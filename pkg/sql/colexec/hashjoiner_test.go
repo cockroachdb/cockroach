@@ -1095,12 +1095,12 @@ func BenchmarkHashJoiner(b *testing.B) {
 											leftSource, rightSource,
 											colexecjoin.HashJoinerInitialNumBuckets, execinfra.DefaultMemoryLimit,
 										)
-										hj.Init()
+										hj.Init(ctx)
 
 										for i := 0; i < nBatches; i++ {
 											// Technically, the non-distinct hash join will produce much more
 											// than nBatches of output.
-											hj.Next(ctx)
+											hj.Next()
 										}
 									}
 								})
@@ -1171,8 +1171,8 @@ func TestHashJoinerProjection(t *testing.T) {
 	args.TestingKnobs.DiskSpillingDisabled = true
 	hjOp, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
-	hjOp.Root.Init()
-	for b := hjOp.Root.Next(ctx); b.Length() > 0; b = hjOp.Root.Next(ctx) {
+	hjOp.Root.Init(ctx)
+	for b := hjOp.Root.Next(); b.Length() > 0; b = hjOp.Root.Next() {
 		// The output types should be {Int64, Int64, Bool, Decimal, Float64, Bytes}
 		// and we check this explicitly.
 		b.ColVec(0).Int64()

@@ -176,7 +176,7 @@ func TestEval(t *testing.T) {
 				},
 				Inputs: []colexecargs.OpWithMetaInfo{{
 					Root: &colexecop.CallbackOperator{
-						NextCb: func(_ context.Context) coldata.Batch {
+						NextCb: func() coldata.Batch {
 							if batchesReturned > 0 {
 								return coldata.ZeroBatch
 							}

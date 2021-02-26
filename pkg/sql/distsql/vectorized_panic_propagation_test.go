@@ -55,7 +55,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		&flowCtx,
 		0, /* processorID */
 		colexecargs.OpWithMetaInfo{Root: &colexecop.CallbackOperator{
-			NextCb: func(ctx context.Context) coldata.Batch {
+			NextCb: func() coldata.Batch {
 				panic("")
 			},
 		}},

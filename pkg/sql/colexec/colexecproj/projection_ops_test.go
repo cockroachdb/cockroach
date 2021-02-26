@@ -121,10 +121,10 @@ func TestGetProjectionConstOperator(t *testing.T) {
 	}
 	expected := &projMultFloat64Float64ConstOp{
 		projConstOpBase: projConstOpBase{
-			OneInputNode: colexecop.NewOneInputNode(op.(*projMultFloat64Float64ConstOp).Input),
-			allocator:    testAllocator,
-			colIdx:       colIdx,
-			outputIdx:    outputIdx,
+			OneInputHelper: colexecop.MakeOneInputHelper(op.(*projMultFloat64Float64ConstOp).Input),
+			allocator:      testAllocator,
+			colIdx:         colIdx,
+			outputIdx:      outputIdx,
 		},
 		constArg: constVal,
 	}
@@ -153,10 +153,10 @@ func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	}
 	expected := &projGEInt64Int16ConstOp{
 		projConstOpBase: projConstOpBase{
-			OneInputNode: colexecop.NewOneInputNode(op.(*projGEInt64Int16ConstOp).Input),
-			allocator:    testAllocator,
-			colIdx:       colIdx,
-			outputIdx:    outputIdx,
+			OneInputHelper: colexecop.MakeOneInputHelper(op.(*projGEInt64Int16ConstOp).Input),
+			allocator:      testAllocator,
+			colIdx:         colIdx,
+			outputIdx:      outputIdx,
 		},
 		constArg: constVal,
 	}
@@ -245,9 +245,9 @@ func TestRandomComparisons(t *testing.T) {
 				fmt.Sprintf("@1 %s @2", cmpOp), false /* canFallbackToRowexec */, testMemAcc,
 			)
 			require.NoError(t, err)
-			op.Init()
+			op.Init(ctx)
 			var idx int
-			for batch := op.Next(ctx); batch.Length() > 0; batch = op.Next(ctx) {
+			for batch := op.Next(); batch.Length() > 0; batch = op.Next() {
 				for i := 0; i < batch.Length(); i++ {
 					absIdx := idx + i
 					assert.Equal(t, expected[absIdx], batch.ColVec(2).Bool()[i],
@@ -281,11 +281,11 @@ func TestGetProjectionOperator(t *testing.T) {
 	}
 	expected := &projMultInt16Int16Op{
 		projOpBase: projOpBase{
-			OneInputNode: colexecop.NewOneInputNode(op.(*projMultInt16Int16Op).Input),
-			allocator:    testAllocator,
-			col1Idx:      col1Idx,
-			col2Idx:      col2Idx,
-			outputIdx:    outputIdx,
+			OneInputHelper: colexecop.MakeOneInputHelper(op.(*projMultInt16Int16Op).Input),
+			allocator:      testAllocator,
+			col1Idx:        col1Idx,
+			col2Idx:        col2Idx,
+			outputIdx:      outputIdx,
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
@@ -332,12 +332,12 @@ func benchmarkProjOp(
 	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, inputTypes)
 	op, err := makeProjOp(source)
 	require.NoError(b, err)
-	op.Init()
+	op.Init(ctx)
 
 	b.Run(name, func(b *testing.B) {
 		b.SetBytes(int64(len(inputTypes) * 8 * coldata.BatchSize()))
 		for i := 0; i < b.N; i++ {
-			op.Next(ctx)
+			op.Next()
 		}
 	})
 }

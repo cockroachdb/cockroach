@@ -17,10 +17,10 @@ WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%IndexBackfiller%'
   AND operation != 'dist sender send'
 ----
-flow       CPut /NamespaceTable/30/1/0/0/"t"/4/1 -> 53
-flow       CPut /Table/3/1/53/2/1 -> database:<name:"t" id:53 modification_time:<> version:1 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > state:PUBLIC offline_reason:"" >
-flow       CPut /NamespaceTable/30/1/53/0/"public"/4/1 -> 29
-exec stmt  rows affected: 0
+materializer  CPut /NamespaceTable/30/1/0/0/"t"/4/1 -> 53
+materializer  CPut /Table/3/1/53/2/1 -> database:<name:"t" id:53 modification_time:<> version:1 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > state:PUBLIC offline_reason:"" >
+materializer  CPut /NamespaceTable/30/1/53/0/"public"/4/1 -> 29
+exec stmt     rows affected: 0
 
 
 # More KV operations.
@@ -38,9 +38,9 @@ WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%IndexBackfiller%'
   AND operation != 'dist sender send'
 ----
-flow       CPut /NamespaceTable/30/1/53/29/"kv"/4/1 -> 54
-flow       CPut /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:1 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:2 column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > next_mutation_id:1 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<> temporary:false partition_all_by:false >
-exec stmt  rows affected: 0
+materializer  CPut /NamespaceTable/30/1/53/29/"kv"/4/1 -> 54
+materializer  CPut /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:1 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:2 column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > next_mutation_id:1 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<> temporary:false partition_all_by:false >
+exec stmt     rows affected: 0
 
 # We avoid using the full trace output, because that would make the
 # ensuing trace especially chatty, as it traces the index backfill at
@@ -65,8 +65,8 @@ WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
   AND tag NOT LIKE '%IndexBackfiller%'
   AND operation != 'dist sender send'
 ----
-flow       Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:2 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:2 column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > mutations:<index:<name:"woo" id:2 unique:true version:2 column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > state:DELETE_ONLY direction:ADD mutation_id:1 rollback:false > next_mutation_id:2 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false >
-exec stmt  rows affected: 0
+materializer  Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:2 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:2 column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > mutations:<index:<name:"woo" id:2 unique:true version:2 column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > state:DELETE_ONLY direction:ADD mutation_id:1 rollback:false > next_mutation_id:2 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false >
+exec stmt     rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
@@ -75,10 +75,10 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-flow       CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
-flow       InitPut /Table/54/2/2/0 -> /BYTES/0x89
-flow       fast path completed
-exec stmt  rows affected: 1
+materializer  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
+materializer  InitPut /Table/54/2/2/0 -> /BYTES/0x89
+materializer  fast path completed
+exec stmt     rows affected: 1
 
 
 statement error duplicate key value
@@ -89,9 +89,9 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-flow       CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
-flow       InitPut /Table/54/2/2/0 -> /BYTES/0x89
-exec stmt  execution failed after 0 rows: duplicate key value violates unique constraint "primary"
+materializer  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
+materializer  InitPut /Table/54/2/2/0 -> /BYTES/0x89
+exec stmt     execution failed after 0 rows: duplicate key value violates unique constraint "primary"
 
 statement error duplicate key value
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -101,9 +101,9 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-flow       CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
-flow       InitPut /Table/54/2/2/0 -> /BYTES/0x8a
-exec stmt  execution failed after 0 rows: duplicate key value violates unique constraint "woo"
+materializer  CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
+materializer  InitPut /Table/54/2/2/0 -> /BYTES/0x8a
+exec stmt     execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 statement ok
 SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv; SET tracing = off
@@ -119,9 +119,9 @@ WHERE message NOT LIKE '%Z/%'
   AND tag NOT LIKE '%IndexBackfiller%'
   AND operation != 'dist sender send'
 ----
-flow       CPut /NamespaceTable/30/1/53/29/"kv2"/4/1 -> 55
-flow       CPut /Table/3/1/55/2/1 -> table:<name:"kv2" id:55 version:1 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false default_expr:"unique_rowid()" hidden:true virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:0 column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > next_mutation_id:1 format_version:3 state:ADD offline_reason:"" view_query:"" is_materialized_view:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<> temporary:false partition_all_by:false >
-exec stmt  rows affected: 0
+materializer  CPut /NamespaceTable/30/1/53/29/"kv2"/4/1 -> 55
+materializer  CPut /Table/3/1/55/2/1 -> table:<name:"kv2" id:55 version:1 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false default_expr:"unique_rowid()" hidden:true virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:0 column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > next_mutation_id:1 format_version:3 state:ADD offline_reason:"" view_query:"" is_materialized_view:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<> temporary:false partition_all_by:false >
+exec stmt     rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; UPDATE t.kv2 SET v = v + 2; SET tracing = off
@@ -138,8 +138,8 @@ WHERE message NOT LIKE '%Z/%'
 ----
 colbatchscan  Scan /Table/55/{1-2}
 colbatchscan  fetched: /kv2/primary/-9222809086901354496/k/v -> /1/2
-flow          Put /Table/55/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
-flow          fast path completed
+materializer  Put /Table/55/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
+materializer  fast path completed
 exec stmt     rows affected: 1
 
 statement ok
@@ -149,9 +149,9 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-flow       DelRange /Table/55/1 - /Table/55/2
-flow       fast path completed
-exec stmt  rows affected: 1
+materializer  DelRange /Table/55/1 - /Table/55/2
+materializer  fast path completed
+exec stmt     rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; DROP TABLE t.kv2; SET tracing = off
@@ -168,8 +168,8 @@ WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
   AND tag NOT LIKE '%IndexBackfiller%'
   AND operation != 'dist sender send'
 ----
-flow       Put /Table/3/1/55/2/1 -> table:<name:"kv2" id:55 version:3 modification_time:<> draining_names:<parent_id:53 parent_schema_id:29 name:"kv2" > parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false default_expr:"unique_rowid()" hidden:true virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:0 column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > next_mutation_id:1 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<...> temporary:false partition_all_by:false >
-exec stmt  rows affected: 0
+materializer  Put /Table/3/1/55/2/1 -> table:<name:"kv2" id:55 version:3 modification_time:<> draining_names:<parent_id:53 parent_schema_id:29 name:"kv2" > parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false default_expr:"unique_rowid()" hidden:true virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:0 column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > next_mutation_id:1 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<...> temporary:false partition_all_by:false >
+exec stmt     rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; DELETE FROM t.kv; SET tracing = off
@@ -180,9 +180,9 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
 colbatchscan  Scan /Table/54/{1-2}
 colbatchscan  fetched: /kv/primary/1/v -> /2
-flow          Del /Table/54/2/2/0
-flow          Del /Table/54/1/1/0
-flow          fast path completed
+materializer  Del /Table/54/2/2/0
+materializer  Del /Table/54/1/1/0
+materializer  fast path completed
 exec stmt     rows affected: 1
 
 statement ok
@@ -202,8 +202,8 @@ WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
   AND tag NOT LIKE '%IndexBackfiller%'
   AND operation != 'dist sender send'
 ----
-flow       Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:5 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:2 column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > mutations:<index:<name:"woo" id:2 unique:true version:2 column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 rollback:false > next_mutation_id:3 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false >
-exec stmt  rows affected: 0
+materializer  Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:5 modification_time:<> parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:2 column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > mutations:<index:<name:"woo" id:2 unique:true version:2 column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 rollback:false > next_mutation_id:3 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false >
+exec stmt     rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; DROP TABLE t.kv; SET tracing = off
@@ -219,8 +219,8 @@ WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
   AND tag NOT LIKE '%IndexBackfiller%'
   AND operation != 'dist sender send'
 ----
-flow       Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:8 modification_time:<> draining_names:<parent_id:53 parent_schema_id:29 name:"kv" > parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:2 column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > next_mutation_id:3 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 gc_mutations:<index_id:2 drop_time:... job_id:0 > create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false >
-exec stmt  rows affected: 0
+materializer  Put /Table/3/1/54/2/1 -> table:<name:"kv" id:54 version:8 modification_time:<> draining_names:<parent_id:53 parent_schema_id:29 name:"kv" > parent_id:53 unexposed_parent_schema_id:29 columns:<name:"k" id:1 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:false hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<InternalType:<family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false > TypeMeta:<Version:0 > > nullable:true hidden:false virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true version:2 column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 > users:<user_proto:"root" privileges:2 > owner_proto:"root" version:1 > next_mutation_id:3 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 gc_mutations:<index_id:2 drop_time:... job_id:0 > create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false >
+exec stmt     rows affected: 0
 
 # Check that session tracing does not inhibit the fast path for inserts &
 # friends (the path resulting in 1PC transactions).

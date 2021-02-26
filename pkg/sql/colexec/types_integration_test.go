@@ -78,7 +78,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 			typs := []*types.T{typ}
 			source := execinfra.NewRepeatableRowSource(typs, rows)
 
-			columnarizer, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, source)
+			columnarizer, err := NewBufferingColumnarizer(testAllocator, flowCtx, 0 /* processorID */, source)
 			require.NoError(t, err)
 
 			c, err := colserde.NewArrowBatchConverter(typs)
@@ -120,7 +120,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 // - converting from Arrow format
 // and returns the resulting batch.
 type arrowTestOperator struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 
 	c *colserde.ArrowBatchConverter
 	r *colserde.RecordBatchSerializer
@@ -137,19 +137,15 @@ func newArrowTestOperator(
 	typs []*types.T,
 ) colexecop.Operator {
 	return &arrowTestOperator{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		c:            c,
-		r:            r,
-		typs:         typs,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		c:              c,
+		r:              r,
+		typs:           typs,
 	}
 }
 
-func (a *arrowTestOperator) Init() {
-	a.Input.Init()
-}
-
-func (a *arrowTestOperator) Next(ctx context.Context) coldata.Batch {
-	batchIn := a.Input.Next(ctx)
+func (a *arrowTestOperator) Next() coldata.Batch {
+	batchIn := a.Input.Next()
 	// Note that we don't need to handle zero-length batches in a special way.
 	var buf bytes.Buffer
 	arrowDataIn, err := a.c.BatchToArrow(batchIn)

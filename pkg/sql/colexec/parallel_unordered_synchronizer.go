@@ -61,6 +61,8 @@ const (
 // ParallelUnorderedSynchronizer is an Operator that combines multiple Operator streams
 // into one.
 type ParallelUnorderedSynchronizer struct {
+	colexecop.InitHelper
+
 	inputs []colexecargs.OpWithMetaInfo
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
@@ -145,10 +147,13 @@ func NewParallelUnorderedSynchronizer(
 	}
 }
 
-// Init is part of the Operator interface.
-func (s *ParallelUnorderedSynchronizer) Init() {
+// Init is part of the colexecop.Operator interface.
+func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
+	if !s.InitHelper.Init(ctx) {
+		return
+	}
 	for _, input := range s.inputs {
-		input.Root.Init()
+		input.Root.Init(s.Ctx)
 	}
 }
 
@@ -172,7 +177,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 	for i, input := range s.inputs {
 		s.nextBatch[i] = func(input colexecargs.OpWithMetaInfo, inputIdx int) func() {
 			return func() {
-				s.batches[inputIdx] = input.Root.Next(ctx)
+				s.batches[inputIdx] = input.Root.Next()
 			}
 		}(input, i)
 		s.externalWaitGroup.Add(1)
@@ -279,8 +284,8 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 	}
 }
 
-// Next is part of the Operator interface.
-func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
+// Next is part of the colexecop.Operator interface.
+func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
 	for {
 		state := s.getState()
 		switch state {
@@ -288,7 +293,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 			return coldata.ZeroBatch
 		case parallelUnorderedSynchronizerStateUninitialized:
 			s.setState(parallelUnorderedSynchronizerStateRunning)
-			s.init(ctx)
+			s.init(s.Ctx)
 		case parallelUnorderedSynchronizerStateRunning:
 			// Signal the input whose batch we returned in the last call to Next that it
 			// is safe to retrieve the next batch. Since Next has been called, we can

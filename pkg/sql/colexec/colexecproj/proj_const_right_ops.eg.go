@@ -11,7 +11,6 @@ package colexecproj
 
 import (
 	"bytes"
-	"context"
 	"math"
 	"time"
 	"unsafe"
@@ -51,14 +50,14 @@ type projBitandInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitandInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -146,10 +145,6 @@ func (p projBitandInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitandInt16Int32ConstOp struct {
@@ -157,14 +152,14 @@ type projBitandInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitandInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -252,10 +247,6 @@ func (p projBitandInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitandInt16Int64ConstOp struct {
@@ -263,14 +254,14 @@ type projBitandInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitandInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -358,10 +349,6 @@ func (p projBitandInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitandInt32Int16ConstOp struct {
@@ -369,14 +356,14 @@ type projBitandInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitandInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -464,10 +451,6 @@ func (p projBitandInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitandInt32Int32ConstOp struct {
@@ -475,14 +458,14 @@ type projBitandInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitandInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -570,10 +553,6 @@ func (p projBitandInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitandInt32Int64ConstOp struct {
@@ -581,14 +560,14 @@ type projBitandInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitandInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -676,10 +655,6 @@ func (p projBitandInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitandInt64Int16ConstOp struct {
@@ -687,14 +662,14 @@ type projBitandInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitandInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -782,10 +757,6 @@ func (p projBitandInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitandInt64Int32ConstOp struct {
@@ -793,14 +764,14 @@ type projBitandInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitandInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -888,10 +859,6 @@ func (p projBitandInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitandInt64Int64ConstOp struct {
@@ -899,14 +866,14 @@ type projBitandInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitandInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -994,10 +961,6 @@ func (p projBitandInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitandDatumDatumConstOp struct {
@@ -1005,14 +968,14 @@ type projBitandDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projBitandDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitandDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1126,10 +1089,6 @@ func (p projBitandDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitandDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorInt16Int16ConstOp struct {
@@ -1137,14 +1096,14 @@ type projBitorInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitorInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1232,10 +1191,6 @@ func (p projBitorInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorInt16Int32ConstOp struct {
@@ -1243,14 +1198,14 @@ type projBitorInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitorInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1338,10 +1293,6 @@ func (p projBitorInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorInt16Int64ConstOp struct {
@@ -1349,14 +1300,14 @@ type projBitorInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitorInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1444,10 +1395,6 @@ func (p projBitorInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorInt32Int16ConstOp struct {
@@ -1455,14 +1402,14 @@ type projBitorInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitorInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1550,10 +1497,6 @@ func (p projBitorInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorInt32Int32ConstOp struct {
@@ -1561,14 +1504,14 @@ type projBitorInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitorInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1656,10 +1599,6 @@ func (p projBitorInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorInt32Int64ConstOp struct {
@@ -1667,14 +1606,14 @@ type projBitorInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitorInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1762,10 +1701,6 @@ func (p projBitorInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorInt64Int16ConstOp struct {
@@ -1773,14 +1708,14 @@ type projBitorInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitorInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1868,10 +1803,6 @@ func (p projBitorInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorInt64Int32ConstOp struct {
@@ -1879,14 +1810,14 @@ type projBitorInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitorInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -1974,10 +1905,6 @@ func (p projBitorInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorInt64Int64ConstOp struct {
@@ -1985,14 +1912,14 @@ type projBitorInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitorInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2080,10 +2007,6 @@ func (p projBitorInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitorDatumDatumConstOp struct {
@@ -2091,14 +2014,14 @@ type projBitorDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projBitorDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitorDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2212,10 +2135,6 @@ func (p projBitorDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitorDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorInt16Int16ConstOp struct {
@@ -2223,14 +2142,14 @@ type projBitxorInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitxorInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2318,10 +2237,6 @@ func (p projBitxorInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorInt16Int32ConstOp struct {
@@ -2329,14 +2244,14 @@ type projBitxorInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitxorInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2424,10 +2339,6 @@ func (p projBitxorInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorInt16Int64ConstOp struct {
@@ -2435,14 +2346,14 @@ type projBitxorInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitxorInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2530,10 +2441,6 @@ func (p projBitxorInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorInt32Int16ConstOp struct {
@@ -2541,14 +2448,14 @@ type projBitxorInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitxorInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2636,10 +2543,6 @@ func (p projBitxorInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorInt32Int32ConstOp struct {
@@ -2647,14 +2550,14 @@ type projBitxorInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitxorInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2742,10 +2645,6 @@ func (p projBitxorInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorInt32Int64ConstOp struct {
@@ -2753,14 +2652,14 @@ type projBitxorInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitxorInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2848,10 +2747,6 @@ func (p projBitxorInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorInt64Int16ConstOp struct {
@@ -2859,14 +2754,14 @@ type projBitxorInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projBitxorInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -2954,10 +2849,6 @@ func (p projBitxorInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorInt64Int32ConstOp struct {
@@ -2965,14 +2856,14 @@ type projBitxorInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projBitxorInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3060,10 +2951,6 @@ func (p projBitxorInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorInt64Int64ConstOp struct {
@@ -3071,14 +2958,14 @@ type projBitxorInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projBitxorInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3166,10 +3053,6 @@ func (p projBitxorInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projBitxorDatumDatumConstOp struct {
@@ -3177,14 +3060,14 @@ type projBitxorDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projBitxorDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projBitxorDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3298,10 +3181,6 @@ func (p projBitxorDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projBitxorDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusDecimalInt16ConstOp struct {
@@ -3309,14 +3188,14 @@ type projPlusDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3432,10 +3311,6 @@ func (p projPlusDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusDecimalInt32ConstOp struct {
@@ -3443,14 +3318,14 @@ type projPlusDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3566,10 +3441,6 @@ func (p projPlusDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusDecimalInt64ConstOp struct {
@@ -3577,14 +3448,14 @@ type projPlusDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3700,10 +3571,6 @@ func (p projPlusDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusDecimalDecimalConstOp struct {
@@ -3711,14 +3578,14 @@ type projPlusDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPlusDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3830,10 +3697,6 @@ func (p projPlusDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusDecimalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt16Int16ConstOp struct {
@@ -3841,14 +3704,14 @@ type projPlusInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -3960,10 +3823,6 @@ func (p projPlusInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt16Int32ConstOp struct {
@@ -3971,14 +3830,14 @@ type projPlusInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4090,10 +3949,6 @@ func (p projPlusInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt16Int64ConstOp struct {
@@ -4101,14 +3956,14 @@ type projPlusInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4220,10 +4075,6 @@ func (p projPlusInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt16DecimalConstOp struct {
@@ -4231,14 +4082,14 @@ type projPlusInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPlusInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4358,10 +4209,6 @@ func (p projPlusInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt16DatumConstOp struct {
@@ -4369,14 +4216,14 @@ type projPlusInt16DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projPlusInt16DatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt16DatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4514,10 +4361,6 @@ func (p projPlusInt16DatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt16DatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt32Int16ConstOp struct {
@@ -4525,14 +4368,14 @@ type projPlusInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4644,10 +4487,6 @@ func (p projPlusInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt32Int32ConstOp struct {
@@ -4655,14 +4494,14 @@ type projPlusInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4774,10 +4613,6 @@ func (p projPlusInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt32Int64ConstOp struct {
@@ -4785,14 +4620,14 @@ type projPlusInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -4904,10 +4739,6 @@ func (p projPlusInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt32DecimalConstOp struct {
@@ -4915,14 +4746,14 @@ type projPlusInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPlusInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5042,10 +4873,6 @@ func (p projPlusInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt32DatumConstOp struct {
@@ -5053,14 +4880,14 @@ type projPlusInt32DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projPlusInt32DatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt32DatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5198,10 +5025,6 @@ func (p projPlusInt32DatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt32DatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt64Int16ConstOp struct {
@@ -5209,14 +5032,14 @@ type projPlusInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5328,10 +5151,6 @@ func (p projPlusInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt64Int32ConstOp struct {
@@ -5339,14 +5158,14 @@ type projPlusInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5458,10 +5277,6 @@ func (p projPlusInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt64Int64ConstOp struct {
@@ -5469,14 +5284,14 @@ type projPlusInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5588,10 +5403,6 @@ func (p projPlusInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt64DecimalConstOp struct {
@@ -5599,14 +5410,14 @@ type projPlusInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPlusInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5726,10 +5537,6 @@ func (p projPlusInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusInt64DatumConstOp struct {
@@ -5737,14 +5544,14 @@ type projPlusInt64DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projPlusInt64DatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusInt64DatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -5882,10 +5689,6 @@ func (p projPlusInt64DatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusInt64DatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusFloat64Float64ConstOp struct {
@@ -5893,14 +5696,14 @@ type projPlusFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projPlusFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6000,10 +5803,6 @@ func (p projPlusFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusTimestampIntervalConstOp struct {
@@ -6011,14 +5810,14 @@ type projPlusTimestampIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projPlusTimestampIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusTimestampIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6098,10 +5897,6 @@ func (p projPlusTimestampIntervalConstOp) Next(ctx context.Context) coldata.Batc
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusTimestampIntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusIntervalTimestampConstOp struct {
@@ -6109,14 +5904,14 @@ type projPlusIntervalTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projPlusIntervalTimestampConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusIntervalTimestampConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6196,10 +5991,6 @@ func (p projPlusIntervalTimestampConstOp) Next(ctx context.Context) coldata.Batc
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusIntervalTimestampConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusIntervalIntervalConstOp struct {
@@ -6207,14 +5998,14 @@ type projPlusIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projPlusIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusIntervalIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6296,23 +6087,19 @@ func (p projPlusIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch
 	return batch
 }
 
-func (p projPlusIntervalIntervalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projPlusIntervalDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
 }
 
-func (p projPlusIntervalDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusIntervalDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6452,23 +6239,19 @@ func (p projPlusIntervalDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projPlusIntervalDatumConstOp) Init() {
-	p.Input.Init()
-}
-
 type projPlusDatumIntervalConstOp struct {
 	projConstOpBase
 	constArg duration.Duration
 }
 
-func (p projPlusDatumIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusDatumIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6600,10 +6383,6 @@ func (p projPlusDatumIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusDatumIntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusDatumInt16ConstOp struct {
@@ -6611,14 +6390,14 @@ type projPlusDatumInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projPlusDatumInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusDatumInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6750,10 +6529,6 @@ func (p projPlusDatumInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusDatumInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusDatumInt32ConstOp struct {
@@ -6761,14 +6536,14 @@ type projPlusDatumInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projPlusDatumInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusDatumInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -6900,10 +6675,6 @@ func (p projPlusDatumInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPlusDatumInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPlusDatumInt64ConstOp struct {
@@ -6911,14 +6682,14 @@ type projPlusDatumInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projPlusDatumInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPlusDatumInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7052,23 +6823,19 @@ func (p projPlusDatumInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projPlusDatumInt64ConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusDecimalInt16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projMinusDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7184,10 +6951,6 @@ func (p projMinusDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusDecimalInt32ConstOp struct {
@@ -7195,14 +6958,14 @@ type projMinusDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7318,10 +7081,6 @@ func (p projMinusDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusDecimalInt64ConstOp struct {
@@ -7329,14 +7088,14 @@ type projMinusDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7452,10 +7211,6 @@ func (p projMinusDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusDecimalDecimalConstOp struct {
@@ -7463,14 +7218,14 @@ type projMinusDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMinusDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7584,23 +7339,19 @@ func (p projMinusDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch 
 	return batch
 }
 
-func (p projMinusDecimalDecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusInt16Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projMinusInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7712,10 +7463,6 @@ func (p projMinusInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt16Int32ConstOp struct {
@@ -7723,14 +7470,14 @@ type projMinusInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7842,10 +7589,6 @@ func (p projMinusInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt16Int64ConstOp struct {
@@ -7853,14 +7596,14 @@ type projMinusInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -7972,10 +7715,6 @@ func (p projMinusInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt16DecimalConstOp struct {
@@ -7983,14 +7722,14 @@ type projMinusInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMinusInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8110,10 +7849,6 @@ func (p projMinusInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt16DatumConstOp struct {
@@ -8121,14 +7856,14 @@ type projMinusInt16DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projMinusInt16DatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt16DatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8268,23 +8003,19 @@ func (p projMinusInt16DatumConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projMinusInt16DatumConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusInt32Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projMinusInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8396,10 +8127,6 @@ func (p projMinusInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt32Int32ConstOp struct {
@@ -8407,14 +8134,14 @@ type projMinusInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8526,10 +8253,6 @@ func (p projMinusInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt32Int64ConstOp struct {
@@ -8537,14 +8260,14 @@ type projMinusInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8656,10 +8379,6 @@ func (p projMinusInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt32DecimalConstOp struct {
@@ -8667,14 +8386,14 @@ type projMinusInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMinusInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8794,10 +8513,6 @@ func (p projMinusInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt32DatumConstOp struct {
@@ -8805,14 +8520,14 @@ type projMinusInt32DatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projMinusInt32DatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt32DatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -8952,23 +8667,19 @@ func (p projMinusInt32DatumConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projMinusInt32DatumConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusInt64Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projMinusInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9080,10 +8791,6 @@ func (p projMinusInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt64Int32ConstOp struct {
@@ -9091,14 +8798,14 @@ type projMinusInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9210,10 +8917,6 @@ func (p projMinusInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusInt64Int64ConstOp struct {
@@ -9221,14 +8924,14 @@ type projMinusInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9342,23 +9045,19 @@ func (p projMinusInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projMinusInt64Int64ConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusInt64DecimalConstOp struct {
 	projConstOpBase
 	constArg apd.Decimal
 }
 
-func (p projMinusInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9480,23 +9179,19 @@ func (p projMinusInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projMinusInt64DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusInt64DatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
 }
 
-func (p projMinusInt64DatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusInt64DatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9636,23 +9331,19 @@ func (p projMinusInt64DatumConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projMinusInt64DatumConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusFloat64Float64ConstOp struct {
 	projConstOpBase
 	constArg float64
 }
 
-func (p projMinusFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9754,23 +9445,19 @@ func (p projMinusFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch 
 	return batch
 }
 
-func (p projMinusFloat64Float64ConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusTimestampTimestampConstOp struct {
 	projConstOpBase
 	constArg time.Time
 }
 
-func (p projMinusTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusTimestampTimestampConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9864,23 +9551,19 @@ func (p projMinusTimestampTimestampConstOp) Next(ctx context.Context) coldata.Ba
 	return batch
 }
 
-func (p projMinusTimestampTimestampConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusTimestampIntervalConstOp struct {
 	projConstOpBase
 	constArg duration.Duration
 }
 
-func (p projMinusTimestampIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusTimestampIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -9962,23 +9645,19 @@ func (p projMinusTimestampIntervalConstOp) Next(ctx context.Context) coldata.Bat
 	return batch
 }
 
-func (p projMinusTimestampIntervalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projMinusIntervalIntervalConstOp struct {
 	projConstOpBase
 	constArg duration.Duration
 }
 
-func (p projMinusIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusIntervalIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10058,10 +9737,6 @@ func (p projMinusIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batc
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusIntervalIntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusIntervalDatumConstOp struct {
@@ -10069,14 +9744,14 @@ type projMinusIntervalDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projMinusIntervalDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusIntervalDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10214,10 +9889,6 @@ func (p projMinusIntervalDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusIntervalDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusJSONBytesConstOp struct {
@@ -10225,14 +9896,14 @@ type projMinusJSONBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projMinusJSONBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusJSONBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10346,10 +10017,6 @@ func (p projMinusJSONBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusJSONBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusJSONInt16ConstOp struct {
@@ -10357,14 +10024,14 @@ type projMinusJSONInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projMinusJSONInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusJSONInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10464,10 +10131,6 @@ func (p projMinusJSONInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusJSONInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusJSONInt32ConstOp struct {
@@ -10475,14 +10138,14 @@ type projMinusJSONInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusJSONInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusJSONInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10582,10 +10245,6 @@ func (p projMinusJSONInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusJSONInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusJSONInt64ConstOp struct {
@@ -10593,14 +10252,14 @@ type projMinusJSONInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusJSONInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusJSONInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10700,10 +10359,6 @@ func (p projMinusJSONInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusJSONInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusDatumDatumConstOp struct {
@@ -10711,14 +10366,14 @@ type projMinusDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projMinusDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10832,10 +10487,6 @@ func (p projMinusDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusDatumIntervalConstOp struct {
@@ -10843,14 +10494,14 @@ type projMinusDatumIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMinusDatumIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDatumIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -10982,10 +10633,6 @@ func (p projMinusDatumIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusDatumIntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusDatumBytesConstOp struct {
@@ -10993,14 +10640,14 @@ type projMinusDatumBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projMinusDatumBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDatumBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11130,10 +10777,6 @@ func (p projMinusDatumBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusDatumBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusDatumInt16ConstOp struct {
@@ -11141,14 +10784,14 @@ type projMinusDatumInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projMinusDatumInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDatumInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11280,10 +10923,6 @@ func (p projMinusDatumInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusDatumInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusDatumInt32ConstOp struct {
@@ -11291,14 +10930,14 @@ type projMinusDatumInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMinusDatumInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDatumInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11430,10 +11069,6 @@ func (p projMinusDatumInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusDatumInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMinusDatumInt64ConstOp struct {
@@ -11441,14 +11076,14 @@ type projMinusDatumInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMinusDatumInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMinusDatumInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11580,10 +11215,6 @@ func (p projMinusDatumInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMinusDatumInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultDecimalInt16ConstOp struct {
@@ -11591,14 +11222,14 @@ type projMultDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11714,10 +11345,6 @@ func (p projMultDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultDecimalInt32ConstOp struct {
@@ -11725,14 +11352,14 @@ type projMultDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11848,10 +11475,6 @@ func (p projMultDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultDecimalInt64ConstOp struct {
@@ -11859,14 +11482,14 @@ type projMultDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -11982,10 +11605,6 @@ func (p projMultDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultDecimalDecimalConstOp struct {
@@ -11993,14 +11612,14 @@ type projMultDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12112,10 +11731,6 @@ func (p projMultDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultDecimalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultDecimalIntervalConstOp struct {
@@ -12123,14 +11738,14 @@ type projMultDecimalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultDecimalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultDecimalIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12230,10 +11845,6 @@ func (p projMultDecimalIntervalConstOp) Next(ctx context.Context) coldata.Batch 
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultDecimalIntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt16Int16ConstOp struct {
@@ -12241,14 +11852,14 @@ type projMultInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12392,10 +12003,6 @@ func (p projMultInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt16Int32ConstOp struct {
@@ -12403,14 +12010,14 @@ type projMultInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12554,10 +12161,6 @@ func (p projMultInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt16Int64ConstOp struct {
@@ -12565,14 +12168,14 @@ type projMultInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12716,10 +12319,6 @@ func (p projMultInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt16DecimalConstOp struct {
@@ -12727,14 +12326,14 @@ type projMultInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12854,10 +12453,6 @@ func (p projMultInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt16IntervalConstOp struct {
@@ -12865,14 +12460,14 @@ type projMultInt16IntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultInt16IntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt16IntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -12952,10 +12547,6 @@ func (p projMultInt16IntervalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt16IntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt32Int16ConstOp struct {
@@ -12963,14 +12554,14 @@ type projMultInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13114,10 +12705,6 @@ func (p projMultInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt32Int32ConstOp struct {
@@ -13125,14 +12712,14 @@ type projMultInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13276,10 +12863,6 @@ func (p projMultInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt32Int64ConstOp struct {
@@ -13287,14 +12870,14 @@ type projMultInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13438,10 +13021,6 @@ func (p projMultInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt32DecimalConstOp struct {
@@ -13449,14 +13028,14 @@ type projMultInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13576,10 +13155,6 @@ func (p projMultInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt32IntervalConstOp struct {
@@ -13587,14 +13162,14 @@ type projMultInt32IntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultInt32IntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt32IntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13674,10 +13249,6 @@ func (p projMultInt32IntervalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt32IntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt64Int16ConstOp struct {
@@ -13685,14 +13256,14 @@ type projMultInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13836,10 +13407,6 @@ func (p projMultInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt64Int32ConstOp struct {
@@ -13847,14 +13414,14 @@ type projMultInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -13998,10 +13565,6 @@ func (p projMultInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt64Int64ConstOp struct {
@@ -14009,14 +13572,14 @@ type projMultInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14160,10 +13723,6 @@ func (p projMultInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt64DecimalConstOp struct {
@@ -14171,14 +13730,14 @@ type projMultInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14298,10 +13857,6 @@ func (p projMultInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultInt64IntervalConstOp struct {
@@ -14309,14 +13864,14 @@ type projMultInt64IntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultInt64IntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultInt64IntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14396,10 +13951,6 @@ func (p projMultInt64IntervalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultInt64IntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultFloat64Float64ConstOp struct {
@@ -14407,14 +13958,14 @@ type projMultFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projMultFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14514,10 +14065,6 @@ func (p projMultFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultFloat64IntervalConstOp struct {
@@ -14525,14 +14072,14 @@ type projMultFloat64IntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projMultFloat64IntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultFloat64IntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14612,10 +14159,6 @@ func (p projMultFloat64IntervalConstOp) Next(ctx context.Context) coldata.Batch 
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultFloat64IntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultIntervalInt16ConstOp struct {
@@ -14623,14 +14166,14 @@ type projMultIntervalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projMultIntervalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultIntervalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14710,10 +14253,6 @@ func (p projMultIntervalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultIntervalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultIntervalInt32ConstOp struct {
@@ -14721,14 +14260,14 @@ type projMultIntervalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projMultIntervalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultIntervalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14808,10 +14347,6 @@ func (p projMultIntervalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultIntervalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultIntervalInt64ConstOp struct {
@@ -14819,14 +14354,14 @@ type projMultIntervalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projMultIntervalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultIntervalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -14906,10 +14441,6 @@ func (p projMultIntervalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultIntervalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultIntervalFloat64ConstOp struct {
@@ -14917,14 +14448,14 @@ type projMultIntervalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projMultIntervalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultIntervalFloat64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15004,10 +14535,6 @@ func (p projMultIntervalFloat64ConstOp) Next(ctx context.Context) coldata.Batch 
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultIntervalFloat64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projMultIntervalDecimalConstOp struct {
@@ -15015,14 +14542,14 @@ type projMultIntervalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projMultIntervalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projMultIntervalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15122,10 +14649,6 @@ func (p projMultIntervalDecimalConstOp) Next(ctx context.Context) coldata.Batch 
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projMultIntervalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivDecimalInt16ConstOp struct {
@@ -15133,14 +14656,14 @@ type projDivDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projDivDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15272,10 +14795,6 @@ func (p projDivDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivDecimalInt32ConstOp struct {
@@ -15283,14 +14802,14 @@ type projDivDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projDivDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15422,10 +14941,6 @@ func (p projDivDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivDecimalInt64ConstOp struct {
@@ -15433,14 +14948,14 @@ type projDivDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15572,10 +15087,6 @@ func (p projDivDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivDecimalDecimalConstOp struct {
@@ -15583,14 +15094,14 @@ type projDivDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projDivDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15718,10 +15229,6 @@ func (p projDivDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivDecimalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt16Int16ConstOp struct {
@@ -15729,14 +15236,14 @@ type projDivInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projDivInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -15864,10 +15371,6 @@ func (p projDivInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt16Int32ConstOp struct {
@@ -15875,14 +15378,14 @@ type projDivInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projDivInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16010,10 +15513,6 @@ func (p projDivInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt16Int64ConstOp struct {
@@ -16021,14 +15520,14 @@ type projDivInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16156,10 +15655,6 @@ func (p projDivInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt16DecimalConstOp struct {
@@ -16167,14 +15662,14 @@ type projDivInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projDivInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16310,10 +15805,6 @@ func (p projDivInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt32Int16ConstOp struct {
@@ -16321,14 +15812,14 @@ type projDivInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projDivInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16456,10 +15947,6 @@ func (p projDivInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt32Int32ConstOp struct {
@@ -16467,14 +15954,14 @@ type projDivInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projDivInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16602,10 +16089,6 @@ func (p projDivInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt32Int64ConstOp struct {
@@ -16613,14 +16096,14 @@ type projDivInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16748,10 +16231,6 @@ func (p projDivInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt32DecimalConstOp struct {
@@ -16759,14 +16238,14 @@ type projDivInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projDivInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -16902,10 +16381,6 @@ func (p projDivInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt64Int16ConstOp struct {
@@ -16913,14 +16388,14 @@ type projDivInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projDivInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17048,10 +16523,6 @@ func (p projDivInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt64Int32ConstOp struct {
@@ -17059,14 +16530,14 @@ type projDivInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projDivInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17194,10 +16665,6 @@ func (p projDivInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt64Int64ConstOp struct {
@@ -17205,14 +16672,14 @@ type projDivInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17340,10 +16807,6 @@ func (p projDivInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivInt64DecimalConstOp struct {
@@ -17351,14 +16814,14 @@ type projDivInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projDivInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17494,10 +16957,6 @@ func (p projDivInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivInt64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivFloat64Float64ConstOp struct {
@@ -17505,14 +16964,14 @@ type projDivFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projDivFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17628,10 +17087,6 @@ func (p projDivFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivIntervalInt64ConstOp struct {
@@ -17639,14 +17094,14 @@ type projDivIntervalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projDivIntervalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivIntervalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17742,10 +17197,6 @@ func (p projDivIntervalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projDivIntervalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projDivIntervalFloat64ConstOp struct {
@@ -17753,14 +17204,14 @@ type projDivIntervalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projDivIntervalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projDivIntervalFloat64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -17858,23 +17309,19 @@ func (p projDivIntervalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projDivIntervalFloat64ConstOp) Init() {
-	p.Input.Init()
-}
-
 type projFloorDivDecimalInt16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projFloorDivDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18006,10 +17453,6 @@ func (p projFloorDivDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivDecimalInt32ConstOp struct {
@@ -18017,14 +17460,14 @@ type projFloorDivDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projFloorDivDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18156,10 +17599,6 @@ func (p projFloorDivDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivDecimalInt64ConstOp struct {
@@ -18167,14 +17606,14 @@ type projFloorDivDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projFloorDivDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18306,10 +17745,6 @@ func (p projFloorDivDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivDecimalDecimalConstOp struct {
@@ -18317,14 +17752,14 @@ type projFloorDivDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projFloorDivDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18452,10 +17887,6 @@ func (p projFloorDivDecimalDecimalConstOp) Next(ctx context.Context) coldata.Bat
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivDecimalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt16Int16ConstOp struct {
@@ -18463,14 +17894,14 @@ type projFloorDivInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projFloorDivInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18578,10 +18009,6 @@ func (p projFloorDivInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt16Int32ConstOp struct {
@@ -18589,14 +18016,14 @@ type projFloorDivInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projFloorDivInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18704,10 +18131,6 @@ func (p projFloorDivInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt16Int64ConstOp struct {
@@ -18715,14 +18138,14 @@ type projFloorDivInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projFloorDivInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18830,10 +18253,6 @@ func (p projFloorDivInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt16DecimalConstOp struct {
@@ -18841,14 +18260,14 @@ type projFloorDivInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projFloorDivInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -18984,10 +18403,6 @@ func (p projFloorDivInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt32Int16ConstOp struct {
@@ -18995,14 +18410,14 @@ type projFloorDivInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projFloorDivInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19110,10 +18525,6 @@ func (p projFloorDivInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt32Int32ConstOp struct {
@@ -19121,14 +18532,14 @@ type projFloorDivInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projFloorDivInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19236,10 +18647,6 @@ func (p projFloorDivInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt32Int64ConstOp struct {
@@ -19247,14 +18654,14 @@ type projFloorDivInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projFloorDivInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19362,10 +18769,6 @@ func (p projFloorDivInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt32DecimalConstOp struct {
@@ -19373,14 +18776,14 @@ type projFloorDivInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projFloorDivInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19516,10 +18919,6 @@ func (p projFloorDivInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt64Int16ConstOp struct {
@@ -19527,14 +18926,14 @@ type projFloorDivInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projFloorDivInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19642,10 +19041,6 @@ func (p projFloorDivInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt64Int32ConstOp struct {
@@ -19653,14 +19048,14 @@ type projFloorDivInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projFloorDivInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19768,10 +19163,6 @@ func (p projFloorDivInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt64Int64ConstOp struct {
@@ -19779,14 +19170,14 @@ type projFloorDivInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projFloorDivInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -19894,10 +19285,6 @@ func (p projFloorDivInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivInt64DecimalConstOp struct {
@@ -19905,14 +19292,14 @@ type projFloorDivInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projFloorDivInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20048,10 +19435,6 @@ func (p projFloorDivInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivInt64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projFloorDivFloat64Float64ConstOp struct {
@@ -20059,14 +19442,14 @@ type projFloorDivFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projFloorDivFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projFloorDivFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20182,10 +19565,6 @@ func (p projFloorDivFloat64Float64ConstOp) Next(ctx context.Context) coldata.Bat
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projFloorDivFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModDecimalInt16ConstOp struct {
@@ -20193,14 +19572,14 @@ type projModDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projModDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20332,10 +19711,6 @@ func (p projModDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModDecimalInt32ConstOp struct {
@@ -20343,14 +19718,14 @@ type projModDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projModDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20482,10 +19857,6 @@ func (p projModDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModDecimalInt64ConstOp struct {
@@ -20493,14 +19864,14 @@ type projModDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projModDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20632,10 +20003,6 @@ func (p projModDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModDecimalDecimalConstOp struct {
@@ -20643,14 +20010,14 @@ type projModDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projModDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20778,10 +20145,6 @@ func (p projModDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModDecimalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt16Int16ConstOp struct {
@@ -20789,14 +20152,14 @@ type projModInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projModInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -20904,10 +20267,6 @@ func (p projModInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt16Int32ConstOp struct {
@@ -20915,14 +20274,14 @@ type projModInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projModInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21030,10 +20389,6 @@ func (p projModInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt16Int64ConstOp struct {
@@ -21041,14 +20396,14 @@ type projModInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projModInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21156,10 +20511,6 @@ func (p projModInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt16DecimalConstOp struct {
@@ -21167,14 +20518,14 @@ type projModInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projModInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21310,10 +20661,6 @@ func (p projModInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt32Int16ConstOp struct {
@@ -21321,14 +20668,14 @@ type projModInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projModInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21436,10 +20783,6 @@ func (p projModInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt32Int32ConstOp struct {
@@ -21447,14 +20790,14 @@ type projModInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projModInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21562,10 +20905,6 @@ func (p projModInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt32Int64ConstOp struct {
@@ -21573,14 +20912,14 @@ type projModInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projModInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21688,10 +21027,6 @@ func (p projModInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt32DecimalConstOp struct {
@@ -21699,14 +21034,14 @@ type projModInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projModInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21842,10 +21177,6 @@ func (p projModInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt64Int16ConstOp struct {
@@ -21853,14 +21184,14 @@ type projModInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projModInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -21968,10 +21299,6 @@ func (p projModInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt64Int32ConstOp struct {
@@ -21979,14 +21306,14 @@ type projModInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projModInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22094,10 +21421,6 @@ func (p projModInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt64Int64ConstOp struct {
@@ -22105,14 +21428,14 @@ type projModInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projModInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22220,10 +21543,6 @@ func (p projModInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModInt64DecimalConstOp struct {
@@ -22231,14 +21550,14 @@ type projModInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projModInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22374,10 +21693,6 @@ func (p projModInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModInt64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projModFloat64Float64ConstOp struct {
@@ -22385,14 +21700,14 @@ type projModFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projModFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projModFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22508,10 +21823,6 @@ func (p projModFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projModFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowDecimalInt16ConstOp struct {
@@ -22519,14 +21830,14 @@ type projPowDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projPowDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22642,10 +21953,6 @@ func (p projPowDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowDecimalInt32ConstOp struct {
@@ -22653,14 +21960,14 @@ type projPowDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projPowDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22776,10 +22083,6 @@ func (p projPowDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowDecimalInt64ConstOp struct {
@@ -22787,14 +22090,14 @@ type projPowDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projPowDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -22910,10 +22213,6 @@ func (p projPowDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowDecimalDecimalConstOp struct {
@@ -22921,14 +22220,14 @@ type projPowDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPowDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23042,23 +22341,19 @@ func (p projPowDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projPowDecimalDecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projPowInt16Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projPowInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23194,10 +22489,6 @@ func (p projPowInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowInt16Int32ConstOp struct {
@@ -23205,14 +22496,14 @@ type projPowInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPowInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23348,10 +22639,6 @@ func (p projPowInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowInt16Int64ConstOp struct {
@@ -23359,14 +22646,14 @@ type projPowInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPowInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23502,10 +22789,6 @@ func (p projPowInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowInt16DecimalConstOp struct {
@@ -23513,14 +22796,14 @@ type projPowInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPowInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23642,23 +22925,19 @@ func (p projPowInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projPowInt16DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projPowInt32Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projPowInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23794,10 +23073,6 @@ func (p projPowInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowInt32Int32ConstOp struct {
@@ -23805,14 +23080,14 @@ type projPowInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPowInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -23948,10 +23223,6 @@ func (p projPowInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowInt32Int64ConstOp struct {
@@ -23959,14 +23230,14 @@ type projPowInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPowInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24102,10 +23373,6 @@ func (p projPowInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowInt32DecimalConstOp struct {
@@ -24113,14 +23380,14 @@ type projPowInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projPowInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24242,23 +23509,19 @@ func (p projPowInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projPowInt32DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projPowInt64Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projPowInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24394,10 +23657,6 @@ func (p projPowInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowInt64Int32ConstOp struct {
@@ -24405,14 +23664,14 @@ type projPowInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projPowInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24548,10 +23807,6 @@ func (p projPowInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projPowInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projPowInt64Int64ConstOp struct {
@@ -24559,14 +23814,14 @@ type projPowInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projPowInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24704,23 +23959,19 @@ func (p projPowInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projPowInt64Int64ConstOp) Init() {
-	p.Input.Init()
-}
-
 type projPowInt64DecimalConstOp struct {
 	projConstOpBase
 	constArg apd.Decimal
 }
 
-func (p projPowInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24842,23 +24093,19 @@ func (p projPowInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projPowInt64DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projPowFloat64Float64ConstOp struct {
 	projConstOpBase
 	constArg float64
 }
 
-func (p projPowFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projPowFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -24960,23 +24207,19 @@ func (p projPowFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projPowFloat64Float64ConstOp) Init() {
-	p.Input.Init()
-}
-
 type projConcatBytesBytesConstOp struct {
 	projConstOpBase
 	constArg []byte
 }
 
-func (p projConcatBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projConcatBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25082,10 +24325,6 @@ func (p projConcatBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projConcatBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projConcatJSONJSONConstOp struct {
@@ -25093,14 +24332,14 @@ type projConcatJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projConcatJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projConcatJSONJSONConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25202,10 +24441,6 @@ func (p projConcatJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projConcatJSONJSONConstOp) Init() {
-	p.Input.Init()
 }
 
 type projConcatDatumDatumConstOp struct {
@@ -25213,14 +24448,14 @@ type projConcatDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projConcatDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projConcatDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25334,10 +24569,6 @@ func (p projConcatDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projConcatDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftInt16Int16ConstOp struct {
@@ -25345,14 +24576,14 @@ type projLShiftInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLShiftInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25464,10 +24695,6 @@ func (p projLShiftInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftInt16Int32ConstOp struct {
@@ -25475,14 +24702,14 @@ type projLShiftInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLShiftInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25594,10 +24821,6 @@ func (p projLShiftInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftInt16Int64ConstOp struct {
@@ -25605,14 +24828,14 @@ type projLShiftInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLShiftInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25724,10 +24947,6 @@ func (p projLShiftInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftInt32Int16ConstOp struct {
@@ -25735,14 +24954,14 @@ type projLShiftInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLShiftInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25854,10 +25073,6 @@ func (p projLShiftInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftInt32Int32ConstOp struct {
@@ -25865,14 +25080,14 @@ type projLShiftInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLShiftInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -25984,10 +25199,6 @@ func (p projLShiftInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftInt32Int64ConstOp struct {
@@ -25995,14 +25206,14 @@ type projLShiftInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLShiftInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26114,10 +25325,6 @@ func (p projLShiftInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftInt64Int16ConstOp struct {
@@ -26125,14 +25332,14 @@ type projLShiftInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLShiftInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26244,10 +25451,6 @@ func (p projLShiftInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftInt64Int32ConstOp struct {
@@ -26255,14 +25458,14 @@ type projLShiftInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLShiftInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26374,10 +25577,6 @@ func (p projLShiftInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftInt64Int64ConstOp struct {
@@ -26385,14 +25584,14 @@ type projLShiftInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLShiftInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26504,10 +25703,6 @@ func (p projLShiftInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftDatumInt16ConstOp struct {
@@ -26515,14 +25710,14 @@ type projLShiftDatumInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projLShiftDatumInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftDatumInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26654,10 +25849,6 @@ func (p projLShiftDatumInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftDatumInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftDatumInt32ConstOp struct {
@@ -26665,14 +25856,14 @@ type projLShiftDatumInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projLShiftDatumInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftDatumInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26804,10 +25995,6 @@ func (p projLShiftDatumInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftDatumInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLShiftDatumInt64ConstOp struct {
@@ -26815,14 +26002,14 @@ type projLShiftDatumInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projLShiftDatumInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLShiftDatumInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -26954,10 +26141,6 @@ func (p projLShiftDatumInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLShiftDatumInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftInt16Int16ConstOp struct {
@@ -26965,14 +26148,14 @@ type projRShiftInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projRShiftInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27084,10 +26267,6 @@ func (p projRShiftInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftInt16Int32ConstOp struct {
@@ -27095,14 +26274,14 @@ type projRShiftInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projRShiftInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27214,10 +26393,6 @@ func (p projRShiftInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftInt16Int64ConstOp struct {
@@ -27225,14 +26400,14 @@ type projRShiftInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projRShiftInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27344,10 +26519,6 @@ func (p projRShiftInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftInt32Int16ConstOp struct {
@@ -27355,14 +26526,14 @@ type projRShiftInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projRShiftInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27474,10 +26645,6 @@ func (p projRShiftInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftInt32Int32ConstOp struct {
@@ -27485,14 +26652,14 @@ type projRShiftInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projRShiftInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27604,10 +26771,6 @@ func (p projRShiftInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftInt32Int64ConstOp struct {
@@ -27615,14 +26778,14 @@ type projRShiftInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projRShiftInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27734,10 +26897,6 @@ func (p projRShiftInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftInt64Int16ConstOp struct {
@@ -27745,14 +26904,14 @@ type projRShiftInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projRShiftInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27864,10 +27023,6 @@ func (p projRShiftInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftInt64Int32ConstOp struct {
@@ -27875,14 +27030,14 @@ type projRShiftInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projRShiftInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -27994,10 +27149,6 @@ func (p projRShiftInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftInt64Int64ConstOp struct {
@@ -28005,14 +27156,14 @@ type projRShiftInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projRShiftInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28126,23 +27277,19 @@ func (p projRShiftInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projRShiftInt64Int64ConstOp) Init() {
-	p.Input.Init()
-}
-
 type projRShiftDatumInt16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projRShiftDatumInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftDatumInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28274,10 +27421,6 @@ func (p projRShiftDatumInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftDatumInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftDatumInt32ConstOp struct {
@@ -28285,14 +27428,14 @@ type projRShiftDatumInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projRShiftDatumInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftDatumInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28424,10 +27567,6 @@ func (p projRShiftDatumInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projRShiftDatumInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projRShiftDatumInt64ConstOp struct {
@@ -28435,14 +27574,14 @@ type projRShiftDatumInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projRShiftDatumInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projRShiftDatumInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28576,23 +27715,19 @@ func (p projRShiftDatumInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projRShiftDatumInt64ConstOp) Init() {
-	p.Input.Init()
-}
-
 type projJSONFetchValJSONBytesConstOp struct {
 	projConstOpBase
 	constArg []byte
 }
 
-func (p projJSONFetchValJSONBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchValJSONBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28718,10 +27853,6 @@ func (p projJSONFetchValJSONBytesConstOp) Next(ctx context.Context) coldata.Batc
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projJSONFetchValJSONBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projJSONFetchValJSONInt16ConstOp struct {
@@ -28729,14 +27860,14 @@ type projJSONFetchValJSONInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projJSONFetchValJSONInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchValJSONInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28852,10 +27983,6 @@ func (p projJSONFetchValJSONInt16ConstOp) Next(ctx context.Context) coldata.Batc
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projJSONFetchValJSONInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projJSONFetchValJSONInt32ConstOp struct {
@@ -28863,14 +27990,14 @@ type projJSONFetchValJSONInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projJSONFetchValJSONInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchValJSONInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -28986,10 +28113,6 @@ func (p projJSONFetchValJSONInt32ConstOp) Next(ctx context.Context) coldata.Batc
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projJSONFetchValJSONInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projJSONFetchValJSONInt64ConstOp struct {
@@ -28997,14 +28120,14 @@ type projJSONFetchValJSONInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projJSONFetchValJSONInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchValJSONInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29120,10 +28243,6 @@ func (p projJSONFetchValJSONInt64ConstOp) Next(ctx context.Context) coldata.Batc
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projJSONFetchValJSONInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projJSONFetchTextJSONBytesConstOp struct {
@@ -29131,14 +28250,14 @@ type projJSONFetchTextJSONBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchTextJSONBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29300,10 +28419,6 @@ func (p projJSONFetchTextJSONBytesConstOp) Next(ctx context.Context) coldata.Bat
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projJSONFetchTextJSONBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projJSONFetchTextJSONInt16ConstOp struct {
@@ -29311,14 +28426,14 @@ type projJSONFetchTextJSONInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projJSONFetchTextJSONInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchTextJSONInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29470,10 +28585,6 @@ func (p projJSONFetchTextJSONInt16ConstOp) Next(ctx context.Context) coldata.Bat
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projJSONFetchTextJSONInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projJSONFetchTextJSONInt32ConstOp struct {
@@ -29481,14 +28592,14 @@ type projJSONFetchTextJSONInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projJSONFetchTextJSONInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchTextJSONInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29640,10 +28751,6 @@ func (p projJSONFetchTextJSONInt32ConstOp) Next(ctx context.Context) coldata.Bat
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projJSONFetchTextJSONInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projJSONFetchTextJSONInt64ConstOp struct {
@@ -29651,14 +28758,14 @@ type projJSONFetchTextJSONInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projJSONFetchTextJSONInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchTextJSONInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29812,23 +28919,19 @@ func (p projJSONFetchTextJSONInt64ConstOp) Next(ctx context.Context) coldata.Bat
 	return batch
 }
 
-func (p projJSONFetchTextJSONInt64ConstOp) Init() {
-	p.Input.Init()
-}
-
 type projJSONFetchValPathJSONDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
 }
 
-func (p projJSONFetchValPathJSONDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchValPathJSONDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -29944,23 +29047,19 @@ func (p projJSONFetchValPathJSONDatumConstOp) Next(ctx context.Context) coldata.
 	return batch
 }
 
-func (p projJSONFetchValPathJSONDatumConstOp) Init() {
-	p.Input.Init()
-}
-
 type projJSONFetchTextPathJSONDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
 }
 
-func (p projJSONFetchTextPathJSONDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projJSONFetchTextPathJSONDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30116,23 +29215,19 @@ func (p projJSONFetchTextPathJSONDatumConstOp) Next(ctx context.Context) coldata
 	return batch
 }
 
-func (p projJSONFetchTextPathJSONDatumConstOp) Init() {
-	p.Input.Init()
-}
-
 type projEQBoolBoolConstOp struct {
 	projConstOpBase
 	constArg bool
 }
 
-func (p projEQBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQBoolBoolConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30268,10 +29363,6 @@ func (p projEQBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQBoolBoolConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQBytesBytesConstOp struct {
@@ -30279,14 +29370,14 @@ type projEQBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projEQBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30388,10 +29479,6 @@ func (p projEQBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQDecimalInt16ConstOp struct {
@@ -30399,14 +29486,14 @@ type projEQDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30534,10 +29621,6 @@ func (p projEQDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQDecimalInt32ConstOp struct {
@@ -30545,14 +29628,14 @@ type projEQDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30680,10 +29763,6 @@ func (p projEQDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQDecimalInt64ConstOp struct {
@@ -30691,14 +29770,14 @@ type projEQDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30826,10 +29905,6 @@ func (p projEQDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQDecimalFloat64ConstOp struct {
@@ -30837,14 +29912,14 @@ type projEQDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQDecimalFloat64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -30980,10 +30055,6 @@ func (p projEQDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQDecimalFloat64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQDecimalDecimalConstOp struct {
@@ -30991,14 +30062,14 @@ type projEQDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31102,10 +30173,6 @@ func (p projEQDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQDecimalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt16Int16ConstOp struct {
@@ -31113,14 +30180,14 @@ type projEQInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31268,10 +30335,6 @@ func (p projEQInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt16Int32ConstOp struct {
@@ -31279,14 +30342,14 @@ type projEQInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31434,10 +30497,6 @@ func (p projEQInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt16Int64ConstOp struct {
@@ -31445,14 +30504,14 @@ type projEQInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31600,10 +30659,6 @@ func (p projEQInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt16Float64ConstOp struct {
@@ -31611,14 +30666,14 @@ type projEQInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt16Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31798,10 +30853,6 @@ func (p projEQInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt16Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt16DecimalConstOp struct {
@@ -31809,14 +30860,14 @@ type projEQInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -31944,10 +30995,6 @@ func (p projEQInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt32Int16ConstOp struct {
@@ -31955,14 +31002,14 @@ type projEQInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32110,10 +31157,6 @@ func (p projEQInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt32Int32ConstOp struct {
@@ -32121,14 +31164,14 @@ type projEQInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32276,10 +31319,6 @@ func (p projEQInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt32Int64ConstOp struct {
@@ -32287,14 +31326,14 @@ type projEQInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32442,10 +31481,6 @@ func (p projEQInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt32Float64ConstOp struct {
@@ -32453,14 +31488,14 @@ type projEQInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt32Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32640,10 +31675,6 @@ func (p projEQInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt32Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt32DecimalConstOp struct {
@@ -32651,14 +31682,14 @@ type projEQInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32786,10 +31817,6 @@ func (p projEQInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt64Int16ConstOp struct {
@@ -32797,14 +31824,14 @@ type projEQInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -32952,10 +31979,6 @@ func (p projEQInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt64Int32ConstOp struct {
@@ -32963,14 +31986,14 @@ type projEQInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33118,10 +32141,6 @@ func (p projEQInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt64Int64ConstOp struct {
@@ -33129,14 +32148,14 @@ type projEQInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33284,10 +32303,6 @@ func (p projEQInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt64Float64ConstOp struct {
@@ -33295,14 +32310,14 @@ type projEQInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33482,10 +32497,6 @@ func (p projEQInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQInt64DecimalConstOp struct {
@@ -33493,14 +32504,14 @@ type projEQInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33628,10 +32639,6 @@ func (p projEQInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQInt64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQFloat64Int16ConstOp struct {
@@ -33639,14 +32646,14 @@ type projEQFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projEQFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQFloat64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -33826,10 +32833,6 @@ func (p projEQFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQFloat64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQFloat64Int32ConstOp struct {
@@ -33837,14 +32840,14 @@ type projEQFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projEQFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQFloat64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34024,10 +33027,6 @@ func (p projEQFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQFloat64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQFloat64Int64ConstOp struct {
@@ -34035,14 +33034,14 @@ type projEQFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projEQFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQFloat64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34222,10 +33221,6 @@ func (p projEQFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQFloat64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQFloat64Float64ConstOp struct {
@@ -34233,14 +33228,14 @@ type projEQFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projEQFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34420,10 +33415,6 @@ func (p projEQFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQFloat64DecimalConstOp struct {
@@ -34431,14 +33422,14 @@ type projEQFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projEQFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQFloat64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34574,10 +33565,6 @@ func (p projEQFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQFloat64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQTimestampTimestampConstOp struct {
@@ -34585,14 +33572,14 @@ type projEQTimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projEQTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQTimestampTimestampConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34724,10 +33711,6 @@ func (p projEQTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQTimestampTimestampConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQIntervalIntervalConstOp struct {
@@ -34735,14 +33718,14 @@ type projEQIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projEQIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQIntervalIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34846,10 +33829,6 @@ func (p projEQIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQIntervalIntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQJSONJSONConstOp struct {
@@ -34857,14 +33836,14 @@ type projEQJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQJSONJSONConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -34990,10 +33969,6 @@ func (p projEQJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQJSONJSONConstOp) Init() {
-	p.Input.Init()
 }
 
 type projEQDatumDatumConstOp struct {
@@ -35001,14 +33976,14 @@ type projEQDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projEQDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projEQDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35118,10 +34093,6 @@ func (p projEQDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projEQDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEBoolBoolConstOp struct {
@@ -35129,14 +34100,14 @@ type projNEBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projNEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEBoolBoolConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35272,10 +34243,6 @@ func (p projNEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEBoolBoolConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEBytesBytesConstOp struct {
@@ -35283,14 +34250,14 @@ type projNEBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projNEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35392,10 +34359,6 @@ func (p projNEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEDecimalInt16ConstOp struct {
@@ -35403,14 +34366,14 @@ type projNEDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35538,10 +34501,6 @@ func (p projNEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEDecimalInt32ConstOp struct {
@@ -35549,14 +34508,14 @@ type projNEDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35684,10 +34643,6 @@ func (p projNEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEDecimalInt64ConstOp struct {
@@ -35695,14 +34650,14 @@ type projNEDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35830,10 +34785,6 @@ func (p projNEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEDecimalFloat64ConstOp struct {
@@ -35841,14 +34792,14 @@ type projNEDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEDecimalFloat64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -35984,10 +34935,6 @@ func (p projNEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEDecimalFloat64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEDecimalDecimalConstOp struct {
@@ -35995,14 +34942,14 @@ type projNEDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36106,10 +35053,6 @@ func (p projNEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEDecimalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt16Int16ConstOp struct {
@@ -36117,14 +35060,14 @@ type projNEInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36272,10 +35215,6 @@ func (p projNEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt16Int32ConstOp struct {
@@ -36283,14 +35222,14 @@ type projNEInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36438,10 +35377,6 @@ func (p projNEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt16Int64ConstOp struct {
@@ -36449,14 +35384,14 @@ type projNEInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36604,10 +35539,6 @@ func (p projNEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt16Float64ConstOp struct {
@@ -36615,14 +35546,14 @@ type projNEInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt16Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36802,10 +35733,6 @@ func (p projNEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt16Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt16DecimalConstOp struct {
@@ -36813,14 +35740,14 @@ type projNEInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -36948,10 +35875,6 @@ func (p projNEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt32Int16ConstOp struct {
@@ -36959,14 +35882,14 @@ type projNEInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37114,10 +36037,6 @@ func (p projNEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt32Int32ConstOp struct {
@@ -37125,14 +36044,14 @@ type projNEInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37280,10 +36199,6 @@ func (p projNEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt32Int64ConstOp struct {
@@ -37291,14 +36206,14 @@ type projNEInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37446,10 +36361,6 @@ func (p projNEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt32Float64ConstOp struct {
@@ -37457,14 +36368,14 @@ type projNEInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt32Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37644,10 +36555,6 @@ func (p projNEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt32Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt32DecimalConstOp struct {
@@ -37655,14 +36562,14 @@ type projNEInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37790,10 +36697,6 @@ func (p projNEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt64Int16ConstOp struct {
@@ -37801,14 +36704,14 @@ type projNEInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -37956,10 +36859,6 @@ func (p projNEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt64Int32ConstOp struct {
@@ -37967,14 +36866,14 @@ type projNEInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38122,10 +37021,6 @@ func (p projNEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt64Int64ConstOp struct {
@@ -38133,14 +37028,14 @@ type projNEInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38288,10 +37183,6 @@ func (p projNEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt64Float64ConstOp struct {
@@ -38299,14 +37190,14 @@ type projNEInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38486,10 +37377,6 @@ func (p projNEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEInt64DecimalConstOp struct {
@@ -38497,14 +37384,14 @@ type projNEInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38632,10 +37519,6 @@ func (p projNEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEInt64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEFloat64Int16ConstOp struct {
@@ -38643,14 +37526,14 @@ type projNEFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projNEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEFloat64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -38830,10 +37713,6 @@ func (p projNEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEFloat64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEFloat64Int32ConstOp struct {
@@ -38841,14 +37720,14 @@ type projNEFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projNEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEFloat64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39028,10 +37907,6 @@ func (p projNEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEFloat64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEFloat64Int64ConstOp struct {
@@ -39039,14 +37914,14 @@ type projNEFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projNEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEFloat64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39226,10 +38101,6 @@ func (p projNEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEFloat64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEFloat64Float64ConstOp struct {
@@ -39237,14 +38108,14 @@ type projNEFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projNEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39424,10 +38295,6 @@ func (p projNEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEFloat64DecimalConstOp struct {
@@ -39435,14 +38302,14 @@ type projNEFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projNEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEFloat64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39578,10 +38445,6 @@ func (p projNEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEFloat64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNETimestampTimestampConstOp struct {
@@ -39589,14 +38452,14 @@ type projNETimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projNETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNETimestampTimestampConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39728,10 +38591,6 @@ func (p projNETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNETimestampTimestampConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEIntervalIntervalConstOp struct {
@@ -39739,14 +38598,14 @@ type projNEIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projNEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEIntervalIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39850,10 +38709,6 @@ func (p projNEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEIntervalIntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEJSONJSONConstOp struct {
@@ -39861,14 +38716,14 @@ type projNEJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEJSONJSONConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -39994,10 +38849,6 @@ func (p projNEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEJSONJSONConstOp) Init() {
-	p.Input.Init()
 }
 
 type projNEDatumDatumConstOp struct {
@@ -40005,14 +38856,14 @@ type projNEDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projNEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projNEDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40122,10 +38973,6 @@ func (p projNEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projNEDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTBoolBoolConstOp struct {
@@ -40133,14 +38980,14 @@ type projLTBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projLTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTBoolBoolConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40276,10 +39123,6 @@ func (p projLTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTBoolBoolConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTBytesBytesConstOp struct {
@@ -40287,14 +39130,14 @@ type projLTBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projLTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40396,10 +39239,6 @@ func (p projLTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTDecimalInt16ConstOp struct {
@@ -40407,14 +39246,14 @@ type projLTDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40542,10 +39381,6 @@ func (p projLTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTDecimalInt32ConstOp struct {
@@ -40553,14 +39388,14 @@ type projLTDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40688,10 +39523,6 @@ func (p projLTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTDecimalInt64ConstOp struct {
@@ -40699,14 +39530,14 @@ type projLTDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40834,10 +39665,6 @@ func (p projLTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTDecimalFloat64ConstOp struct {
@@ -40845,14 +39672,14 @@ type projLTDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTDecimalFloat64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -40988,10 +39815,6 @@ func (p projLTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTDecimalFloat64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTDecimalDecimalConstOp struct {
@@ -40999,14 +39822,14 @@ type projLTDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41110,10 +39933,6 @@ func (p projLTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTDecimalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt16Int16ConstOp struct {
@@ -41121,14 +39940,14 @@ type projLTInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41276,10 +40095,6 @@ func (p projLTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt16Int32ConstOp struct {
@@ -41287,14 +40102,14 @@ type projLTInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41442,10 +40257,6 @@ func (p projLTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt16Int64ConstOp struct {
@@ -41453,14 +40264,14 @@ type projLTInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41608,10 +40419,6 @@ func (p projLTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt16Float64ConstOp struct {
@@ -41619,14 +40426,14 @@ type projLTInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt16Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41806,10 +40613,6 @@ func (p projLTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt16Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt16DecimalConstOp struct {
@@ -41817,14 +40620,14 @@ type projLTInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -41952,10 +40755,6 @@ func (p projLTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt32Int16ConstOp struct {
@@ -41963,14 +40762,14 @@ type projLTInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42118,10 +40917,6 @@ func (p projLTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt32Int32ConstOp struct {
@@ -42129,14 +40924,14 @@ type projLTInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42284,10 +41079,6 @@ func (p projLTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt32Int64ConstOp struct {
@@ -42295,14 +41086,14 @@ type projLTInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42450,10 +41241,6 @@ func (p projLTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt32Float64ConstOp struct {
@@ -42461,14 +41248,14 @@ type projLTInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt32Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42648,10 +41435,6 @@ func (p projLTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt32Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt32DecimalConstOp struct {
@@ -42659,14 +41442,14 @@ type projLTInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42794,10 +41577,6 @@ func (p projLTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt64Int16ConstOp struct {
@@ -42805,14 +41584,14 @@ type projLTInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -42960,10 +41739,6 @@ func (p projLTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt64Int32ConstOp struct {
@@ -42971,14 +41746,14 @@ type projLTInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43126,10 +41901,6 @@ func (p projLTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt64Int64ConstOp struct {
@@ -43137,14 +41908,14 @@ type projLTInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43292,10 +42063,6 @@ func (p projLTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt64Float64ConstOp struct {
@@ -43303,14 +42070,14 @@ type projLTInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43490,10 +42257,6 @@ func (p projLTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTInt64DecimalConstOp struct {
@@ -43501,14 +42264,14 @@ type projLTInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43636,10 +42399,6 @@ func (p projLTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTInt64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTFloat64Int16ConstOp struct {
@@ -43647,14 +42406,14 @@ type projLTFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTFloat64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -43834,10 +42593,6 @@ func (p projLTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTFloat64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTFloat64Int32ConstOp struct {
@@ -43845,14 +42600,14 @@ type projLTFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTFloat64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44032,10 +42787,6 @@ func (p projLTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTFloat64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTFloat64Int64ConstOp struct {
@@ -44043,14 +42794,14 @@ type projLTFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTFloat64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44230,10 +42981,6 @@ func (p projLTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTFloat64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTFloat64Float64ConstOp struct {
@@ -44241,14 +42988,14 @@ type projLTFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44428,10 +43175,6 @@ func (p projLTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTFloat64DecimalConstOp struct {
@@ -44439,14 +43182,14 @@ type projLTFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTFloat64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44582,10 +43325,6 @@ func (p projLTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTFloat64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTTimestampTimestampConstOp struct {
@@ -44593,14 +43332,14 @@ type projLTTimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projLTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTTimestampTimestampConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44732,10 +43471,6 @@ func (p projLTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTTimestampTimestampConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTIntervalIntervalConstOp struct {
@@ -44743,14 +43478,14 @@ type projLTIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projLTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTIntervalIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44854,10 +43589,6 @@ func (p projLTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTIntervalIntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTJSONJSONConstOp struct {
@@ -44865,14 +43596,14 @@ type projLTJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTJSONJSONConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -44998,10 +43729,6 @@ func (p projLTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTJSONJSONConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLTDatumDatumConstOp struct {
@@ -45009,14 +43736,14 @@ type projLTDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projLTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLTDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45126,10 +43853,6 @@ func (p projLTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLTDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEBoolBoolConstOp struct {
@@ -45137,14 +43860,14 @@ type projLEBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projLEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEBoolBoolConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45280,10 +44003,6 @@ func (p projLEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEBoolBoolConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEBytesBytesConstOp struct {
@@ -45291,14 +44010,14 @@ type projLEBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projLEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45400,10 +44119,6 @@ func (p projLEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEBytesBytesConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEDecimalInt16ConstOp struct {
@@ -45411,14 +44126,14 @@ type projLEDecimalInt16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45546,10 +44261,6 @@ func (p projLEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEDecimalInt32ConstOp struct {
@@ -45557,14 +44268,14 @@ type projLEDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45692,10 +44403,6 @@ func (p projLEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEDecimalInt64ConstOp struct {
@@ -45703,14 +44410,14 @@ type projLEDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45838,10 +44545,6 @@ func (p projLEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEDecimalFloat64ConstOp struct {
@@ -45849,14 +44552,14 @@ type projLEDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEDecimalFloat64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -45992,10 +44695,6 @@ func (p projLEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEDecimalFloat64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEDecimalDecimalConstOp struct {
@@ -46003,14 +44702,14 @@ type projLEDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46114,10 +44813,6 @@ func (p projLEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEDecimalDecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt16Int16ConstOp struct {
@@ -46125,14 +44820,14 @@ type projLEInt16Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46280,10 +44975,6 @@ func (p projLEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt16Int32ConstOp struct {
@@ -46291,14 +44982,14 @@ type projLEInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46446,10 +45137,6 @@ func (p projLEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt16Int64ConstOp struct {
@@ -46457,14 +45144,14 @@ type projLEInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46612,10 +45299,6 @@ func (p projLEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt16Float64ConstOp struct {
@@ -46623,14 +45306,14 @@ type projLEInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt16Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46810,10 +45493,6 @@ func (p projLEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt16Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt16DecimalConstOp struct {
@@ -46821,14 +45500,14 @@ type projLEInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -46956,10 +45635,6 @@ func (p projLEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt16DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt32Int16ConstOp struct {
@@ -46967,14 +45642,14 @@ type projLEInt32Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47122,10 +45797,6 @@ func (p projLEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt32Int32ConstOp struct {
@@ -47133,14 +45804,14 @@ type projLEInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47288,10 +45959,6 @@ func (p projLEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt32Int64ConstOp struct {
@@ -47299,14 +45966,14 @@ type projLEInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47454,10 +46121,6 @@ func (p projLEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt32Float64ConstOp struct {
@@ -47465,14 +46128,14 @@ type projLEInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt32Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47652,10 +46315,6 @@ func (p projLEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt32Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt32DecimalConstOp struct {
@@ -47663,14 +46322,14 @@ type projLEInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47798,10 +46457,6 @@ func (p projLEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt32DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt64Int16ConstOp struct {
@@ -47809,14 +46464,14 @@ type projLEInt64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -47964,10 +46619,6 @@ func (p projLEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt64Int32ConstOp struct {
@@ -47975,14 +46626,14 @@ type projLEInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48130,10 +46781,6 @@ func (p projLEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt64Int64ConstOp struct {
@@ -48141,14 +46788,14 @@ type projLEInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48296,10 +46943,6 @@ func (p projLEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt64Float64ConstOp struct {
@@ -48307,14 +46950,14 @@ type projLEInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48494,10 +47137,6 @@ func (p projLEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEInt64DecimalConstOp struct {
@@ -48505,14 +47144,14 @@ type projLEInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48640,10 +47279,6 @@ func (p projLEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEInt64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEFloat64Int16ConstOp struct {
@@ -48651,14 +47286,14 @@ type projLEFloat64Int16ConstOp struct {
 	constArg int16
 }
 
-func (p projLEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEFloat64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -48838,10 +47473,6 @@ func (p projLEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEFloat64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEFloat64Int32ConstOp struct {
@@ -48849,14 +47480,14 @@ type projLEFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projLEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEFloat64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49036,10 +47667,6 @@ func (p projLEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEFloat64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEFloat64Int64ConstOp struct {
@@ -49047,14 +47674,14 @@ type projLEFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projLEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEFloat64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49234,10 +47861,6 @@ func (p projLEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEFloat64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEFloat64Float64ConstOp struct {
@@ -49245,14 +47868,14 @@ type projLEFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projLEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49432,10 +48055,6 @@ func (p projLEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEFloat64DecimalConstOp struct {
@@ -49443,14 +48062,14 @@ type projLEFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projLEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEFloat64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49586,10 +48205,6 @@ func (p projLEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEFloat64DecimalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLETimestampTimestampConstOp struct {
@@ -49597,14 +48212,14 @@ type projLETimestampTimestampConstOp struct {
 	constArg time.Time
 }
 
-func (p projLETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLETimestampTimestampConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49736,10 +48351,6 @@ func (p projLETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLETimestampTimestampConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEIntervalIntervalConstOp struct {
@@ -49747,14 +48358,14 @@ type projLEIntervalIntervalConstOp struct {
 	constArg duration.Duration
 }
 
-func (p projLEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEIntervalIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -49858,10 +48469,6 @@ func (p projLEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEIntervalIntervalConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEJSONJSONConstOp struct {
@@ -49869,14 +48476,14 @@ type projLEJSONJSONConstOp struct {
 	constArg json.JSON
 }
 
-func (p projLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEJSONJSONConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50002,10 +48609,6 @@ func (p projLEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEJSONJSONConstOp) Init() {
-	p.Input.Init()
 }
 
 type projLEDatumDatumConstOp struct {
@@ -50013,14 +48616,14 @@ type projLEDatumDatumConstOp struct {
 	constArg interface{}
 }
 
-func (p projLEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projLEDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50130,10 +48733,6 @@ func (p projLEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projLEDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTBoolBoolConstOp struct {
@@ -50141,14 +48740,14 @@ type projGTBoolBoolConstOp struct {
 	constArg bool
 }
 
-func (p projGTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTBoolBoolConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50284,10 +48883,6 @@ func (p projGTBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTBoolBoolConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTBytesBytesConstOp struct {
@@ -50295,14 +48890,14 @@ type projGTBytesBytesConstOp struct {
 	constArg []byte
 }
 
-func (p projGTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50406,23 +49001,19 @@ func (p projGTBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGTBytesBytesConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGTDecimalInt16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50550,10 +49141,6 @@ func (p projGTDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTDecimalInt32ConstOp struct {
@@ -50561,14 +49148,14 @@ type projGTDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50696,10 +49283,6 @@ func (p projGTDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTDecimalInt64ConstOp struct {
@@ -50707,14 +49290,14 @@ type projGTDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50842,10 +49425,6 @@ func (p projGTDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTDecimalFloat64ConstOp struct {
@@ -50853,14 +49432,14 @@ type projGTDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTDecimalFloat64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -50996,10 +49575,6 @@ func (p projGTDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTDecimalFloat64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTDecimalDecimalConstOp struct {
@@ -51007,14 +49582,14 @@ type projGTDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51120,23 +49695,19 @@ func (p projGTDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGTDecimalDecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGTInt16Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51284,10 +49855,6 @@ func (p projGTInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt16Int32ConstOp struct {
@@ -51295,14 +49862,14 @@ type projGTInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51450,10 +50017,6 @@ func (p projGTInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt16Int64ConstOp struct {
@@ -51461,14 +50024,14 @@ type projGTInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51616,10 +50179,6 @@ func (p projGTInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt16Float64ConstOp struct {
@@ -51627,14 +50186,14 @@ type projGTInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt16Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51814,10 +50373,6 @@ func (p projGTInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt16Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt16DecimalConstOp struct {
@@ -51825,14 +50380,14 @@ type projGTInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -51962,23 +50517,19 @@ func (p projGTInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGTInt16DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGTInt32Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52126,10 +50677,6 @@ func (p projGTInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt32Int32ConstOp struct {
@@ -52137,14 +50684,14 @@ type projGTInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52292,10 +50839,6 @@ func (p projGTInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt32Int64ConstOp struct {
@@ -52303,14 +50846,14 @@ type projGTInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52458,10 +51001,6 @@ func (p projGTInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt32Float64ConstOp struct {
@@ -52469,14 +51008,14 @@ type projGTInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt32Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52656,10 +51195,6 @@ func (p projGTInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt32Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt32DecimalConstOp struct {
@@ -52667,14 +51202,14 @@ type projGTInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52804,23 +51339,19 @@ func (p projGTInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGTInt32DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGTInt64Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -52968,10 +51499,6 @@ func (p projGTInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt64Int32ConstOp struct {
@@ -52979,14 +51506,14 @@ type projGTInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53134,10 +51661,6 @@ func (p projGTInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt64Int64ConstOp struct {
@@ -53145,14 +51668,14 @@ type projGTInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53300,10 +51823,6 @@ func (p projGTInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt64Float64ConstOp struct {
@@ -53311,14 +51830,14 @@ type projGTInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53498,10 +52017,6 @@ func (p projGTInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTInt64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTInt64DecimalConstOp struct {
@@ -53509,14 +52024,14 @@ type projGTInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53646,23 +52161,19 @@ func (p projGTInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGTInt64DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGTFloat64Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTFloat64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -53842,10 +52353,6 @@ func (p projGTFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTFloat64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTFloat64Int32ConstOp struct {
@@ -53853,14 +52360,14 @@ type projGTFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTFloat64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54040,10 +52547,6 @@ func (p projGTFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTFloat64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTFloat64Int64ConstOp struct {
@@ -54051,14 +52554,14 @@ type projGTFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTFloat64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54238,10 +52741,6 @@ func (p projGTFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTFloat64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTFloat64Float64ConstOp struct {
@@ -54249,14 +52748,14 @@ type projGTFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54436,10 +52935,6 @@ func (p projGTFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGTFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGTFloat64DecimalConstOp struct {
@@ -54447,14 +52942,14 @@ type projGTFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTFloat64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54592,23 +53087,19 @@ func (p projGTFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGTFloat64DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGTTimestampTimestampConstOp struct {
 	projConstOpBase
 	constArg time.Time
 }
 
-func (p projGTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTTimestampTimestampConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54742,23 +53233,19 @@ func (p projGTTimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 	return batch
 }
 
-func (p projGTTimestampTimestampConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGTIntervalIntervalConstOp struct {
 	projConstOpBase
 	constArg duration.Duration
 }
 
-func (p projGTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTIntervalIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -54864,23 +53351,19 @@ func (p projGTIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGTIntervalIntervalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGTJSONJSONConstOp struct {
 	projConstOpBase
 	constArg json.JSON
 }
 
-func (p projGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTJSONJSONConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55008,23 +53491,19 @@ func (p projGTJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGTJSONJSONConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGTDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
 }
 
-func (p projGTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGTDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55136,23 +53615,19 @@ func (p projGTDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGTDatumDatumConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEBoolBoolConstOp struct {
 	projConstOpBase
 	constArg bool
 }
 
-func (p projGEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEBoolBoolConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55290,23 +53765,19 @@ func (p projGEBoolBoolConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGEBoolBoolConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEBytesBytesConstOp struct {
 	projConstOpBase
 	constArg []byte
 }
 
-func (p projGEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEBytesBytesConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55410,23 +53881,19 @@ func (p projGEBytesBytesConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGEBytesBytesConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEDecimalInt16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEDecimalInt16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55554,10 +54021,6 @@ func (p projGEDecimalInt16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEDecimalInt16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEDecimalInt32ConstOp struct {
@@ -55565,14 +54028,14 @@ type projGEDecimalInt32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEDecimalInt32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55700,10 +54163,6 @@ func (p projGEDecimalInt32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEDecimalInt32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEDecimalInt64ConstOp struct {
@@ -55711,14 +54170,14 @@ type projGEDecimalInt64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEDecimalInt64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -55846,10 +54305,6 @@ func (p projGEDecimalInt64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEDecimalInt64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEDecimalFloat64ConstOp struct {
@@ -55857,14 +54312,14 @@ type projGEDecimalFloat64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEDecimalFloat64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56000,10 +54455,6 @@ func (p projGEDecimalFloat64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEDecimalFloat64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEDecimalDecimalConstOp struct {
@@ -56011,14 +54462,14 @@ type projGEDecimalDecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEDecimalDecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56124,23 +54575,19 @@ func (p projGEDecimalDecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGEDecimalDecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEInt16Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt16Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56288,10 +54735,6 @@ func (p projGEInt16Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt16Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt16Int32ConstOp struct {
@@ -56299,14 +54742,14 @@ type projGEInt16Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt16Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56454,10 +54897,6 @@ func (p projGEInt16Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt16Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt16Int64ConstOp struct {
@@ -56465,14 +54904,14 @@ type projGEInt16Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt16Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56620,10 +55059,6 @@ func (p projGEInt16Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt16Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt16Float64ConstOp struct {
@@ -56631,14 +55066,14 @@ type projGEInt16Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt16Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56818,10 +55253,6 @@ func (p projGEInt16Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt16Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt16DecimalConstOp struct {
@@ -56829,14 +55260,14 @@ type projGEInt16DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt16DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -56966,23 +55397,19 @@ func (p projGEInt16DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGEInt16DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEInt32Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt32Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57130,10 +55557,6 @@ func (p projGEInt32Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt32Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt32Int32ConstOp struct {
@@ -57141,14 +55564,14 @@ type projGEInt32Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt32Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57296,10 +55719,6 @@ func (p projGEInt32Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt32Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt32Int64ConstOp struct {
@@ -57307,14 +55726,14 @@ type projGEInt32Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt32Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57462,10 +55881,6 @@ func (p projGEInt32Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt32Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt32Float64ConstOp struct {
@@ -57473,14 +55888,14 @@ type projGEInt32Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt32Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57660,10 +56075,6 @@ func (p projGEInt32Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt32Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt32DecimalConstOp struct {
@@ -57671,14 +56082,14 @@ type projGEInt32DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt32DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57808,23 +56219,19 @@ func (p projGEInt32DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGEInt32DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEInt64Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -57972,10 +56379,6 @@ func (p projGEInt64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt64Int32ConstOp struct {
@@ -57983,14 +56386,14 @@ type projGEInt64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58138,10 +56541,6 @@ func (p projGEInt64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt64Int64ConstOp struct {
@@ -58149,14 +56548,14 @@ type projGEInt64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58304,10 +56703,6 @@ func (p projGEInt64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt64Float64ConstOp struct {
@@ -58315,14 +56710,14 @@ type projGEInt64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58502,10 +56897,6 @@ func (p projGEInt64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEInt64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEInt64DecimalConstOp struct {
@@ -58513,14 +56904,14 @@ type projGEInt64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEInt64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58650,23 +57041,19 @@ func (p projGEInt64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGEInt64DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEFloat64Int16ConstOp struct {
 	projConstOpBase
 	constArg int16
 }
 
-func (p projGEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEFloat64Int16ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -58846,10 +57233,6 @@ func (p projGEFloat64Int16ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEFloat64Int16ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEFloat64Int32ConstOp struct {
@@ -58857,14 +57240,14 @@ type projGEFloat64Int32ConstOp struct {
 	constArg int32
 }
 
-func (p projGEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEFloat64Int32ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59044,10 +57427,6 @@ func (p projGEFloat64Int32ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEFloat64Int32ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEFloat64Int64ConstOp struct {
@@ -59055,14 +57434,14 @@ type projGEFloat64Int64ConstOp struct {
 	constArg int64
 }
 
-func (p projGEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEFloat64Int64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59242,10 +57621,6 @@ func (p projGEFloat64Int64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEFloat64Int64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEFloat64Float64ConstOp struct {
@@ -59253,14 +57628,14 @@ type projGEFloat64Float64ConstOp struct {
 	constArg float64
 }
 
-func (p projGEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEFloat64Float64ConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59440,10 +57815,6 @@ func (p projGEFloat64Float64ConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEFloat64Float64ConstOp) Init() {
-	p.Input.Init()
 }
 
 type projGEFloat64DecimalConstOp struct {
@@ -59451,14 +57822,14 @@ type projGEFloat64DecimalConstOp struct {
 	constArg apd.Decimal
 }
 
-func (p projGEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEFloat64DecimalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59596,23 +57967,19 @@ func (p projGEFloat64DecimalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGEFloat64DecimalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGETimestampTimestampConstOp struct {
 	projConstOpBase
 	constArg time.Time
 }
 
-func (p projGETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGETimestampTimestampConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59746,23 +58113,19 @@ func (p projGETimestampTimestampConstOp) Next(ctx context.Context) coldata.Batch
 	return batch
 }
 
-func (p projGETimestampTimestampConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEIntervalIntervalConstOp struct {
 	projConstOpBase
 	constArg duration.Duration
 }
 
-func (p projGEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEIntervalIntervalConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -59868,23 +58231,19 @@ func (p projGEIntervalIntervalConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGEIntervalIntervalConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEJSONJSONConstOp struct {
 	projConstOpBase
 	constArg json.JSON
 }
 
-func (p projGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEJSONJSONConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -60012,23 +58371,19 @@ func (p projGEJSONJSONConstOp) Next(ctx context.Context) coldata.Batch {
 	return batch
 }
 
-func (p projGEJSONJSONConstOp) Init() {
-	p.Input.Init()
-}
-
 type projGEDatumDatumConstOp struct {
 	projConstOpBase
 	constArg interface{}
 }
 
-func (p projGEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
+func (p projGEDatumDatumConstOp) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -60138,10 +58493,6 @@ func (p projGEDatumDatumConstOp) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p projGEDatumDatumConstOp) Init() {
-	p.Input.Init()
 }
 
 // GetProjectionRConstOperator returns the appropriate constant
@@ -60162,7 +58513,7 @@ func GetProjectionRConstOperator(
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
-		OneInputNode:   colexecop.NewOneInputNode(input),
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,

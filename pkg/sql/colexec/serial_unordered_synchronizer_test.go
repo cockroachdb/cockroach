@@ -54,9 +54,10 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 		}
 	}
 	s := NewSerialUnorderedSynchronizer(inputs)
+	s.Init(ctx)
 	resultBatches := 0
 	for {
-		b := s.Next(ctx)
+		b := s.Next()
 		if b.Length() == 0 {
 			require.Equal(t, len(inputs), len(s.DrainMeta(ctx)))
 			break

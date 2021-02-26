@@ -39,8 +39,8 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0}, {1}}, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 		return &selLTInt64Int64ConstOp{
 			selConstOpBase: selConstOpBase{
-				OneInputNode: colexecop.NewOneInputNode(input[0]),
-				colIdx:       0,
+				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
+				colIdx:         0,
 			},
 			constArg: 2,
 		}, nil
@@ -62,9 +62,9 @@ func TestSelLTInt64Int64(t *testing.T) {
 	colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, colexectestutils.Tuples{{0, 1}}, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 		return &selLTInt64Int64Op{
 			selOpBase: selOpBase{
-				OneInputNode: colexecop.NewOneInputNode(input[0]),
-				col1Idx:      0,
-				col2Idx:      1,
+				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
+				col1Idx:        0,
+				col2Idx:        1,
 			},
 		}, nil
 	})
@@ -88,8 +88,8 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	}
 	expected := &selLTInt64Int64ConstOp{
 		selConstOpBase: selConstOpBase{
-			OneInputNode: colexecop.NewOneInputNode(input),
-			colIdx:       colIdx,
+			OneInputHelper: colexecop.MakeOneInputHelper(input),
+			colIdx:         colIdx,
 		},
 		constArg: constVal,
 	}
@@ -116,8 +116,8 @@ func TestGetSelectionConstMixedTypeOperator(t *testing.T) {
 	}
 	expected := &selLTInt16Int64ConstOp{
 		selConstOpBase: selConstOpBase{
-			OneInputNode: colexecop.NewOneInputNode(input),
-			colIdx:       colIdx,
+			OneInputHelper: colexecop.MakeOneInputHelper(input),
+			colIdx:         colIdx,
 		},
 		constArg: constVal,
 	}
@@ -145,9 +145,9 @@ func TestGetSelectionOperator(t *testing.T) {
 	}
 	expected := &selGEInt16Int16Op{
 		selOpBase: selOpBase{
-			OneInputNode: colexecop.NewOneInputNode(input),
-			col1Idx:      col1Idx,
-			col2Idx:      col2Idx,
+			OneInputHelper: colexecop.MakeOneInputHelper(input),
+			col1Idx:        col1Idx,
+			col2Idx:        col2Idx,
 		},
 	}
 	if !reflect.DeepEqual(op, expected) {
@@ -185,21 +185,21 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasN
 		}
 	}
 	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source.Init()
+	source.Init(ctx)
 
 	plusOp := &selLTInt64Int64ConstOp{
 		selConstOpBase: selConstOpBase{
-			OneInputNode: colexecop.NewOneInputNode(source),
-			colIdx:       0,
+			OneInputHelper: colexecop.MakeOneInputHelper(source),
+			colIdx:         0,
 		},
 		constArg: 0,
 	}
-	plusOp.Init()
+	plusOp.Init(ctx)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		plusOp.Next(ctx)
+		plusOp.Next()
 	}
 }
 
@@ -247,21 +247,21 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls 
 		}
 	}
 	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source.Init()
+	source.Init(ctx)
 
 	plusOp := &selLTInt64Int64Op{
 		selOpBase: selOpBase{
-			OneInputNode: colexecop.NewOneInputNode(source),
-			col1Idx:      0,
-			col2Idx:      1,
+			OneInputHelper: colexecop.MakeOneInputHelper(source),
+			col1Idx:        0,
+			col2Idx:        1,
 		},
 	}
-	plusOp.Init()
+	plusOp.Init(ctx)
 
 	b.SetBytes(int64(8 * coldata.BatchSize() * 2))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		plusOp.Next(ctx)
+		plusOp.Next()
 	}
 }
 

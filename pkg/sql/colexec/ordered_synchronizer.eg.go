@@ -32,7 +32,7 @@ import (
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
-	ctx  context.Context
+	colexecop.InitHelper
 	span *tracing.Span
 
 	allocator             *colmem.Allocator
@@ -117,24 +117,13 @@ func NewOrderedSynchronizer(
 	}
 }
 
-// maybeStartTracingSpan stores the context and possibly starts a tracing span
-// on its first call and is a noop on all consequent calls.
-// TODO(yuzefovich): remove this once ctx is passed in Init.
-func (o *OrderedSynchronizer) maybeStartTracingSpan(ctx context.Context) {
-	if o.ctx == nil {
-		// It is the very first call to maybeStartTracingSpan.
-		o.ctx, o.span = execinfra.ProcessorSpan(ctx, "ordered sync")
-	}
-}
-
 // Next is part of the Operator interface.
-func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
+func (o *OrderedSynchronizer) Next() coldata.Batch {
 	if o.inputBatches == nil {
-		o.maybeStartTracingSpan(ctx)
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
 		o.heap = make([]int, 0, len(o.inputs))
 		for i := range o.inputs {
-			o.inputBatches[i] = o.inputs[i].Root.Next(o.ctx)
+			o.inputBatches[i] = o.inputs[i].Root.Next()
 			o.updateComparators(i)
 			if o.inputBatches[i].Length() > 0 {
 				o.heap = append(o.heap, i)
@@ -265,7 +254,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
 				o.inputIndices[minBatch]++
 			} else {
-				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next(o.ctx)
+				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
 				o.inputIndices[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
@@ -380,12 +369,16 @@ func (o *OrderedSynchronizer) resetOutput() {
 }
 
 // Init is part of the Operator interface.
-func (o *OrderedSynchronizer) Init() {
+func (o *OrderedSynchronizer) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.Ctx, o.span = execinfra.ProcessorSpan(o.Ctx, "ordered sync")
 	o.inputIndices = make([]int, len(o.inputs))
 	o.outNulls = make([]*coldata.Nulls, len(o.typs))
 	o.outColsMap = make([]int, len(o.typs))
 	for i := range o.inputs {
-		o.inputs[i].Root.Init()
+		o.inputs[i].Root.Init(o.Ctx)
 	}
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {
@@ -396,8 +389,6 @@ func (o *OrderedSynchronizer) Init() {
 
 func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	var bufferedMeta []execinfrapb.ProducerMetadata
-	// It is possible that Next was never called, yet the tracing is enabled.
-	o.maybeStartTracingSpan(ctx)
 	if o.span != nil {
 		for i := range o.inputs {
 			for _, stats := range o.inputs[i].StatsCollectors {
@@ -409,7 +400,7 @@ func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.Produ
 		}
 	}
 	for _, input := range o.inputs {
-		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(o.ctx)...)
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(o.Ctx)...)
 	}
 	return bufferedMeta
 }

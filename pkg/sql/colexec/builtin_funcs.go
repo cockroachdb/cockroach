@@ -11,8 +11,6 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -24,7 +22,7 @@ import (
 )
 
 type defaultBuiltinFuncOperator struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	allocator           *colmem.Allocator
 	evalCtx             *tree.EvalContext
 	funcExpr            *tree.FuncExpr
@@ -40,12 +38,8 @@ type defaultBuiltinFuncOperator struct {
 
 var _ colexecop.Operator = &defaultBuiltinFuncOperator{}
 
-func (b *defaultBuiltinFuncOperator) Init() {
-	b.Input.Init()
-}
-
-func (b *defaultBuiltinFuncOperator) Next(ctx context.Context) coldata.Batch {
-	batch := b.Input.Next(ctx)
+func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
+	batch := b.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -127,7 +121,7 @@ func NewBuiltinFunctionOperator(
 		outputType := funcExpr.ResolvedType()
 		input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 		return &defaultBuiltinFuncOperator{
-			OneInputNode:        colexecop.NewOneInputNode(input),
+			OneInputHelper:      colexecop.MakeOneInputHelper(input),
 			allocator:           allocator,
 			evalCtx:             evalCtx,
 			funcExpr:            funcExpr,

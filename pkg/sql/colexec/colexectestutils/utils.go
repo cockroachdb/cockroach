@@ -334,15 +334,15 @@ func RunTestsWithTyps(
 			if err != nil {
 				t.Fatal(err)
 			}
-			op.Init()
+			op.Init(ctx)
 			return op
 		}
 		originalOp := opConstructor(false /* injectAllNulls */)
 		opWithNulls := opConstructor(true /* injectAllNulls */)
 		foundDifference := false
 		for {
-			originalBatch := originalOp.Next(ctx)
-			batchWithNulls := opWithNulls.Next(ctx)
+			originalBatch := originalOp.Next()
+			batchWithNulls := opWithNulls.Next()
 			if originalBatch.Length() != batchWithNulls.Length() {
 				foundDifference = true
 				break
@@ -476,8 +476,8 @@ func RunTestsWithoutAllNullsInjection(
 			}
 			// We might short-circuit, so defer the closing of the operator.
 			defer closeIfCloser(ctx, t, op)
-			op.Init()
-			b := op.Next(ctx)
+			op.Init(ctx)
+			b := op.Next()
 			if b.Length() == 0 {
 				return
 			}
@@ -496,7 +496,7 @@ func RunTestsWithoutAllNullsInjection(
 					}
 				}
 			}
-			b = op.Next(ctx)
+			b = op.Next()
 			if b.Length() == 0 {
 				return
 			}
@@ -537,8 +537,8 @@ func RunTestsWithoutAllNullsInjection(
 		if err != nil {
 			t.Fatal(err)
 		}
-		op.Init()
-		for b := op.Next(ctx); b.Length() > 0; b = op.Next(ctx) {
+		op.Init(ctx)
+		for b := op.Next(); b.Length() > 0; b = op.Next() {
 		}
 		closeIfCloser(ctx, t, op)
 	}
@@ -795,7 +795,7 @@ func newOpTestSelInput(
 	return ret
 }
 
-func (s *opTestInput) Init() {
+func (s *opTestInput) Init(context.Context) {
 	if s.typs == nil {
 		if len(s.tuples) == 0 {
 			colexecerror.InternalError(errors.AssertionFailedf("empty tuple source with no specified types"))
@@ -810,7 +810,7 @@ func (s *opTestInput) Init() {
 	}
 }
 
-func (s *opTestInput) Next(context.Context) coldata.Batch {
+func (s *opTestInput) Next() coldata.Batch {
 	if len(s.tuples) == 0 {
 		return coldata.ZeroBatch
 	}
@@ -989,7 +989,7 @@ func NewOpFixedSelTestInput(
 	return ret
 }
 
-func (s *opFixedSelTestInput) Init() {
+func (s *opFixedSelTestInput) Init(context.Context) {
 	if s.typs == nil {
 		if len(s.tuples) == 0 {
 			colexecerror.InternalError(errors.AssertionFailedf("empty tuple source with no specified types"))
@@ -1032,7 +1032,7 @@ func (s *opFixedSelTestInput) Init() {
 
 }
 
-func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
+func (s *opFixedSelTestInput) Next() coldata.Batch {
 	var batchSize int
 	if s.sel == nil {
 		batchSize = s.batchSize
@@ -1089,7 +1089,7 @@ type OpTestOutput struct {
 // NewOpTestOutput returns a new OpTestOutput, initialized with the given input
 // to verify that the output is exactly equal to the expected tuples.
 func NewOpTestOutput(input colexecop.Operator, expected Tuples) *OpTestOutput {
-	input.Init()
+	input.Init(context.Background())
 
 	return &OpTestOutput{
 		OneInputNode: colexecop.NewOneInputNode(input),
@@ -1143,10 +1143,10 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 	return ret
 }
 
-func (r *OpTestOutput) next(ctx context.Context) Tuple {
+func (r *OpTestOutput) next() Tuple {
 	if r.batch == nil || r.curIdx >= r.batch.Length() {
 		// Get a fresh batch.
-		r.batch = r.Input.Next(ctx)
+		r.batch = r.Input.Next()
 		if r.batch.Length() == 0 {
 			return nil
 		}
@@ -1171,10 +1171,9 @@ func (r *OpTestOutput) Reset(ctx context.Context) {
 // tuples, using a slow, reflection-based comparison method, returning an error
 // if the input isn't equal to the expected.
 func (r *OpTestOutput) Verify() error {
-	ctx := context.Background()
 	var actual Tuples
 	for {
-		tup := r.next(ctx)
+		tup := r.next()
 		if tup == nil {
 			break
 		}
@@ -1189,10 +1188,9 @@ func (r *OpTestOutput) Verify() error {
 // reflection-based comparison method, returning an error if the input isn't
 // equal to the expected.
 func (r *OpTestOutput) VerifyAnyOrder() error {
-	ctx := context.Background()
 	var actual Tuples
 	for {
-		tup := r.next(ctx)
+		tup := r.next()
 		if tup == nil {
 			break
 		}
@@ -1370,15 +1368,15 @@ func NewFiniteBatchSource(
 }
 
 // Init implements the Operator interface.
-func (f *FiniteBatchSource) Init() {
-	f.repeatableBatch.Init()
+func (f *FiniteBatchSource) Init(ctx context.Context) {
+	f.repeatableBatch.Init(ctx)
 }
 
 // Next implements the Operator interface.
-func (f *FiniteBatchSource) Next(ctx context.Context) coldata.Batch {
+func (f *FiniteBatchSource) Next() coldata.Batch {
 	if f.usableCount > 0 {
 		f.usableCount--
-		return f.repeatableBatch.Next(ctx)
+		return f.repeatableBatch.Next()
 	}
 	return coldata.ZeroBatch
 }
@@ -1415,15 +1413,15 @@ func NewFiniteChunksSource(
 	}
 }
 
-func (f *finiteChunksSource) Init() {
-	f.repeatableBatch.Init()
+func (f *finiteChunksSource) Init(ctx context.Context) {
+	f.repeatableBatch.Init(ctx)
 	f.adjustment = make([]int64, f.matchLen)
 }
 
-func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
+func (f *finiteChunksSource) Next() coldata.Batch {
 	if f.usableCount > 0 {
 		f.usableCount--
-		batch := f.repeatableBatch.Next(ctx)
+		batch := f.repeatableBatch.Next()
 		if f.matchLen > 0 && f.adjustment[0] == 0 {
 			// We need to calculate the difference between the first and the last
 			// tuples in batch in first matchLen columns so that in the following
@@ -1481,7 +1479,7 @@ func NewChunkingBatchSource(
 	}
 }
 
-func (c *chunkingBatchSource) Init() {
+func (c *chunkingBatchSource) Init(context.Context) {
 	c.batch = c.allocator.NewMemBatchWithMaxCapacity(c.typs)
 	for i := range c.cols {
 		c.batch.ColVec(i).SetCol(c.cols[i].Col())
@@ -1489,7 +1487,7 @@ func (c *chunkingBatchSource) Init() {
 	}
 }
 
-func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
+func (c *chunkingBatchSource) Next() coldata.Batch {
 	if c.curIdx >= c.len {
 		return coldata.ZeroBatch
 	}

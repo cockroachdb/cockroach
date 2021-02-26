@@ -189,7 +189,10 @@ func (h *filteringSingleFunctionHashHelper) applyFilter(
 		return vecs, inputLen, sel, false
 	}
 	h.filterInput.reset(vecs, inputLen, sel)
-	newBatch := h.filter.Next(ctx)
+	// Note that it is ok that we call Init on every iteration - it is a noop
+	// every time except for the first one.
+	h.filter.Init(ctx)
+	newBatch := h.filter.Next()
 	return newBatch.ColVecs(), newBatch.Length(), newBatch.Selection(), true
 }
 
@@ -514,9 +517,9 @@ func newSingleBatchOperator(
 	}
 }
 
-func (o *singleBatchOperator) Init() {}
+func (o *singleBatchOperator) Init(context.Context) {}
 
-func (o *singleBatchOperator) Next(context.Context) coldata.Batch {
+func (o *singleBatchOperator) Next() coldata.Batch {
 	if o.nexted {
 		return coldata.ZeroBatch
 	}

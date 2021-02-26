@@ -42,10 +42,10 @@ func (b *BatchBuffer) Add(batch coldata.Batch, _ []*types.T) {
 }
 
 // Init is part of the Operator interface.
-func (b *BatchBuffer) Init() {}
+func (b *BatchBuffer) Init(context.Context) {}
 
 // Next is part of the Operator interface.
-func (b *BatchBuffer) Next(context.Context) coldata.Batch {
+func (b *BatchBuffer) Next() coldata.Batch {
 	batch := b.buffer[0]
 	b.buffer = b.buffer[1:]
 	return batch
@@ -103,7 +103,7 @@ func NewRepeatableBatchSource(
 }
 
 // Next is part of the Operator interface.
-func (s *RepeatableBatchSource) Next(context.Context) coldata.Batch {
+func (s *RepeatableBatchSource) Next() coldata.Batch {
 	s.batchesReturned++
 	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
 		return coldata.ZeroBatch
@@ -128,7 +128,7 @@ func (s *RepeatableBatchSource) Next(context.Context) coldata.Batch {
 }
 
 // Init is part of the Operator interface.
-func (s *RepeatableBatchSource) Init() {}
+func (s *RepeatableBatchSource) Init(context.Context) {}
 
 // ResetBatchesToReturn sets a limit on how many batches the source returns, as
 // well as resetting how many batches the source has returned so far.
@@ -141,15 +141,15 @@ func (s *RepeatableBatchSource) ResetBatchesToReturn(b int) {
 // callback provided by the user.
 type CallbackOperator struct {
 	ZeroInputNode
-	NextCb func(ctx context.Context) coldata.Batch
+	NextCb func() coldata.Batch
 }
 
 // Init is part of the Operator interface.
-func (o *CallbackOperator) Init() {}
+func (o *CallbackOperator) Init(context.Context) {}
 
 // Next is part of the Operator interface.
-func (o *CallbackOperator) Next(ctx context.Context) coldata.Batch {
-	return o.NextCb(ctx)
+func (o *CallbackOperator) Next() coldata.Batch {
+	return o.NextCb()
 }
 
 // TestingSemaphore is a semaphore.Semaphore that never blocks and is always

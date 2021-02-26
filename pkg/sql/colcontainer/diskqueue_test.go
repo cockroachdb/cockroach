@@ -76,6 +76,7 @@ func TestDiskQueue(t *testing.T) {
 							batches = append(batches, coldatatestutils.CopyBatch(b, typs, testColumnFactory))
 						},
 					})
+					op.Init(ctx)
 					typs := op.Typs()
 
 					queueCfg.CacheMode = diskQueueCacheMode
@@ -109,7 +110,7 @@ func TestDiskQueue(t *testing.T) {
 					// since that is the common pattern.
 					dest := coldata.NewMemBatch(typs, testColumnFactory)
 					for {
-						src := op.Next(ctx)
+						src := op.Next()
 						require.NoError(t, q.Enqueue(ctx, src))
 						if src.Length() == 0 {
 							break
@@ -241,7 +242,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 		q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, testDiskAcc)
 		require.NoError(b, err)
 		for {
-			batchToEnqueue := op.Next(ctx)
+			batchToEnqueue := op.Next()
 			if err := q.Enqueue(ctx, batchToEnqueue); err != nil {
 				b.Fatal(err)
 			}

@@ -216,6 +216,7 @@ var _ colexecop.Resetter = &HashTable{}
 // of tuples (a downside) while not gaining much in the case of the input
 // with large number of tuples.
 func NewHashTable(
+	ctx context.Context,
 	allocator *colmem.Allocator,
 	loadFactor float64,
 	initialNumHashBuckets uint64,
@@ -280,6 +281,7 @@ func NewHashTable(
 		ht.BuildScratch.Next = []uint64{0}
 	}
 
+	ht.cancelChecker.Init(ctx)
 	return ht
 }
 
@@ -320,7 +322,7 @@ func (p *hashTableProbeBuffer) accountForLimitedSlices(allocator *colmem.Allocat
 // buildFromBufferedTuples builds the hash table from already buffered tuples
 // in ht.Vals. It'll determine the appropriate number of buckets that satisfy
 // the target load factor.
-func (ht *HashTable) buildFromBufferedTuples(ctx context.Context) {
+func (ht *HashTable) buildFromBufferedTuples() {
 	for ht.shouldResize(ht.Vals.Length()) {
 		ht.numBuckets *= 2
 	}
@@ -333,8 +335,8 @@ func (ht *HashTable) buildFromBufferedTuples(ctx context.Context) {
 	}
 	// ht.BuildScratch.Next is used to store the computed hash value of each key.
 	ht.BuildScratch.Next = colexecutils.MaybeAllocateUint64Array(ht.BuildScratch.Next, ht.Vals.Length()+1)
-	ht.ComputeBuckets(ctx, ht.BuildScratch.Next[1:], ht.Keys, ht.Vals.Length(), nil /* sel */)
-	ht.buildNextChains(ctx, ht.BuildScratch.First, ht.BuildScratch.Next, 1, uint64(ht.Vals.Length()))
+	ht.ComputeBuckets(ht.BuildScratch.Next[1:], ht.Keys, ht.Vals.Length(), nil /* sel */)
+	ht.buildNextChains(ht.BuildScratch.First, ht.BuildScratch.Next, 1 /* offset */, uint64(ht.Vals.Length()))
 	// Account for memory used by the internal auxiliary slices that are
 	// limited in size.
 	ht.ProbeScratch.accountForLimitedSlices(ht.allocator)
@@ -347,7 +349,7 @@ func (ht *HashTable) buildFromBufferedTuples(ctx context.Context) {
 // FullBuild executes the entirety of the hash table build phase using the input
 // as the build source. The input is entirely consumed in the process. Note that
 // the hash table is assumed to operate in HashTableFullBuildMode.
-func (ht *HashTable) FullBuild(ctx context.Context, input colexecop.Operator) {
+func (ht *HashTable) FullBuild(input colexecop.Operator) {
 	if ht.BuildMode != HashTableFullBuildMode {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"HashTable.FullBuild is called in unexpected build mode %d", ht.BuildMode,
@@ -359,7 +361,7 @@ func (ht *HashTable) FullBuild(ctx context.Context, input colexecop.Operator) {
 	// hash buckets for the target load factor (this is done in
 	// buildFromBufferedTuples()).
 	for {
-		batch := input.Next(ctx)
+		batch := input.Next()
 		if batch.Length() == 0 {
 			break
 		}
@@ -367,26 +369,26 @@ func (ht *HashTable) FullBuild(ctx context.Context, input colexecop.Operator) {
 			ht.Vals.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 		})
 	}
-	ht.buildFromBufferedTuples(ctx)
+	ht.buildFromBufferedTuples()
 }
 
 // DistinctBuild appends all distinct tuples from batch to the hash table. Note
 // that the hash table is assumed to operate in HashTableDistinctBuildMode.
 // batch is updated to include only the distinct tuples.
-func (ht *HashTable) DistinctBuild(ctx context.Context, batch coldata.Batch) {
+func (ht *HashTable) DistinctBuild(batch coldata.Batch) {
 	if ht.BuildMode != HashTableDistinctBuildMode {
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"HashTable.DistinctBuild is called in unexpected build mode %d", ht.BuildMode,
 		))
 	}
-	ht.ComputeHashAndBuildChains(ctx, batch)
+	ht.ComputeHashAndBuildChains(batch)
 	ht.RemoveDuplicates(batch, ht.Keys, ht.ProbeScratch.First, ht.ProbeScratch.Next, ht.CheckProbeForDistinct)
 	// We only check duplicates when there is at least one buffered tuple.
 	if ht.Vals.Length() > 0 {
 		ht.RemoveDuplicates(batch, ht.Keys, ht.BuildScratch.First, ht.BuildScratch.Next, ht.CheckBuildForDistinct)
 	}
 	if batch.Length() > 0 {
-		ht.AppendAllDistinct(ctx, batch)
+		ht.AppendAllDistinct(batch)
 	}
 }
 
@@ -394,7 +396,7 @@ func (ht *HashTable) DistinctBuild(ctx context.Context, batch coldata.Batch) {
 // then builds 'next' chains between those tuples. The goal is to separate all
 // tuples in batch into singly linked lists containing only tuples with the
 // same hash code. Those 'next' chains are stored in ht.ProbeScratch.Next.
-func (ht *HashTable) ComputeHashAndBuildChains(ctx context.Context, batch coldata.Batch) {
+func (ht *HashTable) ComputeHashAndBuildChains(batch coldata.Batch) {
 	srcVecs := batch.ColVecs()
 	for i, keyCol := range ht.keyCols {
 		ht.Keys[i] = srcVecs[keyCol]
@@ -404,7 +406,7 @@ func (ht *HashTable) ComputeHashAndBuildChains(ctx context.Context, batch coldat
 	if cap(ht.ProbeScratch.Next) < batchLength+1 {
 		ht.ProbeScratch.Next = make([]uint64, batchLength+1)
 	}
-	ht.ComputeBuckets(ctx, ht.ProbeScratch.Next[1:batchLength+1], ht.Keys, batchLength, batch.Selection())
+	ht.ComputeBuckets(ht.ProbeScratch.Next[1:batchLength+1], ht.Keys, batchLength, batch.Selection())
 	ht.ProbeScratch.HashBuffer = append(ht.ProbeScratch.HashBuffer[:0], ht.ProbeScratch.Next[1:batchLength+1]...)
 
 	// We need to zero out 'first' buffer for all hash codes present in
@@ -422,7 +424,7 @@ func (ht *HashTable) ComputeHashAndBuildChains(ctx context.Context, batch coldat
 		}
 	}
 
-	ht.buildNextChains(ctx, ht.ProbeScratch.First, ht.ProbeScratch.Next, 1 /* offset */, uint64(batchLength))
+	ht.buildNextChains(ht.ProbeScratch.First, ht.ProbeScratch.Next, 1 /* offset */, uint64(batchLength))
 }
 
 // FindBuckets finds the buckets for all tuples in batch when probing against a
@@ -479,21 +481,21 @@ func (ht *HashTable) RemoveDuplicates(
 // assumes that all tuples are distinct and that ht.ProbeScratch.HashBuffer
 // contains the hash codes for all of them.
 // NOTE: batch must be of non-zero length.
-func (ht *HashTable) AppendAllDistinct(ctx context.Context, batch coldata.Batch) {
+func (ht *HashTable) AppendAllDistinct(batch coldata.Batch) {
 	numBuffered := uint64(ht.Vals.Length())
 	ht.allocator.PerformOperation(ht.Vals.ColVecs(), func() {
 		ht.Vals.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 	})
 	ht.BuildScratch.Next = append(ht.BuildScratch.Next, ht.ProbeScratch.HashBuffer[:batch.Length()]...)
-	ht.buildNextChains(ctx, ht.BuildScratch.First, ht.BuildScratch.Next, numBuffered+1, uint64(batch.Length()))
+	ht.buildNextChains(ht.BuildScratch.First, ht.BuildScratch.Next, numBuffered+1, uint64(batch.Length()))
 	if ht.shouldResize(ht.Vals.Length()) {
-		ht.buildFromBufferedTuples(ctx)
+		ht.buildFromBufferedTuples()
 	}
 }
 
 // MaybeRepairAfterDistinctBuild checks whether the hash table built via
 // DistinctBuild is in an inconsistent state and repairs it if so.
-func (ht *HashTable) MaybeRepairAfterDistinctBuild(ctx context.Context) {
+func (ht *HashTable) MaybeRepairAfterDistinctBuild() {
 	// BuildScratch.Next has an extra 0th element not used by the tuples
 	// reserved for the end of the chain.
 	if len(ht.BuildScratch.Next) < ht.Vals.Length()+1 {
@@ -503,7 +505,7 @@ func (ht *HashTable) MaybeRepairAfterDistinctBuild(ctx context.Context) {
 		numConsistentTuples := len(ht.BuildScratch.Next) - 1
 		lastBatchNumDistinctTuples := ht.Vals.Length() - numConsistentTuples
 		ht.BuildScratch.Next = append(ht.BuildScratch.Next, ht.ProbeScratch.HashBuffer[:lastBatchNumDistinctTuples]...)
-		ht.buildNextChains(ctx, ht.BuildScratch.First, ht.BuildScratch.Next, uint64(numConsistentTuples)+1, uint64(lastBatchNumDistinctTuples))
+		ht.buildNextChains(ht.BuildScratch.First, ht.BuildScratch.Next, uint64(numConsistentTuples)+1, uint64(lastBatchNumDistinctTuples))
 	}
 }
 
@@ -539,9 +541,7 @@ func (ht *HashTable) checkColsForDistinctTuples(
 
 // ComputeBuckets computes the hash value of each key and stores the result in
 // buckets.
-func (ht *HashTable) ComputeBuckets(
-	ctx context.Context, buckets []uint64, keys []coldata.Vec, nKeys int, sel []int,
-) {
+func (ht *HashTable) ComputeBuckets(buckets []uint64, keys []coldata.Vec, nKeys int, sel []int) {
 	if nKeys == 0 {
 		// No work to do - avoid doing the loops below.
 		return
@@ -559,16 +559,14 @@ func (ht *HashTable) ComputeBuckets(
 	}
 
 	for i := range ht.keyCols {
-		rehash(ctx, buckets, keys[i], nKeys, sel, ht.cancelChecker, &ht.overloadHelper, &ht.datumAlloc)
+		rehash(buckets, keys[i], nKeys, sel, ht.cancelChecker, &ht.overloadHelper, &ht.datumAlloc)
 	}
 
 	finalizeHash(buckets, nKeys, ht.numBuckets)
 }
 
 // buildNextChains builds the hash map from the computed hash values.
-func (ht *HashTable) buildNextChains(
-	ctx context.Context, first, next []uint64, offset, batchSize uint64,
-) {
+func (ht *HashTable) buildNextChains(first, next []uint64, offset, batchSize uint64) {
 	// The loop direction here is reversed to ensure that when we are building the
 	// next chain for the probe table, the keyID in each equality chain inside
 	// `next` is strictly in ascending order. This is crucial to ensure that when
@@ -594,7 +592,7 @@ func (ht *HashTable) buildNextChains(
 			next[firstKeyID] = id
 		}
 	}
-	ht.cancelChecker.CheckEveryCall(ctx)
+	ht.cancelChecker.CheckEveryCall()
 }
 
 // SetupLimitedSlices ensures that HeadID, differs, distinct, GroupID, and
