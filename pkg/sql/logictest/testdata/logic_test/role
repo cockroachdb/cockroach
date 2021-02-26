@@ -1104,7 +1104,7 @@ publicdb  root  NULL  {}  NULL
 query TTTTIT
 SHOW TABLES FROM publicdb
 ----
-public  publictable  table  root  NULL  NULL
+public  publictable  table  root  0  NULL
 
 query TTTTIT
 SHOW TABLES FROM privatedb
