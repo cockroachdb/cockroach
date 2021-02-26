@@ -227,17 +227,6 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		return err
 	}
 
-	// Update the database's zone configuration.
-	if err := ApplyZoneConfigFromDatabaseRegionConfig(
-		params.ctx,
-		n.desc.ID,
-		*n.desc.RegionConfig,
-		params.p.txn,
-		params.p.execCfg,
-	); err != nil {
-		return err
-	}
-
 	// Log Alter Database Add Region event. This is an auditable log event and is
 	// recorded in the same transaction as the database descriptor, type
 	// descriptor, and zone configuration updates.
