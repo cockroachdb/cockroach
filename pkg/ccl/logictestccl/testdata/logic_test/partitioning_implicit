@@ -715,23 +715,6 @@ vectorized: true
 │                         table: t@primary
 │                         spans: FULL SCAN
 │
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • hash join (right semi)
-│           │ equality: (pk) = (upsert_pk)
-│           │ right cols are key
-│           │ pred: column3 != partition_by
-│           │
-│           ├── • scan
-│           │     missing stats
-│           │     table: t@t_a_idx
-│           │     spans: FULL SCAN
-│           │
-│           └── • scan buffer
-│                 label: buffer 1
-│
 └── • constraint-check
     │
     └── • error if rows
