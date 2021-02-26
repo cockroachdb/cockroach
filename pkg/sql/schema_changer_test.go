@@ -6850,3 +6850,99 @@ AND descriptor_ids[1] = 'db.t2'::regclass::int`,
 	require.Equal(t, status, jobs.StatusCanceled)
 	require.Equal(t, error, "job canceled by user")
 }
+
+// TestRevertingJobsOnDatabasesAndSchemas tests that schema change jobs on
+// databases and schemas return an error from the OnFailOrCancel hook.
+// Regression test for #59415.
+func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	var s serverutils.TestServerInterface
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				pl := scJob.Payload()
+				// This is a hacky way to only inject errors in the rename/drop/grant jobs.
+				if strings.Contains(pl.Description, "updating parent database") {
+					return nil
+				}
+				for _, s := range []string{"DROP", "RENAME", "updating privileges"} {
+					if strings.Contains(pl.Description, s) {
+						return errors.New("injected permanent error")
+					}
+				}
+				return nil
+			},
+		},
+	}
+	var db *gosql.DB
+	s, db, _ = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	for _, tc := range []struct {
+		name       string
+		setupStmts string
+		scStmt     string
+		jobRegex   string
+	}{
+		{
+			name:       "drop schema",
+			setupStmts: `CREATE DATABASE db_drop_schema; CREATE SCHEMA db_drop_schema.sc;`,
+			scStmt:     `DROP SCHEMA db_drop_schema.sc`,
+			jobRegex:   `^DROP SCHEMA db_drop_schema.sc$`,
+		},
+		{
+			name:       "rename schema",
+			setupStmts: `CREATE DATABASE db_rename_schema; CREATE SCHEMA db_rename_schema.sc;`,
+			scStmt:     `ALTER SCHEMA db_rename_schema.sc RENAME TO new_name`,
+			jobRegex:   `^ALTER SCHEMA db_rename_schema.sc RENAME TO new_name$`,
+		},
+		{
+			name:       "grant on schema",
+			setupStmts: `CREATE DATABASE db_grant_on_schema; CREATE SCHEMA db_grant_on_schema.sc;`,
+			scStmt:     `GRANT ALL ON SCHEMA db_grant_on_schema.sc TO PUBLIC`,
+			jobRegex:   `updating privileges for schema`,
+		},
+		{
+			name:       "drop database cascade",
+			setupStmts: `CREATE DATABASE db_drop; CREATE SCHEMA db_drop.sc; CREATE TABLE db_drop.sc.tbl();`,
+			scStmt:     `DROP DATABASE db_drop CASCADE`,
+			jobRegex:   `^DROP DATABASE db_drop CASCADE$`,
+		},
+		{
+			name:       "rename database",
+			setupStmts: `CREATE DATABASE db_rename;`,
+			scStmt:     `ALTER DATABASE db_rename RENAME TO db_new_name`,
+			jobRegex:   `^ALTER DATABASE db_rename RENAME TO db_new_name$`,
+		},
+		{
+			name:       "grant on database",
+			setupStmts: `CREATE DATABASE db_grant`,
+			scStmt:     `GRANT ALL ON DATABASE db_grant TO PUBLIC`,
+			jobRegex:   `updating privileges for database`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sqlDB.Exec(t, tc.setupStmts)
+			sqlDB.ExpectErr(t, "injected permanent error", tc.scStmt)
+			result := sqlDB.QueryStr(t,
+				`SELECT status, error FROM crdb_internal.jobs WHERE description ~ $1`,
+				tc.jobRegex)
+			require.Len(t, result, 1)
+			status, jobError := result[0][0], result[0][1]
+			require.Equal(t, string(jobs.StatusFailed), status)
+			require.Regexp(t,
+				"cannot be reverted, manual cleanup may be required: "+
+					"schema change jobs on databases and schemas cannot be reverted",
+				jobError)
+		})
+	}
+}
