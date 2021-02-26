@@ -287,6 +287,7 @@ func NewNode(
 	reg *metric.Registry,
 	stopper *stop.Stopper,
 	txnMetrics kvcoord.TxnMetrics,
+	stores *kvserver.Stores,
 	execCfg *sql.ExecutorConfig,
 	clusterID *base.ClusterIDContainer,
 ) *Node {
@@ -299,7 +300,7 @@ func NewNode(
 		stopper:    stopper,
 		recorder:   recorder,
 		metrics:    makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:     kvserver.NewStores(cfg.AmbientCtx, cfg.Clock),
+		stores:     stores,
 		txnMetrics: txnMetrics,
 		sqlExec:    sqlExec,
 		clusterID:  clusterID,
