@@ -120,6 +120,8 @@ go_test(
         "//pkg/blobs",
         "//pkg/ccl/backupccl",
         "//pkg/ccl/kvccl",
+        "//pkg/ccl/multiregionccl",
+        "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl/format",

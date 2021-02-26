@@ -364,7 +364,12 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
 	if desc.LocalityConfig != nil {
+		if err := desc.ValidateTableLocalityConfig(params.ctx, dg); err != nil {
+			return err
+		}
+
 		_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 			params.ctx,
 			params.p.txn,
@@ -404,7 +409,6 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
 	if err := desc.Validate(params.ctx, dg); err != nil {
 		return err
 	}
@@ -2277,11 +2281,6 @@ func NewTableDesc(
 			desc.SetTableLocalityRegionalByRow(n.Locality.RegionalByRowColumn)
 		} else {
 			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
-		}
-
-		dg := catalogkv.NewOneLevelUncachedDescGetter(txn, evalCtx.Codec)
-		if err := desc.ValidateTableLocalityConfig(ctx, dg); err != nil {
-			return nil, err
 		}
 	}
 
