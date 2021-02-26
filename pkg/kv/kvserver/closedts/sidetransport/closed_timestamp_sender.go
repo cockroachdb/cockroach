@@ -13,6 +13,7 @@ package sidetransport
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -70,7 +71,7 @@ type ClosedTimestampSender struct {
 		// structure as soon as it's included in a message, and exits it when it's
 		// removed through ClosedTimestampUpdate.Removed.
 		tracked        map[roachpb.RangeID]trackedRange
-		lastTimestamps map[roachpb.RangeClosedTimestampPolicy]hlc.Timestamp
+		lastTimestamps [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
 		// lastSeqNum is the sequence number of the last message published.
 		lastSeqNum ctpb.UpdateSequenceNumber
 	}
@@ -121,7 +122,6 @@ func NewSideTransportSender(
 		st:      st,
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
-	s.trackedMu.lastTimestamps = make(map[roachpb.RangeClosedTimestampPolicy]hlc.Timestamp)
 	s.leaseholdersMu.leaseholders = make(map[roachpb.RangeID]leaseholder)
 	s.connections = make(map[roachpb.NodeID]*connection)
 	return s
@@ -216,6 +216,7 @@ func (s *ClosedTimestampSender) publish(ctx context.Context) {
 		kvserver.ClosedTimestampTargetByPolicy(now, roachpb.LAG_BY_CLUSTER_SETTING, lagTargetDuration)
 	targetByPolicy[roachpb.LEAD_FOR_GLOBAL_READS] =
 		kvserver.ClosedTimestampTargetByPolicy(now, roachpb.LEAD_FOR_GLOBAL_READS, lagTargetDuration)
+	s.trackedMu.lastTimestamps = targetByPolicy
 
 	s.trackedMu.lastSeqNum++
 	msg := &ctpb.ClosedTimestampUpdate{
@@ -224,6 +225,10 @@ func (s *ClosedTimestampSender) publish(ctx context.Context) {
 		// The first message produced is essentially a snapshot, since it has no
 		// previous state to reference.
 		Snapshot: s.trackedMu.lastSeqNum == 1,
+		ClosedTimestamp: []ctpb.ClosedTimestampUpdateGroupUpdate{
+			{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetByPolicy[roachpb.LAG_BY_CLUSTER_SETTING]},
+			{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: targetByPolicy[roachpb.LEAD_FOR_GLOBAL_READS]},
+		},
 	}
 
 	// Make a copy of the leaseholders map, in order to release its mutex quickly. We can't hold
@@ -329,6 +334,7 @@ func (s *ClosedTimestampSender) GetSnapshot() *ctpb.ClosedTimestampUpdate {
 	defer s.trackedMu.Unlock()
 
 	msg := &ctpb.ClosedTimestampUpdate{
+		NodeID:   s.nodeID,
 		Snapshot: true,
 		// Assigning this SeqNum means that the next incremental sent needs to be
 		// lastSeqNum+1. Notice that GetSnapshot synchronizes with the publishing of
@@ -342,10 +348,12 @@ func (s *ClosedTimestampSender) GetSnapshot() *ctpb.ClosedTimestampUpdate {
 			Policy:  r.policy,
 		})
 	}
-	for policy, ts := range s.trackedMu.lastTimestamps {
+	for _, policy := range []roachpb.RangeClosedTimestampPolicy{
+		roachpb.LAG_BY_CLUSTER_SETTING, roachpb.LEAD_FOR_GLOBAL_READS,
+	} {
 		msg.ClosedTimestamp = append(msg.ClosedTimestamp, ctpb.ClosedTimestampUpdateGroupUpdate{
 			Policy:          policy,
-			ClosedTimestamp: ts,
+			ClosedTimestamp: s.trackedMu.lastTimestamps[policy],
 		})
 	}
 	return msg
@@ -384,17 +392,14 @@ func (b *updatesBuf) Push(ctx context.Context, update *ctpb.ClosedTimestampUpdat
 
 	// If the buffer is not empty, sanity check the seq num.
 	if b.sizeLocked() != 0 {
-		lastIdx := (b.mu.tail - 1)
-		if lastIdx < 0 {
-			lastIdx += len(b.mu.data)
-		}
+		lastIdx := b.lastIdxLocked()
 		if prevSeq := b.mu.data[lastIdx].SeqNum; prevSeq != update.SeqNum-1 {
 			log.Fatalf(ctx, "bad sequence number; expected %d, got %d", prevSeq+1, update.SeqNum)
 		}
 	}
 
-	b.mu.data[b.mu.tail] = update
 	overwrite := b.fullLocked()
+	b.mu.data[b.mu.tail] = update
 	b.mu.tail = (b.mu.tail + 1) % len(b.mu.data)
 	// If the tail just overwrote the head, move the head.
 	if overwrite {
@@ -404,6 +409,14 @@ func (b *updatesBuf) Push(ctx context.Context, update *ctpb.ClosedTimestampUpdat
 	// Notify everybody who might have been waiting for this message - we expect
 	// all the connections to be blocked waiting.
 	b.mu.updated.Broadcast()
+}
+
+func (b *updatesBuf) lastIdxLocked() int {
+	lastIdx := b.mu.tail - 1
+	if lastIdx < 0 {
+		lastIdx += len(b.mu.data)
+	}
+	return lastIdx
 }
 
 // GetBySeq looks through the buffer and returns the update with the requested
@@ -423,7 +436,7 @@ func (b *updatesBuf) GetBySeq(
 		if b.sizeLocked() == 0 {
 			firstSeq, lastSeq = 0, 0
 		} else {
-			firstSeq, lastSeq = b.mu.data[b.mu.head].SeqNum, b.mu.data[b.mu.tail].SeqNum
+			firstSeq, lastSeq = b.mu.data[b.mu.head].SeqNum, b.mu.data[b.lastIdxLocked()].SeqNum
 		}
 		if seqNum < firstSeq {
 			// Requesting a message that's not in the buffer any more.
@@ -520,18 +533,22 @@ func (r *connection) run(ctx context.Context, stopper *stop.Stopper) {
 			for {
 				var msg *ctpb.ClosedTimestampUpdate
 
+				// If we've been disconnected, reset the message sequence. We'll ask the
+				// buffer for the very first message ever, which was a snapshot.
+				// Generally, the buffer is not going to have that message any more and
+				// so we'll generate a snapshot below. Except soon after startup when
+				// streams are initially established, when the initial message should
+				// still be in the buffer.
 				if r.stream == nil {
-					// The stream is not established; the first message needs to be a
-					// snapshot.
+					lastSent = 0
+				}
+
+				msg = r.buf.GetBySeq(ctx, lastSent+1)
+				if msg == nil {
+					// The sequence number we've requested is no longer in the buffer.
+					// We need to generate a snapshot in order to re-initialize the
+					// stream.
 					msg = r.producer.GetSnapshot()
-				} else {
-					msg = r.buf.GetBySeq(ctx, lastSent+1)
-					if msg == nil {
-						// The sequence number we've requested is no longer in the buffer.
-						// We need to generate a snapshot in order to re-initialize the
-						// stream.
-						msg = r.producer.GetSnapshot()
-					}
 				}
 
 				// See if we've been signaled to stop.
@@ -545,7 +562,7 @@ func (r *connection) run(ctx context.Context, stopper *stop.Stopper) {
 
 				lastSent = msg.SeqNum
 				if err := r.sendMsg(ctx, msg); err != nil {
-					if everyN.ShouldLog() {
+					if err != io.EOF && everyN.ShouldLog() {
 						log.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
 							lastSent, r.nodeID, err)
 					}
