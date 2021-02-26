@@ -179,12 +179,12 @@ func TestExternalHashJoinerFallbackToSortMergeJoin(t *testing.T) {
 		}
 	}()
 	require.NoError(t, err)
-	hj.Init()
+	hj.Init(ctx)
 	// We have a full cross-product, so we should get the number of tuples
 	// squared in the output.
 	expectedTuplesCount := nBatches * nBatches * coldata.BatchSize() * coldata.BatchSize()
 	actualTuplesCount := 0
-	for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
+	for b := hj.Next(); b.Length() > 0; b = hj.Next() {
 		actualTuplesCount += b.Length()
 	}
 	require.True(t, spilled)
@@ -270,8 +270,8 @@ func BenchmarkExternalHashJoiner(b *testing.B) {
 						memAccounts = append(memAccounts, accounts...)
 						memMonitors = append(memMonitors, monitors...)
 						require.NoError(b, err)
-						hj.Init()
-						for b := hj.Next(ctx); b.Length() > 0; b = hj.Next(ctx) {
+						hj.Init(ctx)
+						for b := hj.Next(); b.Length() > 0; b = hj.Next() {
 						}
 					}
 				})

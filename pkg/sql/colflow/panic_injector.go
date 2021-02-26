@@ -28,7 +28,7 @@ type panicInjector struct {
 	rng *rand.Rand
 }
 
-var _ colexecop.Operator = panicInjector{}
+var _ colexecop.Operator = &panicInjector{}
 
 const (
 	// These constants were chosen arbitrarily with the guiding thought that
@@ -49,16 +49,16 @@ func newPanicInjector(input colexecop.Operator) colexecop.Operator {
 	}
 }
 
-func (i panicInjector) Init() {
+func (i *panicInjector) Init(ctx context.Context) {
 	if i.rng.Float64() < initPanicInjectionProbability {
 		colexecerror.ExpectedError(errors.New("injected panic in Init"))
 	}
-	i.Input.Init()
+	i.Input.Init(ctx)
 }
 
-func (i panicInjector) Next(ctx context.Context) coldata.Batch {
+func (i *panicInjector) Next() coldata.Batch {
 	if i.rng.Float64() < nextPanicInjectionProbability {
 		colexecerror.ExpectedError(errors.New("injected panic in Next"))
 	}
-	return i.Input.Next(ctx)
+	return i.Input.Next()
 }

@@ -107,6 +107,8 @@ func NewOrProjOp(
 }
 
 type andProjOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	input     colexecop.Operator
 
@@ -166,11 +168,15 @@ func (o *andProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	}
 }
 
-func (o *andProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *andProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -180,8 +186,8 @@ func (o *andProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *andProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
@@ -197,7 +203,7 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
 	o.leftFeedOp.SetBatch(batch)
-	batch = o.leftProjOpChain.Next(ctx)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -272,7 +278,7 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 		// remaining tuples.
 		batch.SetLength(curIdx)
 		o.rightFeedOp.SetBatch(batch)
-		batch = o.rightProjOpChain.Next(ctx)
+		batch = o.rightProjOpChain.Next()
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}
@@ -545,6 +551,8 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type andRightNullProjOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	input     colexecop.Operator
 
@@ -604,11 +612,15 @@ func (o *andRightNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	}
 }
 
-func (o *andRightNullProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *andRightNullProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -618,8 +630,8 @@ func (o *andRightNullProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *andRightNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *andRightNullProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
@@ -635,7 +647,7 @@ func (o *andRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
 	o.leftFeedOp.SetBatch(batch)
-	batch = o.leftProjOpChain.Next(ctx)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -950,6 +962,8 @@ func (o *andRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type andLeftNullProjOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	input     colexecop.Operator
 
@@ -1009,11 +1023,15 @@ func (o *andLeftNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	}
 }
 
-func (o *andLeftNullProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *andLeftNullProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -1023,8 +1041,8 @@ func (o *andLeftNullProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *andLeftNullProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
@@ -1040,7 +1058,7 @@ func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
 	o.leftFeedOp.SetBatch(batch)
-	batch = o.leftProjOpChain.Next(ctx)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -1076,7 +1094,7 @@ func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 		// remaining tuples.
 		batch.SetLength(curIdx)
 		o.rightFeedOp.SetBatch(batch)
-		batch = o.rightProjOpChain.Next(ctx)
+		batch = o.rightProjOpChain.Next()
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}
@@ -1336,6 +1354,8 @@ func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type orProjOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	input     colexecop.Operator
 
@@ -1395,11 +1415,15 @@ func (o *orProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	}
 }
 
-func (o *orProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *orProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -1409,8 +1433,8 @@ func (o *orProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *orProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
@@ -1426,7 +1450,7 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
 	o.leftFeedOp.SetBatch(batch)
-	batch = o.leftProjOpChain.Next(ctx)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -1502,7 +1526,7 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 		// remaining tuples.
 		batch.SetLength(curIdx)
 		o.rightFeedOp.SetBatch(batch)
-		batch = o.rightProjOpChain.Next(ctx)
+		batch = o.rightProjOpChain.Next()
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}
@@ -1775,6 +1799,8 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type orRightNullProjOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	input     colexecop.Operator
 
@@ -1834,11 +1860,15 @@ func (o *orRightNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	}
 }
 
-func (o *orRightNullProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *orRightNullProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -1848,8 +1878,8 @@ func (o *orRightNullProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *orRightNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *orRightNullProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
@@ -1865,7 +1895,7 @@ func (o *orRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
 	o.leftFeedOp.SetBatch(batch)
-	batch = o.leftProjOpChain.Next(ctx)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -2181,6 +2211,8 @@ func (o *orRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 }
 
 type orLeftNullProjOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	input     colexecop.Operator
 
@@ -2240,11 +2272,15 @@ func (o *orLeftNullProjOp) Child(nth int, verbose bool) execinfra.OpNode {
 	}
 }
 
-func (o *orLeftNullProjOp) Init() {
-	o.input.Init()
+// Init is part of the colexecop.Operator interface.
+func (o *orLeftNullProjOp) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
+	o.input.Init(ctx)
 }
 
-// Next is part of the Operator interface.
+// Next is part of the colexecop.Operator interface.
 // The idea to handle the short-circuiting logic is similar to what caseOp
 // does: a logical operator has an input and two projection chains. First,
 // it runs the left chain on the input batch. Then, it "subtracts" the
@@ -2254,8 +2290,8 @@ func (o *orLeftNullProjOp) Init() {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *orLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.input.Next(ctx)
+func (o *orLeftNullProjOp) Next() coldata.Batch {
+	batch := o.input.Next()
 	origLen := batch.Length()
 	if origLen == 0 {
 		return coldata.ZeroBatch
@@ -2271,7 +2307,7 @@ func (o *orLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
 	o.leftFeedOp.SetBatch(batch)
-	batch = o.leftProjOpChain.Next(ctx)
+	batch = o.leftProjOpChain.Next()
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -2308,7 +2344,7 @@ func (o *orLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 		// remaining tuples.
 		batch.SetLength(curIdx)
 		o.rightFeedOp.SetBatch(batch)
-		batch = o.rightProjOpChain.Next(ctx)
+		batch = o.rightProjOpChain.Next()
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}

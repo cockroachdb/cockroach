@@ -38,7 +38,7 @@ type flowStreamServer interface {
 	Recv() (*execinfrapb.ProducerMessage, error)
 }
 
-// Inbox is used to expose data from remote flows through an exec.Operator
+// Inbox is used to expose data from remote flows through a colexecop.Operator
 // interface. FlowStream RPC handlers should call RunWithStream (which blocks
 // until operation terminates, gracefully or unexpectedly) to pass the stream
 // to the inbox. Next may be called before RunWithStream, it will just block
@@ -50,6 +50,8 @@ type flowStreamServer interface {
 // closing the stream.
 type Inbox struct {
 	colexecop.ZeroInputNode
+	colexecop.InitHelper
+
 	typs []*types.T
 
 	allocator  *colmem.Allocator
@@ -63,7 +65,7 @@ type Inbox struct {
 	// streamCh is the channel over which the stream is passed from the stream
 	// handler to the reader goroutine.
 	streamCh chan flowStreamServer
-	// contextCh is the channel over which the reader goroutine passes the first
+	// contextCh is the channel over which the reader goroutine passes the
 	// context to the stream handler so that it can listen for context
 	// cancellation.
 	contextCh chan context.Context
@@ -82,9 +84,6 @@ type Inbox struct {
 	// right after init. To be used for unit testing.
 	ctxInterceptorFn func(context.Context)
 
-	// initialized prevents double initialization. Should not be used by the
-	// RunWithStream goroutine.
-	initialized bool
 	// done prevents double closing. It should not be used by the RunWithStream
 	// goroutine.
 	done bool
@@ -95,14 +94,6 @@ type Inbox struct {
 	// stream is the RPC stream. It is set when RunWithStream is called but
 	// only the Next/DrainMeta goroutine may access it.
 	stream flowStreamServer
-
-	// flowCtx is a temporary field that captures a flow's context during
-	// initialization. This is so that RunWithStream can listen for cancellation
-	// even in the case in which Next is not called (e.g. in cases where the Inbox
-	// is the left side of a HashJoiner). The best solution for this problem would
-	// be to refactor Operator.Init to accept a context since that must be called
-	// regardless of whether or not Next is called.
-	flowCtx context.Context
 
 	// statsAtomics are the execution statistics that need to be atomically
 	// accessed. This is necessary since Get*() methods can be called from
@@ -131,7 +122,7 @@ var _ colexecop.Operator = &Inbox{}
 
 // NewInbox creates a new Inbox.
 func NewInbox(
-	ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
+	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -151,32 +142,15 @@ func NewInbox(
 		contextCh:                make(chan context.Context, 1),
 		timeoutCh:                make(chan error, 1),
 		errCh:                    make(chan error, 1),
-		flowCtx:                  ctx,
 		deserializationStopWatch: timeutil.NewStopWatch(),
 	}
 	i.scratch.data = make([]*array.Data, len(typs))
 	return i, nil
 }
 
-// maybeInit calls Inbox.init if the inbox is not initialized and returns an
-// error if the initialization was not successful. Usually this is because the
-// given context is canceled before the remote stream arrives.
-func (i *Inbox) maybeInit(ctx context.Context) error {
-	if !i.initialized {
-		if err := i.init(ctx); err != nil {
-			return err
-		}
-		i.initialized = true
-	}
-	return nil
-}
-
-// init initializes the Inbox for operation by blocking until
-// RunWithStream sets the stream to read from. ctx ownership is retained until
-// the stream arrives (to allow for unblocking the wait for a stream), at which
-// point ownership is transferred to RunWithStream. This should only be called
-// from the reader goroutine when it needs a stream.
-func (i *Inbox) init(ctx context.Context) error {
+// init initializes the Inbox for operation by blocking until RunWithStream sets
+// the stream to read from.
+func (i *Inbox) init() error {
 	// Wait for the stream to be initialized. We're essentially waiting for the
 	// remote connection.
 	select {
@@ -184,15 +158,15 @@ func (i *Inbox) init(ctx context.Context) error {
 	case err := <-i.timeoutCh:
 		i.errCh <- fmt.Errorf("%s: remote stream arrived too late", err)
 		return err
-	case <-ctx.Done():
-		i.errCh <- fmt.Errorf("%s: Inbox while waiting for stream", ctx.Err())
-		return ctx.Err()
+	case <-i.Ctx.Done():
+		i.errCh <- fmt.Errorf("%s: Inbox while waiting for stream", i.Ctx.Err())
+		return i.Ctx.Err()
 	}
 
 	if i.ctxInterceptorFn != nil {
-		i.ctxInterceptorFn(ctx)
+		i.ctxInterceptorFn(i.Ctx)
 	}
-	i.contextCh <- ctx
+	i.contextCh <- i.Ctx
 	return nil
 }
 
@@ -206,8 +180,8 @@ func (i *Inbox) close() {
 }
 
 // RunWithStream sets the Inbox's stream and waits until either streamCtx is
-// canceled, a caller of Next cancels the first context passed into Next, or
-// an EOF is encountered on the stream by the Next goroutine.
+// canceled, a caller of Next cancels the context passed into Init, or an EOF is
+// encountered on the stream by the Next goroutine.
 func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer) error {
 	streamCtx = logtags.AddTag(streamCtx, "streamID", i.streamID)
 	log.VEvent(streamCtx, 2, "Inbox handling stream")
@@ -223,8 +197,6 @@ func (i *Inbox) RunWithStream(streamCtx context.Context, stream flowStreamServer
 		log.VEvent(streamCtx, 2, "Inbox reader arrived")
 	case <-streamCtx.Done():
 		return fmt.Errorf("%s: streamCtx while waiting for reader (remote client canceled)", streamCtx.Err())
-	case <-i.flowCtx.Done():
-		return fmt.Errorf("%s: flowCtx while waiting for reader (local server canceled)", i.flowCtx.Err())
 	}
 
 	// Now wait for one of the events described in the method comment. If a
@@ -250,37 +222,48 @@ func (i *Inbox) Timeout(err error) {
 }
 
 // Init is part of the Operator interface.
-func (i *Inbox) Init() {}
+func (i *Inbox) Init(ctx context.Context) {
+	if !i.InitHelper.Init(ctx) {
+		return
+	}
+
+	i.Ctx = logtags.AddTag(ctx, "streamID", i.streamID)
+	if err := i.init(); err != nil {
+		// An error occurred while initializing the Inbox and is likely caused
+		// by the connection issues. It is expected that such an error can
+		// occur. errCh must still be closed.
+		// NOTE: It is very important to close i.errCh only when execution
+		// terminates ungracefully or when DrainMeta has been called (which
+		// indicates a graceful termination). DrainMeta will use the stream
+		// to read any remaining metadata after Next returns a zero-length
+		// batch during normal execution.
+		i.close()
+		colexecerror.ExpectedError(err)
+	}
+}
 
 // Next returns the next batch. It will block until there is data available.
-// The Inbox will exit when either the context passed in on the first call to
-// Next is canceled or when DrainMeta goroutine tells it to do so.
-func (i *Inbox) Next(ctx context.Context) coldata.Batch {
+// The Inbox will exit when either the context passed in Init() is canceled or
+// when DrainMeta goroutine tells it to do so.
+func (i *Inbox) Next() coldata.Batch {
 	if i.done {
 		return coldata.ZeroBatch
 	}
-
-	ctx = logtags.AddTag(ctx, "streamID", i.streamID)
 
 	defer func() {
 		// Catch any panics that occur and close the errCh in order to not leak the
 		// goroutine listening for context cancellation. errCh must still be closed
 		// during normal termination.
 		if err := recover(); err != nil {
+			// NOTE: It is very important to close i.errCh only when execution
+			// terminates ungracefully or when DrainMeta has been called (which
+			// indicates a graceful termination). DrainMeta will use the stream
+			// to read any remaining metadata after Next returns a zero-length
+			// batch during normal execution.
 			i.close()
 			colexecerror.InternalError(logcrash.PanicAsError(0, err))
 		}
 	}()
-
-	// NOTE: It is very important to close i.errCh only when execution terminates
-	// ungracefully or when DrainMeta has been called (which indicates a graceful
-	// termination). DrainMeta will use the stream to read any remaining metadata
-	// after Next returns a zero-length batch during normal execution.
-	if err := i.maybeInit(ctx); err != nil {
-		// An error occurred while initializing the Inbox and is likely caused by
-		// the connection issues. It is expected that such an error can occur.
-		colexecerror.ExpectedError(err)
-	}
 
 	i.deserializationStopWatch.Start()
 	defer i.deserializationStopWatch.Stop()
@@ -306,7 +289,7 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		}
 		if len(m.Data.Metadata) != 0 {
 			for _, rpm := range m.Data.Metadata {
-				meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(ctx, rpm)
+				meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(i.Ctx, rpm)
 				if !ok {
 					continue
 				}
@@ -377,7 +360,7 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 
 // DrainMeta is part of the MetadataGenerator interface. DrainMeta may not be
 // called concurrently with Next.
-func (i *Inbox) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (i *Inbox) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
 	allMeta := i.bufferedMeta
 	i.bufferedMeta = i.bufferedMeta[:0]
 
@@ -387,15 +370,7 @@ func (i *Inbox) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	}
 	defer i.close()
 
-	ctx = logtags.AddTag(ctx, "streamID", i.streamID)
-
-	if err := i.maybeInit(ctx); err != nil {
-		if log.V(1) {
-			log.Warningf(ctx, "Inbox unable to initialize stream while draining metadata: %+v", err)
-		}
-		return allMeta
-	}
-	if err := i.sendDrainSignal(ctx); err != nil {
+	if err := i.sendDrainSignal(i.Ctx); err != nil {
 		return allMeta
 	}
 
@@ -406,12 +381,12 @@ func (i *Inbox) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 				break
 			}
 			if log.V(1) {
-				log.Warningf(ctx, "Inbox Recv connection error while draining metadata: %+v", err)
+				log.Warningf(i.Ctx, "Inbox Recv connection error while draining metadata: %+v", err)
 			}
 			return allMeta
 		}
 		for _, remoteMeta := range msg.Data.Metadata {
-			meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(ctx, remoteMeta)
+			meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(i.Ctx, remoteMeta)
 			if !ok {
 				continue
 			}

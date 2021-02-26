@@ -24,23 +24,20 @@ import (
 
 // Operator is a column vector operator that produces a Batch as output.
 type Operator interface {
-	// Init initializes this operator. Will be called once at operator setup
-	// time. If an operator has an input operator, it's responsible for calling
-	// Init on that input operator as well.
+	// Init initializes this operator. It will be called once at operator setup
+	// time. Second, third, etc calls should be noops. If an operator has any
+	// input operators, it's responsible for calling Init on all of those input
+	// operators as well.
+	//
+	// Canceling the provided context results in forceful termination of
+	// execution. The operators are expected to hold onto the provided context
+	// (and derive a new one if needed) that is then used for Next() calls.
 	//
 	// It might panic with an expected error, so there must be a "root"
 	// component that will catch that panic.
-	// TODO(yuzefovich): we might need to clarify whether it is ok to call
-	// Init() multiple times before the first call to Next(). It is possible to
-	// hit the memory limit during Init(), and a disk-backed operator needs to
-	// make sure that the input has been initialized. We could also in case that
-	// Init() doesn't succeed for bufferingInMemoryOperator - which should only
-	// happen when 'workmem' setting is too low - just bail, even if we have
-	// disk spilling for that operator.
-	// TODO(yuzefovich): we probably should move ctx argument from Next into
-	// Init, the operator will then capture the context and use it (or the one
-	// derived from it) in Next and DrainMeta (when applicable) calls.
-	Init()
+	// TODO(yuzefovich): use the stored context for DrainMeta calls (when
+	// applicable) too.
+	Init(ctx context.Context)
 
 	// Next returns the next Batch from this operator. Once the operator is
 	// finished, it will return a Batch with length 0. Subsequent calls to
@@ -48,12 +45,10 @@ type Operator interface {
 	//
 	// Calling Next may invalidate the contents of the last Batch returned by
 	// Next.
-	// Canceling the provided context results in forceful termination of
-	// execution.
 	//
 	// It might panic with an expected error, so there must be a "root"
 	// component that will catch that panic.
-	Next(context.Context) coldata.Batch
+	Next() coldata.Batch
 
 	execinfra.OpNode
 }
@@ -134,7 +129,7 @@ type BufferingInMemoryOperator interface {
 	//
 	// Calling ExportBuffered may invalidate the contents of the last batch
 	// returned by ExportBuffered.
-	ExportBuffered(ctx context.Context, input Operator) coldata.Batch
+	ExportBuffered(input Operator) coldata.Batch
 }
 
 // Closer is an object that releases resources when Close is called. Note that
@@ -201,10 +196,10 @@ func NewFeedOperator() *FeedOperator {
 }
 
 // Init implements the colexecop.Operator interface.
-func (FeedOperator) Init() {}
+func (FeedOperator) Init(context.Context) {}
 
 // Next implements the colexecop.Operator interface.
-func (o *FeedOperator) Next(context.Context) coldata.Batch {
+func (o *FeedOperator) Next() coldata.Batch {
 	return o.batch
 }
 
@@ -223,33 +218,68 @@ type NonExplainable interface {
 	nonExplainableMarker()
 }
 
-// OperatorInitStatus indicates whether Init method has already been called on
-// an Operator.
-type OperatorInitStatus int
+// InitHelper is a simple struct that helps Operators implement Init() method.
+type InitHelper struct {
+	// Ctx is the context passed on the first call to Init(). If it is nil, then
+	// Init() hasn't been called yet.
+	Ctx context.Context
+}
 
-const (
-	// OperatorNotInitialized indicates that Init has not been called yet.
-	OperatorNotInitialized OperatorInitStatus = iota
-	// OperatorInitialized indicates that Init has already been called.
-	OperatorInitialized
-)
+// Init marks the InitHelper as initialized. If true is returned, this is the
+// first call to Init.
+func (h *InitHelper) Init(ctx context.Context) bool {
+	if h.Ctx != nil {
+		return false
+	}
+	if ctx == nil {
+		colexecerror.InternalError(errors.AssertionFailedf("nil context is passed"))
+	}
+	h.Ctx = ctx
+	return true
+}
 
-// CloserHelper is a simple helper that helps Operators implement
-// Closer. If close returns true, resources may be released, if it
-// returns false, close has already been called.
-// use.
+// MakeOneInputHelper returns a new OneInputHelper.
+func MakeOneInputHelper(input Operator) OneInputHelper {
+	return OneInputHelper{
+		OneInputNode: NewOneInputNode(input),
+	}
+}
+
+// OneInputHelper is an execinfra.OpNode which only needs to initialize its
+// single Operator input in Init().
+type OneInputHelper struct {
+	OneInputNode
+	InitHelper
+}
+
+// Init implements the Operator interface.
+func (h *OneInputHelper) Init(ctx context.Context) {
+	if !h.InitHelper.Init(ctx) {
+		return
+	}
+	h.Input.Init(ctx)
+}
+
+// CloserHelper is a simple helper that helps Operators implement Closer. If
+// close returns true, resources may be released, if it returns false, close has
+// already been called.
 type CloserHelper struct {
-	Closed bool
+	closed bool
 }
 
 // Close marks the CloserHelper as closed. If true is returned, this is the
-// first call to close.
+// first call to Close.
 func (c *CloserHelper) Close() bool {
-	if c.Closed {
+	if c.closed {
 		return false
 	}
-	c.Closed = true
+	c.closed = true
 	return true
+}
+
+// Reset resets the CloserHelper so that it can be closed again.
+func (c *CloserHelper) Reset() {
+	c.closed = false
 }
 
 // ClosableOperator is an Operator that needs to be Close()'d.
@@ -265,7 +295,7 @@ func MakeOneInputCloserHelper(input Operator) OneInputCloserHelper {
 	}
 }
 
-// OneInputCloserHelper is an execinfrapb.OpNode with a single Operator input
+// OneInputCloserHelper is an execinfra.OpNode with a single Operator input
 // that might need to be Close()'d.
 type OneInputCloserHelper struct {
 	OneInputNode
@@ -285,8 +315,30 @@ func (c *OneInputCloserHelper) Close(ctx context.Context) error {
 	return nil
 }
 
-type noopOperator struct {
+// MakeOneInputInitCloserHelper returns a new OneInputInitCloserHelper.
+func MakeOneInputInitCloserHelper(input Operator) OneInputInitCloserHelper {
+	return OneInputInitCloserHelper{
+		OneInputCloserHelper: MakeOneInputCloserHelper(input),
+	}
+}
+
+// OneInputInitCloserHelper is an execinfra.OpNode that only needs to initialize
+// its single Operator input in Init() and might need to Close() it too.
+type OneInputInitCloserHelper struct {
+	InitHelper
 	OneInputCloserHelper
+}
+
+// Init implements the Operator interface.
+func (h *OneInputInitCloserHelper) Init(ctx context.Context) {
+	if !h.InitHelper.Init(ctx) {
+		return
+	}
+	h.Input.Init(ctx)
+}
+
+type noopOperator struct {
+	OneInputInitCloserHelper
 	NonExplainable
 }
 
@@ -294,15 +346,11 @@ var _ ResettableOperator = &noopOperator{}
 
 // NewNoop returns a new noop Operator.
 func NewNoop(input Operator) ResettableOperator {
-	return &noopOperator{OneInputCloserHelper: MakeOneInputCloserHelper(input)}
+	return &noopOperator{OneInputInitCloserHelper: MakeOneInputInitCloserHelper(input)}
 }
 
-func (n *noopOperator) Init() {
-	n.Input.Init()
-}
-
-func (n *noopOperator) Next(ctx context.Context) coldata.Batch {
-	return n.Input.Next(ctx)
+func (n *noopOperator) Next() coldata.Batch {
+	return n.Input.Next()
 }
 
 func (n *noopOperator) Reset(ctx context.Context) {

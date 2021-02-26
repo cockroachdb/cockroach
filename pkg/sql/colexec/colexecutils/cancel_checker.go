@@ -19,20 +19,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 )
 
-// CancelChecker is an Operator that checks whether query cancellation has
-// occurred. The check happens on every batch.
+// CancelChecker is a colexecop.Operator that checks whether query cancellation
+// has occurred. The check happens on every batch.
+//
+// It also can be used for its utility Check*() methods, but it must be
+// initialized still.
 type CancelChecker struct {
 	colexecop.OneInputNode
+	colexecop.InitHelper
 	colexecop.NonExplainable
 
 	// Number of times check() has been called since last context cancellation
 	// check.
 	callsSinceLastCheck uint32
-}
-
-// Init is part of the Operator interface.
-func (c *CancelChecker) Init() {
-	c.Input.Init()
 }
 
 var _ colexecop.Operator = &CancelChecker{}
@@ -42,10 +41,22 @@ func NewCancelChecker(op colexecop.Operator) *CancelChecker {
 	return &CancelChecker{OneInputNode: colexecop.NewOneInputNode(op)}
 }
 
-// Next is part of Operator interface.
-func (c *CancelChecker) Next(ctx context.Context) coldata.Batch {
-	c.CheckEveryCall(ctx)
-	return c.Input.Next(ctx)
+// Init is part of colexecop.Operator interface.
+func (c *CancelChecker) Init(ctx context.Context) {
+	if !c.InitHelper.Init(ctx) {
+		return
+	}
+	if c.Input != nil {
+		// In some cases, the cancel checker is used as a utility to provide
+		// Check*() methods, and the input remains nil then.
+		c.Input.Init(ctx)
+	}
+}
+
+// Next is part of colexecop.Operator interface.
+func (c *CancelChecker) Next() coldata.Batch {
+	c.CheckEveryCall()
+	return c.Input.Next()
 }
 
 // Interval of Check() calls to wait between checks for context cancellation.
@@ -56,9 +67,9 @@ const cancelCheckInterval = 1024
 // Check panics with a query canceled error if the associated query has been
 // canceled. The check is performed on every cancelCheckInterval'th call. This
 // should be used only during long-running operations.
-func (c *CancelChecker) Check(ctx context.Context) {
+func (c *CancelChecker) Check() {
 	if c.callsSinceLastCheck%cancelCheckInterval == 0 {
-		c.CheckEveryCall(ctx)
+		c.CheckEveryCall()
 	}
 
 	// Increment. This may rollover when the 32-bit capacity is reached, but
@@ -69,9 +80,9 @@ func (c *CancelChecker) Check(ctx context.Context) {
 // CheckEveryCall panics with query canceled error (which will be caught at the
 // materializer level and will be propagated forward as metadata) if the
 // associated query has been canceled. The check is performed on every call.
-func (c *CancelChecker) CheckEveryCall(ctx context.Context) {
+func (c *CancelChecker) CheckEveryCall() {
 	select {
-	case <-ctx.Done():
+	case <-c.Ctx.Done():
 		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
 	default:
 	}
