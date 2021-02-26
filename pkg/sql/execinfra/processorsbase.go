@@ -870,6 +870,7 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 // It is likely that this method is called from RowSource.Start implementation,
 // and the recommended layout is the following:
 //   ctx = pb.StartInternal(ctx, name)
+//   < inputs >.Start(ctx) // if there are any inputs-RowSources to pb
 //   < other initialization >
 // so that the caller doesn't mistakenly use old ctx object.
 func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {

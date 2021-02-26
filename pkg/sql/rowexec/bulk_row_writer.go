@@ -76,8 +76,8 @@ func newBulkRowWriterProcessor(
 
 // Start is part of the RowSource interface.
 func (sp *bulkRowWriter) Start(ctx context.Context) {
-	sp.input.Start(ctx)
 	ctx = sp.StartInternal(ctx, "bulkRowWriter")
+	sp.input.Start(ctx)
 	err := sp.work(ctx)
 	sp.MoveToDraining(err)
 }
