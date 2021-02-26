@@ -70,7 +70,7 @@ function makeCommonColumns(
     },
     {
       name: "latency",
-      title: StatementTableTitle.latency,
+      title: StatementTableTitle.statementTime,
       className: cx("statements-table__col-latency"),
       cell: latencyBar,
       sort: stmt => stmt.stats.service_lat.mean,
