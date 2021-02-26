@@ -960,7 +960,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 							// At the last outbox, we can accurately retrieve stats for the
 							// whole flow from parent monitors. These stats are added to a
 							// flow-level span.
-							span.SetTag(execinfrapb.FlowIDTagKey, flowCtx.ID)
 							span.SetSpanStats(&execinfrapb.ComponentStats{
 								Component: execinfrapb.FlowComponentID(base.SQLInstanceID(outputStream.OriginNodeID), flowCtx.ID),
 								FlowStats: execinfrapb.FlowStats{
