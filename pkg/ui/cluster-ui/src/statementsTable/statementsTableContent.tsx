@@ -54,36 +54,6 @@ export const StatementTableTitle = {
       Statements
     </Tooltip>
   ),
-  txtType: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
-          <p>
-            {
-              "Type of transaction (implicit or explicit). Explicit transactions refer to statements that are wrapped by "
-            }
-            <code>BEGIN</code>
-            {" and "}
-            <code>COMMIT</code>
-            {" statements by the client. Explicit transactions employ "}
-            <Anchor href={transactionalPipelining} target="_blank">
-              transactional pipelining
-            </Anchor>
-            {
-              " and therefore report latencies that do not account for replication."
-            }
-          </p>
-          <p>
-            For statements not in explicit transactions, CockroachDB wraps each
-            statement in individual implicit transactions.
-          </p>
-        </div>
-      }
-    >
-      TXN Type
-    </Tooltip>
-  ),
   executionCount: (
     <Tooltip
       placement="bottom"
