@@ -483,7 +483,7 @@ func DecodeDatum(
 			}
 			return tree.ParseDJSON(string(b))
 		}
-		if _, ok := types.ArrayOids[id]; ok {
+		if t.Family() == types.ArrayFamily {
 			// Arrays come in in their string form, so we parse them as such and later
 			// convert them to their actual datum form.
 			if err := validateStringBytes(b); err != nil {
@@ -756,8 +756,8 @@ func DecodeDatum(
 			ba, err := bitarray.FromEncodingParts(words, lastBitsUsed)
 			return &tree.DBitArray{BitArray: ba}, err
 		default:
-			if _, ok := types.ArrayOids[id]; ok {
-				return decodeBinaryArray(evalCtx, types.OidToType[id].ArrayContents(), b, code)
+			if t.Family() == types.ArrayFamily {
+				return decodeBinaryArray(evalCtx, t.ArrayContents(), b, code)
 			}
 		}
 	default:
@@ -917,7 +917,7 @@ func decodeBinaryArray(
 	if t.Oid() != oid.Oid(hdr.ElemOid) {
 		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "wrong element type")
 	}
-	arr := tree.NewDArray(types.OidToType[t.Oid()])
+	arr := tree.NewDArray(t)
 	if hdr.Ndims == 0 {
 		return arr, nil
 	}
