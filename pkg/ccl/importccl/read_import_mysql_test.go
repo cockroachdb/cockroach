@@ -216,11 +216,15 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 		tableName := &descpb.AnonymousTable
 		expectedDesc := tabledesc.NewImmutable(*expected)
 		gotDesc := tabledesc.NewImmutable(*got)
-		e, err := schemaexpr.FormatIndexForDisplay(ctx, expectedDesc, tableName, &expected.Indexes[i], &semaCtx)
+		e, err := schemaexpr.FormatIndexForDisplay(
+			ctx, expectedDesc, tableName, &expected.Indexes[i], "" /* partition */, "" /* interleave */, &semaCtx,
+		)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}
-		g, err := schemaexpr.FormatIndexForDisplay(ctx, gotDesc, tableName, &got.Indexes[i], &semaCtx)
+		g, err := schemaexpr.FormatIndexForDisplay(
+			ctx, gotDesc, tableName, &got.Indexes[i], "" /* partition */, "" /* interleave */, &semaCtx,
+		)
 		if err != nil {
 			t.Fatalf("unexpected error: %s", err)
 		}

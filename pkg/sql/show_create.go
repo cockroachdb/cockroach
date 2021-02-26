@@ -159,27 +159,39 @@ func ShowCreateTable(
 		}
 		if idx.ID != desc.GetPrimaryIndex().ID && includeInterleaveClause {
 			// Showing the primary index is handled above.
+
+			// Build the PARTITION BY clause.
+			var partitionBuf bytes.Buffer
+			if err := ShowCreatePartitioning(
+				a, p.ExecCfg().Codec, desc, idx, &idx.Partitioning, &partitionBuf, 1 /* indent */, 0, /* colOffset */
+			); err != nil {
+				return "", err
+			}
+
+			// Add interleave or Foreign Key indexes only to the create_table columns,
+			// and not the create_nofks column.
+			var interleaveBuf bytes.Buffer
+			if includeInterleaveClause {
+				if err := showCreateInterleave(idx, &interleaveBuf, dbPrefix, lCtx); err != nil {
+					return "", err
+				}
+			}
+
 			f.WriteString(",\n\t")
-			idxStr, err := schemaexpr.FormatIndexForDisplay(ctx, desc, &descpb.AnonymousTable, idx, &p.RunParams(ctx).p.semaCtx)
+			idxStr, err := schemaexpr.FormatIndexForDisplay(
+				ctx,
+				desc,
+				&descpb.AnonymousTable,
+				idx,
+				partitionBuf.String(),
+				interleaveBuf.String(),
+				p.RunParams(ctx).p.SemaCtx(),
+			)
 			if err != nil {
 				return "", err
 			}
 			f.WriteString(idxStr)
-			// Showing the INTERLEAVE and PARTITION BY for the primary index are
-			// handled last.
 
-			// Add interleave or Foreign Key indexes only to the create_table columns,
-			// and not the create_nofks column.
-			if includeInterleaveClause {
-				if err := showCreateInterleave(idx, &f.Buffer, dbPrefix, lCtx); err != nil {
-					return "", err
-				}
-			}
-			if err := ShowCreatePartitioning(
-				a, p.ExecCfg().Codec, desc, idx, &idx.Partitioning, &f.Buffer, 1 /* indent */, 0, /* colOffset */
-			); err != nil {
-				return "", err
-			}
 		}
 	}
 
