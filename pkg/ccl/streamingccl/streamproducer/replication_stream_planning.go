@@ -167,6 +167,10 @@ var replicationStreamHeader = colinfo.ResultColumns{
 func createReplicationStreamHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+	stream, ok := stmt.(*tree.ReplicationStream)
+	if !ok {
+		return nil, nil, nil, false, nil
+	}
 	if !p.SessionData().EnableStreamReplication {
 		return nil, nil, nil, false, errors.WithTelemetry(
 			pgerror.WithCandidateCode(
@@ -180,10 +184,6 @@ func createReplicationStreamHook(
 		)
 	}
 
-	stream, ok := stmt.(*tree.ReplicationStream)
-	if !ok {
-		return nil, nil, nil, false, nil
-	}
 	eval, err := makeReplicationStreamEval(ctx, p, stream)
 	if err != nil {
 		return nil, nil, nil, false, err
