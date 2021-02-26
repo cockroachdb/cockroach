@@ -18,9 +18,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -234,6 +237,115 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 	if numLeases := getNumVersions(ts); numLeases != 1 {
 		t.Fatalf("found %d versions instead of 1", numLeases)
+	}
+}
+
+// TestPurgeOldVersionsRetainsDescriptorWithFutureModificationTime tests the
+// behavior of purgeOldVersions when the descriptorSet contains a descriptor
+// version with a modification time in advance of the current HLC clock, as can
+// be the case if the descriptor was updated in a transaction that wrote to a
+// global_reads range. In such cases, the descriptor with the newest
+// modification time should still be retained.
+func TestPurgeOldVersionsRetainsDescriptorWithFutureModificationTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// We're going to block gossip so it doesn't come randomly and clear up the
+	// leases we're artificially setting up.
+	gossipSem := make(chan struct{}, 1)
+	serverParams := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &ManagerTestingKnobs{
+				TestingDescriptorUpdateEvent: func(_ *descpb.Descriptor) error {
+					gossipSem <- struct{}{}
+					<-gossipSem
+					return nil
+				},
+			},
+		},
+	}
+	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, serverParams)
+	defer s.Stopper().Stop(ctx)
+	leaseManager := s.LeaseManager().(*Manager)
+
+	// Block gossip.
+	gossipSem <- struct{}{}
+	defer func() {
+		// Unblock gossip.
+		<-gossipSem
+	}()
+
+	if _, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	futureTime := s.Clock().Now().Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
+
+	getLatestDesc := func() catalog.TableDescriptor {
+		if err := leaseManager.AcquireFreshestFromStore(ctx, tableDesc.GetID()); err != nil {
+			t.Fatal(err)
+		}
+		table, _, err := leaseManager.Acquire(ctx, futureTime, tableDesc.GetID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		latestDesc := table.(catalog.TableDescriptor)
+		if err := leaseManager.Release(table); err != nil {
+			t.Fatal(err)
+		}
+		return latestDesc
+	}
+	origDesc := getLatestDesc()
+	ts := leaseManager.findDescriptorState(tableDesc.GetID(), false)
+	if numLeases := getNumVersions(ts); numLeases != 1 {
+		t.Fatalf("found %d versions instead of 1", numLeases)
+	}
+
+	// Publish a new version for the table with a modification time slightly in
+	// the future of present time. We dictate this modification time by creating
+	// a read-write conflict that forces the publishing transaction to bump its
+	// commit timestamp.
+	update := func(catalog.MutableDescriptor) error { return nil }
+	logEvent := func(txn *kv.Txn) error {
+		txn2 := kvDB.NewTxn(ctx, "future-read")
+		txn2.SetFixedTimestamp(ctx, futureTime.Prev())
+		if _, err := txn2.Get(ctx, "key"); err != nil {
+			return errors.Wrap(err, "read from other txn in future")
+		}
+
+		return txn.Put(ctx, "key", "value")
+	}
+	if _, err := leaseManager.Publish(ctx, tableDesc.GetID(), update, logEvent); err != nil {
+		t.Fatal(err)
+	}
+
+	// The leaseManager should be able to acquire the new version.
+	latestDesc := getLatestDesc()
+	if latestDesc.GetVersion() <= origDesc.GetVersion() {
+		t.Fatalf("expected new version, found %v after %v", latestDesc, origDesc)
+	}
+	ts = leaseManager.findDescriptorState(tableDesc.GetID(), false)
+	if numLeases := getNumVersions(ts); numLeases != 2 {
+		t.Fatalf("found %d versions instead of 2", numLeases)
+	}
+
+	// Purge old versions and make sure that the newest lease survives the
+	// purge.
+	if err := purgeOldVersions(ctx, kvDB, tableDesc.GetID(), false, 2 /* minVersion */, leaseManager); err != nil {
+		t.Fatal(err)
+	}
+	if numLeases := getNumVersions(ts); numLeases != 1 {
+		t.Fatalf("found %d versions instead of 1", numLeases)
+	}
+	ts.mu.Lock()
+	correctLease := ts.mu.active.data[0].GetID() == latestDesc.GetID() &&
+		ts.mu.active.data[0].GetVersion() == latestDesc.GetVersion()
+	ts.mu.Unlock()
+	if !correctLease {
+		t.Fatalf("wrong lease survived purge")
 	}
 }
 

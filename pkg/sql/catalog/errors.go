@@ -66,12 +66,6 @@ func HasAddingTableError(err error) bool {
 	return errors.HasType(err, (*addingTableError)(nil))
 }
 
-// HasInactiveDescriptorError returns true if the error contains an
-// inactiveDescriptorError.
-func HasInactiveDescriptorError(err error) bool {
-	return errors.HasType(err, (*inactiveDescriptorError)(nil))
-}
-
 // NewInactiveDescriptorError wraps an error in a new inactiveDescriptorError.
 func NewInactiveDescriptorError(err error) error {
 	return &inactiveDescriptorError{err}
