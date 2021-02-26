@@ -40,6 +40,11 @@ func streamIngestionJobDescription(
 func ingestionPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
+	ingestionStmt, ok := stmt.(*tree.StreamIngestion)
+	if !ok {
+		return nil, nil, nil, false, nil
+	}
+
 	// Check if the experimental feature is enabled.
 	if !p.SessionData().EnableStreamReplication {
 		return nil, nil, nil, false, errors.WithTelemetry(
@@ -52,11 +57,6 @@ func ingestionPlanHook(
 			),
 			"replication.ingest.disabled",
 		)
-	}
-
-	ingestionStmt, ok := stmt.(*tree.StreamIngestion)
-	if !ok {
-		return nil, nil, nil, false, nil
 	}
 
 	fromFn, err := p.TypeAsStringArray(ctx, tree.Exprs(ingestionStmt.From), "INGESTION")
