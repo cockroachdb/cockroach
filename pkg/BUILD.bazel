@@ -83,6 +83,7 @@ ALL_TESTS = [
     "//pkg/kv/kvclient/rangecache:rangecache_test",
     "//pkg/kv/kvclient/rangefeed:rangefeed_test",
     "//pkg/kv/kvnemesis:kvnemesis_test",
+    "//pkg/kv/kvprober:kvprober_test",
     "//pkg/kv/kvserver/abortspan:abortspan_test",
     "//pkg/kv/kvserver/apply:apply_test",
     "//pkg/kv/kvserver/batcheval/result:result_test",
