@@ -66,7 +66,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	col, err := colexec.NewBufferingColumnarizer(ctx, testAllocator, &flowCtx, 1, mts)
+	col, err := colexec.NewBufferingColumnarizer(testAllocator, &flowCtx, 1, mts)
 	if err != nil {
 		t.Fatal(err)
 	}

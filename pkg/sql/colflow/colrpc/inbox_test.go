@@ -61,13 +61,13 @@ func TestInboxCancellation(t *testing.T) {
 
 	typs := []*types.T{types.Int}
 	t.Run("ReaderWaitingForStreamHandler", func(t *testing.T) {
-		inbox, err := NewInbox(context.Background(), testAllocator, typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
 		// Cancel the context.
 		cancelFn()
-		// Next should not block if the context is canceled.
-		err = colexecerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+		// Init should encounter an error if the context is canceled.
+		err = colexecerror.CatchVectorizedRuntimeError(func() { inbox.Init(ctx) })
 		require.True(t, testutils.IsError(err, "context canceled"), err)
 		// Now, the remote stream arrives.
 		err = inbox.RunWithStream(context.Background(), mockFlowStreamServer{})
@@ -76,13 +76,14 @@ func TestInboxCancellation(t *testing.T) {
 
 	t.Run("DuringRecv", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(context.Background(), testAllocator, typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 		ctx, cancelFn := context.WithCancel(context.Background())
 
 		// Setup reader and stream.
 		go func() {
-			inbox.Next(ctx)
+			inbox.Init(ctx)
+			inbox.Next()
 		}()
 		recvCalled := make(chan struct{})
 		streamHandlerErrCh := handleStream(context.Background(), inbox, callbackFlowStreamServer{
@@ -107,7 +108,7 @@ func TestInboxCancellation(t *testing.T) {
 
 	t.Run("StreamHandlerWaitingForReader", func(t *testing.T) {
 		rpcLayer := makeMockFlowStreamRPCLayer()
-		inbox, err := NewInbox(context.Background(), testAllocator, typs, execinfrapb.StreamID(0))
+		inbox, err := NewInbox(testAllocator, typs, execinfrapb.StreamID(0))
 		require.NoError(t, err)
 
 		ctx, cancelFn := context.WithCancel(context.Background())
@@ -125,7 +126,7 @@ func TestInboxCancellation(t *testing.T) {
 func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	inbox, err := NewInbox(context.Background(), testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	rpcLayer := makeMockFlowStreamRPCLayer()
@@ -140,7 +141,10 @@ func TestInboxNextPanicDoesntLeakGoroutines(t *testing.T) {
 
 	// inbox.Next should panic given that the deserializer will encounter garbage
 	// data.
-	require.Panics(t, func() { inbox.Next(context.Background()) })
+	require.Panics(t, func() {
+		inbox.Init(context.Background())
+		inbox.Next()
+	})
 
 	// We require no error from the stream handler as nothing was canceled. The
 	// panic is bubbled up through the Next chain on the Inbox's host.
@@ -152,7 +156,7 @@ func TestInboxTimeout(t *testing.T) {
 
 	ctx := context.Background()
 
-	inbox, err := NewInbox(ctx, testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0))
+	inbox, err := NewInbox(testAllocator, []*types.T{types.Int}, execinfrapb.StreamID(0))
 	require.NoError(t, err)
 
 	var (
@@ -160,7 +164,10 @@ func TestInboxTimeout(t *testing.T) {
 		rpcLayer    = makeMockFlowStreamRPCLayer()
 	)
 	go func() {
-		readerErrCh <- colexecerror.CatchVectorizedRuntimeError(func() { inbox.Next(ctx) })
+		readerErrCh <- colexecerror.CatchVectorizedRuntimeError(func() {
+			inbox.Init(ctx)
+			inbox.Next()
+		})
 	}()
 
 	// Timeout the inbox.
@@ -255,7 +262,7 @@ func TestInboxShutdown(t *testing.T) {
 					inboxCtx, inboxCancel := context.WithCancel(context.Background())
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer inboxMemAccount.Close(inboxCtx)
-					inbox, err := NewInbox(context.Background(), colmem.NewAllocator(inboxCtx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
+					inbox, err := NewInbox(colmem.NewAllocator(inboxCtx, &inboxMemAccount, coldata.StandardColumnFactory), typs, execinfrapb.StreamID(0))
 					require.NoError(t, err)
 					c, err := colserde.NewArrowBatchConverter(typs)
 					require.NoError(t, err)
@@ -362,15 +369,19 @@ func TestInboxShutdown(t *testing.T) {
 										_ = inbox.DrainMeta(inboxCtx)
 										return
 									}
+									err = colexecerror.CatchVectorizedRuntimeError(func() {
+										inbox.Init(inboxCtx)
+									})
+									if err != nil {
+										errCh <- err
+										return
+									}
 									if nextSleep != 0 {
 										time.Sleep(nextSleep)
 									}
-									var (
-										done bool
-										err  error
-									)
+									var done bool
 									for !done && err == nil {
-										err = colexecerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(inboxCtx); done = b.Length() == 0 })
+										err = colexecerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(); done = b.Length() == 0 })
 										if drainScenario == drainMetaPrematurely {
 											_ = inbox.DrainMeta(inboxCtx)
 											return

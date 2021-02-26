@@ -418,7 +418,7 @@ func newMergeJoinBase(
 	diskQueueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
 	diskQueueCfg.SetDefaultBufferSizeBytesForCacheMode()
 	base := &mergeJoinBase{
-		twoInputNode:       newTwoInputNode(left, right),
+		joinHelper:         newJoinHelper(left, right),
 		unlimitedAllocator: unlimitedAllocator,
 		memoryLimit:        memoryLimit,
 		diskQueueCfg:       diskQueueCfg,
@@ -458,7 +458,7 @@ func newMergeJoinBase(
 
 // mergeJoinBase extracts the common logic between all merge join operators.
 type mergeJoinBase struct {
-	twoInputNode
+	*joinHelper
 	colexecop.CloserHelper
 
 	unlimitedAllocator *colmem.Allocator
@@ -506,10 +506,11 @@ func (o *mergeJoinBase) Reset(ctx context.Context) {
 	o.resetBuilderCrossProductState()
 }
 
-func (o *mergeJoinBase) Init() {
+func (o *mergeJoinBase) Init(ctx context.Context) {
+	if !o.init(ctx) {
+		return
+	}
 	o.outputTypes = o.joinType.MakeOutputTypes(o.left.sourceTypes, o.right.sourceTypes)
-	o.left.source.Init()
-	o.right.source.Init()
 	o.bufferedGroup.left.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
 		o.left.sourceTypes, 1, /* capacity */
 	).ColVecs()
@@ -548,12 +549,7 @@ func (o *mergeJoinBase) resetBuilderCrossProductState() {
 // A zero-length batch needs to be appended when no more batches will be
 // appended to the buffered group.
 func (o *mergeJoinBase) appendToBufferedGroup(
-	ctx context.Context,
-	input *mergeJoinInput,
-	batch coldata.Batch,
-	sel []int,
-	groupStartIdx int,
-	groupLength int,
+	input *mergeJoinInput, batch coldata.Batch, sel []int, groupStartIdx int, groupLength int,
 ) {
 	var (
 		bufferedGroup     *mjBufferedGroup
@@ -577,7 +573,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	if batch.Length() == 0 || groupLength == 0 {
 		// We have finished appending to this buffered group, so we need to
 		// Enqueue a zero-length batch per the contract of the spilling queue.
-		if err := bufferedTuples.Enqueue(ctx, coldata.ZeroBatch); err != nil {
+		if err := bufferedTuples.Enqueue(o.Ctx, coldata.ZeroBatch); err != nil {
 			colexecerror.InternalError(err)
 		}
 		return
@@ -625,7 +621,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		}
 		bufferedGroup.scratchBatch.SetLength(groupLength)
 	})
-	if err := bufferedTuples.Enqueue(ctx, bufferedGroup.scratchBatch); err != nil {
+	if err := bufferedTuples.Enqueue(o.Ctx, bufferedGroup.scratchBatch); err != nil {
 		colexecerror.InternalError(err)
 	}
 }
@@ -641,19 +637,19 @@ func (o *mergeJoinBase) setBuilderSourceToBatch() {
 
 // initProberState sets the batches, lengths, and current indices to the right
 // locations given the last iteration of the operator.
-func (o *mergeJoinBase) initProberState(ctx context.Context) {
+func (o *mergeJoinBase) initProberState() {
 	// If this is the first batch or we're done with the current batch, get the
 	// next batch.
 	if o.proberState.lBatch == nil || (o.proberState.lLength != 0 && o.proberState.lIdx == o.proberState.lLength) {
-		o.proberState.lIdx, o.proberState.lBatch = 0, o.left.source.Next(ctx)
+		o.proberState.lIdx, o.proberState.lBatch = 0, o.left.source.Next()
 		o.proberState.lLength = o.proberState.lBatch.Length()
 	}
 	if o.proberState.rBatch == nil || (o.proberState.rLength != 0 && o.proberState.rIdx == o.proberState.rLength) {
-		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next(ctx)
+		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next()
 		o.proberState.rLength = o.proberState.rBatch.Length()
 	}
 	if o.bufferedGroup.needToReset {
-		o.bufferedGroup.helper.Reset(ctx)
+		o.bufferedGroup.helper.Reset(o.Ctx)
 		o.bufferedGroup.needToReset = false
 	}
 }
@@ -671,9 +667,9 @@ func (o *mergeJoinBase) sourceFinished() bool {
 
 // finishBufferedGroup appends a zero-length batch to the buffered group which
 // is required by the contract of the spilling queue.
-func (o *mergeJoinBase) finishBufferedGroup(ctx context.Context, input *mergeJoinInput) {
+func (o *mergeJoinBase) finishBufferedGroup(input *mergeJoinInput) {
 	o.appendToBufferedGroup(
-		ctx, input, coldata.ZeroBatch, nil, /* sel */
+		input, coldata.ZeroBatch, nil, /* sel */
 		0 /* groupStartIdx */, 0, /* groupLength */
 	)
 }
@@ -689,16 +685,19 @@ func (o *mergeJoinBase) finishBufferedGroup(ctx context.Context, input *mergeJoi
 // unbounded buffering.
 // SIDE EFFECT: can append to the buffered group corresponding to the source.
 func (o *mergeJoinBase) completeBufferedGroup(
-	ctx context.Context, input *mergeJoinInput, batch coldata.Batch, rowIdx int,
+	input *mergeJoinInput, batch coldata.Batch, rowIdx int,
 ) (_ coldata.Batch, idx int, batchLength int) {
 	batchLength = batch.Length()
 	if o.isBufferedGroupFinished(input, batch, rowIdx) {
-		o.finishBufferedGroup(ctx, input)
+		o.finishBufferedGroup(input)
 		return batch, rowIdx, batchLength
 	}
 
 	isBufferedGroupComplete := false
-	input.distincter.(colexecop.Resetter).Reset(ctx)
+	// It is ok that we might call Init() multiple times - it'll be a noop after
+	// the first one.
+	input.distincter.Init(o.Ctx)
+	input.distincter.(colexecop.Resetter).Reset(o.Ctx)
 	// Ignore the first row of the distincter in the first pass since we already
 	// know that we are in the same group and, thus, the row is not distinct,
 	// regardless of what the distincter outputs.
@@ -711,7 +710,7 @@ func (o *mergeJoinBase) completeBufferedGroup(
 		// so the distincter - in a sense - compares the incoming tuples to the
 		// first tuple of the first iteration (which we know is the same group).
 		input.distincterInput.SetBatch(batch)
-		input.distincter.Next(ctx)
+		input.distincter.Next()
 
 		sel = batch.Selection()
 		var groupLength int
@@ -738,19 +737,19 @@ func (o *mergeJoinBase) completeBufferedGroup(
 		loopStartIndex = 0
 
 		// Buffer all the tuples that are part of the buffered group.
-		o.appendToBufferedGroup(ctx, input, batch, sel, rowIdx, groupLength)
+		o.appendToBufferedGroup(input, batch, sel, rowIdx, groupLength)
 		rowIdx += groupLength
 
 		if !isBufferedGroupComplete {
 			// The buffered group is still not complete which means that we have
 			// just appended all the tuples from batch to it, so we need to get a
 			// fresh batch from the input.
-			rowIdx, batch = 0, input.source.Next(ctx)
+			rowIdx, batch = 0, input.source.Next()
 			batchLength = batch.Length()
 			if batchLength == 0 {
 				// The input has been exhausted, so the buffered group is now complete.
 				isBufferedGroupComplete = true
-				o.finishBufferedGroup(ctx, input)
+				o.finishBufferedGroup(input)
 			}
 		}
 	}
@@ -759,15 +758,13 @@ func (o *mergeJoinBase) completeBufferedGroup(
 }
 
 // finishProbe completes the buffered groups on both sides of the input.
-func (o *mergeJoinBase) finishProbe(ctx context.Context) {
+func (o *mergeJoinBase) finishProbe() {
 	o.proberState.lBatch, o.proberState.lIdx, o.proberState.lLength = o.completeBufferedGroup(
-		ctx,
 		&o.left,
 		o.proberState.lBatch,
 		o.proberState.lIdx,
 	)
 	o.proberState.rBatch, o.proberState.rIdx, o.proberState.rLength = o.completeBufferedGroup(
-		ctx,
 		&o.right,
 		o.proberState.rBatch,
 		o.proberState.rIdx,

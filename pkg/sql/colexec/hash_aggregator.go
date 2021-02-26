@@ -64,6 +64,8 @@ const (
 // and are used interchangeably.
 type hashAggregator struct {
 	colexecop.OneInputNode
+	colexecop.InitHelper
+	colexecop.CloserHelper
 
 	allocator *colmem.Allocator
 	spec      *execinfrapb.AggregatorSpec
@@ -184,13 +186,17 @@ func NewHashAggregator(
 	return hashAgg, err
 }
 
-func (op *hashAggregator) Init() {
-	op.Input.Init()
+func (op *hashAggregator) Init(ctx context.Context) {
+	if !op.InitHelper.Init(ctx) {
+		return
+	}
+	op.Input.Init(ctx)
 	// These numbers were chosen after running the micro-benchmarks and relevant
 	// TPCH queries using tpchvec/bench.
 	const hashTableLoadFactor = 0.1
 	const hashTableNumBuckets = 256
 	op.ht = colexechash.NewHashTable(
+		ctx,
 		op.allocator,
 		hashTableLoadFactor,
 		hashTableNumBuckets,
@@ -202,7 +208,7 @@ func (op *hashAggregator) Init() {
 	)
 }
 
-func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
+func (op *hashAggregator) Next() coldata.Batch {
 	for {
 		switch op.state {
 		case hashAggregatorBuffering:
@@ -213,10 +219,10 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 					)
 				})
 			}
-			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.Input.Next(ctx), 0
+			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.Input.Next(), 0
 			n := op.bufferingState.pendingBatch.Length()
 			if op.inputTrackingState.tuples != nil {
-				if err := op.inputTrackingState.tuples.Enqueue(ctx, op.bufferingState.pendingBatch); err != nil {
+				if err := op.inputTrackingState.tuples.Enqueue(op.Ctx, op.bufferingState.pendingBatch); err != nil {
 					colexecerror.InternalError(err)
 				}
 				op.inputTrackingState.zeroBatchEnqueued = n == 0
@@ -260,7 +266,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 
 		case hashAggregatorAggregating:
 			op.inputArgsConverter.ConvertBatch(op.bufferingState.tuples)
-			op.onlineAgg(ctx, op.bufferingState.tuples)
+			op.onlineAgg(op.bufferingState.tuples)
 			if op.bufferingState.pendingBatch.Length() == 0 {
 				if len(op.buckets) == 0 {
 					op.state = hashAggregatorDone
@@ -386,13 +392,13 @@ func (op *hashAggregator) setupScratchSlices(numBuffered int) {
 //  We have processed the input fully, so we're ready to emit the output.
 //
 // NOTE: b *must* be non-zero length batch.
-func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
+func (op *hashAggregator) onlineAgg(b coldata.Batch) {
 	op.setupScratchSlices(b.Length())
 	inputVecs := b.ColVecs()
 	// Step 1: find "equality" buckets: we compute the hash buckets for all
 	// tuples, build 'next' chains between them, and then find equality buckets
 	// for the tuples.
-	op.ht.ComputeHashAndBuildChains(ctx, b)
+	op.ht.ComputeHashAndBuildChains(b)
 	op.ht.FindBuckets(
 		b, op.ht.Keys, op.ht.ProbeScratch.First, op.ht.ProbeScratch.Next, op.ht.CheckProbeForDistinct,
 	)
@@ -422,7 +428,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 				eqChain := op.scratch.eqChains[eqChainsSlot]
 				bucket := op.buckets[HeadID-1]
 				op.aggHelper.performAggregation(
-					ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
+					op.Ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
 				)
 				// We have fully processed this equality chain, so we need to
 				// reset its length.
@@ -456,7 +462,7 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 				op.aggFnsAlloc.MakeAggregateFuncs(), op.aggHelper.makeSeenMaps(), nil, /* groups */
 			)
 			op.aggHelper.performAggregation(
-				ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
+				op.Ctx, inputVecs, len(eqChain), eqChain, bucket, nil, /* groups */
 			)
 			newGroupsHeadsSel = append(newGroupsHeadsSel, eqChainsHeads[eqChainSlot])
 			// We need to compact the hash buffer according to the new groups
@@ -472,20 +478,20 @@ func (op *hashAggregator) onlineAgg(ctx context.Context, b coldata.Batch) {
 		// buckets to the hash table.
 		copy(b.Selection(), newGroupsHeadsSel)
 		b.SetLength(newGroupCount)
-		op.ht.AppendAllDistinct(ctx, b)
+		op.ht.AppendAllDistinct(b)
 	}
 }
 
-func (op *hashAggregator) ExportBuffered(ctx context.Context, _ colexecop.Operator) coldata.Batch {
+func (op *hashAggregator) ExportBuffered(input colexecop.Operator) coldata.Batch {
 	if !op.inputTrackingState.zeroBatchEnqueued {
 		// Per the contract of the spilling queue, we need to append a
 		// zero-length batch.
-		if err := op.inputTrackingState.tuples.Enqueue(ctx, coldata.ZeroBatch); err != nil {
+		if err := op.inputTrackingState.tuples.Enqueue(op.Ctx, coldata.ZeroBatch); err != nil {
 			colexecerror.InternalError(err)
 		}
 		op.inputTrackingState.zeroBatchEnqueued = true
 	}
-	batch, err := op.inputTrackingState.tuples.Dequeue(ctx)
+	batch, err := op.inputTrackingState.tuples.Dequeue(op.Ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -511,6 +517,9 @@ func (op *hashAggregator) Reset(ctx context.Context) {
 }
 
 func (op *hashAggregator) Close(ctx context.Context) error {
+	if !op.CloserHelper.Close() {
+		return nil
+	}
 	var retErr error
 	if op.inputTrackingState.tuples != nil {
 		retErr = op.inputTrackingState.tuples.Close(ctx)

@@ -20,8 +20,6 @@
 package colexecproj
 
 import (
-	"context"
-
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -87,14 +85,14 @@ type _OP_CONST_NAME struct {
 	// {{end}}
 }
 
-func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
+func (p _OP_CONST_NAME) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -132,10 +130,6 @@ func (p _OP_CONST_NAME) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p _OP_CONST_NAME) Init() {
-	p.Input.Init()
 }
 
 // {{end}}
@@ -266,7 +260,7 @@ func GetProjection_CONST_SIDEConstOperator(
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projConstOpBase := projConstOpBase{
-		OneInputNode:   colexecop.NewOneInputNode(input),
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		allocator:      allocator,
 		colIdx:         colIdx,
 		outputIdx:      outputIdx,

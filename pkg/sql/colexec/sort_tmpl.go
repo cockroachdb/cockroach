@@ -137,18 +137,19 @@ type sort_TYPE_DIR_HANDLES_NULLSOp struct {
 	cancelChecker colexecutils.CancelChecker
 }
 
-func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(col coldata.Vec, order []int) {
+func (s *sort_TYPE_DIR_HANDLES_NULLSOp) init(ctx context.Context, col coldata.Vec, order []int) {
 	s.sortCol = col.TemplateType()
 	s.nulls = col.Nulls()
 	s.order = order
+	s.cancelChecker.Init(ctx)
 }
 
-func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sort(ctx context.Context) {
+func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sort() {
 	n := s.sortCol.Len()
-	s.quickSort(ctx, 0, n, maxDepth(n))
+	s.quickSort(0, n, maxDepth(n))
 }
 
-func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(ctx context.Context, partitions []int) {
+func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(partitions []int) {
 	if len(partitions) < 1 {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid partitions list %v", partitions))
 	}
@@ -162,7 +163,7 @@ func (s *sort_TYPE_DIR_HANDLES_NULLSOp) sortPartitions(ctx context.Context, part
 		}
 		s.order = order[partitionStart:partitionEnd]
 		n := partitionEnd - partitionStart
-		s.quickSort(ctx, 0, n, maxDepth(n))
+		s.quickSort(0, n, maxDepth(n))
 	}
 }
 

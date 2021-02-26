@@ -83,8 +83,8 @@ func NewExternalDistinct(
 	// in-memory operator tuples, so we plan a special filterer operator to
 	// remove all such tuples.
 	input = &unorderedDistinctFilterer{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		ht:           inMemUnorderedDistinct.(*unorderedDistinct).ht,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		ud:             inMemUnorderedDistinct.(*unorderedDistinct),
 	}
 	numRequiredActivePartitions := colexecop.ExternalSorterMinPartitions
 	ed := newHashBasedPartitioner(

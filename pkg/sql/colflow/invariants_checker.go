@@ -25,9 +25,10 @@ import (
 // should be planned between other Operators in tests.
 type invariantsChecker struct {
 	colexecop.OneInputNode
+	colexecop.InitHelper
 }
 
-var _ colexecop.Operator = invariantsChecker{}
+var _ colexecop.Operator = &invariantsChecker{}
 
 // newInvariantsChecker creates a new invariantsChecker.
 func newInvariantsChecker(input colexecop.Operator) colexecop.Operator {
@@ -36,12 +37,18 @@ func newInvariantsChecker(input colexecop.Operator) colexecop.Operator {
 	}
 }
 
-func (i invariantsChecker) Init() {
-	i.Input.Init()
+func (i *invariantsChecker) Init(ctx context.Context) {
+	if !i.InitHelper.Init(ctx) {
+		colexecerror.InternalError(errors.AssertionFailedf("Init is called for the second time"))
+	}
+	i.Input.Init(ctx)
 }
 
-func (i invariantsChecker) Next(ctx context.Context) coldata.Batch {
-	b := i.Input.Next(ctx)
+func (i *invariantsChecker) Next() coldata.Batch {
+	if i.Ctx == nil {
+		colexecerror.InternalError(errors.AssertionFailedf("Ctx is nil, was Init() called?"))
+	}
+	b := i.Input.Next()
 	n := b.Length()
 	if n == 0 {
 		return b

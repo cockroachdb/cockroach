@@ -83,6 +83,7 @@ const (
 // value is part of a new group).
 type orderedAggregator struct {
 	colexecop.OneInputNode
+	colexecop.InitHelper
 
 	state orderedAggregatorState
 
@@ -178,12 +179,15 @@ func NewOrderedAggregator(
 	return a, nil
 }
 
-func (a *orderedAggregator) Init() {
-	a.Input.Init()
+func (a *orderedAggregator) Init(ctx context.Context) {
+	if !a.InitHelper.Init(ctx) {
+		return
+	}
+	a.Input.Init(ctx)
 	a.bucket.init(a.bucket.fns, a.aggHelper.makeSeenMaps(), a.groupCol)
 }
 
-func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
+func (a *orderedAggregator) Next() coldata.Batch {
 	stateAfterOutputting := orderedAggregatorUnknown
 	for {
 		switch a.state {
@@ -201,7 +205,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 			batch := a.lastReadBatch
 			a.lastReadBatch = nil
 			if batch == nil {
-				batch = a.Input.Next(ctx)
+				batch = a.Input.Next()
 			}
 			batchLength := batch.Length()
 
@@ -241,7 +245,7 @@ func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 				if batchLength > 0 {
 					a.inputArgsConverter.ConvertBatch(batch)
 					a.aggHelper.performAggregation(
-						ctx, batch.ColVecs(), batchLength, batch.Selection(), &a.bucket, a.groupCol,
+						a.Ctx, batch.ColVecs(), batchLength, batch.Selection(), &a.bucket, a.groupCol,
 					)
 				} else {
 					a.allocator.PerformOperation(a.scratch.ColVecs(), func() {

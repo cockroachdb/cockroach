@@ -10,8 +10,6 @@
 package colexecproj
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
@@ -30,12 +28,8 @@ type defaultCmpProjOp struct {
 
 var _ colexecop.Operator = &defaultCmpProjOp{}
 
-func (d *defaultCmpProjOp) Init() {
-	d.Input.Init()
-}
-
-func (d *defaultCmpProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := d.Input.Next(ctx)
+func (d *defaultCmpProjOp) Next() coldata.Batch {
+	batch := d.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -91,12 +85,8 @@ type defaultCmpRConstProjOp struct {
 
 var _ colexecop.Operator = &defaultCmpRConstProjOp{}
 
-func (d *defaultCmpRConstProjOp) Init() {
-	d.Input.Init()
-}
-
-func (d *defaultCmpRConstProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := d.Input.Next(ctx)
+func (d *defaultCmpRConstProjOp) Next() coldata.Batch {
+	batch := d.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

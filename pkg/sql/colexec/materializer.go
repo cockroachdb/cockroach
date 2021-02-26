@@ -235,14 +235,12 @@ func (m *Materializer) Child(nth int, verbose bool) execinfra.OpNode {
 func (m *Materializer) Start(ctx context.Context) {
 	m.drainHelper.Start(ctx)
 	ctx = m.ProcessorBase.StartInternal(ctx, materializerProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
 	// We can encounter an expected error during Init (e.g. an operator
 	// attempts to allocate a batch, but the memory budget limit has been
 	// reached), so we need to wrap it with a catcher.
-	if err := colexecerror.CatchVectorizedRuntimeError(m.input.Init); err != nil {
+	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+		m.input.Init(ctx)
+	}); err != nil {
 		m.MoveToDraining(err)
 	}
 }
@@ -253,7 +251,7 @@ func (m *Materializer) Start(ctx context.Context) {
 func (m *Materializer) next() rowenc.EncDatumRow {
 	if m.batch == nil || m.curIdx >= m.batch.Length() {
 		// Get a fresh batch.
-		m.batch = m.input.Next(m.Ctx)
+		m.batch = m.input.Next()
 		if m.batch.Length() == 0 {
 			return nil
 		}

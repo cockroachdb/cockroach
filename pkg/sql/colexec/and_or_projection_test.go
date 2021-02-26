@@ -268,11 +268,11 @@ func benchmarkLogicalProjOp(
 		fmt.Sprintf("@1 %s @2", operation), false /* canFallbackToRowexec */, testMemAcc,
 	)
 	require.NoError(b, err)
-	logicalProjOp.Init()
+	logicalProjOp.Init(ctx)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	for i := 0; i < b.N; i++ {
-		logicalProjOp.Next(ctx)
+		logicalProjOp.Next()
 	}
 }
 

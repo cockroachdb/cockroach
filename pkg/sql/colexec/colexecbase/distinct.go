@@ -27,9 +27,9 @@ func OrderedDistinctColsToOperators(
 ) (colexecop.ResettableOperator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize())
 	// zero the boolean column on every iteration.
-	input = fnOp{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		fn:           func() { copy(distinctCol, colexecutils.ZeroBoolColumn) },
+	input = &fnOp{
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		fn:             func() { copy(distinctCol, colexecutils.ZeroBoolColumn) },
 	}
 	var (
 		err error
@@ -67,7 +67,7 @@ func NewOrderedDistinct(
 		return nil, err
 	}
 	return &colexecutils.BoolVecToSelOp{
-		OneInputNode: colexecop.NewOneInputNode(op),
-		OutputCol:    outputCol,
+		OneInputHelper: colexecop.MakeOneInputHelper(op),
+		OutputCol:      outputCol,
 	}, nil
 }

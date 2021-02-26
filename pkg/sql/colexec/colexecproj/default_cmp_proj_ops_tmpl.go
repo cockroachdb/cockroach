@@ -20,8 +20,6 @@
 package colexecproj
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
@@ -47,12 +45,8 @@ type defaultCmp_KINDProjOp struct {
 
 var _ colexecop.Operator = &defaultCmp_KINDProjOp{}
 
-func (d *defaultCmp_KINDProjOp) Init() {
-	d.Input.Init()
-}
-
-func (d *defaultCmp_KINDProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := d.Input.Next(ctx)
+func (d *defaultCmp_KINDProjOp) Next() coldata.Batch {
+	batch := d.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

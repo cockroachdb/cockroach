@@ -68,6 +68,7 @@ const (
 
 type topKSorter struct {
 	colexecop.OneInputNode
+	colexecop.InitHelper
 
 	allocator    *colmem.Allocator
 	orderingCols []execinfrapb.Ordering_Column
@@ -98,8 +99,11 @@ type topKSorter struct {
 	windowedBatch     coldata.Batch
 }
 
-func (t *topKSorter) Init() {
-	t.Input.Init()
+func (t *topKSorter) Init(ctx context.Context) {
+	if !t.InitHelper.Init(ctx) {
+		return
+	}
+	t.Input.Init(ctx)
 	t.topK = colexecutils.NewAppendOnlyBufferedBatch(t.allocator, t.inputTypes, nil /* colsToStore */)
 	t.comparators = make([]vecComparator, len(t.inputTypes))
 	for i, typ := range t.inputTypes {
@@ -111,11 +115,11 @@ func (t *topKSorter) Init() {
 	t.windowedBatch = coldata.NewMemBatchNoCols(t.inputTypes, coldata.BatchSize())
 }
 
-func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
+func (t *topKSorter) Next() coldata.Batch {
 	for {
 		switch t.state {
 		case topKSortSpooling:
-			t.spool(ctx)
+			t.spool()
 			t.state = topKSortEmitting
 		case topKSortEmitting:
 			output := t.emit()
@@ -142,9 +146,9 @@ func (t *topKSorter) Next(ctx context.Context) coldata.Batch {
 // After all the input has been read, we pop everything off the heap to
 // determine the final output ordering. This is used in emit() to output the rows
 // in sorted order.
-func (t *topKSorter) spool(ctx context.Context) {
+func (t *topKSorter) spool() {
 	// Fill up t.topK by spooling up to K rows from the input.
-	t.inputBatch = t.Input.Next(ctx)
+	t.inputBatch = t.Input.Next()
 	remainingRows := t.k
 	for remainingRows > 0 && t.inputBatch.Length() > 0 {
 		fromLength := t.inputBatch.Length()
@@ -158,7 +162,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 		})
 		remainingRows -= uint64(fromLength)
 		if fromLength == t.inputBatch.Length() {
-			t.inputBatch = t.Input.Next(ctx)
+			t.inputBatch = t.Input.Next()
 			t.firstUnprocessedTupleIdx = 0
 		}
 	}
@@ -195,7 +199,7 @@ func (t *topKSorter) spool(ctx context.Context) {
 				t.firstUnprocessedTupleIdx = t.inputBatch.Length()
 			},
 		)
-		t.inputBatch = t.Input.Next(ctx)
+		t.inputBatch = t.Input.Next()
 		t.firstUnprocessedTupleIdx = 0
 	}
 
@@ -269,7 +273,7 @@ func (t *topKSorter) updateComparators(vecIdx int, batch coldata.Batch) {
 	}
 }
 
-func (t *topKSorter) ExportBuffered(context.Context, colexecop.Operator) coldata.Batch {
+func (t *topKSorter) ExportBuffered(colexecop.Operator) coldata.Batch {
 	topKLen := t.topK.Length()
 	// First, we check whether we have exported all tuples from the topK vector.
 	if t.exportedFromTopK < topKLen {

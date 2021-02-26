@@ -72,13 +72,13 @@ func BenchmarkOffset(b *testing.B) {
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	batch.SetLength(coldata.BatchSize())
 	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source.Init()
 
 	o := NewOffsetOp(source, 1)
+	o.Init(ctx)
 	// Set throughput proportional to size of the selection vector.
 	b.SetBytes(int64(2 * coldata.BatchSize()))
 	for i := 0; i < b.N; i++ {
-		o.(*offsetOp).Reset()
-		o.Next(ctx)
+		o.(*offsetOp).seen = 0
+		o.Next()
 	}
 }

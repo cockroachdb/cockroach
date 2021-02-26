@@ -860,7 +860,7 @@ func TestAggregatorRandom(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					a.Init()
+					a.Init(context.Background())
 
 					testOutput := colexectestutils.NewOpTestOutput(a, expectedTuples)
 					if strings.Contains(agg.name, "hash") {
@@ -1018,9 +1018,9 @@ func benchmarkAggregateFunction(
 				if err != nil {
 					b.Fatal(err)
 				}
-				a.Init()
+				a.Init(ctx)
 				// Exhaust aggregator until all batches have been read.
-				for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
+				for b := a.Next(); b.Length() != 0; b = a.Next() {
 				}
 				if err = a.(colexecop.Closer).Close(ctx); err != nil {
 					b.Fatal(err)

@@ -21,7 +21,7 @@ import (
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
-	colexecop.OneInputCloserHelper
+	colexecop.OneInputInitCloserHelper
 	colexecop.NonExplainable
 
 	projection []uint32
@@ -106,7 +106,7 @@ func NewSimpleProjectOp(
 		}
 	}
 	s := &simpleProjectOp{
-		OneInputCloserHelper:       colexecop.MakeOneInputCloserHelper(input),
+		OneInputInitCloserHelper:   colexecop.MakeOneInputInitCloserHelper(input),
 		projection:                 make([]uint32, len(projection)),
 		batches:                    make(map[coldata.Batch]*projectingBatch),
 		numBatchesLoggingThreshold: 128,
@@ -116,12 +116,8 @@ func NewSimpleProjectOp(
 	return s
 }
 
-func (d *simpleProjectOp) Init() {
-	d.Input.Init()
-}
-
-func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
-	batch := d.Input.Next(ctx)
+func (d *simpleProjectOp) Next() coldata.Batch {
+	batch := d.Input.Next()
 	if batch.Length() == 0 {
 		return coldata.ZeroBatch
 	}
@@ -131,7 +127,7 @@ func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
 		d.batches[batch] = projBatch
 		if len(d.batches) == d.numBatchesLoggingThreshold {
 			if log.V(1) {
-				log.Infof(ctx, "simpleProjectOp: size of 'batches' map = %d", len(d.batches))
+				log.Infof(d.Ctx, "simpleProjectOp: size of 'batches' map = %d", len(d.batches))
 			}
 			d.numBatchesLoggingThreshold = d.numBatchesLoggingThreshold * 2
 		}

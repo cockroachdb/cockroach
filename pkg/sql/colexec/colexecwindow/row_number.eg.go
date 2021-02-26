@@ -10,8 +10,6 @@
 package colexecwindow
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -29,7 +27,7 @@ func NewRowNumberOperator(
 ) colexecop.Operator {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Int, outputColIdx)
 	base := rowNumberBase{
-		OneInputNode:    colexecop.NewOneInputNode(input),
+		OneInputHelper:  colexecop.MakeOneInputHelper(input),
 		allocator:       allocator,
 		outputColIdx:    outputColIdx,
 		partitionColIdx: partitionColIdx,
@@ -44,16 +42,12 @@ func NewRowNumberOperator(
 // variations of row number operators. Note that it is not an operator itself
 // and should not be used directly.
 type rowNumberBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	allocator       *colmem.Allocator
 	outputColIdx    int
 	partitionColIdx int
 
 	rowNumber int64
-}
-
-func (r *rowNumberBase) Init() {
-	r.Input.Init()
 }
 
 type rowNumberNoPartitionOp struct {
@@ -62,8 +56,8 @@ type rowNumberNoPartitionOp struct {
 
 var _ colexecop.Operator = &rowNumberNoPartitionOp{}
 
-func (r *rowNumberNoPartitionOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.Input.Next(ctx)
+func (r *rowNumberNoPartitionOp) Next() coldata.Batch {
+	batch := r.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -99,8 +93,8 @@ type rowNumberWithPartitionOp struct {
 
 var _ colexecop.Operator = &rowNumberWithPartitionOp{}
 
-func (r *rowNumberWithPartitionOp) Next(ctx context.Context) coldata.Batch {
-	batch := r.Input.Next(ctx)
+func (r *rowNumberWithPartitionOp) Next() coldata.Batch {
+	batch := r.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch

@@ -198,9 +198,9 @@ func BenchmarkCastOp(b *testing.B) {
 						require.NoError(b, err)
 						b.SetBytes(int64(8 * coldata.BatchSize()))
 						b.ResetTimer()
-						op.Init()
+						op.Init(ctx)
 						for i := 0; i < b.N; i++ {
-							op.Next(ctx)
+							op.Next()
 						}
 					})
 			}

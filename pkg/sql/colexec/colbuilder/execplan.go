@@ -110,13 +110,9 @@ func wrapRowSources(
 	}
 
 	if _, mustBeStreaming := toWrap.(execinfra.StreamingProcessor); mustBeStreaming {
-		return colexec.NewStreamingColumnarizer(
-			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
-		)
+		return colexec.NewStreamingColumnarizer(colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap)
 	}
-	return colexec.NewBufferingColumnarizer(
-		ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
-	)
+	return colexec.NewBufferingColumnarizer(colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap)
 }
 
 type opResult struct {

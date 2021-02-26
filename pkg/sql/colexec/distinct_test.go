@@ -329,8 +329,8 @@ func runDistinctBenchmarks(
 								if err != nil {
 									b.Fatal(err)
 								}
-								distinct.Init()
-								for b := distinct.Next(ctx); b.Length() > 0; b = distinct.Next(ctx) {
+								distinct.Init(ctx)
+								for b := distinct.Next(); b.Length() > 0; b = distinct.Next() {
 								}
 							}
 							b.StopTimer()
