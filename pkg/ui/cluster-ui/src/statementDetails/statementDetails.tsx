@@ -493,6 +493,15 @@ export class StatementDetails extends React.Component<
                         )}
                       </Text>
                     </div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text type="body-strong">Max scratch disk usage</Text>
+                      <Text>
+                        {formatNumberForDisplay(
+                          stats.exec_stats.max_disk_usage.mean,
+                          Bytes,
+                        )}
+                      </Text>
+                    </div>
                   </Col>
                 </Row>
               </SummaryCard>
