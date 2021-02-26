@@ -59,6 +59,11 @@ type Columnarizer struct {
 	accumulatedMeta []execinfrapb.ProducerMetadata
 	ctx             context.Context
 	typs            []*types.T
+
+	// removedFromFlow marks this Columnarizer as having been removed from the
+	// flow. This renders all future calls to Init, Next, Close, and DrainMeta
+	// noops.
+	removedFromFlow bool
 }
 
 var _ colexecop.Operator = &Columnarizer{}
@@ -127,6 +132,9 @@ func newColumnarizer(
 
 // Init is part of the Operator interface.
 func (c *Columnarizer) Init() {
+	if c.removedFromFlow {
+		return
+	}
 	// We don't want to call Start on the input to columnarizer and allocating
 	// internal objects several times if Init method is called more than once, so
 	// we have this check in place.
@@ -140,6 +148,9 @@ func (c *Columnarizer) Init() {
 
 // Next is part of the Operator interface.
 func (c *Columnarizer) Next(context.Context) coldata.Batch {
+	if c.removedFromFlow {
+		return coldata.ZeroBatch
+	}
 	var reallocated bool
 	switch c.mode {
 	case columnarizerBufferingMode:
@@ -223,6 +234,9 @@ var (
 
 // DrainMeta is part of the MetadataSource interface.
 func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	if c.removedFromFlow {
+		return nil
+	}
 	c.MoveToDraining(nil /* err */)
 	for {
 		meta := c.DrainHelper()
@@ -236,6 +250,9 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 
 // Close is part of the Operator interface.
 func (c *Columnarizer) Close(ctx context.Context) error {
+	if c.removedFromFlow {
+		return nil
+	}
 	c.InternalClose()
 	return nil
 }
@@ -264,4 +281,14 @@ func (c *Columnarizer) Child(nth int, verbose bool) execinfra.OpNode {
 // Input returns the input of this columnarizer.
 func (c *Columnarizer) Input() execinfra.RowSource {
 	return c.input
+}
+
+// MarkAsRemovedFromFlow is called by planning code to make all future calls on
+// this columnarizer noops. It exists to support an execution optimization where
+// a Columnarizer is removed from a flow in cases where it would be the input to
+// a Materializer (which is redundant). Simply bypassing the Columnarizer is not
+// enough because it is added to a slice of Closers and MetadataSources that are
+// difficult to change once physical planning moves on from the Columnarizer.
+func (c *Columnarizer) MarkAsRemovedFromFlow() {
+	c.removedFromFlow = true
 }
