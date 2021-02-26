@@ -57,7 +57,8 @@ export class TransactionDetails extends React.Component<
 > {
   state: TState = {
     sortSetting: {
-      sortKey: 2,
+      // Sort by statement latency as default column.
+      sortKey: 4,
       ascending: false,
     },
     pagination: {

@@ -26,7 +26,7 @@ describe("StatementsPage", () => {
       > = rootWrapper.find(StatementsPage).first();
       const statementsPageInstance = statementsPageWrapper.instance();
 
-      assert.equal(statementsPageInstance.state.sortSetting.sortKey, 3);
+      assert.equal(statementsPageInstance.state.sortSetting.sortKey, 1);
       assert.equal(statementsPageInstance.state.sortSetting.ascending, false);
     });
   });
