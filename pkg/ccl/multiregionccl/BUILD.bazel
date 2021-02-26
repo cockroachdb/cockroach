@@ -28,6 +28,7 @@ go_test(
     ],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",

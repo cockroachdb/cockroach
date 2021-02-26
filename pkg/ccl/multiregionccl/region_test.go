@@ -9,17 +9,14 @@
 package multiregionccl_test
 
 import (
-	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -31,48 +28,28 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	numServers := 2
-	serverArgs := make(map[int]base.TestServerArgs)
-
-	regionNames := make([]string, numServers)
-	for i := 0; i < numServers; i++ {
-		// "us-east1", "us-east2"...
-		regionNames[i] = fmt.Sprintf("us-east%d", i+1)
-	}
-
 	var mu syncutil.Mutex
 	dropRegionStarted := make(chan struct{})
 	waitForPrimaryRegionSwitch := make(chan struct{})
 	dropRegionFinished := make(chan struct{})
-	for i := 0; i < numServers; i++ {
-		serverArgs[i] = base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-					RunBeforeEnumMemberPromotion: func() {
-						mu.Lock()
-						defer mu.Unlock()
-						if dropRegionStarted != nil {
-							close(dropRegionStarted)
-							<-waitForPrimaryRegionSwitch
-							dropRegionStarted = nil
-						}
-					},
-				},
+	knobs := base.TestingKnobs{
+		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+			RunBeforeEnumMemberPromotion: func() {
+				mu.Lock()
+				defer mu.Unlock()
+				if dropRegionStarted != nil {
+					close(dropRegionStarted)
+					<-waitForPrimaryRegionSwitch
+					dropRegionStarted = nil
+				}
 			},
-			Locality: roachpb.Locality{
-				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
-			},
-		}
+		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numServers, base.TestClusterArgs{
-		ServerArgsPerNode: serverArgs,
-	})
-
-	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
-
-	sqlDB := tc.ServerConn(0)
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 2 /* numServers */, knobs,
+	)
+	defer cleanup()
 
 	// Setup the test.
 	_, err := sqlDB.Exec(`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"`)
@@ -142,44 +119,42 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer sqltestutils.SetTestJobsAdoptInterval()()
 
-	params, _ := tests.CreateTestServerParams()
-	params.Locality.Tiers = []roachpb.Tier{
-		{Key: "region", Value: "us-east-1"},
-	}
-
 	// Protects expectedCleanupRuns
 	var mu syncutil.Mutex
 	// We need to cleanup 2 times, once for the multi-region type descriptor and
 	// once for the array alias of the multi-region type descriptor.
 	haveWePerformedFirstRoundOfCleanup := false
 	cleanupFinished := make(chan struct{})
-	params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
-		RunBeforeExec: func() error {
-			return errors.New("yikes")
-		},
-		RunAfterOnFailOrCancel: func() error {
-			mu.Lock()
-			defer mu.Unlock()
-			if haveWePerformedFirstRoundOfCleanup {
-				close(cleanupFinished)
-			}
-			haveWePerformedFirstRoundOfCleanup = true
-			return nil
+	knobs := base.TestingKnobs{
+		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+			RunBeforeExec: func() error {
+				return errors.New("yikes")
+			},
+			RunAfterOnFailOrCancel: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				if haveWePerformedFirstRoundOfCleanup {
+					close(cleanupFinished)
+				}
+				haveWePerformedFirstRoundOfCleanup = true
+				return nil
+			},
 		},
 	}
 
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 1 /* numServers */, knobs,
+	)
+	defer cleanup()
 
 	// Setup the test.
 	_, err := sqlDB.Exec(`
-CREATE DATABASE db WITH PRIMARY REGION "us-east-1"; 
+CREATE DATABASE db WITH PRIMARY REGION "us-east1"; 
 CREATE TABLE db.t(k INT) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 `)
 	require.NoError(t, err)
 
-	_, err = sqlDB.Exec(`ALTER DATABASE db DROP REGION "us-east-1"`)
+	_, err = sqlDB.Exec(`ALTER DATABASE db DROP REGION "us-east1"`)
 	testutils.IsError(err, "yikes")
 
 	<-cleanupFinished
@@ -192,7 +167,7 @@ CREATE TABLE db.t(k INT) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 		t.Fatal("expected crdb_internal_region not to be present in system.namespace")
 	}
 
-	_, err = sqlDB.Exec(`ALTER DATABASE db PRIMARY REGION "us-east-1"`)
+	_, err = sqlDB.Exec(`ALTER DATABASE db PRIMARY REGION "us-east1"`)
 	require.NoError(t, err)
 
 	rows = sqlDB.QueryRow(`SELECT count(*) FROM system.namespace WHERE name = 'crdb_internal_region'`)
@@ -203,61 +178,82 @@ CREATE TABLE db.t(k INT) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 	}
 }
 
-// TODO(arul): Currently, database level zone configurations aren't rolled back.
-// When we fix this limitation we should also update this test to check for that.
-func TestRollbackDuringAddRegion(t *testing.T) {
+// TestRollbackDuringAddDropRegionAsyncJobFailure ensures that rollback when
+// an ADD REGION/DROP REGION fails asynchronously is handled appropriately.
+// This also ensures that zone configuration changes on the database are
+// transactional.
+func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "times out under race")
 
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer sqltestutils.SetTestJobsAdoptInterval()()
 
-	numServers := 2
-	serverArgs := make(map[int]base.TestServerArgs)
-
-	regionNames := make([]string, numServers)
-	for i := 0; i < numServers; i++ {
-		// "us-east1", "us-east2"...
-		regionNames[i] = fmt.Sprintf("us-east%d", i+1)
+	knobs := base.TestingKnobs{
+		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+			RunBeforeMultiRegionUpdates: func() error {
+				return errors.New("boom")
+			},
+		},
 	}
 
-	for i := 0; i < numServers; i++ {
-		serverArgs[i] = base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-					RunBeforeExec: func() error {
-						return errors.New("boom")
-					},
-				},
-			},
-			Locality: roachpb.Locality{
-				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
-			},
-		}
-	}
-
-	tc := serverutils.StartNewTestCluster(t, numServers, base.TestClusterArgs{
-		ServerArgsPerNode: serverArgs,
-	})
-
-	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
-
-	sqlDB := tc.ServerConn(0)
-
-	_, err := sqlDB.Exec(`CREATE DATABASE db WITH PRIMARY REGION "us-east1"`)
+	// Setup.
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, knobs,
+	)
+	defer cleanup()
+	_, err := sqlDB.Exec(`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"`)
 	require.NoError(t, err)
-	if err != nil {
-		t.Error(err)
+
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{
+			"add-region",
+			`ALTER DATABASE db ADD REGION "us-east3"`,
+		},
+		{
+			"drop-region",
+			`ALTER DATABASE db DROP REGION "us-east2"`,
+		},
+		{
+			"add-drop-region-in-txn",
+			`BEGIN; ALTER DATABASE db DROP REGION "us-east2"; ALTER DATABASE db ADD REGION "us-east3"; COMMIT`,
+		},
 	}
 
-	_, err = sqlDB.Exec(`ALTER DATABASE db ADD REGION "us-east2"`)
-	require.Error(t, err, "boom")
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var originalZoneConfig string
+			res := sqlDB.QueryRow(`SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR DATABASE db]`)
+			err = res.Scan(&originalZoneConfig)
+			require.NoError(t, err)
 
-	var jobStatus string
-	var jobErr string
-	row := sqlDB.QueryRow("SELECT status, error FROM [SHOW JOBS] WHERE job_type = 'TYPEDESC SCHEMA CHANGE'")
-	require.NoError(t, row.Scan(&jobStatus, &jobErr))
-	require.Regexp(t, "boom", jobErr)
-	require.Regexp(t, "failed", jobStatus)
+			_, err = sqlDB.Exec(tc.query)
+			testutils.IsError(err, "boom")
+
+			var jobStatus string
+			var jobErr string
+			row := sqlDB.QueryRow("SELECT status, error FROM [SHOW JOBS] WHERE job_type = 'TYPEDESC SCHEMA CHANGE'")
+			require.NoError(t, row.Scan(&jobStatus, &jobErr))
+			require.Contains(t, "boom", jobErr)
+			require.Contains(t, "failed", jobStatus)
+
+			// Ensure the zone configuration didn't change.
+			var newZoneConfig string
+			res = sqlDB.QueryRow(`SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR DATABASE db]`)
+			err = res.Scan(&newZoneConfig)
+			require.NoError(t, err)
+
+			if newZoneConfig != originalZoneConfig {
+				t.Fatalf("expected zone config to not have changed, expected %q found %q",
+					originalZoneConfig,
+					newZoneConfig,
+				)
+			}
+		})
+	}
 }
