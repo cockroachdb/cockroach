@@ -681,6 +681,40 @@ INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1), (2, 2, 2, 2, 2, 2, 2)
 statement error pq: duplicate key value violates unique constraint "t_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
 UPDATE t SET b = 1 WHERE pk = 2
 
+# Create a table without an explicit primary key.
+statement ok
+CREATE TABLE no_pk (
+  i INT NOT NULL
+) PARTITION ALL BY LIST (i) (
+  PARTITION one VALUES IN ((1)),
+  PARTITION two VALUES IN ((2))
+)
+
+# We don't require the rowid to be unique in implicitly partitioned tables, so
+# there should be no uniqueness check.
+query T
+EXPLAIN INSERT INTO no_pk (rowid, i) VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ into: no_pk(i, rowid)
+│ auto commit
+│
+└── • values
+      size: 2 columns, 1 row
+
+statement ok
+INSERT INTO no_pk (rowid, i) VALUES (1, 1), (1, 2)
+
+query II
+SELECT rowid, i FROM no_pk
+----
+1  1
+1  2
+
+
 subtest upsert
 
 # The conflict columns in an upsert should only include the primary key,

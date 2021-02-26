@@ -1039,6 +1039,59 @@ CREATE TABLE public.regional_by_row_table_pk_defined_separately (
                             FAMILY "primary" (pk, crdb_region)
 ) LOCALITY REGIONAL BY ROW
 
+
+# Tests using a table without an explicit primary key.
+statement ok
+CREATE TABLE regional_by_row_no_pk (
+  i INT
+) LOCALITY REGIONAL BY ROW
+
+# We don't require the rowid to be unique in REGIONAL BY ROW tables, so there
+# should be no uniqueness check.
+query T
+EXPLAIN INSERT INTO regional_by_row_no_pk (rowid, i) VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ into: regional_by_row_no_pk(i, crdb_region, rowid)
+│ auto commit
+│
+└── • values
+      size: 4 columns, 1 row
+
+statement ok
+INSERT INTO regional_by_row_no_pk (crdb_region, rowid, i) VALUES ('us-east-1', 1, 1), ('ca-central-1', 1, 1)
+
+query TII
+SELECT crdb_region, rowid, i FROM regional_by_row_no_pk
+----
+ca-central-1  1  1
+us-east-1     1  1
+
+# Trying to change locality should fail since the new primary key will not be
+# unique.
+statement error pq: failed to ingest index entries during backfill: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(rowid\)=\(1\) already exists\.
+ALTER TABLE regional_by_row_no_pk SET LOCALITY REGIONAL BY TABLE
+
+statement error pq: failed to ingest index entries during backfill: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(rowid\)=\(1\) already exists\.
+ALTER TABLE regional_by_row_no_pk SET LOCALITY GLOBAL
+
+query T
+SELECT
+  create_statement
+FROM [SHOW CREATE TABLE regional_by_row_no_pk]
+----
+CREATE TABLE public.regional_by_row_no_pk (
+                            i INT8 NULL,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                            CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+                            FAMILY "primary" (i, crdb_region, rowid)
+) LOCALITY REGIONAL BY ROW
+
+
 # Tests for REGIONAL BY TABLE AS
 statement error cannot use column crdb_region_col which has type INT8 in REGIONAL BY ROW\nDETAIL: REGIONAL BY ROW AS must reference a column of type crdb_internal_region
 CREATE TABLE regional_by_row_table_as (

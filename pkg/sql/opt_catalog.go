@@ -785,17 +785,36 @@ func newOptTable(
 		}
 
 		// Add unique constraints for implicitly partitioned unique indexes.
-		if idxDesc.Unique && idxDesc.Partitioning.NumImplicitColumns > 0 {
-			ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-				name:         idxDesc.Name,
-				table:        ot.ID(),
-				columns:      idxDesc.ColumnIDs[idxDesc.Partitioning.NumImplicitColumns:],
-				withoutIndex: true,
-				predicate:    idxDesc.Predicate,
-				// TODO(rytaft): will we ever support an unvalidated unique constraint
-				// here?
-				validity: descpb.ConstraintValidity_Validated,
-			})
+		numImplicitCols := int(idxDesc.Partitioning.NumImplicitColumns)
+		if idxDesc.Unique && numImplicitCols > 0 {
+			// We do not want to add a unique constraint if this is the automatically
+			// generated rowid column in the primary index, since there is no need to
+			// guarantee its uniqueness.
+			isRowidCol := false
+			if i == 0 && len(idxDesc.ColumnIDs)-numImplicitCols == 1 {
+				colID := idxDesc.ColumnIDs[numImplicitCols]
+				ord, ok := ot.colMap.Get(colID)
+				if !ok {
+					return nil, errors.AssertionFailedf("column %d does not exist", colID)
+				}
+				col := ot.columns[ord]
+				if col.Visibility() == cat.Hidden && col.DefaultExprStr() == "unique_rowid()" {
+					isRowidCol = true
+				}
+			}
+
+			if !isRowidCol {
+				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
+					name:         idxDesc.Name,
+					table:        ot.ID(),
+					columns:      idxDesc.ColumnIDs[numImplicitCols:],
+					withoutIndex: true,
+					predicate:    idxDesc.Predicate,
+					// TODO(rytaft): will we ever support an unvalidated unique constraint
+					// here?
+					validity: descpb.ConstraintValidity_Validated,
+				})
+			}
 		}
 	}
 
