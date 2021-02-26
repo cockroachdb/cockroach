@@ -129,11 +129,11 @@ func wrapRowSources(
 	var c *colexec.Columnarizer
 	if proc.MustBeStreaming() {
 		c, err = colexec.NewStreamingColumnarizer(
-			ctx, colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
+			colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
 		)
 	} else {
 		c, err = colexec.NewBufferingColumnarizer(
-			ctx, colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
+			colmem.NewAllocator(ctx, streamingMemAccount, factory), flowCtx, processorID, toWrap,
 		)
 	}
 	return c, releasables, err

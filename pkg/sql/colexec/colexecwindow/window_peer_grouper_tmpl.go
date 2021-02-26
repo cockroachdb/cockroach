@@ -20,8 +20,6 @@
 package colexecwindow
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -64,7 +62,7 @@ func NewWindowPeerGrouper(
 	}
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, outputColIdx)
 	initFields := windowPeerGrouperInitFields{
-		OneInputNode:    colexecop.NewOneInputNode(input),
+		OneInputHelper:  colexecop.MakeOneInputHelper(input),
 		allocator:       allocator,
 		partitionColIdx: partitionColIdx,
 		distinctCol:     distinctCol,
@@ -91,7 +89,7 @@ func NewWindowPeerGrouper(
 }
 
 type windowPeerGrouperInitFields struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 
 	allocator       *colmem.Allocator
 	partitionColIdx int
@@ -113,12 +111,8 @@ type _PEER_GROUPER_STRINGOp struct {
 
 var _ colexecop.Operator = &_PEER_GROUPER_STRINGOp{}
 
-func (p *_PEER_GROUPER_STRINGOp) Init() {
-	p.Input.Init()
-}
-
-func (p *_PEER_GROUPER_STRINGOp) Next(ctx context.Context) coldata.Batch {
-	b := p.Input.Next(ctx)
+func (p *_PEER_GROUPER_STRINGOp) Next() coldata.Batch {
+	b := p.Input.Next()
 	n := b.Length()
 	if n == 0 {
 		return b
