@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -64,10 +63,8 @@ type LocalResult struct {
 	MaybeAddToSplitQueue bool
 	// Call MaybeGossipNodeLiveness with the specified Span, if set.
 	MaybeGossipNodeLiveness *roachpb.Span
-	// FreezeStart indicates the high water mark timestamp beyond which the range
-	// is guaranteed to not have served any requests. This value is only set when
-	// a range merge is in progress. If set, call maybeWatchForMerge.
-	FreezeStart hlc.Timestamp
+	// Call maybeWatchForMerge.
+	MaybeWatchForMerge bool
 
 	// Metrics contains counters which are to be passed to the
 	// metrics subsystem.
@@ -87,7 +84,7 @@ func (lResult *LocalResult) IsZero() bool {
 		!lResult.MaybeGossipSystemConfig &&
 		!lResult.MaybeGossipSystemConfigIfHaveFailure &&
 		lResult.MaybeGossipNodeLiveness == nil &&
-		lResult.FreezeStart.IsEmpty() &&
+		!lResult.MaybeWatchForMerge &&
 		lResult.Metrics == nil
 }
 
@@ -100,13 +97,13 @@ func (lResult *LocalResult) String() string {
 		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
-		"MaybeGossipNodeLiveness:%s FreezeStart:%s",
+		"MaybeGossipNodeLiveness:%s MaybeWatchForMerge:%t",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
 		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
 		lResult.MaybeGossipSystemConfigIfHaveFailure, lResult.MaybeAddToSplitQueue,
-		lResult.MaybeGossipNodeLiveness, lResult.FreezeStart)
+		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
 }
 
 // DetachEncounteredIntents returns (and removes) those encountered
@@ -343,17 +340,11 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Local.MaybeGossipNodeLiveness = nil
 
-	if p.Local.FreezeStart.IsEmpty() {
-		p.Local.FreezeStart = q.Local.FreezeStart
-	} else if !q.Local.FreezeStart.IsEmpty() {
-		return errors.AssertionFailedf("conflicting FreezeStart")
-	}
-	q.Local.FreezeStart = hlc.Timestamp{}
-
 	coalesceBool(&p.Local.GossipFirstRange, &q.Local.GossipFirstRange)
 	coalesceBool(&p.Local.MaybeGossipSystemConfig, &q.Local.MaybeGossipSystemConfig)
 	coalesceBool(&p.Local.MaybeGossipSystemConfigIfHaveFailure, &q.Local.MaybeGossipSystemConfigIfHaveFailure)
 	coalesceBool(&p.Local.MaybeAddToSplitQueue, &q.Local.MaybeAddToSplitQueue)
+	coalesceBool(&p.Local.MaybeWatchForMerge, &q.Local.MaybeWatchForMerge)
 
 	if p.Local.Metrics == nil {
 		p.Local.Metrics = q.Local.Metrics
