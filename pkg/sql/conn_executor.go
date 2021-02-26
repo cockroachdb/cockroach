@@ -692,7 +692,6 @@ func (s *Server) newConnExecutorWithTxn(
 	)
 	ex.state.resetForNewSQLTxn(
 		ctx,
-		explicitTxn,
 		txn.ReadTimestamp().GoTime(),
 		nil, /* historicalTimestamp */
 		roachpb.UnspecifiedUserPriority,

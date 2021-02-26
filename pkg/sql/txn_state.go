@@ -139,7 +139,6 @@ const (
 // tranCtx: A bag of extra execution context.
 func (ts *txnState) resetForNewSQLTxn(
 	connCtx context.Context,
-	txnType txnType,
 	sqlTimestamp time.Time,
 	historicalTimestamp *hlc.Timestamp,
 	priority roachpb.UserPriority,
@@ -164,9 +163,6 @@ func (ts *txnState) resetForNewSQLTxn(
 		traceOpts = append(traceOpts, tracing.WithBypassRegistry())
 	}
 	txnCtx, sp := createRootOrChildSpan(connCtx, opName, tranCtx.tracer, traceOpts...)
-	if txnType == implicitTxn {
-		sp.SetTag("implicit", "true")
-	}
 
 	alreadyRecording := tranCtx.sessionTracing.Enabled()
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)

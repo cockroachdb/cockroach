@@ -435,10 +435,8 @@ func noTxnToOpen(args fsm.Args) error {
 	payload := args.Payload.(eventTxnStartPayload)
 	ts := args.Extended.(*txnState)
 
-	txnTyp := explicitTxn
 	advCode := advanceOne
 	if ev.ImplicitTxn.Get() {
-		txnTyp = implicitTxn
 		// For an implicit txn, we want the statement that produced the event to be
 		// executed again (this time in state Open).
 		advCode = stayInPlace
@@ -446,7 +444,6 @@ func noTxnToOpen(args fsm.Args) error {
 
 	ts.resetForNewSQLTxn(
 		connCtx,
-		txnTyp,
 		payload.txnSQLTimestamp,
 		payload.historicalTimestamp,
 		payload.pri,
