@@ -2171,6 +2171,7 @@ func (h *joinPropsHelper) outputCols() opt.ColSet {
 	//
 	//   1. semi and anti joins, which only project the left columns
 	//   2. lookup joins, which can project a subset of input columns
+	//   3. inverted joins, which can project a subset of input columns
 	//
 	var cols opt.ColSet
 	switch h.joinType {
@@ -2184,6 +2185,10 @@ func (h *joinPropsHelper) outputCols() opt.ColSet {
 	if lookup, ok := h.join.(*LookupJoinExpr); ok {
 		// Remove any columns that are not projected by the lookup join.
 		cols.IntersectionWith(lookup.Cols)
+	}
+	if inv, ok := h.join.(*InvertedJoinExpr); ok {
+		// Remove any columns that are not projected by the inverted join.
+		cols.IntersectionWith(inv.Cols)
 	}
 
 	return cols
