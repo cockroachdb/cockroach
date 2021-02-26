@@ -159,6 +159,11 @@ func NewFunctionDefinition(
 // for every builtin function. Initialized by builtins.init().
 var FunDefs map[string]*FunctionDefinition
 
+// OidToBuiltinName contains a map from the hashed OID of all builtin functions
+// to their name. We populate this from the pg_catalog.go file in the sql
+// package because of dependency issues: we can't use oidHasher from this file.
+var OidToBuiltinName map[int]string
+
 // Format implements the NodeFormatter interface.
 func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
 	ctx.WriteString(fd.Name)

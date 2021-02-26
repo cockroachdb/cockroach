@@ -85,6 +85,10 @@ type Overload struct {
 	// volatility against Postgres's volatility at test time.
 	// This should be used with caution.
 	IgnoreVolatilityCheck bool
+
+	// Oid is the cached oidHasher.BuiltinOid result for this Overload. It's
+	// populated at init-time.
+	Oid DInt
 }
 
 // params implements the overloadImpl interface.

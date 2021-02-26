@@ -1283,6 +1283,19 @@ func performCastWithoutPrecisionTruncation(ctx *EvalContext, d Datum, t *types.T
 				}
 				ret.name = typ.PGName()
 				return ret, nil
+
+			case oid.T_regproc, oid.T_regprocedure:
+				// We need to have a map somewhere that we can access that takes us
+				// from integer to procedure name.
+				// Mapping an oid to a regtype is easy: we have a hardcoded map.
+				name, ok := OidToBuiltinName[int(v.DInt)]
+				ret := &DOid{semanticType: t, DInt: v.DInt}
+				if !ok {
+					return ret, nil
+				}
+				ret.name = name
+				return ret, nil
+
 			default:
 				oid, err := queryOid(ctx, t, v)
 				if err != nil {
