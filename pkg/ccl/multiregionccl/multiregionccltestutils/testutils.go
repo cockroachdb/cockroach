@@ -23,7 +23,7 @@ import (
 // of nodes and the provided testing knobs applied to each of the nodes. Every
 // node is placed in its own locality, named "us-east1", "us-east2", and so on.
 func TestingCreateMultiRegionCluster(
-	t *testing.T, numServers int, knobs base.TestingKnobs,
+	t *testing.T, numServers int, knobs base.TestingKnobs, baseDir *string,
 ) (serverutils.TestClusterInterface, *gosql.DB, func()) {
 	serverArgs := make(map[int]base.TestServerArgs)
 	regionNames := make([]string, numServers)
@@ -32,9 +32,15 @@ func TestingCreateMultiRegionCluster(
 		regionNames[i] = fmt.Sprintf("us-east%d", i+1)
 	}
 
+	b := ""
+	if baseDir != nil {
+		b = *baseDir
+	}
+
 	for i := 0; i < numServers; i++ {
 		serverArgs[i] = base.TestServerArgs{
-			Knobs: knobs,
+			Knobs:         knobs,
+			ExternalIODir: b,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: regionNames[i]}},
 			},
