@@ -3,7 +3,7 @@ module github.com/cockroachdb/cockroach
 go 1.15
 
 require (
-	cloud.google.com/go v0.34.0
+	cloud.google.com/go v0.45.1
 	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.12.0
 	github.com/Azure/go-autorest/autorest v0.10.2
@@ -13,7 +13,7 @@ require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/DataDog/zstd v1.4.8 // indirect
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
-	github.com/PuerkitoBio/goquery v1.5.0
+	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/Shopify/sarama v1.27.2
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
 	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 // indirect
@@ -76,10 +76,8 @@ require (
 	github.com/google/flatbuffers v1.11.0
 	github.com/google/go-cmp v0.5.2
 	github.com/google/go-github v17.0.0+incompatible
-	github.com/google/martian v2.1.0+incompatible // indirect
-	github.com/google/pprof v0.0.0-20190109223431-e84dfd68c163
+	github.com/google/pprof v0.0.0-20190515194954-54271f7e092f
 	github.com/google/uuid v1.2.0 // indirect
-	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
 	github.com/gorhill/cronexpr v0.0.0-20140423231348-a557574d6c02
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.3.0
@@ -115,14 +113,13 @@ require (
 	github.com/mibk/dupl v1.0.0
 	github.com/mitchellh/reflectwalk v1.0.0
 	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab
-	github.com/montanaflynn/stats v0.4.1-0.20190115100425-713f2944833c
+	github.com/montanaflynn/stats v0.6.3
 	github.com/nlopes/slack v0.4.0
-	github.com/olekukonko/tablewriter v0.0.0-20170122224234-a0225b3f23b5
+	github.com/olekukonko/tablewriter v0.0.5-0.20200416053754-163badb3bac6
 	github.com/opennota/wd v0.0.0-20180911144301-b446539ab1e7 // indirect
 	github.com/opentracing-contrib/go-observer v0.0.0-20170622124052-a52f23424492 // indirect
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/openzipkin-contrib/zipkin-go-opentracing v0.3.5
-	github.com/pborman/uuid v1.2.0 // indirect
 	github.com/peterbourgon/g2s v0.0.0-20170223122336-d4e7ad98afea // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5
 	github.com/pierrec/lz4 v2.6.0+incompatible // indirect
@@ -130,7 +127,7 @@ require (
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/pquerna/cachecontrol v0.0.0-20200819021114-67c6ae64274f // indirect
-	github.com/prometheus/client_golang v1.1.0
+	github.com/prometheus/client_golang v1.4.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.9.1
 	github.com/prometheus/procfs v0.0.10 // indirect
@@ -151,7 +148,7 @@ require (
 	golang.org/x/exp v0.0.0-20210212053707-62dc52270d37
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
-	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
+	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/sys v0.0.0-20210217105451-b926d437f341
@@ -159,13 +156,12 @@ require (
 	golang.org/x/text v0.3.5
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.1.0
-	google.golang.org/api v0.1.0
+	google.golang.org/api v0.9.0
 	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
 	google.golang.org/grpc v1.29.1
 	google.golang.org/protobuf v1.23.0
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0
-	gotest.tools v2.2.0+incompatible // indirect
 	honnef.co/go/tools v0.0.1-2020.1.6
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
@@ -178,7 +174,7 @@ replace github.com/olekukonko/tablewriter => github.com/cockroachdb/tablewriter 
 
 replace github.com/abourget/teamcity => github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11
 
-replace vitess.io/vitess => github.com/cockroachdb/vitess v2.2.0-rc.1.0.20180830030426-1740ce8b3188+incompatible
+replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82
 
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20180705215940-0e2822948641
 
