@@ -384,11 +384,11 @@ func (sp *StorePool) updateLocalStoreAfterRebalance(
 		return
 	}
 	switch changeType {
-	case roachpb.ADD_VOTER:
+	case roachpb.ADD_VOTER, roachpb.ADD_NON_VOTER:
 		detail.desc.Capacity.RangeCount++
 		detail.desc.Capacity.LogicalBytes += rangeUsageInfo.LogicalBytes
 		detail.desc.Capacity.WritesPerSecond += rangeUsageInfo.WritesPerSecond
-	case roachpb.REMOVE_VOTER:
+	case roachpb.REMOVE_VOTER, roachpb.REMOVE_NON_VOTER:
 		detail.desc.Capacity.RangeCount--
 		if detail.desc.Capacity.LogicalBytes <= rangeUsageInfo.LogicalBytes {
 			detail.desc.Capacity.LogicalBytes = 0
@@ -400,6 +400,8 @@ func (sp *StorePool) updateLocalStoreAfterRebalance(
 		} else {
 			detail.desc.Capacity.WritesPerSecond -= rangeUsageInfo.WritesPerSecond
 		}
+	default:
+		return
 	}
 	sp.detailsMu.storeDetails[storeID] = &detail
 }
