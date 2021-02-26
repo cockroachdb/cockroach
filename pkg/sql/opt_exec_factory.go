@@ -1065,7 +1065,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	out.writef("")
 	// Show the values of any non-default session variables that can impact
 	// planning decisions.
-	if err := c.PrintSettings(&out.buf); err != nil {
+	if err := c.PrintSessionSettings(&out.buf); err != nil {
 		return nil, err
 	}
 

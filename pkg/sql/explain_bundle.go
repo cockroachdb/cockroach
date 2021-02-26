@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -353,11 +355,17 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	fmt.Fprintf(&buf, "\n")
 
-	// Show the values of any non-default session variables that can impact
-	// planning decisions.
-	if err := c.PrintSettings(&buf); err != nil {
-		fmt.Fprintf(&buf, "-- error getting settings: %v\n", err)
+	// Show the values of session variables that can impact planning decisions.
+	if err := c.PrintSessionSettings(&buf); err != nil {
+		fmt.Fprintf(&buf, "-- error getting session settings: %v\n", err)
 	}
+
+	fmt.Fprintf(&buf, "\n")
+
+	if err := c.PrintClusterSettings(&buf); err != nil {
+		fmt.Fprintf(&buf, "-- error getting cluster settings: %v\n", err)
+	}
+
 	b.z.AddFile("env.sql", buf.String())
 
 	mem := b.plan.mem
@@ -535,17 +543,49 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 	return err
 }
 
-// PrintSettings appends information about session settings that can impact
-// planning decisions.
-func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
+// PrintSessionSettings appends information about session settings that can
+// impact planning decisions.
+func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
+	// Cluster setting encoded default value to session setting value conversion
+	// functions.
+	boolToOnOff := func(boolStr string) string {
+		switch boolStr {
+		case "true":
+			return "on"
+		case "false":
+			return "off"
+		}
+		return boolStr
+	}
+
+	distsqlConv := func(enumVal string) string {
+		n, err := strconv.ParseInt(enumVal, 10, 32)
+		if err != nil {
+			return enumVal
+		}
+		return sessiondata.DistSQLExecMode(n).String()
+	}
+
+	vectorizeConv := func(enumVal string) string {
+		n, err := strconv.ParseInt(enumVal, 10, 32)
+		if err != nil {
+			return enumVal
+		}
+		return sessiondatapb.VectorizeExecMode(n).String()
+	}
+
 	relevantSettings := []struct {
 		sessionSetting string
 		clusterSetting settings.WritableSetting
+		convFunc       func(string) string
 	}{
 		{sessionSetting: "reorder_joins_limit", clusterSetting: ReorderJoinsLimitClusterValue},
-		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode},
-		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode},
-		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode},
+		{sessionSetting: "enable_zigzag_join", clusterSetting: zigzagJoinClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "optimizer_use_histograms", clusterSetting: optUseHistogramsClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "optimizer_use_multicol_stats", clusterSetting: optUseMultiColStatsClusterMode, convFunc: boolToOnOff},
+		{sessionSetting: "locality_optimized_partitioned_index_scan", clusterSetting: localityOptimizedSearchMode, convFunc: boolToOnOff},
+		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
+		{sessionSetting: "vectorize", clusterSetting: VectorizeClusterMode, convFunc: vectorizeConv},
 	}
 
 	for _, s := range relevantSettings {
@@ -555,18 +595,40 @@ func (c *stmtEnvCollector) PrintSettings(w io.Writer) error {
 		}
 		// Get the default value for the cluster setting.
 		def := s.clusterSetting.EncodedDefault()
-		// Convert true/false to on/off to match what SHOW returns.
-		switch def {
-		case "true":
-			def = "on"
-		case "false":
-			def = "off"
+		if s.convFunc != nil {
+			// If necessary, convert the encoded cluster setting to a session setting
+			// value (e.g.  "true"->"on"), depending on the setting.
+			def = s.convFunc(def)
 		}
 
 		if value == def {
 			fmt.Fprintf(w, "-- %s has the default value: %s\n", s.sessionSetting, value)
 		} else {
 			fmt.Fprintf(w, "SET %s = %s;  -- default value: %s\n", s.sessionSetting, value, def)
+		}
+	}
+	return nil
+}
+
+func (c *stmtEnvCollector) PrintClusterSettings(w io.Writer) error {
+	rows, err := c.ie.QueryBufferedEx(
+		c.ctx,
+		"stmtEnvCollector",
+		nil, /* txn */
+		sessiondata.NoSessionDataOverride,
+		"SELECT variable, value, description FROM [ SHOW ALL CLUSTER SETTINGS ]",
+	)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "-- Cluster settings:\n")
+	for _, r := range rows {
+		// The datums should always be DString, but we should be defensive.
+		variable, ok1 := r[0].(*tree.DString)
+		value, ok2 := r[1].(*tree.DString)
+		description, ok3 := r[2].(*tree.DString)
+		if ok1 && ok2 && ok3 {
+			fmt.Fprintf(w, "--   %s = %s  (%s)\n", *variable, *value, *description)
 		}
 	}
 	return nil
