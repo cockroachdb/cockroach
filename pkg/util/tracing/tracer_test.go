@@ -67,7 +67,6 @@ func TestTracerRecording(t *testing.T) {
 	// Initial recording of this fresh (real) span.
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		span: a
-			tags: _unfinished=1
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +144,6 @@ func TestTracerRecording(t *testing.T) {
 	s1.Recordf("x=%d", 100)
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		span: a
-			tags: _unfinished=1
 	`); err != nil {
 		t.Fatal(err)
 	}
