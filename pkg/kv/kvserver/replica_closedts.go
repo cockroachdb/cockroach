@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -82,12 +81,20 @@ func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
 	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
-) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy) {
+) (ok bool, _ ctpb.LAI, _ roachpb.RangeClosedTimestampPolicy) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// TODO(andrei,nvanbenschoten): This method can be called even after a
+	// replica is destoyed, because unlinkReplicaByRangeIDLocked does not
+	// synchronize with sidetransport.Sender.publish, which maintains a local
+	// copy of its leaseholder map. To avoid issues resulting from this, we
+	// should probably check if the replica is destroyed here.
+
+	lai := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
 	policy := r.closedTimestampPolicyRLocked()
 	target := targetByPolicy[policy]
+
 	// We can't close timestamps outside our lease.
 	st := r.leaseStatusForRequestRLocked(ctx, now, target)
 	if !st.IsValid() && !st.OwnedBy(r.StoreID()) {
@@ -112,19 +119,27 @@ func (r *Replica) BumpSideTransportClosed(
 	// Note that the proposals in the proposalBuf don't matter here; these
 	// proposals and their timestamps are still tracked in proposal buffer's
 	// tracker, and they'll be considered below.
+	//
+	// TODO(andrei,nvanbenschoten): this seems broken. What if we are in the
+	// middle of applying a batch of entries? We remove from the proposals map
+	// (in replicaDecoder.retrieveLocalProposals) before we bump the
+	// r.mu.state.LeaseAppliedIndex (in replicaAppBatch.ApplyToStateMachine).
+	// We don't want to grab the raftMu here to synchronize with the application
+	// process, so we need to do something else.
 	if len(r.mu.proposals) > 0 {
 		return false, 0, 0
 	}
 
+	// TODO(andrei,nvanbenschoten): give this a comment.
 	if !r.mu.proposalBuf.MaybeForwardClosedLocked(ctx, target) {
 		return false, 0, 0
 	}
-	lai := r.mu.state.LeaseAppliedIndex
+
 	// Update the replica directly since there's no side-transport connection to
 	// the local node.
 	r.mu.sideTransportClosedTimestamp = target
 	r.mu.sideTransportCloseTimestampLAI = lai
-	return true, ctpb.LAI(lai), policy
+	return true, lai, policy
 }
 
 // closedTimestampTargetRLocked computes the timestamp we'd like to close for
@@ -133,31 +148,7 @@ func (r *Replica) BumpSideTransportClosed(
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 	now := r.Clock().NowAsClockTimestamp()
 	maxClockOffset := r.Clock().MaxOffset()
-	policy := r.closedTimestampPolicyRLocked()
 	lagTargetDuration := closedts.TargetDuration.Get(&r.ClusterSettings().SV)
-	return ClosedTimestampTargetByPolicy(now, maxClockOffset, policy, lagTargetDuration)
-}
-
-// ClosedTimestampTargetByPolicy returns the target closed timestamp for a range
-// with the given policy.
-func ClosedTimestampTargetByPolicy(
-	now hlc.ClockTimestamp,
-	maxClockOffset time.Duration,
-	policy roachpb.RangeClosedTimestampPolicy,
-	lagTargetDuration time.Duration,
-) hlc.Timestamp {
-	switch policy {
-	case roachpb.LAG_BY_CLUSTER_SETTING, roachpb.LEAD_FOR_GLOBAL_READS:
-		return hlc.Timestamp{WallTime: now.WallTime - lagTargetDuration.Nanoseconds()}
-		// TODO(andrei,nvanbenschoten): Resolve all the issues preventing us from closing
-		// timestamps in the future (which, in turn, forces future-time writes on
-		// global ranges), and enable the proper logic below.
-		//case roachpb.LEAD_FOR_GLOBAL_READS:
-		//	closedTSTarget = hlc.Timestamp{
-		//		WallTime:  now + 2*maxClockOffset.Nanoseconds(),
-		//		Synthetic: true,
-		//	}
-	default:
-		panic("unexpected RangeClosedTimestampPolicy")
-	}
+	policy := r.closedTimestampPolicyRLocked()
+	return closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, policy)
 }

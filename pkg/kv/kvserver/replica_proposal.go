@@ -524,7 +524,7 @@ func (r *Replica) leasePostApplyLocked(
 	if iAmTheLeaseHolder {
 		r.store.registerLeaseholder(ctx, r, newLease.Sequence)
 	} else {
-		r.store.unregisterLeaseholder(ctx, r.RangeID)
+		r.store.unregisterLeaseholder(ctx, r)
 	}
 
 	// Mark the new lease in the replica's lease history.

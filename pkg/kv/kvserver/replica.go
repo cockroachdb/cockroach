@@ -402,10 +402,17 @@ type Replica struct {
 		//
 		// TODO(andrei): actually implement and reference also the global storage
 		// for side-transport closed timestamps.
+		//
+		// TODO(andrei): document here and probably elsewhere the relationship
+		// between the sideTransportClosedTimestamp and the raftClosedTimestamp.
+		// Specifically that for a given LAI, the side transport closed timestamp
+		// will always lead the raft closed timestamp, but that across LAIs, the
+		// larger LAI will always include the larger closed timestamp, independent
+		// of the source.
 		sideTransportClosedTimestamp hlc.Timestamp
-		// sideTransportCloseTimestampLAI is the LAI associated with
-		// sideTransportClosedTimestamp.
-		sideTransportCloseTimestampLAI uint64
+		// sideTransportCloseTimestampLAI is the lease-applied index associated
+		// with sideTransportClosedTimestamp.
+		sideTransportCloseTimestampLAI ctpb.LAI
 
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.

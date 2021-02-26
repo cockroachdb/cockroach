@@ -10,6 +10,9 @@
 
 package sidetransport
 
+// TODO(andrei): move this under a pkg/kv/kvserver/closedts/v2/sidetransport
+// package.
+
 import (
 	"context"
 	"fmt"
@@ -19,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,30 +36,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// closingPeriod dictates how often the ClosedTimestampSender will close
-// timestamps.
+// closingPeriod dictates how often the Sender will close timestamps.
+// TODO(andrei): make this a cluster setting which, when set to 0, disables
+// the sidetransport.
 const closingPeriod = 200 * time.Millisecond
 
-// ClosedTimestampSender represents the sending-side of the closed timestamps
-// "side-transport". Its role is to periodically advance the closed timestamps
-// of all the ranges with leases on the current node and to communicate these
-// closed timestamps to all other nodes that have replicas for any of these
-// ranges.
+// Sender represents the sending-side of the closed timestamps "side-transport".
+// Its role is to periodically advance the closed timestamps of all the ranges
+// with leases on the current node and to communicate these closed timestamps to
+// all other nodes that have replicas for any of these ranges.
 //
 // This side-transport is particularly important for range that are not seeing
 // frequent writes; in the absence of Raft proposals, this is the only way for
 // the closed timestamps to advance.
 //
-// The ClosedTimestampSender is notified when leases are acquired or lost by the
-// current node. The sender periodically loops through all the ranges with local
-// leases, tries to advance the closed timestamp of each range according to its
-// policy, and then publishes a message with the update to all other nodes with
+// The Sender is notified when leases are acquired or lost by the current node.
+// The sender periodically loops through all the ranges with local leases, tries
+// to advance the closed timestamp of each range according to its policy, and
+// then publishes a message with the update to all other nodes with
 // non-leaseholder replicas. Every node receives the same messages; for
 // efficiency the sender does not keep track of which follower node is
 // interested in which ranges. On the receiver side the closed timestamp updates
 // are processed lazily, so it doesn't particularly matter that each receiver is
 // told about ranges that it doesn't care about.
-type ClosedTimestampSender struct {
+type Sender struct {
 	stopper *stop.Stopper
 	dialer  *nodedialer.Dialer
 	st      *cluster.Settings
@@ -66,14 +68,16 @@ type ClosedTimestampSender struct {
 
 	trackedMu struct {
 		syncutil.Mutex
+		// lastSeqNum is the sequence number of the last message published.
+		lastSeqNum ctpb.SeqNum
+		// lastClosed is the closed timestamp published for each policy in the
+		// last message.
+		lastClosed [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
 		// tracked maintains the information that was communicated to connections in
 		// the last sent message (implicitly or explicitly). A range enters this
 		// structure as soon as it's included in a message, and exits it when it's
-		// removed through ClosedTimestampUpdate.Removed.
-		tracked        map[roachpb.RangeID]trackedRange
-		lastTimestamps [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
-		// lastSeqNum is the sequence number of the last message published.
-		lastSeqNum ctpb.UpdateSequenceNumber
+		// removed through Update.Removed.
+		tracked map[roachpb.RangeID]trackedRange
 	}
 
 	leaseholdersMu struct {
@@ -81,8 +85,8 @@ type ClosedTimestampSender struct {
 		leaseholders map[roachpb.RangeID]leaseholder
 	}
 
-	// buf contains recent messages published to connections. Adding a message to
-	// this buffer signals the connections to send it on their streams.
+	// buf contains recent messages published to connections. Adding a message
+	// to this buffer signals the connections to send it on their streams.
 	buf *updatesBuf
 
 	// connections contains connections to all nodes with follower replicas.
@@ -99,22 +103,51 @@ type trackedRange struct {
 	policy roachpb.RangeClosedTimestampPolicy
 }
 
+// leaseholder represents a leaseholder replicas that has been registered with
+// the sender and can send closed timestamp updates through the side transport.
 type leaseholder struct {
-	r        *kvserver.Replica
-	storeID  roachpb.StoreID
+	Replica
 	leaseSeq roachpb.LeaseSequence
 }
 
-// NewSideTransportSender creates a ClosedTimestampSender. Run must be called on
-// it afterwards to get it to start publishing closed timestamps.
-func NewSideTransportSender(
+// Replica represents a *Replica object, but with only the capabilities needed
+// by the closed timestamp side transport to accomplish its job.
+type Replica interface {
+	// Accessors.
+	StoreID() roachpb.StoreID
+	GetRangeID() roachpb.RangeID
+	Desc() *roachpb.RangeDescriptor
+
+	// BumpSideTransportClosed advances the range's closed timestamp if it can.
+	// If the closed timestamp is advanced, the function synchronizes with
+	// incoming requests, making sure that future requests are not allowed to
+	// write below the new closed timestamp.
+	//
+	// Returns false is the desired timestamp could not be closed. This can
+	// happen if the lease is no longer valid, if the range has proposals
+	// in-flight, if there are requests evaluating above the desired closed
+	// timestamp, or if the range has already closed a higher timestamp.
+	//
+	// If the closed timestamp was advanced, the function returns a LAI to be
+	// attached to the newly closed timestamp.
+	BumpSideTransportClosed(
+		ctx context.Context,
+		now hlc.ClockTimestamp,
+		targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy)
+}
+
+// NewSender creates a Sender. Run must be called on it afterwards to get it to
+// start publishing closed timestamps.
+func NewSender(
 	stopper *stop.Stopper, dialer *nodedialer.Dialer, clock *hlc.Clock, st *cluster.Settings,
-) *ClosedTimestampSender {
+) *Sender {
+	// TODO(andrei): rationalize this a little bit.
 	bufSize := 3 * time.Second.Nanoseconds() / closingPeriod.Nanoseconds()
 	if bufSize < 2 {
 		bufSize = 2
 	}
-	s := &ClosedTimestampSender{
+	s := &Sender{
 		stopper: stopper,
 		dialer:  dialer,
 		buf:     newUpdatesBuf(int(bufSize)),
@@ -132,7 +165,7 @@ func NewSideTransportSender(
 //
 // nodeID is the id of the local node. Used to avoid connecting to ourselves.
 // This is not know at construction time.
-func (s *ClosedTimestampSender) Run(ctx context.Context, nodeID roachpb.NodeID) {
+func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 	s.nodeID = nodeID
 
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
@@ -160,77 +193,80 @@ func (s *ClosedTimestampSender) Run(ctx context.Context, nodeID roachpb.NodeID) 
 		})
 }
 
-// RegisterLeaseholder adds a range to the leaseholders collection. From now on,
-// the side-transport will try to advance this range's closed timestamp.
-func (s *ClosedTimestampSender) RegisterLeaseholder(
-	ctx context.Context, r *kvserver.Replica, storeID roachpb.StoreID, leaseSeq roachpb.LeaseSequence,
+// RegisterLeaseholder adds a replica to the leaseholders collection. From now
+// on, until the replica is unregistered, the side-transport will try to advance
+// this replica's closed timestamp.
+func (s *Sender) RegisterLeaseholder(
+	ctx context.Context, r Replica, leaseSeq roachpb.LeaseSequence,
 ) {
 	s.leaseholdersMu.Lock()
 	defer s.leaseholdersMu.Unlock()
 
-	if lh, ok := s.leaseholdersMu.leaseholders[r.RangeID]; ok {
-		// The leaseholder is already registered. If we're already aware of a newer lease,
-		// there's nothing to do.
+	if lh, ok := s.leaseholdersMu.leaseholders[r.GetRangeID()]; ok {
+		// The leaseholder is already registered. If we're already aware of this
+		// or a newer lease, there's nothing to do.
 		if lh.leaseSeq >= leaseSeq {
 			return
 		}
+		// Otherwise, update the leaseholder, which may be different object if
+		// the lease moved between replicas for the same range on the same node
+		// but on different stores.
 	}
-	s.leaseholdersMu.leaseholders[r.RangeID] = leaseholder{
-		r:        r,
-		storeID:  storeID,
+	s.leaseholdersMu.leaseholders[r.GetRangeID()] = leaseholder{
+		Replica:  r,
 		leaseSeq: leaseSeq,
 	}
 }
 
-// UnregisterLeaseholder removes a range from the leaseholders collection.
-func (s *ClosedTimestampSender) UnregisterLeaseholder(
-	ctx context.Context, rangeID roachpb.RangeID, storeID roachpb.StoreID,
+// UnregisterLeaseholder removes a replica from the leaseholders collection, if
+// the replica is currently tracked.
+func (s *Sender) UnregisterLeaseholder(
+	ctx context.Context, storeID roachpb.StoreID, rangeID roachpb.RangeID,
 ) {
 	s.leaseholdersMu.Lock()
 	defer s.leaseholdersMu.Unlock()
 
-	if lh, ok := s.leaseholdersMu.leaseholders[rangeID]; ok && lh.storeID == storeID {
+	if lh, ok := s.leaseholdersMu.leaseholders[rangeID]; ok && lh.StoreID() == storeID {
 		delete(s.leaseholdersMu.leaseholders, rangeID)
 	}
 }
 
-func (s *ClosedTimestampSender) publish(ctx context.Context) {
+func (s *Sender) publish(ctx context.Context) {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
 
-	// We'll accumulate all the nodes we need to connect to in order to check if
-	// we need to open new connections or close existing ones.
-	nodesWithFollowers := util.MakeFastIntSet()
+	msg := &ctpb.Update{
+		NodeID:           s.nodeID,
+		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, len(s.trackedMu.lastClosed)),
+	}
+
+	// Determine the message's sequence number.
+	s.trackedMu.lastSeqNum++
+	msg.SeqNum = s.trackedMu.lastSeqNum
+	// The first message produced is essentially a snapshot, since it has no
+	// previous state to reference.
+	msg.Snapshot = msg.SeqNum == 1
 
 	// Fix the closed timestamps that will be communicated to by this message.
 	// These timestamps (one per range policy) will apply to all the ranges
 	// included in message.
-	var targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
 	now := s.clock.NowAsClockTimestamp()
 	maxClockOffset := s.clock.MaxOffset()
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
-	targetByPolicy[roachpb.LAG_BY_CLUSTER_SETTING] =
-		kvserver.ClosedTimestampTargetByPolicy(now, maxClockOffset, roachpb.LAG_BY_CLUSTER_SETTING, lagTargetDuration)
-	targetByPolicy[roachpb.LEAD_FOR_GLOBAL_READS] =
-		kvserver.ClosedTimestampTargetByPolicy(now, maxClockOffset, roachpb.LEAD_FOR_GLOBAL_READS, lagTargetDuration)
-	s.trackedMu.lastTimestamps = targetByPolicy
-
-	s.trackedMu.lastSeqNum++
-	msg := &ctpb.ClosedTimestampUpdate{
-		NodeID: s.nodeID,
-		SeqNum: s.trackedMu.lastSeqNum,
-		// The first message produced is essentially a snapshot, since it has no
-		// previous state to reference.
-		Snapshot: s.trackedMu.lastSeqNum == 1,
-		ClosedTimestamp: []ctpb.ClosedTimestampUpdateGroupUpdate{
-			{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetByPolicy[roachpb.LAG_BY_CLUSTER_SETTING]},
-			{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: targetByPolicy[roachpb.LEAD_FOR_GLOBAL_READS]},
-		},
+	for i := range s.trackedMu.lastClosed {
+		pol := roachpb.RangeClosedTimestampPolicy(i)
+		target := closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, pol)
+		s.trackedMu.lastClosed[pol] = target
+		msg.ClosedTimestamps[pol] = ctpb.Update_GroupUpdate{
+			Policy:          roachpb.RangeClosedTimestampPolicy(pol),
+			ClosedTimestamp: target,
+		}
 	}
 
-	// Make a copy of the leaseholders map, in order to release its mutex quickly. We can't hold
-	// this mutex while calling into any replicas (and locking the replica) because replicas call
-	// into the ClosedTimestampSender and take leaseholdersMu through Register/UnregisterLeaseholder.
+	// Make a copy of the leaseholders map, in order to release its mutex
+	// quickly. We can't hold this mutex while calling into any replicas (and
+	// locking the replica) because replicas call into the Sender and take
+	// leaseholdersMu through Register/UnregisterLeaseholder.
 	s.leaseholdersMu.Lock()
 	leaseholders := make(map[roachpb.RangeID]leaseholder, len(s.leaseholdersMu.leaseholders))
 	for k, v := range s.leaseholdersMu.leaseholders {
@@ -238,26 +274,42 @@ func (s *ClosedTimestampSender) publish(ctx context.Context) {
 	}
 	s.leaseholdersMu.Unlock()
 
+	// We'll accumulate all the nodes we need to connect to in order to check if
+	// we need to open new connections or close existing ones.
+	nodesWithFollowers := util.MakeFastIntSet()
+
+	// If there's any tracked ranges for which we're not the leaseholder any more,
+	// we need to untrack them and tell the connections about it.
+	for rid := range s.trackedMu.tracked {
+		if _, ok := leaseholders[rid]; !ok {
+			msg.Removed = append(msg.Removed, rid)
+			delete(s.trackedMu.tracked, rid)
+		}
+	}
+
+	// Iterate through each leaseholder and determine whether it can be part of
+	// this update or not.
 	for _, lh := range leaseholders {
-		r := lh.r
+		lhRangeID := lh.GetRangeID()
+		lastMsg, tracked := s.trackedMu.tracked[lhRangeID]
+
 		// Make sure that we're communicating with all of the range's followers.
 		// Note that we're including this range's followers before deciding below if
 		// this message will include this range. This is because we don't want
 		// dynamic conditions about the activity of this range to dictate the
 		// opening and closing of connections to the other nodes.
-		for _, repl := range r.Desc().Replicas().VoterFullAndNonVoterDescriptors() {
+		for _, repl := range lh.Desc().Replicas().VoterFullAndNonVoterDescriptors() {
 			nodesWithFollowers.Add(int(repl.NodeID))
 		}
 
 		// Check whether the desired timestamp can be closed on this range.
-		canClose, lai, policy := r.BumpSideTransportClosed(ctx, now, targetByPolicy)
-		lastMsg, tracked := s.trackedMu.tracked[r.RangeID]
+		canClose, lai, policy := lh.BumpSideTransportClosed(ctx, now, s.trackedMu.lastClosed)
 		if !canClose {
 			// We can't close the desired timestamp. If this range was tracked, we
 			// need to un-track it.
 			if tracked {
-				msg.Removed = append(msg.Removed, r.RangeID)
-				delete(s.trackedMu.tracked, r.RangeID)
+				msg.Removed = append(msg.Removed, lhRangeID)
+				delete(s.trackedMu.tracked, lhRangeID)
 			}
 			continue
 		}
@@ -280,18 +332,12 @@ func (s *ClosedTimestampSender) publish(ctx context.Context) {
 			needExplicit = true
 		}
 		if needExplicit {
-			msg.AddedOrUpdated = append(msg.AddedOrUpdated, ctpb.RangeUpdate{RangeID: r.RangeID, LAI: lai, Policy: policy})
-			s.trackedMu.tracked[r.RangeID] = trackedRange{lai: lai, policy: policy}
-		}
-
-	}
-
-	// If there's any tracked ranges for which we're not the leaseholder any more,
-	// we need to untrack them and tell the connections about it.
-	for rid := range s.trackedMu.tracked {
-		if _, ok := leaseholders[rid]; !ok {
-			msg.Removed = append(msg.Removed, rid)
-			delete(s.trackedMu.tracked, rid)
+			msg.AddedOrUpdated = append(msg.AddedOrUpdated, ctpb.Update_RangeUpdate{
+				RangeID: lhRangeID,
+				LAI:     lai,
+				Policy:  policy,
+			})
+			s.trackedMu.tracked[lhRangeID] = trackedRange{lai: lai, policy: policy}
 		}
 	}
 
@@ -309,12 +355,12 @@ func (s *ClosedTimestampSender) publish(ctx context.Context) {
 	nodesWithFollowers.ForEach(func(nid int) {
 		nodeID := roachpb.NodeID(nid)
 		// Note that we don't open a connection to ourselves. The timestamps that
-		// we'we closing are written directly to the sideTransportClosedTimestamp
-		// fields of the local replicas.
+		// we're closing are written directly to the sideTransportClosedTimestamp
+		// fields of the local replicas in BumpSideTransportClosed.
 		if _, ok := s.connections[nodeID]; !ok && nodeID != s.nodeID {
 			c := newConnection(s, nodeID, s.dialer, s.buf)
-			s.connections[nodeID] = c
 			c.run(ctx, s.stopper)
+			s.connections[nodeID] = c
 		}
 	})
 
@@ -326,44 +372,47 @@ func (s *ClosedTimestampSender) publish(ctx context.Context) {
 // opposed to being an incremental delta since a previous message). The returned
 // msg will have the `snapshot` field set, and a sequence number indicating
 // where to resume sending incremental updates.
-func (s *ClosedTimestampSender) GetSnapshot() *ctpb.ClosedTimestampUpdate {
+func (s *Sender) GetSnapshot() *ctpb.Update {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
 
-	msg := &ctpb.ClosedTimestampUpdate{
-		NodeID:   s.nodeID,
-		Snapshot: true,
+	msg := &ctpb.Update{
+		NodeID: s.nodeID,
 		// Assigning this SeqNum means that the next incremental sent needs to be
 		// lastSeqNum+1. Notice that GetSnapshot synchronizes with the publishing of
 		// of incremental messages.
-		SeqNum: s.trackedMu.lastSeqNum,
+		SeqNum:           s.trackedMu.lastSeqNum,
+		Snapshot:         true,
+		ClosedTimestamps: make([]ctpb.Update_GroupUpdate, len(s.trackedMu.lastClosed)),
+		AddedOrUpdated:   make([]ctpb.Update_RangeUpdate, 0, len(s.trackedMu.tracked)),
+	}
+	for pol, ts := range s.trackedMu.lastClosed {
+		msg.ClosedTimestamps[pol] = ctpb.Update_GroupUpdate{
+			Policy:          roachpb.RangeClosedTimestampPolicy(pol),
+			ClosedTimestamp: ts,
+		}
 	}
 	for rid, r := range s.trackedMu.tracked {
-		msg.AddedOrUpdated = append(msg.AddedOrUpdated, ctpb.RangeUpdate{
+		msg.AddedOrUpdated = append(msg.AddedOrUpdated, ctpb.Update_RangeUpdate{
 			RangeID: rid,
 			LAI:     r.lai,
 			Policy:  r.policy,
 		})
 	}
-	for _, policy := range []roachpb.RangeClosedTimestampPolicy{
-		roachpb.LAG_BY_CLUSTER_SETTING, roachpb.LEAD_FOR_GLOBAL_READS,
-	} {
-		msg.ClosedTimestamp = append(msg.ClosedTimestamp, ctpb.ClosedTimestampUpdateGroupUpdate{
-			Policy:          policy,
-			ClosedTimestamp: s.trackedMu.lastTimestamps[policy],
-		})
-	}
 	return msg
 }
 
-// updatesBuf is a circular buffer of ClosedTimestampUpdates. It's created with
-// a given capacity and, once it fills up, new items overwrite the oldest ones.
-// It lets consumers query for the update with a particular sequence number and
-// it lets queries block until the next update is produced.
+// updatesBuf is a circular buffer of Updates. It's created with a given
+// capacity and, once it fills up, new items overwrite the oldest ones. It lets
+// consumers query for the update with a particular sequence number and it lets
+// queries block until the next update is produced.
 type updatesBuf struct {
 	mu struct {
 		syncutil.Mutex
-		data []*ctpb.ClosedTimestampUpdate
+		// updated is signaled when a new item is inserted.
+		updated sync.Cond
+		// data contains pointers to the Updates.
+		data []*ctpb.Update
 		// head points to the earliest update in the buffer. If the buffer is empty,
 		// head is 0 and the respective slot is nil.
 		//
@@ -373,19 +422,18 @@ type updatesBuf struct {
 		head, tail int
 		// closed is set by the producer to signal the consumers to exit.
 		closed bool
-		// updated is signaled when a new item is inserted.
-		updated *sync.Cond
 	}
 }
 
 func newUpdatesBuf(size int) *updatesBuf {
 	buf := &updatesBuf{}
-	buf.mu.data = make([]*ctpb.ClosedTimestampUpdate, size)
-	buf.mu.updated = sync.NewCond(&buf.mu)
+	buf.mu.updated.L = &buf.mu
+	buf.mu.data = make([]*ctpb.Update, size)
 	return buf
 }
 
-func (b *updatesBuf) Push(ctx context.Context, update *ctpb.ClosedTimestampUpdate) {
+// Push adds a new update to the back of the buffer.
+func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -426,9 +474,7 @@ func (b *updatesBuf) lastIdxLocked() int {
 //
 // The bool retval is set to false if the producer has closed the buffer. In
 // that case, the consumers should quit.
-func (b *updatesBuf) GetBySeq(
-	ctx context.Context, seqNum ctpb.UpdateSequenceNumber,
-) (*ctpb.ClosedTimestampUpdate, bool) {
+func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Update, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -438,7 +484,7 @@ func (b *updatesBuf) GetBySeq(
 			return nil, false
 		}
 
-		var firstSeq, lastSeq ctpb.UpdateSequenceNumber
+		var firstSeq, lastSeq ctpb.SeqNum
 		if b.sizeLocked() == 0 {
 			firstSeq, lastSeq = 0, 0
 		} else {
@@ -491,19 +537,19 @@ func (b *updatesBuf) Close() {
 // watches an updatesBuf and streams all the messages to the respective node.
 type connection struct {
 	log.AmbientContext
-	producer *ClosedTimestampSender
+	producer *Sender
 	nodeID   roachpb.NodeID
 	dialer   *nodedialer.Dialer
 	// buf accumulates messages to be sent to the connection. If the buffer
 	// overflows (because this stream is disconnected for long enough), we'll have
 	// to send a snapshot before we can resume sending regular messages.
 	buf    *updatesBuf
-	stream ctpb.ClosedTimestampSideTransport_PushUpdatesClient
+	stream ctpb.SideTransport_PushUpdatesClient
 	closed int32 // atomic
 }
 
 func newConnection(
-	p *ClosedTimestampSender, nodeID roachpb.NodeID, dialer *nodedialer.Dialer, buf *updatesBuf,
+	p *Sender, nodeID roachpb.NodeID, dialer *nodedialer.Dialer, buf *updatesBuf,
 ) *connection {
 	r := &connection{
 		producer: p,
@@ -516,19 +562,19 @@ func newConnection(
 }
 
 // close makes the connection stop sending messages. The run() goroutine will
-// exit asynchronously. The parent ClosedTimestampSender is expected to remove
-// this connection from its list.
+// exit asynchronously. The parent Sender is expected to remove this connection
+// from its list.
 func (r *connection) close() {
 	atomic.StoreInt32(&r.closed, 1)
 }
 
-func (r *connection) sendMsg(ctx context.Context, msg *ctpb.ClosedTimestampUpdate) error {
+func (r *connection) sendMsg(ctx context.Context, msg *ctpb.Update) error {
 	if r.stream == nil {
 		conn, err := r.dialer.Dial(ctx, r.nodeID, rpc.SystemClass)
 		if err != nil {
 			return err
 		}
-		r.stream, err = ctpb.NewClosedTimestampSideTransportClient(conn).PushUpdates(ctx)
+		r.stream, err = ctpb.NewSideTransportClient(conn).PushUpdates(ctx)
 		if err != nil {
 			return err
 		}
@@ -550,9 +596,9 @@ func (r *connection) run(ctx context.Context, stopper *stop.Stopper) {
 
 			everyN := log.Every(10 * time.Second)
 
-			var lastSent ctpb.UpdateSequenceNumber
+			var lastSent ctpb.SeqNum
 			for {
-				var msg *ctpb.ClosedTimestampUpdate
+				var msg *ctpb.Update
 
 				// If we've been disconnected, reset the message sequence. We'll ask the
 				// buffer for the very first message ever, which was a snapshot.

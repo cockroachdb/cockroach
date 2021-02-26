@@ -10,5 +10,5 @@
 
 package ctpb
 
-// UpdateSequenceNumber identifies a ClosedTimestampUpdate.
-type UpdateSequenceNumber int64
+// SeqNum identifies a ctpb.Update.
+type SeqNum int64

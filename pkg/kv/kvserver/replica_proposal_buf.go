@@ -913,15 +913,17 @@ func (b *propBuf) TrackEvaluatingRequest(
 }
 
 // MaybeForwardClosedLocked checks whether the closed timestamp can be advanced
-// to target.
+// to target. If so, the assigned closed timestamp is forwarded to the target,
+// ensuring that no future writes ever write below it.
 //
 // Returns false in the following cases:
 // 1) target is below the propBuf's closed timestamp. This ensures that the
 //    side-transport (the caller) is prevented from publishing closed timestamp
 //    regressions. In other words, for a given LAI, the side-transport only
 //    publishes closed timestamps higher than what Raft published.
-// 2) There are requests evaluating at timestamps below target (as tracked by
-//    the evalTracker). We can't close timestamps below these requests.
+// 2) There are requests evaluating at timestamps equal to or below target (as
+//    tracked by the evalTracker). We can't close timestamps at or above these
+//    requests' write timestamps.
 func (b *propBuf) MaybeForwardClosedLocked(ctx context.Context, target hlc.Timestamp) bool {
 	if lb := b.evalTracker.LowerBound(ctx); lb.LessEq(target) {
 		return false

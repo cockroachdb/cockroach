@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -206,17 +207,16 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		DefaultZoneConfig:            zonepb.DefaultZoneConfigRef(),
-		DefaultSystemZoneConfig:      zonepb.DefaultSystemZoneConfigRef(),
-		Settings:                     st,
-		AmbientCtx:                   log.AmbientContext{Tracer: st.Tracer},
-		Clock:                        clock,
-		CoalescedHeartbeatsInterval:  50 * time.Millisecond,
-		ScanInterval:                 10 * time.Minute,
-		HistogramWindowInterval:      metric.TestSampleInterval,
-		ClosedTimestamp:              container.NoopContainer(),
-		ClosedTimestampSideTransport: dummyClosedTimestampSideTransport{},
-		ProtectedTimestampCache:      protectedts.EmptyCache(clock),
+		DefaultZoneConfig:           zonepb.DefaultZoneConfigRef(),
+		DefaultSystemZoneConfig:     zonepb.DefaultSystemZoneConfigRef(),
+		Settings:                    st,
+		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
+		Clock:                       clock,
+		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
+		ScanInterval:                10 * time.Minute,
+		HistogramWindowInterval:     metric.TestSampleInterval,
+		ClosedTimestamp:             container.NoopContainer(),
+		ProtectedTimestampCache:     protectedts.EmptyCache(clock),
 	}
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
@@ -394,35 +394,35 @@ func (rs *storeReplicaVisitor) EstimatedCount() int {
 // A Store maintains a map of ranges by start key. A Store corresponds
 // to one physical device.
 type Store struct {
-	Ident                        *roachpb.StoreIdent // pointer to catch access before Start() is called
-	cfg                          StoreConfig
-	db                           *kv.DB
-	engine                       storage.Engine // The underlying key-value store
-	tsCache                      tscache.Cache  // Most recent timestamps for keys / key ranges
-	allocator                    Allocator      // Makes allocation decisions
-	replRankings                 *replicaRankings
-	storeRebalancer              *StoreRebalancer
-	rangeIDAlloc                 *idalloc.Allocator          // Range ID allocator
-	gcQueue                      *gcQueue                    // Garbage collection queue
-	mergeQueue                   *mergeQueue                 // Range merging queue
-	splitQueue                   *splitQueue                 // Range splitting queue
-	replicateQueue               *replicateQueue             // Replication queue
-	replicaGCQueue               *replicaGCQueue             // Replica GC queue
-	raftLogQueue                 *raftLogQueue               // Raft log truncation queue
-	raftSnapshotQueue            *raftSnapshotQueue          // Raft repair queue
-	tsMaintenanceQueue           *timeSeriesMaintenanceQueue // Time series maintenance queue
-	scanner                      *replicaScanner             // Replica scanner
-	consistencyQueue             *consistencyQueue           // Replica consistency check queue
-	consistencyLimiter           *quotapool.RateLimiter      // Rate limits consistency checks
-	metrics                      *StoreMetrics
-	intentResolver               *intentresolver.IntentResolver
-	recoveryMgr                  txnrecovery.Manager
-	raftEntryCache               *raftentry.Cache
-	limiters                     batcheval.Limiters
-	txnWaitMetrics               *txnwait.Metrics
-	sstSnapshotStorage           SSTSnapshotStorage
-	protectedtsCache             protectedts.Cache
-	closedTimestampSideTransport closedTimestampSideTransport
+	Ident              *roachpb.StoreIdent // pointer to catch access before Start() is called
+	cfg                StoreConfig
+	db                 *kv.DB
+	engine             storage.Engine // The underlying key-value store
+	tsCache            tscache.Cache  // Most recent timestamps for keys / key ranges
+	allocator          Allocator      // Makes allocation decisions
+	replRankings       *replicaRankings
+	storeRebalancer    *StoreRebalancer
+	rangeIDAlloc       *idalloc.Allocator          // Range ID allocator
+	gcQueue            *gcQueue                    // Garbage collection queue
+	mergeQueue         *mergeQueue                 // Range merging queue
+	splitQueue         *splitQueue                 // Range splitting queue
+	replicateQueue     *replicateQueue             // Replication queue
+	replicaGCQueue     *replicaGCQueue             // Replica GC queue
+	raftLogQueue       *raftLogQueue               // Raft log truncation queue
+	raftSnapshotQueue  *raftSnapshotQueue          // Raft repair queue
+	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
+	scanner            *replicaScanner             // Replica scanner
+	consistencyQueue   *consistencyQueue           // Replica consistency check queue
+	consistencyLimiter *quotapool.RateLimiter      // Rate limits consistency checks
+	metrics            *StoreMetrics
+	intentResolver     *intentresolver.IntentResolver
+	recoveryMgr        txnrecovery.Manager
+	raftEntryCache     *raftentry.Cache
+	limiters           batcheval.Limiters
+	txnWaitMetrics     *txnwait.Metrics
+	sstSnapshotStorage SSTSnapshotStorage
+	protectedtsCache   protectedts.Cache
+	ctSender           *sidetransport.Sender
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -650,8 +650,8 @@ type StoreConfig struct {
 	RPCContext              *rpc.Context
 	RangeDescriptorCache    *rangecache.RangeCache
 
-	ClosedTimestamp              *container.Container
-	ClosedTimestampSideTransport closedTimestampSideTransport
+	ClosedTimestamp       *container.Container
+	ClosedTimestampSender *sidetransport.Sender
 
 	// SQLExecutor is used by the store to execute SQL statements.
 	SQLExecutor sqlutil.InternalExecutor
@@ -799,12 +799,12 @@ func NewStore(
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
-		cfg:                          cfg,
-		db:                           cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:                       eng,
-		nodeDesc:                     nodeDesc,
-		metrics:                      newStoreMetrics(cfg.HistogramWindowInterval),
-		closedTimestampSideTransport: cfg.ClosedTimestampSideTransport,
+		cfg:      cfg,
+		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:   eng,
+		nodeDesc: nodeDesc,
+		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
+		ctSender: cfg.ClosedTimestampSender,
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
@@ -2766,14 +2766,29 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 	return g.Wait()
 }
 
+// registerLeaseholder registers the provided replica as a leaseholder in the
+// node's closed timestamp side transport.
 func (s *Store) registerLeaseholder(
 	ctx context.Context, r *Replica, leaseSeq roachpb.LeaseSequence,
 ) {
-	s.closedTimestampSideTransport.RegisterLeaseholder(ctx, r, s.StoreID(), leaseSeq)
+	if s.ctSender != nil {
+		s.ctSender.RegisterLeaseholder(ctx, r, leaseSeq)
+	}
 }
 
-func (s *Store) unregisterLeaseholder(ctx context.Context, rangeID roachpb.RangeID) {
-	s.closedTimestampSideTransport.UnregisterLeaseholder(ctx, rangeID, s.StoreID())
+// unregisterLeaseholder unregisters the provided replica from node's closed
+// timestamp side transport if it had been previously registered as a
+// leaseholder.
+func (s *Store) unregisterLeaseholder(ctx context.Context, r *Replica) {
+	s.unregisterLeaseholderByID(ctx, r.RangeID)
+}
+
+// unregisterLeaseholderByID is like unregisterLeaseholder, but it accepts a
+// range ID instead of a replica.
+func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.RangeID) {
+	if s.ctSender != nil {
+		s.ctSender.UnregisterLeaseholder(ctx, s.StoreID(), rangeID)
+	}
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local
@@ -2806,24 +2821,3 @@ func min(a, b int) int {
 	}
 	return b
 }
-
-// closedTimestampSideTransport is implemented by SideTransportSender. The
-// interface serves to avoid a circular dependency.
-type closedTimestampSideTransport interface {
-	RegisterLeaseholder(context.Context, *Replica, roachpb.StoreID, roachpb.LeaseSequence)
-	UnregisterLeaseholder(context.Context, roachpb.RangeID, roachpb.StoreID)
-}
-
-type dummyClosedTimestampSideTransport struct{}
-
-func (d dummyClosedTimestampSideTransport) RegisterLeaseholder(
-	context.Context, *Replica, roachpb.StoreID, roachpb.LeaseSequence,
-) {
-}
-
-func (d dummyClosedTimestampSideTransport) UnregisterLeaseholder(
-	context.Context, roachpb.RangeID, roachpb.StoreID,
-) {
-}
-
-var _ closedTimestampSideTransport = dummyClosedTimestampSideTransport{}

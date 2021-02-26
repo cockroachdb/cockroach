@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package closedts
 
 import (
 	"testing"
@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClosedTimestampTargetByPolicy(t *testing.T) {
+func TestTargetForPolicy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -46,7 +46,7 @@ func TestClosedTimestampTargetByPolicy(t *testing.T) {
 	} {
 		t.Run(tc.rangePolicy.String(), func(t *testing.T) {
 			now := hlc.ClockTimestamp{WallTime: nowNanos}
-			target := ClosedTimestampTargetByPolicy(now, maxOffsetNanos, tc.rangePolicy, lagTargetNanos)
+			target := TargetForPolicy(now, maxOffsetNanos, lagTargetNanos, tc.rangePolicy)
 			require.Equal(t, tc.expClosedTSTarget, target)
 		})
 	}
