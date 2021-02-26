@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,6 +25,7 @@ import (
 
 func init() {
 	sql.CreateRegionConfigCCL = createRegionConfig
+	sql.GetMultiRegionEnumAddValuePlacementCCL = getMultiRegionEnumAddValuePlacement
 }
 
 func createRegionConfig(
@@ -127,4 +129,44 @@ func checkClusterSupportsMultiRegion(evalCtx *tree.EvalContext) error {
 		)
 	}
 	return nil
+}
+
+func getMultiRegionEnumAddValuePlacement(
+	execCfg *sql.ExecutorConfig, typeDesc *typedesc.Mutable, region tree.Name,
+) (tree.AlterTypeAddValue, error) {
+	if err := utilccl.CheckEnterpriseEnabled(
+		execCfg.Settings,
+		execCfg.ClusterID(),
+		execCfg.Organization(),
+		"ADD REGION",
+	); err != nil {
+		return tree.AlterTypeAddValue{}, err
+	}
+
+	// Find the location in the enum where we should insert the new value. We much search
+	// for the location (and not append to the end), as we want to keep the values in sorted
+	// order.
+	loc := sort.Search(
+		len(typeDesc.EnumMembers),
+		func(i int) bool {
+			return string(region) < typeDesc.EnumMembers[i].LogicalRepresentation
+		},
+	)
+
+	// If the above search couldn't find a value greater than the region being added, add the
+	// new region at the end of the enum.
+	before := true
+	if loc == len(typeDesc.EnumMembers) {
+		before = false
+		loc = len(typeDesc.EnumMembers) - 1
+	}
+
+	return tree.AlterTypeAddValue{
+		IfNotExists: false,
+		NewVal:      tree.EnumValue(region),
+		Placement: &tree.AlterTypeAddValuePlacement{
+			Before:      before,
+			ExistingVal: tree.EnumValue(typeDesc.EnumMembers[loc].LogicalRepresentation),
+		},
+	}, nil
 }
