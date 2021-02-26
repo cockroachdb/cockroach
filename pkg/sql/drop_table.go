@@ -134,6 +134,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 			droppedDesc,
 			false, /* droppingDatabase */
 			tree.AsStringWithFQNames(n.n, params.Ann()),
+			n.n.DropBehavior,
 		)
 		if err != nil {
 			return err
@@ -271,7 +272,11 @@ func (p *planner) removeInterleave(ctx context.Context, ref descpb.ForeignKeyRef
 // dropped due to `cascade` behavior. droppingParent indicates whether this
 // table's parent (either database or schema) is being dropped
 func (p *planner) dropTableImpl(
-	ctx context.Context, tableDesc *tabledesc.Mutable, droppingParent bool, jobDesc string,
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	droppingParent bool,
+	jobDesc string,
+	behavior tree.DropBehavior,
 ) ([]string, error) {
 	var droppedViews []string
 
@@ -323,7 +328,7 @@ func (p *planner) dropTableImpl(
 
 	// Drop sequences that the columns of the table own.
 	for _, col := range tableDesc.Columns {
-		if err := p.dropSequencesOwnedByCol(ctx, &col, !droppingParent); err != nil {
+		if err := p.dropSequencesOwnedByCol(ctx, &col, !droppingParent, behavior); err != nil {
 			return droppedViews, err
 		}
 	}

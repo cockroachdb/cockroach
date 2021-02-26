@@ -4,9 +4,10 @@ go_library(
     name = "server",
     srcs = [
         "admin.go",
-        "api.go",
-        "api_auth.go",
-        "api_error.go",
+        "api_v2.go",
+        "api_v2_auth.go",
+        "api_v2_error.go",
+        "api_v2_ranges.go",
         "authentication.go",
         "auto_tls_init.go",
         "auto_upgrade.go",
@@ -236,6 +237,8 @@ go_test(
     srcs = [
         "admin_cluster_test.go",
         "admin_test.go",
+        "api_v2_ranges_test.go",
+        "api_v2_test.go",
         "authentication_test.go",
         "auto_tls_init_test.go",
         "config_test.go",

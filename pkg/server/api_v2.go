@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -102,6 +103,13 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 
 		// Directly register other endpoints in the api server.
 		{"sessions/", a.listSessions, true /* requiresAuth */, adminRole, noOption},
+		{"nodes/", a.listNodes, true, adminRole, noOption},
+		// Any endpoint returning range information requires an admin user. This is because range start/end keys
+		// are sensitive info.
+		{"nodes/{node_id}/ranges/", a.listNodeRanges, true, adminRole, noOption},
+		{"ranges/hot/", a.listHotRanges, true, adminRole, noOption},
+		{"ranges/{range_id:[0-9]+}/", a.listRange, true, adminRole, noOption},
+		{"health/", a.health, false, regularRole, noOption},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
@@ -148,7 +156,7 @@ func (c *callCountDecorator) ServeHTTP(w http.ResponseWriter, req *http.Request)
 type listSessionsResponse struct {
 	serverpb.ListSessionsResponse
 
-	Next string `json:"next"`
+	Next string `json:"next,omitempty"`
 }
 
 func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
@@ -173,4 +181,31 @@ func (a *apiV2Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	response.ListSessionsResponse = *responseProto
 	writeJSONResponse(ctx, w, http.StatusOK, response)
+}
+
+func (a *apiV2Server) health(w http.ResponseWriter, r *http.Request) {
+	ready := false
+	readyStr := r.URL.Query().Get("ready")
+	if len(readyStr) > 0 {
+		var err error
+		ready, err = strconv.ParseBool(readyStr)
+		if err != nil {
+			http.Error(w, "invalid ready value", http.StatusBadRequest)
+			return
+		}
+	}
+	ctx := r.Context()
+	resp := &serverpb.HealthResponse{}
+	// If Ready is not set, the client doesn't want to know whether this node is
+	// ready to receive client traffic.
+	if !ready {
+		writeJSONResponse(ctx, w, 200, resp)
+		return
+	}
+
+	if err := a.admin.checkReadinessForHealthCheck(ctx); err != nil {
+		apiV2InternalError(ctx, err, w)
+		return
+	}
+	writeJSONResponse(ctx, w, 200, resp)
 }
