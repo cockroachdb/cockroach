@@ -700,12 +700,19 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	ctx context.Context, err error, evalCtx *extendedEvalContext,
 ) error {
 
-	// Ensure that this mutation is first in line prior to reverting.
+	// Ensure that this is a table descriptor and that the mutation is first in
+	// line prior to reverting.
 	{
 		// Pull out the requested descriptor.
 		desc, descErr := sc.getTargetDescriptor(ctx)
 		if descErr != nil {
 			return descErr
+		}
+		// Currently we don't attempt to roll back schema changes for anything other
+		// than tables. For jobs intended to drop other types of descriptors, we do
+		// nothing.
+		if _, ok := desc.(catalog.TableDescriptor); !ok {
+			return errors.Newf("schema change jobs on databases and schemas cannot be reverted")
 		}
 
 		// Check that we aren't queued behind another schema changer.
@@ -2197,12 +2204,11 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, phs interface{}
 	p := phs.(PlanHookState)
 	details := r.job.Details().(jobspb.SchemaChangeDetails)
 
-	if details.DroppedDatabaseID != descpb.InvalidID {
-		// TODO (lucy): Do we need to do anything here?
-		return nil
-	}
+	// If this is a schema change to drop a database or schema, DescID will be
+	// unset. We cannot revert such schema changes, so just exit early with an
+	// error.
 	if details.DescID == descpb.InvalidID {
-		return errors.AssertionFailedf("job has no database ID or table ID")
+		return errors.Newf("schema change jobs on databases and schemas cannot be reverted")
 	}
 	sc := SchemaChanger{
 		descID:               details.DescID,
