@@ -363,7 +363,6 @@ func WriteDescriptors(
 						table.GetID(), table)
 				}
 			}
-
 			// If the table descriptor is being written to a multi-region database and
 			// the table does not have a locality config setup, set one up here. The
 			// table's locality config will be set to the default locality - REGIONAL
@@ -377,8 +376,20 @@ func WriteDescriptors(
 			if err != nil {
 				return err
 			}
-			if dbDesc.GetRegionConfig() != nil && table.GetLocalityConfig() == nil {
-				table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+			if dbDesc.GetRegionConfig() != nil {
+				if table.GetLocalityConfig() == nil {
+					table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+				}
+			} else {
+				// If the database is not multi-region enabled, ensure that we don't
+				// write any multi-region table descriptors into it.
+				if table.GetLocalityConfig() != nil {
+					return pgerror.Newf(pgcode.FeatureNotSupported,
+						"cannot write descriptor for multi-region table %s into non-multi-region database %s",
+						table.GetName(),
+						dbDesc.GetName(),
+					)
+				}
 			}
 
 			if err := descsCol.WriteDescToBatch(

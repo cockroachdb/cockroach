@@ -47,7 +47,7 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	}
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 2 /* numServers */, knobs,
+		t, 2 /* numServers */, knobs, nil, /* baseDir */
 	)
 	defer cleanup()
 
@@ -143,7 +143,7 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 	}
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 1 /* numServers */, knobs,
+		t, 1 /* numServers */, knobs, nil, /* baseDir */
 	)
 	defer cleanup()
 
@@ -201,7 +201,7 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 
 	// Setup.
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, knobs,
+		t, 3 /* numServers */, knobs, nil, /* baseDir */
 	)
 	defer cleanup()
 	_, err := sqlDB.Exec(`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"`)
