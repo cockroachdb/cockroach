@@ -1324,6 +1324,6 @@ func (e *CacheEntry) evictLeaseholder(
 // IsRangeLookupErrorRetryable returns whether the provided range lookup error
 // can be retried or whether it should be propagated immediately.
 func IsRangeLookupErrorRetryable(err error) bool {
-	// For now, all errors are retryable except authentication errors.
-	return !grpcutil.IsAuthenticationError(err)
+	// For now, all errors are retryable except authentication/authorization.
+	return !grpcutil.IsAuthError(err)
 }

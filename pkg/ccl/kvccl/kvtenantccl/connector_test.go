@@ -330,7 +330,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 	desc, err := c.FirstRange()
 	require.Nil(t, desc)
 	require.Regexp(t, "does not have access to FirstRange", err)
-	require.True(t, grpcutil.IsAuthenticationError(err))
+	require.True(t, grpcutil.IsAuthError(err))
 }
 
 // TestConnectorRetriesUnreachable tests that Connector iterates over each of

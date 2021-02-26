@@ -1888,8 +1888,8 @@ func (ds *DistSender) sendToReplicas(
 		ds.maybeIncrementErrCounters(br, err)
 
 		if err != nil {
-			if grpcutil.IsAuthenticationError(err) {
-				// Authentication error. Propagate.
+			if grpcutil.IsAuthError(err) {
+				// Authentication or authorization error. Propagate.
 				if ambiguousError != nil {
 					return nil, roachpb.NewAmbiguousResultErrorf("error=%s [propagate]", ambiguousError)
 				}
