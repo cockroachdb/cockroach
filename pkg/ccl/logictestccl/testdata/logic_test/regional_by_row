@@ -775,26 +775,8 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • lookup join (semi)
-│           │ table: regional_by_row_table@primary
-│           │ equality: (lookup_join_const_col_@33, upsert_pk) = (crdb_region,pk)
-│           │ equality cols are key
-│           │ pred: column1 != crdb_region
-│           │
-│           └── • cross join
-│               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@48, column5) = (crdb_region,b)
+│           │ equality: (lookup_join_const_col_@33, column5) = (crdb_region,b)
 │           │ equality cols are key
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
@@ -812,7 +794,7 @@ vectorized: true
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@63, column4, column5) = (crdb_region,a,b)
+            │ equality: (lookup_join_const_col_@48, column4, column5) = (crdb_region,a,b)
             │ equality cols are key
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │
@@ -858,26 +840,8 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • lookup join (semi)
-│           │ table: regional_by_row_table@primary
-│           │ equality: (lookup_join_const_col_@33, upsert_pk) = (crdb_region,pk)
-│           │ equality cols are key
-│           │ pred: column1 != crdb_region
-│           │
-│           └── • cross join
-│               │
-│               ├── • values
-│               │     size: 1 column, 3 rows
-│               │
-│               └── • scan buffer
-│                     label: buffer 1
-│
-├── • constraint-check
-│   │
-│   └── • error if rows
-│       │
-│       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@48, column5) = (crdb_region,b)
+│           │ equality: (lookup_join_const_col_@33, column5) = (crdb_region,b)
 │           │ equality cols are key
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
@@ -895,7 +859,7 @@ vectorized: true
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@63, column4, column5) = (crdb_region,a,b)
+            │ equality: (lookup_join_const_col_@48, column4, column5) = (crdb_region,a,b)
             │ equality cols are key
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │

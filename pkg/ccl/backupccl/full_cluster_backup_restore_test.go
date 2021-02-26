@@ -21,9 +21,12 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -40,10 +43,31 @@ func TestFullClusterBackup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 10
-	_, _, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
-	_, _, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	_, tcBackup, sqlDB, tempDir, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
+
+	backupKVDB := tcBackup.Server(0).DB()
+
+	// Closed when the restore is allowed to progress with the rest of the backup.
+	allowProgressAfterPreRestore := make(chan struct{})
+	// Closed to signal the the zones have been restored.
+	restoredZones := make(chan struct{})
+	for _, server := range tcRestore.Servers {
+		registry := server.JobRegistry().(*jobs.Registry)
+		registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*restoreResumer)
+				r.testingKnobs.afterPreRestore = func() error {
+					close(restoredZones)
+					<-allowProgressAfterPreRestore
+					return nil
+				}
+				return r
+			},
+		}
+	}
 
 	// The claim_session_id field in jobs is a uuid and so needs to be excluded
 	// when comparing jobs pre/post restore.
@@ -77,6 +101,9 @@ USE data2;
 CREATE SCHEMA empty_schema;
 CREATE TABLE data2.foo (a int);
 `)
+	tableDesc := catalogkv.TestingGetTableDescriptor(backupKVDB, keys.SystemSQLCodec, "data2", "foo")
+	// Store the highest user-table ID for later assertions.
+	maxBackupTableID := tableDesc.GetID()
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
@@ -138,7 +165,41 @@ CREATE TABLE data2.foo (a int);
 		[][]string{{"0"}},
 	)
 
-	sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
+	doneRestore := make(chan struct{})
+	go func() {
+		sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
+		close(doneRestore)
+	}()
+
+	// Check that zones are restored during pre-restore.
+	t.Run("ensure zones are restored during pre-restore", func(t *testing.T) {
+		<-restoredZones
+		checkZones := "SELECT * FROM system.zones"
+		sqlDBRestore.CheckQueryResults(t, checkZones, sqlDB.QueryStr(t, checkZones))
+
+		// Check that the user tables are still offline.
+		sqlDBRestore.ExpectErr(t, "database \"data\" is offline: restoring", "SELECT * FROM data.bank")
+
+		// Check there is no data in the span that we expect user data to be imported.
+		store := tcRestore.GetFirstStoreFromServer(t, 0)
+		startKey := keys.SystemSQLCodec.TablePrefix(keys.MinUserDescID)
+		endKey := keys.SystemSQLCodec.TablePrefix(uint32(maxBackupTableID)).PrefixEnd()
+		it := store.Engine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+			UpperBound: endKey,
+		})
+		defer it.Close()
+		it.SeekGE(storage.MVCCKey{Key: startKey})
+		hasKey, err := it.Valid()
+		require.NoError(t, err)
+		require.False(t, hasKey)
+	})
+
+	// Allow the restore to make progress after we've checked the pre-restore
+	// stage.
+	close(allowProgressAfterPreRestore)
+
+	// Wait for the restore to finish before checking that it did the right thing.
+	<-doneRestore
 
 	t.Run("ensure all databases restored", func(t *testing.T) {
 		sqlDBRestore.CheckQueryResults(t,

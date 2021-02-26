@@ -86,6 +86,12 @@ func (a *arbiterSet) UniqueConstraintOrdinals() []int {
 	return a.uniqueConstraints.Ordered()
 }
 
+// ContainsUniqueConstraint returns true if the set contains the given unique
+// constraint.
+func (a *arbiterSet) ContainsUniqueConstraint(uniq cat.UniqueOrdinal) bool {
+	return a.uniqueConstraints.Contains(uniq)
+}
+
 // ForEach calls a function for every arbiter in the set. The function is called
 // with the following arguments:
 //

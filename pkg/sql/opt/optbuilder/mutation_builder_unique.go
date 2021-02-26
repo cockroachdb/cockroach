@@ -44,9 +44,19 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 	h := &mb.uniqueCheckHelper
 
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
-		// If this constraint is already enforced by an index we don't need to plan
+		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if mb.tab.Unique(i).WithoutIndex() && h.init(mb, i) {
+		if !mb.tab.Unique(i).WithoutIndex() {
+			continue
+		}
+		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
+		// NOTHING clause, we don't need to plan a check (ON CONFLICT ... DO UPDATE
+		// does not go through this code path; that's handled by
+		// buildUniqueChecksForUpsert).
+		if mb.uniqueConstraintIsArbiter(i) {
+			continue
+		}
+		if h.init(mb, i) {
 			mb.uniqueChecks = append(mb.uniqueChecks, h.buildInsertionCheck())
 		}
 	}
@@ -66,9 +76,17 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 	h := &mb.uniqueCheckHelper
 
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
-		// If this constraint is already enforced by an index or doesn't include
-		// the updated columns we don't need to plan a check.
-		if mb.tab.Unique(i).WithoutIndex() && mb.uniqueColsUpdated(i) && h.init(mb, i) {
+		// If this constraint is already enforced by an index, we don't need to plan
+		// a check.
+		if !mb.tab.Unique(i).WithoutIndex() {
+			continue
+		}
+		// If this constraint doesn't include the updated columns we don't need to
+		// plan a check.
+		if !mb.uniqueColsUpdated(i) {
+			continue
+		}
+		if h.init(mb, i) {
 			// The insertion check works for updates too since it simply checks that
 			// the unique columns in the newly inserted or updated rows do not match
 			// any existing rows. The check prevents rows from matching themselves by
@@ -92,9 +110,22 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 	h := &mb.uniqueCheckHelper
 
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
-		// If this constraint is already enforced by an index we don't need to plan
+		// If this constraint is already enforced by an index, we don't need to plan
 		// a check.
-		if mb.tab.Unique(i).WithoutIndex() && h.init(mb, i) {
+		if !mb.tab.Unique(i).WithoutIndex() {
+			continue
+		}
+		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
+		// UPDATE clause and not updated by the DO UPDATE clause, we don't need to
+		// plan a check (ON CONFLICT ... DO NOTHING does not go through this code
+		// path; that's handled by buildUniqueChecksForInsert). Note that that if
+		// the constraint is partial and columns referenced in the predicate are
+		// updated, we'll still plan the check (this is handled correctly by
+		// mb.uniqueColsUpdated).
+		if mb.uniqueConstraintIsArbiter(i) && !mb.uniqueColsUpdated(i) {
+			continue
+		}
+		if h.init(mb, i) {
 			// The insertion check works for upserts too since it simply checks that
 			// the unique columns in the newly inserted or updated rows do not match
 			// any existing rows. The check prevents rows from matching themselves by
@@ -144,6 +175,12 @@ func (mb *mutationBuilder) uniqueColsUpdated(uniqueOrdinal int) bool {
 	}
 
 	return false
+}
+
+// uniqueConstraintIsArbiter returns true if the given unique constraint is used
+// as an arbiter to detect conflicts in an  INSERT ... ON CONFLICT statement.
+func (mb *mutationBuilder) uniqueConstraintIsArbiter(uniqueOrdinal int) bool {
+	return mb.arbiters.ContainsUniqueConstraint(uniqueOrdinal)
 }
 
 // uniqueCheckHelper is a type associated with a single unique constraint and

@@ -48,6 +48,13 @@ const (
 //    cluster so there is no need to rewrite system table data.
 type systemBackupConfiguration struct {
 	IncludeInClusterBackup clusterBackupInclusion
+	// RestoreBeforeData indicates that this system table should be fully restored
+	// before restoring the user data. If a system table is restored before the
+	// user data, the restore will see this system table during the restore.
+	// The default is `false` because most of the system tables should be set up
+	// to support the restore (e.g. users that can run the restore, cluster settings
+	// that control how the restore runs, etc...).
+	RestoreBeforeData bool
 	// CustomRestoreFunc is responsible for restoring the data from a table that
 	// holds the restore system table data into the given system table. If none
 	// is provided then `defaultRestoreFunc` is used.
@@ -146,6 +153,9 @@ var SystemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.ZonesTable.GetName(): {
 		IncludeInClusterBackup: OptInToClusterBackup,
+		// The zones table should be restored before the user data so that the range
+		// allocator properly distributes ranges during the restore.
+		RestoreBeforeData: true,
 	},
 	systemschema.SettingsTable.GetName(): {
 		IncludeInClusterBackup: OptInToClusterBackup,
@@ -247,4 +257,17 @@ func GetSystemTablesToIncludeInClusterBackup() map[string]struct{} {
 	}
 
 	return systemTablesToInclude
+}
+
+// GetSystemTablesToRestoreBeforeData returns the set of system tables that
+// should be restored before the user data.
+func GetSystemTablesToRestoreBeforeData() map[string]struct{} {
+	systemTablesToRestoreBeforeData := make(map[string]struct{})
+	for systemTableName, backupConfig := range SystemTableBackupConfiguration {
+		if backupConfig.IncludeInClusterBackup == OptInToClusterBackup && backupConfig.RestoreBeforeData {
+			systemTablesToRestoreBeforeData[systemTableName] = struct{}{}
+		}
+	}
+
+	return systemTablesToRestoreBeforeData
 }
