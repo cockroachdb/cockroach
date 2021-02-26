@@ -503,7 +503,7 @@ CREATE TABLE crdb_internal.leases (
 		ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error,
 	) (err error) {
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID() // zero if not available
-		p.LeaseMgr().VisitLeases(func(desc catalog.Descriptor, dropped bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
+		p.LeaseMgr().VisitLeases(func(desc catalog.Descriptor, takenOffline bool, _ int, expiration tree.DTimestamp) (wantMore bool) {
 			if p.CheckAnyPrivilege(ctx, desc) != nil {
 				// TODO(ajwerner): inspect what type of error got returned.
 				return true
@@ -515,7 +515,7 @@ CREATE TABLE crdb_internal.leases (
 				tree.NewDString(desc.GetName()),
 				tree.NewDInt(tree.DInt(int64(desc.GetParentID()))),
 				&expiration,
-				tree.MakeDBool(tree.DBool(dropped)),
+				tree.MakeDBool(tree.DBool(takenOffline)),
 			)
 			return err == nil
 		})
