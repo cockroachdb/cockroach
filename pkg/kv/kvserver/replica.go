@@ -387,7 +387,16 @@ type Replica struct {
 		//
 		// TODO(ajwerner): move the proposal map and ProposalData entirely under
 		// the raftMu.
-		proposals         map[kvserverbase.CmdIDKey]*ProposalData
+		proposals map[kvserverbase.CmdIDKey]*ProposalData
+		// Indicates that the replica is in the process of applying log entries.
+		// Updated to true in handleRaftReady before entries are removed from
+		// the proposals map and set to false after they are applied. Useful in
+		// conjunction with len(proposals) to check for any in-flight proposals
+		// whose effects have not yet taken hold without synchronizing with
+		// raftMu and the entire handleRaftReady loop. Not needed if raftMu is
+		// already held.
+		applyingEntries bool
+		// The replica's Raft group "node".
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. This value may never be 0.
 		replicaID roachpb.ReplicaID

@@ -85,11 +85,14 @@ func (r *Replica) BumpSideTransportClosed(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// TODO(andrei,nvanbenschoten): This method can be called even after a
-	// replica is destoyed, because unlinkReplicaByRangeIDLocked does not
-	// synchronize with sidetransport.Sender.publish, which maintains a local
-	// copy of its leaseholder map. To avoid issues resulting from this, we
-	// should probably check if the replica is destroyed here.
+	// This method can be called even after a Replica is destroyed and removed
+	// from the Store's replicas map, because unlinkReplicaByRangeIDLocked does
+	// not synchronize with sidetransport.Sender.publish, which maintains a
+	// local copy of its leaseholder map. To avoid issues resulting from this,
+	// we first check if the replica is destroyed.
+	if _, err := r.isDestroyedRLocked(); err != nil {
+		return false, 0, 0
+	}
 
 	lai := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
 	policy := r.closedTimestampPolicyRLocked()
@@ -108,25 +111,19 @@ func (r *Replica) BumpSideTransportClosed(
 		return false, 0, 0
 	}
 
-	// If there are pending proposals in-flight, the side-transport doesn't
-	// advance the closed timestamp. The side-transport can't publish a closed
-	// timestamp with an LAI that takes the in-flight LAIs into consideration,
-	// because the in-flight proposals might not actually end up applying. In
-	// order to publish a closed timestamp with an LAI that doesn't consider these
+	// If there are pending Raft proposals in-flight or committed entries that
+	// have yet to be applied, the side-transport doesn't advance the closed
+	// timestamp. The side-transport can't publish a closed timestamp with an
+	// LAI that takes the in-flight LAIs into consideration, because the
+	// in-flight proposals might not actually end up applying. In order to
+	// publish a closed timestamp with an LAI that doesn't consider these
 	// in-flight proposals we'd have to check that they're all trying to write
 	// above `target`; that's too expensive.
 	//
 	// Note that the proposals in the proposalBuf don't matter here; these
 	// proposals and their timestamps are still tracked in proposal buffer's
 	// tracker, and they'll be considered below.
-	//
-	// TODO(andrei,nvanbenschoten): this seems broken. What if we are in the
-	// middle of applying a batch of entries? We remove from the proposals map
-	// (in replicaDecoder.retrieveLocalProposals) before we bump the
-	// r.mu.state.LeaseAppliedIndex (in replicaAppBatch.ApplyToStateMachine).
-	// We don't want to grab the raftMu here to synchronize with the application
-	// process, so we need to do something else.
-	if len(r.mu.proposals) > 0 {
+	if len(r.mu.proposals) > 0 || r.mu.applyingEntries {
 		return false, 0, 0
 	}
 
