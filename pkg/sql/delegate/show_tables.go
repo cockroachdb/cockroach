@@ -85,8 +85,10 @@ ORDER BY schema_name, table_name
 	var estimatedRowCountJoin string
 	if showEstimatedRowCountClusterSetting.Get(&d.evalCtx.Settings.SV) {
 		estimatedRowCount = "s.estimated_row_count AS estimated_row_count, "
-		estimatedRowCountJoin = `
-  LEFT JOIN crdb_internal.table_row_statistics AS s on (s.table_id = pc.oid::INT8)`
+		estimatedRowCountJoin = fmt.Sprintf(
+			`LEFT JOIN %[1]s.crdb_internal.table_row_statistics AS s on (s.table_id = pc.oid::INT8)`,
+			&name.CatalogName,
+		)
 	}
 	var descJoin string
 	var comment string
