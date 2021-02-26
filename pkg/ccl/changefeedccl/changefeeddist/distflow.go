@@ -34,7 +34,7 @@ var ChangefeedResultTypes = []*types.T{
 func StartDistChangefeed(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	jobID int64,
+	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
 	trackedSpans []roachpb.Span,
 	initialHighWater hlc.Timestamp,

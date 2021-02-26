@@ -468,7 +468,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	blockCh := make(chan struct{})
 	defer close(blockCh)
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
-		RunBeforeResume: func(_ int64) error { <-blockCh; return nil },
+		RunBeforeResume: func(_ jobspb.JobID) error { <-blockCh; return nil },
 	}
 
 	const numAccounts = 1000

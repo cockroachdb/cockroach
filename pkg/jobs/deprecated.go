@@ -137,7 +137,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			break
 		}
 
-		id := (*int64)(row[0].(*tree.DInt))
+		id := jobspb.JobID(*row[0].(*tree.DInt))
 
 		payload, err := UnmarshalPayload(row[1])
 		if err != nil {
@@ -147,7 +147,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		status := Status(tree.MustBeDString(row[3]))
 		if log.V(3) {
 			log.Infof(ctx, "job %d: evaluating for adoption with status `%s` and lease %v",
-				*id, status, payload.Lease)
+				id, status, payload.Lease)
 		}
 
 		// In version 20.1, the registry must not adopt 19.2-style schema change
@@ -162,7 +162,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			// If the lease is missing, it simply means the job does not yet support
 			// resumability.
 			if log.V(2) {
-				log.Infof(ctx, "job %d: skipping: nil lease", *id)
+				log.Infof(ctx, "job %d: skipping: nil lease", id)
 			}
 			continue
 		}
@@ -171,7 +171,7 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		// has been upgraded to 2.1 then we know nothing is running the job and it
 		// can be safely failed.
 		if nullProgress, ok := row[2].(*tree.DBool); ok && bool(*nullProgress) {
-			log.Warningf(ctx, "job %d predates cluster upgrade and must be re-run", *id)
+			log.Warningf(ctx, "job %d predates cluster upgrade and must be re-run", id)
 			versionErr := errors.New("job predates cluster upgrade and must be re-run")
 			payload.Error = versionErr.Error()
 			payloadBytes, err := protoutil.Marshal(payload)
@@ -183,19 +183,19 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			// the progress. Setting the status to failed is idempotent so we don't care
 			// if multiple nodes execute this.
 			const updateStmt = `UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3`
-			updateArgs := []interface{}{StatusFailed, payloadBytes, *id}
+			updateArgs := []interface{}{StatusFailed, payloadBytes, id}
 			err = r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				_, err := r.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
 				return err
 			})
 			if err != nil {
-				log.Warningf(ctx, "job %d: has no progress but unable to mark failed: %s", *id, err)
+				log.Warningf(ctx, "job %d: has no progress but unable to mark failed: %s", id, err)
 			}
 			continue
 		}
 
 		r.mu.Lock()
-		_, runningOnNode := r.mu.deprecatedJobs[*id]
+		_, runningOnNode := r.mu.deprecatedJobs[id]
 		r.mu.Unlock()
 
 		// If we're running as a tenant (!ok), then we are the sole SQL server in
@@ -206,8 +206,8 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			if runningOnNode {
 				// If we are currently running a job that another node has the lease on,
 				// stop running it.
-				log.Warningf(ctx, "job %d: node %d owns lease; canceling", *id, payload.Lease.NodeID)
-				r.unregister(*id)
+				log.Warningf(ctx, "job %d: node %d owns lease; canceling", id, payload.Lease.NodeID)
+				r.unregister(id)
 				continue
 			}
 			nodeStatus, ok := nodeStatusMap[payload.Lease.NodeID]
@@ -215,12 +215,12 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 				// This case can happen when a node first starts up and runs schema
 				// migrations.
 				log.Warningf(ctx, "job %d: skipping: no liveness record for the job's node %d",
-					log.Safe(*id), payload.Lease.NodeID)
+					log.Safe(id), payload.Lease.NodeID)
 				continue
 			}
 			if nodeStatus.isLive {
 				if log.V(2) {
-					log.Infof(ctx, "job %d: skipping: another node is live and holds the lease", *id)
+					log.Infof(ctx, "job %d: skipping: another node is live and holds the lease", id)
 				}
 				continue
 			}
@@ -228,18 +228,18 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 
 		// Below we know that this node holds the lease on the job, or that we want
 		// to adopt it anyway because the leaseholder seems dead.
-		job := &Job{id: *id, registry: r}
+		job := &Job{id: id, registry: r}
 		resumeCtx, cancel := r.makeCtx()
 
 		if pauseRequested := status == StatusPauseRequested; pauseRequested {
 			if err := job.paused(ctx, nil /* txn */, func(context.Context, *kv.Txn) error {
-				r.unregister(*id)
+				r.unregister(id)
 				return nil
 			}); err != nil {
-				log.Errorf(ctx, "job %d: could not set to paused: %v", *id, err)
+				log.Errorf(ctx, "job %d: could not set to paused: %v", id, err)
 				continue
 			}
-			log.Infof(ctx, "job %d: paused", *id)
+			log.Infof(ctx, "job %d: paused", id)
 			continue
 		}
 
@@ -247,16 +247,16 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 			if err := job.reverted(ctx, nil /* txn */, errJobCanceled, func(context.Context, *kv.Txn) error {
 				// Unregister the job in case it is running on the node.
 				// Unregister is a no-op for jobs that are not running.
-				r.unregister(*id)
+				r.unregister(id)
 				return nil
 			}); err != nil {
-				log.Errorf(ctx, "job %d: could not set to reverting: %v", *id, err)
+				log.Errorf(ctx, "job %d: could not set to reverting: %v", id, err)
 				continue
 			}
-			log.Infof(ctx, "job %d: canceled: the job is now reverting", *id)
-		} else if currentlyRunning := r.deprecatedRegister(*id, cancel) != nil; currentlyRunning {
+			log.Infof(ctx, "job %d: canceled: the job is now reverting", id)
+		} else if currentlyRunning := r.deprecatedRegister(id, cancel) != nil; currentlyRunning {
 			if log.V(3) {
-				log.Infof(ctx, "job %d: skipping: the job is already running/reverting on this node", *id)
+				log.Infof(ctx, "job %d: skipping: the job is already running/reverting on this node", id)
 			}
 			continue
 		}
@@ -271,19 +271,19 @@ WHERE status IN ($1, $2, $3, $4, $5) ORDER BY created DESC`
 		}
 		// Adopt job and resume/revert it.
 		if err := job.deprecatedAdopt(ctx, nil /* txn */, payload.Lease); err != nil {
-			r.unregister(*id)
+			r.unregister(id)
 			return errors.Wrap(err, "unable to acquire lease")
 		}
 
 		resumer, err := r.createResumer(job, r.settings)
 		if err != nil {
-			r.unregister(*id)
+			r.unregister(id)
 			return err
 		}
-		log.Infof(ctx, "job %d: resuming execution", *id)
+		log.Infof(ctx, "job %d: resuming execution", id)
 		err = r.deprecatedResume(resumeCtx, resumer, job)
 		if err != nil {
-			r.unregister(*id)
+			r.unregister(id)
 			return err
 		}
 
@@ -318,7 +318,7 @@ func (r *Registry) deprecatedCancelAllLocked(ctx context.Context) {
 // deprecatedRegister registers an about to be resumed job in memory so that it can be
 // killed and that no one else tries to resume it. This essentially works as a
 // barrier that only one function can cross and try to resume the job.
-func (r *Registry) deprecatedRegister(jobID int64, cancel func()) error {
+func (r *Registry) deprecatedRegister(jobID jobspb.JobID, cancel func()) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// We need to prevent different routines trying to adopt and resume the job.
@@ -375,7 +375,11 @@ func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *J
 }
 
 func (j *Job) deprecatedInsert(
-	ctx context.Context, txn *kv.Txn, id int64, lease *jobspb.Lease, session sqlliveness.Session,
+	ctx context.Context,
+	txn *kv.Txn,
+	id jobspb.JobID,
+	lease *jobspb.Lease,
+	session sqlliveness.Session,
 ) error {
 	j.mu.payload.Lease = lease
 

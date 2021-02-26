@@ -542,8 +542,8 @@ var _ jobs.Resumer = &cancellableImportResumer{}
 
 type cancellableImportResumer struct {
 	ctx              context.Context
-	jobIDCh          chan int64
-	jobID            int64
+	jobIDCh          chan jobspb.JobID
+	jobID            jobspb.JobID
 	onSuccessBarrier syncBarrier
 	wrapped          *importResumer
 }
@@ -590,7 +590,7 @@ type jobState struct {
 	prog   jobspb.ImportProgress
 }
 
-func queryJob(db sqlutils.DBHandle, jobID int64) (js jobState) {
+func queryJob(db sqlutils.DBHandle, jobID jobspb.JobID) (js jobState) {
 	js = jobState{
 		err:    nil,
 		status: "",
@@ -623,7 +623,7 @@ func queryJob(db sqlutils.DBHandle, jobID int64) (js jobState) {
 
 // Repeatedly queries job status/progress until specified function returns true.
 func queryJobUntil(
-	t *testing.T, db sqlutils.DBHandle, jobID int64, isDone func(js jobState) bool,
+	t *testing.T, db sqlutils.DBHandle, jobID jobspb.JobID, isDone func(js jobState) bool,
 ) (js jobState) {
 	t.Helper()
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
@@ -666,8 +666,8 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	defer sqlDB.Exec(t, `DROP TABLE t`)
 
 	jobCtx, cancelImport := context.WithCancel(ctx)
-	jobIDCh := make(chan int64)
-	var jobID int64 = -1
+	jobIDCh := make(chan jobspb.JobID)
+	var jobID jobspb.JobID = -1
 	var importSummary backupccl.RowCount
 
 	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
@@ -772,10 +772,10 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	sqlDB.Exec(t, "CREATE TABLE t (id INT, data STRING)")
 	defer sqlDB.Exec(t, `DROP TABLE t`)
 
-	jobIDCh := make(chan int64)
+	jobIDCh := make(chan jobspb.JobID)
 	controllerBarrier, importBarrier := newSyncBarrier()
 
-	var jobID int64 = -1
+	var jobID jobspb.JobID = -1
 	var importSummary backupccl.RowCount
 
 	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{

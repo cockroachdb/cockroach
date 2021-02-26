@@ -32,7 +32,7 @@ func ingest(
 	execCtx sql.JobExecContext,
 	streamAddress streamingccl.StreamAddress,
 	progress jobspb.Progress,
-	jobID int64,
+	jobID jobspb.JobID,
 ) error {
 	// Initialize a stream client and resolve topology.
 	client, err := streamclient.NewStreamClient(streamAddress)

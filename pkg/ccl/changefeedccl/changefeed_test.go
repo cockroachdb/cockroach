@@ -2158,7 +2158,7 @@ func TestChangefeedDescription(t *testing.T) {
 		sink.Scheme = changefeedbase.SinkSchemeExperimentalSQL
 		sink.Path = `d`
 
-		var jobID int64
+		var jobID jobspb.JobID
 		sqlDB.QueryRow(t,
 			`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope = $2`, sink.String(), `wrapped`,
 		).Scan(&jobID)

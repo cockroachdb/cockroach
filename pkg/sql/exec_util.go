@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -1488,7 +1489,7 @@ func newSchemaInterface(descsCol *descs.Collection, vs catalog.VirtualSchemas) *
 // into a serverpb.Session. Exported for testing.
 const MaxSQLBytes = 1000
 
-type jobsCollection []int64
+type jobsCollection []jobspb.JobID
 
 // truncateStatementStringForTelemetry truncates the string
 // representation of a statement to a maximum length, so as to not

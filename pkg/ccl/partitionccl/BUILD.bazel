@@ -43,6 +43,7 @@ go_test(
         "//pkg/ccl/utilccl",
         "//pkg/config",
         "//pkg/config/zonepb",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",

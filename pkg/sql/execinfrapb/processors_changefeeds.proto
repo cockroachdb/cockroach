@@ -56,7 +56,8 @@ message ChangeFrontierSpec {
   // JobID is the id of this changefeed in the system jobs.
   optional int64 job_id = 3 [
     (gogoproto.nullable) = false,
-    (gogoproto.customname) = "JobID"
+    (gogoproto.customname) = "JobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"
   ];
 
   // User who initiated the changefeed. This is used to check access privileges

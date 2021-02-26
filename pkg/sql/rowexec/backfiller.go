@@ -214,7 +214,7 @@ func GetResumeSpans(
 	}
 
 	// Find the job.
-	var jobID int64
+	var jobID jobspb.JobID
 	if len(tableDesc.GetMutationJobs()) > 0 {
 		// TODO (lucy): We need to get rid of MutationJobs. This is the only place
 		// where we need to get the job where it's not completely straightforward to
@@ -222,7 +222,7 @@ func GetResumeSpans(
 		// know which job it's associated with.
 		for _, job := range tableDesc.GetMutationJobs() {
 			if job.MutationID == mutationID {
-				jobID = job.JobID
+				jobID = jobspb.JobID(job.JobID)
 				break
 			}
 		}

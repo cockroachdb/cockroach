@@ -43,7 +43,7 @@ func refreshTables(
 	tableIDs []descpb.ID,
 	tableDropTimes map[descpb.ID]int64,
 	indexDropTimes map[descpb.IndexID]int64,
-	jobID int64,
+	jobID jobspb.JobID,
 	progress *jobspb.SchemaChangeGCProgress,
 ) (expired bool, earliestDeadline time.Time) {
 	earliestDeadline = maxDeadline

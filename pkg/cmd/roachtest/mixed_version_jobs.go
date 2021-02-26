@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -198,7 +199,8 @@ FROM [SHOW JOBS] WHERE status = $1 OR status = $2`,
 		t.Fatal(err)
 	}
 	var jobType, desc, status, jobError string
-	var jobID, coordinatorID int64
+	var jobID jobspb.JobID
+	var coordinatorID int64
 	var errMsg string
 	for rows.Next() {
 		err := rows.Scan(&jobID, &jobType, &desc, &status, &jobError, &coordinatorID)
