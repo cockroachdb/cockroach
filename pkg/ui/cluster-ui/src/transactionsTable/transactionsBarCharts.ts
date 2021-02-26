@@ -44,6 +44,18 @@ const latencyBar = [
 const latencyStdDev = bar(cx("bar-chart__overall-dev"), (d: Transaction) =>
   stdDevLong(d.stats_data.stats.service_lat, d.stats_data.stats.count),
 );
+const contentionBar = [
+  bar(
+    "contention",
+    (d: Transaction) => d.stats_data.stats.exec_stats.contention_time?.mean,
+  ),
+];
+const contentionStdDev = bar(cx("contention-dev"), (d: Transaction) =>
+  stdDevLong(
+    d.stats_data.stats.exec_stats.contention_time,
+    d.stats_data.stats.exec_stats.count,
+  ),
+);
 const maxMemUsageBar = [
   bar("max-mem-usage", (d: Transaction) =>
     longToInt(d.stats_data.stats.exec_stats.max_mem_usage?.mean),
@@ -94,6 +106,12 @@ export const transactionsLatencyBarChart = barChartFactory(
   latencyBar,
   v => Duration(v * 1e9),
   latencyStdDev,
+);
+export const transactionsContentionBarChart = barChartFactory(
+  "grey",
+  contentionBar,
+  v => Duration(v * 1e9),
+  contentionStdDev,
 );
 export const transactionsMaxMemUsageBarChart = barChartFactory(
   "grey",
