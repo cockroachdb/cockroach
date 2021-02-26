@@ -828,6 +828,7 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 	backupAndRestore(ctx, t, tc, []string{LocalFoo}, []string{LocalFoo}, numAccounts)
 
 	sqlDB.Exec(t, `CREATE UNIQUE INDEX id2 ON data.bank (id)`)
+	// This statement will be a no-op since the primary key is already ID
 	sqlDB.Exec(t, `ALTER TABLE data.bank ALTER PRIMARY KEY USING COLUMNS(id)`)
 
 	var unused string
@@ -838,7 +839,7 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 	if exportedRows != numAccounts {
 		t.Fatalf("expected %d rows, got %d", numAccounts, exportedRows)
 	}
-	expectedIndexEntries := numAccounts * 3 // old PK, new and old secondary idx
+	expectedIndexEntries := numAccounts * 2 // PK and old secondary idx
 	if exportedIndexEntries != expectedIndexEntries {
 		t.Fatalf("expected %d index entries, got %d", expectedIndexEntries, exportedIndexEntries)
 	}
