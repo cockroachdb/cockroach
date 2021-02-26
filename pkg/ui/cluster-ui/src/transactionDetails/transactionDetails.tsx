@@ -184,7 +184,17 @@ export class TransactionDetails extends React.Component<
                             )}
                           </Text>
                         </div>
-                        {/* TODO(asubiotto): Add temporary disk usage */}
+                        <div
+                          className={summaryCardStylesCx("summary--card__item")}
+                        >
+                          <Text type="body-strong">Max scratch disk usage</Text>
+                          <Text>
+                            {formatNumberForDisplay(
+                              transactionStats.exec_stats.max_disk_usage.mean,
+                              Bytes,
+                            )}
+                          </Text>
+                        </div>
                       </SummaryCard>
                     </Col>
                   </Row>
