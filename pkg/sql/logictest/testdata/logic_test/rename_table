@@ -131,8 +131,8 @@ SHOW TABLES
 query TTTTIT
 SHOW TABLES FROM test2
 ----
-public  t   table  root  NULL  NULL
-public  t2  table  root  NULL  NULL
+public  t   table  root  0  NULL
+public  t2  table  root  0  NULL
 
 user root
 
