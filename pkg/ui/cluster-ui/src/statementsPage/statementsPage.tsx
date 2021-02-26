@@ -88,7 +88,8 @@ export class StatementsPage extends React.Component<
     super(props);
     const defaultState = {
       sortSetting: {
-        sortKey: 3, // Sort by Execution Count column as default option
+        // Sort by Execution Count column as default option.
+        sortKey: 1,
         ascending: false,
       },
       pagination: {
