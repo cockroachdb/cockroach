@@ -66,7 +66,8 @@ export class TransactionsPage extends React.Component<
 
   state: TState = {
     sortSetting: {
-      sortKey: 3,
+      // Sort by Execution Count column as default option.
+      sortKey: 1,
       ascending: false,
     },
     pagination: {
