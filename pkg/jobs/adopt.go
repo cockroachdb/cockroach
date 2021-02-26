@@ -165,6 +165,10 @@ FROM system.jobs WHERE id = $1 AND claim_session_id = $2`,
 	}
 
 	status := Status(*row[0].(*tree.DString))
+	if status == StatusSucceeded {
+		// A concurrent registry could have already executed the job.
+		return nil
+	}
 	if status != StatusRunning && status != StatusReverting {
 		// A concurrent registry could have requested the job to be paused or canceled.
 		return errors.Errorf("job %d: status changed to %s which is not resumable`", jobID, status)
