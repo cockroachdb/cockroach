@@ -270,12 +270,12 @@ project
       ├── stats: [rows=3]
       ├── fd: (1)-->(2,3)
       ├── inner-join (inverted json_multi_col@sj_idx [as=t1])
-      │    ├── columns: t2.j:8(jsonb) "inverted_join_const_col_@3":11(string!null) t1.k:12(int!null) s:14(string!null)
+      │    ├── columns: t2.j:8(jsonb) t1.k:12(int!null) s:14(string!null)
       │    ├── prefix key columns: [11] = [14]
       │    ├── inverted-expr
       │    │    └── t1.j:13 @> t2.j:8 [type=bool]
       │    ├── stats: [rows=3, distinct(11)=3, null(11)=0, distinct(12)=2.99565406, null(12)=0, distinct(14)=3, null(14)=0]
-      │    ├── fd: (12)-->(14), (11)==(14), (14)==(11)
+      │    ├── fd: (12)-->(14)
       │    ├── inner-join (cross)
       │    │    ├── columns: t2.j:8(jsonb) "inverted_join_const_col_@3":11(string!null)
       │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
@@ -321,12 +321,12 @@ project
       ├── stats: [rows=0.3]
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── inner-join (inverted json_multi_col@sij_idx [as=t1])
-      │    ├── columns: t2.j:9(jsonb) "inverted_join_const_col_@3":12(string!null) "inverted_join_const_col_@4":13(int!null) t1.k:14(int!null) s:16(string!null) i:17(int!null)
+      │    ├── columns: t2.j:9(jsonb) t1.k:14(int!null) s:16(string!null) i:17(int!null)
       │    ├── prefix key columns: [12 13] = [16 17]
       │    ├── inverted-expr
       │    │    └── t1.j:15 @> t2.j:9 [type=bool]
       │    ├── stats: [rows=0.3, distinct(12)=0.3, null(12)=0, distinct(13)=0.3, null(13)=0, distinct(14)=0.299956504, null(14)=0, distinct(16)=0.3, null(16)=0, distinct(17)=0.3, null(17)=0, distinct(16,17)=0.3, null(16,17)=0]
-      │    ├── fd: ()-->(13,17), (14)-->(16), (12)==(16), (16)==(12), (13)==(17), (17)==(13)
+      │    ├── fd: ()-->(17), (14)-->(16)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@4":13(int!null) t2.j:9(jsonb) "inverted_join_const_col_@3":12(string!null)
       │    │    ├── stats: [rows=30, distinct(12)=3, null(12)=0, distinct(13)=1, null(13)=0]
