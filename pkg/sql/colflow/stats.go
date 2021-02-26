@@ -81,10 +81,10 @@ func makeBatchInfoCollector(
 }
 
 // Next is part of the Operator interface.
-func (bic *batchInfoCollector) Next(ctx context.Context) coldata.Batch {
+func (bic *batchInfoCollector) Next() coldata.Batch {
 	var batch coldata.Batch
 	bic.stopwatch.Start()
-	batch = bic.Operator.Next(ctx)
+	batch = bic.Operator.Next()
 	bic.stopwatch.Stop()
 	if batch.Length() > 0 {
 		bic.mu.Lock()
@@ -264,9 +264,9 @@ type statsInvariantChecker struct {
 var _ colexecop.VectorizedStatsCollector = &statsInvariantChecker{}
 var _ colexecop.MetadataSource = &statsInvariantChecker{}
 
-func (i *statsInvariantChecker) Init() {}
+func (i *statsInvariantChecker) Init(context.Context) {}
 
-func (i *statsInvariantChecker) Next(context.Context) coldata.Batch {
+func (i *statsInvariantChecker) Next() coldata.Batch {
 	return coldata.ZeroBatch
 }
 

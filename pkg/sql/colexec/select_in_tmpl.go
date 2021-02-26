@@ -20,8 +20,6 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -96,11 +94,11 @@ func GetInProjectionOperator(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			obj := &projectInOp_TYPE{
-				OneInputNode: colexecop.NewOneInputNode(input),
-				allocator:    allocator,
-				colIdx:       colIdx,
-				outputIdx:    resultIdx,
-				negate:       negate,
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
+				allocator:      allocator,
+				colIdx:         colIdx,
+				outputIdx:      resultIdx,
+				negate:         negate,
 			}
 			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(t, datumTuple)
 			return obj, nil
@@ -121,9 +119,9 @@ func GetInOperator(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			obj := &selectInOp_TYPE{
-				OneInputNode: colexecop.NewOneInputNode(input),
-				colIdx:       colIdx,
-				negate:       negate,
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
+				colIdx:         colIdx,
+				negate:         negate,
 			}
 			obj.filterRow, obj.hasNulls = fillDatumRow_TYPE(t, datumTuple)
 			return obj, nil
@@ -138,7 +136,7 @@ func GetInOperator(
 // {{range .WidthOverloads}}
 
 type selectInOp_TYPE struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	colIdx    int
 	filterRow []_GOTYPE
 	hasNulls  bool
@@ -148,7 +146,7 @@ type selectInOp_TYPE struct {
 var _ colexecop.Operator = &selectInOp_TYPE{}
 
 type projectInOp_TYPE struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
@@ -202,17 +200,9 @@ func cmpIn_TYPE(
 	}
 }
 
-func (si *selectInOp_TYPE) Init() {
-	si.Input.Init()
-}
-
-func (pi *projectInOp_TYPE) Init() {
-	pi.Input.Init()
-}
-
-func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
+func (si *selectInOp_TYPE) Next() coldata.Batch {
 	for {
-		batch := si.Input.Next(ctx)
+		batch := si.Input.Next()
 		if batch.Length() == 0 {
 			return coldata.ZeroBatch
 		}
@@ -287,8 +277,8 @@ func (si *selectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-func (pi *projectInOp_TYPE) Next(ctx context.Context) coldata.Batch {
-	batch := pi.Input.Next(ctx)
+func (pi *projectInOp_TYPE) Next() coldata.Batch {
+	batch := pi.Input.Next()
 	if batch.Length() == 0 {
 		return coldata.ZeroBatch
 	}

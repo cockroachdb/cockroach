@@ -20,8 +20,6 @@
 package colexecsel
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
@@ -46,13 +44,9 @@ type defaultCmp_KINDSelOp struct {
 
 var _ colexecop.Operator = &defaultCmp_KINDSelOp{}
 
-func (d *defaultCmp_KINDSelOp) Init() {
-	d.Input.Init()
-}
-
-func (d *defaultCmp_KINDSelOp) Next(ctx context.Context) coldata.Batch {
+func (d *defaultCmp_KINDSelOp) Next() coldata.Batch {
 	for {
-		batch := d.Input.Next(ctx)
+		batch := d.Input.Next()
 		n := batch.Length()
 		if n == 0 {
 			return coldata.ZeroBatch

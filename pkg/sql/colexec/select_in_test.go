@@ -76,11 +76,11 @@ func TestSelectInInt64(t *testing.T) {
 		log.Infof(context.Background(), "%s", c.desc)
 		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			op := selectInOpInt64{
-				OneInputNode: colexecop.NewOneInputNode(input[0]),
-				colIdx:       0,
-				filterRow:    c.filterRow,
-				negate:       c.negate,
-				hasNulls:     c.hasNulls,
+				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
+				colIdx:         0,
+				filterRow:      c.filterRow,
+				negate:         c.negate,
+				hasNulls:       c.hasNulls,
 			}
 			return &op, nil
 		}
@@ -132,18 +132,17 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	}
 
 	source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-	source.Init()
 	inOp := &selectInOpInt64{
-		OneInputNode: colexecop.NewOneInputNode(source),
-		colIdx:       0,
-		filterRow:    []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+		OneInputHelper: colexecop.MakeOneInputHelper(source),
+		colIdx:         0,
+		filterRow:      []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 	}
-	inOp.Init()
+	inOp.Init(ctx)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		inOp.Next(ctx)
+		inOp.Next()
 	}
 }
 

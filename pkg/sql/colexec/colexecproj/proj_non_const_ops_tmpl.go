@@ -20,8 +20,6 @@
 package colexecproj
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -78,7 +76,7 @@ func _ASSIGN(_, _, _, _, _, _ interface{}) {
 // so, it'll be redeclared because we execute that template twice. To go
 // around the problem we specify it here.
 type projConstOpBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	allocator      *colmem.Allocator
 	colIdx         int
 	outputIdx      int
@@ -87,7 +85,7 @@ type projConstOpBase struct {
 
 // projOpBase contains all of the fields for non-constant projections.
 type projOpBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	allocator      *colmem.Allocator
 	col1Idx        int
 	col2Idx        int
@@ -101,14 +99,14 @@ type _OP_NAME struct {
 	projOpBase
 }
 
-func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
+func (p _OP_NAME) Next() coldata.Batch {
 	// In order to inline the templated code of overloads, we need to have a
 	// `_overloadHelper` local variable of type `execgen.OverloadHelper`.
 	_overloadHelper := p.overloadHelper
 	// However, the scratch is not used in all of the projection operators, so
 	// we add this to go around "unused" error.
 	_ = _overloadHelper
-	batch := p.Input.Next(ctx)
+	batch := p.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -140,10 +138,6 @@ func (p _OP_NAME) Next(ctx context.Context) coldata.Batch {
 		batch.SetLength(n)
 	})
 	return batch
-}
-
-func (p _OP_NAME) Init() {
-	p.Input.Init()
 }
 
 // {{end}}
@@ -261,7 +255,7 @@ func GetProjectionOperator(
 ) (colexecop.Operator, error) {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, outputType, outputIdx)
 	projOpBase := projOpBase{
-		OneInputNode:   colexecop.NewOneInputNode(input),
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		allocator:      allocator,
 		col1Idx:        col1Idx,
 		col2Idx:        col2Idx,

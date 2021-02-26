@@ -20,8 +20,6 @@
 package colexec
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -32,7 +30,7 @@ import (
 )
 
 type isNullProjBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	allocator *colmem.Allocator
 	colIdx    int
 	outputIdx int
@@ -53,11 +51,11 @@ func NewIsNullProjOp(
 ) colexecop.Operator {
 	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Bool, outputIdx)
 	base := isNullProjBase{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		allocator:    allocator,
-		colIdx:       colIdx,
-		outputIdx:    outputIdx,
-		negate:       negate,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		allocator:      allocator,
+		colIdx:         colIdx,
+		outputIdx:      outputIdx,
+		negate:         negate,
 	}
 	if isTupleNull {
 		return &isTupleNullProjOp{isNullProjBase: base}
@@ -78,12 +76,8 @@ type is_KINDNullProjOp struct {
 
 var _ colexecop.Operator = &is_KINDNullProjOp{}
 
-func (o *is_KINDNullProjOp) Init() {
-	o.Input.Init()
-}
-
-func (o *is_KINDNullProjOp) Next(ctx context.Context) coldata.Batch {
-	batch := o.Input.Next(ctx)
+func (o *is_KINDNullProjOp) Next() coldata.Batch {
+	batch := o.Input.Next()
 	n := batch.Length()
 	if n == 0 {
 		return coldata.ZeroBatch
@@ -159,7 +153,7 @@ func _COMPUTE_IS_NULL(
 } // */}}
 
 type isNullSelBase struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 	colIdx int
 	negate bool
 }
@@ -173,9 +167,9 @@ func NewIsNullSelOp(
 	input colexecop.Operator, colIdx int, negate bool, isTupleNull bool,
 ) colexecop.Operator {
 	base := isNullSelBase{
-		OneInputNode: colexecop.NewOneInputNode(input),
-		colIdx:       colIdx,
-		negate:       negate,
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
+		colIdx:         colIdx,
+		negate:         negate,
 	}
 	if isTupleNull {
 		return &isTupleNullSelOp{isNullSelBase: base}
@@ -194,13 +188,9 @@ type is_KINDNullSelOp struct {
 
 var _ colexecop.Operator = &is_KINDNullSelOp{}
 
-func (o *is_KINDNullSelOp) Init() {
-	o.Input.Init()
-}
-
-func (o *is_KINDNullSelOp) Next(ctx context.Context) coldata.Batch {
+func (o *is_KINDNullSelOp) Next() coldata.Batch {
 	for {
-		batch := o.Input.Next(ctx)
+		batch := o.Input.Next()
 		n := batch.Length()
 		if n == 0 {
 			return batch

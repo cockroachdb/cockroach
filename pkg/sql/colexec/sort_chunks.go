@@ -57,6 +57,8 @@ func NewSortChunks(
 }
 
 type sortChunksOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	input     *chunker
 	sorter    colexecop.ResettableOperator
@@ -82,18 +84,21 @@ func (c *sortChunksOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-func (c *sortChunksOp) Init() {
-	c.input.init()
-	c.sorter.Init()
+func (c *sortChunksOp) Init(ctx context.Context) {
+	if !c.InitHelper.Init(ctx) {
+		return
+	}
+	c.input.init(c.Ctx)
+	c.sorter.Init(c.Ctx)
 	// TODO(yuzefovich): switch to calling this method on allocator. This will
 	// require plumbing unlimited allocator to work correctly in tests with
 	// memory limit of 1.
 	c.windowedBatch = coldata.NewMemBatchNoCols(c.input.inputTypes, coldata.BatchSize())
 }
 
-func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
+func (c *sortChunksOp) Next() coldata.Batch {
 	for {
-		batch := c.sorter.Next(ctx)
+		batch := c.sorter.Next()
 		if batch.Length() == 0 {
 			if c.input.done() {
 				// We're done, so return a zero-length batch.
@@ -104,14 +109,14 @@ func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
 			// the full reset of the chunker because we're in the middle of
 			// processing of the input to sortChunksOp.
 			c.input.emptyBuffer()
-			c.sorter.Reset(ctx)
+			c.sorter.Reset(c.Ctx)
 		} else {
 			return batch
 		}
 	}
 }
 
-func (c *sortChunksOp) ExportBuffered(context.Context, colexecop.Operator) coldata.Batch {
+func (c *sortChunksOp) ExportBuffered(colexecop.Operator) coldata.Batch {
 	// First, we check whether chunker has buffered up any tuples, and if so,
 	// whether we have exported them all.
 	if c.input.bufferedTuples.Length() > 0 {
@@ -277,8 +282,8 @@ func newChunker(
 	}, nil
 }
 
-func (s *chunker) init() {
-	s.Input.Init()
+func (s *chunker) init(ctx context.Context) {
+	s.Input.Init(ctx)
 	s.bufferedTuples = colexecutils.NewAppendOnlyBufferedBatch(s.allocator, s.inputTypes, nil /* colsToStore */)
 	s.partitionCol = make([]bool, coldata.BatchSize())
 	s.chunks = make([]int, 0, 16)
@@ -294,11 +299,11 @@ func (s *chunker) done() bool {
 // Note: it does not return the batches directly; instead, the chunker
 // remembers where the next chunks to be emitted are actually stored. In order
 // to access the chunks, getValues() must be used.
-func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
+func (s *chunker) prepareNextChunks() chunkerReadingState {
 	for {
 		switch s.state {
 		case chunkerReading:
-			s.batch = s.Input.Next(ctx)
+			s.batch = s.Input.Next()
 			s.exportState.numProcessedTuplesFromBatch = 0
 			if s.batch.Length() == 0 {
 				s.inputDone = true
@@ -426,8 +431,8 @@ func (s *chunker) buffer(start int, end int) {
 	})
 }
 
-func (s *chunker) spool(ctx context.Context) {
-	s.readFrom = s.prepareNextChunks(ctx)
+func (s *chunker) spool() {
+	s.readFrom = s.prepareNextChunks()
 }
 
 func (s *chunker) getValues(i int) coldata.Vec {
