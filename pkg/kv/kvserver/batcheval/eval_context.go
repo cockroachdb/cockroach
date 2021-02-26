@@ -97,14 +97,20 @@ type EvalContext interface {
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
 	GetRangeInfo(context.Context) roachpb.RangeInfo
-	GetFrozenClosedTimestamp() hlc.Timestamp
 
 	// GetCurrentReadSummary returns a new ReadSummary reflecting all reads
 	// served by the range to this point. The method requires a write latch
 	// across all keys in the range (see declareAllKeys), because it will only
 	// return a meaningful summary if the caller has serialized with all other
 	// requests on the range.
-	GetCurrentReadSummary() rspb.ReadSummary
+	//
+	// The method also returns the current closed timestamp on the range. This
+	// closed timestamp is already incorporated into the read summary, but some
+	// callers also need is separated out. It is expected that a caller will
+	// have performed some action (either calling RevokeLease or WatchForMerge)
+	// to freeze further progression of the closed timestamp before calling this
+	// method.
+	GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp)
 
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
 	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
@@ -194,9 +200,6 @@ func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() uint64 {
 func (m *mockEvalCtxImpl) GetTracker() closedts.TrackerI {
 	panic("unimplemented")
 }
-func (m *mockEvalCtxImpl) GetFrozenClosedTimestamp() hlc.Timestamp {
-	panic("unimplemented")
-}
 func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {
 	return m.MockEvalCtx.Desc
 }
@@ -226,8 +229,8 @@ func (m *mockEvalCtxImpl) GetLease() (roachpb.Lease, roachpb.Lease) {
 func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	return roachpb.RangeInfo{Desc: *m.Desc(), Lease: m.Lease}
 }
-func (m *mockEvalCtxImpl) GetCurrentReadSummary() rspb.ReadSummary {
-	return m.CurrentReadSummary
+func (m *mockEvalCtxImpl) GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp) {
+	return m.CurrentReadSummary, hlc.Timestamp{}
 }
 func (m *mockEvalCtxImpl) GetExternalStorage(
 	ctx context.Context, dest roachpb.ExternalStorage,
