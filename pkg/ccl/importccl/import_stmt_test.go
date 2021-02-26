@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -6732,4 +6733,40 @@ func TestDetachedImport(t *testing.T) {
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
+}
+
+// This is a regression test for #61203. This would previously fail with a
+// primary key collision error since we would generate duplicate UUIDs.
+//
+// Note: that although there is no guarantee that UUIDs do not collide, the
+// probability of such a collision is vanishingly low.
+func TestUniqueUUID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	const (
+		nodes = 3
+	)
+	ctx := context.Background()
+	args := base.TestServerArgs{}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	connDB := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(connDB)
+
+	sqlDB.Exec(t, `CREATE TABLE data AS SELECT * FROM generate_series(1, 20000);`)
+	sqlDB.Exec(t, `EXPORT INTO CSV 'userfile://defaultdb.my_files/export' FROM TABLE data;`)
+
+	// Ensure that UUIDs do not collide when importing 20000 rows.
+	sqlDB.Exec(t, `CREATE TABLE r1 (a UUID PRIMARY KEY DEFAULT gen_random_uuid(), b INT);`)
+	sqlDB.Exec(t, `IMPORT INTO r1 (b) CSV DATA ('userfile://defaultdb.my_files/export/*');`)
+
+	// Ensure that UUIDs do not collide when importing into a table with several UUID calls.
+	sqlDB.Exec(t, `CREATE TABLE r2 (a UUID PRIMARY KEY DEFAULT gen_random_uuid(), b INT, c UUID DEFAULT gen_random_uuid());`)
+	sqlDB.Exec(t, `IMPORT INTO r2 (b) CSV DATA ('userfile://defaultdb.my_files/export/*');`)
+
+	// Ensure that random keys do not collide.
+	sqlDB.Exec(t, `CREATE TABLE r3 (a FLOAT PRIMARY KEY DEFAULT random(), b INT);`)
+	sqlDB.Exec(t, `IMPORT INTO r3 (b) CSV DATA ('userfile://defaultdb.my_files/export/*');`)
 }
