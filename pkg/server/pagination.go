@@ -34,7 +34,10 @@ import (
 // simplePaginate takes in an input slice, and returns a sub-slice of the next
 // `limit` elements starting at `offset`. The second returned value is the
 // next offset that can be used to return the next "limit" results, or
-// len(result) if there are no more results.
+// 0 if there are no more results. The choice of a 0 return value for next
+// in cases where input has been exhausted, helps when it's being returned
+// back to the client as a `json:omitempty` field, as the JSON mashal code will
+// simply ignore the field if it's a zero value.
 func simplePaginate(input interface{}, limit, offset int) (result interface{}, next int) {
 	val := reflect.ValueOf(input)
 	if limit <= 0 || val.Kind() != reflect.Slice {
@@ -50,7 +53,11 @@ func simplePaginate(input interface{}, limit, offset int) (result interface{}, n
 	if endIdx > val.Len() {
 		endIdx = val.Len()
 	}
-	return val.Slice(startIdx, endIdx).Interface(), endIdx
+	next = endIdx
+	if endIdx == val.Len() {
+		next = 0
+	}
+	return val.Slice(startIdx, endIdx).Interface(), next
 }
 
 // paginationState represents the current state of pagination through the result
@@ -440,4 +447,17 @@ func getRPCPaginationValues(r *http.Request) (limit int, start paginationState) 
 		return limit, paginationState{}
 	}
 	return limit, start
+}
+
+// getSimplePaginationValues parses offset-based pagination related values out
+// of the query string of a Request. Meant for use with simplePaginate.
+func getSimplePaginationValues(r *http.Request) (limit, offset int) {
+	var err error
+	if limit, err = strconv.Atoi(r.URL.Query().Get("limit")); err != nil || limit <= 0 {
+		return 0, 0
+	}
+	if offset, err = strconv.Atoi(r.URL.Query().Get("offset")); err != nil || offset < 0 {
+		return limit, 0
+	}
+	return limit, offset
 }

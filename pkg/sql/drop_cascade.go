@@ -192,13 +192,11 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 		var cascadedObjects []string
 		var err error
 		if desc.IsView() {
-			// TODO(knz): The names of dependent dropped views should be qualified here.
 			cascadedObjects, err = p.dropViewImpl(ctx, desc, false /* queueJob */, "", tree.DropCascade)
 		} else if desc.IsSequence() {
 			err = p.dropSequenceImpl(ctx, desc, false /* queueJob */, "", tree.DropCascade)
 		} else {
-			// TODO(knz): The names of dependent dropped tables should be qualified here.
-			cascadedObjects, err = p.dropTableImpl(ctx, desc, true /* droppingParent */, "")
+			cascadedObjects, err = p.dropTableImpl(ctx, desc, true /* droppingParent */, "", tree.DropCascade)
 		}
 		if err != nil {
 			return err

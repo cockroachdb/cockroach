@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -54,7 +54,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 			continue
 		}
 
-		if depErr := p.sequenceDependencyError(ctx, droppedDesc); depErr != nil {
+		if depErr := p.sequenceDependencyError(ctx, droppedDesc, n.DropBehavior); depErr != nil {
 			return nil, depErr
 		}
 
@@ -116,6 +116,11 @@ func (p *planner) dropSequenceImpl(
 	if err := removeSequenceOwnerIfExists(ctx, p, seqDesc.ID, seqDesc.GetSequenceOpts()); err != nil {
 		return err
 	}
+	if behavior == tree.DropCascade {
+		if err := dropDependentOnSequence(ctx, p, seqDesc); err != nil {
+			return err
+		}
+	}
 	return p.initiateDropTable(ctx, seqDesc, queueJob, jobDesc, true /* drainName */)
 }
 
@@ -123,9 +128,9 @@ func (p *planner) dropSequenceImpl(
 // a table uses it in a DEFAULT expression on one of its columns, or nil if there is no
 // such dependency.
 func (p *planner) sequenceDependencyError(
-	ctx context.Context, droppedDesc *tabledesc.Mutable,
+	ctx context.Context, droppedDesc *tabledesc.Mutable, behavior tree.DropBehavior,
 ) error {
-	if len(droppedDesc.DependedOnBy) > 0 {
+	if behavior != tree.DropCascade && len(droppedDesc.DependedOnBy) > 0 {
 		return pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
 			"cannot drop sequence %s because other objects depend on it",
@@ -205,10 +210,9 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 			}
 		}
 
-		// Once Drop Sequence Cascade actually respects the drop behavior, this
-		// check should go away.
+		// If cascade is enabled, allow the sequences to be dropped.
 		if behavior == tree.DropCascade {
-			return unimplemented.NewWithIssue(20965, "DROP SEQUENCE CASCADE is currently unimplemented")
+			continue
 		}
 		// If Cascade is not enabled, and more than 1 columns depend on it, and the
 		return pgerror.Newf(
@@ -216,6 +220,69 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 			"cannot drop table %s because other objects depend on it",
 			desc.Name,
 		)
+	}
+	return nil
+}
+
+// dropDependentOnSequence drops the default values of any columns that depend on the
+// given sequence descriptor being dropped, and if the dependent object
+// is a view, it drops the views.
+// This is called when the DropBehavior is DropCascade.
+func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc.Mutable) error {
+	for _, dependent := range seqDesc.DependedOnBy {
+		tblDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, dependent.ID,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					IncludeOffline: true,
+					IncludeDropped: true,
+				},
+			})
+		if err != nil {
+			return err
+		}
+
+		// If the table that uses the sequence has been dropped already,
+		// no need to update, so skip.
+		if tblDesc.Dropped() {
+			continue
+		}
+
+		// If the dependent object is a view, drop the view.
+		if tblDesc.IsView() {
+			_, err = p.dropViewImpl(ctx, tblDesc, false /* queueJob */, "", tree.DropCascade)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Set of column IDs which will have their default values dropped.
+		colsToDropDefault := make(map[descpb.ColumnID]struct{})
+		for _, colID := range dependent.ColumnIDs {
+			colsToDropDefault[colID] = struct{}{}
+		}
+
+		// Iterate over all columns in the table, drop affected columns' default values
+		// and update back references.
+		for idx := range tblDesc.Columns {
+			column := &tblDesc.Columns[idx]
+			if _, ok := colsToDropDefault[column.ID]; ok {
+				column.DefaultExpr = nil
+				if err := p.removeSequenceDependencies(ctx, tblDesc, column); err != nil {
+					return err
+				}
+			}
+		}
+
+		jobDesc := fmt.Sprintf(
+			"removing default expressions using sequence %q since it is being dropped",
+			seqDesc.Name,
+		)
+		if err := p.writeSchemaChange(
+			ctx, tblDesc, descpb.InvalidMutationID, jobDesc,
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }

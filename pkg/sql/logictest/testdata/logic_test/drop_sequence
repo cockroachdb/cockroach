@@ -1,6 +1,12 @@
 # see also file `sequences`
 
 statement ok
+SET sql_safe_updates = true
+
+# Test dropping sequences with/without CASCADE
+subtest drop_sequence
+
+statement ok
 CREATE SEQUENCE drop_test
 
 statement ok
@@ -14,3 +20,314 @@ CREATE SEQUENCE drop_if_exists_test
 
 statement ok
 DROP SEQUENCE IF EXISTS drop_if_exists_test
+
+statement ok
+CREATE SEQUENCE drop_test
+
+statement ok
+CREATE TABLE t1 (i INT NOT NULL DEFAULT nextval('drop_test'))
+
+query TT
+SHOW CREATE TABLE t1
+----
+t1  CREATE TABLE public.t1 (
+    i INT8 NOT NULL DEFAULT nextval('test.public.drop_test':::STRING::REGCLASS),
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (i, rowid)
+)
+
+query T
+SELECT pg_get_serial_sequence('t1', 'i')
+----
+public.drop_test
+
+statement error pq: cannot drop sequence drop_test because other objects depend on it
+DROP SEQUENCE drop_test
+
+statement ok
+DROP SEQUENCE drop_test CASCADE
+
+query TT
+SHOW CREATE TABLE t1
+----
+t1  CREATE TABLE public.t1 (
+    i INT8 NOT NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (i, rowid)
+)
+
+query T
+SELECT pg_get_serial_sequence('t1', 'i')
+----
+NULL
+
+statement ok
+INSERT INTO t1 VALUES (1)
+
+
+# Test that if a database is dropped with CASCADE and it
+# contains a sequence, that sequence is dropped and any DEFAULT
+# expressions using that sequence will also be dropped.
+subtest drop_database_cascade
+
+statement ok
+CREATE DATABASE other_db
+
+statement ok
+CREATE SEQUENCE other_db.s
+
+statement ok
+CREATE SEQUENCE s
+
+statement ok
+CREATE TABLE foo (
+  i INT NOT NULL DEFAULT nextval('other_db.s'),
+  j INT NOT NULL DEFAULT nextval('s'),
+  FAMILY (i, j)
+)
+
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+     i INT8 NOT NULL DEFAULT nextval('other_db.public.s':::STRING::REGCLASS),
+     j INT8 NOT NULL DEFAULT nextval('test.public.s':::STRING::REGCLASS),
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+query TT
+SELECT pg_get_serial_sequence('foo', 'i'), pg_get_serial_sequence('foo', 'j')
+----
+public.s  public.s
+
+statement error DROP DATABASE on non-empty database without explicit CASCADE
+DROP DATABASE other_db
+
+statement ok
+DROP DATABASE other_db CASCADE
+
+query TT
+SHOW CREATE TABLE foo
+----
+foo  CREATE TABLE public.foo (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL DEFAULT nextval('test.public.s':::STRING::REGCLASS),
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+query TT
+SELECT pg_get_serial_sequence('foo', 'i'), pg_get_serial_sequence('foo', 'j')
+----
+NULL  public.s
+
+statement ok
+INSERT INTO foo VALUES (1, default)
+
+
+# Test that if a schema is dropped and it contains a sequence,
+# any DEFAULT expressions using that sequence will also be dropped.
+subtest drop_schema_cascade
+
+statement ok
+CREATE SCHEMA other_sc
+
+statement ok
+CREATE SEQUENCE other_sc.s
+
+statement ok
+CREATE TABLE bar (
+  i INT NOT NULL DEFAULT nextval('other_sc.s'),
+  j INT NOT NULL DEFAULT nextval('s'),
+  FAMILY (i, j)
+)
+
+query TT
+SHOW CREATE TABLE bar
+----
+bar  CREATE TABLE public.bar (
+     i INT8 NOT NULL DEFAULT nextval('test.other_sc.s':::STRING::REGCLASS),
+     j INT8 NOT NULL DEFAULT nextval('test.public.s':::STRING::REGCLASS),
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+query TT
+SELECT pg_get_serial_sequence('bar', 'i'), pg_get_serial_sequence('bar', 'j')
+----
+other_sc.s  public.s
+
+statement error schema "other_sc" is not empty and CASCADE was not specified
+DROP SCHEMA other_sc
+
+statement ok
+DROP SCHEMA other_sc CASCADE
+
+query TT
+SHOW CREATE TABLE bar
+----
+bar  CREATE TABLE public.bar (
+     i INT8 NOT NULL,
+     j INT8 NOT NULL DEFAULT nextval('test.public.s':::STRING::REGCLASS),
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+query TT
+SELECT pg_get_serial_sequence('bar', 'i'), pg_get_serial_sequence('bar', 'j')
+----
+NULL  public.s
+
+statement ok
+INSERT INTO bar VALUES (1, default)
+
+
+# Test that sequences owned by tables are dropped properly,
+# and if CASCADE is specified, DEFAULT expressions are dropped
+subtest drop_table_cascade
+
+statement ok
+CREATE TABLE t2 (i INT NOT NULL)
+
+statement ok
+CREATE SEQUENCE s2 OWNED BY t2.i
+
+statement ok
+CREATE TABLE t3 (i INT NOT NULL DEFAULT nextval('s2'))
+
+query T
+SELECT pg_get_serial_sequence('t3', 'i')
+----
+public.s2
+
+statement error cannot drop table t2 because other objects depend on it
+DROP TABLE t2
+
+statement ok
+DROP TABLE t2 CASCADE
+
+query TT
+SHOW CREATE TABLE t3
+----
+t3  CREATE TABLE public.t3 (
+    i INT8 NOT NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (i, rowid)
+)
+
+query T
+SELECT pg_get_serial_sequence('t3', 'i')
+----
+NULL
+
+statement ok
+INSERT INTO t3 VALUES (1)
+
+statement ok
+CREATE SEQUENCE s3
+
+statement ok
+CREATE TABLE t4 (i INT NOT NULL DEFAULT nextval('s3'))
+
+statement ok
+ALTER SEQUENCE s3 OWNED BY t3.i
+
+query T
+SELECT pg_get_serial_sequence('t4', 'i')
+----
+public.s3
+
+statement ok
+DROP TABLE t3 CASCADE
+
+query TT
+SHOW CREATE TABLE t4
+----
+t4  CREATE TABLE public.t4 (
+    i INT8 NOT NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (i, rowid)
+)
+
+query T
+SELECT pg_get_serial_sequence('t4', 'i')
+----
+NULL
+
+statement ok
+INSERT INTO t4 VALUES (1)
+
+
+# Test that sequences owned by columns are dropped properly,
+# and if CASCADE is specified, DEFAULT expressions are dropped
+subtest drop_column_cascade
+
+statement ok
+CREATE TABLE t5 (i INT NOT NULL)
+
+statement ok
+CREATE SEQUENCE s5 OWNED BY t5.i
+
+statement ok
+CREATE TABLE t6 (i INT NOT NULL DEFAULT nextval('s5'))
+
+query T
+SELECT pg_get_serial_sequence('t6', 'i')
+----
+public.s5
+
+statement error ALTER TABLE DROP COLUMN will remove all data in that column
+ALTER TABLE t5 DROP COLUMN i
+
+statement ok
+SET sql_safe_updates = false
+
+statement ok
+ALTER TABLE t5 DROP COLUMN i CASCADE
+
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+    i INT8 NOT NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (i, rowid)
+)
+
+query T
+SELECT pg_get_serial_sequence('t6', 'i')
+----
+NULL
+
+statement ok
+INSERT INTO t6 VALUES (1)
+
+
+# Test that sequences owned by columns are dropped properly,
+# and if CASCADE is specified, DEFAULT expressions are dropped
+subtest drop_view
+
+statement ok
+CREATE SEQUENCE s6
+
+statement ok
+CREATE VIEW v AS SELECT nextval('s6')
+
+statement error cannot drop sequence s6 because other objects depend on it
+DROP SEQUENCE s6
+
+statement ok
+DROP SEQUENCE s6 CASCADE
+
+statement error relation "v" does not exist
+SELECT * from v
