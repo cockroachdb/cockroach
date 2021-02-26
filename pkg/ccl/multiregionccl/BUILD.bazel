@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/utilccl",
         "//pkg/clusterversion",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkv",
@@ -20,6 +21,7 @@ go_test(
     name = "multiregionccl_test",
     srcs = [
         "main_test.go",
+        "multiregion_test.go",
         "region_test.go",
         "regional_by_row_test.go",
         "show_test.go",
@@ -41,6 +43,7 @@ go_test(
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util",
         "//pkg/util/leaktest",
