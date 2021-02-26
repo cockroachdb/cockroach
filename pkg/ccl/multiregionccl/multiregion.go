@@ -12,6 +12,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -35,6 +36,15 @@ func createRegionConfig(
 	regions []tree.Name,
 ) (descpb.DatabaseDescriptor_RegionConfig, error) {
 	if err := checkClusterSupportsMultiRegion(evalCtx); err != nil {
+		return descpb.DatabaseDescriptor_RegionConfig{}, err
+	}
+
+	if err := utilccl.CheckEnterpriseEnabled(
+		execCfg.Settings,
+		execCfg.ClusterID(),
+		execCfg.Organization(),
+		"multi-region features",
+	); err != nil {
 		return descpb.DatabaseDescriptor_RegionConfig{}, err
 	}
 

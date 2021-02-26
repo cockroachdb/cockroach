@@ -33,9 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// REGIONAL BY ROW tests are defined in multiregionccl as REGIONAL BY ROW
-// requires CCL to operate.
-
 // createTestMultiRegionCluster creates a test cluster with numServers number of
 // nodes with the provided testing knobs applied to each of the nodes. Every
 // node is placed in its own locality, named "us-east1", "us-east2", and so on.
