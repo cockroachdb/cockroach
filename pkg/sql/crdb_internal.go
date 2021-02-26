@@ -391,7 +391,7 @@ CREATE TABLE crdb_internal.leases (
 				ts.mu.Lock()
 				defer ts.mu.Unlock()
 
-				dropped := tree.MakeDBool(tree.DBool(ts.mu.dropped))
+				takenOffline := tree.MakeDBool(tree.DBool(ts.mu.takenOffline))
 
 				for _, state := range ts.mu.active.data {
 					if p.CheckAnyPrivilege(ctx, &state.TableDescriptor) != nil {
@@ -410,7 +410,7 @@ CREATE TABLE crdb_internal.leases (
 						tree.NewDString(state.Name),
 						tree.NewDInt(tree.DInt(int64(state.GetParentID()))),
 						&lease.expiration,
-						dropped,
+						takenOffline,
 					); err != nil {
 						return err
 					}
