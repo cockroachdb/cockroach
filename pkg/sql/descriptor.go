@@ -89,7 +89,7 @@ func (p *planner) createDatabase(
 		return nil, false, err
 	}
 
-	if database.PrimaryRegion != tree.PrimaryRegionLocalityName {
+	if database.PrimaryRegion != tree.PrimaryRegionNotSpecifiedName {
 		telemetry.Inc(sqltelemetry.CreateMultiRegionDatabaseCounter)
 		telemetry.Inc(
 			sqltelemetry.CreateDatabaseSurvivalGoalCounter(
