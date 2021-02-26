@@ -694,7 +694,16 @@ func (ie *InternalExecutor) execInternal(
 	var resPos CmdPos
 
 	ch := make(chan ieIteratorResult, ieIteratorChannelBufferSize)
+	var syncCbCalled bool
+	var errCbError error
 	syncCallback := func(results []resWithPos) {
+		if errCbError != nil {
+			panic(errors.Wrap(errCbError, "errCallback was already called with this error"))
+		}
+		if syncCbCalled {
+			panic(errors.AssertionFailedf("syncCallback is called for the second time"))
+		}
+		syncCbCalled = true
 		// Close the stmtBuf so that the connExecutor exits its run() loop.
 		stmtBuf.Close()
 		for _, res := range results {
@@ -714,6 +723,12 @@ func (ie *InternalExecutor) execInternal(
 	// errCallback is called if an error is returned from the connExecutor's
 	// run() loop.
 	errCallback := func(err error) {
+		if errCbError != nil {
+			panic(errors.Wrap(errCbError, "errCallback was already called with this error"))
+		}
+		if syncCbCalled {
+			panic(errors.AssertionFailedf("both syncCallback and errCallback are called by the connExecutor"))
+		}
 		// The connExecutor exited its run() loop, so the stmtBuf must have been
 		// closed. Still, since Close() is idempotent, we'll call it here too.
 		stmtBuf.Close()
