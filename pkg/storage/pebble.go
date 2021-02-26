@@ -1072,8 +1072,17 @@ func (p *Pebble) NewBatch() Batch {
 
 // NewReadOnly implements the Engine interface.
 func (p *Pebble) NewReadOnly() ReadWriter {
+	// TODO(sumeer): a sync.Pool for pebbleReadOnly would save on allocations
+	// for the underlying pebbleIterators.
 	return &pebbleReadOnly{
 		parent: p,
+		// Defensively set reusable=true. One has to be careful about this since
+		// an accidental false value would cause these iterators, that are value
+		// members of pebbleReadOnly, to be put in the pebbleIterPool.
+		prefixIter:       pebbleIterator{reusable: true},
+		normalIter:       pebbleIterator{reusable: true},
+		prefixEngineIter: pebbleIterator{reusable: true},
+		normalEngineIter: pebbleIterator{reusable: true},
 	}
 }
 
@@ -1368,14 +1377,14 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	if iter.inuse {
 		panic("iterator already in use")
 	}
+	// Ensures no timestamp hints etc.
+	checkOptionsForIterReuse(opts)
 
 	if iter.iter != nil {
-		iter.setOptions(opts)
+		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		iter.init(p.parent.db, p.iter, opts)
-		// The timestamp hints should be empty given the earlier code, but we are
-		// being defensive.
-		if p.iter == nil && opts.MaxTimestampHint.IsEmpty() && opts.MinTimestampHint.IsEmpty() {
+		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
@@ -1403,14 +1412,14 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.inuse {
 		panic("iterator already in use")
 	}
+	// Ensures no timestamp hints etc.
+	checkOptionsForIterReuse(opts)
 
 	if iter.iter != nil {
-		iter.setOptions(opts)
+		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		iter.init(p.parent.db, p.iter, opts)
-		// The timestamp hints should be empty given this is an EngineIterator,
-		// but we are being defensive.
-		if p.iter == nil && opts.MaxTimestampHint.IsEmpty() && opts.MinTimestampHint.IsEmpty() {
+		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
@@ -1419,6 +1428,18 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 
 	iter.inuse = true
 	return iter
+}
+
+// checkOptionsForIterReuse checks that the options are appropriate for
+// iterators that are reusable, and panics if not. This includes disallowing
+// any timestamp hints.
+func checkOptionsForIterReuse(opts IterOptions) {
+	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
+		panic("iterator with timestamp hints cannot be reused")
+	}
+	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
+		panic("iterator must set prefix or upper bound or lower bound")
+	}
 }
 
 // ConsistentIterators implements the Engine interface.
