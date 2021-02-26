@@ -37,6 +37,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/stop",

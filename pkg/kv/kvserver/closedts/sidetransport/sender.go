@@ -161,6 +161,7 @@ func newSenderWithConnFactory(
 // This is not know at construction time.
 func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 	s.nodeID = nodeID
+	waitForUpgrade := !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport)
 
 	confCh := make(chan struct{}, 1)
 	confChanged := func() {
@@ -191,8 +192,11 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				select {
 				case <-timer.C:
 					timer.Read = true
-					if !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+					if waitForUpgrade && !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
 						continue
+					} else if waitForUpgrade {
+						waitForUpgrade = false
+						log.Infof(ctx, "closed-timestamps v2 mechanism enabled by cluster version upgrade")
 					}
 					s.publish(ctx)
 				case <-confCh:
@@ -246,6 +250,7 @@ func (s *Sender) UnregisterLeaseholder(
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
+	log.VEventf(ctx, 2, "side-transport publishing a new message")
 
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
@@ -377,6 +382,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	})
 
 	// Publish the new message to all connections.
+	log.VEventf(ctx, 4, "side-transport publishing message with closed timestamps: %v (%v)", msg.ClosedTimestamps, msg)
 	s.buf.Push(ctx, msg)
 
 	// Return the publication time, for tests.

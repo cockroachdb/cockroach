@@ -629,6 +629,19 @@ type Store struct {
 
 var _ kv.Sender = &Store{}
 
+// ClosedTimestampSideTransportProvider describes the interface of
+// Receiver needed by the replicas.
+type ClosedTimestampSideTransportProvider interface {
+	// GetClosedTimestamp returns the latest closed timestamp that the receiver
+	// knows for a particular range, together with the LAI needed to have applied in
+	// order to use this closed timestamp.
+	//
+	// leaseholderNode is the last known leaseholder for the range.
+	GetClosedTimestamp(
+		ctx context.Context, rangeID roachpb.RangeID, leaseholderNode roachpb.NodeID,
+	) (hlc.Timestamp, ctpb.LAI)
+}
+
 // A StoreConfig encompasses the auxiliary objects and configuration
 // required to create a store.
 // All fields holding a pointer or an interface are required to create
@@ -650,8 +663,9 @@ type StoreConfig struct {
 	RPCContext              *rpc.Context
 	RangeDescriptorCache    *rangecache.RangeCache
 
-	ClosedTimestamp       *container.Container
-	ClosedTimestampSender *sidetransport.Sender
+	ClosedTimestamp         *container.Container
+	ClosedTimestampSender   *sidetransport.Sender
+	ClosedTimestampReceiver ClosedTimestampSideTransportProvider
 
 	// SQLExecutor is used by the store to execute SQL statements.
 	SQLExecutor sqlutil.InternalExecutor
