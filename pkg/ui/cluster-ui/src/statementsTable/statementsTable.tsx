@@ -146,13 +146,6 @@ export function makeStatementsColumns(
       cell: StatementTableCell.statements(search, selectedApp),
       sort: stmt => stmt.label,
     },
-    {
-      name: "txtType",
-      title: StatementTableTitle.txtType,
-      className: cx("statements-table__col-time"),
-      cell: stmt => (stmt.implicitTxn ? "Implicit" : "Explicit"),
-      sort: stmt => (stmt.implicitTxn ? "Implicit" : "Explicit"),
-    },
   ];
   columns.push(...makeCommonColumns(statements));
 
