@@ -2309,7 +2309,7 @@ func NewTableDesc(
 		if n.Locality == nil {
 			// The absence of a locality on the AST node indicates that the table must
 			// be homed in the primary region.
-			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
+			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelTable {
 			desc.SetTableLocalityRegionalByTable(n.Locality.TableRegion)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelGlobal {

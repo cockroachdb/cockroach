@@ -58,13 +58,13 @@ func createRegionConfig(
 	}
 
 	regionConfig.PrimaryRegion = descpb.RegionName(primaryRegion)
-	if regionConfig.PrimaryRegion != descpb.RegionName(tree.PrimaryRegionLocalityName) {
+	if regionConfig.PrimaryRegion != descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
 		if err := sql.CheckLiveClusterRegion(liveRegions, regionConfig.PrimaryRegion); err != nil {
 			return descpb.DatabaseDescriptor_RegionConfig{}, err
 		}
 	}
 	if len(regions) > 0 {
-		if regionConfig.PrimaryRegion == descpb.RegionName(tree.PrimaryRegionLocalityName) {
+		if regionConfig.PrimaryRegion == descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
 			return descpb.DatabaseDescriptor_RegionConfig{}, pgerror.Newf(
 				pgcode.InvalidDatabaseDefinition,
 				"PRIMARY REGION must be specified if REGIONS are specified",
