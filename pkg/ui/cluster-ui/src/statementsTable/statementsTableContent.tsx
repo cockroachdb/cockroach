@@ -129,7 +129,7 @@ export const StatementTableTitle = {
       Bytes Read
     </Tooltip>
   ),
-  latency: (
+  statementTime: (
     <Tooltip
       placement="bottom"
       title={
@@ -145,7 +145,26 @@ export const StatementTableTitle = {
         </div>
       }
     >
-      Latency
+      Statement Time
+    </Tooltip>
+  ),
+  transactionTime: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            Average service latency of transactions with this fingerprint within
+            the last hour or specified time interval.
+          </p>
+          <p>
+            The gray bar indicates the mean latency. The blue bar indicates one
+            standard deviation from the mean.
+          </p>
+        </div>
+      }
+    >
+      Transaction Time
     </Tooltip>
   ),
   maxMemUsage: (
