@@ -320,8 +320,11 @@ func validateForeignKey(
 // HAVING count(*) > 1
 // LIMIT 1  -- if limitResults is set
 //
+// The pred argument is a partial unique constraint predicate, which filters the
+// subset of rows that are guaranteed unique by the constraint. If the unique
+// constraint is not partial, pred should be empty.
 func duplicateRowQuery(
-	srcTbl catalog.TableDescriptor, columnIDs []descpb.ColumnID, limitResults bool,
+	srcTbl catalog.TableDescriptor, columnIDs []descpb.ColumnID, pred string, limitResults bool,
 ) (sql string, colNames []string, _ error) {
 	colNames, err := srcTbl.NamesForColumnIDs(columnIDs)
 	if err != nil {
@@ -333,9 +336,16 @@ func duplicateRowQuery(
 		srcCols[i] = tree.NameString(n)
 	}
 
-	srcWhere := make([]string, len(columnIDs))
-	for i := range srcWhere {
-		srcWhere[i] = fmt.Sprintf("%s IS NOT NULL", srcCols[i])
+	// There will be an expression in the WHERE clause for each of the columns,
+	// and possibly one for pred.
+	srcWhere := make([]string, 0, len(srcCols)+1)
+	for i := range srcCols {
+		srcWhere = append(srcWhere, fmt.Sprintf("%s IS NOT NULL", srcCols[i]))
+	}
+
+	// Wrap the predicate in parentheses.
+	if pred != "" {
+		srcWhere = append(srcWhere, fmt.Sprintf("(%s)", pred))
 	}
 
 	limit := ""
@@ -361,11 +371,12 @@ func validateUniqueConstraint(
 	srcTable catalog.TableDescriptor,
 	constraintName string,
 	columnIDs []descpb.ColumnID,
+	pred string,
 	ie *InternalExecutor,
 	txn *kv.Txn,
 ) error {
 	query, colNames, err := duplicateRowQuery(
-		srcTable, columnIDs, true, /* limitResults */
+		srcTable, columnIDs, pred, true, /* limitResults */
 	)
 	if err != nil {
 		return err
