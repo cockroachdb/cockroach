@@ -186,6 +186,7 @@ CREATE TABLE pg_catalog.pg_class (
 	relreplident "char",
 	relrewrite OID,
 	relrowsecurity BOOL,
+	relpartbound STRING,
   INDEX (oid)
 )`
 

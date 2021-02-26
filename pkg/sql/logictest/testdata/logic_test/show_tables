@@ -1,10 +1,27 @@
 # LogicTest: local
 
 statement ok
-SET CLUSTER SETTING sql.show_tables.estimated_row_count.enabled = false
+CREATE TABLE show_this_table()
+
+query TTTTIT
+SHOW TABLES
+----
+public  show_this_table  table  root  0  NULL
 
 statement ok
-CREATE TABLE show_this_table()
+CREATE DATABASE other;
+SET DATABASE = 'other'
+
+query TTTTIT
+SHOW TABLES FROM test
+----
+public  show_this_table  table  root  0  NULL
+
+statement ok
+SET DATABASE = 'test'
+
+statement ok
+SET CLUSTER SETTING sql.show_tables.estimated_row_count.enabled = false
 
 query TTTTT
 SHOW TABLES
