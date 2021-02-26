@@ -1466,8 +1466,16 @@ var charts = []sectionDescription{
 				Metrics: []string{"queue.replicate.purgatory"},
 			},
 			{
-				Title:   "Reblance Count",
+				Title:   "Rebalance Count",
 				Metrics: []string{"queue.replicate.rebalancereplica"},
+			},
+			{
+				Title:   "Demotions of Voters to Non Voters",
+				Metrics: []string{"queue.replicate.voterdemotions"},
+			},
+			{
+				Title:   "Promotions of Non Voters to Voters",
+				Metrics: []string{"queue.replicate.nonvoterpromotions"},
 			},
 			{
 				Title: "Remove Replica Count",

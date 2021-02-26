@@ -2312,18 +2312,20 @@ func TestChangeReplicasSwapVoterWithNonVoter(t *testing.T) {
 	firstStore, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(tc.Server(0).GetFirstStoreID())
 	require.NoError(t, err)
 	firstRepl := firstStore.LookupReplica(roachpb.RKey(key))
-	require.NotNil(t, firstRepl, `the first node in the TestCluster must have a replica for the ScratchRange`)
+	require.NotNil(t, firstRepl, "the first node in the TestCluster must have a"+
+		" replica for the ScratchRange")
 
+	tc.AddNonVotersOrFatal(t, key, nonVoter)
 	// TODO(aayush): Trying to swap the last voting replica with a non-voter hits
 	// the safeguard inside Replica.propose() as the last voting replica is always
 	// the leaseholder. There are a bunch of subtleties around getting a
 	// leaseholder to remove itself without another voter to immediately transfer
-	// the lease to. Determine if/how this needs to be fixed.
-	tc.AddNonVotersOrFatal(t, key, nonVoter)
+	// the lease to. See #40333.
 	_, err = tc.SwapVoterWithNonVoter(key, firstVoter, nonVoter)
 	require.Regexp(t, "received invalid ChangeReplicasTrigger", err)
 
 	tc.AddVotersOrFatal(t, key, secondVoter)
+
 	tc.SwapVoterWithNonVoterOrFatal(t, key, secondVoter, nonVoter)
 }
 
