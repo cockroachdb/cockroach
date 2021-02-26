@@ -36,6 +36,20 @@ func (node *SurvivalGoal) Format(ctx *FmtCtx) {
 	case SurvivalGoalZoneFailure:
 		ctx.WriteString("SURVIVE ZONE FAILURE")
 	default:
-		panic(errors.Newf("unknown survival goal: %d", *node))
+		panic(errors.AssertionFailedf("unknown survival goal: %d", *node))
+	}
+}
+
+// TelemetryName returns a representation of SurvivalGoal suitable for telemetry
+func (node *SurvivalGoal) TelemetryName() string {
+	switch *node {
+	case SurvivalGoalDefault:
+		return "survive_default"
+	case SurvivalGoalRegionFailure:
+		return "survive_region_failure"
+	case SurvivalGoalZoneFailure:
+		return "survive_zone_failure"
+	default:
+		panic(errors.AssertionFailedf("unknown survival goal: %d", *node))
 	}
 }

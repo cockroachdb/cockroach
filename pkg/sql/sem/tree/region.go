@@ -40,7 +40,7 @@ const (
 	// has no AS <col> specified.
 	// TODO(#59455): clean this up to use something nicer.
 	RegionalByRowRegionNotSpecifiedName = ""
-	// PrimaryRegionLocalityName is the string denoting the primary region in the
+	// PrimaryRegionLocalityName is the string denoting the lack of primary region in the
 	// locality config.
 	// TODO(#59455): clean this up to use something nicer.
 	PrimaryRegionLocalityName Name = ""

@@ -6,6 +6,7 @@ go_test(
         "main_test.go",
         "telemetry_test.go",
     ],
+    data = glob(["testdata/**"]),
     deps = [
         "//pkg/base",
         "//pkg/ccl",
