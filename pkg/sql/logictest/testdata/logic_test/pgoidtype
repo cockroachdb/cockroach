@@ -400,3 +400,18 @@ PREPARE regression_56193 AS SELECT $1::regclass;
 EXECUTE regression_56193('regression_53686"'::regclass)
 ----
 "regression_53686"""
+
+query O
+SELECT (-1)::OID
+----
+4294967295
+
+query O
+SELECT (-1)::REGPROC
+----
+4294967295
+
+query O
+SELECT (-1)::REGCLASS
+----
+4294967295
