@@ -80,7 +80,8 @@ func (p *planner) writeSchemaDescChange(
 				// jobs.
 				FormatVersion: jobspb.DatabaseJobFormatVersion,
 			},
-			Progress: jobspb.SchemaChangeProgress{},
+			Progress:      jobspb.SchemaChangeProgress{},
+			NonCancelable: true,
 		}
 		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
 		if err != nil {

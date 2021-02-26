@@ -1251,7 +1251,8 @@ func createNonDropDatabaseChangeJob(
 			DescID:        databaseID,
 			FormatVersion: jobspb.DatabaseJobFormatVersion,
 		},
-		Progress: jobspb.SchemaChangeProgress{},
+		Progress:      jobspb.SchemaChangeProgress{},
+		NonCancelable: true,
 	}
 
 	jobID := p.ExecCfg().JobRegistry.MakeJobID()
@@ -2282,7 +2283,8 @@ func (r *importResumer) dropSchemas(
 			DroppedDatabaseID: descpb.InvalidID,
 			FormatVersion:     jobspb.DatabaseJobFormatVersion,
 		},
-		Progress: jobspb.SchemaChangeProgress{},
+		Progress:      jobspb.SchemaChangeProgress{},
+		NonCancelable: true,
 	}
 	jobID := p.ExecCfg().JobRegistry.MakeJobID()
 	job, err := execCfg.JobRegistry.CreateJobWithTxn(ctx, dropSchemaJobRecord, jobID, txn)
