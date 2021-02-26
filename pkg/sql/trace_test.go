@@ -107,10 +107,10 @@ func TestTrace(t *testing.T) {
 
 				// Check that stat collection from the above SELECT statement is output
 				// to trace. We don't insert any rows in this test, thus the expected
-				// stat value is 0.
+				// num tuples value plus one is 1.
 				rows, err := sqlDB.Query(
 					"SELECT count(message) FROM crdb_internal.session_trace " +
-						"WHERE message LIKE '%cockroach.stat.kv.tuples.read: 0%'",
+						"WHERE message LIKE '%component%num_tuples%value_plus_one:1%'",
 				)
 				if err != nil {
 					t.Fatal(err)

@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -39,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
+	"github.com/stretchr/testify/require"
 )
 
 // setupRouter creates and starts a router. Returns the router and a WaitGroup
@@ -870,25 +871,34 @@ func TestRouterDiskSpill(t *testing.T) {
 					}
 					traceMetaSeen = true
 					span := meta.TraceData[0]
-					getTagValue := func(key string) string {
-						strValue, ok := span.Tags[key]
-						if !ok {
-							t.Errorf("missing tag: %s", key)
+					var stats execinfrapb.ComponentStats
+					var err error
+					var unmarshalled bool
+					span.Structured(func(any *pbtypes.Any) {
+						if !pbtypes.Is(any, &stats) {
+							return
 						}
-						return strValue
+						if err = pbtypes.UnmarshalAny(any, &stats); err != nil {
+							return
+						}
+						unmarshalled = true
+					})
+					require.NoError(t, err)
+					require.True(t, unmarshalled)
+					require.True(t, stats.Inputs[0].NumTuples.HasValue())
+					require.True(t, stats.Exec.MaxAllocatedMem.HasValue())
+					require.True(t, stats.Exec.MaxAllocatedDisk.HasValue())
+					rowsRouted := stats.Inputs[0].NumTuples.Value()
+					memMax := stats.Exec.MaxAllocatedMem.Value()
+					diskMax := stats.Exec.MaxAllocatedDisk.Value()
+					if rowsRouted != numRows {
+						t.Errorf("expected %d rows routed, got %d", numRows, rowsRouted)
 					}
-					t.Logf("tags: %v\n", span.Tags)
-					rowsRouted := getTagValue("cockroach.stat.input.tuples")
-					memMax := getTagValue("cockroach.stat.max.memory.allocated")
-					diskMax := getTagValue("cockroach.stat.max.scratch.disk.allocated")
-					if rowsRouted != fmt.Sprintf("%d", numRows) {
-						t.Errorf("expected %d rows routed, got %s", numRows, rowsRouted)
+					if memMax == 0 {
+						t.Errorf("expected memMax > 0, got %d", memMax)
 					}
-					if strings.HasPrefix(memMax, `"0"`) {
-						t.Errorf("expected memMax > 0, got %s", memMax)
-					}
-					if strings.HasPrefix(diskMax, `"0"`) {
-						t.Errorf("expected diskMax > 0, got %s", diskMax)
+					if diskMax == 0 {
+						t.Errorf("expected diskMax > 0, got %d", diskMax)
 					}
 				}
 				continue

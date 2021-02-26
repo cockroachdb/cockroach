@@ -314,9 +314,6 @@ func (s *spanInner) SetSpanStats(stats SpanStats) {
 	s.RecordStructured(stats)
 	s.crdb.mu.Lock()
 	s.crdb.mu.stats = stats
-	for name, value := range stats.StatsTags() {
-		s.setTagInner(name, value, true /* locked */)
-	}
 	s.crdb.mu.Unlock()
 }
 
