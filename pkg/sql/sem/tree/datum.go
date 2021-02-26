@@ -4272,7 +4272,16 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 		if err != nil {
 			return nil, err
 		}
-		return queryOid(ctx, t, NewDString(funcDef.Name))
+		if len(funcDef.Definition) > 1 {
+			return nil, pgerror.Newf(pgcode.AmbiguousAlias,
+				"more than one function named '%s'", funcDef.Name)
+		}
+		def := funcDef.Definition[0]
+		overload, ok := def.(*Overload)
+		if !ok {
+			return nil, errors.AssertionFailedf("invalid non-overload regproc %s", funcDef.Name)
+		}
+		return &DOid{semanticType: t, DInt: DInt(overload.Oid), name: funcDef.Name}, nil
 	case oid.T_regtype:
 		parsedTyp, err := ctx.Planner.GetTypeFromValidSQLSyntax(s)
 		if err == nil {

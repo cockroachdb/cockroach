@@ -80,6 +80,61 @@ WHERE (
     ) AND (n.nspname NOT IN ('pg_catalog', 'pg_toast'))
 ) AND pg_table_is_visible(c.oid)`,
 		},
+
+		{
+			name: "activerecord type introspection query",
+			stmt: `SELECT
+  t.oid, t.typname, t.typelem, t.typdelim, t.typinput, r.rngsubtype, t.typtype, t.typbasetype
+FROM
+  pg_type AS t LEFT JOIN pg_range AS r ON oid = rngtypid
+WHERE
+  t.typname
+  IN (
+      'int2',
+      'int4',
+      'int8',
+      'oid',
+      'float4',
+      'float8',
+      'text',
+      'varchar',
+      'char',
+      'name',
+      'bpchar',
+      'bool',
+      'bit',
+      'varbit',
+      'timestamptz',
+      'date',
+      'money',
+      'bytea',
+      'point',
+      'hstore',
+      'json',
+      'jsonb',
+      'cidr',
+      'inet',
+      'uuid',
+      'xml',
+      'tsvector',
+      'macaddr',
+      'citext',
+      'ltree',
+      'line',
+      'lseg',
+      'box',
+      'path',
+      'polygon',
+      'circle',
+      'interval',
+      'time',
+      'timestamp',
+      'numeric'
+    )
+  OR t.typtype IN ('r', 'e', 'd')
+  OR t.typinput = 'array_in(cstring,oid,integer)'::REGPROCEDURE
+  OR t.typelem != 0`,
+		},
 	}
 
 	RunRoundTripBenchmark(b, tests)

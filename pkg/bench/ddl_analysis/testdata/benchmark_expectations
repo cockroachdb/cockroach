@@ -71,3 +71,4 @@ min	max	benchmark
 2	2	ORMQueries/django_table_introspection_1_table
 2	2	ORMQueries/django_table_introspection_4_tables
 2	2	ORMQueries/django_table_introspection_8_tables
+4   4   ORMQueries/activerecord_type_introspection_query
