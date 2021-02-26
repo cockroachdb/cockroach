@@ -26,6 +26,7 @@ import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
 import { Col, Row } from "antd";
 import { Text, Heading } from "@cockroachlabs/ui-components";
+import { formatTwoPlaces } from "../barCharts";
 
 const { containerClass } = tableClasses;
 
@@ -150,6 +151,7 @@ export class TransactionDetails extends React.Component<
                           <Text>
                             {formatNumberForDisplay(
                               transactionStats.rows_read.mean,
+                              formatTwoPlaces,
                             )}
                             {" / "}
                             {formatNumberForDisplay(
