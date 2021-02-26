@@ -61,7 +61,8 @@ func (p *planner) createDropDatabaseJob(
 			DroppedDatabaseID: databaseID,
 			FormatVersion:     jobspb.DatabaseJobFormatVersion,
 		},
-		Progress: jobspb.SchemaChangeProgress{},
+		Progress:      jobspb.SchemaChangeProgress{},
+		NonCancelable: true,
 	}
 	newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
 	if err != nil {
@@ -85,7 +86,8 @@ func (p *planner) createNonDropDatabaseChangeJob(
 			DescID:        databaseID,
 			FormatVersion: jobspb.DatabaseJobFormatVersion,
 		},
-		Progress: jobspb.SchemaChangeProgress{},
+		Progress:      jobspb.SchemaChangeProgress{},
+		NonCancelable: true,
 	}
 	newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
 	if err != nil {
