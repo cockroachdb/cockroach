@@ -15,31 +15,29 @@ SET vectorize=off; SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET trac
 # how many commands we ran in the session.
 query ITT
 SELECT
-  span, regexp_replace(regexp_replace(message, 'pos:[0-9]*', 'pos:?'), 'flowid: [0-9A-Fa-f-]*', 'flowid: ?'), operation
+  span, regexp_replace(message, 'pos:[0-9]*', 'pos:?'), operation
 FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 ----
-0                    === SPAN START: session recording ===                session recording
-1                    === SPAN START: exec stmt ===                        exec stmt
-1                    [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  exec stmt
-2                    === SPAN START: sql txn ===                          sql txn
-3                    === SPAN START: exec stmt ===                        exec stmt
-3                    [Open pos:?] executing ExecStmt: SELECT 1            exec stmt
-4                    === SPAN START: consuming rows ===                   consuming rows
-5                    === SPAN START: flow ===
-cockroach.flowid: ?  flow
-6                    === SPAN START: exec stmt ===                        exec stmt
-6                    [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  exec stmt
-7                    === SPAN START: exec stmt ===                        exec stmt
-7                    [NoTxn pos:?] executing ExecStmt: SELECT 2           exec stmt
-8                    === SPAN START: sql txn ===                          sql txn
-9                    === SPAN START: exec stmt ===                        exec stmt
-9                    [Open pos:?] executing ExecStmt: SELECT 2            exec stmt
-10                   === SPAN START: consuming rows ===                   consuming rows
-11                   === SPAN START: flow ===
-cockroach.flowid: ?  flow
-12                   === SPAN START: exec stmt ===                        exec stmt
-12                   [NoTxn pos:?] executing ExecStmt: SET TRACING = off  exec stmt
+0   === SPAN START: session recording ===                session recording
+1   === SPAN START: exec stmt ===                        exec stmt
+1   [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  exec stmt
+2   === SPAN START: sql txn ===                          sql txn
+3   === SPAN START: exec stmt ===                        exec stmt
+3   [Open pos:?] executing ExecStmt: SELECT 1            exec stmt
+4   === SPAN START: consuming rows ===                   consuming rows
+5   === SPAN START: flow ===                             flow
+6   === SPAN START: exec stmt ===                        exec stmt
+6   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  exec stmt
+7   === SPAN START: exec stmt ===                        exec stmt
+7   [NoTxn pos:?] executing ExecStmt: SELECT 2           exec stmt
+8   === SPAN START: sql txn ===                          sql txn
+9   === SPAN START: exec stmt ===                        exec stmt
+9   [Open pos:?] executing ExecStmt: SELECT 2            exec stmt
+10  === SPAN START: consuming rows ===                   consuming rows
+11  === SPAN START: flow ===                             flow
+12  === SPAN START: exec stmt ===                        exec stmt
+12  [NoTxn pos:?] executing ExecStmt: SET TRACING = off  exec stmt
 
 # ------------------------------------------------------------------------------
 # Numeric References Tests.
