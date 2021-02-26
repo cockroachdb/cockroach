@@ -34,23 +34,23 @@ import (
 )
 
 // Sender represents the sending-side of the closed timestamps "side-transport".
-// Its role is to periodically advance the closed timestamps of all the ranges
+// Its role is to periodically advance the closed timestamps of all the tracked
 // with leases on the current node and to communicate these closed timestamps to
-// all other nodes that have replicas for any of these ranges.
+// all other nodes that have replicas for any of these tracked.
 //
 // This side-transport is particularly important for range that are not seeing
 // frequent writes; in the absence of Raft proposals, this is the only way for
 // the closed timestamps to advance.
 //
 // The Sender is notified when leases are acquired or lost by the current node.
-// The sender periodically loops through all the ranges with local leases, tries
+// The sender periodically loops through all the tracked with local leases, tries
 // to advance the closed timestamp of each range according to its policy, and
 // then publishes a message with the update to all other nodes with
 // non-leaseholder replicas. Every node receives the same messages; for
 // efficiency the sender does not keep track of which follower node is
-// interested in which ranges. On the receiver side the closed timestamp updates
+// interested in which tracked. On the receiver side the closed timestamp updates
 // are processed lazily, so it doesn't particularly matter that each receiver is
-// told about ranges that it doesn't care about.
+// told about tracked that it doesn't care about.
 type Sender struct {
 	stopper *stop.Stopper
 	st      *cluster.Settings
@@ -59,16 +59,7 @@ type Sender struct {
 
 	trackedMu struct {
 		syncutil.Mutex
-		// lastSeqNum is the sequence number of the last message published.
-		lastSeqNum ctpb.SeqNum
-		// lastClosed is the closed timestamp published for each policy in the
-		// last message.
-		lastClosed [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
-		// tracked maintains the information that was communicated to connections in
-		// the last sent message (implicitly or explicitly). A range enters this
-		// structure as soon as it's included in a message, and exits it when it's
-		// removed through Update.Removed.
-		tracked map[roachpb.RangeID]trackedRange
+		streamState
 	}
 
 	leaseholdersMu struct {
@@ -84,9 +75,25 @@ type Sender struct {
 	connFactory connFactory
 	// conns contains connections to all nodes with follower replicas of any of
 	// the registered leaseholder. connections are added as nodes get replicas
-	// for ranges with local leases and removed when the respective node no
+	// for tracked with local leases and removed when the respective node no
 	// longer has any replicas with local leases.
 	conns map[roachpb.NodeID]conn
+}
+
+// streamState encapsulates the state that's tracked by a stream. Both the
+// Sender and the Receiver use this struct and, for a given stream, both ends
+// are supposed to correspond (modulo message delays), in wonderful symmetry.
+type streamState struct {
+	// lastSeqNum is the sequence number of the last message published.
+	lastSeqNum ctpb.SeqNum
+	// lastClosed is the closed timestamp published for each policy in the
+	// last message.
+	lastClosed [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+	// tracked maintains the information that was communicated to connections in
+	// the last sent message (implicitly or explicitly). A range enters this
+	// structure as soon as it's included in a message, and exits it when it's
+	// removed through Update.Removed.
+	tracked map[roachpb.RangeID]trackedRange
 }
 
 // trackedRange contains the information that the side-transport last published
@@ -155,12 +162,13 @@ func newSenderWithConnFactory(
 }
 
 // Run starts a goroutine that periodically closes new timestamps for all the
-// ranges where the leaseholder is on this node.
+// tracked where the leaseholder is on this node.
 //
 // nodeID is the id of the local node. Used to avoid connecting to ourselves.
 // This is not know at construction time.
 func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 	s.nodeID = nodeID
+	waitForUpgrade := !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport)
 
 	confCh := make(chan struct{}, 1)
 	confChanged := func() {
@@ -191,8 +199,11 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				select {
 				case <-timer.C:
 					timer.Read = true
-					if !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+					if waitForUpgrade && !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
 						continue
+					} else if waitForUpgrade {
+						waitForUpgrade = false
+						log.Infof(ctx, "closed-timestamps v2 mechanism enabled by cluster version upgrade")
 					}
 					s.publish(ctx)
 				case <-confCh:
@@ -246,6 +257,7 @@ func (s *Sender) UnregisterLeaseholder(
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
+	log.VEventf(ctx, 2, "side-transport publishing a new message")
 
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
@@ -260,7 +272,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	msg.Snapshot = msg.SeqNum == 1
 
 	// Fix the closed timestamps that will be communicated to by this message.
-	// These timestamps (one per range policy) will apply to all the ranges
+	// These timestamps (one per range policy) will apply to all the tracked
 	// included in message.
 	now := s.clock.NowAsClockTimestamp()
 	maxClockOffset := s.clock.MaxOffset()
@@ -290,7 +302,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	// we need to open new connections or close existing ones.
 	nodesWithFollowers := util.MakeFastIntSet()
 
-	// If there's any tracked ranges for which we're not the leaseholder any more,
+	// If there's any tracked tracked for which we're not the leaseholder any more,
 	// we need to untrack them and tell the connections about it.
 	for rid := range s.trackedMu.tracked {
 		if _, ok := leaseholders[rid]; !ok {
@@ -354,7 +366,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	}
 
 	// Close connections to the nodes that no longer need any info from us
-	// (because they don't have replicas for any of the ranges with leases on this
+	// (because they don't have replicas for any of the tracked with leases on this
 	// node).
 	for nodeID, c := range s.conns {
 		if !nodesWithFollowers.Contains(int(nodeID)) {
@@ -377,6 +389,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	})
 
 	// Publish the new message to all connections.
+	log.VEventf(ctx, 4, "side-transport publishing message with closed timestamps: %v (%v)", msg.ClosedTimestamps, msg)
 	s.buf.Push(ctx, msg)
 
 	// Return the publication time, for tests.

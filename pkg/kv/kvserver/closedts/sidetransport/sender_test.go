@@ -191,7 +191,7 @@ func TestSenderBasic(t *testing.T) {
 }
 
 func TestSenderConnectionChanges(t *testing.T) {
-	// TODO: Two ranges.
+	// TODO: Two tracked.
 	// Add follower for range 1: 2, 3.
 	// - check conns to 2 and 3.
 	// Add follower for range 2: 3, 4.
