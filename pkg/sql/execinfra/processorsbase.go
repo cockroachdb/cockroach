@@ -711,6 +711,15 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 		}
 	}
+
+	if util.CrdbTestBuild && pb.Ctx == nil {
+		panic(
+			errors.AssertionFailedf(
+				"unexpected nil ProcessorBase.Ctx when draining. Was StartInternal called?",
+			),
+		)
+	}
+
 	// trailingMetaCallback is called after reading the tracing data because it
 	// generally calls InternalClose, indirectly, which switches the context and
 	// the span.

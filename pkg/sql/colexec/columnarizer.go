@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -117,7 +118,15 @@ func newColumnarizer(
 		processorID,
 		nil, /* output */
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{input}},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{input},
+			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+				if err := c.Close(ctx); util.CrdbTestBuild && err != nil {
+					// Close never returns an error.
+					colexecerror.InternalError(errors.AssertionFailedf("unexpected error %v from Columnarizer.Close", err))
+				}
+				return nil
+			}},
 	); err != nil {
 		return nil, err
 	}
@@ -132,6 +141,7 @@ func (c *Columnarizer) Init() {
 	// we have this check in place.
 	if c.initStatus == colexecop.OperatorNotInitialized {
 		c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
+		c.ctx = c.StartInternal(c.ctx, "columnarizer")
 		c.input.Start(c.ctx)
 		c.initStatus = colexecop.OperatorInitialized
 	}
@@ -235,7 +245,7 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 
 // Close is part of the Operator interface.
 func (c *Columnarizer) Close(ctx context.Context) error {
-	c.input.ConsumerClosed()
+	c.InternalClose()
 	return nil
 }
 
