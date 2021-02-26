@@ -337,8 +337,8 @@ func (ag *orderedAggregator) Start(ctx context.Context) {
 }
 
 func (ag *aggregatorBase) start(ctx context.Context, procName string) {
-	ag.input.Start(ctx)
 	ctx = ag.StartInternal(ctx, procName)
+	ag.input.Start(ctx)
 	ag.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	ag.runningState = aggAccumulating
 }

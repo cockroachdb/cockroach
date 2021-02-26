@@ -158,9 +158,9 @@ func newHashJoiner(
 
 // Start is part of the RowSource interface.
 func (h *hashJoiner) Start(ctx context.Context) {
+	ctx = h.StartInternal(ctx, hashJoinerProcName)
 	h.leftSource.Start(ctx)
 	h.rightSource.Start(ctx)
-	ctx = h.StartInternal(ctx, hashJoinerProcName)
 	h.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 	h.runningState = hjBuilding
 }

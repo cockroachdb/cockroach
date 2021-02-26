@@ -76,12 +76,8 @@ func newOrdinalityProcessor(
 
 // Start is part of the RowSource interface.
 func (o *ordinalityProcessor) Start(ctx context.Context) {
-	o.input.Start(ctx)
 	ctx = o.StartInternal(ctx, ordinalityProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
+	o.input.Start(ctx)
 }
 
 // Next is part of the RowSource interface.

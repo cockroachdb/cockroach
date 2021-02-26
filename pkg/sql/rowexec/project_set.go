@@ -116,8 +116,8 @@ func newProjectSetProcessor(
 
 // Start is part of the RowSource interface.
 func (ps *projectSetProcessor) Start(ctx context.Context) {
-	ps.input.Start(ctx)
 	ctx = ps.StartInternal(ctx, projectSetProcName)
+	ps.input.Start(ctx)
 	ps.cancelChecker = cancelchecker.NewCancelChecker(ctx)
 }
 
