@@ -167,6 +167,30 @@ export const StatementTableTitle = {
       Transaction Time
     </Tooltip>
   ),
+  contention: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            {
+              "Average time statements with this fingerprint spent contending on other queries within the last hour or specified "
+            }
+            <Anchor href={statementsTimeInterval} target="_blank">
+              time interval
+            </Anchor>
+            .
+          </p>
+          <p>
+            The gray bar indicates mean contention time. The blue bar indicates
+            one standard deviation from the mean.
+          </p>
+        </div>
+      }
+    >
+      Contention
+    </Tooltip>
+  ),
   maxMemUsage: (
     <Tooltip
       placement="bottom"
@@ -182,8 +206,8 @@ export const StatementTableTitle = {
             .
           </p>
           <p>
-            The gray bar indicates the mean number of rows returned. The blue
-            bar indicates one standard deviation from the mean.
+            The gray bar indicates the average max memory usage. The blue bar
+            indicates one standard deviation from the mean.
           </p>
         </div>
       }
@@ -206,8 +230,9 @@ export const StatementTableTitle = {
             .
           </p>
           <p>
-            The gray bar indicates the mean number of rows returned. The blue
-            bar indicates one standard deviation from the mean.
+            The gray bar indicates the mean number of bytes sent over the
+            network. The blue bar indicates one standard deviation from the
+            mean.
           </p>
         </div>
       }

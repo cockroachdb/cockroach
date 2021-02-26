@@ -6,6 +6,7 @@ import {
   transactionsRowsReadBarChart,
   transactionsBytesReadBarChart,
   transactionsLatencyBarChart,
+  transactionsContentionBarChart,
   transactionsMaxMemUsageBarChart,
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
@@ -68,6 +69,10 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     transactions,
     latencyClasses.barChart,
   );
+  const contentionBar = transactionsContentionBarChart(
+    transactions,
+    barChartOptions,
+  );
   const maxMemUsageBar = transactionsMaxMemUsageBarChart(
     transactions,
     barChartOptions,
@@ -124,6 +129,14 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
       cell: latencyBar,
       className: latencyClasses.column,
       sort: (item: Transaction) => item.stats_data.stats.service_lat.mean,
+    },
+    {
+      name: "contention",
+      title: StatementTableTitle.contention,
+      cell: contentionBar,
+      className: cx("statements-table__col-contention"),
+      sort: (item: Transaction) =>
+        FixLong(Number(item.stats_data.stats.exec_stats.contention_time?.mean)),
     },
     {
       name: "max memory",
