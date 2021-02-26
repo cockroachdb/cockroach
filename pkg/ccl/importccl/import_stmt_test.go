@@ -3648,7 +3648,7 @@ func TestImportDefault(t *testing.T) {
 
 		}
 	})
-	t.Run("random-related", func(t *testing.T) {
+	t.Run("random-functions", func(t *testing.T) {
 		testCases := []struct {
 			name       string
 			create     string
@@ -3658,19 +3658,19 @@ func TestImportDefault(t *testing.T) {
 		}{
 			{
 				name:       "random-multiple",
-				create:     "a INT, b FLOAT DEFAULT random(), c STRING, d FLOAT DEFAULT random()",
+				create:     "a INT, b FLOAT PRIMARY KEY DEFAULT random(), c STRING, d FLOAT DEFAULT random()",
 				targetCols: []string{"a", "c"},
 				randomCols: []string{selectNotNull("b"), selectNotNull("d")},
 			},
 			{
 				name:       "gen_random_uuid",
-				create:     "a INT, b STRING, c UUID DEFAULT gen_random_uuid()",
+				create:     "a INT, b STRING, c UUID PRIMARY KEY DEFAULT gen_random_uuid(), d UUID DEFAULT gen_random_uuid()",
 				targetCols: []string{"a", "b"},
-				randomCols: []string{selectNotNull("c")},
+				randomCols: []string{selectNotNull("c"), selectNotNull("d")},
 			},
 			{
 				name:       "mixed_random_uuid",
-				create:     "a INT, b STRING, c UUID DEFAULT gen_random_uuid(), d FLOAT DEFAULT random()",
+				create:     "a INT, b STRING, c UUID PRIMARY KEY DEFAULT gen_random_uuid(), d FLOAT DEFAULT random()",
 				targetCols: []string{"a", "b"},
 				randomCols: []string{selectNotNull("c")},
 			},
@@ -3711,6 +3711,50 @@ func TestImportDefault(t *testing.T) {
 			})
 		}
 	})
+}
+
+// This is a regression test for #61203. We test that the random() keys are
+// unique on a larger data set. This would previously fail with a primary key
+// collision error since we would generate duplicate UUIDs.
+//
+// Note: that although there is no guarantee that UUIDs do not collide, the
+// probability of such a collision is vanishingly low.
+func TestUniqueUUID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test is slow under race since it explicitly tried to import a large
+	// amount of data.
+	skip.UnderRace(t, "slow under race")
+
+	const (
+		nodes     = 3
+		dataDir   = "userfile://defaultdb.my_files/export"
+		dataFiles = dataDir + "/*"
+	)
+	ctx := context.Background()
+	args := base.TestServerArgs{}
+	tc := testcluster.StartTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	defer tc.Stopper().Stop(ctx)
+	connDB := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(connDB)
+
+	dataSize := parallelImporterReaderBatchSize * 100
+
+	sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE data AS SELECT * FROM generate_series(1, %d);`, dataSize))
+	sqlDB.Exec(t, `EXPORT INTO CSV $1 FROM TABLE data;`, dataDir)
+
+	// Ensure that UUIDs do not collide when importing 20000 rows.
+	sqlDB.Exec(t, `CREATE TABLE r1 (a UUID PRIMARY KEY DEFAULT gen_random_uuid(), b INT);`)
+	sqlDB.Exec(t, `IMPORT INTO r1 (b) CSV DATA ($1);`, dataFiles)
+
+	// Ensure that UUIDs do not collide when importing into a table with several UUID calls.
+	sqlDB.Exec(t, `CREATE TABLE r2 (a UUID PRIMARY KEY DEFAULT gen_random_uuid(), b INT, c UUID DEFAULT gen_random_uuid());`)
+	sqlDB.Exec(t, `IMPORT INTO r2 (b) CSV DATA ($1);`, dataFiles)
+
+	// Ensure that random keys do not collide.
+	sqlDB.Exec(t, `CREATE TABLE r3 (a FLOAT PRIMARY KEY DEFAULT random(), b INT);`)
+	sqlDB.Exec(t, `IMPORT INTO r3 (b) CSV DATA ($1);`, dataFiles)
 }
 
 func TestImportComputed(t *testing.T) {
