@@ -691,39 +691,22 @@ upsert uniq
  │         ├── CASE WHEN uniq.k:12 IS NULL THEN column4:10 ELSE uniq.x:15 END [as=upsert_x:22]
  │         └── CASE WHEN uniq.k:12 IS NULL THEN column5:11 ELSE uniq.y:16 END [as=upsert_y:23]
  └── unique-checks
-      ├── unique-checks-item: uniq(w)
-      │    └── semi-join (hash)
-      │         ├── columns: k:30 v:31!null w:32 x:33 y:34
-      │         ├── with-scan &1
-      │         │    ├── columns: k:30 v:31!null w:32 x:33 y:34
-      │         │    └── mapping:
-      │         │         ├──  upsert_k:19 => k:30
-      │         │         ├──  upsert_v:20 => v:31
-      │         │         ├──  upsert_w:21 => w:32
-      │         │         ├──  upsert_x:22 => x:33
-      │         │         └──  upsert_y:23 => y:34
-      │         ├── scan uniq
-      │         │    └── columns: uniq.k:24!null uniq.v:25 uniq.w:26 uniq.x:27 uniq.y:28
-      │         └── filters
-      │              ├── w:32 = uniq.w:26
-      │              └── k:30 != uniq.k:24
-      └── unique-checks-item: uniq(x,y)
+      └── unique-checks-item: uniq(w)
            └── semi-join (hash)
-                ├── columns: k:41 v:42!null w:43 x:44 y:45
+                ├── columns: k:30 v:31!null w:32 x:33 y:34
                 ├── with-scan &1
-                │    ├── columns: k:41 v:42!null w:43 x:44 y:45
+                │    ├── columns: k:30 v:31!null w:32 x:33 y:34
                 │    └── mapping:
-                │         ├──  upsert_k:19 => k:41
-                │         ├──  upsert_v:20 => v:42
-                │         ├──  upsert_w:21 => w:43
-                │         ├──  upsert_x:22 => x:44
-                │         └──  upsert_y:23 => y:45
+                │         ├──  upsert_k:19 => k:30
+                │         ├──  upsert_v:20 => v:31
+                │         ├──  upsert_w:21 => w:32
+                │         ├──  upsert_x:22 => x:33
+                │         └──  upsert_y:23 => y:34
                 ├── scan uniq
-                │    └── columns: uniq.k:35!null uniq.v:36 uniq.w:37 uniq.x:38 uniq.y:39
+                │    └── columns: uniq.k:24!null uniq.v:25 uniq.w:26 uniq.x:27 uniq.y:28
                 └── filters
-                     ├── x:44 = uniq.x:38
-                     ├── y:45 = uniq.y:39
-                     └── k:41 != uniq.k:35
+                     ├── w:32 = uniq.w:26
+                     └── k:30 != uniq.k:24
 
 # Cannot conflict on a subset of columns in a unique constraint.
 build
@@ -1036,37 +1019,21 @@ upsert uniq_overlaps_pk
       │              ├── b:26 = uniq_overlaps_pk.b:21
       │              ├── c:27 = uniq_overlaps_pk.c:22
       │              └── a:25 != uniq_overlaps_pk.a:20
-      ├── unique-checks-item: uniq_overlaps_pk(a)
-      │    └── semi-join (hash)
-      │         ├── columns: a:34 b:35!null c:36 d:37
-      │         ├── with-scan &1
-      │         │    ├── columns: a:34 b:35!null c:36 d:37
-      │         │    └── mapping:
-      │         │         ├──  upsert_a:16 => a:34
-      │         │         ├──  upsert_b:17 => b:35
-      │         │         ├──  upsert_c:18 => c:36
-      │         │         └──  upsert_d:19 => d:37
-      │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: uniq_overlaps_pk.a:29!null uniq_overlaps_pk.b:30!null uniq_overlaps_pk.c:31 uniq_overlaps_pk.d:32
-      │         └── filters
-      │              ├── a:34 = uniq_overlaps_pk.a:29
-      │              └── b:35 != uniq_overlaps_pk.b:30
-      └── unique-checks-item: uniq_overlaps_pk(c,d)
+      └── unique-checks-item: uniq_overlaps_pk(a)
            └── semi-join (hash)
-                ├── columns: a:43 b:44!null c:45 d:46
+                ├── columns: a:34 b:35!null c:36 d:37
                 ├── with-scan &1
-                │    ├── columns: a:43 b:44!null c:45 d:46
+                │    ├── columns: a:34 b:35!null c:36 d:37
                 │    └── mapping:
-                │         ├──  upsert_a:16 => a:43
-                │         ├──  upsert_b:17 => b:44
-                │         ├──  upsert_c:18 => c:45
-                │         └──  upsert_d:19 => d:46
+                │         ├──  upsert_a:16 => a:34
+                │         ├──  upsert_b:17 => b:35
+                │         ├──  upsert_c:18 => c:36
+                │         └──  upsert_d:19 => d:37
                 ├── scan uniq_overlaps_pk
-                │    └── columns: uniq_overlaps_pk.a:38!null uniq_overlaps_pk.b:39!null uniq_overlaps_pk.c:40 uniq_overlaps_pk.d:41
+                │    └── columns: uniq_overlaps_pk.a:29!null uniq_overlaps_pk.b:30!null uniq_overlaps_pk.c:31 uniq_overlaps_pk.d:32
                 └── filters
-                     ├── c:45 = uniq_overlaps_pk.c:40
-                     ├── d:46 = uniq_overlaps_pk.d:41
-                     └── (a:43 != uniq_overlaps_pk.a:38) OR (b:44 != uniq_overlaps_pk.b:39)
+                     ├── a:34 = uniq_overlaps_pk.a:29
+                     └── b:35 != uniq_overlaps_pk.b:30
 
 exec-ddl
 CREATE TABLE uniq_hidden_pk (
