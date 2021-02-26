@@ -1240,3 +1240,167 @@ ALTER TABLE t54629 ALTER PRIMARY KEY USING COLUMNS (c);
 DROP INDEX t54629_a_key CASCADE;
 INSERT INTO t54629 VALUES (1, 1);
 DELETE FROM t54629 WHERE c = 1;
+
+# Validate ALTER ADD PRIMARY KEY idempotence for #59307
+statement ok
+create table t1(id integer not null, id2 integer not null, name varchar(32));
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1] where index_name like 'primary%';
+----
+primary  rowid  ASC
+
+statement ok
+alter table t1 alter primary key using columns(id, id2);
+
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1];
+----
+primary  id  ASC
+primary  id2  ASC
+
+
+statement ok
+alter table t1 alter primary key using columns(id, id2);
+
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1];
+----
+primary  id  ASC
+primary  id2  ASC
+
+# Validate drop and recreate
+statement ok
+alter table t1 drop constraint "primary", alter primary key using columns(id, id2);
+
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1];
+----
+primary  id  ASC
+primary  id2  ASC
+
+statement ok
+alter table t1 alter primary key using columns(id);
+
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1];
+----
+primary  id  ASC
+t1_id_id2_key  id  ASC
+t1_id_id2_key  id2  ASC
+
+statement ok
+alter table t1 alter primary key using columns(id desc);
+
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1];
+----
+primary        id   DESC
+t1_id_id2_key  id   ASC
+t1_id_id2_key  id2  ASC
+t1_id_key      id   ASC
+
+
+statement ok
+alter table t1 alter primary key using columns(id desc);
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1];
+----
+primary  id  DESC
+t1_id_id2_key  id  ASC
+t1_id_id2_key  id2  ASC
+t1_id_key id  ASC
+
+statement ok
+alter table t1 alter primary key using columns(id desc);
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1];
+----
+primary  id  DESC
+t1_id_id2_key  id  ASC
+t1_id_id2_key  id2  ASC
+t1_id_key id  ASC
+
+statement ok
+alter table t1 alter primary key using columns(id) USING HASH WITH BUCKET_COUNT = 10
+
+query TTT
+select index_name,column_name,direction from [show indexes from t1];
+----
+primary        crdb_internal_id_shard_10  ASC
+primary        id                         ASC
+t1_id_key1     id                         DESC
+t1_id_key1     crdb_internal_id_shard_10  ASC
+t1_id_id2_key  id                         ASC
+t1_id_id2_key  id2                        ASC
+t1_id_id2_key  crdb_internal_id_shard_10  ASC
+t1_id_key      id                         ASC
+t1_id_key      crdb_internal_id_shard_10  ASC
+
+statement ok
+CREATE TABLE parent3 (x INT, y INT, PRIMARY KEY (x, y), FAMILY (x, y));
+
+statement ok
+CREATE TABLE child3 (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FAMILY (x, y, z));
+
+statement ok
+INSERT INTO parent3 VALUES (1, 2), (4, 5);
+
+statement ok
+INSERT INTO child3 VALUES (1, 2, 3), (4, 5, 6);
+
+statement ok
+ALTER TABLE child3 ALTER PRIMARY KEY USING COLUMNS (x, y, z) INTERLEAVE IN PARENT parent3(x, y)
+
+query TTT
+select index_name,column_name,direction from [show indexes from child3];
+----
+primary       x  ASC
+primary       y  ASC
+primary       z  ASC
+child3_x_key  x  ASC
+child3_x_key  y  ASC
+child3_x_key  z  ASC
+
+statement ok
+ALTER TABLE child3 ALTER PRIMARY KEY USING COLUMNS (x, y, z) INTERLEAVE IN PARENT parent3(x, y)
+
+query TTT
+select index_name,column_name,direction from [show indexes from child3];
+----
+primary       x  ASC
+primary       y  ASC
+primary       z  ASC
+child3_x_key  x  ASC
+child3_x_key  y  ASC
+child3_x_key  z  ASC
+
+statement ok
+ALTER TABLE child3 ALTER PRIMARY KEY USING COLUMNS (x, y) INTERLEAVE IN PARENT parent3(x, y)
+
+query TTT
+select index_name,column_name,direction from [show indexes from child3];
+----
+primary           x  ASC
+primary           y  ASC
+child3_x_key      x  ASC
+child3_x_key      y  ASC
+child3_x_y_z_key  x  ASC
+child3_x_y_z_key  y  ASC
+child3_x_y_z_key  z  ASC
+
+statement ok
+drop table t1;
+
+statement ok
+drop table child3;
+
+statement ok
+drop table parent3;
