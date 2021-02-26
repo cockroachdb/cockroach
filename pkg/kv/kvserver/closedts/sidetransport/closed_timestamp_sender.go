@@ -138,12 +138,8 @@ func (s *ClosedTimestampSender) Run(ctx context.Context, nodeID roachpb.NodeID) 
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
 		func(ctx context.Context) {
 			defer func() {
-				// Cleanup all connections.
-				s.trackedMu.Lock()
-				defer s.trackedMu.Unlock()
-				for _, r := range s.connections {
-					r.close()
-				}
+				// Closing the buffer signals all connections to quit.
+				s.buf.Close()
 			}()
 
 			var timer timeutil.Timer
@@ -374,6 +370,8 @@ type updatesBuf struct {
 		// tail == head meaning that the head will be overwritten by the next
 		// insertion.
 		head, tail int
+		// closed is set by the producer to signal the consumers to exit.
+		closed bool
 		// updated is signaled when a new item is inserted.
 		updated *sync.Cond
 	}
@@ -424,14 +422,21 @@ func (b *updatesBuf) lastIdxLocked() int {
 // produced; the call will block until the message is produced.
 //
 // If the requested message is too old and is no longer in the buffer, returns nil.
+//
+// The bool retval is set to false if the producer has closed the buffer. In
+// that case, the consumers should quit.
 func (b *updatesBuf) GetBySeq(
 	ctx context.Context, seqNum ctpb.UpdateSequenceNumber,
-) *ctpb.ClosedTimestampUpdate {
+) (*ctpb.ClosedTimestampUpdate, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	// Loop until the requested seqNum is added to the buffer.
 	for {
+		if b.mu.closed {
+			return nil, false
+		}
+
 		var firstSeq, lastSeq ctpb.UpdateSequenceNumber
 		if b.sizeLocked() == 0 {
 			firstSeq, lastSeq = 0, 0
@@ -440,7 +445,7 @@ func (b *updatesBuf) GetBySeq(
 		}
 		if seqNum < firstSeq {
 			// Requesting a message that's not in the buffer any more.
-			return nil
+			return nil, true
 		}
 		// If the requested msg has not been produced yet, block.
 		if seqNum == lastSeq+1 {
@@ -451,7 +456,7 @@ func (b *updatesBuf) GetBySeq(
 			log.Fatalf(ctx, "skipping sequence numbers; requested: %d, last: %d", seqNum, lastSeq)
 		}
 		idx := (b.mu.head + (int)(seqNum-firstSeq)) % len(b.mu.data)
-		return b.mu.data[idx]
+		return b.mu.data[idx], true
 	}
 }
 
@@ -471,6 +476,14 @@ func (b *updatesBuf) sizeLocked() int {
 
 func (b *updatesBuf) fullLocked() bool {
 	return b.sizeLocked() == len(b.mu.data)
+}
+
+// Close unblocks all the consumers and signals them to exit.
+func (b *updatesBuf) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.mu.closed = true
+	b.mu.updated.Broadcast()
 }
 
 // connection represents a connection to one particular node. The connection
@@ -525,8 +538,15 @@ func (r *connection) sendMsg(ctx context.Context, msg *ctpb.ClosedTimestampUpdat
 func (r *connection) run(ctx context.Context, stopper *stop.Stopper) {
 	_ /* err */ = stopper.RunAsyncTask(ctx, fmt.Sprintf("closedts publisher for n%d", r.nodeID),
 		func(ctx context.Context) {
-			ctx, cancel := stopper.WithCancelOnQuiesce(r.AnnotateCtx(ctx))
-			defer cancel()
+			ctx = r.AnnotateCtx(ctx)
+
+			defer func() {
+				if r.stream != nil {
+					_ /* err */ = r.stream.CloseSend()
+					r.stream = nil
+				}
+			}()
+
 			everyN := log.Every(10 * time.Second)
 
 			var lastSent ctpb.UpdateSequenceNumber
@@ -543,21 +563,24 @@ func (r *connection) run(ctx context.Context, stopper *stop.Stopper) {
 					lastSent = 0
 				}
 
-				msg = r.buf.GetBySeq(ctx, lastSent+1)
+				var ok bool
+				msg, ok = r.buf.GetBySeq(ctx, lastSent+1)
+				// We can be signaled to stop in two ways: the buffer can be closed (in
+				// which case all connections must exit), or this connection was closed
+				// via close(). In either case, we quit.
+				if !ok {
+					return
+				}
+				closed := atomic.LoadInt32(&r.closed) > 0
+				if closed {
+					return
+				}
+
 				if msg == nil {
 					// The sequence number we've requested is no longer in the buffer.
 					// We need to generate a snapshot in order to re-initialize the
 					// stream.
 					msg = r.producer.GetSnapshot()
-				}
-
-				// See if we've been signaled to stop.
-				closed := atomic.LoadInt32(&r.closed) > 0
-				if closed || ctx.Err() != nil {
-					if r.stream != nil {
-						_ /* err */ = r.stream.CloseSend()
-					}
-					return
 				}
 
 				lastSent = msg.SeqNum
