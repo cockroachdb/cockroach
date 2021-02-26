@@ -860,6 +860,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DNull, // relreplident
 			tree.DNull, // relrewrite
 			tree.DNull, // relrowsecurity
+			tree.DNull, // relpartbound
 		); err != nil {
 			return err
 		}
@@ -913,6 +914,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 				tree.DNull, // relreplident
 				tree.DNull, // relrewrite
 				tree.DNull, // relrowsecurity
+				tree.DNull, // relpartbound
 			)
 		})
 	})

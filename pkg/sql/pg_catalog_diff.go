@@ -115,8 +115,10 @@ func (p PGCatalogTables) isDiffOid(
 		return true
 	}
 
+	// For columns that are expected to be missing, the diff is stored as nil
+	// and is present in the map.
 	diff, ok := columns[columnName]
-	if !ok {
+	if !ok || diff == nil {
 		return true
 	}
 
