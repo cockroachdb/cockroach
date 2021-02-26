@@ -12,6 +12,7 @@ go_library(
         "feature_flags.go",
         "follower_reads.go",
         "iam.go",
+        "multiregion.go",
         "partitioning.go",
         "pgwire.go",
         "planning.go",
