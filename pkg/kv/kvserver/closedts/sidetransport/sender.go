@@ -62,16 +62,7 @@ type Sender struct {
 
 	trackedMu struct {
 		syncutil.Mutex
-		// lastSeqNum is the sequence number of the last message published.
-		lastSeqNum ctpb.SeqNum
-		// lastClosed is the closed timestamp published for each policy in the
-		// last message.
-		lastClosed [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
-		// tracked maintains the information that was communicated to connections in
-		// the last sent message (implicitly or explicitly). A range enters this
-		// structure as soon as it's included in a message, and exits it when it's
-		// removed through Update.Removed.
-		tracked map[roachpb.RangeID]trackedRange
+		streamState
 	}
 
 	leaseholdersMu struct {
@@ -88,6 +79,22 @@ type Sender struct {
 	// for ranges with local leases and removed when the respective node no
 	// longer has any replicas with local leases.
 	conns map[roachpb.NodeID]conn
+}
+
+// streamState encapsulates the state that's tracked by a stream. Both the
+// Sender and the Receiver use this struct and, for a given stream, both ends
+// are supposed to correspond (modulo message delays), in wonderful symmetry.
+type streamState struct {
+	// lastSeqNum is the sequence number of the last message published.
+	lastSeqNum ctpb.SeqNum
+	// lastClosed is the closed timestamp published for each policy in the
+	// last message.
+	lastClosed [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+	// tracked maintains the information that was communicated to connections in
+	// the last sent message (implicitly or explicitly). A range enters this
+	// structure as soon as it's included in a message, and exits it when it's
+	// removed through Update.Removed.
+	tracked map[roachpb.RangeID]trackedRange
 }
 
 type connTestingKnobs struct {
@@ -166,6 +173,7 @@ func newSenderWithConnFactory(
 // This is not know at construction time.
 func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 	s.nodeID = nodeID
+	waitForUpgrade := !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport)
 
 	confCh := make(chan struct{}, 1)
 	confChanged := func() {
@@ -197,8 +205,11 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				select {
 				case <-timer.C:
 					timer.Read = true
-					if !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+					if waitForUpgrade && !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
 						continue
+					} else if waitForUpgrade {
+						waitForUpgrade = false
+						log.Infof(ctx, "closed-timestamps v2 mechanism enabled by cluster version upgrade")
 					}
 					s.publish(ctx)
 				case <-confCh:
@@ -252,6 +263,7 @@ func (s *Sender) UnregisterLeaseholder(
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
+	log.VEventf(ctx, 2, "side-transport publishing a new message")
 
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
@@ -383,6 +395,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	})
 
 	// Publish the new message to all connections.
+	log.VEventf(ctx, 4, "side-transport publishing message with closed timestamps: %v (%v)", msg.ClosedTimestamps, msg)
 	s.buf.Push(ctx, msg)
 
 	// Return the publication time, for tests.
