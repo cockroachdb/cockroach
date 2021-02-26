@@ -180,14 +180,14 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		lResult.AcquiredLocks = nil
 	}
 
-	if !lResult.FreezeStart.IsEmpty() {
-		// A merge is (likely) about to be carried out, and this replica needs to
-		// block all non-read traffic until the merge either commits or aborts. See
+	if lResult.MaybeWatchForMerge {
+		// A merge is (likely) about to be carried out, and this replica needs
+		// to block all traffic until the merge either commits or aborts. See
 		// docs/tech-notes/range-merges.md.
-		if err := r.maybeWatchForMerge(ctx, lResult.FreezeStart); err != nil {
+		if err := r.maybeWatchForMerge(ctx); err != nil {
 			return roachpb.NewError(err)
 		}
-		lResult.FreezeStart = hlc.Timestamp{}
+		lResult.MaybeWatchForMerge = false
 	}
 
 	if !lResult.IsZero() {

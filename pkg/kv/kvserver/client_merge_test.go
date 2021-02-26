@@ -4350,92 +4350,103 @@ func sendWithTxn(
 	return pErr.GoError()
 }
 
-// TestHistoricalReadsAfterSubsume tests that a subsumed right hand side range
-// can only serve read-only traffic for timestamps that precede the subsumption
-// time, but don't contain the subsumption time in their uncertainty interval.
-func TestHistoricalReadsAfterSubsume(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
+// TODO(nvanbenschoten): fix this test. In b192bba, we allowed historical reads
+// up to the freeze start time on subsumed ranges. This turned out not to be
+// quite the right idea, because we can now ship the timestamp cache to the LHS
+// and be more optimal about the resulting timestamp cache on the joint range.
+// However, since we started allowing reads up to the freeze time, we were
+// effectively closing this time for all future writes on the joint range, so we
+// couldn't take advantage of the new ability to ship the timestamp cache
+// around. But the change was very well intentioned and revealed that we should
+// have no problem allowing reads below the closed timestamp on subsumed ranges.
+// Add support for this and update this test.
+//
+// // TestHistoricalReadsAfterSubsume tests that a subsumed right hand side range
+// // can only serve read-only traffic for timestamps that precede the subsumption
+// // time, but don't contain the subsumption time in their uncertainty interval.
+// func TestHistoricalReadsAfterSubsume(t *testing.T) {
+// 	defer leaktest.AfterTest(t)()
+// 	defer log.Scope(t).Close(t)
+// 	ctx := context.Background()
 
-	maxOffset := 100 * time.Millisecond
-	preUncertaintyTs := func(ts hlc.Timestamp) hlc.Timestamp {
-		return hlc.Timestamp{
-			WallTime: ts.GoTime().Add(-maxOffset).UnixNano() - 1,
-			Logical:  ts.Logical,
-		}
-	}
+// 	maxOffset := 100 * time.Millisecond
+// 	preUncertaintyTs := func(ts hlc.Timestamp) hlc.Timestamp {
+// 		return hlc.Timestamp{
+// 			WallTime: ts.GoTime().Add(-maxOffset).UnixNano() - 1,
+// 			Logical:  ts.Logical,
+// 		}
+// 	}
 
-	type testCase struct {
-		name          string
-		queryTsFunc   func(freezeStart hlc.Timestamp) hlc.Timestamp
-		queryArgsFunc func(key roachpb.Key) roachpb.Request
-		shouldBlock   bool
-	}
+// 	type testCase struct {
+// 		name          string
+// 		queryTsFunc   func(freezeStart hlc.Timestamp) hlc.Timestamp
+// 		queryArgsFunc func(key roachpb.Key) roachpb.Request
+// 		shouldBlock   bool
+// 	}
 
-	tests := []testCase{
-		// Ensure that a read query for a timestamp older than freezeStart-MaxOffset
-		// is let through.
-		{
-			name:        "historical read",
-			queryTsFunc: preUncertaintyTs,
-			queryArgsFunc: func(key roachpb.Key) roachpb.Request {
-				return getArgs(key)
-			},
-			shouldBlock: false,
-		},
-		// Write queries for the same historical timestamp should block (and then
-		// eventually fail because the range no longer exists).
-		{
-			name:        "historical write",
-			queryTsFunc: preUncertaintyTs,
-			queryArgsFunc: func(key roachpb.Key) roachpb.Request {
-				return putArgs(key, []byte(`test value`))
-			},
-			shouldBlock: true,
-		},
-		// Read queries that contain the subsumption time in its uncertainty interval
-		// should block and eventually fail.
-		{
-			name: "historical read with uncertainty",
-			queryTsFunc: func(freezeStart hlc.Timestamp) hlc.Timestamp {
-				return freezeStart.Prev()
-			},
-			queryArgsFunc: func(key roachpb.Key) roachpb.Request {
-				return getArgs(key)
-			},
-			shouldBlock: true,
-		},
-	}
+// 	tests := []testCase{
+// 		// Ensure that a read query for a timestamp older than freezeStart-MaxOffset
+// 		// is let through.
+// 		{
+// 			name:        "historical read",
+// 			queryTsFunc: preUncertaintyTs,
+// 			queryArgsFunc: func(key roachpb.Key) roachpb.Request {
+// 				return getArgs(key)
+// 			},
+// 			shouldBlock: false,
+// 		},
+// 		// Write queries for the same historical timestamp should block (and then
+// 		// eventually fail because the range no longer exists).
+// 		{
+// 			name:        "historical write",
+// 			queryTsFunc: preUncertaintyTs,
+// 			queryArgsFunc: func(key roachpb.Key) roachpb.Request {
+// 				return putArgs(key, []byte(`test value`))
+// 			},
+// 			shouldBlock: true,
+// 		},
+// 		// Read queries that contain the subsumption time in its uncertainty interval
+// 		// should block and eventually fail.
+// 		{
+// 			name: "historical read with uncertainty",
+// 			queryTsFunc: func(freezeStart hlc.Timestamp) hlc.Timestamp {
+// 				return freezeStart.Prev()
+// 			},
+// 			queryArgsFunc: func(key roachpb.Key) roachpb.Request {
+// 				return getArgs(key)
+// 			},
+// 			shouldBlock: true,
+// 		},
+// 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			tc, store, rhsDesc, freezeStart, waitForBlocked, cleanupFunc :=
-				setupClusterWithSubsumedRange(ctx, t, 1 /* numNodes */, maxOffset)
-			defer tc.Stopper().Stop(ctx)
-			errCh := make(chan error)
-			go func() {
-				errCh <- sendWithTxn(store, rhsDesc, test.queryTsFunc(freezeStart), maxOffset,
-					test.queryArgsFunc(rhsDesc.StartKey.AsRawKey()))
-			}()
-			if test.shouldBlock {
-				waitForBlocked()
-				cleanupFunc()
-				// RHS should cease to exist once the merge completes but we cannot
-				// guarantee that the merge wasn't internally retried before it was able
-				// to successfully commit. If it did, requests blocked on the previous
-				// merge attempt might go through successfully. Thus, we cannot make any
-				// assertions about the result of these blocked requests.
-				<-errCh
-			} else {
-				require.NoError(t, <-errCh)
-				// We cleanup *after* the non-blocking read request succeeds to prevent
-				// it from racing with the merge commit trigger.
-				cleanupFunc()
-			}
-		})
-	}
-}
+// 	for _, test := range tests {
+// 		t.Run(test.name, func(t *testing.T) {
+// 			tc, store, rhsDesc, freezeStart, waitForBlocked, cleanupFunc :=
+// 				setupClusterWithSubsumedRange(ctx, t, 1 /* numNodes */, maxOffset)
+// 			defer tc.Stopper().Stop(ctx)
+// 			errCh := make(chan error)
+// 			go func() {
+// 				errCh <- sendWithTxn(store, rhsDesc, test.queryTsFunc(freezeStart), maxOffset,
+// 					test.queryArgsFunc(rhsDesc.StartKey.AsRawKey()))
+// 			}()
+// 			if test.shouldBlock {
+// 				waitForBlocked()
+// 				cleanupFunc()
+// 				// RHS should cease to exist once the merge completes but we cannot
+// 				// guarantee that the merge wasn't internally retried before it was able
+// 				// to successfully commit. If it did, requests blocked on the previous
+// 				// merge attempt might go through successfully. Thus, we cannot make any
+// 				// assertions about the result of these blocked requests.
+// 				<-errCh
+// 			} else {
+// 				require.NoError(t, <-errCh)
+// 				// We cleanup *after* the non-blocking read request succeeds to prevent
+// 				// it from racing with the merge commit trigger.
+// 				cleanupFunc()
+// 			}
+// 		})
+// 	}
+// }
 
 // TestStoreBlockTransferLeaseRequestAfterSubsumption tests that a
 // TransferLeaseRequest checks & waits for an ongoing merge before it can be

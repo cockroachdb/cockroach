@@ -110,6 +110,11 @@ func Subsume(
 		return result.Result{}, errors.AssertionFailedf("non-deletion intent on local range descriptor")
 	}
 
+	// NOTE: the deletion intent on the range's meta2 descriptor is just as
+	// important to correctness as the deletion intent on the local descriptor,
+	// but the check is too expensive as it would involve a network roundtrip on
+	// most nodes.
+
 	// We prevent followers of the RHS from being able to serve follower reads on
 	// timestamps that fall in the timestamp window representing the range's
 	// subsumed state (i.e. between the subsumption time (FreezeStart) and the
@@ -142,16 +147,16 @@ func Subsume(
 	// is subsumed, we ensure that the initial MLAI update broadcast by the new
 	// leaseholder respects the invariant in question, in much the same way we do
 	// here. Take a look at `EmitMLAI()` in replica_closedts.go for more details.
+	//
+	// TODO(nvanbenschoten): remove this in v21.2 when the rest of the v1 closed
+	// timestamp system disappears.
 	_, untrack := cArgs.EvalCtx.GetTracker().Track(ctx)
 	lease, _ := cArgs.EvalCtx.GetLease()
 	lai := cArgs.EvalCtx.GetLeaseAppliedIndex()
 	untrack(ctx, ctpb.Epoch(lease.Epoch), desc.RangeID, ctpb.LAI(lai+1))
 
-	// NOTE: the deletion intent on the range's meta2 descriptor is just as
-	// important to correctness as the deletion intent on the local descriptor,
-	// but the check is too expensive as it would involve a network roundtrip on
-	// most nodes.
-
+	// Now that the range is frozen, collect some information to ship to the LHS
+	// leaseholder through the merge trigger.
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = lai
 	reply.FreezeStart = cArgs.EvalCtx.Clock().NowAsClockTimestamp()
@@ -183,6 +188,6 @@ func Subsume(
 	reply.ReadSummary = &priorReadSum
 
 	return result.Result{
-		Local: result.LocalResult{FreezeStart: reply.FreezeStart.ToTimestamp()},
+		Local: result.LocalResult{MaybeWatchForMerge: true},
 	}, nil
 }
