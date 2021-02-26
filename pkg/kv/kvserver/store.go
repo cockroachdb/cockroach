@@ -649,8 +649,9 @@ type StoreConfig struct {
 	RPCContext              *rpc.Context
 	RangeDescriptorCache    *rangecache.RangeCache
 
-	ClosedTimestamp       *container.Container
-	ClosedTimestampSender *sidetransport.Sender
+	ClosedTimestamp         *container.Container
+	ClosedTimestampSender   *sidetransport.Sender
+	ClosedTimestampReceiver *sidetransport.Receiver
 
 	// SQLExecutor is used by the store to execute SQL statements.
 	SQLExecutor sqlutil.InternalExecutor

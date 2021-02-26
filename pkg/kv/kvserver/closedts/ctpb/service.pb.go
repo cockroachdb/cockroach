@@ -61,8 +61,9 @@ type Update struct {
 	// to result in a stream failing and a new one being established).
 	Snapshot         bool                 `protobuf:"varint,3,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
 	ClosedTimestamps []Update_GroupUpdate `protobuf:"bytes,4,rep,name=closed_timestamps,json=closedTimestamps,proto3" json:"closed_timestamps"`
-	// removed contains the set of ranges that are no longer registered on the
-	// stream and who future updates are no longer applicable to.
+	// removed contains the set of ranges that are no longer tracked on this
+	// stream. The closed timestamps in this message and future messages no longer
+	// apply to these removed ranges.
 	//
 	// The field will be empty if snapshot is true, as a snapshot message implies
 	// that all ranges not present in the snapshot's added_or_updated list are no
@@ -75,7 +76,7 @@ func (m *Update) Reset()         { *m = Update{} }
 func (m *Update) String() string { return proto.CompactTextString(m) }
 func (*Update) ProtoMessage()    {}
 func (*Update) Descriptor() ([]byte, []int) {
-	return fileDescriptor_service_96a1a4bff833e11e, []int{0}
+	return fileDescriptor_service_458097978ab919fe, []int{0}
 }
 func (m *Update) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -118,7 +119,7 @@ func (m *Update_GroupUpdate) Reset()         { *m = Update_GroupUpdate{} }
 func (m *Update_GroupUpdate) String() string { return proto.CompactTextString(m) }
 func (*Update_GroupUpdate) ProtoMessage()    {}
 func (*Update_GroupUpdate) Descriptor() ([]byte, []int) {
-	return fileDescriptor_service_96a1a4bff833e11e, []int{0, 0}
+	return fileDescriptor_service_458097978ab919fe, []int{0, 0}
 }
 func (m *Update_GroupUpdate) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -159,7 +160,7 @@ func (m *Update_RangeUpdate) Reset()         { *m = Update_RangeUpdate{} }
 func (m *Update_RangeUpdate) String() string { return proto.CompactTextString(m) }
 func (*Update_RangeUpdate) ProtoMessage()    {}
 func (*Update_RangeUpdate) Descriptor() ([]byte, []int) {
-	return fileDescriptor_service_96a1a4bff833e11e, []int{0, 1}
+	return fileDescriptor_service_458097978ab919fe, []int{0, 1}
 }
 func (m *Update_RangeUpdate) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -191,7 +192,7 @@ func (m *Response) Reset()         { *m = Response{} }
 func (m *Response) String() string { return proto.CompactTextString(m) }
 func (*Response) ProtoMessage()    {}
 func (*Response) Descriptor() ([]byte, []int) {
-	return fileDescriptor_service_96a1a4bff833e11e, []int{1}
+	return fileDescriptor_service_458097978ab919fe, []int{1}
 }
 func (m *Response) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1290,10 +1291,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/closedts/ctpb/service.proto", fileDescriptor_service_96a1a4bff833e11e)
+	proto.RegisterFile("kv/kvserver/closedts/ctpb/service.proto", fileDescriptor_service_458097978ab919fe)
 }
 
-var fileDescriptor_service_96a1a4bff833e11e = []byte{
+var fileDescriptor_service_458097978ab919fe = []byte{
 	// 628 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x54, 0xc1, 0x4e, 0xdb, 0x30,
 	0x18, 0x6e, 0x96, 0x92, 0x56, 0xae, 0x06, 0xcc, 0xda, 0x21, 0x8a, 0xb6, 0xa4, 0x62, 0x82, 0xe5,
