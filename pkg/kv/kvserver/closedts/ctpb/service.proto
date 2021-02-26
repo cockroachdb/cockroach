@@ -72,8 +72,9 @@ message Update {
   }
   repeated GroupUpdate closed_timestamps = 4 [(gogoproto.nullable) = false];
 
-  // removed contains the set of ranges that are no longer registered on the
-  // stream and who future updates are no longer applicable to.
+  // removed contains the set of ranges that are no longer tracked on this
+  // stream. The closed timestamps in this message and future messages no longer
+  // apply to these removed ranges.
   //
   // The field will be empty if snapshot is true, as a snapshot message implies
   // that all ranges not present in the snapshot's added_or_updated list are no
