@@ -227,12 +227,8 @@ func newSortAllProcessor(
 
 // Start is part of the RowSource interface.
 func (s *sortAllProcessor) Start(ctx context.Context) {
-	s.input.Start(ctx)
 	ctx = s.StartInternal(ctx, sortAllProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
+	s.input.Start(ctx)
 
 	valid, err := s.fill()
 	if !valid || err != nil {
@@ -343,8 +339,8 @@ func newSortTopKProcessor(
 
 // Start is part of the RowSource interface.
 func (s *sortTopKProcessor) Start(ctx context.Context) {
-	s.input.Start(ctx)
 	ctx = s.StartInternal(ctx, sortTopKProcName)
+	s.input.Start(ctx)
 
 	// The execution loop for the SortTopK processor is similar to that of the
 	// SortAll processor; the difference is that we push rows into a max-heap
@@ -526,12 +522,8 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 
 // Start is part of the RowSource interface.
 func (s *sortChunksProcessor) Start(ctx context.Context) {
-	s.input.Start(ctx)
 	ctx = s.StartInternal(ctx, sortChunksProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
+	s.input.Start(ctx)
 }
 
 // Next is part of the RowSource interface.
