@@ -102,6 +102,7 @@ func TestSpillingQueue(t *testing.T) {
 					tuples.AppendTuples(b, 0 /* startIdx */, b.Length())
 				},
 			})
+			op.Init(ctx)
 			typs := op.Typs()
 
 			queueCfg.CacheMode = diskQueueCacheMode
@@ -179,7 +180,7 @@ func TestSpillingQueue(t *testing.T) {
 			}
 
 			for {
-				b = op.Next(ctx)
+				b = op.Next()
 				require.NoError(t, q.Enqueue(ctx, b))
 				if b.Length() == 0 {
 					break
@@ -269,6 +270,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 		BatchSize:         1 + rng.Intn(coldata.BatchSize()),
 		Nulls:             true,
 	})
+	op.Init(ctx)
 
 	typs := op.Typs()
 	// Choose a memory limit such that at most two batches can be kept in the
@@ -298,7 +300,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	)
 
 	for {
-		b := op.Next(ctx)
+		b := op.Next()
 		require.NoError(t, q.Enqueue(ctx, b))
 		b, err := q.Dequeue(ctx)
 		require.NoError(t, err)

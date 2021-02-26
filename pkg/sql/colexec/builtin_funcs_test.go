@@ -134,12 +134,12 @@ func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls b
 		"abs(@1)" /* projectingExpr */, false /* canFallbackToRowexec */, testMemAcc,
 	)
 	require.NoError(b, err)
-	op.Init()
+	op.Init(ctx)
 
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		op.Next(ctx)
+		op.Next()
 	}
 }
 
@@ -191,7 +191,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.Fatal(err)
 	}
 	defaultOp := &defaultBuiltinFuncOperator{
-		OneInputNode:        colexecop.NewOneInputNode(source),
+		OneInputHelper:      colexecop.MakeOneInputHelper(source),
 		allocator:           testAllocator,
 		evalCtx:             evalCtx,
 		funcExpr:            typedExpr.(*tree.FuncExpr),
@@ -203,19 +203,19 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		row:                 make(tree.Datums, outputIdx),
 		argumentCols:        inputCols,
 	}
-	defaultOp.Init()
+	defaultOp.Init(ctx)
 
 	// Set up the specialized substring operator.
 	specOp := newSubstringOperator(
 		testAllocator, typs, inputCols, outputIdx, source,
 	)
-	specOp.Init()
+	specOp.Init(ctx)
 
 	b.Run("DefaultBuiltinOperator", func(b *testing.B) {
 		b.SetBytes(int64(len("hello there") * coldata.BatchSize()))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			b := defaultOp.Next(ctx)
+			b := defaultOp.Next()
 			// Due to the flat byte updates, we have to reset the output
 			// bytes col after each next call.
 			b.ColVec(outputIdx).Bytes().Reset()
@@ -226,7 +226,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		b.SetBytes(int64(len("hello there") * coldata.BatchSize()))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			b := specOp.Next(ctx)
+			b := specOp.Next()
 			// Due to the flat byte updates, we have to reset the output
 			// bytes col after each next call.
 			b.ColVec(outputIdx).Bytes().Reset()

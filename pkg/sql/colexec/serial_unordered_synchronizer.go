@@ -26,6 +26,8 @@ import (
 // undesirable - for example when the whole query is planned on the gateway and
 // we want to run it in the RootTxn.
 type SerialUnorderedSynchronizer struct {
+	colexecop.InitHelper
+
 	inputs []SynchronizerInput
 	// curSerialInputIdx indicates the index of the current input being consumed.
 	curSerialInputIdx int
@@ -56,19 +58,22 @@ func NewSerialUnorderedSynchronizer(inputs []SynchronizerInput) *SerialUnordered
 }
 
 // Init is part of the Operator interface.
-func (s *SerialUnorderedSynchronizer) Init() {
+func (s *SerialUnorderedSynchronizer) Init(ctx context.Context) {
+	if !s.InitHelper.Init(ctx) {
+		return
+	}
 	for _, input := range s.inputs {
-		input.Op.Init()
+		input.Op.Init(ctx)
 	}
 }
 
 // Next is part of the Operator interface.
-func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
+func (s *SerialUnorderedSynchronizer) Next() coldata.Batch {
 	for {
 		if s.curSerialInputIdx == len(s.inputs) {
 			return coldata.ZeroBatch
 		}
-		b := s.inputs[s.curSerialInputIdx].Op.Next(ctx)
+		b := s.inputs[s.curSerialInputIdx].Op.Next()
 		if b.Length() == 0 {
 			s.curSerialInputIdx++
 		} else {

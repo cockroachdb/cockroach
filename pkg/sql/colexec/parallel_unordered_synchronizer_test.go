@@ -70,7 +70,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 	var wg sync.WaitGroup
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	s.Init()
+	s.Init(ctx)
 
 	type synchronizerTerminationScenario int
 	const (
@@ -123,7 +123,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 				expectZeroBatch = true
 			}
 			var b coldata.Batch
-			if err := colexecerror.CatchVectorizedRuntimeError(func() { b = s.Next(ctx) }); err != nil {
+			if err := colexecerror.CatchVectorizedRuntimeError(func() { b = s.Next() }); err != nil {
 				if terminationScenario == synchronizerContextCanceled {
 					require.True(t, testutils.IsError(err, "context canceled"), err)
 					break
@@ -159,7 +159,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	ctx := context.Background()
 
 	inputs := make([]SynchronizerInput, 6)
-	inputs[0].Op = &colexecop.CallbackOperator{NextCb: func(context.Context) coldata.Batch {
+	inputs[0].Op = &colexecop.CallbackOperator{NextCb: func() coldata.Batch {
 		colexecerror.InternalError(errors.New(expectedErr))
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
@@ -169,7 +169,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		defer acc.Close(ctx)
 		func(allocator *colmem.Allocator) {
 			inputs[i].Op = &colexecop.CallbackOperator{
-				NextCb: func(ctx context.Context) coldata.Batch {
+				NextCb: func() coldata.Batch {
 					// All inputs that do not encounter an error will continue to return
 					// batches.
 					b := allocator.NewMemBatchWithMaxCapacity([]*types.T{types.Int})
@@ -186,9 +186,9 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 
 	var wg sync.WaitGroup
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	s.Init()
+	s.Init(ctx)
 	for {
-		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next(ctx) }); err != nil {
+		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next() }); err != nil {
 			require.True(t, testutils.IsError(err, expectedErr), err)
 			break
 		}
@@ -213,11 +213,11 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
 	s := NewParallelUnorderedSynchronizer(inputs, &wg)
-	s.Init()
+	s.Init(ctx)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		s.Next(ctx)
+		s.Next()
 	}
 	b.StopTimer()
 	cancelFn()

@@ -24,24 +24,30 @@ import (
 // are present in the vectorized engine are maintained on all batches. It
 // should be planned between other Operators in tests.
 type invariantsChecker struct {
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 }
 
-var _ colexecop.Operator = invariantsChecker{}
+var _ colexecop.Operator = &invariantsChecker{}
 
 // newInvariantsChecker creates a new invariantsChecker.
 func newInvariantsChecker(input colexecop.Operator) colexecop.Operator {
 	return &invariantsChecker{
-		OneInputNode: colexecop.OneInputNode{Input: input},
+		OneInputHelper: colexecop.MakeOneInputHelper(input),
 	}
 }
 
-func (i invariantsChecker) Init() {
-	i.Input.Init()
+func (i *invariantsChecker) Init(ctx context.Context) {
+	if !i.InitHelper.Init(ctx) {
+		colexecerror.InternalError(errors.AssertionFailedf("Init is called for the second time"))
+	}
+	i.Input.Init(ctx)
 }
 
-func (i invariantsChecker) Next(ctx context.Context) coldata.Batch {
-	b := i.Input.Next(ctx)
+func (i *invariantsChecker) Next() coldata.Batch {
+	if i.Ctx == nil {
+		colexecerror.InternalError(errors.AssertionFailedf("Ctx is nil, was Init() called?"))
+	}
+	b := i.Input.Next()
 	n := b.Length()
 	if n == 0 {
 		return b

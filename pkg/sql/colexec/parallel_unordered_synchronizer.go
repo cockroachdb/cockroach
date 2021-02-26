@@ -58,6 +58,8 @@ const (
 // ParallelUnorderedSynchronizer is an Operator that combines multiple Operator streams
 // into one.
 type ParallelUnorderedSynchronizer struct {
+	colexecop.InitHelper
+
 	inputs []SynchronizerInput
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
@@ -166,9 +168,12 @@ func NewParallelUnorderedSynchronizer(
 }
 
 // Init is part of the Operator interface.
-func (s *ParallelUnorderedSynchronizer) Init() {
+func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
+	if !s.InitHelper.Init(ctx) {
+		return
+	}
 	for _, input := range s.inputs {
-		input.Op.Init()
+		input.Op.Init(ctx)
 	}
 }
 
@@ -183,18 +188,18 @@ func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchron
 const parallelUnorderedSynchronizerInputString = "parallel unordered synchronizer input"
 
 // init starts one goroutine per input to read from each input asynchronously
-// and push to batchCh. Canceling the context results in all goroutines
-// terminating, otherwise they keep on pushing batches until a zero-length batch
-// is encountered. Once all inputs terminate, s.batchCh is closed. If an error
-// occurs, the goroutines will make a non-blocking best effort to push that
-// error on s.errCh, resulting in the first error pushed to be observed by the
-// Next goroutine. Inputs are asynchronous so that the synchronizer is minimally
-// affected by slow inputs.
+// and push to batchCh. Canceling the context (passed in Init() or DrainMeta())
+// results in all goroutines terminating, otherwise they keep on pushing batches
+// until a zero-length batch is encountered. Once all inputs terminate,
+// s.batchCh is closed. If an error occurs, the goroutines will make a
+// non-blocking best effort to push that error on s.errCh, resulting in the
+// first error pushed to be observed by the Next goroutine. Inputs are
+// asynchronous so that the synchronizer is minimally affected by slow inputs.
 func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 	for i, input := range s.inputs {
 		s.nextBatch[i] = func(input SynchronizerInput, inputIdx int) func() {
 			return func() {
-				s.batches[inputIdx] = input.Op.Next(ctx)
+				s.batches[inputIdx] = input.Op.Next()
 			}
 		}(input, i)
 		s.externalWaitGroup.Add(1)
@@ -290,7 +295,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 }
 
 // Next is part of the Operator interface.
-func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
+func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
 	for {
 		state := s.getState()
 		switch state {
@@ -298,7 +303,7 @@ func (s *ParallelUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch 
 			return coldata.ZeroBatch
 		case parallelUnorderedSynchronizerStateUninitialized:
 			s.setState(parallelUnorderedSynchronizerStateRunning)
-			s.init(ctx)
+			s.init(s.Ctx)
 		case parallelUnorderedSynchronizerStateRunning:
 			// Signal the input whose batch we returned in the last call to Next that it
 			// is safe to retrieve the next batch. Since Next has been called, we can

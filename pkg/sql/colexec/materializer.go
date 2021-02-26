@@ -238,7 +238,9 @@ func (m *Materializer) Start(ctx context.Context) {
 	// We can encounter an expected error during Init (e.g. an operator
 	// attempts to allocate a batch, but the memory budget limit has been
 	// reached), so we need to wrap it with a catcher.
-	if err := colexecerror.CatchVectorizedRuntimeError(m.input.Init); err != nil {
+	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+		m.input.Init(ctx)
+	}); err != nil {
 		m.MoveToDraining(err)
 	}
 }
@@ -249,7 +251,7 @@ func (m *Materializer) Start(ctx context.Context) {
 func (m *Materializer) next() rowenc.EncDatumRow {
 	if m.batch == nil || m.curIdx >= m.batch.Length() {
 		// Get a fresh batch.
-		m.batch = m.input.Next(m.Ctx)
+		m.batch = m.input.Next()
 		if m.batch.Length() == 0 {
 			return nil
 		}

@@ -20,8 +20,6 @@
 package colexecjoin
 
 import (
-	"context"
-
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -269,9 +267,9 @@ func _PROBE_SWITCH(_JOIN_TYPE joinTypeInfo, _SEL_PERMUTATION selPermutation) { /
 						// Last equality column and either group is incomplete. Save state
 						// and have it handled in the next iteration.
 						if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
-							o.appendToBufferedGroup(ctx, &o.left, o.proberState.lBatch, lSel, beginLIdx, lGroupLength)
+							o.appendToBufferedGroup(&o.left, o.proberState.lBatch, lSel, beginLIdx, lGroupLength)
 							o.proberState.lIdx = lGroupLength + beginLIdx
-							o.appendToBufferedGroup(ctx, &o.right, o.proberState.rBatch, rSel, beginRIdx, rGroupLength)
+							o.appendToBufferedGroup(&o.right, o.proberState.rBatch, rSel, beginRIdx, rGroupLength)
 							o.proberState.rIdx = rGroupLength + beginRIdx
 
 							o.groups.finishedCol()
@@ -634,7 +632,7 @@ func _PROCESS_NOT_LAST_GROUP_IN_COLUMN_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 // */}}
 
 // {{range $sel := $.SelPermutations}}
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL(ctx context.Context) {
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL() {
 	lSel := o.proberState.lBatch.Selection()
 	rSel := o.proberState.rBatch.Selection()
 EqLoop:
@@ -972,28 +970,28 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) buildRightGroupsFromBatch(
 // and set the correct cardinality.
 // Note that in this phase, we do this for every group, except the last group
 // in the batch.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) probe(ctx context.Context) {
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) probe() {
 	o.groups.reset(o.proberState.lIdx, o.proberState.lLength, o.proberState.rIdx, o.proberState.rLength)
 	lSel := o.proberState.lBatch.Selection()
 	rSel := o.proberState.rBatch.Selection()
 	if lSel != nil {
 		if rSel != nil {
-			o.probeBodyLSeltrueRSeltrue(ctx)
+			o.probeBodyLSeltrueRSeltrue()
 		} else {
-			o.probeBodyLSeltrueRSelfalse(ctx)
+			o.probeBodyLSeltrueRSelfalse()
 		}
 	} else {
 		if rSel != nil {
-			o.probeBodyLSelfalseRSeltrue(ctx)
+			o.probeBodyLSelfalseRSeltrue()
 		} else {
-			o.probeBodyLSelfalseRSelfalse(ctx)
+			o.probeBodyLSelfalseRSelfalse()
 		}
 	}
 }
 
 // setBuilderSourceToBufferedGroup sets up the builder state to use the
 // buffered group.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup(ctx context.Context) {
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup() {
 	o.builderState.buildFrom = mjBuildFromBufferedGroup
 	o.bufferedGroup.helper.setupBuilder()
 	o.builderState.totalOutCountFromBufferedGroup = o.bufferedGroup.helper.calculateOutputCount()
@@ -1008,7 +1006,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) setBuilderSourceToBufferedGroup(ctx conte
 // exhaustLeftSource sets up the builder to process any remaining tuples from
 // the left source. It should only be called when the right source has been
 // exhausted.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource(ctx context.Context) {
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) exhaustLeftSource() {
 	// {{if or _JOIN_TYPE.IsInner (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsRightSemi)}}
 	// {{/*
 	// Remaining tuples from the left source do not have a match, so they are
@@ -1110,7 +1108,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) calculateOutputCount(groups []group) int 
 }
 
 // build creates the cross product, and writes it to the output member.
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) build(ctx context.Context) {
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) build() {
 	outStartIdx := o.builderState.outCount
 	switch o.builderState.buildFrom {
 	case mjBuildFromBatch:
@@ -1146,10 +1144,10 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) build(ctx context.Context) {
 		o.builderState.alreadyEmittedFromBufferedGroup += willEmit
 		if o.output.Width() != 0 && willEmit > 0 {
 			// {{if not (or _JOIN_TYPE.IsRightSemi _JOIN_TYPE.IsRightAnti)}}
-			o.bufferedGroup.helper.buildFromLeftInput(ctx, outStartIdx)
+			o.bufferedGroup.helper.buildFromLeftInput(o.Ctx, outStartIdx)
 			// {{end}}
 			// {{if not (or _JOIN_TYPE.IsLeftSemi _JOIN_TYPE.IsLeftAnti)}}
-			o.bufferedGroup.helper.buildFromRightInput(ctx, outStartIdx)
+			o.bufferedGroup.helper.buildFromRightInput(o.Ctx, outStartIdx)
 			// {{end}}
 		}
 
@@ -1168,7 +1166,7 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	o.outputReady = true
 	o.builderState.buildFrom = mjBuildFromBatch
 	// {{if or $.JoinType.IsInner (or $.JoinType.IsLeftSemi $.JoinType.IsRightSemi)}}
-	o.setBuilderSourceToBufferedGroup(ctx)
+	o.setBuilderSourceToBufferedGroup()
 	// {{else}}
 	// Next, we need to make sure that builder state is set up for a case when
 	// neither exhaustLeftSource nor exhaustRightSource is called below. In such
@@ -1183,7 +1181,7 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 	// nulls corresponding to the right one. But if the left source is
 	// finished, then there is nothing left to do.
 	if o.proberState.lIdx < o.proberState.lLength {
-		o.exhaustLeftSource(ctx)
+		o.exhaustLeftSource()
 		// We unset o.outputReady here because we want to put as many unmatched
 		// tuples from the left into the output batch. Once outCount reaches the
 		// desired output batch size, the output will be returned.
@@ -1209,7 +1207,7 @@ func _SOURCE_FINISHED_SWITCH(_JOIN_TYPE joinTypeInfo) { // */}}
 
 // */}}
 
-func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
+func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next() coldata.Batch {
 	o.output, _ = o.unlimitedAllocator.ResetMaybeReallocate(
 		o.outputTypes, o.output, 1 /* minCapacity */, o.memoryLimit,
 	)
@@ -1217,7 +1215,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 	for {
 		switch o.state {
 		case mjEntry:
-			o.initProberState(ctx)
+			o.initProberState()
 
 			if o.nonEmptyBufferedGroup() {
 				o.state = mjFinishBufferedGroup
@@ -1234,15 +1232,15 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			_SOURCE_FINISHED_SWITCH(_JOIN_TYPE)
 			o.state = mjBuild
 		case mjFinishBufferedGroup:
-			o.finishProbe(ctx)
-			o.setBuilderSourceToBufferedGroup(ctx)
+			o.finishProbe()
+			o.setBuilderSourceToBufferedGroup()
 			o.state = mjBuild
 		case mjProbe:
-			o.probe(ctx)
+			o.probe()
 			o.setBuilderSourceToBatch()
 			o.state = mjBuild
 		case mjBuild:
-			o.build(ctx)
+			o.build()
 
 			if o.builderState.outFinished {
 				o.state = mjEntry
@@ -1266,7 +1264,7 @@ func (o *mergeJoin_JOIN_TYPE_STRINGOp) Next(ctx context.Context) coldata.Batch {
 			// Note that resetting of buffered group will close disk queues
 			// (if there are any).
 			if o.bufferedGroup.needToReset {
-				o.bufferedGroup.helper.Reset(ctx)
+				o.bufferedGroup.helper.Reset(o.Ctx)
 				o.bufferedGroup.needToReset = false
 			}
 			return coldata.ZeroBatch

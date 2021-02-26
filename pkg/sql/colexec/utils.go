@@ -39,6 +39,7 @@ func newPartitionerToOperator(
 // PartitionedQueue to Operator.
 type partitionerToOperator struct {
 	colexecop.ZeroInputNode
+	colexecop.InitHelper
 	colexecop.NonExplainable
 
 	allocator    *colmem.Allocator
@@ -50,21 +51,22 @@ type partitionerToOperator struct {
 
 var _ colexecop.Operator = &partitionerToOperator{}
 
-func (p *partitionerToOperator) Init() {
-	if p.batch == nil {
-		// We will be dequeueing the batches from disk into this batch, so we
-		// need to have enough capacity to support the batches of any size.
-		p.batch = p.allocator.NewMemBatchWithFixedCapacity(p.types, coldata.BatchSize())
+func (p *partitionerToOperator) Init(ctx context.Context) {
+	if !p.InitHelper.Init(ctx) {
+		return
 	}
+	// We will be dequeueing the batches from disk into this batch, so we
+	// need to have enough capacity to support the batches of any size.
+	p.batch = p.allocator.NewMemBatchWithFixedCapacity(p.types, coldata.BatchSize())
 }
 
-func (p *partitionerToOperator) Next(ctx context.Context) coldata.Batch {
+func (p *partitionerToOperator) Next() coldata.Batch {
 	var err error
 	// We need to perform the memory accounting on the dequeued batch. Note that
 	// such setup allows us to release the memory under the old p.batch (which
 	// is no longer valid) and to retain the memory under the just dequeued one.
 	p.allocator.PerformOperation(p.batch.ColVecs(), func() {
-		err = p.partitioner.Dequeue(ctx, p.partitionIdx, p.batch)
+		err = p.partitioner.Dequeue(p.Ctx, p.partitionIdx, p.batch)
 	})
 	if err != nil {
 		colexecerror.InternalError(err)

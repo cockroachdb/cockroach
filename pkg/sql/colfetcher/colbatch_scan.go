@@ -46,20 +46,19 @@ import (
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type ColBatchScan struct {
 	colexecop.ZeroInputNode
+	colexecop.InitHelper
+
 	spans       roachpb.Spans
 	flowCtx     *execinfra.FlowCtx
 	rf          *cFetcher
 	limitHint   int64
 	parallelize bool
-	ctx         context.Context
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
 	tracingSpan *tracing.Span
 	// rowsRead contains the number of total rows this ColBatchScan has returned
 	// so far.
 	rowsRead int64
-	// init is true after Init() has been called.
-	init bool
 	// ResultTypes is the slice of resulting column types from this operator.
 	// It should be used rather than the slice of column types from the scanned
 	// table because the scan might synthesize additional implicit system columns.
@@ -72,8 +71,15 @@ var _ colexecop.Closer = &ColBatchScan{}
 var _ colexecop.Operator = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
-func (s *ColBatchScan) Init() {
-	s.init = true
+func (s *ColBatchScan) Init(ctx context.Context) {
+	if !s.InitHelper.Init(ctx) {
+		return
+	}
+	if execinfra.ShouldCollectStats(s.Ctx, s.flowCtx) {
+		// We need to start a child span so that the only contention events
+		// present in the recording would be because of this cFetcher.
+		s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
+	}
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
 		s.flowCtx.Txn, s.spans, limitBatches, s.limitHint, s.flowCtx.TraceKV,
@@ -84,18 +90,8 @@ func (s *ColBatchScan) Init() {
 }
 
 // Next is part of the Operator interface.
-func (s *ColBatchScan) Next(ctx context.Context) coldata.Batch {
-	if s.ctx == nil {
-		// This is the first call to Next(), so we will capture the context and
-		// possibly replace it with a child below.
-		s.ctx = ctx
-		if execinfra.ShouldCollectStats(s.ctx, s.flowCtx) {
-			// We need to start a child span so that the only contention events
-			// present in the recording would be because of this cFetcher.
-			s.ctx, s.tracingSpan = execinfra.ProcessorSpan(s.ctx, "colbatchscan")
-		}
-	}
-	bat, err := s.rf.NextBatch(s.ctx)
+func (s *ColBatchScan) Next() coldata.Batch {
+	bat, err := s.rf.NextBatch(s.Ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -108,10 +104,10 @@ func (s *ColBatchScan) Next(ctx context.Context) coldata.Batch {
 
 // DrainMeta is part of the MetadataSource interface.
 func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if !s.init {
-		// In some pathological queries like `SELECT 1 FROM t HAVING true`, Init()
-		// and Next() may never get called. Return early to avoid using an
-		// uninitialized fetcher.
+	if s.Ctx == nil {
+		// In some pathological queries like `SELECT 1 FROM t HAVING true`,
+		// Init() and Next() may never get called. Return early to avoid using
+		// an uninitialized fetcher.
 		return nil
 	}
 	var trailingMeta []execinfrapb.ProducerMetadata
@@ -144,7 +140,7 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 		// TODO(yuzefovich): this is temporary hack that will be fixed by adding
 		// context.Context argument to Init() and removing it from Next() and
 		// DrainMeta().
-		if trace := execinfra.GetTraceData(s.ctx); trace != nil {
+		if trace := execinfra.GetTraceData(s.Ctx); trace != nil {
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 		}
 	}
@@ -163,11 +159,11 @@ func (s *ColBatchScan) GetRowsRead() int64 {
 
 // GetCumulativeContentionTime is part of the execinfra.KVReader interface.
 func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
-	if s.ctx == nil {
-		// Next was never called, so there was no contention events.
+	if s.Ctx == nil {
+		// Init was never called, so there was no contention events.
 		return 0
 	}
-	return execinfra.GetCumulativeContentionTime(s.ctx)
+	return execinfra.GetCumulativeContentionTime(s.Ctx)
 }
 
 var colBatchScanPool = sync.Pool{

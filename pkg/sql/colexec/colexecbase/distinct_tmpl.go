@@ -80,7 +80,7 @@ func newSingleDistinct(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			return &distinct_TYPEOp{
-				OneInputNode:   colexecop.NewOneInputNode(input),
+				OneInputHelper: colexecop.MakeOneInputHelper(input),
 				distinctColIdx: distinctColIdx,
 				outputCol:      outputCol,
 			}, nil
@@ -144,7 +144,7 @@ type distinct_TYPEOp struct {
 	// still works across batch boundaries.
 	lastVal _GOTYPE
 
-	colexecop.OneInputNode
+	colexecop.OneInputHelper
 
 	// distinctColIdx is the index of the column to distinct upon.
 	distinctColIdx int
@@ -158,10 +158,6 @@ type distinct_TYPEOp struct {
 
 var _ colexecop.ResettableOperator = &distinct_TYPEOp{}
 
-func (p *distinct_TYPEOp) Init() {
-	p.Input.Init()
-}
-
 func (p *distinct_TYPEOp) Reset(ctx context.Context) {
 	p.foundFirstRow = false
 	p.lastValNull = false
@@ -170,8 +166,8 @@ func (p *distinct_TYPEOp) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
-	batch := p.Input.Next(ctx)
+func (p *distinct_TYPEOp) Next() coldata.Batch {
+	batch := p.Input.Next()
 	if batch.Length() == 0 {
 		return batch
 	}

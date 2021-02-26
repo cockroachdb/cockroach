@@ -362,11 +362,11 @@ func NewRandomDataOp(
 	}
 }
 
-// Init is part of the colexec.Operator interface.
-func (o *RandomDataOp) Init() {}
+// Init is part of the colexecop.Operator interface.
+func (o *RandomDataOp) Init(context.Context) {}
 
-// Next is part of the colexec.Operator interface.
-func (o *RandomDataOp) Next(context.Context) coldata.Batch {
+// Next is part of the colexecop.Operator interface.
+func (o *RandomDataOp) Next() coldata.Batch {
 	if o.numReturned == o.numBatches {
 		// Done.
 		b := coldata.ZeroBatch

@@ -240,9 +240,9 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					require.NoError(t, err)
 				}); err == nil {
 					err = colexecerror.CatchVectorizedRuntimeError(func() {
-						result.Op.Init()
-						result.Op.Next(ctx)
-						result.Op.Next(ctx)
+						result.Op.Init(ctx)
+						result.Op.Next()
+						result.Op.Next()
 					})
 				}
 				if result != nil {

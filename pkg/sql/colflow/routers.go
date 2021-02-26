@@ -99,6 +99,7 @@ type drainCoordinator interface {
 }
 
 type routerOutputOp struct {
+	colexecop.InitHelper
 	// input is a reference to our router.
 	input execinfra.OpNode
 	// drainCoordinator is a reference to the HashRouter to be able to notify it
@@ -210,15 +211,17 @@ func newRouterOutputOp(args routerOutputOpArgs) *routerOutputOp {
 	return o
 }
 
-func (o *routerOutputOp) Init() {}
+func (o *routerOutputOp) Init(ctx context.Context) {
+	o.InitHelper.Init(ctx)
+}
 
 // nextErrorLocked is a helper method that handles an error encountered in Next.
-func (o *routerOutputOp) nextErrorLocked(ctx context.Context, err error) {
+func (o *routerOutputOp) nextErrorLocked(err error) {
 	o.mu.state = routerOutputOpDraining
 	o.maybeUnblockLocked()
 	// Unlock the mutex, since the HashRouter will cancel all outputs.
 	o.mu.Unlock()
-	o.drainCoordinator.encounteredError(ctx)
+	o.drainCoordinator.encounteredError(o.Ctx)
 	o.mu.Lock()
 	colexecerror.InternalError(err)
 }
@@ -226,7 +229,7 @@ func (o *routerOutputOp) nextErrorLocked(ctx context.Context, err error) {
 // Next returns the next coldata.Batch from the routerOutputOp. Note that Next
 // is designed for only one concurrent caller and will block until data is
 // ready.
-func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
+func (o *routerOutputOp) Next() coldata.Batch {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for o.mu.forwardedErr == nil && o.mu.state == routerOutputOpRunning && o.mu.data.Empty() {
@@ -239,12 +242,12 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 	if o.mu.state == routerOutputOpDraining {
 		return coldata.ZeroBatch
 	}
-	b, err := o.mu.data.Dequeue(ctx)
+	b, err := o.mu.data.Dequeue(o.Ctx)
 	if err == nil && o.testingKnobs.nextTestInducedErrorCb != nil {
 		err = o.testingKnobs.nextTestInducedErrorCb()
 	}
 	if err != nil {
-		o.nextErrorLocked(ctx, err)
+		o.nextErrorLocked(err)
 	}
 	o.mu.numUnread -= b.Length()
 	if o.mu.numUnread <= o.testingKnobs.blockedThreshold {
@@ -253,13 +256,13 @@ func (o *routerOutputOp) Next(ctx context.Context) coldata.Batch {
 	if b.Length() == 0 {
 		if o.testingKnobs.nextTestInducedErrorCb != nil {
 			if err := o.testingKnobs.nextTestInducedErrorCb(); err != nil {
-				o.nextErrorLocked(ctx, err)
+				o.nextErrorLocked(err)
 			}
 		}
 		// This is the last batch. closeLocked will set done to protect against
 		// further calls to Next since this is allowed by the interface as well as
 		// cleaning up and releasing possible disk infrastructure.
-		o.closeLocked(ctx)
+		o.closeLocked(o.Ctx)
 	}
 	return b
 }
@@ -554,7 +557,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 	// method with a catcher. Note that we also have "internal" catchers as
 	// well for more fine-grained control of error propagation.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
-		r.Input.Init()
+		r.Input.Init(ctx)
 		var done bool
 		processNextBatch := func() {
 			done = r.processNextBatch(ctx)
@@ -622,7 +625,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 // each column to its corresponding output, returning whether the input is
 // done.
 func (r *HashRouter) processNextBatch(ctx context.Context) bool {
-	b := r.Input.Next(ctx)
+	b := r.Input.Next()
 	n := b.Length()
 	if n == 0 {
 		// Done. Push an empty batch to outputs to tell them the data is done as
@@ -633,7 +636,10 @@ func (r *HashRouter) processNextBatch(ctx context.Context) bool {
 		return true
 	}
 
-	selections := r.tupleDistributor.Distribute(ctx, b, r.hashCols)
+	// It is ok that we call Init() on every batch since all calls except for
+	// the first one are noops.
+	r.tupleDistributor.Init(ctx)
+	selections := r.tupleDistributor.Distribute(b, r.hashCols)
 	for i, o := range r.outputs {
 		if len(selections[i]) > 0 {
 			b.SetSelection(true)

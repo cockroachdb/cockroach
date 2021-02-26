@@ -30,6 +30,8 @@ import (
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
+	colexecop.InitHelper
+
 	allocator             *colmem.Allocator
 	memoryLimit           int64
 	inputs                []SynchronizerInput
@@ -112,12 +114,12 @@ func NewOrderedSynchronizer(
 }
 
 // Next is part of the Operator interface.
-func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
+func (o *OrderedSynchronizer) Next() coldata.Batch {
 	if o.inputBatches == nil {
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
 		o.heap = make([]int, 0, len(o.inputs))
 		for i := range o.inputs {
-			o.inputBatches[i] = o.inputs[i].Op.Next(ctx)
+			o.inputBatches[i] = o.inputs[i].Op.Next()
 			o.updateComparators(i)
 			if o.inputBatches[i].Length() > 0 {
 				o.heap = append(o.heap, i)
@@ -239,7 +241,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
 				o.inputIndices[minBatch]++
 			} else {
-				o.inputBatches[minBatch] = o.inputs[minBatch].Op.Next(ctx)
+				o.inputBatches[minBatch] = o.inputs[minBatch].Op.Next()
 				o.inputIndices[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
@@ -346,12 +348,15 @@ func (o *OrderedSynchronizer) resetOutput() {
 }
 
 // Init is part of the Operator interface.
-func (o *OrderedSynchronizer) Init() {
+func (o *OrderedSynchronizer) Init(ctx context.Context) {
+	if !o.InitHelper.Init(ctx) {
+		return
+	}
 	o.inputIndices = make([]int, len(o.inputs))
 	o.outNulls = make([]*coldata.Nulls, len(o.typs))
 	o.outColsMap = make([]int, len(o.typs))
 	for i := range o.inputs {
-		o.inputs[i].Op.Init()
+		o.inputs[i].Op.Init(ctx)
 	}
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {

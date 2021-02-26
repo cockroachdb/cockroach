@@ -230,14 +230,14 @@ func (o *Outbox) sendBatches(
 		o.runnerCtx = ctx
 	}
 	errToSend = colexecerror.CatchVectorizedRuntimeError(func() {
-		o.Input.Init()
+		o.Input.Init(o.runnerCtx)
 		for {
 			if atomic.LoadUint32(&o.draining) == 1 {
 				terminatedGracefully = true
 				return
 			}
 
-			batch := o.Input.Next(o.runnerCtx)
+			batch := o.Input.Next()
 			n := batch.Length()
 			if n == 0 {
 				terminatedGracefully = true

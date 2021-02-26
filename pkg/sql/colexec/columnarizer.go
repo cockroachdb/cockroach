@@ -48,17 +48,15 @@ type Columnarizer struct {
 	execinfra.ProcessorBase
 	colexecop.NonExplainable
 
-	mode       columnarizerMode
-	allocator  *colmem.Allocator
-	input      execinfra.RowSource
-	da         rowenc.DatumAlloc
-	initStatus colexecop.OperatorInitStatus
+	mode      columnarizerMode
+	allocator *colmem.Allocator
+	input     execinfra.RowSource
+	da        rowenc.DatumAlloc
 
 	buffered        rowenc.EncDatumRows
 	batch           coldata.Batch
 	maxBatchMemSize int64
 	accumulatedMeta []execinfrapb.ProducerMetadata
-	ctx             context.Context
 	typs            []*types.T
 
 	// removedFromFlow marks this Columnarizer as having been removed from the
@@ -72,30 +70,27 @@ var _ colexecop.Operator = &Columnarizer{}
 // NewBufferingColumnarizer returns a new Columnarizer that will be buffering up
 // rows before emitting them as output batches.
 func NewBufferingColumnarizer(
-	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
 ) (*Columnarizer, error) {
-	return newColumnarizer(ctx, allocator, flowCtx, processorID, input, columnarizerBufferingMode)
+	return newColumnarizer(allocator, flowCtx, processorID, input, columnarizerBufferingMode)
 }
 
 // NewStreamingColumnarizer returns a new Columnarizer that emits every input
 // row as a separate batch.
 func NewStreamingColumnarizer(
-	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
 	input execinfra.RowSource,
 ) (*Columnarizer, error) {
-	return newColumnarizer(ctx, allocator, flowCtx, processorID, input, columnarizerStreamingMode)
+	return newColumnarizer(allocator, flowCtx, processorID, input, columnarizerStreamingMode)
 }
 
 // newColumnarizer returns a new Columnarizer.
 func newColumnarizer(
-	ctx context.Context,
 	allocator *colmem.Allocator,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
@@ -112,7 +107,6 @@ func newColumnarizer(
 		allocator:       allocator,
 		input:           input,
 		maxBatchMemSize: execinfra.GetWorkMemLimit(flowCtx.Cfg),
-		ctx:             ctx,
 		mode:            mode,
 	}
 	if err = c.ProcessorBase.Init(
@@ -140,23 +134,21 @@ func newColumnarizer(
 }
 
 // Init is part of the Operator interface.
-func (c *Columnarizer) Init() {
+func (c *Columnarizer) Init(ctx context.Context) {
 	if c.removedFromFlow {
 		return
 	}
-	// We don't want to call Start on the input to columnarizer and allocating
-	// internal objects several times if Init method is called more than once, so
-	// we have this check in place.
-	if c.initStatus == colexecop.OperatorNotInitialized {
-		c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
-		c.ctx = c.StartInternalNoSpan(c.ctx)
-		c.input.Start(c.ctx)
-		c.initStatus = colexecop.OperatorInitialized
+	if c.Ctx != nil {
+		// Init has already been called.
+		return
 	}
+	c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
+	ctx = c.StartInternalNoSpan(ctx)
+	c.input.Start(ctx)
 }
 
 // Next is part of the Operator interface.
-func (c *Columnarizer) Next(context.Context) coldata.Batch {
+func (c *Columnarizer) Next() coldata.Batch {
 	if c.removedFromFlow {
 		return coldata.ZeroBatch
 	}

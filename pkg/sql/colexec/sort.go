@@ -74,9 +74,9 @@ type spooler interface {
 	execinfra.OpNode
 
 	// init initializes this spooler and will be called once at the setup time.
-	init()
+	init(context.Context)
 	// spool performs the actual spooling.
-	spool(context.Context)
+	spool()
 	// getValues returns ith Vec of the already spooled data.
 	getValues(i int) coldata.Vec
 	// getNumTuples returns the number of spooled tuples.
@@ -126,18 +126,18 @@ func newAllSpooler(
 	}
 }
 
-func (p *allSpooler) init() {
-	p.Input.Init()
+func (p *allSpooler) init(ctx context.Context) {
+	p.Input.Init(ctx)
 	p.bufferedTuples = colexecutils.NewAppendOnlyBufferedBatch(p.allocator, p.inputTypes, nil /* colsToStore */)
 	p.windowedBatch = p.allocator.NewMemBatchWithFixedCapacity(p.inputTypes, 0 /* size */)
 }
 
-func (p *allSpooler) spool(ctx context.Context) {
+func (p *allSpooler) spool() {
 	if p.spooled {
 		colexecerror.InternalError(errors.AssertionFailedf("spool() is called for the second time"))
 	}
 	p.spooled = true
-	for batch := p.Input.Next(ctx); batch.Length() != 0; batch = p.Input.Next(ctx) {
+	for batch := p.Input.Next(); batch.Length() != 0; batch = p.Input.Next() {
 		p.allocator.PerformOperation(p.bufferedTuples.ColVecs(), func() {
 			p.bufferedTuples.AppendTuples(batch, 0 /* startIdx */, batch.Length())
 		})
@@ -184,6 +184,8 @@ func (p *allSpooler) Reset(ctx context.Context) {
 }
 
 type sortOp struct {
+	colexecop.InitHelper
+
 	allocator *colmem.Allocator
 	input     spooler
 
@@ -224,16 +226,19 @@ type colSorter interface {
 	// init prepares this sorter, given a particular Vec and an order vector,
 	// which must be the same size as the input Vec and will be permuted with
 	// the same swaps as the column.
-	init(col coldata.Vec, order []int)
+	init(ctx context.Context, col coldata.Vec, order []int)
 	// sort globally sorts this sorter's column.
-	sort(ctx context.Context)
+	sort()
 	// sortPartitions sorts this sorter's column once for every partition in the
 	// partition slice.
-	sortPartitions(ctx context.Context, partitions []int)
+	sortPartitions(partitions []int)
 }
 
-func (p *sortOp) Init() {
-	p.input.init()
+func (p *sortOp) Init(ctx context.Context) {
+	if !p.InitHelper.Init(ctx) {
+		return
+	}
+	p.input.init(ctx)
 }
 
 // sortState represents the state of the sort operator.
@@ -254,14 +259,14 @@ const (
 	sortDone
 )
 
-func (p *sortOp) Next(ctx context.Context) coldata.Batch {
+func (p *sortOp) Next() coldata.Batch {
 	for {
 		switch p.state {
 		case sortSpooling:
-			p.input.spool(ctx)
+			p.input.spool()
 			p.state = sortSorting
 		case sortSorting:
-			p.sort(ctx)
+			p.sort()
 			p.state = sortEmitting
 		case sortEmitting:
 			toEmit := p.input.getNumTuples() - p.emitted
@@ -309,7 +314,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 
 // sort sorts the spooled tuples, so it must be called after spool() has been
 // performed.
-func (p *sortOp) sort(ctx context.Context) {
+func (p *sortOp) sort() {
 	spooledTuples := p.input.getNumTuples()
 	if spooledTuples == 0 {
 		// There is nothing to sort.
@@ -330,7 +335,7 @@ func (p *sortOp) sort(ctx context.Context) {
 	for i := range p.orderingCols {
 		inputVec := p.input.getValues(int(p.orderingCols[i].ColIdx))
 		p.sorters[i] = newSingleSorter(p.inputTypes[p.orderingCols[i].ColIdx], p.orderingCols[i].Direction, inputVec.MaybeHasNulls())
-		p.sorters[i].init(inputVec, p.order)
+		p.sorters[i].init(p.Ctx, inputVec, p.order)
 	}
 
 	// Now, sort each column in turn.
@@ -341,7 +346,7 @@ func (p *sortOp) sort(ctx context.Context) {
 	if partitionsCol == nil {
 		// All spooled tuples belong to the same partition, so the first column
 		// doesn't need special treatment - we just globally sort it.
-		p.sorters[0].sort(ctx)
+		p.sorters[0].sort()
 		if len(p.sorters) == 1 {
 			// We're done sorting. Transition to emitting.
 			return
@@ -400,7 +405,7 @@ func (p *sortOp) sort(ctx context.Context) {
 		partitions = boolVecToSel64(partitionsCol, partitions[:0])
 		// For each partition (set of tuples that are identical in all of the sort
 		// columns we've seen so far), sort based on the new column.
-		sorter.sortPartitions(ctx, partitions)
+		sorter.sortPartitions(partitions)
 	}
 }
 
@@ -426,7 +431,7 @@ func (p *sortOp) Child(nth int, verbose bool) execinfra.OpNode {
 	return nil
 }
 
-func (p *sortOp) ExportBuffered(context.Context, colexecop.Operator) coldata.Batch {
+func (p *sortOp) ExportBuffered(colexecop.Operator) coldata.Batch {
 	if p.exported == p.input.getNumTuples() {
 		return coldata.ZeroBatch
 	}

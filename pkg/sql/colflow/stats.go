@@ -82,10 +82,10 @@ func makeBatchInfoCollector(
 }
 
 // Next is part of the Operator interface.
-func (bic *batchInfoCollector) Next(ctx context.Context) coldata.Batch {
+func (bic *batchInfoCollector) Next() coldata.Batch {
 	var batch coldata.Batch
 	bic.stopwatch.Start()
-	batch = bic.Operator.Next(ctx)
+	batch = bic.Operator.Next()
 	if batch.Length() > 0 {
 		bic.numBatches++
 		bic.numTuples += uint64(batch.Length())
