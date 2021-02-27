@@ -163,7 +163,7 @@ func ParseDArrayFromString(
 	return ret, dependsOnContext, nil
 }
 
-// doParseDArraryFromString does most of the work of ParseDArrayFromString,
+// doParseDArrayFromString does most of the work of ParseDArrayFromString,
 // except the error it returns isn't prettified as a parsing error.
 //
 // The dependsOnContext return value indicates if we had to consult the

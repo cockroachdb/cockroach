@@ -866,6 +866,118 @@ vectorized: true
       right columns: ()
       right fixed values: 1 column
 
+# Test that queries with the contained by <@ operator use the inverted index.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: ARRAY[] @> b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: e@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 111 (missing stats)
+          table: e@e_b_idx
+          spans: /[]-/"D"
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[0,1,2]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: ARRAY[0,1,2] @> b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: e@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: e@e_b_idx
+                  spans: /[]-/"D" /0-/3
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[NULL]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: ARRAY[NULL] @> b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: e@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 111 (missing stats)
+          table: e@e_b_idx
+          spans: /[]-/"D"
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b <@ ARRAY[0,1,NULL]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: ARRAY[0,1,NULL] @> b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: e@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: e@e_b_idx
+                  spans: /[]-/"D" /0-/2
+
+
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.
 statement ok
