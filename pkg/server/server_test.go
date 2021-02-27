@@ -765,8 +765,8 @@ func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
 			m := hlc.NewManualClock(test.clockStartTime)
 			c := hlc.NewClock(m.UnixNano, maxOffset)
 
-			sleepUntilFn := func(until int64, currentTime func() int64) {
-				delta := until - currentTime()
+			sleepUntilFn := func(t hlc.Timestamp) {
+				delta := t.WallTime - c.Now().WallTime
 				if delta > 0 {
 					m.Increment(delta)
 				}

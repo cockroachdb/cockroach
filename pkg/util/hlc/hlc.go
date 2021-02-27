@@ -486,3 +486,30 @@ func (c *Clock) WallTimeUpperBound() int64 {
 	defer c.mu.Unlock()
 	return c.mu.wallTimeUpperBound
 }
+
+// SleepUntil sleeps until the HLC reaches or exceeds the given timestamp. This
+// typically results in sleeping for the duration between the given timestamp's
+// nanosecond WallTime and the Clock's current WallTime time, but may result in
+// sleeping for longer or shorter, depending on the HLC clock's relation to its
+// physical time source (it may lead it) and whether it advances more rapidly
+// due to updates from other nodes.
+func (c *Clock) SleepUntil(t Timestamp) {
+	// Don't busy loop if the HLC clock is out ahead of the system's
+	// physical clock.
+	const minSleep = 25 * time.Microsecond
+	// Refresh every second in case there was a clock jump.
+	const maxSleep = 1 * time.Second
+	for {
+		now := c.Now()
+		if t.LessEq(now) {
+			return
+		}
+		d := now.GoTime().Sub(t.GoTime())
+		if d < minSleep {
+			d = minSleep
+		} else if d > maxSleep {
+			d = maxSleep
+		}
+		time.Sleep(d)
+	}
+}

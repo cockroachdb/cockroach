@@ -46,13 +46,6 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	// This test was seen taking north of 20m under race.
 	skip.UnderRace(t)
-
-	testutils.RunTrueAndFalse(t, "atomic", func(t *testing.T, atomic bool) {
-		testReplicateQueueRebalanceInner(t, atomic)
-	})
-}
-
-func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 	skip.UnderShort(t)
 
 	const numNodes = 5
@@ -72,9 +65,6 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
 		kvserver.LoadBasedRebalancingMode.Override(&st.SV, int64(kvserver.LBRebalancingOff))
-		// NB: usually it's preferred to set the cluster settings, but this is less
-		// boilerplate than setting it and then waiting for all nodes to have it.
-		kvserver.UseAtomicReplicationChanges.Override(&st.SV, atomic)
 	}
 
 	const newRanges = 10
@@ -153,11 +143,7 @@ func testReplicateQueueRebalanceInner(t *testing.T, atomic bool) {
 		// If we have atomic changes enabled, we expect to never see four replicas
 		// on our tracked ranges. If we don't have atomic changes, we can't avoid
 		// it.
-		if atomic {
-			t.Error(info)
-		} else {
-			t.Log(info)
-		}
+		t.Error(info)
 	}
 }
 

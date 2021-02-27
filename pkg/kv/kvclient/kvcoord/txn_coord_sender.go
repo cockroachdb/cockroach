@@ -15,13 +15,11 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -412,32 +410,40 @@ func generateTxnDeadlineExceededErr(
 		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
 }
 
-// commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
-// cheaper than, sending an EndTxnRequest. A read-only txn doesn't have a
-// transaction record, so there's no need to send any request to the server. An
-// EndTxnRequest for a read-only txn is elided by the txnCommitter interceptor.
-// However, calling this and short-circuting even earlier is even more efficient
-// (and shows in benchmarks).
+// finalizeNonLockingTxnLocked finalizes a non-locking txn, either marking it as
+// committed or aborted. It is equivalent, but cheaper than, sending an
+// EndTxnRequest. A non-locking txn doesn't have a transaction record, so
+// there's no need to send any request to the server. An EndTxnRequest for a
+// non-locking txn is elided by the txnCommitter interceptor. However, calling
+// this and short-circuting even earlier is even more efficient (and shows in
+// benchmarks).
 // TODO(nvanbenschoten): we could have this call into txnCommitter's
 // sendLockedWithElidedEndTxn method, but we would want to confirm
 // that doing so doesn't cut into the speed-up we see from this fast-path.
-func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
+func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) *roachpb.Error {
-	deadline := ba.Requests[0].GetEndTxn().Deadline
-	if deadline != nil && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
-		txn := tc.mu.txn.Clone()
-		pErr := generateTxnDeadlineExceededErr(txn, *deadline)
-		// We need to bump the epoch and transform this retriable error.
-		ba.Txn = txn
-		return tc.updateStateLocked(ctx, ba, nil /* br */, pErr)
+	et := ba.Requests[0].GetEndTxn()
+	if et.Commit {
+		deadline := et.Deadline
+		if deadline != nil && deadline.LessEq(tc.mu.txn.WriteTimestamp) {
+			txn := tc.mu.txn.Clone()
+			pErr := generateTxnDeadlineExceededErr(txn, *deadline)
+			// We need to bump the epoch and transform this retriable error.
+			ba.Txn = txn
+			return tc.updateStateLocked(ctx, ba, nil /* br */, pErr)
+		}
+		// Mark the transaction as committed so that, in case this commit is done by
+		// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
+		// Also so that the correct metric gets incremented.
+		tc.mu.txn.Status = roachpb.COMMITTED
+	} else {
+		tc.mu.txn.Status = roachpb.ABORTED
 	}
-	tc.mu.txnState = txnFinalized
-	// Mark the transaction as committed so that, in case this commit is done by
-	// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
-	// Also so that the correct metric gets incremented.
-	tc.mu.txn.Status = roachpb.COMMITTED
-	tc.cleanupTxnLocked(ctx)
+	tc.finalizeAndCleanupTxnLocked(ctx)
+	if et.Commit {
+		tc.maybeCommitWait(ctx)
+	}
 	return nil
 }
 
@@ -459,10 +465,8 @@ func (tc *TxnCoordSender) Send(
 	}
 
 	if ba.IsSingleEndTxnRequest() && !tc.interceptorAlloc.txnPipeliner.hasAcquiredLocks() {
-		return nil, tc.commitReadOnlyTxnLocked(ctx, ba)
+		return nil, tc.finalizeNonLockingTxnLocked(ctx, ba)
 	}
-
-	startNs := tc.clock.PhysicalNow()
 
 	ctx, sp := tc.AnnotateCtxWithSpan(ctx, OpTxnCoordSender)
 	defer sp.Finish()
@@ -503,17 +507,12 @@ func (tc *TxnCoordSender) Send(
 	// If we succeeded to commit, or we attempted to rollback, we move to
 	// txnFinalized.
 	if req, ok := ba.GetArg(roachpb.EndTxn); ok {
-		etReq := req.(*roachpb.EndTxnRequest)
-		if etReq.Commit {
-			if pErr == nil {
-				tc.mu.txnState = txnFinalized
-				tc.cleanupTxnLocked(ctx)
-				tc.maybeSleepForLinearizable(ctx, br, startNs)
+		et := req.(*roachpb.EndTxnRequest)
+		if (et.Commit && pErr == nil) || !et.Commit {
+			tc.finalizeAndCleanupTxnLocked(ctx)
+			if et.Commit {
+				tc.maybeCommitWait(ctx)
 			}
-		} else {
-			// Rollbacks always move us to txnFinalized.
-			tc.mu.txnState = txnFinalized
-			tc.cleanupTxnLocked(ctx)
 		}
 	}
 
@@ -528,29 +527,91 @@ func (tc *TxnCoordSender) Send(
 	return br, nil
 }
 
-// maybeSleepForLinearizable sleeps if the linearizable flag is set. We want to
-// make sure that all the clocks in the system are past the commit timestamp of
-// the transaction. This is guaranteed if either:
-// - the commit timestamp is MaxOffset behind startNs
-// - MaxOffset ns were spent in this function when returning to the
-// client.
-// Below we choose the option that involves less waiting, which is likely the
-// first one unless a transaction commits with an odd timestamp.
-func (tc *TxnCoordSender) maybeSleepForLinearizable(
-	ctx context.Context, br *roachpb.BatchResponse, startNs int64,
-) {
-	if tsNS := br.Txn.WriteTimestamp.WallTime; startNs > tsNS {
-		startNs = tsNS
+// maybeCommitWait performs a "commit-wait" sleep, if doing so is deemed
+// necessary for consistency.
+//
+// By default, commit-wait is only necessary for transactions that commit
+// with a future-time timestamp that leads the local HLC clock. This is
+// because CockroachDB's consistency model depends on all transactions
+// waiting until their commit timestamp is below their gateway clock. In
+// doing so, transactions ensure that at the time that they complete, all
+// other clocks in the system (i.e. on all possible gateways) will be no
+// more than the max_offset below the transaction's commit timestamp. This
+// property ensures that all causally dependent transactions will have an
+// uncertainty interval (see GlobalUncertaintyLimit) that exceeds the
+// original transaction's commit timestamp, preventing stale reads. Without
+// the wait, it would be possible for a read-write transaction to write a
+// future-time value and then for a causally dependent transaction to read
+// below that future-time value, violating "read your writes".
+//
+// The property must also hold for read-only transactions, which may have a
+// commit timestamp in the future due to an uncertainty restart after
+// observing a future-time value in their uncertainty interval. In such
+// cases, the property that the transaction must wait for the local HLC
+// clock to exceed its commit timestamp is not necessary to prevent stale
+// reads, but it is necessary to ensure monotonic reads. Without the wait,
+// it would be possible for a read-only transaction coordinated on a gateway
+// with a fast clock to return a future-time value and then for a causally
+// dependent read-only transaction coordinated on a gateway with a slow
+// clock to read below that future-time value, violating "monotonic reads".
+//
+// In practice, most transactions do not need to wait at all, because their
+// commit timestamps were pulled from an HLC clock (i.e. are not synthetic)
+// and so they will be guaranteed to lead the local HLC's clock, assuming
+// proper HLC time propagation. Only transactions whose commit timestamps
+// were pushed into the future will need to wait, like those who wrote to a
+// global_read range and got bumped by the closed timestamp or those who
+// conflicted (write-read or write-write) with an existing future-time
+// value.
+//
+// However, CockroachDB also supports a stricter model of consistency
+// through its "linearizable" flag. When in linearizable mode (also known as
+// "strict serializable" mode), all writing transactions (but not read-only
+// transactions) must wait an additional max_offset after committing to
+// ensure that their commit timestamp is below the current HLC clock time of
+// any other node in the system. In doing so, all causally dependent
+// transactions are guaranteed to start with higher timestamps, regardless
+// of the gateway they use. This ensures that all causally dependent
+// transactions commit with higher timestamps, even if their read and writes
+// sets do not conflict with the original transaction's. This obviates the
+// need for uncertainty intervals and prevents the "causal reverse" anamoly
+// which can be observed by a third, concurrent transaction.
+//
+// For more, see https://www.cockroachlabs.com/blog/consistency-model/ and
+// docs/RFCS/20200811_non_blocking_txns.md.
+func (tc *TxnCoordSender) maybeCommitWait(ctx context.Context) {
+	if tc.mu.txn.Status != roachpb.COMMITTED {
+		log.Fatalf(ctx, "maybeCommitWait called when not committed")
 	}
-	sleepNS := tc.clock.MaxOffset() -
-		time.Duration(tc.clock.PhysicalNow()-startNs)
 
-	if tc.linearizable && sleepNS > 0 {
-		// TODO(andrei): perhaps we shouldn't sleep with the lock held.
-		log.VEventf(ctx, 2, "%v: waiting %s on EndTxn for linearizability",
-			br.Txn.Short(), duration.Truncate(sleepNS, time.Millisecond))
-		time.Sleep(sleepNS)
+	commitTS := tc.mu.txn.WriteTimestamp
+	readOnly := tc.mu.txn.Sequence == 0
+	linearizable := tc.linearizable
+	needWait := commitTS.Synthetic || (linearizable && !readOnly)
+	if !needWait {
+		// No need to wait. If !Synthetic then we know the commit timestamp
+		// leads the local HLC clock, and since that's all we'd need to wait
+		// for, we can short-circuit.
+		return
 	}
+
+	waitUntil := commitTS
+	if linearizable && !readOnly {
+		waitUntil = waitUntil.Add(tc.clock.MaxOffset().Nanoseconds(), 0)
+	}
+
+	before := tc.clock.PhysicalTime()
+	est := waitUntil.GoTime().Sub(before)
+	log.VEventf(ctx, 2, "performing commit-wait sleep for ~%s", est)
+
+	// NB: unlock while sleeping to avoid holding the lock for commit-wait.
+	tc.mu.Unlock()
+	tc.clock.SleepUntil(waitUntil)
+	tc.mu.Lock()
+
+	after := tc.clock.PhysicalTime()
+	log.VEventf(ctx, 2, "completed commit-wait sleep, took %s", after.Sub(before))
+	tc.metrics.CommitWaits.Inc(1)
 }
 
 // maybeRejectClientLocked checks whether the transaction is in a state that
@@ -617,6 +678,13 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// All good.
 	}
 	return nil
+}
+
+// finalizeAndCleanupTxnLocked marks the transaction state as finalized and
+// closes all interceptors.
+func (tc *TxnCoordSender) finalizeAndCleanupTxnLocked(ctx context.Context) {
+	tc.mu.txnState = txnFinalized
+	tc.cleanupTxnLocked(ctx)
 }
 
 // cleanupTxnLocked closes all the interceptors.
