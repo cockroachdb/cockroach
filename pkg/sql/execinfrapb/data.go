@@ -327,9 +327,12 @@ type MetadataSource interface {
 	// has finished doing its computations. This is a signal that the output
 	// requires no more rows to be returned.
 	// Implementers can choose what to do on subsequent calls (if such occur).
+	//
+	// Note that the components should be using their own context (received
+	// either in Start() or Init() method).
 	// TODO(yuzefovich): modify the contract to require returning nil on all
 	// calls after the first one.
-	DrainMeta(context.Context) []ProducerMetadata
+	DrainMeta() []ProducerMetadata
 }
 
 // MetadataSources is a slice of MetadataSource.
@@ -337,10 +340,10 @@ type MetadataSources []MetadataSource
 
 // DrainMeta calls DrainMeta on all MetadataSources and returns a single slice
 // with all the accumulated metadata.
-func (s MetadataSources) DrainMeta(ctx context.Context) []ProducerMetadata {
+func (s MetadataSources) DrainMeta() []ProducerMetadata {
 	var result []ProducerMetadata
 	for _, src := range s {
-		result = append(result, src.DrainMeta(ctx)...)
+		result = append(result, src.DrainMeta()...)
 	}
 	return result
 }

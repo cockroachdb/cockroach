@@ -907,7 +907,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 			}
 			wg.Wait()
 			// Expect no metadata, this should be a successful run.
-			unexpectedMetadata := ro.DrainMeta(ctx)
+			unexpectedMetadata := ro.DrainMeta()
 			if len(unexpectedMetadata) != 0 {
 				t.Fatalf("unexpected metadata when draining HashRouter output: %+v", unexpectedMetadata)
 			}
@@ -1078,7 +1078,7 @@ func TestHashRouterRandom(t *testing.T) {
 					outputs,
 					[]execinfrapb.MetadataSource{
 						execinfrapb.CallbackMetadataSource{
-							DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
+							DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 								return []execinfrapb.ProducerMetadata{{Err: errors.New(hashRouterMetadataMsg)}}
 							},
 						},
@@ -1114,7 +1114,7 @@ func TestHashRouterRandom(t *testing.T) {
 							if err != nil || b.Length() == 0 || isTerminationScenario(outputRng, 0.5, hashRouterPrematureDrainMeta) {
 								resultsByOp[i].err = err
 								metadataMu.Lock()
-								if meta := outputsAsOps[i].DrainMeta(ctx); meta != nil {
+								if meta := outputsAsOps[i].DrainMeta(); meta != nil {
 									metadataMu.metadata = append(metadataMu.metadata, meta)
 								}
 								metadataMu.Unlock()
@@ -1321,7 +1321,7 @@ func BenchmarkHashRouter(b *testing.B) {
 								oBatch := outputs[j].Next()
 								actualDistribution[j] += oBatch.Length()
 								if oBatch.Length() == 0 {
-									_ = outputs[j].DrainMeta(ctx)
+									_ = outputs[j].DrainMeta()
 									break
 								}
 							}

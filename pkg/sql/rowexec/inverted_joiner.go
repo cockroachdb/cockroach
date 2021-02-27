@@ -250,9 +250,9 @@ func newInvertedJoiner(
 		ij, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ij.input},
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				ij.close()
-				return ij.generateMeta(ctx)
+				return ij.DrainMeta()
 			},
 		},
 	); err != nil {
@@ -805,17 +805,13 @@ func (ij *invertedJoiner) GetCumulativeContentionTime() time.Duration {
 	return execinfra.GetCumulativeContentionTime(ij.Ctx)
 }
 
-func (ij *invertedJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+// DrainMeta is part of the MetadataSource interface.
+func (ij *invertedJoiner) DrainMeta() []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, ij.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(ij.Ctx, ij.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (ij *invertedJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return ij.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

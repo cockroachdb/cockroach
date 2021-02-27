@@ -46,7 +46,7 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 			Op: source,
 			MetadataSources: []execinfrapb.MetadataSource{
 				execinfrapb.CallbackMetadataSource{
-					DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
+					DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 						return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d test-induced metadata", inputIdx)}}
 					},
 				},
@@ -59,7 +59,7 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 	for {
 		b := s.Next()
 		if b.Length() == 0 {
-			require.Equal(t, len(inputs), len(s.DrainMeta(ctx)))
+			require.Equal(t, len(inputs), len(s.DrainMeta()))
 			break
 		}
 		resultBatches++

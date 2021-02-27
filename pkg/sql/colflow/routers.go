@@ -267,7 +267,7 @@ func (o *routerOutputOp) Next() coldata.Batch {
 	return b
 }
 
-func (o *routerOutputOp) DrainMeta(_ context.Context) []execinfrapb.ProducerMetadata {
+func (o *routerOutputOp) DrainMeta() []execinfrapb.ProducerMetadata {
 	o.mu.Lock()
 	o.mu.state = routerOutputOpDraining
 	o.maybeUnblockLocked()
@@ -614,7 +614,7 @@ func (r *HashRouter) Run(ctx context.Context) {
 
 	// Non-blocking send of metadata so that one of the outputs can return it
 	// in DrainMeta.
-	r.bufferedMeta = append(r.bufferedMeta, r.metadataSources.DrainMeta(ctx)...)
+	r.bufferedMeta = append(r.bufferedMeta, r.metadataSources.DrainMeta()...)
 	r.waitForMetadata <- r.bufferedMeta
 	close(r.waitForMetadata)
 

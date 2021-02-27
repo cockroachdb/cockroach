@@ -54,7 +54,7 @@ func NewMetadataTestSender(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{mts.input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				mts.InternalClose()
 				// Send a final record with LastMsg set.
 				meta := execinfrapb.ProducerMetadata{

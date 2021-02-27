@@ -119,8 +119,8 @@ func newColumnarizer(
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-				if err := c.Close(ctx); util.CrdbTestBuild && err != nil {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				if err := c.Close(c.Ctx); util.CrdbTestBuild && err != nil {
 					// Close never returns an error.
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected error %v from Columnarizer.Close", err))
 				}
@@ -234,7 +234,7 @@ var (
 )
 
 // DrainMeta is part of the MetadataSource interface.
-func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	if c.removedFromFlow {
 		return nil
 	}

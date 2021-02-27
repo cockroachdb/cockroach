@@ -366,7 +366,7 @@ func TestInboxShutdown(t *testing.T) {
 										return
 									}
 									if drainScenario == drainMetaBeforeNext {
-										_ = inbox.DrainMeta(inboxCtx)
+										_ = inbox.DrainMeta()
 										return
 									}
 									err = colexecerror.CatchVectorizedRuntimeError(func() {
@@ -383,12 +383,12 @@ func TestInboxShutdown(t *testing.T) {
 									for !done && err == nil {
 										err = colexecerror.CatchVectorizedRuntimeError(func() { b := inbox.Next(); done = b.Length() == 0 })
 										if drainScenario == drainMetaPrematurely {
-											_ = inbox.DrainMeta(inboxCtx)
+											_ = inbox.DrainMeta()
 											return
 										}
 									}
 									if drainScenario == drainMetaAfterNextIsExhausted {
-										_ = inbox.DrainMeta(inboxCtx)
+										_ = inbox.DrainMeta()
 									}
 									errCh <- err
 								}()

@@ -365,10 +365,10 @@ func (o *OrderedSynchronizer) Init(ctx context.Context) {
 	}
 }
 
-func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	var bufferedMeta []execinfrapb.ProducerMetadata
 	for _, input := range o.inputs {
-		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(ctx)...)
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta()...)
 	}
 	return bufferedMeta
 }

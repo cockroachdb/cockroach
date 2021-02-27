@@ -33,12 +33,12 @@ import (
 // CallbackMetadataSource is a utility struct that implements the MetadataSource
 // interface by calling a provided callback.
 type CallbackMetadataSource struct {
-	DrainMetaCb func(context.Context) []ProducerMetadata
+	DrainMetaCb func() []ProducerMetadata
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (s CallbackMetadataSource) DrainMeta(ctx context.Context) []ProducerMetadata {
-	return s.DrainMetaCb(ctx)
+func (s CallbackMetadataSource) DrainMeta() []ProducerMetadata {
+	return s.DrainMetaCb()
 }
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {

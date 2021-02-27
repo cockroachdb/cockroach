@@ -309,9 +309,9 @@ func newZigzagJoiner(
 		post,
 		output,
 		execinfra.ProcStateOpts{
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				z.close()
-				return z.generateMeta(ctx)
+				return z.DrainMeta()
 			},
 		},
 	)
@@ -1034,16 +1034,12 @@ func (z *zigzagJoiner) GetCumulativeContentionTime() time.Duration {
 	return execinfra.GetCumulativeContentionTime(z.Ctx)
 }
 
-func (z *zigzagJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, z.FlowCtx.Txn); tfs != nil {
+// DrainMeta is part of the MetadataSource interface.
+func (z *zigzagJoiner) DrainMeta() []execinfrapb.ProducerMetadata {
+	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx, z.FlowCtx.Txn); tfs != nil {
 		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
 	}
 	return nil
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (z *zigzagJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return z.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

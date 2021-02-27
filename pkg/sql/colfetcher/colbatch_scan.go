@@ -75,11 +75,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	if execinfra.ShouldCollectStats(s.Ctx, s.flowCtx) {
-		// We need to start a child span so that the only contention events
-		// present in the recording would be because of this cFetcher.
-		s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
-	}
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
 		s.flowCtx.Txn, s.spans, limitBatches, s.limitHint, s.flowCtx.TraceKV,
@@ -103,7 +99,7 @@ func (s *ColBatchScan) Next() coldata.Batch {
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	if s.Ctx == nil {
 		// In some pathological queries like `SELECT 1 FROM t HAVING true`,
 		// Init() and Next() may never get called. Return early to avoid using
@@ -114,13 +110,13 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	if !s.flowCtx.Local {
 		nodeID, ok := s.flowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(ctx, s.spans, nodeID, s.flowCtx.Cfg.RangeCache)
+			ranges := execinfra.MisplannedRanges(s.Ctx, s.spans, nodeID, s.flowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
 		}
 	}
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, s.flowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(s.Ctx, s.flowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	meta := execinfrapb.GetProducerMeta()
@@ -128,21 +124,8 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
-	if s.tracingSpan != nil {
-		// If tracingSpan is non-nil, then we have derived a new context in
-		// Next() and we have to collect the trace data.
-		//
-		// If tracingSpan is nil, then we used the same context that was passed
-		// in Next() and it is the responsibility of the caller-component
-		// (either materializer, or wrapped processor, or an outbox) to collect
-		// the trace data. If we were to do it here too, we would see duplicate
-		// spans.
-		// TODO(yuzefovich): this is temporary hack that will be fixed by adding
-		// context.Context argument to Init() and removing it from Next() and
-		// DrainMeta().
-		if trace := execinfra.GetTraceData(s.Ctx); trace != nil {
-			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
-		}
+	if trace := execinfra.GetTraceData(s.Ctx); trace != nil {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 	}
 	return trailingMeta
 }

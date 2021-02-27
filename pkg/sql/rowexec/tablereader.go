@@ -169,10 +169,9 @@ func newTableReader(
 	return tr, nil
 }
 
-func (tr *tableReader) generateTrailingMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	trailingMeta := tr.generateMeta(ctx)
+func (tr *tableReader) generateTrailingMeta() []execinfrapb.ProducerMetadata {
 	tr.close()
-	return trailingMeta
+	return tr.DrainMeta()
 }
 
 // Start is part of the RowSource interface.
@@ -304,18 +303,19 @@ func (tr *tableReader) GetCumulativeContentionTime() time.Duration {
 	return execinfra.GetCumulativeContentionTime(tr.Ctx)
 }
 
-func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+// DrainMeta is part of the MetadataSource interface.
+func (tr *tableReader) DrainMeta() []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
 		nodeID, ok := tr.FlowCtx.NodeID.OptionalNodeID()
 		if ok {
-			ranges := execinfra.MisplannedRanges(ctx, tr.spans, nodeID, tr.FlowCtx.Cfg.RangeCache)
+			ranges := execinfra.MisplannedRanges(tr.Ctx, tr.spans, nodeID, tr.FlowCtx.Cfg.RangeCache)
 			if ranges != nil {
 				trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{Ranges: ranges})
 			}
 		}
 	}
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, tr.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(tr.Ctx, tr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 
@@ -323,11 +323,6 @@ func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead, meta.Metrics.RowsRead = tr.GetBytesRead(), tr.GetRowsRead()
 	return append(trailingMeta, *meta)
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (tr *tableReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return tr.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

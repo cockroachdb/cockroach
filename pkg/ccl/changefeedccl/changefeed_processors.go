@@ -147,7 +147,7 @@ func newChangeAggregatorProcessor(
 		output,
 		memMonitor,
 		execinfra.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				ca.close()
 				return nil
 			},
@@ -874,7 +874,7 @@ func newChangeFrontierProcessor(
 		output,
 		memMonitor,
 		execinfra.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				cf.close()
 				return nil
 			},

@@ -72,7 +72,6 @@ type Materializer struct {
 // generation.
 type drainHelper struct {
 	sources      execinfrapb.MetadataSources
-	ctx          context.Context
 	bufferedMeta []execinfrapb.ProducerMetadata
 }
 
@@ -99,14 +98,12 @@ func (d *drainHelper) OutputTypes() []*types.T {
 }
 
 // Start implements the RowSource interface.
-func (d *drainHelper) Start(ctx context.Context) {
-	d.ctx = ctx
-}
+func (d *drainHelper) Start(context.Context) {}
 
 // Next implements the RowSource interface.
 func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if d.bufferedMeta == nil {
-		d.bufferedMeta = d.sources.DrainMeta(d.ctx)
+		d.bufferedMeta = d.sources.DrainMeta()
 		if d.bufferedMeta == nil {
 			// Still nil, avoid more calls to DrainMeta.
 			d.bufferedMeta = []execinfrapb.ProducerMetadata{}
@@ -198,7 +195,7 @@ func NewMaterializer(
 		execinfra.ProcStateOpts{
 			// We append drainHelper to inputs to drain below in order to reuse
 			// the same underlying slice from the pooled materializer.
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				m.close()
 				return nil
 			},

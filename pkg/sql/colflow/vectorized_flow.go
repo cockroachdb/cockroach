@@ -950,9 +950,10 @@ func (s *vectorizedFlowCreator) setupOutput(
 			metadataSourcesQueue = append(
 				metadataSourcesQueue,
 				execinfrapb.CallbackMetadataSource{
-					DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+					DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 						// Start a separate recording so that GetRecording will return
 						// the recordings for only the child spans containing stats.
+						// TODO: ctx.
 						ctx, span := tracing.ChildSpanRemote(ctx, "")
 						if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode {
 							// At the last outbox, we can accurately retrieve stats for the

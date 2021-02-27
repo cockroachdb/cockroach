@@ -146,11 +146,6 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 	}, nil
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (idp *readImportDataProcessor) ConsumerDone() {
-	idp.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (idp *readImportDataProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.

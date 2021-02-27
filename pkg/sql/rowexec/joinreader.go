@@ -282,9 +282,9 @@ func newJoinReader(
 		output,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{jr.input},
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				jr.close()
-				return jr.generateMeta(ctx)
+				return jr.DrainMeta()
 			},
 		},
 	); err != nil {
@@ -769,21 +769,17 @@ func (jr *joinReader) GetCumulativeContentionTime() time.Duration {
 	return execinfra.GetCumulativeContentionTime(jr.Ctx)
 }
 
-func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+// DrainMeta is part of the MetadataSource interface.
+func (jr *joinReader) DrainMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.RowsRead = jr.GetRowsRead()
 	meta.Metrics.BytesRead = jr.GetBytesRead()
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx, jr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (jr *joinReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return jr.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

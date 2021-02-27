@@ -186,14 +186,14 @@ func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchron
 }
 
 // init starts one goroutine per input to read from each input asynchronously
-// and push to batchCh. Canceling the context (passed in Init() or DrainMeta())
-// results in all goroutines terminating, otherwise they keep on pushing batches
-// until a zero-length batch is encountered. Once all inputs terminate,
-// s.batchCh is closed. If an error occurs, the goroutines will make a
-// non-blocking best effort to push that error on s.errCh, resulting in the
-// first error pushed to be observed by the Next goroutine. Inputs are
-// asynchronous so that the synchronizer is minimally affected by slow inputs.
-func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
+// and push to batchCh. Canceling the context (passed in Init() above) results
+// in all goroutines terminating, otherwise they keep on pushing batches until a
+// zero-length batch is encountered. Once all inputs terminate, s.batchCh is
+// closed. If an error occurs, the goroutines will make a non-blocking best
+// effort to push that error on s.errCh, resulting in the first error pushed to
+// be observed by the Next goroutine. Inputs are asynchronous so that the
+// synchronizer is minimally affected by slow inputs.
+func (s *ParallelUnorderedSynchronizer) init() {
 	for i, input := range s.inputs {
 		s.nextBatch[i] = func(input SynchronizerInput, inputIdx int) func() {
 			return func() {
@@ -212,7 +212,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				}
 				// We need to close all of the closers of this input before we
 				// notify the wait groups.
-				input.ToClose.CloseAndLogOnErr(ctx, "parallel unordered synchronizer input")
+				input.ToClose.CloseAndLogOnErr(s.Ctx, "parallel unordered synchronizer input")
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
 			}()
@@ -249,7 +249,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 						inputIdx: inputIdx,
 					}
 					if input.MetadataSources != nil {
-						msg.meta = input.MetadataSources.DrainMeta(ctx)
+						msg.meta = input.MetadataSources.DrainMeta()
 					}
 					if msg.meta == nil {
 						// Initialize msg.meta to be non-nil, which is a signal that
@@ -267,8 +267,8 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 					sentMeta = true
 				}
 				select {
-				case <-ctx.Done():
-					sendErr(ctx.Err())
+				case <-s.Ctx.Done():
+					sendErr(s.Ctx.Err())
 					return
 				case s.batchCh <- msg:
 				}
@@ -282,8 +282,8 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 				// Wait until Next goroutine tells us we are good to go.
 				select {
 				case <-s.readNextBatch[inputIdx]:
-				case <-ctx.Done():
-					sendErr(ctx.Err())
+				case <-s.Ctx.Done():
+					sendErr(s.Ctx.Err())
 					return
 				}
 			}
@@ -300,7 +300,7 @@ func (s *ParallelUnorderedSynchronizer) Next() coldata.Batch {
 			return coldata.ZeroBatch
 		case parallelUnorderedSynchronizerStateUninitialized:
 			s.setState(parallelUnorderedSynchronizerStateRunning)
-			s.init(s.Ctx)
+			s.init()
 		case parallelUnorderedSynchronizerStateRunning:
 			// Signal the input whose batch we returned in the last call to Next that it
 			// is safe to retrieve the next batch. Since Next has been called, we can
@@ -357,13 +357,11 @@ func (s *ParallelUnorderedSynchronizer) notifyInputToReadNextBatch(inputIdx int)
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (s *ParallelUnorderedSynchronizer) DrainMeta(
-	ctx context.Context,
-) []execinfrapb.ProducerMetadata {
+func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	prevState := s.getState()
 	s.setState(parallelUnorderedSynchronizerStateDraining)
 	if prevState == parallelUnorderedSynchronizerStateUninitialized {
-		s.init(ctx)
+		s.init()
 	}
 
 	// Non-blocking drain of batchCh. This is important mostly because of the

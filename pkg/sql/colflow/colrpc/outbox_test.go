@@ -70,7 +70,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	require.Error(t, err)
 
 	// Expect no metadata.
-	meta := inbox.DrainMeta(ctx)
+	meta := inbox.DrainMeta()
 	require.True(t, len(meta) == 0)
 
 	require.True(t, testutils.IsError(err, "runtime error: index out of range"), err)
@@ -95,7 +95,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 		var sourceDrained uint32
 		outbox, err := NewOutbox(allocator, input, typs, []execinfrapb.MetadataSource{
 			execinfrapb.CallbackMetadataSource{
-				DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
+				DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 					atomic.StoreUint32(&sourceDrained, 1)
 					return nil
 				},

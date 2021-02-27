@@ -119,7 +119,7 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 				// Calling DrainMeta from the vectorized execution engine should propagate to
 				// non-vectorized components as calling ConsumerDone and then draining their
 				// metadata.
-				meta := c.DrainMeta(ctx)
+				meta := c.DrainMeta()
 				require.True(t, len(meta) == 0)
 				require.True(t, rb.Done)
 				require.Equal(t, execinfra.DrainRequested, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)

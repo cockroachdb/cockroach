@@ -58,10 +58,7 @@ func newOrdinalityProcessor(
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{o.input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
-				o.ConsumerClosed()
-				return nil
-			}},
+		},
 	); err != nil {
 		return nil, err
 	}
