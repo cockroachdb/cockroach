@@ -4965,11 +4965,13 @@ semi-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
  ├── key columns: [19] = [13]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:19!null continuation:25
+ │    ├── first join in paired joiner; continuation column: continuation:25
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:22)
  │    ├── key: (1,19)
@@ -4997,11 +4999,13 @@ anti-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
  ├── key columns: [19] = [13]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:19 continuation:25
+ │    ├── first join in paired joiner; continuation column: continuation:25
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:22)
  │    ├── key: (1,19)
@@ -5031,9 +5035,11 @@ project
       ├── columns: c.boroname:9 c.geom:10
       ├── key columns: [20] = [13]
       ├── lookup columns are key
+      ├── second join in paired joiner
       ├── immutable
       ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    ├── columns: c.boroname:9 c.geom:10 n.gid:20 continuation:26
+      │    ├── first join in paired joiner; continuation column: continuation:26
       │    ├── inverted-expr
       │    │    └── st_covers(c.geom:10, n.geom:23)
       │    ├── fd: (20)-->(26)
@@ -5056,11 +5062,13 @@ left-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10 gid:13 boroname:14 name:15 geom:16
  ├── key columns: [19] = [13]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1,13)
  ├── fd: (1)-->(2-10), (13)-->(14-16)
  ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:19 continuation:25
+ │    ├── first join in paired joiner; continuation column: continuation:25
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:22)
  │    ├── key: (1,19)
@@ -5112,9 +5120,11 @@ with &1 (q)
       │    │    ├── columns: geom:22 n.boroname:24 n.geom:26
       │    │    ├── key columns: [42] = [23]
       │    │    ├── lookup columns are key
+      │    │    ├── second join in paired joiner
       │    │    ├── immutable
       │    │    ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx [as=n])
       │    │    │    ├── columns: geom:22 n.gid:42 continuation:48
+      │    │    │    ├── first join in paired joiner; continuation column: continuation:48
       │    │    │    ├── inverted-expr
       │    │    │    │    └── st_intersects(geom:22, n.geom:45)
       │    │    │    ├── fd: (42)-->(48)
@@ -5424,10 +5434,12 @@ project
       ├── columns: t2.j:3 t1.k:6 t1.j:8
       ├── key columns: [13] = [6]
       ├── lookup columns are key
+      ├── second join in paired joiner
       ├── immutable
       ├── fd: (6)-->(8)
       ├── left-join (inverted json_arr1@j_idx [as=t1])
       │    ├── columns: t2.j:3 t1.k:13 continuation:20
+      │    ├── first join in paired joiner; continuation column: continuation:20
       │    ├── inverted-expr
       │    │    └── t1.j:15 @> t2.j:3
       │    ├── fd: (13)-->(20)
@@ -5531,11 +5543,13 @@ left-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4 k:6 i:7 j:8 a:9
  ├── key columns: [13] = [6]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1,6)
  ├── fd: (1)-->(2-4), (6)-->(7-9)
  ├── left-join (inverted json_arr1@a_idx [as=t1])
  │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:13 continuation:20
+ │    ├── first join in paired joiner; continuation column: continuation:20
  │    ├── inverted-expr
  │    │    └── (t1.a:16 @> t2.a:4) AND (t1.a:16 @> ARRAY['foo'])
  │    ├── key: (1,13)
@@ -5561,11 +5575,13 @@ semi-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
  ├── key columns: [13] = [6]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
  │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:13!null continuation:20
+ │    ├── first join in paired joiner; continuation column: continuation:20
  │    ├── inverted-expr
  │    │    └── t1.j:15 @> t2.j:3
  │    ├── key: (1,13)
@@ -5589,11 +5605,13 @@ anti-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
  ├── key columns: [13] = [6]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── left-join (inverted json_arr1@j_idx [as=t1])
  │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:13 continuation:20
+ │    ├── first join in paired joiner; continuation column: continuation:20
  │    ├── inverted-expr
  │    │    └── t1.j:15 @> t2.j:3
  │    ├── key: (1,13)
@@ -5709,6 +5727,7 @@ sort (segmented)
       ├── columns: j1.k:1!null j1.j:2 j2.k:4 j2.j:5
       ├── key columns: [8] = [4]
       ├── lookup columns are key
+      ├── second join in paired joiner
       ├── immutable
       ├── key: (1,4)
       ├── fd: (1)-->(2), (1,4)-->(5)
@@ -5716,6 +5735,7 @@ sort (segmented)
       ├── left-join (inverted j2@j2_j_idx)
       │    ├── columns: j1.k:1!null j1.j:2 j2.k:8 continuation:12
       │    ├── flags: force inverted join (into right side)
+      │    ├── first join in paired joiner; continuation column: continuation:12
       │    ├── inverted-expr
       │    │    └── j2.j:9 @> j1.j:2
       │    ├── key: (1,8)
@@ -6317,12 +6337,14 @@ semi-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
  ├── key columns: [20] = [6]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
  │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:20!null i:21!null continuation:33
  │    ├── prefix key columns: [19] = [21]
+ │    ├── first join in paired joiner; continuation column: continuation:33
  │    ├── inverted-expr
  │    │    └── t1.j:22 @> t2.j:3
  │    ├── fd: (1)-->(2-4), (20)-->(21,33)
@@ -6356,12 +6378,14 @@ semi-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
  ├── key columns: [19] = [6]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── inner-join (inverted json_arr1@j_idx [as=t1])
  │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:19!null i:20!null continuation:32
  │    ├── prefix key columns: [1] = [20]
+ │    ├── first join in paired joiner; continuation column: continuation:32
  │    ├── inverted-expr
  │    │    └── t1.j:21 @> t2.j:3
  │    ├── key: (19)
@@ -6412,12 +6436,14 @@ anti-join (lookup json_arr1 [as=t1])
  ├── columns: k:1!null l:2 j:3 a:4
  ├── key columns: [19] = [6]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── left-join (inverted json_arr1@j_idx [as=t1])
  │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:19 i:20 continuation:32
  │    ├── prefix key columns: [1] = [20]
+ │    ├── first join in paired joiner; continuation column: continuation:32
  │    ├── inverted-expr
  │    │    └── t1.j:21 @> t2.j:3
  │    ├── key: (1,19)
@@ -6669,11 +6695,13 @@ semi-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
  ├── key columns: [21] = [13]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── inner-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:21!null continuation:29
+ │    ├── first join in paired joiner; continuation column: continuation:29
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:24)
  │    ├── key: (1,21)
@@ -6699,11 +6727,13 @@ anti-join (lookup nyc_neighborhoods [as=n])
  ├── columns: gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 boroname:9 geom:10
  ├── key columns: [21] = [13]
  ├── lookup columns are key
+ ├── second join in paired joiner
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2-10)
  ├── left-join (inverted nyc_neighborhoods@nyc_neighborhoods_geo_idx,partial [as=n])
  │    ├── columns: c.gid:1!null blkid:2 popn_total:3 popn_white:4 popn_black:5 popn_nativ:6 popn_asian:7 popn_other:8 c.boroname:9 c.geom:10 n.gid:21 continuation:29
+ │    ├── first join in paired joiner; continuation column: continuation:29
  │    ├── inverted-expr
  │    │    └── st_covers(c.geom:10, n.geom:24)
  │    ├── key: (1,21)

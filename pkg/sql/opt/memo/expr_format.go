@@ -468,6 +468,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if t.LookupColsAreTableKey {
 			tp.Childf("lookup columns are key")
 		}
+		if t.IsSecondJoinInPairedJoiner {
+			tp.Childf("second join in paired joiner")
+		}
 
 	case *InvertedJoinExpr:
 		if !t.Flags.Empty() {
@@ -480,6 +483,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 				idxCols[i] = t.Table.ColumnID(idx.Column(i).Ordinal())
 			}
 			tp.Childf("prefix key columns: %v = %v", t.PrefixKeyCols, idxCols)
+		}
+		if t.IsFirstJoinInPairedJoiner {
+			f.formatColList(e, tp, "first join in paired joiner; continuation column:", opt.ColList{t.ContinuationCol})
 		}
 		n := tp.Child("inverted-expr")
 		f.formatExpr(t.InvertedExpr, n)
