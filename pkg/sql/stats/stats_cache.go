@@ -146,6 +146,10 @@ func (sc *TableStatisticsCache) tableStatAddedGossipUpdate(key string, value roa
 // and if the stats are not present in the cache, it looks them up in
 // system.table_statistics.
 //
+// The function returns an error if we could not query the system table. It
+// silently ignores any statistics that can't be decoded (e.g. because
+// user-defined types don't exit).
+//
 // The statistics are ordered by their CreatedAt time (newest-to-oldest).
 func (sc *TableStatisticsCache) GetTableStats(
 	ctx context.Context, tableID descpb.ID,
@@ -481,6 +485,9 @@ func (sc *TableStatisticsCache) parseStats(
 
 // getTableStatsFromDB retrieves the statistics in system.table_statistics
 // for the given table ID.
+//
+// It ignores any statistics that cannot be decoded (e.g. because a user-defined
+// type that doesn't exist) and returns the rest (with no error).
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID,
 ) (_ []*TableStatistic, retErr error) {
@@ -505,21 +512,14 @@ ORDER BY "createdAt" DESC
 	if err != nil {
 		return nil, err
 	}
-	// We have to make sure to close the iterator since we might return from the
-	// for loop early (before Next() returns false).
-	defer func() {
-		closeErr := it.Close()
-		if retErr == nil {
-			retErr = closeErr
-		}
-	}()
 
 	var statsList []*TableStatistic
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		stats, err := sc.parseStats(ctx, it.Cur())
 		if err != nil {
-			return nil, err
+			log.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
+			continue
 		}
 		statsList = append(statsList, stats)
 	}
