@@ -251,10 +251,21 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			unique:   true,
 		},
 		{
-			// Contained by is not yet supported for JSON.
-			filters:  "j <@ '1'",
-			indexOrd: jsonOrd,
-			ok:       false,
+			// Contained by is supported for json.
+			filters:          "j <@ '1'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j <@ '1'",
+		},
+		{
+			filters:          `j <@ '{"a": 1}'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: `j <@ '{"a": 1}'`,
 		},
 		{
 			filters:  "a @> '{1}'",
@@ -342,10 +353,12 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 		},
 		{
 			// We can constrain the JSON index when the functions are AND-ed.
-			// This will work once JSON is supported for <@.
-			filters:  "j <@ '1' AND a <@ '{1}'",
-			indexOrd: jsonOrd,
-			ok:       false,
+			filters:          "j <@ '1' AND a <@ '{1}'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j <@ '1' AND a <@ '{1}'",
 		},
 		{
 			// We can guarantee unique primary keys when there are multiple paths
