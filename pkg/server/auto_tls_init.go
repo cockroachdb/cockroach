@@ -20,7 +20,6 @@ import (
 	"encoding/pem"
 	"io/ioutil"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -186,8 +185,8 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	}
 
 	// CA cert and key should now be loaded, create service cert and key.
-	var hostCert, hostKey []byte
-	hostCert, hostKey, err = security.CreateServiceCertAndKey(
+	//var hostCert, hostKey []byte
+	sb.HostCertificate, sb.HostKey, err = security.CreateServiceCertAndKey(
 		initLifespan,
 		serviceName,
 		hostnames,
@@ -200,12 +199,12 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 		)
 	}
 
-	err = writeCertificateFile(serviceCertPath, hostCert, false)
+	err = writeCertificateFile(serviceCertPath, sb.HostCertificate, false)
 	if err != nil {
 		return err
 	}
 
-	err = writeKeyFile(serviceKeyPath, hostKey, false)
+	err = writeKeyFile(serviceKeyPath, sb.HostKey, false)
 	if err != nil {
 		return err
 	}
@@ -286,7 +285,7 @@ func writeKeyFile(keyFilePath string, keyPEMBytes []byte, overwrite bool) error 
 	}
 
 	// TODO(aaron-crl): Add logging here.
-	return security.WritePEMToFile(keyFilePath, 600, overwrite, keyBlock)
+	return security.WritePEMToFile(keyFilePath, 0600, overwrite, keyBlock)
 }
 
 // InitializeFromConfig is called by the node creating certificates for the
@@ -537,7 +536,6 @@ func collectLocalCABundle(c base.Config) (CertificateBundle, error) {
 // certificate/key pair.
 func rotateGeneratedCerts(c base.Config) error {
 	cl := security.MakeCertsLocator(c.SSLCertsDir)
-	var errStrings []string
 
 	// Fail fast if we can't load the CAs.
 	b, err := collectLocalCABundle(c)
@@ -604,7 +602,7 @@ func rotateGeneratedCerts(c base.Config) error {
 		}
 	}
 
-	return errors.Errorf(strings.Join(errStrings, "\n"))
+	return nil
 }
 
 // rotateServiceCert will generate a new service certificate for the provided
@@ -631,7 +629,7 @@ func (sb *ServiceCertificateBundle) rotateServiceCert(
 	}
 
 	// Check to make sure we're about to overwrite a file.
-	if _, err := os.Stat(certPath); err != nil {
+	if _, err := os.Stat(certPath); err == nil {
 		err = writeCertificateFile(certPath, certPEM, true)
 		if err != nil {
 			return errors.Wrapf(
@@ -643,7 +641,7 @@ func (sb *ServiceCertificateBundle) rotateServiceCert(
 	}
 
 	// Check to make sure we're about to overwrite a file.
-	if _, err := os.Stat(certPath); err != nil {
+	if _, err := os.Stat(certPath); err == nil {
 		err = writeKeyFile(keyPath, keyPEM, true)
 		if err != nil {
 			return errors.Wrapf(
