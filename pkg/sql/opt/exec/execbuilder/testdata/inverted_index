@@ -977,6 +977,148 @@ vectorized: true
                   table: e@e_b_idx
                   spans: /[]-/"D" /0-/2
 
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[]'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: '[]' @> b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 111 (missing stats)
+          table: d@foo_inv
+          spans: /[]-/{}
+
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[1, 2]'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: '[1, 2]' @> b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 5
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /1-/1/PrefixEnd /2-/2/PrefixEnd /[]-/{} /Arr/1-/Arr/1/PrefixEnd /Arr/2-/Arr/2/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '{}'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: '{}' @> b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • scan
+          columns: (a)
+          estimated row count: 111 (missing stats)
+          table: d@foo_inv
+          spans: /{}-/{}/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '{"a": "b"}'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: '{"a": "b"}' @> b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /{}-/{}/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM d WHERE b <@ '[{"a": "b"}, {"c": {"d": ["e"]}}, "f"]'
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: '[{"a": "b"}, {"c": {"d": ["e"]}}, "f"]' @> b
+│
+└── • index join
+    │ columns: (a, b)
+    │ estimated row count: 111 (missing stats)
+    │ table: d@primary
+    │ key columns: a
+    │
+    └── • project
+        │ columns: (a)
+        │ estimated row count: 111 (missing stats)
+        │
+        └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 10
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: d@foo_inv
+                  spans: /"f"-/"f"/PrefixEnd /[]-/{} /Arr/"f"-/Arr/"f"/PrefixEnd /Arr/{}-/Arr/{}/PrefixEnd /Arr/"a"/"b"-/Arr/"a"/"b"/PrefixEnd /Arr/"c"/{}-/Arr/"c"/{}/PrefixEnd /Arr/"c"/{}-/Arr/"c"/{}/PrefixEnd /Arr/"c"/"d"/[]-/Arr/"c"/"d"/{} /Arr/"c"/"d"/[]-/Arr/"c"/"d"/{} /Arr/"c"/"d"/Arr/"e"-/Arr/"c"/"d"/Arr/"e"/PrefixEnd
 
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.

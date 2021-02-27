@@ -266,6 +266,324 @@ index-join t
            ├── key: (1)
            └── fd: (1)-->(4)
 
+# An inverted index scan is preferred for the containment of an indexed column
+# by an empty array. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '[]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /4/1
+ │         │    └── spans: ["7\x00\x018", "7\x00\x018"]
+ │         ├── stats: [rows=10, distinct(4)=1, null(4)=0]
+ │         │   histogram(4)=  0       10       0       0
+ │         │                <--- '\x37000138' --- '\x37000139'
+ │         └── key: (1)
+ └── filters
+      └── '[]' @> j:2 [type=bool, outer=(2), immutable]
+
+# An inverted index scan is preferred for containment of an indexed column
+# by an empty object. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '{}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=10]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan t@j_idx
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted constraint: /4/1
+ │         │    └── spans: ["7\x00\x019", "7\x00\x019"]
+ │         ├── stats: [rows=10, distinct(4)=1, null(4)=0]
+ │         │   histogram(4)=  0       10       0       0
+ │         │                <--- '\x37000139' --- '\x3700013a'
+ │         └── key: (1)
+ └── filters
+      └── '{}' @> j:2 [type=bool, outer=(2), immutable]
+
+# An inverted index scan is preferred for a more selective filter. An
+# additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '{"c": "d"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=110]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x019", "7\x00\x019"]
+ │         │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+ │         ├── stats: [rows=110]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x019", "7\x00\x019"]
+ │              │         └── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+ │              ├── stats: [rows=110, distinct(1)=99.0990991, null(1)=0, distinct(4)=2, null(4)=0]
+ │              │   histogram(4)=  0       10       0          100           0           0
+ │              │                <--- '\x37000139' --- '\x3763000112640001' --- '\x3763000112640002'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── '{"c": "d"}' @> j:2 [type=bool, outer=(2), immutable]
+
+# A disjunction requires scanning all entries that match either the left or the
+# right. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '{"c": "d"}' OR j <@ '{"e": "f"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=120]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x019", "7\x00\x019"]
+ │         │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+ │         │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+ │         ├── stats: [rows=120]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x019", "7\x00\x019"]
+ │              │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+ │              │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+ │              ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, distinct(4)=3, null(4)=0]
+ │              │   histogram(4)=  0       10       0          100           0           10
+ │              │                <--- '\x37000139' --- '\x3763000112640001' --- '\x3765000112660001'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── ('{"c": "d"}' @> j:2) OR ('{"e": "f"}' @> j:2) [type=bool, outer=(2), immutable]
+
+# A conjunction requires scanning all entries that match both the left and the
+# right. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '{"c": "d"}' AND j <@ '{"e": "f"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=120]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: ["7\x00\x019", "7\x00\x019"]
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: false
+ │         │         │    └── union spans: ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans: ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+ │         ├── stats: [rows=120]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x019", "7\x00\x019"]
+ │              │         ├── ["7c\x00\x01\x12d\x00\x01", "7c\x00\x01\x12d\x00\x01"]
+ │              │         └── ["7e\x00\x01\x12f\x00\x01", "7e\x00\x01\x12f\x00\x01"]
+ │              ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, distinct(4)=3, null(4)=0]
+ │              │   histogram(4)=  0       10       0          100           0           10
+ │              │                <--- '\x37000139' --- '\x3763000112640001' --- '\x3765000112660001'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      ├── '{"c": "d"}' @> j:2 [type=bool, outer=(2), immutable]
+      └── '{"e": "f"}' @> j:2 [type=bool, outer=(2), immutable]
+
+# An inverted index scan is preferred for a more selective filter. An
+# additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '[2]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=110]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │         │         ├── ["7\x00\x018", "7\x00\x018"]
+ │         │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │         ├── stats: [rows=110]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │              │         ├── ["7\x00\x018", "7\x00\x018"]
+ │              │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │              ├── stats: [rows=110, distinct(1)=99.0990991, null(1)=0, distinct(4)=2, null(4)=0]
+ │              │   histogram(4)=  0       10       0          100           0           0
+ │              │                <--- '\x37000138' --- '\x37000300012a0400' --- '\x37000300012a0401'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── '[2]' @> j:2 [type=bool, outer=(2), immutable]
+
+# A disjunction requires scanning all entries that match either the left or the
+# right. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '[2]' OR j <@ '[3]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=120]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │         │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │         │         ├── ["7\x00\x018", "7\x00\x018"]
+ │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │         │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │         ├── stats: [rows=120]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │              │         ├── ["7\x00\x018", "7\x00\x018"]
+ │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │              │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │              ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, distinct(4)=3, null(4)=0]
+ │              │   histogram(4)=  0       10       0          100           0           10           0           0
+ │              │                <--- '\x37000138' --- '\x37000300012a0400' --- '\x37000300012a0600' --- '\x37000300012a0601'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── ('[2]' @> j:2) OR ('[3]' @> j:2) [type=bool, outer=(2), immutable]
+
+# A conjunction requires scanning all entries that match both the left and the
+# right. An additional filter is required.
+opt
+SELECT * FROM t WHERE j <@ '[2]' AND j <@ '[3]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=120]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: ["7\x00\x018", "7\x00\x018"]
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: false
+ │         │         │    └── union spans
+ │         │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │         │         │         └── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans
+ │         │                   ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │         │                   └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │         ├── stats: [rows=120]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │              │         ├── ["7\x00\x018", "7\x00\x018"]
+ │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │              │         └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │              ├── stats: [rows=120, distinct(1)=108.108108, null(1)=0, distinct(4)=3, null(4)=0]
+ │              │   histogram(4)=  0       10       0          100           0           10           0           0
+ │              │                <--- '\x37000138' --- '\x37000300012a0400' --- '\x37000300012a0600' --- '\x37000300012a0601'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      ├── '[2]' @> j:2 [type=bool, outer=(2), immutable]
+      └── '[3]' @> j:2 [type=bool, outer=(2), immutable]
+
 # Histogram boundaries are for JSON values `true`, `"foo"`, `22`, `[]`, and
 # `{}`.
 exec-ddl

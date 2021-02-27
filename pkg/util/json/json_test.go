@@ -1354,17 +1354,17 @@ func TestEncodeJSONInvertedIndex(t *testing.T) {
 
 func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 	testCases := []struct {
-		value    string
-		contains string
-		expected bool
-		tight    bool
-		unique   bool
+		indexedValue string
+		value        string
+		expected     bool
+		tight        bool
+		unique       bool
 	}{
 		// This test uses EncodeInvertedIndexKeys and
 		// EncodeContainingInvertedIndexSpans to determine whether the first JSON
-		// value contains the second. If the first value contains the second,
-		// expected is true. Otherwise expected is false. If the spans produced for
-		// contains are tight, tight is true. Otherwise tight is false.
+		// value contains the second. If the indexedValue @> value, expected is
+		// true. Otherwise expected is false. If the spans produced for contains
+		// are tight, tight is true. Otherwise tight is false.
 		//
 		// If EncodeContainingInvertedIndexSpans produces spans that are guaranteed not to
 		// contain duplicate primary keys, unique is true. Otherwise it is false.
@@ -1462,28 +1462,28 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 
 	// Run pre-defined test cases from above.
 	for _, c := range testCases {
-		value, contains := jsonTestShorthand(c.value), jsonTestShorthand(c.contains)
+		indexedValue, value := jsonTestShorthand(c.indexedValue), jsonTestShorthand(c.value)
 
-		// First check that evaluating `value @> contains` matches the expected
+		// First check that evaluating `indexedValue @> value` matches the expected
 		// result.
-		res, err := Contains(value, contains)
+		res, err := Contains(indexedValue, value)
 		require.NoError(t, err)
 		if res != c.expected {
 			t.Fatalf(
 				"expected value of %s @> %s did not match actual value. Expected: %v. Got: %v",
-				c.value, c.contains, c.expected, res,
+				c.indexedValue, c.value, c.expected, res,
 			)
 		}
 
 		// Now check that we get the same result with the inverted index spans.
-		tight := runTest(value, contains, c.expected, c.unique)
+		tight := runTest(indexedValue, value, c.expected, c.unique)
 
 		// And check that the tightness matches the expected value.
 		if tight != c.tight {
 			if c.tight {
-				t.Errorf("expected spans for %s to be tight but they were not", c.contains)
+				t.Errorf("expected spans for %s to be tight but they were not", c.value)
 			} else {
-				t.Errorf("expected spans for %s not to be tight but they were", c.contains)
+				t.Errorf("expected spans for %s not to be tight but they were", c.value)
 			}
 		}
 	}
@@ -1516,6 +1516,183 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 
 		// Now check that we get the same result with the inverted index spans.
 		runTest(left, right, res, expectUnique)
+	}
+}
+
+func TestEncodeContainedJSONInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		indexedValue string
+		value        string
+		containsKeys bool
+		expected     bool
+		unique       bool
+	}{
+		// This test uses EncodeInvertedIndexKeys and EncodeContainedInvertedIndexSpans
+		// to determine if the spans produced from the second JSON value will correctly
+		// include or exclude the first value, indicated by containsKeys.
+		// Then, if indexedValue <@ value, expected is true.
+
+		// Not all indexedValues included in the spans are contained by the value,
+		// so the expression is never tight. Unless the value is a scalar, empty
+		// object, or empty array, the expression produced is a union of spans, so
+		// unique should be false.
+
+		// First we test that the spans will include expected results, even if
+		// they are not necessarily contained by the value.
+		{`{}`, `{}`, true, true, true},
+		{`[]`, `[]`, true, true, true},
+		{`1`, `1`, true, true, true},
+		{`"a"`, `"a"`, true, true, true},
+		{`null`, `null`, true, true, true},
+		{`true`, `true`, true, true, true},
+		{`{}`, `[[], {}]`, true, false, false}, // Surprising, but matches Postgres' behavior.
+		{`[]`, `[[], {}]`, true, true, false},
+		{`[]`, `[{"a": "a"}, {"b": "c"}]`, true, true, false},
+		{`[{}]`, `[{"a": "a"}, {"b": "c"}]`, true, true, false},
+		{`[{"a": "a"}]`, `[{"a": "a"}, {"b": "c"}]`, true, true, false},
+		{`[]`, `[[[["a"]]], [[["a"]]]]`, true, true, false},
+		{`{}`, `{"a": 123.123}`, true, true, false},
+		{`{"a": []}`, `{"a": [{}]}`, true, true, false},
+		{`{"a": []}`, `{"a": [1]}`, true, true, false},
+		{`{"a": {}}`, `{"a": {"b": "c"}}`, true, true, false},
+		{`[1, 2]`, `[1, 2, 3, 4, "foo"]`, true, true, false},
+		{`[1, "bar"]`, `[1, 2, 3, 4, "foo"]`, true, false, false},
+		{`{"a": {"b": [1]}}`, `{"a": {"b": [1]}}`, true, true, false},
+		{`{"a": {"b": [1]}}`, `{"a": {"b": [1, [2]]}}`, true, true, false},
+		{`{"a": {"b": [1, 2]}}`, `{"a": {"b": [1, [2]]}}`, true, false, false},
+		{`{"a": "b", "c": "d"}`, `{"a": "b", "c": "d"}`, true, true, false},
+		{`"a"`, `["a", "a"]`, true, true, false},
+		{`1`, `[1, 2, 3, 1]`, true, true, false},
+		{`[1, 3, 3]`, `[1, 2, 3, 1]`, true, true, false},
+		{`{}`, `{"\u0000\u0001": "b"}`, true, true, false},
+		{`{"\u0000\u0001": {}}`, `{"\u0000\u0001": {"\u0000\u0001": "b"}}`, true, true, false},
+		{`[null, []]`, `[[1], false, null]`, true, true, false},
+		{`[null, {}]`, `[[[], {}], false, null]`, true, false, false},
+		{`[true, {}]`, `[{"foo": {"bar": "foobar"}}, true]`, true, true, false},
+		{`{"a": {"b": "c"}}`, `{"a": {"b": "c", "d": "e"}, "f": "g"}`, true, true, false},
+		{`[{"a": {"b": [[2]]}}, "d"]`, `[{"a": {"b": [1, [2]]}}, "d"]`, true, true, false},
+		{`[null, []]`, `[[], null]`, true, true, false},
+		{`[[1, 2]]`, `[[1], [2]]`, true, false, false},
+		{`[[1], [2]]`, `[[1, 2]]`, true, true, false},
+		{`{"bar": []}`, `{"bar": [["c"]]}`, true, true, false},
+		{`{"c": [{}]}`, `{"c": [{"a": "b"}, []]}`, true, true, false},
+		{`[{}, {"a": [], "bar": {}}, {}]`, `[{"bar": {"foo": {}}}, {"a": []}]`, true, false, false},
+		{`[{"bar": [1, 2]}]`, `[{"bar": [1]}, {"bar": [2]}]`, true, false, false},
+		{`[[1, 1]]`, `[[1], [2]]`, true, true, false},
+		{`[[[[]]]]`, `[[[[{}], [], false], false], [{}]]`, true, true, false},
+		{`{"a": []}`, `{"4@9>eZjMRS": {"b": {}}, "9@B6\\ 3b": [null], "J4u}'6zpjW~": "DF,.W9t$PHZ", "a": [{"-zovTiPCGGV": {"\">&kjO": "c", "+Oyq": []}, "Ac{": null, "a": {}, "foobar": []}], "c": []}`, true, true, false},
+		{`{"b": []}`, `{"b": [[{"a": []}, [], 0.6458094342366152]], "c": {"=<74QyuG": [2.3595799519823046, [], false], "R;J]H$T\"\\X": {"S\\PV)>H": {}}}}`, true, true, false},
+		{`{"bar": []}`, `{"3o55": {"foo": {}, "foobar": [null]}, "bar": [true, null], "baz": {"bar": [true], "foobar": [[true], true], "}J>r!]_|Xd=": null}}`, true, true, false},
+		{`{"b": []}`, `{"'fpR-G": "c", "8tQU": [], "MiL=R:;8A%{o": [], "a": {}, "b": [{}, [{}], 0.3628875092529953, []]}`, true, true, false},
+		{`{"b": {}}`, `{"b": {"QOp1#": [], "b": [{}, {"bar": "_p9&"}, {}], "c": [null, []], "m2D": "b"}, "c": [true], "foo": {}}`, true, true, false},
+		// Then we test that the spans do not include results that should not be
+		// included.
+		{`{"a": {}}`, `{}`, false, false, true},
+		{`{"a": {}}`, `{"a": [{}]}`, false, false, false},
+		{`{"b": "c"}`, `{"a": {"b": "c"}}`, false, false, false},
+		{`{"a": [[]]}`, `{"a": [{}]}`, false, false, false},
+		{`{"a": {"b": true}}`, `{"a": {}}`, false, false, false},
+		{`{"a": {"b": true}}`, `{"a": {"b": false}}`, false, false, false},
+		{`{"a": "a"}`, `[{"a": "a"}, {"b": "c"}]`, false, false, false},
+		{`{}`, `[{"a": "a"}, {"b": "c"}]`, false, false, false},
+		{`"b"`, `[true, false, null, 1.23, "a"]`, false, false, false},
+		{`1`, `[[1]]`, false, false, false},
+		{`[true]`, `[false, null]`, false, false, false},
+		{`[[null]]`, `[{"a": []}, null]`, false, false, false},
+		{`[[]]`, `[{"a": [[]]}, null]`, false, false, false},
+		{`[{"b": {}}]`, `[{"b": null}, {"bar": "c"}]`, false, false, false},
+		{`[false]`, `[[[[{}], [], false], false], [{}]]`, false, false, false},
+		{`"foo"`, `[[{"a": {}, "c": "foo"}, {}], [false]]`, false, false, false},
+	}
+
+	runTest := func(indexedValue, value JSON, expectContainsKeys, expected, expectUnique bool) {
+		keys, err := EncodeInvertedIndexKeys(nil, indexedValue)
+		require.NoError(t, err)
+
+		invertedExpr, err := EncodeContainedInvertedIndexSpans(nil, value)
+		require.NoError(t, err)
+
+		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
+		if !ok {
+			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		}
+
+		// Spans should never be tight for contained by.
+		if spanExpr.Tight {
+			t.Errorf("For %s, expected tight=false, but got true", value)
+		}
+
+		if spanExpr.Unique != expectUnique {
+			t.Errorf("For %s, expected unique=%v, but got %v", value, expectUnique, spanExpr.Unique)
+		}
+
+		containsKeys, err := spanExpr.ContainsKeys(keys)
+		require.NoError(t, err)
+
+		if containsKeys != expectContainsKeys {
+			if expectContainsKeys {
+				t.Errorf("expected spans of %s to include %s but they did not", value, indexedValue)
+			} else {
+				t.Errorf("expected spans of %s not to include %s but they did", value, indexedValue)
+			}
+		}
+
+		// Since the spans are never tight, apply an additional filter to determine
+		// if the result is contained.
+		actual, err := Contains(value, indexedValue)
+		require.NoError(t, err)
+		if actual != expected {
+			if expected {
+				t.Errorf("expected %s to be contained by %s but it was not", indexedValue, value)
+			} else {
+				t.Errorf("expected %s not to be contained by %s but it was", indexedValue, value)
+			}
+		}
+	}
+
+	// Run pre-defined test cases from above.
+	for _, c := range testCases {
+		indexedValue, value := jsonTestShorthand(c.indexedValue), jsonTestShorthand(c.value)
+
+		// First check that evaluating `indexedValue <@ value` matches the expected
+		// result.
+		res, err := Contains(value, indexedValue)
+		require.NoError(t, err)
+		if res != c.expected {
+			t.Fatalf(
+				"expected value of %s <@ %s did not match actual value. Expected: %v. Got: %v",
+				c.indexedValue, c.value, c.expected, res,
+			)
+		}
+		runTest(indexedValue, value, c.containsKeys, c.expected, c.unique)
+	}
+
+	// Run a set of randomly generated test cases.
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < 100; i++ {
+		// Generate two random JSONs and evaluate the result of `left <@ right`.
+		left, err := Random(20, rng)
+		require.NoError(t, err)
+		right, err := Random(20, rng)
+		require.NoError(t, err)
+
+		// We cannot check for false positives with these tests (due to the fact that
+		// the spans are not tight), so we will only test for false negatives.
+		isContained, err := Contains(right, left)
+		require.NoError(t, err)
+		if !isContained {
+			continue
+		}
+
+		// The spans will not produce duplicate primary keys only if the json is a
+		// scalar, empty object, or empty array).
+		expectUnique := false
+		if right.Len() == 0 {
+			expectUnique = true
+		}
+
+		// Now check that we get the same result with the inverted index spans.
+		runTest(left, right, true, true, expectUnique)
 	}
 }
 
