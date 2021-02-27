@@ -63,8 +63,6 @@ type LocalResult struct {
 	MaybeAddToSplitQueue bool
 	// Call MaybeGossipNodeLiveness with the specified Span, if set.
 	MaybeGossipNodeLiveness *roachpb.Span
-	// Call maybeWatchForMerge.
-	MaybeWatchForMerge bool
 
 	// Metrics contains counters which are to be passed to the
 	// metrics subsystem.
@@ -84,7 +82,6 @@ func (lResult *LocalResult) IsZero() bool {
 		!lResult.MaybeGossipSystemConfig &&
 		!lResult.MaybeGossipSystemConfigIfHaveFailure &&
 		lResult.MaybeGossipNodeLiveness == nil &&
-		!lResult.MaybeWatchForMerge &&
 		lResult.Metrics == nil
 }
 
@@ -97,13 +94,13 @@ func (lResult *LocalResult) String() string {
 		"#updated txns: %d #end txns: %d, "+
 		"GossipFirstRange:%t MaybeGossipSystemConfig:%t "+
 		"MaybeGossipSystemConfigIfHaveFailure:%t MaybeAddToSplitQueue:%t "+
-		"MaybeGossipNodeLiveness:%s MaybeWatchForMerge:%t",
+		"MaybeGossipNodeLiveness:%s ",
 		lResult.Reply,
 		len(lResult.EncounteredIntents), len(lResult.AcquiredLocks), len(lResult.ResolvedLocks),
 		len(lResult.UpdatedTxns), len(lResult.EndTxns),
 		lResult.GossipFirstRange, lResult.MaybeGossipSystemConfig,
 		lResult.MaybeGossipSystemConfigIfHaveFailure, lResult.MaybeAddToSplitQueue,
-		lResult.MaybeGossipNodeLiveness, lResult.MaybeWatchForMerge)
+		lResult.MaybeGossipNodeLiveness)
 }
 
 // DetachEncounteredIntents returns (and removes) those encountered
@@ -344,7 +341,6 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	coalesceBool(&p.Local.MaybeGossipSystemConfig, &q.Local.MaybeGossipSystemConfig)
 	coalesceBool(&p.Local.MaybeGossipSystemConfigIfHaveFailure, &q.Local.MaybeGossipSystemConfigIfHaveFailure)
 	coalesceBool(&p.Local.MaybeAddToSplitQueue, &q.Local.MaybeAddToSplitQueue)
-	coalesceBool(&p.Local.MaybeWatchForMerge, &q.Local.MaybeWatchForMerge)
 
 	if p.Local.Metrics == nil {
 		p.Local.Metrics = q.Local.Metrics

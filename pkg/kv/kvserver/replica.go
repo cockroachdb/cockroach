@@ -1444,31 +1444,53 @@ func (r *Replica) isNewerThanSplitRLocked(split *roachpb.SplitTrigger) bool {
 		r.mu.replicaID > rightDesc.ReplicaID
 }
 
-// maybeWatchForMerge checks whether a merge of this replica into its left
+// WatchForMerge is like maybeWatchForMergeLocked, except it expects a merge to
+// be in progress and returns an error if one is not.
+//
+// See docs/tech-notes/range-merges.md.
+func (r *Replica) WatchForMerge(ctx context.Context) error {
+	ok, err := r.maybeWatchForMerge(ctx)
+	if err != nil {
+		return err
+	} else if !ok {
+		return errors.AssertionFailedf("range merge unexpectedly not in-progress")
+	}
+	return nil
+}
+
+// maybeWatchForMergeLocked checks whether a merge of this replica into its left
 // neighbor is in its critical phase and, if so, arranges to block all requests
-// until the merge completes.
-func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
+// until the merge completes. Returns a boolean indicating whether a merge was
+// found to be in progress.
+//
+// See docs/tech-notes/range-merges.md.
+func (r *Replica) maybeWatchForMerge(ctx context.Context) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.maybeWatchForMergeLocked(ctx)
 }
 
-func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) error {
+func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
+	// Checking for a deletion intent on the local range descriptor, which
+	// indicates that a merge is in progress and this range is currently in its
+	// critical phase of being subsumed by its left-hand side neighbor. Read
+	// inconsistently at the maximum timestamp to ensure that we see an intent
+	// if one exists, regardless of what timestamp it is written at.
 	desc := r.descRLocked()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
+	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, hlc.MaxTimestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
-		return err
+		return false, err
 	} else if intent == nil {
-		return nil
+		return false, nil
 	}
 	val, _, err := storage.MVCCGetAsTxn(
 		ctx, r.Engine(), descKey, intent.Txn.WriteTimestamp, intent.Txn)
 	if err != nil {
-		return err
+		return false, err
 	} else if val != nil {
-		return nil
+		return false, nil
 	}
 
 	// At this point, we know we have a deletion intent on our range descriptor.
@@ -1481,7 +1503,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) error {
 		// Another request already noticed the merge, installed a mergeComplete
 		// channel, and launched a goroutine to watch for the merge's completion.
 		// Nothing more to do.
-		return nil
+		return true, nil
 	}
 	r.mu.mergeComplete = mergeCompleteCh
 	// The RHS of a merge is not permitted to quiesce while a mergeComplete
@@ -1612,7 +1634,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) error {
 		// requests will get dropped and retried on another node. Suppress the error.
 		err = nil
 	}
-	return err
+	return true, err
 }
 
 // maybeTransferRaftLeadershipToLeaseholderLocked attempts to transfer the
