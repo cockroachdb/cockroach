@@ -76,6 +76,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.testing.vectorize.batch_size":      {},
 	"sql.testing.mutations.max_batch_size":  {},
 	"sql.testing.mock_contention.enabled":   {},
+	"kv.atomic_replication_changes.enabled": {},
 }
 
 // register adds a setting to the registry.

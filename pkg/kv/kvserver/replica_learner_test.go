@@ -868,9 +868,6 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	_, err := tc.Conns[0].Exec(`SET CLUSTER SETTING kv.atomic_replication_changes.enabled = true`)
-	require.NoError(t, err)
-
 	scratchStartKey := tc.ScratchRange(t)
 	ltk.withStopAfterLearnerAtomic(func() {
 		_ = tc.AddVotersOrFatal(t, scratchStartKey, tc.Target(1))

@@ -1082,9 +1082,7 @@ func setupMetricsTest(t *testing.T) (*localtestcluster.LocalTestCluster, TxnMetr
 
 	metrics := MakeTxnMetrics(metric.TestSampleInterval)
 	s.DB.GetFactory().(*TxnCoordSenderFactory).metrics = metrics
-	return s, metrics, func() {
-		s.Stop()
-	}
+	return s, metrics, s.Stop
 }
 
 // Test a normal transaction. This and the other metrics tests below use real KV operations,
@@ -1156,25 +1154,32 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 func TestTxnAbortCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	s, metrics, cleanupFn := setupMetricsTest(t)
 	defer cleanupFn()
-
-	value := []byte("value")
-
 	const intentionalErrText = "intentional error to cause abort"
-	// Test aborted transaction.
-	if err := s.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-		key := []byte("key-abort")
 
-		if err := txn.Put(ctx, key, value); err != nil {
-			t.Fatal(err)
-		}
+	// Test aborted read-write transaction.
+	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		err := txn.Put(ctx, "key", "value")
+		require.NoError(t, err)
 
 		return errors.New(intentionalErrText)
 	}); !testutils.IsError(err, intentionalErrText) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 1 /* aborts */, 0)
+
+	// Test aborted read-only transaction.
+	if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		_, err := txn.Get(ctx, "key")
+		require.NoError(t, err)
+
+		return errors.New(intentionalErrText)
+	}); !testutils.IsError(err, intentionalErrText) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	checkTxnMetrics(t, metrics, "abort txn", 0, 0, 2 /* aborts */, 0)
 }
 
 func TestTxnRestartCount(t *testing.T) {
@@ -1272,6 +1277,148 @@ func TestTxnDurations(t *testing.T) {
 	if min, thresh := hist.Min(), incr-10; min < thresh {
 		t.Fatalf("min %d < %d", min, thresh)
 	}
+}
+
+// TestTxnCommitWait tests the commit-wait sleep phase of transactions under
+// various conditions. It verifies that transactions sleep for the correct
+// amount of time and verifies that metrics are correctly updated to reflect
+// these commit-wait sleeps. For more, see TxnCoordSender.maybeCommitWait.
+func TestTxnCommitWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Testing parameters:
+	//
+	// - linearizable: is linearizable mode enabled?
+	// - commit:       does the transaction commit or rollback?
+	// - readOnly:     does the transaction perform any writes?
+	// - futureTime:   does the transaction commit in the future?
+	//
+	testFn := func(t *testing.T, linearizable, commit, readOnly, futureTime bool) {
+		s, metrics, cleanupFn := setupMetricsTest(t)
+		s.DB.GetFactory().(*TxnCoordSenderFactory).linearizable = linearizable
+		defer cleanupFn()
+
+		// maxClockOffset defines the maximum clock offset between nodes in the
+		// cluster. When in linearizable mode, all writing transactions must
+		// wait this additional duration after committing to ensure that their
+		// commit timestamp is below the current HLC clock time of any other
+		// node in the system. In doing so, all causally dependent transactions
+		// are guaranteed to start with higher timestamps, regardless of the
+		// gateway they use. This ensures that all causally dependent
+		// transactions commit with higher timestamps, even if their read and
+		// writes sets do not conflict with the original transaction's. This, in
+		// turn, prevents the "causal reverse" anamoly which can be observed by
+		// a third, concurrent transaction. See the following blog post for
+		// more: https://www.cockroachlabs.com/blog/consistency-model/.
+		maxClockOffset := s.Clock.MaxOffset()
+		// futureOffset defines how far in the future the test transaction will
+		// commit, if futureTime is true. We set it to less than the maximum
+		// clock offset as a convenience, so that a value this far in the future
+		// falls within the uncertainty interval of a read, which allows the
+		// test to cause a read-only transaction to commit with a future
+		// timestamp, if readOnly is true.
+		futureOffset := maxClockOffset / 2
+
+		txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
+		readyC := make(chan struct{})
+		errC := make(chan error, 1)
+		go func() {
+			errC <- func() error {
+				key := roachpb.Key("a")
+
+				// If we want the transaction to commit in the future, we
+				// perform a write in its near future. If the transaction is
+				// read-only, it will restart due to uncertainty. If the
+				// transaction is read-write, it will need to bump its write
+				// timestamp above the other value.
+				if futureTime {
+					ts := txn.TestingCloneTxn().WriteTimestamp.
+						Add(futureOffset.Nanoseconds(), 0).
+						WithSynthetic(true)
+					h := roachpb.Header{Timestamp: ts}
+					put := roachpb.NewPut(key, roachpb.Value{})
+					if _, pErr := kv.SendWrappedWith(ctx, s.DB.NonTransactionalSender(), h, put); pErr != nil {
+						return pErr.GoError()
+					}
+				}
+
+				if readOnly {
+					if _, err := txn.Get(ctx, key); err != nil {
+						return err
+					}
+				} else {
+					if err := txn.Put(ctx, key, "val"); err != nil {
+						return err
+					}
+				}
+
+				close(readyC)
+				if !commit {
+					return txn.Rollback(ctx)
+				}
+				return txn.Commit(ctx)
+			}()
+		}()
+
+		// Wait until the transaction is about to commit / rollback.
+		<-readyC
+
+		if !commit {
+			// If the transaction rolled back, it should immediately return,
+			// without waiting.
+			require.NoError(t, <-errC)
+			require.Equal(t, int64(0), metrics.CommitWaits.Count())
+			return
+		}
+
+		// If the transaction committed, it will need to wait at least until its
+		// commit timestamp is below the HLC clock. If linearizable mode is
+		// enabled and this transaction wrote then it will need to wait an
+		// additional max_offset.
+		expWait := time.Duration(0)
+		if linearizable && !readOnly {
+			expWait += maxClockOffset
+		}
+		if futureTime {
+			expWait += futureOffset
+		}
+		expMetric := int64(0)
+		if expWait > 0 {
+			expMetric = 1
+		}
+
+		// Advance the manual clock slowly. If the commit-wait sleep completes
+		// too early, we'll catch it with the require.Empty. If it completes too
+		// late, we'll stall when pulling from the channel.
+		for expWait > 0 {
+			require.Empty(t, errC)
+
+			adv := futureOffset / 5
+			expWait -= adv
+			s.Manual.Increment(adv.Nanoseconds())
+		}
+		require.NoError(t, <-errC)
+		require.Equal(t, expMetric, metrics.CommitWaits.Count())
+
+		// Validate the transaction's commit timestamp in relation to the local
+		// HLC clock.
+		minClockTS := txn.TestingCloneTxn().WriteTimestamp
+		if linearizable && !readOnly {
+			minClockTS = minClockTS.Add(maxClockOffset.Nanoseconds(), 0)
+		}
+		require.True(t, minClockTS.Less(s.Clock.Now()))
+	}
+	testutils.RunTrueAndFalse(t, "linearizable", func(t *testing.T, linearizable bool) {
+		testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
+			testutils.RunTrueAndFalse(t, "readOnly", func(t *testing.T, readOnly bool) {
+				testutils.RunTrueAndFalse(t, "futureTime", func(t *testing.T, futureTime bool) {
+					testFn(t, linearizable, commit, readOnly, futureTime)
+				})
+			})
+		})
+	})
 }
 
 // TestAbortTransactionOnCommitErrors verifies that transactions are

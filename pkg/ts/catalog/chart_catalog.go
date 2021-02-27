@@ -946,6 +946,7 @@ var charts = []sectionDescription{
 					"txn.commits",
 					"txn.commits1PC",
 					"txn.parallelcommits",
+					"txn.commit_waits",
 				},
 			},
 			{

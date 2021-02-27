@@ -958,23 +958,6 @@ func (r *Replica) ChangeReplicas(
 			return nil, errors.New("must disable replicate queue to use ChangeReplicas manually")
 		}
 	}
-
-	// We execute the change serially if we're not allowed to run atomic
-	// replication changes or if that was explicitly disabled.
-	st := r.ClusterSettings()
-	unroll := !UseAtomicReplicationChanges.Get(&st.SV)
-	if unroll {
-		// Legacy behavior.
-		for i := range chgs {
-			var err error
-			desc, err = r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs[i:i+1])
-			if err != nil {
-				return nil, err
-			}
-		}
-		return desc, nil
-	}
-	// Atomic replication change.
 	return r.changeReplicasImpl(ctx, desc, priority, reason, details, chgs)
 }
 
