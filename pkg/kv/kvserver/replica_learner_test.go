@@ -735,8 +735,9 @@ func TestLearnerNoAcceptLease(t *testing.T) {
 
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	err := tc.TransferRangeLease(desc, tc.Target(1))
-	if !testutils.IsError(err, `cannot transfer lease to replica of type LEARNER`) {
-		t.Fatalf(`expected "cannot transfer lease to replica of type LEARNER" error got: %+v`, err)
+	exp := `replica cannot hold lease`
+	if !testutils.IsError(err, exp) {
+		t.Fatalf(`expected %q error got: %+v`, exp, err)
 	}
 }
 
@@ -760,7 +761,7 @@ func TestJointConfigLease(t *testing.T) {
 	require.True(t, desc.Replicas().InAtomicReplicationChange(), desc)
 
 	err := tc.TransferRangeLease(desc, tc.Target(1))
-	exp := `cannot transfer lease to replica of type VOTER_INCOMING`
+	exp := `replica cannot hold lease`
 	require.True(t, testutils.IsError(err, exp), err)
 
 	// NB: we don't have to transition out of the previous joint config first
@@ -768,7 +769,6 @@ func TestJointConfigLease(t *testing.T) {
 	// it's asked to do.
 	desc = tc.RemoveVotersOrFatal(t, k, tc.Target(1))
 	err = tc.TransferRangeLease(desc, tc.Target(1))
-	exp = `cannot transfer lease to replica of type VOTER_DEMOTING_LEARNER`
 	require.True(t, testutils.IsError(err, exp), err)
 }
 
