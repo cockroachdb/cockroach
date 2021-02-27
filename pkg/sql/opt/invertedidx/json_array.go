@@ -90,9 +90,21 @@ func (j *jsonOrArrayJoinPlanner) canExtractJSONOrArrayJoinCondition(
 // getInvertedExprForJSONOrArrayIndex gets an inverted.Expression that
 // constrains a json or array index according to the given constant.
 func getInvertedExprForJSONOrArrayIndex(
-	evalCtx *tree.EvalContext, d tree.Datum,
+	evalCtx *tree.EvalContext, d tree.Datum, contained bool,
 ) inverted.Expression {
 	var b []byte
+	// The contained parameter indicates that we are checking if the indexed
+	// column is contained by a constant. This is handled differently than
+	// checking if the indexed column contains a constant.
+	if contained {
+		invertedExpr, err := rowenc.EncodeContainedInvertedIndexSpans(
+			evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion,
+		)
+		if err != nil {
+			panic(err)
+		}
+		return invertedExpr
+	}
 	invertedExpr, err := rowenc.EncodeContainingInvertedIndexSpans(
 		evalCtx, d, b, descpb.EmptyArraysInInvertedIndexesVersion,
 	)
@@ -181,7 +193,7 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 			// it for every row.
 			var spanExpr *inverted.SpanExpression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
-				invertedExpr := getInvertedExprForJSONOrArrayIndex(evalCtx, d)
+				invertedExpr := getInvertedExprForJSONOrArrayIndex(evalCtx, d, false /* contained */)
 				spanExpr, _ = invertedExpr.(*inverted.SpanExpression)
 			}
 
@@ -226,7 +238,7 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 			if d == tree.DNull {
 				return nil, nil
 			}
-			return getInvertedExprForJSONOrArrayIndex(g.evalCtx, d), nil
+			return getInvertedExprForJSONOrArrayIndex(g.evalCtx, d, false /* contained */), nil
 
 		default:
 			return nil, fmt.Errorf("unsupported expression %v", t)
@@ -309,27 +321,37 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 	evalCtx *tree.EvalContext, left, right opt.ScalarExpr,
 ) inverted.Expression {
-	// The first argument should be a variable or expression corresponding to
-	// the index column.
-	if !isIndexColumn(j.tabID, j.index, left, j.computedColumns) {
-		return inverted.NonInvertedColExpression{}
-	}
+	// When the first argument is a variable or expression corresponding to the
+	// index column and the second argument is a constant, we get the
+	// InvertedExpression for left @> right.
+	if isIndexColumn(j.tabID, j.index, left, j.computedColumns) && memo.CanExtractConstDatum(right) {
+		d := memo.ExtractConstDatum(right)
+		if left.DataType().Family() == types.ArrayFamily &&
+			j.index.Version() < descpb.EmptyArraysInInvertedIndexesVersion {
+			if arr, ok := d.(*tree.DArray); ok && arr.Len() == 0 {
+				// We cannot constrain array indexes that do not include
+				// keys for empty arrays.
+				return inverted.NonInvertedColExpression{}
+			}
+		}
+		return getInvertedExprForJSONOrArrayIndex(evalCtx, d, false /* contained */)
 
-	// The second argument should be a constant.
-	if !memo.CanExtractConstDatum(right) {
-		return inverted.NonInvertedColExpression{}
-	}
-	d := memo.ExtractConstDatum(right)
-	if left.DataType().Family() == types.ArrayFamily &&
-		j.index.Version() < descpb.EmptyArraysInInvertedIndexesVersion {
-		if arr, ok := d.(*tree.DArray); ok && arr.Len() == 0 {
+		// When the second argument is a variable or expression corresponding to
+		// the index column and the first argument is a constant, we get the
+		// equivalent InvertedExpression for right <@ left.
+	} else if isIndexColumn(j.tabID, j.index, right, j.computedColumns) && memo.CanExtractConstDatum(left) {
+		d := memo.ExtractConstDatum(left)
+		if right.DataType().Family() == types.ArrayFamily &&
+			j.index.Version() < descpb.EmptyArraysInInvertedIndexesVersion {
 			// We cannot constrain array indexes that do not include
 			// keys for empty arrays.
 			return inverted.NonInvertedColExpression{}
 		}
+		return getInvertedExprForJSONOrArrayIndex(evalCtx, d, true /* contained */)
 	}
 
-	return getInvertedExprForJSONOrArrayIndex(evalCtx, d)
+	// If neither condition is met, we cannot create an InvertedExpression.
+	return inverted.NonInvertedColExpression{}
 }
 
 // extractJSONFetchValEqCondition extracts an InvertedExpression representing an
@@ -426,7 +448,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 		obj = b.Build()
 	}
 
-	invertedExpr := getInvertedExprForJSONOrArrayIndex(evalCtx, tree.NewDJSON(obj))
+	invertedExpr := getInvertedExprForJSONOrArrayIndex(evalCtx, tree.NewDJSON(obj), false /* contained */)
 
 	// When the right side is an array or object, the InvertedExpression
 	// generated is not tight. We must indicate it is non-tight so an additional
