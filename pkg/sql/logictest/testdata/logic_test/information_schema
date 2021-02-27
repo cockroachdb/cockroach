@@ -4281,3 +4281,23 @@ other_db       public        t2          d            2
 
 statement ok
 SET DATABASE = test
+
+# Testing udt_type at information_schema.columns
+statement ok
+CREATE DATABASE enum_db;
+SET DATABASE = enum_db;
+CREATE SCHEMA sh;
+CREATE TYPE e AS ENUM ('a', 'b');
+CREATE TYPE sh.d AS ENUM('x', 'y');
+CREATE TABLE t (e e, d sh.d);
+
+query TT colnames
+select udt_schema, udt_name
+from information_schema.columns
+where table_name = 't'
+ORDER BY udt_name
+----
+udt_schema  udt_name
+sh          d
+public      e
+pg_catalog  int8
