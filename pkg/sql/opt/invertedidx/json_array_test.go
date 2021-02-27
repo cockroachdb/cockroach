@@ -264,10 +264,13 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			unique:   true,
 		},
 		{
-			// Contained by is not yet supported.
-			filters:  "a <@ '{1}'",
-			indexOrd: arrayOrd,
-			ok:       false,
+			// Contained by is supported.
+			filters:          "a <@ '{1}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "a <@ '{1}'",
 		},
 		{
 			// Wrong index ordinal.

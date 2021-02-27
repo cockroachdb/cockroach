@@ -525,6 +525,118 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	}
 }
 
+func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		value     string
+		result    string
+		expected  bool
+		contained bool
+	}{
+
+		// This test uses EncodeInvertedIndexTableKeys and EncodeContainedInvertedIndexSpans
+		// to determine if the spans produced from the given array value will correctly
+		// include and exclude given results. It then checks if result <@ value.
+
+		// Not all results included in the spans are contained by the value, so the
+		// expression is never tight. Also, the expression is a union of spans, so
+		// unique should never be true.
+
+		// First we test that the spans will include expected results, even if
+		// they are not necessarily contained by the value.
+		{`{}`, `{}`, true, true},
+		{`{1}`, `{1}`, true, true},
+		{`{1}`, `{}`, true, true},
+		{`{1}`, `{1, 2}`, true, false},
+		{`{1, 2}`, `{}`, true, true},
+		{`{1, 2}`, `{2}`, true, true},
+		{`{1, 2}`, `{2, NULL}`, true, false},
+		{`{1, 2}`, `{1, 2}`, true, true},
+		{`{1, 2}`, `{1, 3}`, true, false},
+		{`{2, 2}`, `{2}`, true, true},
+		{`{1, 2, 1}`, `{1, 2}`, true, true},
+		{`{1, 2, 1}`, `{1, 1, 2, 3}`, true, false},
+		{`{1, 2, 3}`, `{1, 2, 4}`, true, false},
+		{`{NULL}`, `{}`, true, true},
+		{`{2, NULL}`, `{2}`, true, true},
+		{`{2, NULL}`, `{2, 3}`, true, false},
+		{`{1, 2, NULL}`, `{1, NULL}`, true, false},
+
+		// Then we test that the spans do not include results that should not be
+		// included.
+		{`{}`, `{1}`, false, false},
+		{`{}`, `{NULL}`, false, false},
+		{`{1}`, `{2}`, false, false},
+		{`{2, 1}`, `{4, 3}`, false, false},
+		{`{1, 2, 1}`, `{5}`, false, false},
+		{`{1, 2, 1}`, `{NULL, 3}`, false, false},
+		{`{NULL}`, `{NULL}`, false, false},
+		{`{1, NULL}`, `{NULL}`, false, false},
+		{`{1, NULL}`, `{2, NULL}`, false, false},
+	}
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	parseArray := func(s string) tree.Datum {
+		arr, _, err := tree.ParseDArrayFromString(&evalCtx, s, types.Int)
+		if err != nil {
+			t.Fatalf("Failed to parse array %s: %v", s, err)
+		}
+		return arr
+	}
+
+	version := descpb.EmptyArraysInInvertedIndexesVersion
+	runTest := func(value, result tree.Datum, expected, contained bool) {
+		keys, err := EncodeInvertedIndexTableKeys(result, nil, version)
+		require.NoError(t, err)
+
+		invertedExpr, err := EncodeContainedInvertedIndexSpans(&evalCtx, value, nil, version)
+		require.NoError(t, err)
+
+		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
+		if !ok {
+			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		}
+
+		// Array spans for <@ are never tight.
+		if spanExpr.Tight == true {
+			t.Errorf("For %s, expected tight=false, but got true", value)
+		}
+
+		// Array spans for <@ are never unique.
+		if spanExpr.Unique {
+			t.Errorf("For %s, expected unique=false, but got true", value)
+		}
+
+		// Check if the result is included by the spans.
+		actual, err := spanExpr.ContainsKeys(keys)
+		require.NoError(t, err)
+
+		if actual != expected {
+			if expected {
+				t.Errorf("expected spans of %s to include %s but it did not", value, result)
+			} else {
+				t.Errorf("expected spans of %s not to include %s but it did", value, result)
+			}
+		}
+
+		// Since the spans are never tight, an additional filter to determine if
+		// the result is contained.
+		isContained, err := tree.ArrayContains(&evalCtx, value.(*tree.DArray), result.(*tree.DArray))
+		require.NoError(t, err)
+		if bool(*isContained) != contained {
+			if contained {
+				t.Errorf("expected %s to be contained by %s but it was not", result, value)
+			}
+			t.Errorf("expected %s not to be contained by %s but it was", result, value)
+		}
+	}
+
+	// Run pre-defined test cases from above.
+	for _, c := range testCases {
+		value, result := parseArray(c.value), parseArray(c.result)
+		runTest(value, result, c.expected, c.contained)
+	}
+}
+
 type arrayEncodingTest struct {
 	name     string
 	datum    tree.DArray

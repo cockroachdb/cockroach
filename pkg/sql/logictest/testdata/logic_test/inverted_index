@@ -994,3 +994,113 @@ query ITT
 SELECT * FROM c WHERE foo @> '{1, 2}' ORDER BY id
 ----
 4  {1,2,3}  {b,NULL,c}
+
+subtest contained_by_arrays
+
+statement ok
+CREATE TABLE cb (
+  id INT PRIMARY KEY,
+  numbers INT[],
+  words STRING[],
+  INVERTED INDEX n (numbers),
+  INVERTED INDEX w (words)
+)
+
+statement ok
+INSERT INTO cb VALUES
+  (0, ARRAY[], ARRAY[]),
+  (1, ARRAY[0], ARRAY[NULL]),
+  (2, ARRAY[1], ARRAY['cat']),
+  (3, ARRAY[0,1], ARRAY['mouse']),
+  (4, ARRAY[NULL], ARRAY['cat', 'mouse']),
+  (5, ARRAY[0,1,2], ARRAY['cat', NULL, 'mouse']),
+  (6, ARRAY[3,4,5], ARRAY['rat']),
+  (7, ARRAY[1,2,1], ARRAY['rat', NULL]),
+  (8, ARRAY[0,1,NULL], ARRAY[''])
+
+query T
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[]::INT[]
+----
+{}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[1]
+----
+{}
+{1}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[0,1,2]
+----
+{}
+{0}
+{1}
+{0,1}
+{0,1,2}
+{1,2,1}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[1,2,3]
+----
+{}
+{1}
+{1,2,1}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[0,1,NULL]
+----
+{}
+{0}
+{1}
+{0,1}
+
+query T
+SELECT numbers FROM cb@n WHERE numbers <@ ARRAY[NULL]::INT[]
+----
+{}
+
+query T
+SELECT words FROM cb@w WHERE words <@ ARRAY[]::STRING[]
+----
+{}
+
+query T
+SELECT words FROM cb@w WHERE words <@ ARRAY['']::STRING[]
+----
+{}
+{""}
+
+query T
+SELECT words FROM cb@w WHERE words <@ ARRAY[NULL]::STRING[]
+----
+{}
+
+
+query T
+SELECT words FROM cb@w WHERE words <@ ARRAY['cat']
+----
+{}
+{cat}
+
+
+query T
+SELECT words FROM cb@w WHERE words <@ ARRAY['cat', 'mouse']
+----
+{}
+{cat}
+{mouse}
+{cat,mouse}
+
+query T
+SELECT words FROM cb@w WHERE words <@ ARRAY['cat', 'mouse', NULL]
+----
+{}
+{cat}
+{mouse}
+{cat,mouse}
+
+query T
+SELECT words FROM cb@w WHERE words <@ ARRAY[NULL, 'rat']
+----
+{}
+{rat}
