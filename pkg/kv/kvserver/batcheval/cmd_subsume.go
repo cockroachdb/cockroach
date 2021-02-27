@@ -115,6 +115,16 @@ func Subsume(
 	// but the check is too expensive as it would involve a network roundtrip on
 	// most nodes.
 
+	// Freeze the range. Do so by blocking all requests while a newly launched
+	// async goroutine watches (pushes with low priority) the merge transaction.
+	// This will also block the closed timestamp side-transport from closing new
+	// timestamps, meaning that the following call to GetCurrentReadSummary is
+	// guaranteed to observe the highest closed timestamp ever published by this
+	// range (if the merge eventually completes).
+	if err := cArgs.EvalCtx.WatchForMerge(ctx); err != nil {
+		return result.Result{}, errors.Wrap(err, "watching for merge during subsume")
+	}
+
 	// We prevent followers of the RHS from being able to serve follower reads on
 	// timestamps that fall in the timestamp window representing the range's
 	// subsumed state (i.e. between the subsumption time (FreezeStart) and the
@@ -189,7 +199,5 @@ func Subsume(
 	// being merged.
 	reply.ClosedTimestamp = closedTS
 
-	return result.Result{
-		Local: result.LocalResult{MaybeWatchForMerge: true},
-	}, nil
+	return result.Result{}, nil
 }
