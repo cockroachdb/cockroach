@@ -46,8 +46,11 @@ func TestMain(m *testing.M) {
 	// below-Raft proto tracking in non-race builds, so there is little benefit
 	// to also doing it in race builds.
 	if util.RaceEnabled {
-		os.Exit(m.Run())
-		return
+		// This package fails under race with "clock allocator overflow".
+		// Tracked by #61120.
+		//os.Exit(m.Run())
+		fmt.Println("SKIPPED (#61120)")
+		os.Exit(0)
 	}
 
 	// Create a set of all protos we believe to be marshaled downstream of raft.
