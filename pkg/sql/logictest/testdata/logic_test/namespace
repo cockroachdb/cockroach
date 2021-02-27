@@ -15,7 +15,7 @@ public  a  table  root  0
 query TTTTI
 SHOW TABLES FROM public.public
 ----
-public  t  table  root  NULL
+public  t  table  root  0
 
 # Of course one can also list the tables in "public" by making it the
 # current database.

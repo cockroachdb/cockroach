@@ -1104,7 +1104,7 @@ publicdb   root
 query TTTTI
 SHOW TABLES FROM publicdb
 ----
-public  publictable  table  root  NULL
+public  publictable  table  root  0
 
 query TTTTI
 SHOW TABLES FROM privatedb

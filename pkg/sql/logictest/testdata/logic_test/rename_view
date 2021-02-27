@@ -146,8 +146,8 @@ SHOW TABLES FROM test
 query TTTTI
 SHOW TABLES FROM test2
 ----
-public  v   view  root  NULL
-public  v2  view  root  NULL
+public  v   view  root  0
+public  v2  view  root  0
 
 user root
 
