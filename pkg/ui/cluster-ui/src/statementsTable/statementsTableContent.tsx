@@ -54,36 +54,6 @@ export const StatementTableTitle = {
       Statements
     </Tooltip>
   ),
-  txtType: (
-    <Tooltip
-      placement="bottom"
-      title={
-        <div className={cx("tooltip__table--title")}>
-          <p>
-            {
-              "Type of transaction (implicit or explicit). Explicit transactions refer to statements that are wrapped by "
-            }
-            <code>BEGIN</code>
-            {" and "}
-            <code>COMMIT</code>
-            {" statements by the client. Explicit transactions employ "}
-            <Anchor href={transactionalPipelining} target="_blank">
-              transactional pipelining
-            </Anchor>
-            {
-              " and therefore report latencies that do not account for replication."
-            }
-          </p>
-          <p>
-            For statements not in explicit transactions, CockroachDB wraps each
-            statement in individual implicit transactions.
-          </p>
-        </div>
-      }
-    >
-      TXN Type
-    </Tooltip>
-  ),
   executionCount: (
     <Tooltip
       placement="bottom"
@@ -159,7 +129,7 @@ export const StatementTableTitle = {
       Bytes Read
     </Tooltip>
   ),
-  latency: (
+  statementTime: (
     <Tooltip
       placement="bottom"
       title={
@@ -175,7 +145,50 @@ export const StatementTableTitle = {
         </div>
       }
     >
-      Latency
+      Statement Time
+    </Tooltip>
+  ),
+  transactionTime: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            Average service latency of transactions with this fingerprint within
+            the last hour or specified time interval.
+          </p>
+          <p>
+            The gray bar indicates the mean latency. The blue bar indicates one
+            standard deviation from the mean.
+          </p>
+        </div>
+      }
+    >
+      Transaction Time
+    </Tooltip>
+  ),
+  contention: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            {
+              "Average time statements with this fingerprint spent contending on other queries within the last hour or specified "
+            }
+            <Anchor href={statementsTimeInterval} target="_blank">
+              time interval
+            </Anchor>
+            .
+          </p>
+          <p>
+            The gray bar indicates mean contention time. The blue bar indicates
+            one standard deviation from the mean.
+          </p>
+        </div>
+      }
+    >
+      Contention
     </Tooltip>
   ),
   maxMemUsage: (
@@ -193,8 +206,8 @@ export const StatementTableTitle = {
             .
           </p>
           <p>
-            The gray bar indicates the mean number of rows returned. The blue
-            bar indicates one standard deviation from the mean.
+            The gray bar indicates the average max memory usage. The blue bar
+            indicates one standard deviation from the mean.
           </p>
         </div>
       }
@@ -217,8 +230,9 @@ export const StatementTableTitle = {
             .
           </p>
           <p>
-            The gray bar indicates the mean number of rows returned. The blue
-            bar indicates one standard deviation from the mean.
+            The gray bar indicates the mean number of bytes sent over the
+            network. The blue bar indicates one standard deviation from the
+            mean.
           </p>
         </div>
       }

@@ -60,7 +60,7 @@
     border-radius: 3px;
   }
 
-  .rows-dev, .rows-read-dev, .bytes-read-dev, .max-mem-usage-dev, .network-bytes-dev {
+  .rows-dev, .rows-read-dev, .bytes-read-dev, .contention-dev, .max-mem-usage-dev, .network-bytes-dev {
     background-color: $colors--primary-blue-3;
   }
 

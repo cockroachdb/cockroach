@@ -26,6 +26,7 @@ import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
 import { Col, Row } from "antd";
 import { Text, Heading } from "@cockroachlabs/ui-components";
+import { formatTwoPlaces } from "../barCharts";
 
 const { containerClass } = tableClasses;
 
@@ -57,7 +58,8 @@ export class TransactionDetails extends React.Component<
 > {
   state: TState = {
     sortSetting: {
-      sortKey: 2,
+      // Sort by statement latency as default column.
+      sortKey: 4,
       ascending: false,
     },
     pagination: {
@@ -149,6 +151,7 @@ export class TransactionDetails extends React.Component<
                           <Text>
                             {formatNumberForDisplay(
                               transactionStats.rows_read.mean,
+                              formatTwoPlaces,
                             )}
                             {" / "}
                             {formatNumberForDisplay(
@@ -181,7 +184,17 @@ export class TransactionDetails extends React.Component<
                             )}
                           </Text>
                         </div>
-                        {/* TODO(asubiotto): Add temporary disk usage */}
+                        <div
+                          className={summaryCardStylesCx("summary--card__item")}
+                        >
+                          <Text type="body-strong">Max scratch disk usage</Text>
+                          <Text>
+                            {formatNumberForDisplay(
+                              transactionStats.exec_stats.max_disk_usage.mean,
+                              Bytes,
+                            )}
+                          </Text>
+                        </div>
                       </SummaryCard>
                     </Col>
                   </Row>
