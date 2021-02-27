@@ -313,7 +313,7 @@ func TestCacheUserDefinedTypes(t *testing.T) {
 CREATE DATABASE t;
 USE t;
 CREATE TYPE t AS ENUM ('hello');
-CREATE TABLE tt (x t PRIMARY KEY);
+CREATE TABLE tt (x t PRIMARY KEY, y INT, INDEX(y));
 INSERT INTO tt VALUES ('hello');
 CREATE STATISTICS s FROM tt;
 `); err != nil {
@@ -333,9 +333,28 @@ CREATE STATISTICS s FROM tt;
 	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
-	_, err := sc.GetTableStats(ctx, tbl.ID)
+	stats, err := sc.GetTableStats(ctx, tbl.ID)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(stats) != 2 {
+		t.Errorf("expected two statistics (for x and y), got %d", len(stats))
+	}
+
+	// Drop the table and the type.
+	if _, err := sqlDB.Exec(`DROP TABLE tt; DROP TYPE t;`); err != nil {
+		t.Fatal(err)
+	}
+	// Purge the cache.
+	sc.InvalidateTableStats(ctx, tbl.GetID())
+	// Verify that GetTableStats ignores the statistic on the now unknown type and
+	// returns the rest.
+	stats, err = sc.GetTableStats(ctx, tbl.GetID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stats) != 1 {
+		t.Errorf("expected one statistic (for y), got %d", len(stats))
 	}
 }
 
