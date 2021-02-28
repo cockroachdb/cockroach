@@ -71,6 +71,7 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 
 	err = bundleFromDisk.InterNode.loadOrCreateServiceCertificates(
 		ctx, cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		true, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
 		return bundleFromDisk, err
@@ -82,6 +83,7 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 	//)
 	err = bundleFromDisk.SQLService.loadOrCreateServiceCertificates(
 		ctx, cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		false, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
 		return bundleFromDisk, err
@@ -89,6 +91,7 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 
 	err = bundleFromDisk.RPCService.loadOrCreateServiceCertificates(
 		ctx, cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		false, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
 		return bundleFromDisk, err
@@ -96,6 +99,7 @@ func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBund
 
 	err = bundleFromDisk.AdminUIService.loadOrCreateServiceCertificates(
 		ctx, cl.UICertPath(), cl.UIKeyPath(), "", "", 0, 0, "fakehost", "", []string{},
+		false, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
 		return bundleFromDisk, err
@@ -234,7 +238,9 @@ func TestDummyCertLoader(t *testing.T) {
 	scb := ServiceCertificateBundle{}
 	_ = scb.loadServiceCertAndKey("", "")
 	_ = scb.loadCACertAndKey("", "")
-	_ = scb.rotateServiceCert(context.Background(), "", "", time.Minute, "fakehost", "", []string{""})
+	_ = scb.rotateServiceCert(context.Background(), "", "", time.Minute, "fakehost", "", []string{""},
+		false, /* serviceCertIsAlsoValidAsClient */
+	)
 }
 
 // TestNodeCertRotation tests that the rotation function will overwrite the

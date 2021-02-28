@@ -176,6 +176,7 @@ func CreateServiceCertAndKey(
 	hostnames []string,
 	caCertPEM []byte,
 	caKeyPEM []byte,
+	serviceCertIsAlsoValidAsClient bool,
 ) (certPEM []byte, keyPEM []byte, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
@@ -231,6 +232,10 @@ func CreateServiceCertAndKey(
 		NotAfter:    notAfter,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+	}
+
+	if serviceCertIsAlsoValidAsClient {
+		serviceCert.ExtKeyUsage = append(serviceCert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
 	}
 
 	// Attempt to parse hostname as IP, if successful add it as an IP

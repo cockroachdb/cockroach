@@ -157,6 +157,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	commonName string,
 	serviceName string,
 	hostnames []string,
+	serviceCertIsAlsoValidAsClient bool,
 ) error {
 	ctx = logtags.AddTag(ctx, "service", serviceName)
 
@@ -220,6 +221,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 		hostnames,
 		sb.CACertificate,
 		sb.CAKey,
+		serviceCertIsAlsoValidAsClient,
 	)
 	if err != nil {
 		return errors.Wrap(
@@ -364,6 +366,7 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 		security.NodeUser,
 		serviceNameInterNode,
 		rpcAddrs,
+		true, /* serviceCertIsAlsoValidAsClient */
 	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create InterNode certificates")
@@ -394,6 +397,7 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 		serviceNameSQL,
 		// TODO(aaron-crl): Add RPC variable to config or SplitSQLAddr.
 		sqlAddrs,
+		false, /* serviceCertIsAlsoValidAsClient */
 	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create SQL service certificate(s)")
@@ -412,6 +416,7 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 		serviceNameRPC,
 		// TODO(aaron-crl): Add RPC variable to config.
 		rpcAddrs,
+		false, /* serviceCertIsAlsoValidAsClient */
 	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create RPC service certificate(s)")
@@ -429,6 +434,7 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 		httpAddrs[0],
 		serviceNameUI,
 		httpAddrs,
+		false, /* serviceCertIsAlsoValidAsClient */
 	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create Admin UI service certificate(s)")
@@ -631,6 +637,7 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 			security.NodeUser,
 			serviceNameInterNode,
 			rpcAddrs,
+			true, /* serviceCertIsAlsoValidAsClient */
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate InterNode cert")
@@ -649,6 +656,7 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 			security.NodeUser,
 			serviceNameSQL,
 			sqlAddrs,
+			false, /* serviceCertIsAlsoValidAsClient */
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate SQLService cert")
@@ -665,6 +673,7 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 			security.NodeUser,
 			serviceNameRPC,
 			rpcAddrs,
+			false, /* serviceCertIsAlsoValidAsClient */
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate RPCService cert")
@@ -681,6 +690,7 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 			httpAddrs[0],
 			serviceNameUI,
 			httpAddrs,
+			false, /* serviceCertIsAlsoValidAsClient */
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate AdminUIService cert")
@@ -700,6 +710,7 @@ func (sb *ServiceCertificateBundle) rotateServiceCert(
 	serviceCertLifespan time.Duration,
 	commonName, serviceString string,
 	hostnames []string,
+	serviceCertIsAlsoValidAsClient bool,
 ) error {
 	// generate
 	certPEM, keyPEM, err := security.CreateServiceCertAndKey(
@@ -711,6 +722,7 @@ func (sb *ServiceCertificateBundle) rotateServiceCert(
 		hostnames,
 		sb.CACertificate,
 		sb.CAKey,
+		serviceCertIsAlsoValidAsClient,
 	)
 	if err != nil {
 		return errors.Wrapf(

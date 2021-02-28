@@ -139,7 +139,17 @@ func createNodeInitTempCertificates(
 		return certs, err
 	}
 	serviceCtx := logtags.AddTag(ctx, "create-temp-service", nil)
-	serviceCert, serviceKey, err := security.CreateServiceCertAndKey(serviceCtx, log.Ops.Infof, lifespan, security.NodeUser, initServiceName, hostnames, caCert, caKey)
+	serviceCert, serviceKey, err := security.CreateServiceCertAndKey(
+		serviceCtx,
+		log.Ops.Infof,
+		lifespan,
+		security.NodeUser,
+		initServiceName,
+		hostnames,
+		caCert,
+		caKey,
+		false, /* serviceCertIsAlsoValidAsClient */
+	)
 	if err != nil {
 		return certs, err
 	}

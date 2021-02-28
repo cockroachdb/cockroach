@@ -48,6 +48,7 @@ func TestDummyCreateServiceCertAndKey(t *testing.T) {
 		[]string{"localhost", "127.0.0.1"},
 		caCert,
 		caKey,
+		false, /* serviceCertIsAlsoValidAsClient */
 	)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %s", err)
