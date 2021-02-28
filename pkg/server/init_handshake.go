@@ -416,6 +416,9 @@ func initHandshakeHelper(
 	certsDir string,
 	listener net.Listener,
 ) error {
+	if len(token) == 0 {
+		return errors.AssertionFailedf("programming error: token cannot be empty")
+	}
 	if numExpectedNodes <= 0 {
 		return errors.AssertionFailedf("programming error: must expect more than 1 node")
 	}
