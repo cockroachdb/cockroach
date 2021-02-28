@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -29,6 +30,9 @@ import (
 func TestInitHandshake(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+
 	timeout := 11 * time.Minute
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -131,9 +135,12 @@ func TestInitHandshake(t *testing.T) {
 func TestInitHandshakeWrongToken(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+
 	// The test deadline needs to be greater than this for this test to pass,
 	// as one of the nodes will have to wait for this context to time out.
-	timeout := 30 * time.Second
+	timeout := 20 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
