@@ -128,7 +128,11 @@ func CreateCACertAndKey(
 // CreateServiceCertAndKey creates a cert/key pair signed by the provided CA.
 // This is a utility function to help with cluster auto certificate generation.
 func CreateServiceCertAndKey(
-	lifespan time.Duration, service string, hostnames []string, caCertPEM []byte, caKeyPEM []byte,
+	lifespan time.Duration,
+	commonName, service string,
+	hostnames []string,
+	caCertPEM []byte,
+	caKeyPEM []byte,
 ) (certPEM []byte, keyPEM []byte, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
@@ -173,6 +177,7 @@ func CreateServiceCertAndKey(
 			Organization:       []string{"Cockroach Labs"},
 			OrganizationalUnit: []string{service},
 			Country:            []string{"US"},
+			CommonName:         commonName,
 		},
 		NotBefore:   notBefore,
 		NotAfter:    notAfter,

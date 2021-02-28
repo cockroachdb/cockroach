@@ -255,7 +255,9 @@ func init() {
 
 	// Add a pre-run command for `start` and `start-single-node`, as well as the
 	// multi-tenancy related commands that start long-running servers.
-	for _, cmd := range serverCmds {
+	// Also for `connect` which does not really start a server but uses
+	// all the networking flags.
+	for _, cmd := range append(serverCmds, connectCmd) {
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
 			// Finalize the configuration of network settings.
 			return extraServerFlagInit(cmd)
