@@ -311,7 +311,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 		cl.CAKeyPath(),
 		initLifespan,
 		security.NodeUser,
-		"InterNode Service",
+		"cockroach-node",
 		rpcHostName,
 	); err != nil {
 		return errors.Wrap(err,
@@ -325,7 +325,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 		cl.ClientCACertPath(),
 		cl.ClientCAKeyPath(),
 		initLifespan,
-		"User Authentication",
+		"cockroach-client",
 	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create User auth certificate(s)")
@@ -339,7 +339,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 		cl.SQLServiceCAKeyPath(),
 		initLifespan,
 		security.NodeUser,
-		"SQL Service",
+		"cockroach-sql",
 		sqlHostName,
 	); err != nil {
 		return errors.Wrap(err,
@@ -354,7 +354,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 		cl.RPCServiceCAKeyPath(),
 		initLifespan,
 		security.NodeUser,
-		"RPC Service",
+		"cockroach-rpc",
 		rpcHostName, // TODO(aaron-crl): Add RPC variable to config.
 	); err != nil {
 		return errors.Wrap(err,
@@ -369,7 +369,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 		cl.UICAKeyPath(),
 		initLifespan,
 		httpHostName,
-		"AdminUI Service",
+		"cockroach-http",
 		httpHostName,
 	); err != nil {
 		return errors.Wrap(err,
