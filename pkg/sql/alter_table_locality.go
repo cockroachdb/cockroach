@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -448,6 +450,13 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	newLocality := n.n.Locality
 	existingLocality := n.tableDesc.LocalityConfig
+
+	telemetry.Inc(
+		sqltelemetry.AlterTableLocalityCounter(
+			existingLocality.TelemetryName(),
+			newLocality.TelemetryName(),
+		),
+	)
 
 	// Look at the existing locality, and implement any changes required to move to
 	// the new locality.

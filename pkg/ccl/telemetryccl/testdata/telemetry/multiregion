@@ -54,3 +54,43 @@ feature-usage
 ALTER DATABASE d SURVIVE ZONE FAILURE
 ----
 sql.multiregion.alter_database.survival_goal.survive_zone_failure
+
+exec
+USE d;
+ALTER DATABASE d ADD REGION "ap-southeast-2"
+----
+
+feature-usage
+CREATE TABLE t1 ()
+----
+sql.multiregion.create_table.locality.unspecified
+
+feature-usage
+CREATE TABLE t2 () LOCALITY REGIONAL BY TABLE
+----
+sql.multiregion.create_table.locality.regional_by_table
+
+feature-usage
+CREATE TABLE t3 () LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+----
+sql.multiregion.create_table.locality.regional_by_table_in
+
+feature-usage
+CREATE TABLE t4 () LOCALITY GLOBAL
+----
+sql.multiregion.create_table.locality.global
+
+feature-usage
+CREATE TABLE t5 () LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.create_table.locality.regional_by_row
+
+feature-usage
+CREATE TABLE t6 (cr crdb_internal_region) LOCALITY REGIONAL BY ROW AS cr
+----
+sql.multiregion.create_table.locality.regional_by_row_as
+
+feature-usage
+ALTER TABLE t1 SET LOCALITY REGIONAL BY ROW
+----
+sql.multiregion.alter_table.locality.regional_by_table.regional_by_row

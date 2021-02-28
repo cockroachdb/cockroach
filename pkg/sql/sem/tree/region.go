@@ -56,6 +56,35 @@ type Locality struct {
 	RegionalByRowColumn Name
 }
 
+// Constants to use for telemetry for multi-region table localities.
+const (
+	TelemetryNameGlobal            = "global"
+	TelemetryNameRegionalByTable   = "regional_by_table"
+	TelemetryNameRegionalByTableIn = "regional_by_table_in"
+	TelemetryNameRegionalByRow     = "regional_by_row"
+	TelemetryNameRegionalByRowAs   = "regional_by_row_as"
+)
+
+// TelemetryName returns the telemetry name for a given locality level.
+func (node *Locality) TelemetryName() string {
+	switch node.LocalityLevel {
+	case LocalityLevelGlobal:
+		return TelemetryNameGlobal
+	case LocalityLevelTable:
+		if node.TableRegion != RegionalByRowRegionNotSpecifiedName {
+			return TelemetryNameRegionalByTableIn
+		}
+		return TelemetryNameRegionalByTable
+	case LocalityLevelRow:
+		if node.RegionalByRowColumn != PrimaryRegionNotSpecifiedName {
+			return TelemetryNameRegionalByRowAs
+		}
+		return TelemetryNameRegionalByRow
+	default:
+		panic(fmt.Sprintf("unknown locality: %#v", node.LocalityLevel))
+	}
+}
+
 // Format implements the NodeFormatter interface.
 func (node *Locality) Format(ctx *FmtCtx) {
 	ctx.WriteString("LOCALITY ")
@@ -76,6 +105,6 @@ func (node *Locality) Format(ctx *FmtCtx) {
 			node.RegionalByRowColumn.Format(ctx)
 		}
 	default:
-		panic(fmt.Sprintf("unknown regional affinity: %#v", node.LocalityLevel))
+		panic(fmt.Sprintf("unknown locality: %#v", node.LocalityLevel))
 	}
 }
