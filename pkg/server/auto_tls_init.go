@@ -283,8 +283,12 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
 	if _, err = os.Stat(cl.NodeCertPath()); !oserror.IsNotExist(err) {
-		err = errors.New("interNodeHost certificate already present")
-		return
+		return errors.New("interNodeHost certificate already present")
+	}
+
+	// Create the target directory if it does not exist yet.
+	if err := cl.EnsureCertsDirectory(); err != nil {
+		return err
 	}
 
 	// Start by loading or creating the InterNode certificates.
