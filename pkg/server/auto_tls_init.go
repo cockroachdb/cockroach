@@ -17,15 +17,18 @@
 package server
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/logtags"
 )
 
 // Define default certificate lifespan of 366 days
@@ -80,14 +83,20 @@ func (sb *ServiceCertificateBundle) loadCACertAndKey(certPath string, keyPath st
 
 // LoadUserAuthCACertAndKey loads host certificate and key from disk or fails with error.
 func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(
-	caCertPath string, caKeyPath string, initLifespan time.Duration, serviceName string,
+	ctx context.Context,
+	caCertPath string,
+	caKeyPath string,
+	initLifespan time.Duration,
+	serviceName string,
 ) (err error) {
+	log.Ops.Infof(ctx, "attempting to load CA cert: %s", caCertPath)
 	// Attempt to load cert into ServiceCertificateBundle.
 	sb.CACertificate, err = loadCertificateFile(caCertPath)
 	if err != nil {
 		if oserror.IsNotExist(err) {
+			log.Ops.Infof(ctx, "not found; auto-generating")
 			// Certificate not found, attempt to create both cert and key now.
-			err = sb.createServiceCA(caCertPath, caKeyPath, initLifespan, serviceName)
+			err = sb.createServiceCA(ctx, caCertPath, caKeyPath, initLifespan, serviceName)
 			if err != nil {
 				return err
 			}
@@ -100,12 +109,15 @@ func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(
 		return err
 	}
 
+	log.Ops.Infof(ctx, "found; loading CA key: %s", caKeyPath)
 	// Load the key only if it exists.
 	sb.CAKey, err = loadKeyFile(caKeyPath)
 	if !oserror.IsNotExist(err) {
 		// An error returned but it was not that the file didn't exist;
 		// this is an error.
 		return err
+	} else {
+		log.Ops.Infof(ctx, "CA key not found")
 	}
 
 	return nil
@@ -123,6 +135,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(
 //   It will persist these to disk and store them
 //     in the ServiceCertificateBundle.
 func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
+	ctx context.Context,
 	serviceCertPath string,
 	serviceKeyPath string,
 	caCertPath string,
@@ -132,11 +145,14 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	serviceName string,
 	hostname string,
 ) error {
-	var err error
+	ctx = logtags.AddTag(ctx, "service", serviceName)
 
+	var err error
+	log.Ops.Infof(ctx, "attempting to load service cert: %s", serviceCertPath)
 	// Check if the service cert and key already exist, if it does return early.
 	sb.HostCertificate, err = loadCertificateFile(serviceCertPath)
 	if err == nil {
+		log.Ops.Infof(ctx, "found; loading service key: %s", serviceKeyPath)
 		// Cert file exists, now load key.
 		sb.HostKey, err = loadKeyFile(serviceKeyPath)
 		if err != nil {
@@ -150,14 +166,20 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 			return errors.Wrap(err, "something went wrong loading service key")
 		}
 		// Both certificate and key should be successfully loaded.
+		log.Ops.Infof(ctx, "service cert is ready")
 		return nil
 	}
+	// TODO(aaron-crl, knz): err != nil is not handled here.
 
-	// Niether service cert or key exist, attempt to load CA.
+	log.Ops.Infof(ctx, "not found; will attempt auto-creation")
+
+	log.Ops.Infof(ctx, "attempting to load CA cert: %s", caCertPath)
+	// Neither service cert or key exist, attempt to load CA.
 	sb.CACertificate, err = loadCertificateFile(caCertPath)
 	if err == nil {
 		// CA cert has been successfully loaded, attempt to load
 		// CA key.
+		log.Ops.Infof(ctx, "found; loading CA key: %s", caKeyPath)
 		sb.CAKey, err = loadKeyFile(caKeyPath)
 		if err != nil {
 			return errors.Wrapf(
@@ -165,17 +187,21 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 			)
 		}
 	} else if oserror.IsNotExist(err) {
+		log.Ops.Infof(ctx, "not found; CA cert does not exist, auto-creating")
 		// CA cert does not yet exist, create it and its key.
-		if err := sb.createServiceCA(caCertPath, caKeyPath, initLifespan, serviceName); err != nil {
+		if err := sb.createServiceCA(ctx, caCertPath, caKeyPath, initLifespan, serviceName); err != nil {
 			return errors.Wrap(
 				err, "failed to create Service CA",
 			)
 		}
 	}
+	// TODO(aaron-crl, knz): missing `else` case here.
 
 	// CA cert and key should now be loaded, create service cert and key.
 	var hostCert, hostKey []byte
 	hostCert, hostKey, err = security.CreateServiceCertAndKey(
+		ctx,
+		log.Ops.Infof,
 		initLifespan,
 		commonName,
 		serviceName,
@@ -189,13 +215,13 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 		)
 	}
 
-	err = writeCertificateFile(serviceCertPath, hostCert)
-	if err != nil {
+	log.Ops.Infof(ctx, "writing service cert: %s", serviceCertPath)
+	if err := writeCertificateFile(serviceCertPath, hostCert); err != nil {
 		return err
 	}
 
-	err = writeKeyFile(serviceKeyPath, hostKey)
-	if err != nil {
+	log.Ops.Infof(ctx, "writing service key: %s", serviceKeyPath)
+	if err := writeKeyFile(serviceKeyPath, hostKey); err != nil {
 		return err
 	}
 
@@ -205,18 +231,26 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 // createServiceCA builds CA cert and key and populates them to
 // ServiceCertificateBundle.
 func (sb *ServiceCertificateBundle) createServiceCA(
-	caCertPath string, caKeyPath string, initLifespan time.Duration, serviceName string,
+	ctx context.Context,
+	caCertPath string,
+	caKeyPath string,
+	initLifespan time.Duration,
+	serviceName string,
 ) (err error) {
-	sb.CACertificate, sb.CAKey, err = security.CreateCACertAndKey(initLifespan, serviceName)
+	ctx = logtags.AddTag(ctx, "auto-create-ca", nil)
+
+	sb.CACertificate, sb.CAKey, err = security.CreateCACertAndKey(ctx, log.Ops.Infof, initLifespan, serviceName)
 	if err != nil {
 		return
 	}
 
+	log.Ops.Infof(ctx, "writing CA cert: %s", caCertPath)
 	err = writeCertificateFile(caCertPath, sb.CACertificate)
 	if err != nil {
 		return
 	}
 
+	log.Ops.Infof(ctx, "writing CA key: %s", caKeyPath)
 	err = writeKeyFile(caKeyPath, sb.CAKey)
 	if err != nil {
 		return
@@ -271,7 +305,7 @@ func writeKeyFile(keyPath string, keyPEM []byte) error {
 // https://github.com/cockroachdb/cockroach/pull/51991
 // N.B.: This function fast fails if an inter-node cert/key pair are present
 // as this should _never_ happen.
-func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
+func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Config) error {
 	cl := security.MakeCertsLocator(c.SSLCertsDir)
 
 	// First check to see if host cert is already present
@@ -305,6 +339,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 
 	// Start by loading or creating the InterNode certificates.
 	if err := b.InterNode.loadOrCreateServiceCertificates(
+		ctx,
 		cl.NodeCertPath(),
 		cl.NodeKeyPath(),
 		cl.CACertPath(),
@@ -322,6 +357,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 	// TODO(aaron-crl): Double check that we want to do this. It seems
 	// like this is covered by the interface certificates?
 	if err := b.UserAuth.loadOrCreateUserAuthCACertAndKey(
+		ctx,
 		cl.ClientCACertPath(),
 		cl.ClientCAKeyPath(),
 		initLifespan,
@@ -333,6 +369,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 
 	// Initialize SQLService Certs.
 	if err := b.SQLService.loadOrCreateServiceCertificates(
+		ctx,
 		cl.SQLServiceCertPath(),
 		cl.SQLServiceKeyPath(),
 		cl.SQLServiceCACertPath(),
@@ -348,6 +385,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 
 	// Initialize RPCService Certs.
 	if err := b.RPCService.loadOrCreateServiceCertificates(
+		ctx,
 		cl.RPCServiceCertPath(),
 		cl.RPCServiceKeyPath(),
 		cl.RPCServiceCACertPath(),
@@ -363,6 +401,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 
 	// Initialize AdminUIService Certs.
 	if err := b.AdminUIService.loadOrCreateServiceCertificates(
+		ctx,
 		cl.UICertPath(),
 		cl.UIKeyPath(),
 		cl.UICACertPath(),
@@ -383,8 +422,8 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 // details from the config object to write certs to disk and generate any
 // missing host-specific certificates and keys
 // It is assumed that a node receiving this has not has TLS initialized. If
-// a interNodeHost certificate is found, this function will error.
-func (b *CertificateBundle) InitializeNodeFromBundle(c base.Config) error {
+// an inter-node certificate is found, this function will error.
+func (b *CertificateBundle) InitializeNodeFromBundle(ctx context.Context, c base.Config) error {
 	cl := security.MakeCertsLocator(c.SSLCertsDir)
 
 	// First check to see if host cert is already present
@@ -403,39 +442,33 @@ func (b *CertificateBundle) InitializeNodeFromBundle(c base.Config) error {
 	// and return an error.
 
 	// Attempt to write InterNodeHostCA to disk first.
-	err := b.InterNode.writeCAOrFail(cl.CACertPath(), cl.CAKeyPath())
-	if err != nil {
+	if err := b.InterNode.writeCAOrFail(cl.CACertPath(), cl.CAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write InterNodeCA to disk")
 	}
 
 	// Attempt to write ClientCA to disk.
-	err = b.InterNode.writeCAOrFail(cl.ClientCACertPath(), cl.ClientCAKeyPath())
-	if err != nil {
+	if err := b.InterNode.writeCAOrFail(cl.ClientCACertPath(), cl.ClientCAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write ClientCA to disk")
 	}
 
 	// Attempt to write SQLServiceCA to disk.
-	err = b.InterNode.writeCAOrFail(cl.SQLServiceCACertPath(), cl.SQLServiceCAKeyPath())
-	if err != nil {
+	if err := b.InterNode.writeCAOrFail(cl.SQLServiceCACertPath(), cl.SQLServiceCAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write SQLServiceCA to disk")
 	}
 
 	// Attempt to write RPCServiceCA to disk.
-	err = b.InterNode.writeCAOrFail(cl.RPCServiceCACertPath(), cl.RPCServiceCAKeyPath())
-	if err != nil {
+	if err := b.InterNode.writeCAOrFail(cl.RPCServiceCACertPath(), cl.RPCServiceCAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write RPCServiceCA to disk")
 	}
 
 	// Attempt to write AdminUIServiceCA to disk.
-	err = b.InterNode.writeCAOrFail(cl.UICACertPath(), cl.UICAKeyPath())
-	if err != nil {
+	if err := b.InterNode.writeCAOrFail(cl.UICACertPath(), cl.UICAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write AdminUIServiceCA to disk")
 	}
 
 	// Once CAs are written call the same InitFromConfig function to create
 	// host certificates.
-	err = b.InitializeFromConfig(c)
-	if err != nil {
+	if err := b.InitializeFromConfig(ctx, c); err != nil {
 		return errors.Wrap(
 			err,
 			"failed to initialize host certs after writing CAs to disk")

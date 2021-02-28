@@ -11,6 +11,7 @@
 package server
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -35,7 +36,7 @@ func TestDummyInitializeFromConfig(t *testing.T) {
 		SSLCertsDir: tempDir,
 	}
 
-	err = certBundle.InitializeFromConfig(cfg)
+	err = certBundle.InitializeFromConfig(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %s", err)
 	}
@@ -64,7 +65,7 @@ func TestDummyInitializeNodeFromBundle(t *testing.T) {
 		SSLCertsDir: tempDir,
 	}
 
-	err = certBundle.InitializeNodeFromBundle(cfg)
+	err = certBundle.InitializeNodeFromBundle(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %s", err)
 	}
