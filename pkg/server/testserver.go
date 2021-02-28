@@ -784,7 +784,7 @@ func StartTenant(
 		SetupIdleMonitor(ctx, args.stopper, baseCfg.IdleExitAfter, connManager)
 	}
 
-	pgL, err := listen(ctx, &args.Config.SQLAddr, &args.Config.SQLAdvertiseAddr, "sql")
+	pgL, err := ListenAndUpdateAddrs(ctx, &args.Config.SQLAddr, &args.Config.SQLAdvertiseAddr, "sql")
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -804,7 +804,7 @@ func StartTenant(
 		}
 	}
 
-	httpL, err := listen(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
+	httpL, err := ListenAndUpdateAddrs(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
 	if err != nil {
 		return nil, "", "", err
 	}

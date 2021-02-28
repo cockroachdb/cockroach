@@ -69,7 +69,7 @@ func loadAllCertsFromDisk(cfg base.Config) (CertificateBundle, error) {
 	}
 
 	err = bundleFromDisk.InterNode.loadOrCreateServiceCertificates(
-		cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, "", []string{},
+		cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
 	)
 	if err != nil {
 		return bundleFromDisk, err
@@ -80,21 +80,21 @@ func loadAllCertsFromDisk(cfg base.Config) (CertificateBundle, error) {
 	//	cl.ClientCertPath(), cl.ClientKeyPath(), "", "", 0, "", []string{},
 	//)
 	err = bundleFromDisk.SQLService.loadOrCreateServiceCertificates(
-		cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, "", []string{},
+		cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
 	)
 	if err != nil {
 		return bundleFromDisk, err
 	}
 
 	err = bundleFromDisk.RPCService.loadOrCreateServiceCertificates(
-		cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, "", []string{},
+		cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
 	)
 	if err != nil {
 		return bundleFromDisk, err
 	}
 
 	err = bundleFromDisk.AdminUIService.loadOrCreateServiceCertificates(
-		cl.UICertPath(), cl.UIKeyPath(), "", "", 0, 0, "", []string{},
+		cl.UICertPath(), cl.UIKeyPath(), "", "", 0, 0, "fakehost", "", []string{},
 	)
 	if err != nil {
 		return bundleFromDisk, err
@@ -233,7 +233,7 @@ func TestDummyCertLoader(t *testing.T) {
 	scb := ServiceCertificateBundle{}
 	_ = scb.loadServiceCertAndKey("", "")
 	_ = scb.loadCACertAndKey("", "")
-	_ = scb.rotateServiceCert("", "", time.Minute, "", []string{""})
+	_ = scb.rotateServiceCert("", "", time.Minute, "fakehost", "", []string{""})
 }
 
 // TestNodeCertRotation tests that the rotation function will overwrite the
@@ -272,6 +272,8 @@ func TestRotationOnUnintializedNode(t *testing.T) {
 		t.Fatal("files added to cfg.SSLCertsDir when they shouldn't have been")
 	}
 
+	// TODO(aaron-crl): Verify that the certs are rotated for the proper
+	// addresses.
 	err = rotateGeneratedCerts(cfg)
 	if err != nil {
 		t.Fatalf("expected nil error generating no certs, got: %q", err)
@@ -304,6 +306,8 @@ func TestRotationOnIntializedNode(t *testing.T) {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}
 
+	// TODO(aaron-crl): Verify that the certs are rotated for the proper
+	// addresses.
 	err = rotateGeneratedCerts(cfg)
 	if err != nil {
 		t.Fatalf("rotation failed; expected err=nil, got: %q", err)
@@ -354,6 +358,9 @@ func TestRotationOnPartialIntializedNode(t *testing.T) {
 	if err = os.Remove(cl.UICAKeyPath()); err != nil {
 		t.Fatalf("failed to remove test cert: %q", err)
 	}
+
+	// TODO(aaron-crl): Verify that the certs are rotated for the proper
+	// addresses.
 
 	// This should rotate all service certs except client and UI.
 	err = rotateGeneratedCerts(cfg)

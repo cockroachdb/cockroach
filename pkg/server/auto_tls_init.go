@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -139,6 +140,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	caKeyPath string,
 	serviceCertLifespan time.Duration,
 	caCertLifespan time.Duration,
+	commonName string,
 	serviceName string,
 	hostnames []string,
 ) error {
@@ -176,8 +178,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 		}
 	} else if oserror.IsNotExist(err) {
 		// CA cert does not yet exist, create it and its key.
-		err = sb.createServiceCA(caCertPath, caKeyPath, caCertLifespan, serviceName)
-		if err != nil {
+		if err := sb.createServiceCA(caCertPath, caKeyPath, caCertLifespan, serviceName); err != nil {
 			return errors.Wrap(
 				err, "failed to create Service CA",
 			)
@@ -188,6 +189,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	//var hostCert, hostKey []byte
 	sb.HostCertificate, sb.HostKey, err = security.CreateServiceCertAndKey(
 		serviceCertLifespan,
+		commonName,
 		serviceName,
 		hostnames,
 		sb.CACertificate,
@@ -307,90 +309,118 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 			err, "interNodeHost certificate access issue")
 	}
 
+	rpcAddrs := extractHosts(c.Addr, c.AdvertiseAddr)
+	sqlAddrs := rpcAddrs
+	if c.SplitListenSQL {
+		sqlAddrs = extractHosts(c.SQLAddr, c.SQLAdvertiseAddr)
+	}
+	httpAddrs := extractHosts(c.HTTPAddr, c.HTTPAdvertiseAddr)
+
 	// Create the target directory if it does not exist yet.
 	if err := cl.EnsureCertsDirectory(); err != nil {
 		return err
 	}
 
 	// Start by loading or creating the InterNode certificates.
-	err := b.InterNode.loadOrCreateServiceCertificates(
+	if err := b.InterNode.loadOrCreateServiceCertificates(
 		cl.NodeCertPath(),
 		cl.NodeKeyPath(),
 		cl.CACertPath(),
 		cl.CAKeyPath(),
 		defaultCertLifetime,
 		defaultCALifetime,
+		security.NodeUser,
 		serviceNameInterNode,
-		[]string{c.Addr, c.AdvertiseAddr},
-	)
-	if err != nil {
+		rpcAddrs,
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create InterNode certificates")
 	}
 
 	// Initialize User auth certificates.
-	err = b.UserAuth.loadOrCreateUserAuthCACertAndKey(
+	if err := b.UserAuth.loadOrCreateUserAuthCACertAndKey(
 		cl.ClientCACertPath(),
 		cl.ClientCAKeyPath(),
 		defaultCALifetime,
 		serviceNameUserAuth,
-	)
-	if err != nil {
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create User auth certificate(s)")
 	}
 
 	// Initialize SQLService Certs.
-	err = b.SQLService.loadOrCreateServiceCertificates(
+	if err := b.SQLService.loadOrCreateServiceCertificates(
 		cl.SQLServiceCertPath(),
 		cl.SQLServiceKeyPath(),
 		cl.SQLServiceCACertPath(),
 		cl.SQLServiceCAKeyPath(),
 		defaultCertLifetime,
 		defaultCALifetime,
+		security.NodeUser,
 		serviceNameSQL,
 		// TODO(aaron-crl): Add RPC variable to config or SplitSQLAddr.
-		[]string{c.SQLAddr, c.SQLAdvertiseAddr},
-	)
-	if err != nil {
+		sqlAddrs,
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create SQL service certificate(s)")
 	}
 
 	// Initialize RPCService Certs.
-	err = b.RPCService.loadOrCreateServiceCertificates(
+	if err := b.RPCService.loadOrCreateServiceCertificates(
 		cl.RPCServiceCertPath(),
 		cl.RPCServiceKeyPath(),
 		cl.RPCServiceCACertPath(),
 		cl.RPCServiceCAKeyPath(),
 		defaultCertLifetime,
 		defaultCALifetime,
+		security.NodeUser,
 		serviceNameRPC,
 		// TODO(aaron-crl): Add RPC variable to config.
-		[]string{c.SQLAddr, c.SQLAdvertiseAddr},
-	)
-	if err != nil {
+		rpcAddrs,
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create RPC service certificate(s)")
 	}
 
 	// Initialize AdminUIService Certs.
-	err = b.AdminUIService.loadOrCreateServiceCertificates(
+	if err := b.AdminUIService.loadOrCreateServiceCertificates(
 		cl.UICertPath(),
 		cl.UIKeyPath(),
 		cl.UICACertPath(),
 		cl.UICAKeyPath(),
 		defaultCertLifetime,
 		defaultCALifetime,
+		httpAddrs[0],
 		serviceNameUI,
-		[]string{c.HTTPAddr, c.HTTPAdvertiseAddr},
-	)
-	if err != nil {
+		httpAddrs,
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create Admin UI service certificate(s)")
 	}
 
 	return nil
+}
+
+func extractHosts(addrs ...string) []string {
+	res := make([]string, 0, len(addrs))
+
+	for _, addr := range addrs {
+		hostname, _, err := netutil.SplitHostPort(addr, "0")
+		if err != nil {
+			panic(err)
+		}
+		found := false
+		for _, h := range res {
+			if h == hostname {
+				found = true
+				break
+			}
+		}
+		if !found {
+			res = append(res, hostname)
+		}
+	}
+	return res
 }
 
 // InitializeNodeFromBundle uses the contents of the CertificateBundle and
@@ -555,14 +585,22 @@ func rotateGeneratedCerts(c base.Config) error {
 			err, "failed to load local CAs for certificate rotation")
 	}
 
+	rpcAddrs := extractHosts(c.Addr, c.AdvertiseAddr)
+	sqlAddrs := rpcAddrs
+	if c.SplitListenSQL {
+		sqlAddrs = extractHosts(c.SQLAddr, c.SQLAdvertiseAddr)
+	}
+	httpAddrs := extractHosts(c.HTTPAddr, c.HTTPAdvertiseAddr)
+
 	// Rotate InterNode Certs.
 	if b.InterNode.CACertificate != nil {
 		err = b.InterNode.rotateServiceCert(
 			cl.NodeCertPath(),
 			cl.NodeKeyPath(),
 			defaultCertLifetime,
+			security.NodeUser,
 			serviceNameInterNode,
-			[]string{c.HTTPAddr, c.HTTPAdvertiseAddr},
+			rpcAddrs,
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate InterNode cert")
@@ -577,8 +615,9 @@ func rotateGeneratedCerts(c base.Config) error {
 			cl.SQLServiceCertPath(),
 			cl.SQLServiceKeyPath(),
 			defaultCertLifetime,
+			security.NodeUser,
 			serviceNameSQL,
-			[]string{c.HTTPAddr, c.HTTPAdvertiseAddr},
+			sqlAddrs,
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate SQLService cert")
@@ -591,8 +630,9 @@ func rotateGeneratedCerts(c base.Config) error {
 			cl.RPCServiceCertPath(),
 			cl.RPCServiceKeyPath(),
 			defaultCertLifetime,
+			security.NodeUser,
 			serviceNameRPC,
-			[]string{c.HTTPAddr, c.HTTPAdvertiseAddr},
+			rpcAddrs,
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate RPCService cert")
@@ -605,8 +645,9 @@ func rotateGeneratedCerts(c base.Config) error {
 			cl.UICertPath(),
 			cl.UIKeyPath(),
 			defaultCertLifetime,
+			httpAddrs[0],
 			serviceNameUI,
-			[]string{c.HTTPAddr, c.HTTPAdvertiseAddr},
+			httpAddrs,
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to rotate AdminUIService cert")
@@ -623,12 +664,13 @@ func (sb *ServiceCertificateBundle) rotateServiceCert(
 	certPath string,
 	keyPath string,
 	serviceCertLifespan time.Duration,
-	serviceString string,
+	commonName, serviceString string,
 	hostnames []string,
 ) error {
 	// generate
 	certPEM, keyPEM, err := security.CreateServiceCertAndKey(
 		serviceCertLifespan,
+		commonName,
 		serviceString,
 		hostnames,
 		sb.CACertificate,

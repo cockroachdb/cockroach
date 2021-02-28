@@ -13,7 +13,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"net"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/spf13/cobra"
@@ -34,18 +34,54 @@ secure inter-node connections.
 
 // runConnect connects to other nodes and negotiates an initialization bundle
 // for use with secure inter-node connections.
-func runConnect(cmd *cobra.Command, args []string) error {
+func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 	peers := []string(serverCfg.JoinList)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", startCtx.serverListenAddr, serverListenPort))
+	// Ensure that the default hostnames / ports are filled in for the
+	// various address fields in baseCfg.
+	if err := baseCfg.ValidateAddrs(ctx); err != nil {
+		return err
+	}
+
+	// We are creating listeners so that if the host part of the listen
+	// address means "all interfaces", the Listen call will resolve this
+	// into a concrete network address. We need all separate listeners
+	// because the certs will want to use the advertised addresses.
+	rpcLn, err := server.ListenAndUpdateAddrs(ctx, &baseCfg.Addr, &baseCfg.AdvertiseAddr, "rpc")
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = listener.Close()
+		_ = rpcLn.Close()
+	}()
+	httpLn, err := server.ListenAndUpdateAddrs(ctx, &baseCfg.HTTPAddr, &baseCfg.HTTPAdvertiseAddr, "http")
+	if err != nil {
+		return err
+	}
+	if baseCfg.SplitListenSQL {
+		sqlLn, err := server.ListenAndUpdateAddrs(ctx, &baseCfg.SQLAddr, &baseCfg.SQLAdvertiseAddr, "sql")
+		if err != nil {
+			return err
+		}
+		_ = sqlLn.Close()
+	}
+	// Note: we want the http listener to remain open while we open the
+	// SQL listener above to detect port conflict in the configuration
+	// properly.
+	_ = httpLn.Close()
+
+	defer func() {
+		if retErr == nil {
+			fmt.Println("server certificate generation complete.\n" +
+				"Files were generated in: " + os.ExpandEnv(baseCfg.SSLCertsDir) + "\n\n" +
+				"Do not forget to generate a client certificate for the 'root' user!\n" +
+				"This must be done manually, preferably from a different unix user account\n" +
+				"than the one running the server. Eample command:\n\n" +
+				"   " + os.Args[0] + " cert create-client root --ca-key=<path-to-client-ca-key>\n")
+		}
 	}()
 
-	return server.InitHandshake(ctx, baseCfg, startCtx.initToken, startCtx.numExpectedNodes, peers, baseCfg.SSLCertsDir, listener)
+	return server.InitHandshake(ctx, baseCfg, startCtx.initToken, startCtx.numExpectedNodes, peers, baseCfg.SSLCertsDir, rpcLn)
 }
