@@ -68,20 +68,20 @@ func loadAllCertsFromDisk(cfg base.Config) (CertificateBundle, error) {
 		return bundleFromDisk, err
 	}
 	bundleFromDisk.InterNode.loadOrCreateServiceCertificates(
-		cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, "", []string{},
+		cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, "", []string{},
 	)
 	// TODO(aaron-crl): Figure out how to handle client auth case.
 	//bundleFromDisk.UserAuth.loadOrCreateServiceCertificates(
 	//	cl.ClientCertPath(), cl.ClientKeyPath(), "", "", 0, "", []string{},
 	//)
 	bundleFromDisk.SQLService.loadOrCreateServiceCertificates(
-		cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, "", []string{},
+		cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, "", []string{},
 	)
 	bundleFromDisk.RPCService.loadOrCreateServiceCertificates(
-		cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, "", []string{},
+		cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, "", []string{},
 	)
 	bundleFromDisk.AdminUIService.loadOrCreateServiceCertificates(
-		cl.UICertPath(), cl.UIKeyPath(), "", "", 0, "", []string{},
+		cl.UICertPath(), cl.UIKeyPath(), "", "", 0, 0, "", []string{},
 	)
 
 	return bundleFromDisk, nil
@@ -109,42 +109,42 @@ func compareBundleCaCerts(
 	// Compare InterNode CA cert and key.
 	cmp(
 		cb1.InterNode.CACertificate,
-		cb2.InterNode.CACertificate, "InterNodeCA cert")
+		cb2.InterNode.CACertificate, serviceNameInterNode+" CA cert")
 	cmp(
 		cb1.InterNode.CAKey,
-		cb2.InterNode.CAKey, "InterNodeCA key")
+		cb2.InterNode.CAKey, serviceNameInterNode+" CA key")
 
 	// Compare UserAuth CA cert and key.
 	cmp(
 		cb1.UserAuth.CACertificate,
-		cb2.UserAuth.CACertificate, "UserAuth CA cert")
+		cb2.UserAuth.CACertificate, serviceNameUserAuth+" CA cert")
 	cmp(
 		cb1.UserAuth.CAKey,
-		cb2.UserAuth.CAKey, "UserAuth CA key")
+		cb2.UserAuth.CAKey, serviceNameUserAuth+" CA key")
 
 	// Compare SQL CA cert and key.
 	cmp(
 		cb1.SQLService.CACertificate,
-		cb2.SQLService.CACertificate, "SQLService CA cert")
+		cb2.SQLService.CACertificate, serviceNameSQL+" CA cert")
 	cmp(
 		cb1.SQLService.CAKey,
-		cb2.SQLService.CAKey, "SQLService CA key")
+		cb2.SQLService.CAKey, serviceNameSQL+" CA key")
 
 	// Compare RPC CA cert and key.
 	cmp(
 		cb1.RPCService.CACertificate,
-		cb2.RPCService.CACertificate, "RPCService CA cert")
+		cb2.RPCService.CACertificate, serviceNameRPC+" CA cert")
 	cmp(
 		cb1.RPCService.CAKey,
-		cb2.RPCService.CAKey, "RPCService CA key")
+		cb2.RPCService.CAKey, serviceNameRPC+" CA key")
 
 	// Compare UI CA cert and key.
 	cmp(
 		cb1.AdminUIService.CACertificate,
-		cb2.AdminUIService.CACertificate, "AdminUIService CA cert")
+		cb2.AdminUIService.CACertificate, serviceNameUI+" CA cert")
 	cmp(
 		cb1.AdminUIService.CAKey,
-		cb2.AdminUIService.CAKey, "AdminUIService CA key")
+		cb2.AdminUIService.CAKey, serviceNameUI+" CA key")
 
 }
 
@@ -155,31 +155,31 @@ func compareBundleServiceCerts(
 
 	cmp(
 		cb1.InterNode.HostCertificate,
-		cb2.InterNode.HostCertificate, "InterNode Host cert")
+		cb2.InterNode.HostCertificate, serviceNameInterNode+" Host cert")
 	cmp(
 		cb1.InterNode.HostKey,
-		cb2.InterNode.HostKey, "InterNode Host key")
+		cb2.InterNode.HostKey, serviceNameInterNode+" Host key")
 
 	cmp(
 		cb1.SQLService.HostCertificate,
-		cb2.SQLService.HostCertificate, "SQLService Host cert")
+		cb2.SQLService.HostCertificate, serviceNameSQL+" Host cert")
 	cmp(
 		cb1.SQLService.HostKey,
-		cb2.SQLService.HostKey, "SQLService Host key")
+		cb2.SQLService.HostKey, serviceNameSQL+" Host key")
 
 	cmp(
 		cb1.RPCService.HostCertificate,
-		cb2.RPCService.HostCertificate, "RPCService Host cert")
+		cb2.RPCService.HostCertificate, serviceNameRPC+" Host cert")
 	cmp(
 		cb1.RPCService.HostKey,
-		cb2.RPCService.HostKey, "RPCService Host key")
+		cb2.RPCService.HostKey, serviceNameRPC+" Host key")
 
 	cmp(
 		cb1.AdminUIService.HostCertificate,
-		cb2.AdminUIService.HostCertificate, "AdminUIService Host cert")
+		cb2.AdminUIService.HostCertificate, serviceNameUI+" Host cert")
 	cmp(
 		cb1.AdminUIService.HostKey,
-		cb2.AdminUIService.HostKey, "AdminUIService Host key")
+		cb2.AdminUIService.HostKey, serviceNameUI+" Host key")
 }
 
 // TestDummyInitializeNodeFromBundle is a placeholder for actual testing functions.
@@ -218,8 +218,9 @@ func TestDummyCertLoader(t *testing.T) {
 
 // TestNodeCertRotation tests that the rotation function will overwrite the
 // expected certificates and fail if they are not there.
-// TODO(aaron-crl): correct this
 func TestRotationOnUnintializedNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// Create a temp dir for all certificate tests.
 	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
 	if err != nil {
@@ -235,14 +236,17 @@ func TestRotationOnUnintializedNode(t *testing.T) {
 	// Check to see that the only file in dir is the EOF.
 	dir, err := os.Open(cfg.SSLCertsDir)
 	if err != nil {
-		t.Fatalf("failed to open cfg.SSLCertsDir: %q", cfg.SSLCertsDir)
+		t.Fatalf(
+			"failed to open cfg.SSLCertsDir: %q with err: %q",
+			cfg.SSLCertsDir,
+			err)
 	}
+	defer dir.Close()
 	_, err = dir.Readdir(1)
 	if err != io.EOF {
 		// Directory is not empty to start with, this is an error.
 		t.Fatal("files added to cfg.SSLCertsDir when they shouldn't have been")
 	}
-	dir.Close()
 
 	err = rotateGeneratedCerts(cfg)
 	if err != nil {
@@ -252,6 +256,8 @@ func TestRotationOnUnintializedNode(t *testing.T) {
 }
 
 func TestRotationOnIntializedNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// Create a temp dir for all certificate tests.
 	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
 	if err != nil {
@@ -284,6 +290,8 @@ func TestRotationOnIntializedNode(t *testing.T) {
 }
 
 func TestRotationOnPartialIntializedNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// Create a temp dir for all certificate tests.
 	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
 	if err != nil {
@@ -343,6 +351,8 @@ func TestRotationOnPartialIntializedNode(t *testing.T) {
 
 // TestRotationOnBrokenIntializedNode in the partially provisioned case (remove the Client and UI CAs).
 func TestRotationOnBrokenIntializedNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// Create a temp dir for all certificate tests.
 	tempDir, err := ioutil.TempDir("", "auto_tls_init_test")
 	if err != nil {

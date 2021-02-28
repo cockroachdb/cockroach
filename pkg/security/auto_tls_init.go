@@ -26,8 +26,8 @@ import (
 )
 
 // TODO(aaron-crl): This shared a name and purpose with the value in
-// pkg/security and should be consolidated.
-const defaultKeySize = 4096
+// pkg/cli/cert.go and should be consolidated.
+const defaultKeySize = 2048
 
 // notBeforeMargin provides a window to compensate for potential clock skew.
 const notBeforeMargin = time.Second * 30
