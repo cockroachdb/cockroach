@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -2127,6 +2128,18 @@ func (s *Server) Decommission(
 			// we're guaranteed to be on v20.2.
 			targetStatus = livenesspb.MembershipStatus_DECOMMISSIONING
 		}
+	}
+
+	// If we're asked to decommission ourself we may lose access to cluster RPC,
+	// so we decommission ourself last. We copy the slice to avoid mutating the
+	// input slice.
+	if targetStatus == livenesspb.MembershipStatus_DECOMMISSIONED {
+		orderedNodeIDs := make([]roachpb.NodeID, len(nodeIDs))
+		copy(orderedNodeIDs, nodeIDs)
+		sort.SliceStable(orderedNodeIDs, func(i, j int) bool {
+			return orderedNodeIDs[j] == s.NodeID()
+		})
+		nodeIDs = orderedNodeIDs
 	}
 
 	var event eventpb.EventPayload

@@ -18,6 +18,7 @@
 package serverutils
 
 import (
+	"context"
 	gosql "database/sql"
 	"testing"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"google.golang.org/grpc"
 )
 
 // TestClusterInterface defines TestCluster functionality used by tests.
@@ -42,6 +44,10 @@ type TestClusterInterface interface {
 
 	// ServerConn returns a gosql.DB connection to a specific node.
 	ServerConn(idx int) *gosql.DB
+
+	// ClientConn returns a grpc.ClientConn to a specific node, independent
+	// of any server's RPCContext.
+	ClientConn(ctx context.Context, t testing.TB, serverIdx int) *grpc.ClientConn
 
 	// StopServer stops a single server.
 	StopServer(idx int)

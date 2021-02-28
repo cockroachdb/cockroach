@@ -466,17 +466,10 @@ func runDecommissionNodeImpl(
 				NodeIDs:          nodeIDs,
 				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 			}
-			resp, err := c.Decommission(ctx, req)
+			_, err = c.Decommission(ctx, req)
 			if err != nil {
 				fmt.Fprintln(stderr)
 				return errors.Wrap(err, "while trying to mark as decommissioned")
-			}
-			if !reflect.DeepEqual(&prevResponse, resp) {
-				fmt.Fprintln(stderr)
-				if err := printDecommissionStatus(*resp); err != nil {
-					return err
-				}
-				prevResponse = *resp
 			}
 
 			fmt.Fprintln(os.Stdout, "\nNo more data reported on target nodes. "+
