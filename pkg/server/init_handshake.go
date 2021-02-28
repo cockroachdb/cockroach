@@ -128,13 +128,13 @@ func pemToSignature(caCertPEM []byte) ([]byte, error) {
 }
 
 func createNodeInitTempCertificates(
-	hostname string, lifespan time.Duration,
+	hostnames []string, lifespan time.Duration,
 ) (certs ServiceCertificateBundle, err error) {
 	caCert, caKey, err := security.CreateCACertAndKey(lifespan, initServiceName)
 	if err != nil {
 		return certs, err
 	}
-	serviceCert, serviceKey, err := security.CreateServiceCertAndKey(lifespan, initServiceName, hostname, caCert, caKey)
+	serviceCert, serviceKey, err := security.CreateServiceCertAndKey(lifespan, initServiceName, hostnames, caCert, caKey)
 	if err != nil {
 		return certs, err
 	}
@@ -424,7 +424,7 @@ func initHandshakeHelper(
 	default:
 		return errors.New("unsupported listener protocol: only TCP listeners supported")
 	}
-	tempCerts, err := createNodeInitTempCertificates(listenHost, defaultInitLifespan)
+	tempCerts, err := createNodeInitTempCertificates([]string{listenHost}, defaultInitLifespan)
 	if err != nil {
 		return errors.Wrap(err, "failed to create certificates")
 	}
@@ -500,7 +500,12 @@ func initHandshakeHelper(
 		if err := b.InitializeFromConfig(*cfg); err != nil {
 			return errors.Wrap(err, "error when creating initialization bundle")
 		}
-		peerInit := b.ToPeerInitBundle()
+
+		peerInit, err := collectLocalCABundle(*cfg)
+		if err != nil {
+			return errors.Wrap(err, "error when loading initialization bundle")
+		}
+
 		trustBundle := nodeTrustBundle{Bundle: peerInit}
 		trustBundle.signHMAC(handshaker.token)
 		// For each peer, use its CA to establish a secure connection and deliver the trust bundle.

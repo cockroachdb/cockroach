@@ -26,8 +26,8 @@ import (
 )
 
 // TODO(aaron-crl): This shared a name and purpose with the value in
-// pkg/security and should be consolidated.
-const defaultKeySize = 4096
+// pkg/cli/cert.go and should be consolidated.
+const defaultKeySize = 2048
 
 // notBeforeMargin provides a window to compensate for potential clock skew.
 const notBeforeMargin = time.Second * 30
@@ -128,7 +128,7 @@ func CreateCACertAndKey(
 // CreateServiceCertAndKey creates a cert/key pair signed by the provided CA.
 // This is a utility function to help with cluster auto certificate generation.
 func CreateServiceCertAndKey(
-	lifespan time.Duration, service, hostname string, caCertPEM []byte, caKeyPEM []byte,
+	lifespan time.Duration, service string, hostnames []string, caCertPEM []byte, caKeyPEM []byte,
 ) (certPEM []byte, keyPEM []byte, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
@@ -183,11 +183,13 @@ func CreateServiceCertAndKey(
 	// Attempt to parse hostname as IP, if successful add it as an IP
 	// otherwise presume it is a DNS name.
 	// TODO(aaron-crl): Pass these values via config object.
-	ip := net.ParseIP(hostname)
-	if ip != nil {
-		serviceCert.IPAddresses = []net.IP{ip}
-	} else {
-		serviceCert.DNSNames = []string{hostname}
+	for _, hostname := range hostnames {
+		ip := net.ParseIP(hostname)
+		if ip != nil {
+			serviceCert.IPAddresses = []net.IP{ip}
+		} else {
+			serviceCert.DNSNames = []string{hostname}
+		}
 	}
 
 	servicePrivKey, err := rsa.GenerateKey(rand.Reader, defaultKeySize)
@@ -223,5 +225,5 @@ func CreateServiceCertAndKey(
 		return nil, nil, err
 	}
 
-	return serviceCertBlock.Bytes(), servicePrivKeyPEM.Bytes(), err
+	return serviceCertBlock.Bytes(), servicePrivKeyPEM.Bytes(), nil
 }
