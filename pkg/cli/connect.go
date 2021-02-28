@@ -16,6 +16,7 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -40,6 +41,15 @@ secure inter-node connections.
 func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 	if err := validateConnectFlags(cmd, true /* requireExplicitFlags */); err != nil {
 		return err
+	}
+
+	// If the node cert already exists, skip all the complexity of setting up
+	// servers, etc.
+	cl := security.MakeCertsLocator(baseCfg.SSLCertsDir)
+	if exists, err := cl.HasNodeCert(); err != nil {
+		return err
+	} else if exists {
+		return errors.Newf("node certificate already exists in %s", baseCfg.SSLCertsDir)
 	}
 
 	peers := []string(serverCfg.JoinList)

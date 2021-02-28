@@ -269,19 +269,17 @@ func writeKeyFile(keyPath string, keyPEM []byte) error {
 // cluster. It uses or generates an InterNode CA to produce any missing
 // unmanaged certificates. It does this base on the logic in:
 // https://github.com/cockroachdb/cockroach/pull/51991
-// N.B.: This function fast fails if an InterNodeHost cert/key pair are present
+// N.B.: This function fast fails if an inter-node cert/key pair are present
 // as this should _never_ happen.
 func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 	cl := security.MakeCertsLocator(c.SSLCertsDir)
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
-	if _, err := os.Stat(cl.NodeCertPath()); err == nil {
-		return errors.New(
-			"interNodeHost certificate already present")
-	} else if !oserror.IsNotExist(err) {
-		return errors.Wrap(
-			err, "interNodeHost certificate access issue")
+	if exists, err := cl.HasNodeCert(); err != nil {
+		return err
+	} else if exists {
+		return errors.New("inter-node certificate already present")
 	}
 
 	rpcHostName, _, err := netutil.SplitHostPort(c.AdvertiseAddr, "0")
@@ -391,11 +389,10 @@ func (b *CertificateBundle) InitializeNodeFromBundle(c base.Config) error {
 
 	// First check to see if host cert is already present
 	// if it is, we should fail to initialize.
-	if _, err := os.Stat(cl.NodeCertPath()); err == nil {
-		return errors.New("interNodeHost certificate already present")
-	} else if !oserror.IsNotExist(err) {
-		// Something else went wrong accessing the path
+	if exists, err := cl.HasNodeCert(); err != nil {
 		return err
+	} else if exists {
+		return errors.New("inter-node certificate already present")
 	}
 
 	if err := cl.EnsureCertsDirectory(); err != nil {
