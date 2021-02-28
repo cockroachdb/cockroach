@@ -12,6 +12,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -38,13 +39,13 @@ func TestInitializeFromConfig(t *testing.T) {
 		SSLCertsDir: tempDir,
 	}
 
-	err = certBundle.InitializeFromConfig(cfg)
+	err = certBundle.InitializeFromConfig(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}
 
 	// Verify certs written to disk match certs in bundles.
-	bundleFromDisk, err := loadAllCertsFromDisk(cfg)
+	bundleFromDisk, err := loadAllCertsFromDisk(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("failed loading certs from disk, got: %q", err)
 	}
@@ -61,7 +62,7 @@ func TestInitializeFromConfig(t *testing.T) {
 
 }
 
-func loadAllCertsFromDisk(cfg base.Config) (CertificateBundle, error) {
+func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBundle, error) {
 	cl := security.MakeCertsLocator(cfg.SSLCertsDir)
 	bundleFromDisk, err := collectLocalCABundle(cfg)
 	if err != nil {
@@ -69,7 +70,7 @@ func loadAllCertsFromDisk(cfg base.Config) (CertificateBundle, error) {
 	}
 
 	err = bundleFromDisk.InterNode.loadOrCreateServiceCertificates(
-		cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
 	)
 	if err != nil {
 		return bundleFromDisk, err
@@ -77,24 +78,24 @@ func loadAllCertsFromDisk(cfg base.Config) (CertificateBundle, error) {
 
 	// TODO(aaron-crl): Figure out how to handle client auth case.
 	//bundleFromDisk.UserAuth.loadOrCreateServiceCertificates(
-	//	cl.ClientCertPath(), cl.ClientKeyPath(), "", "", 0, "", []string{},
+	//	ctx, cl.ClientCertPath(), cl.ClientKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
 	//)
 	err = bundleFromDisk.SQLService.loadOrCreateServiceCertificates(
-		cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
 	)
 	if err != nil {
 		return bundleFromDisk, err
 	}
 
 	err = bundleFromDisk.RPCService.loadOrCreateServiceCertificates(
-		cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
+		ctx, cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, security.NodeUser, "", []string{},
 	)
 	if err != nil {
 		return bundleFromDisk, err
 	}
 
 	err = bundleFromDisk.AdminUIService.loadOrCreateServiceCertificates(
-		cl.UICertPath(), cl.UIKeyPath(), "", "", 0, 0, "fakehost", "", []string{},
+		ctx, cl.UICertPath(), cl.UIKeyPath(), "", "", 0, 0, "fakehost", "", []string{},
 	)
 	if err != nil {
 		return bundleFromDisk, err
@@ -219,7 +220,7 @@ func TestDummyInitializeNodeFromBundle(t *testing.T) {
 		SSLCertsDir: tempDir,
 	}
 
-	err = certBundle.InitializeNodeFromBundle(cfg)
+	err = certBundle.InitializeNodeFromBundle(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %s", err)
 	}
@@ -233,7 +234,7 @@ func TestDummyCertLoader(t *testing.T) {
 	scb := ServiceCertificateBundle{}
 	_ = scb.loadServiceCertAndKey("", "")
 	_ = scb.loadCACertAndKey("", "")
-	_ = scb.rotateServiceCert("", "", time.Minute, "fakehost", "", []string{""})
+	_ = scb.rotateServiceCert(context.Background(), "", "", time.Minute, "fakehost", "", []string{""})
 }
 
 // TestNodeCertRotation tests that the rotation function will overwrite the
@@ -274,7 +275,7 @@ func TestRotationOnUnintializedNode(t *testing.T) {
 
 	// TODO(aaron-crl): Verify that the certs are rotated for the proper
 	// addresses.
-	err = rotateGeneratedCerts(cfg)
+	err = rotateGeneratedCerts(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("expected nil error generating no certs, got: %q", err)
 	}
@@ -298,23 +299,24 @@ func TestRotationOnIntializedNode(t *testing.T) {
 	cfg := base.Config{
 		SSLCertsDir: tempDir,
 	}
+	ctx := context.Background()
 
 	// Test in the fully provisioned case.
 	certBundle := CertificateBundle{}
-	err = certBundle.InitializeFromConfig(cfg)
+	err = certBundle.InitializeFromConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}
 
 	// TODO(aaron-crl): Verify that the certs are rotated for the proper
 	// addresses.
-	err = rotateGeneratedCerts(cfg)
+	err = rotateGeneratedCerts(ctx, cfg)
 	if err != nil {
 		t.Fatalf("rotation failed; expected err=nil, got: %q", err)
 	}
 
 	// Verify that any existing certs have changed on disk for services
-	diskBundle, err := loadAllCertsFromDisk(cfg)
+	diskBundle, err := loadAllCertsFromDisk(ctx, cfg)
 	if err != nil {
 		t.Fatalf("failed loading certs from disk, got: %q", err)
 	}
@@ -338,9 +340,11 @@ func TestRotationOnPartialIntializedNode(t *testing.T) {
 	cfg := base.Config{
 		SSLCertsDir: tempDir,
 	}
+	ctx := context.Background()
+
 	// Test in the partially provisioned case (remove the Client and UI CAs).
 	certBundle := CertificateBundle{}
-	err = certBundle.InitializeFromConfig(cfg)
+	err = certBundle.InitializeFromConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}
@@ -363,13 +367,13 @@ func TestRotationOnPartialIntializedNode(t *testing.T) {
 	// addresses.
 
 	// This should rotate all service certs except client and UI.
-	err = rotateGeneratedCerts(cfg)
+	err = rotateGeneratedCerts(ctx, cfg)
 	if err != nil {
 		t.Fatalf("rotation failed; expected err=nil, got: %q", err)
 	}
 
 	// Verify that client and UI service host certs are unchanged.
-	diskBundle, err := loadAllCertsFromDisk(cfg)
+	diskBundle, err := loadAllCertsFromDisk(ctx, cfg)
 	if err != nil {
 		t.Fatalf("failed loading certs from disk, got: %q", err)
 	}
@@ -406,9 +410,11 @@ func TestRotationOnBrokenIntializedNode(t *testing.T) {
 	cfg := base.Config{
 		SSLCertsDir: tempDir,
 	}
+	ctx := context.Background()
+
 	cl := security.MakeCertsLocator(cfg.SSLCertsDir)
 	certBundle := CertificateBundle{}
-	err = certBundle.InitializeFromConfig(cfg)
+	err = certBundle.InitializeFromConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %q", err)
 	}
@@ -421,7 +427,7 @@ func TestRotationOnBrokenIntializedNode(t *testing.T) {
 		t.Fatalf("failed to remove test cert: %q", err)
 	}
 
-	err = rotateGeneratedCerts(cfg)
+	err = rotateGeneratedCerts(ctx, cfg)
 	if err == nil {
 		t.Fatalf("rotation succeeded but should have failed with missing leaf certs for SQLService")
 	}

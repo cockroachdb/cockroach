@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,26 +36,29 @@ func TestInitHandshake(t *testing.T) {
 	tempDir, del := testutils.TempDir(t)
 	defer del()
 
+	ctx1 := logtags.AddTag(ctx, "n", 1)
 	cfg1 := &base.Config{}
 	cfg1.InitDefaults()
 	cfg1.SSLCertsDir = path.Join(tempDir, "temp1")
 	cfg1.Addr = "127.0.0.1:0"
 	require.NoError(t, os.Mkdir(cfg1.SSLCertsDir, 0755))
-	require.NoError(t, cfg1.ValidateAddrs(ctx))
+	require.NoError(t, cfg1.ValidateAddrs(ctx1))
 
+	ctx2 := logtags.AddTag(ctx, "n", 2)
 	cfg2 := &base.Config{}
 	cfg2.InitDefaults()
 	cfg2.SSLCertsDir = path.Join(tempDir, "temp2")
 	cfg2.Addr = "127.0.0.1:0"
 	require.NoError(t, os.Mkdir(cfg2.SSLCertsDir, 0755))
-	require.NoError(t, cfg2.ValidateAddrs(ctx))
+	require.NoError(t, cfg2.ValidateAddrs(ctx2))
 
+	ctx3 := logtags.AddTag(ctx, "n", 3)
 	cfg3 := &base.Config{}
 	cfg3.InitDefaults()
 	cfg3.SSLCertsDir = path.Join(tempDir, "temp3")
 	cfg3.Addr = "127.0.0.1:0"
 	require.NoError(t, os.Mkdir(cfg3.SSLCertsDir, 0755))
-	require.NoError(t, cfg3.ValidateAddrs(ctx))
+	require.NoError(t, cfg3.ValidateAddrs(ctx3))
 
 	errReturned := make(chan error, 1)
 	// Do a three-node handshake, and ensure no error is returned. The errors
@@ -62,35 +66,41 @@ func TestInitHandshake(t *testing.T) {
 	// not be empty.
 	var addr1, addr2, addr3 string
 
-	listener1, err := ListenAndUpdateAddrs(ctx, &cfg1.Addr, &cfg1.AdvertiseAddr, "rpc")
+	listener1, err := ListenAndUpdateAddrs(ctx1, &cfg1.Addr, &cfg1.AdvertiseAddr, "rpc")
 	require.NoError(t, err)
 	defer func() {
 		_ = listener1.Close()
 	}()
 	addr1 = listener1.Addr().String()
 
-	listener2, err := ListenAndUpdateAddrs(ctx, &cfg2.Addr, &cfg2.AdvertiseAddr, "rpc")
+	listener2, err := ListenAndUpdateAddrs(ctx2, &cfg2.Addr, &cfg2.AdvertiseAddr, "rpc")
 	require.NoError(t, err)
 	defer func() {
 		_ = listener2.Close()
 	}()
 	addr2 = listener2.Addr().String()
 
-	listener3, err := ListenAndUpdateAddrs(ctx, &cfg3.Addr, &cfg3.AdvertiseAddr, "rpc")
+	listener3, err := ListenAndUpdateAddrs(ctx3, &cfg3.Addr, &cfg3.AdvertiseAddr, "rpc")
 	require.NoError(t, err)
 	defer func() {
 		_ = listener3.Close()
 	}()
 	addr3 = listener3.Addr().String()
 
+	reporter := func(prefix string) func(string, ...interface{}) {
+		return func(format string, args ...interface{}) {
+			t.Logf(prefix+": "+format, args...)
+		}
+	}
+
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg1, "foobar", 3, []string{addr2, addr3}, cfg1.SSLCertsDir, listener1)
+		errReturned <- InitHandshake(ctx1, reporter("n1"), cfg1, "foobar", 3, []string{addr2, addr3}, cfg1.SSLCertsDir, listener1)
 	}()
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg2, "foobar", 3, []string{addr1, addr3}, cfg2.SSLCertsDir, listener2)
+		errReturned <- InitHandshake(ctx2, reporter("n2"), cfg2, "foobar", 3, []string{addr1, addr3}, cfg2.SSLCertsDir, listener2)
 	}()
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg3, "foobar", 3, []string{addr1, addr2}, cfg3.SSLCertsDir, listener3)
+		errReturned <- InitHandshake(ctx3, reporter("n3"), cfg3, "foobar", 3, []string{addr1, addr2}, cfg3.SSLCertsDir, listener3)
 	}()
 
 	count := 0
@@ -130,26 +140,29 @@ func TestInitHandshakeWrongToken(t *testing.T) {
 	tempDir, del := testutils.TempDir(t)
 	defer del()
 
+	ctx1 := logtags.AddTag(ctx, "n", 1)
 	cfg1 := &base.Config{}
 	cfg1.InitDefaults()
 	cfg1.SSLCertsDir = path.Join(tempDir, "temp1")
 	cfg1.Addr = "127.0.0.1:0"
 	require.NoError(t, os.Mkdir(cfg1.SSLCertsDir, 0755))
-	require.NoError(t, cfg1.ValidateAddrs(ctx))
+	require.NoError(t, cfg1.ValidateAddrs(ctx1))
 
+	ctx2 := logtags.AddTag(ctx, "n", 2)
 	cfg2 := &base.Config{}
 	cfg2.InitDefaults()
 	cfg2.SSLCertsDir = path.Join(tempDir, "temp2")
 	cfg2.Addr = "127.0.0.1:0"
 	require.NoError(t, os.Mkdir(cfg2.SSLCertsDir, 0755))
-	require.NoError(t, cfg2.ValidateAddrs(ctx))
+	require.NoError(t, cfg2.ValidateAddrs(ctx2))
 
+	ctx3 := logtags.AddTag(ctx, "n", 3)
 	cfg3 := &base.Config{}
 	cfg3.InitDefaults()
 	cfg3.SSLCertsDir = path.Join(tempDir, "temp3")
 	cfg3.Addr = "127.0.0.1:0"
 	require.NoError(t, os.Mkdir(cfg3.SSLCertsDir, 0755))
-	require.NoError(t, cfg3.ValidateAddrs(ctx))
+	require.NoError(t, cfg3.ValidateAddrs(ctx3))
 
 	errReturned := make(chan error, 1)
 	// Do a three-node handshake, and ensure no error is returned. The errors
@@ -157,35 +170,41 @@ func TestInitHandshakeWrongToken(t *testing.T) {
 	// not be empty.
 	var addr1, addr2, addr3 string
 
-	listener1, err := ListenAndUpdateAddrs(ctx, &cfg1.Addr, &cfg1.AdvertiseAddr, "rpc")
+	listener1, err := ListenAndUpdateAddrs(ctx1, &cfg1.Addr, &cfg1.AdvertiseAddr, "rpc")
 	require.NoError(t, err)
 	defer func() {
 		_ = listener1.Close()
 	}()
 	addr1 = listener1.Addr().String()
 
-	listener2, err := ListenAndUpdateAddrs(ctx, &cfg2.Addr, &cfg2.AdvertiseAddr, "rpc")
+	listener2, err := ListenAndUpdateAddrs(ctx2, &cfg2.Addr, &cfg2.AdvertiseAddr, "rpc")
 	require.NoError(t, err)
 	defer func() {
 		_ = listener2.Close()
 	}()
 	addr2 = listener2.Addr().String()
 
-	listener3, err := ListenAndUpdateAddrs(ctx, &cfg3.Addr, &cfg3.AdvertiseAddr, "rpc")
+	listener3, err := ListenAndUpdateAddrs(ctx3, &cfg3.Addr, &cfg3.AdvertiseAddr, "rpc")
 	require.NoError(t, err)
 	defer func() {
 		_ = listener3.Close()
 	}()
 	addr3 = listener3.Addr().String()
 
+	reporter := func(prefix string) func(string, ...interface{}) {
+		return func(format string, args ...interface{}) {
+			t.Logf(prefix+": "+format, args...)
+		}
+	}
+
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg1, "foobar", 3, []string{addr2, addr3}, cfg1.SSLCertsDir, listener1)
+		errReturned <- InitHandshake(ctx1, reporter("n1"), cfg1, "foobar", 3, []string{addr2, addr3}, cfg1.SSLCertsDir, listener1)
 	}()
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg2, "foobarbaz", 3, []string{addr1, addr3}, cfg2.SSLCertsDir, listener2)
+		errReturned <- InitHandshake(ctx2, reporter("n2"), cfg2, "foobarbaz", 3, []string{addr1, addr3}, cfg2.SSLCertsDir, listener2)
 	}()
 	go func() {
-		errReturned <- InitHandshake(ctx, cfg3, "foobar", 3, []string{addr1, addr2}, cfg3.SSLCertsDir, listener3)
+		errReturned <- InitHandshake(ctx3, reporter("n3"), cfg3, "foobar", 3, []string{addr1, addr2}, cfg3.SSLCertsDir, listener3)
 	}()
 
 	count := 0

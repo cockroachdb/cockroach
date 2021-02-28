@@ -11,6 +11,7 @@
 package security_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -22,7 +23,8 @@ import (
 // TODO(aaron-crl): [tests] write unit tests
 func TestDummyCreateCACertAndKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	_, _, err := security.CreateCACertAndKey(time.Hour, "test CA cert generation")
+	_, _, err := security.CreateCACertAndKey(context.Background(), nil, /* loggerFn */
+		time.Hour, "test CA cert generation")
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %s", err)
 	}
@@ -32,12 +34,14 @@ func TestDummyCreateCACertAndKey(t *testing.T) {
 // TODO(aaron-crl): [tests] write unit tests
 func TestDummyCreateServiceCertAndKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	caCert, caKey, err := security.CreateCACertAndKey(time.Hour, "test CA cert generation")
+	caCert, caKey, err := security.CreateCACertAndKey(context.Background(), nil, /* loggerFn */
+		time.Hour, "test CA cert generation")
 	if err != nil {
 		t.Fatalf("expected err=nil, got: %s", err)
 	}
 
 	_, _, err = security.CreateServiceCertAndKey(
+		context.Background(), nil, /* loggerFn */
 		time.Minute,
 		"dummy-common-name",
 		"test Service cert generation",

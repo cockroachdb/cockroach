@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/spf13/cobra"
 )
 
@@ -55,6 +56,8 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 	peers := []string(serverCfg.JoinList)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	ctx = logtags.AddTag(ctx, "connect", nil)
 
 	log.Infof(ctx, "validating the command line network arguments")
 
@@ -98,8 +101,8 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 
 	defer func() {
 		if retErr == nil {
-			fmt.Println("server certificate generation complete.\n" +
-				"Files were generated in: " + os.ExpandEnv(baseCfg.SSLCertsDir) + "\n\n" +
+			fmt.Println("server certificate generation complete.\n\n" +
+				"cert files generated in: " + os.ExpandEnv(baseCfg.SSLCertsDir) + "\n\n" +
 				"Do not forget to generate a client certificate for the 'root' user!\n" +
 				"This must be done manually, preferably from a different unix user account\n" +
 				"than the one running the server. Eample command:\n\n" +
@@ -107,7 +110,11 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 		}
 	}()
 
-	return server.InitHandshake(ctx, baseCfg, startCtx.initToken, startCtx.numExpectedNodes, peers, baseCfg.SSLCertsDir, rpcLn)
+	reporter := func(format string, args ...interface{}) {
+		fmt.Printf(format+"\n", args...)
+	}
+
+	return server.InitHandshake(ctx, reporter, baseCfg, startCtx.initToken, startCtx.numExpectedNodes, peers, baseCfg.SSLCertsDir, rpcLn)
 }
 
 func validateConnectFlags(cmd *cobra.Command, requireExplicitFlags bool) error {

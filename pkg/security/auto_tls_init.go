@@ -12,6 +12,7 @@ package security
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TODO(aaron-crl): This shared a name and purpose with the value in
@@ -53,6 +55,27 @@ func createCertificateSerialNumber() (serialNumber *big.Int, err error) {
 	return
 }
 
+// LoggerFn is the type we use to inject logging functions into the
+// security package to avoid circular dependencies.
+type LoggerFn = func(ctx context.Context, format string, args ...interface{})
+
+func describeCert(cert *x509.Certificate) redact.RedactableString {
+	var buf redact.StringBuilder
+	buf.SafeString("{\n")
+	buf.Printf("  SN: %s,\n", cert.SerialNumber)
+	buf.Printf("  CA: %v,\n", cert.IsCA)
+	buf.Printf("  Issuer: %q,\n", cert.Issuer)
+	buf.Printf("  Subject: %q,\n", cert.Subject)
+	buf.Printf("  NotBefore: %s,\n", cert.NotBefore)
+	buf.Printf("  NotAfter: %s", cert.NotAfter)
+	buf.Printf(" (Validity: %s),\n", cert.NotAfter.Sub(timeutil.Now()))
+	if !cert.IsCA {
+		buf.Printf("  DNS: %v,\n", cert.DNSNames)
+		buf.Printf("  IP: %v\n", cert.IPAddresses)
+	}
+	buf.SafeString("}")
+	return buf.RedactableString()
+}
 
 const (
 	crlOrg      = "Cockroach Labs"
@@ -64,7 +87,7 @@ const (
 // now() and expiring after `lifespan`. This is a utility function to help
 // with cluster auto certificate generation.
 func CreateCACertAndKey(
-	lifespan time.Duration, service string,
+	ctx context.Context, loggerFn LoggerFn, lifespan time.Duration, service string,
 ) (certPEM []byte, keyPEM []byte, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
@@ -95,6 +118,9 @@ func CreateCACertAndKey(
 		BasicConstraintsValid: true,
 		MaxPathLenZero:        true,
 	}
+	if loggerFn != nil {
+		loggerFn(ctx, "creating CA cert from template: %s", describeCert(ca))
+	}
 
 	// Create private and public key for CA.
 	caPrivKey, err := rsa.GenerateKey(rand.Reader, defaultKeySize)
@@ -116,6 +142,9 @@ func CreateCACertAndKey(
 		return nil, nil, err
 	}
 
+	if loggerFn != nil {
+		loggerFn(ctx, "signing CA cert")
+	}
 	// Create CA certificate then PEM encode it.
 	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
 	if err != nil {
@@ -140,6 +169,8 @@ func CreateCACertAndKey(
 // CreateServiceCertAndKey creates a cert/key pair signed by the provided CA.
 // This is a utility function to help with cluster auto certificate generation.
 func CreateServiceCertAndKey(
+	ctx context.Context,
+	loggerFn LoggerFn,
 	lifespan time.Duration,
 	commonName, service string,
 	hostnames []string,
@@ -214,11 +245,18 @@ func CreateServiceCertAndKey(
 		}
 	}
 
+	if loggerFn != nil {
+		loggerFn(ctx, "creating service cert from template: %s", describeCert(serviceCert))
+	}
+
 	servicePrivKey, err := rsa.GenerateKey(rand.Reader, defaultKeySize)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	if loggerFn != nil {
+		loggerFn(ctx, "signing service cert")
+	}
 	serviceCertBytes, err := x509.CreateCertificate(rand.Reader, serviceCert, caCert, &servicePrivKey.PublicKey, caKey)
 	if err != nil {
 		return nil, nil, err
