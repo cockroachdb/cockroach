@@ -1,0 +1,63 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
+
+import "google/api/annotations.proto";
+
+// CaRequest requests the CA cert anchoring this service.
+message CaRequest {
+  // No information needed.
+}
+
+// CaResponse contains a PEM encoded copy of the CA cert for this service.
+message CaResponse {
+  // query is the SQL query string.
+  bytes caCert = 1;
+  bytes MAC = 2;
+}
+
+// BundleRequest requests the bundle of initialization CAs for a new node.
+// It provides authentication in the form of a joinToken containing a
+// sharedSecret.
+message BundleRequest {
+    // sharedSecret
+    string tokenId = 1;
+    string sharedSecret = 2;
+ }
+
+// BundleResponse contains a copy of all CAs needed to intialize TLS for
+// a new node.
+message BundleResponse {
+  // query is the SQL query string.
+  bytes bundle = 1;
+}
+
+// AddJoin is the gRPC API for the token-based add/join protocol. These
+// endpoints do not require client TLS authentication but rely on the secure
+// join handshake protocol defined here: [link]
+// TODO(aaron-crl): Link to RFC
+service AddJoin {
+  // URL: /_join/v1/bundle
+  rpc CA(CaRequest) returns (CaResponse) {
+    option (google.api.http) = {
+      get : "/_join/v1/ca"
+    };
+  }
+
+  // URL: /_admin/v1/databases
+  rpc Join(BundleRequest) returns (BundleResponse) {
+    option (google.api.http) = {
+      get : "/_join/v1/join"
+    };
+  }
+}
