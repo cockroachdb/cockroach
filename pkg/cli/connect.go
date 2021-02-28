@@ -42,6 +42,12 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
+	// If the node cert already exists, skip all the complexity of setting up
+	// servers, etc.
+	if cl := security.MakeCertsLocator(baseCfg.SSLCertsDir); cl.HasNodeCert() {
+		return errors.Newf("node certificate already exists in %s", baseCfg.SSLCertsDir)
+	}
+
 	peers := []string(serverCfg.JoinList)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
