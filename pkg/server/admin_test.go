@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -2009,4 +2011,71 @@ func TestEndpointTelemetryBasic(t *testing.T) {
 	require.Equal(t, int32(1), telemetry.Read(getServerEndpointCounter(
 		"/cockroach.server.serverpb.Status/Statements",
 	)))
+}
+
+func TestDecommissionSelf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set up test cluster.
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 7, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Decommission several nodes, including the node we're submitting the
+	// decommission request to. We use the admin client in order to test the
+	// admin server's logic, which involves a subsequent DecommissionStatus
+	// call which could fail if used from a node that's just decommissioned
+	// itself and lost access to cluster RPC.
+	adminClient := serverpb.NewAdminClient(tc.ClientConn(ctx, t, 4))
+	decomNodeIDs := []roachpb.NodeID{
+		tc.Server(3).NodeID(),
+		tc.Server(4).NodeID(),
+		tc.Server(5).NodeID(),
+		tc.Server(6).NodeID(),
+	}
+
+	// The DECOMMISSIONING call should return a full status response.
+	resp, err := adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
+		NodeIDs:          decomNodeIDs,
+		TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Status, len(decomNodeIDs))
+	for i, nodeID := range decomNodeIDs {
+		status := resp.Status[i]
+		require.Equal(t, nodeID, status.NodeID)
+		// Liveness entries may not have been updated yet.
+		require.Contains(t, []livenesspb.MembershipStatus{
+			livenesspb.MembershipStatus_ACTIVE,
+			livenesspb.MembershipStatus_DECOMMISSIONING,
+		}, status.Membership, "unexpected membership status %v for node %v", status, nodeID)
+	}
+
+	// The DECOMMISSIONED call should return an empty response, to avoid
+	// erroring due to loss of cluster RPC access when decommissioning self.
+	resp, err = adminClient.Decommission(ctx, &serverpb.DecommissionRequest{
+		NodeIDs:          decomNodeIDs,
+		TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
+	})
+	require.NoError(t, err)
+	require.Empty(t, resp.Status)
+
+	// The nodes should now have been (or soon become) decommissioned.
+	for i := 0; i < tc.NumServers(); i++ {
+		srv := tc.Server(i)
+		expect := livenesspb.MembershipStatus_ACTIVE
+		for _, nodeID := range decomNodeIDs {
+			if srv.NodeID() == nodeID {
+				expect = livenesspb.MembershipStatus_DECOMMISSIONED
+				break
+			}
+		}
+		require.Eventually(t, func() bool {
+			liveness, ok := srv.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(srv.NodeID())
+			return ok && liveness.Membership == expect
+		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for node %v status %v", i, expect)
+	}
 }

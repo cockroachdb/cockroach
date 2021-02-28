@@ -87,9 +87,7 @@ func runDecommissionMixedVersions(
 		// to communicate with the cluster (i.e. most commands against it will fail).
 		// This is also why we're making sure to avoid decommissioning pinnedUpgrade
 		// itself, as we use it to check the membership after.
-		//
-		// NB: we avoid runNode == targetNode here to temporarily avoid #56718.
-		fullyDecommissionStep(h.getRandNodeOtherThan(pinnedUpgrade), pinnedUpgrade, ""),
+		fullyDecommissionStep(h.getRandNodeOtherThan(pinnedUpgrade), h.getRandNode(), ""),
 		checkOneMembership(pinnedUpgrade, "decommissioned"),
 	)
 

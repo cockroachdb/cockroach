@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3"
+	"google.golang.org/grpc"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -1415,6 +1416,27 @@ func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.R
 		return nil
 	})
 	return raftLeaderRepl
+}
+
+// ClientConn creates a new gRPC client connection to the specified server,
+// using a new RPCContext that doesn't belong to any of the servers. This is
+// useful to test client behavior without being affected by any server state.
+func (tc *TestCluster) ClientConn(
+	ctx context.Context, t testing.TB, serverIdx int,
+) *grpc.ClientConn {
+	srv := tc.Server(serverIdx)
+	srvContext := srv.RPCContext()
+	rpcContext := rpc.NewContext(rpc.ContextOptions{
+		TenantID:   roachpb.SystemTenantID,
+		Config:     srvContext.Config,
+		Settings:   srvContext.Settings,
+		AmbientCtx: log.AmbientContext{Tracer: srvContext.Settings.Tracer},
+		Clock:      hlc.NewClock(hlc.UnixNano, 0),
+		Stopper:    tc.Stopper(),
+	})
+	conn, err := rpcContext.GRPCDialNode(srv.RPCAddr(), srv.NodeID(), rpc.DefaultClass).Connect(ctx)
+	require.NoError(t, err, "failed to connect to server %s", srv.RPCAddr())
+	return conn
 }
 
 // GetAdminClient gets the severpb.AdminClient for the specified server.
