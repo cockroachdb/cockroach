@@ -523,7 +523,8 @@ func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
 			"init",
 			"--certs-dir=/certs/",
 			"--host=" + l.Nodes[nodeIdx].nodeStr,
-			"--logtostderr",
+			"--log-dir=/logs/init-command",
+			"--logtostderr=NONE",
 		},
 	}
 
@@ -639,14 +640,15 @@ func (l *DockerCluster) Start(ctx context.Context) {
 	log.Infof(ctx, "creating node certs (%dbit) in: %s", keyLen, certsDir)
 	l.createNodeCerts()
 
+	log.Infof(ctx, "starting %d nodes", len(l.Nodes))
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	go l.monitor(ctx)
 	var wg sync.WaitGroup
 	wg.Add(len(l.Nodes))
 	for _, node := range l.Nodes {
 		go func(node *testNode) {
+			defer wg.Done()
 			l.startNode(ctx, node)
-			wg.Done()
 		}(node)
 	}
 	wg.Wait()

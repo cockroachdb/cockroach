@@ -81,9 +81,24 @@ func Main() {
 func doMain(cmd *cobra.Command, cmdName string) error {
 	if cmd != nil && !cmdHasCustomLoggingSetup(cmd) {
 		// the customLoggingSetupCmds do their own calls to setupLogging().
-		if err := setupLogging(context.Background(), cmd,
-			false /* isServerCmd */, true /* applyConfig */); err != nil {
-			return err
+		//
+		// We use a PreRun function, to ensure setupLogging() is only
+		// called after the command line flags have been parsed.
+		//
+		// NB: we cannot use PersistentPreRunE,like in flags.go, because
+		// overriding that here will prevent the persistent pre-run from
+		// running on parent commands. (See the difference between PreRun
+		// and PersistentPreRun in `(*cobra.Command) execute()`.)
+		wrapped := cmd.PreRunE
+		cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+			if wrapped != nil {
+				if err := wrapped(cmd, args); err != nil {
+					return err
+				}
+			}
+
+			return setupLogging(context.Background(), cmd,
+				false /* isServerCmd */, true /* applyConfig */)
 		}
 	}
 
