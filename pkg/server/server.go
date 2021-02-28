@@ -1868,7 +1868,7 @@ func (s *Server) startListenRPCAndSQL(
 	}
 	if ln == nil {
 		var err error
-		ln, err = listen(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, rpcChanName)
+		ln, err = ListenAndUpdateAddrs(ctx, &s.cfg.Addr, &s.cfg.AdvertiseAddr, rpcChanName)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1877,7 +1877,7 @@ func (s *Server) startListenRPCAndSQL(
 
 	var pgL net.Listener
 	if s.cfg.SplitListenSQL {
-		pgL, err = listen(ctx, &s.cfg.SQLAddr, &s.cfg.SQLAdvertiseAddr, "sql")
+		pgL, err = ListenAndUpdateAddrs(ctx, &s.cfg.SQLAddr, &s.cfg.SQLAdvertiseAddr, "sql")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1970,7 +1970,7 @@ func (s *Server) startListenRPCAndSQL(
 func (s *Server) startServeUI(
 	ctx, workersCtx context.Context, connManager netutil.Server, uiTLSConfig *tls.Config,
 ) error {
-	httpLn, err := listen(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, "http")
+	httpLn, err := ListenAndUpdateAddrs(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, "http")
 	if err != nil {
 		return err
 	}
@@ -2484,7 +2484,11 @@ type tcpKeepAliveManager struct {
 	loggedKeepAliveStatus int32
 }
 
-func listen(
+// ListenAndUpdateAddrs starts a TCP listener on the specified address
+// then updates the address and advertised address fields based on the
+// actual interface address resolved by the OS during the Listen()
+// call.
+func ListenAndUpdateAddrs(
 	ctx context.Context, addr, advertiseAddr *string, connName string,
 ) (net.Listener, error) {
 	ln, err := net.Listen("tcp", *addr)

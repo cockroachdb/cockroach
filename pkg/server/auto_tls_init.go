@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -133,6 +134,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	caCertPath string,
 	caKeyPath string,
 	initLifespan time.Duration,
+	commonName string,
 	serviceName string,
 	hostname string,
 ) (err error) {
@@ -147,7 +149,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 			return
 		}
 	} else {
-		// Niether service cert or key exist, attempt to load CA.
+		// Neither service cert or key exist, attempt to load CA.
 		// Check if the CA cert and key already exist.
 		if _, err = os.Stat(caCertPath); !oserror.IsNotExist(err) {
 			// cert exists
@@ -188,6 +190,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 		var hostCert, hostKey []byte
 		hostCert, hostKey, err = security.CreateServiceCertAndKey(
 			initLifespan,
+			commonName,
 			serviceName,
 			hostname,
 			sb.CACertificate,
@@ -286,6 +289,22 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		return errors.New("interNodeHost certificate already present")
 	}
 
+	rpcHostName, _, err := netutil.SplitHostPort(c.AdvertiseAddr, "0")
+	if err != nil {
+		return err
+	}
+	sqlHostName := rpcHostName
+	if c.SplitListenSQL {
+		sqlHostName, _, err = netutil.SplitHostPort(c.SQLAdvertiseAddr, "0")
+		if err != nil {
+			return err
+		}
+	}
+	httpHostName, _, err := netutil.SplitHostPort(c.HTTPAdvertiseAddr, "0")
+	if err != nil {
+		return err
+	}
+
 	// Create the target directory if it does not exist yet.
 	if err := cl.EnsureCertsDirectory(); err != nil {
 		return err
@@ -298,8 +317,9 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		cl.CACertPath(),
 		cl.CAKeyPath(),
 		initLifespan,
+		security.NodeUser,
 		"InterNode Service",
-		c.Addr,
+		rpcHostName,
 	)
 	if err != nil {
 		err = errors.Wrap(err,
@@ -329,8 +349,9 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		cl.SQLServiceCACertPath(),
 		cl.SQLServiceCAKeyPath(),
 		initLifespan,
+		security.NodeUser,
 		"SQL Service",
-		c.SQLAddr,
+		sqlHostName,
 	)
 	if err != nil {
 		err = errors.Wrap(err,
@@ -345,8 +366,9 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		cl.RPCServiceCACertPath(),
 		cl.RPCServiceCAKeyPath(),
 		initLifespan,
+		security.NodeUser,
 		"RPC Service",
-		c.SQLAddr, // TODO(aaron-crl): Add RPC variable to config.
+		rpcHostName, // TODO(aaron-crl): Add RPC variable to config.
 	)
 	if err != nil {
 		err = errors.Wrap(err,
@@ -361,8 +383,9 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		cl.UICACertPath(),
 		cl.UICAKeyPath(),
 		initLifespan,
+		httpHostName,
 		"AdminUI Service",
-		c.HTTPAddr,
+		httpHostName,
 	)
 	if err != nil {
 		err = errors.Wrap(err,

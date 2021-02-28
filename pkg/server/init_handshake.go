@@ -134,7 +134,7 @@ func createNodeInitTempCertificates(
 	if err != nil {
 		return certs, err
 	}
-	serviceCert, serviceKey, err := security.CreateServiceCertAndKey(lifespan, initServiceName, hostname, caCert, caKey)
+	serviceCert, serviceKey, err := security.CreateServiceCertAndKey(lifespan, security.NodeUser, initServiceName, hostname, caCert, caKey)
 	if err != nil {
 		return certs, err
 	}

@@ -39,6 +39,7 @@ func TestDummyCreateServiceCertAndKey(t *testing.T) {
 
 	_, _, err = security.CreateServiceCertAndKey(
 		time.Minute,
+		"dummy-common-name",
 		"test Service cert generation",
 		"localhost",
 		caCert,
