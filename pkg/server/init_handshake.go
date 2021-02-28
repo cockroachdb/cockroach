@@ -501,7 +501,7 @@ func initHandshakeHelper(
 			return errors.Wrap(err, "error when creating initialization bundle")
 		}
 
-		peerInit, err := collectLocalCABundle(*cfg)
+		peerInit, err := collectLocalCABundle(cfg.SSLCertsDir)
 		if err != nil {
 			return errors.Wrap(err, "error when loading initialization bundle")
 		}
