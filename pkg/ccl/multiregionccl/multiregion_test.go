@@ -73,13 +73,23 @@ CREATE TABLE t4 () LOCALITY REGIONAL BY ROW
 
 	// Test certain commands are no longer usable.
 	t.Run("no new multi-region items", func(t *testing.T) {
-		for _, errorStmt := range []string{
-			`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"`,
+		for _, tc := range []struct {
+			stmt             string
+			expectedContains string
+		}{
+			{
+				stmt:             `CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2"`,
+				expectedContains: multiRegionNoEnterpriseContains,
+			},
+			{
+				stmt:             `ALTER DATABASE test ADD REGION "us-east3"`,
+				expectedContains: "use of ADD REGION requires an enterprise license",
+			},
 		} {
-			t.Run(errorStmt, func(t *testing.T) {
-				_, err := sqlDB.Exec(errorStmt)
+			t.Run(tc.stmt, func(t *testing.T) {
+				_, err := sqlDB.Exec(tc.stmt)
 				require.Error(t, err)
-				require.Contains(t, err.Error(), multiRegionNoEnterpriseContains)
+				require.Contains(t, err.Error(), tc.expectedContains)
 			})
 		}
 	})
