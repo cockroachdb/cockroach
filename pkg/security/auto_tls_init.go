@@ -53,6 +53,13 @@ func createCertificateSerialNumber() (serialNumber *big.Int, err error) {
 	return
 }
 
+
+const (
+	crlOrg      = "Cockroach Labs"
+	crlIssuerOU = "automatic cert generator"
+	crlC        = "US"
+)
+
 // CreateCACertAndKey will create a CA with a validity beginning
 // now() and expiring after `lifespan`. This is a utility function to help
 // with cluster auto certificate generation.
@@ -71,10 +78,15 @@ func CreateCACertAndKey(
 	// Create short lived initial CA template.
 	ca := &x509.Certificate{
 		SerialNumber: serialNumber,
+		Issuer: pkix.Name{
+			Organization:       []string{crlOrg},
+			OrganizationalUnit: []string{crlIssuerOU},
+			Country:            []string{crlC},
+		},
 		Subject: pkix.Name{
-			Organization:       []string{"Cockroach Labs"},
+			Organization:       []string{crlOrg},
 			OrganizationalUnit: []string{service},
-			Country:            []string{"US"},
+			Country:            []string{crlC},
 		},
 		NotBefore:             notBefore,
 		NotAfter:              notAfter,
@@ -169,10 +181,15 @@ func CreateServiceCertAndKey(
 	// pkg/security/x509.go until we can consolidate them.
 	serviceCert := &x509.Certificate{
 		SerialNumber: serialNumber,
+		Issuer: pkix.Name{
+			Organization:       []string{crlOrg},
+			OrganizationalUnit: []string{crlIssuerOU},
+			Country:            []string{crlC},
+		},
 		Subject: pkix.Name{
-			Organization:       []string{"Cockroach Labs"},
+			Organization:       []string{crlOrg},
 			OrganizationalUnit: []string{service},
-			Country:            []string{"US"},
+			Country:            []string{crlC},
 			CommonName:         commonName,
 		},
 		NotBefore:   notBefore,
