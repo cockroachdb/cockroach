@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -127,6 +128,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	caCertPath string,
 	caKeyPath string,
 	initLifespan time.Duration,
+	commonName string,
 	serviceName string,
 	hostname string,
 ) error {
@@ -164,8 +166,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 		}
 	} else if oserror.IsNotExist(err) {
 		// CA cert does not yet exist, create it and its key.
-		err = sb.createServiceCA(caCertPath, caKeyPath, initLifespan, serviceName)
-		if err != nil {
+		if err := sb.createServiceCA(caCertPath, caKeyPath, initLifespan, serviceName); err != nil {
 			return errors.Wrap(
 				err, "failed to create Service CA",
 			)
@@ -176,6 +177,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 	var hostCert, hostKey []byte
 	hostCert, hostKey, err = security.CreateServiceCertAndKey(
 		initLifespan,
+		commonName,
 		serviceName,
 		hostname,
 		sb.CACertificate,
@@ -282,22 +284,38 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 			err, "interNodeHost certificate access issue")
 	}
 
+	rpcHostName, _, err := netutil.SplitHostPort(c.AdvertiseAddr, "0")
+	if err != nil {
+		return err
+	}
+	sqlHostName := rpcHostName
+	if c.SplitListenSQL {
+		sqlHostName, _, err = netutil.SplitHostPort(c.SQLAdvertiseAddr, "0")
+		if err != nil {
+			return err
+		}
+	}
+	httpHostName, _, err := netutil.SplitHostPort(c.HTTPAdvertiseAddr, "0")
+	if err != nil {
+		return err
+	}
+
 	// Create the target directory if it does not exist yet.
 	if err := cl.EnsureCertsDirectory(); err != nil {
 		return err
 	}
 
 	// Start by loading or creating the InterNode certificates.
-	err := b.InterNode.loadOrCreateServiceCertificates(
+	if err := b.InterNode.loadOrCreateServiceCertificates(
 		cl.NodeCertPath(),
 		cl.NodeKeyPath(),
 		cl.CACertPath(),
 		cl.CAKeyPath(),
 		initLifespan,
+		security.NodeUser,
 		"InterNode Service",
-		c.Addr,
-	)
-	if err != nil {
+		rpcHostName,
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create InterNode certificates")
 	}
@@ -305,58 +323,57 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 	// Initialize User auth certificates.
 	// TODO(aaron-crl): Double check that we want to do this. It seems
 	// like this is covered by the interface certificates?
-	err = b.UserAuth.loadOrCreateUserAuthCACertAndKey(
+	if err := b.UserAuth.loadOrCreateUserAuthCACertAndKey(
 		cl.ClientCACertPath(),
 		cl.ClientCAKeyPath(),
 		initLifespan,
 		"User Authentication",
-	)
-	if err != nil {
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create User auth certificate(s)")
 	}
 
 	// Initialize SQLService Certs.
-	err = b.SQLService.loadOrCreateServiceCertificates(
+	if err := b.SQLService.loadOrCreateServiceCertificates(
 		cl.SQLServiceCertPath(),
 		cl.SQLServiceKeyPath(),
 		cl.SQLServiceCACertPath(),
 		cl.SQLServiceCAKeyPath(),
 		initLifespan,
+		security.NodeUser,
 		"SQL Service",
-		c.SQLAddr,
-	)
-	if err != nil {
+		sqlHostName,
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create SQL service certificate(s)")
 	}
 
 	// Initialize RPCService Certs.
-	err = b.RPCService.loadOrCreateServiceCertificates(
+	if err := b.RPCService.loadOrCreateServiceCertificates(
 		cl.RPCServiceCertPath(),
 		cl.RPCServiceKeyPath(),
 		cl.RPCServiceCACertPath(),
 		cl.RPCServiceCAKeyPath(),
 		initLifespan,
+		security.NodeUser,
 		"RPC Service",
-		c.SQLAddr, // TODO(aaron-crl): Add RPC variable to config.
-	)
-	if err != nil {
+		rpcHostName, // TODO(aaron-crl): Add RPC variable to config.
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create RPC service certificate(s)")
 	}
 
 	// Initialize AdminUIService Certs.
-	err = b.AdminUIService.loadOrCreateServiceCertificates(
+	if err := b.AdminUIService.loadOrCreateServiceCertificates(
 		cl.UICertPath(),
 		cl.UIKeyPath(),
 		cl.UICACertPath(),
 		cl.UICAKeyPath(),
 		initLifespan,
+		httpHostName,
 		"AdminUI Service",
-		c.HTTPAddr,
-	)
-	if err != nil {
+		httpHostName,
+	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create Admin UI service certificate(s)")
 	}
