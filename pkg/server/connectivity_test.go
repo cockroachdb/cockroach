@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -352,24 +353,28 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
 	defer tc.Stopper().Stop(ctx)
 
+	scratchKey := tc.ScratchRange(t)
+	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+	require.Len(t, scratchRange.InternalReplicas, 1)
+	require.Equal(t, tc.Server(0).NodeID(), scratchRange.InternalReplicas[0].NodeID)
+
+	decomSrv := tc.Server(2)
 	for _, status := range []livenesspb.MembershipStatus{
 		livenesspb.MembershipStatus_DECOMMISSIONING, livenesspb.MembershipStatus_DECOMMISSIONED,
 	} {
-		require.NoError(t, tc.Servers[0].Decommission(ctx, status, []roachpb.NodeID{3}))
+		require.NoError(t, tc.Servers[0].Decommission(ctx, status, []roachpb.NodeID{decomSrv.NodeID()}))
 	}
 
 	testutils.SucceedsSoon(t, func() error {
 		for _, idx := range []int{0, 1} {
 			clusterSrv := tc.Server(idx)
-			decomSrv := tc.Server(2)
 
 			// Within a short period of time, the cluster (n1, n2) will refuse to reach out to n3.
 			{
 				_, err := clusterSrv.RPCContext().GRPCDialNode(
 					decomSrv.RPCAddr(), decomSrv.NodeID(), rpc.DefaultClass,
 				).Connect(ctx)
-				cause := errors.UnwrapAll(err)
-				s, ok := grpcstatus.FromError(cause)
+				s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
 				if !ok || s.Code() != codes.PermissionDenied {
 					return errors.Errorf("expected permission denied for n%d->n%d, got %v", clusterSrv.NodeID(), decomSrv.NodeID(), err)
 				}
@@ -380,8 +385,7 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 				_, err := decomSrv.RPCContext().GRPCDialNode(
 					clusterSrv.RPCAddr(), decomSrv.NodeID(), rpc.DefaultClass,
 				).Connect(ctx)
-				cause := errors.UnwrapAll(err)
-				s, ok := grpcstatus.FromError(cause)
+				s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
 				if !ok || s.Code() != codes.PermissionDenied {
 					return errors.Errorf("expected permission denied for n%d->n%d, got %v", decomSrv.NodeID(), clusterSrv.NodeID(), err)
 				}
@@ -389,4 +393,17 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 		}
 		return nil
 	})
+
+	// Trying to scan the scratch range via the decommissioned node should
+	// now result in a permission denied error.
+	_, err := decomSrv.DB().Scan(ctx, scratchKey, keys.MaxKey, 1)
+	require.Error(t, err)
+
+	// TODO(erikgrinaker): until cockroachdb/errors preserves grpcstatus.Error
+	// across errors.EncodeError() we just check for any error, this should
+	// check that it matches codes.PermissionDenied later.
+	//err = errors.UnwrapAll(err)
+	//s, ok := grpcstatus.FromError(err)
+	//require.True(t, ok, "expected gRPC error, got %T (%v)", err, err)
+	//require.Equal(t, codes.PermissionDenied, s.Code(), "expected permission denied error")
 }

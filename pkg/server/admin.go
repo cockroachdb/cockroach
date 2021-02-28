@@ -1922,14 +1922,14 @@ func (s *adminServer) DecommissionStatus(
 ) (*serverpb.DecommissionStatusResponse, error) {
 	// Get the number of replicas on each node. We *may* not need all of them,
 	// but that would be more complicated than seems worth it right now.
-	ns, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{})
-	if err != nil {
-		return nil, errors.Wrap(err, "loading node statuses")
-	}
-
 	nodeIDs := req.NodeIDs
+
 	// If no nodeIDs given, use all nodes.
 	if len(nodeIDs) == 0 {
+		ns, err := s.server.status.Nodes(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return nil, errors.Wrap(err, "loading node statuses")
+		}
 		for _, status := range ns.Nodes {
 			nodeIDs = append(nodeIDs, status.Desc.NodeID)
 		}
@@ -1991,6 +1991,9 @@ func (s *adminServer) DecommissionStatus(
 }
 
 // Decommission sets the decommission flag to the specified value on the specified node(s).
+// When the flag is set to DECOMMISSIONED, an empty response is returned on success -- this
+// ensures a node can decommission itself, since the node could otherwise lose RPC access
+// to the cluster while building the full response.
 func (s *adminServer) Decommission(
 	ctx context.Context, req *serverpb.DecommissionRequest,
 ) (*serverpb.DecommissionStatusResponse, error) {
@@ -2005,6 +2008,14 @@ func (s *adminServer) Decommission(
 	if err := s.server.Decommission(ctx, req.TargetMembership, nodeIDs); err != nil {
 		return nil, err
 	}
+
+	// We return an empty response when setting the final DECOMMISSIONED state,
+	// since a node can be asked to decommission itself which may cause it to
+	// lose access to cluster RPC and fail to populate the response.
+	if req.TargetMembership == livenesspb.MembershipStatus_DECOMMISSIONED {
+		return &serverpb.DecommissionStatusResponse{}, nil
+	}
+
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
 }
 
