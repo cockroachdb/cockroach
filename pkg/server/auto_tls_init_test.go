@@ -68,20 +68,20 @@ func loadAllCertsFromDisk(cfg base.Config) (CertificateBundle, error) {
 		return bundleFromDisk, err
 	}
 	bundleFromDisk.InterNode.loadOrCreateServiceCertificates(
-		cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, "", []string{},
+		cl.NodeCertPath(), cl.NodeKeyPath(), "", "", 0, 0, "", []string{},
 	)
 	// TODO(aaron-crl): Figure out how to handle client auth case.
 	//bundleFromDisk.UserAuth.loadOrCreateServiceCertificates(
 	//	cl.ClientCertPath(), cl.ClientKeyPath(), "", "", 0, "", []string{},
 	//)
 	bundleFromDisk.SQLService.loadOrCreateServiceCertificates(
-		cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, "", []string{},
+		cl.SQLServiceCertPath(), cl.SQLServiceKeyPath(), "", "", 0, 0, "", []string{},
 	)
 	bundleFromDisk.RPCService.loadOrCreateServiceCertificates(
-		cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, "", []string{},
+		cl.RPCServiceCertPath(), cl.RPCServiceKeyPath(), "", "", 0, 0, "", []string{},
 	)
 	bundleFromDisk.AdminUIService.loadOrCreateServiceCertificates(
-		cl.UICertPath(), cl.UIKeyPath(), "", "", 0, "", []string{},
+		cl.UICertPath(), cl.UIKeyPath(), "", "", 0, 0, "", []string{},
 	)
 
 	return bundleFromDisk, nil

@@ -26,8 +26,8 @@ import (
 )
 
 // TODO(aaron-crl): This shared a name and purpose with the value in
-// pkg/security and should be consolidated.
-const defaultKeySize = 4096
+// pkg/cli/cert.go and should be consolidated.
+const defaultKeySize = 2048
 
 // notBeforeMargin provides a window to compensate for potential clock skew.
 const notBeforeMargin = time.Second * 30
@@ -40,7 +40,7 @@ func createCertificateSerialNumber() (serialNumber *big.Int, err error) {
 	max := new(big.Int)
 	max.Exp(big.NewInt(2), big.NewInt(130), nil).Sub(max, big.NewInt(1))
 
-	// Serials is set using rand.Int which yields a value between [0, max)
+	// serialNumber is set using rand.Int which yields a value between [0, max)
 	// where max is (2^130)-1.
 	serialNumber, err = rand.Int(rand.Reader, max)
 	if err != nil {
