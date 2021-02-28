@@ -360,6 +360,7 @@ func init() {
 		// The initialization token and expected peers. For 'start' commands this is optional.
 		stringFlag(f, &startCtx.initToken, cliflags.InitToken)
 		intFlag(f, &startCtx.numExpectedNodes, cliflags.NumExpectedInitialNodes)
+		boolFlag(f, &startCtx.genCertsForSingleNode, cliflags.SingleNode)
 
 		if cmd == startSingleNodeCmd {
 			// Even though all server flags are supported for
