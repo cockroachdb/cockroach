@@ -15,7 +15,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -35,6 +37,10 @@ secure inter-node connections.
 // runConnect connects to other nodes and negotiates an initialization bundle
 // for use with secure inter-node connections.
 func runConnect(cmd *cobra.Command, args []string) (retErr error) {
+	if err := validateConnectFlags(cmd, true /* requireExplicitFlags */); err != nil {
+		return err
+	}
+
 	peers := []string(serverCfg.JoinList)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -84,4 +90,36 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 	}()
 
 	return server.InitHandshake(ctx, baseCfg, startCtx.initToken, startCtx.numExpectedPeers, peers, baseCfg.SSLCertsDir, rpcLn)
+}
+
+func validateConnectFlags(cmd *cobra.Command, requireExplicitFlags bool) error {
+	if requireExplicitFlags {
+		f := flagSetForCmd(cmd)
+		if !(f.Lookup(cliflags.SingleNode.Name).Changed ||
+			(f.Lookup(cliflags.NumExpectedInitialPeers.Name).Changed && f.Lookup(cliflags.InitToken.Name).Changed)) {
+			return errors.Newf("either --%s must be passed, or both --%s and --%s",
+				cliflags.SingleNode.Name, cliflags.NumExpectedInitialPeers.Name, cliflags.InitToken.Name)
+		}
+		if f.Lookup(cliflags.SingleNode.Name).Changed &&
+			(f.Lookup(cliflags.NumExpectedInitialPeers.Name).Changed || f.Lookup(cliflags.InitToken.Name).Changed) {
+			return errors.Newf("--%s cannot be specified together with --%s or --%s",
+				cliflags.SingleNode.Name, cliflags.NumExpectedInitialPeers.Name, cliflags.InitToken.Name)
+		}
+	}
+
+	if startCtx.genCertsForSingleNode {
+		startCtx.numExpectedPeers = 0
+		startCtx.initToken = "start-single-node"
+		return nil
+	}
+
+	if startCtx.numExpectedPeers < 0 {
+		return errors.Newf("flag --%s must be set to a non-negative value",
+			cliflags.NumExpectedInitialPeers.Name)
+	}
+	if startCtx.initToken == "" {
+		return errors.Newf("flag --%s must be set to a non-empty string",
+			cliflags.InitToken.Name)
+	}
+	return nil
 }

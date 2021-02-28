@@ -734,6 +734,17 @@ The --init-token flag must be combined with --init-num-peers.`,
 The --init-num-peers flag must be combined with --init-token.`,
 	}
 
+	SingleNode = FlagInfo{
+		Name: "single-node",
+		Description: `Prepare the certificates for a subsequent 'start-single-node'
+command. The 'connect' command only runs cursory checks on the network
+configuration and does not wait for peers to auto-negotiate a common
+set of credentials.
+
+The --single-node flag is exclusive with the --init-num-peers and --init-token
+flags.`,
+	}
+
 	CertsDir = FlagInfo{
 		Name:        "certs-dir",
 		EnvVar:      "COCKROACH_CERTS_DIR",

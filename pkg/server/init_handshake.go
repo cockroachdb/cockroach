@@ -416,6 +416,10 @@ func initHandshakeHelper(
 	certsDir string,
 	listener net.Listener,
 ) error {
+	if len(token) == 0 {
+		return errors.AssertionFailedf("programming error: token cannot be empty")
+	}
+
 	addr := listener.Addr()
 	var listenHost string
 	switch netAddr := addr.(type) {

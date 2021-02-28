@@ -414,8 +414,9 @@ var startCtx struct {
 	serverListenAddr       string
 
 	// The TLS auto-handshake parameters.
-	initToken        string
-	numExpectedPeers int
+	initToken             string
+	numExpectedPeers      int
+	genCertsForSingleNode bool
 
 	// if specified, this forces the HTTP listen addr to localhost
 	// and disables TLS on the HTTP listener.
@@ -454,6 +455,7 @@ func setStartContextDefaults() {
 	startCtx.serverListenAddr = ""
 	startCtx.initToken = ""
 	startCtx.numExpectedPeers = 0
+	startCtx.genCertsForSingleNode = false
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""
 	startCtx.externalIODir = ""
