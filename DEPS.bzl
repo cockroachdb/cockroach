@@ -1327,8 +1327,8 @@ def go_deps():
         name = "com_github_golang_snappy",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/golang/snappy",
-        sum = "h1:aeE13tS0IiQgFjYdoL8qN3K1N2bXXtI6Vi51/y7BpMw=",
-        version = "v0.0.2",
+        sum = "h1:fHPg5GQYlCeLIPB9BZqMVR5nR9A+IM5zcgeTdjMYmLA=",
+        version = "v0.0.3",
     )
     go_repository(
         name = "com_github_gomodule_redigo",
