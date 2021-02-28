@@ -64,7 +64,7 @@ func TestInitializeFromConfig(t *testing.T) {
 
 func loadAllCertsFromDisk(ctx context.Context, cfg base.Config) (CertificateBundle, error) {
 	cl := security.MakeCertsLocator(cfg.SSLCertsDir)
-	bundleFromDisk, err := collectLocalCABundle(cfg)
+	bundleFromDisk, err := collectLocalCABundle(cfg.SSLCertsDir)
 	if err != nil {
 		return bundleFromDisk, err
 	}

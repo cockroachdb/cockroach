@@ -560,8 +560,8 @@ func (sb *ServiceCertificateBundle) loadCACertAndKeyIfExists(
 // collectLocalCABundle will load any CA certs and keys present on disk. It
 // will skip any CA's where the certificate is not found. Any other read errors
 // including permissions result in an error.
-func collectLocalCABundle(c base.Config) (CertificateBundle, error) {
-	cl := security.MakeCertsLocator(c.SSLCertsDir)
+func collectLocalCABundle(SSLCertsDir string) (CertificateBundle, error) {
+	cl := security.MakeCertsLocator(SSLCertsDir)
 	var b CertificateBundle
 	var err error
 
@@ -614,7 +614,7 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 	cl := security.MakeCertsLocator(c.SSLCertsDir)
 
 	// Fail fast if we can't load the CAs.
-	b, err := collectLocalCABundle(c)
+	b, err := collectLocalCABundle(c.SSLCertsDir)
 	if err != nil {
 		return errors.Wrap(
 			err, "failed to load local CAs for certificate rotation")
