@@ -25,7 +25,7 @@ func TestAppliedStandaloneConfig(t *testing.T) {
 
 	const expected = `sinks:
   stderr:
-    channels: [DEV]
+    channels: all
     filter: INFO
     format: crdb-v2-tty
     redact: false
