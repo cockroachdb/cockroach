@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -45,11 +46,15 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	log.Infof(ctx, "validating the command line network arguments")
+
 	// Ensure that the default hostnames / ports are filled in for the
 	// various address fields in baseCfg.
 	if err := baseCfg.ValidateAddrs(ctx); err != nil {
 		return err
 	}
+
+	log.Ops.Infof(ctx, "starting the initial network listeners")
 
 	// We are creating listeners so that if the host part of the listen
 	// address means "all interfaces", the Listen call will resolve this
@@ -59,6 +64,7 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 	if err != nil {
 		return err
 	}
+	log.Ops.Infof(ctx, "started rpc listener at: %s", rpcLn.Addr())
 	defer func() {
 		_ = rpcLn.Close()
 	}()
@@ -66,11 +72,13 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 	if err != nil {
 		return err
 	}
+	log.Ops.Infof(ctx, "started http listener at: %s", httpLn.Addr())
 	if baseCfg.SplitListenSQL {
 		sqlLn, err := server.ListenAndUpdateAddrs(ctx, &baseCfg.SQLAddr, &baseCfg.SQLAdvertiseAddr, "sql")
 		if err != nil {
 			return err
 		}
+		log.Ops.Infof(ctx, "started sql listener at: %s", sqlLn.Addr())
 		_ = sqlLn.Close()
 	}
 	// Note: we want the http listener to remain open while we open the
