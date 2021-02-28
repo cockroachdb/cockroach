@@ -271,11 +271,17 @@ func init() {
 	// all the networking flags.
 	for _, cmd := range append(serverCmds, connectCmd) {
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
-			// Note: we do not need to call setupLogging() here.
-			// All the server commands do this explicitly elsewhere.
-
 			// Finalize the configuration of network settings.
-			return extraServerFlagInit(cmd)
+			if err := extraServerFlagInit(cmd); err != nil {
+				return err
+			}
+			if cmd == connectCmd {
+				if err := setupLogging(context.Background(), cmd,
+					false /* isServerCmd */, true /* applyConfig */); err != nil {
+					return err
+				}
+			}
+			return nil
 		})
 	}
 

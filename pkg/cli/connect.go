@@ -16,9 +16,11 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/spf13/cobra"
 )
 
@@ -51,6 +53,8 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 	peers := []string(serverCfg.JoinList)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	ctx = logtags.AddTag(ctx, "connect", nil)
 
 	log.Infof(ctx, "validating the command line network arguments")
 
