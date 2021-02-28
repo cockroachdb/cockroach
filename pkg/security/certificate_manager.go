@@ -262,6 +262,12 @@ func (cl CertsLocator) CACertPath() string {
 	return filepath.Join(cl.certsDir, CACertFilename())
 }
 
+// EnsureCertsDirectory ensures that the certs directory exists by
+// creating it if does not exist yet.
+func (cl CertsLocator) EnsureCertsDirectory() error {
+	return os.MkdirAll(cl.certsDir, 0700)
+}
+
 // CACertFilename returns the expected file name for the CA certificate.
 func CACertFilename() string { return "ca" + certExtension }
 
