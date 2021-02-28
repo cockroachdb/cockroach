@@ -71,7 +71,7 @@ require (
 	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/protobuf v1.4.2
-	github.com/golang/snappy v0.0.2
+	github.com/golang/snappy v0.0.3
 	github.com/google/btree v1.0.0
 	github.com/google/flatbuffers v1.11.0
 	github.com/google/go-cmp v0.5.2
