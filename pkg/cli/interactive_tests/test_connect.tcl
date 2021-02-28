@@ -11,13 +11,13 @@ set ::env(COCKROACH_INSECURE) "false"
 
 system "hostname >hostname.txt"
 
-start_test "Check that the connect command can generate single-node credentials"
-# Run connect. We are careful to preserve the generated files into the logs sub-directory
+start_test "Check that the connect init command can generate single-node credentials"
+# Run connect init. We are careful to preserve the generated files into the logs sub-directory
 # so that the artifacts remain for investigation if the command fail.
 # The reason why we do not use --certs-dir=logs directly is that the log directory
 # makes its contents world-readable, and crdb asserts that cert / key files
 # are not world-readable.
-send "$argv connect --single-node --listen-addr=`cat hostname.txt` --http-addr=`cat hostname.txt` --certs-dir=certs/sn; cp -a certs logs/\r"
+send "$argv connect init --single-node --listen-addr=`cat hostname.txt` --http-addr=`cat hostname.txt` --certs-dir=certs/sn; cp -a certs logs/\r"
 eexpect "generating cert bundle"
 eexpect "cert files generated"
 eexpect ":/# "
@@ -31,7 +31,7 @@ end_test
 # some time in the future.
 system "$argv cert create-client root --ca-key=certs/sn/ca-client.key --certs-dir=certs/sn"
 
-start_test "Check we can connect a SQL client with that"
+start_test "Check we can connect init a SQL client with that"
 system "$argv sql --certs-dir=certs/sn --host=`cat hostname.txt` -e 'select 1'"
 end_test
 
@@ -45,14 +45,14 @@ eexpect ":/# "
 
 system "mkdir -p logs/n1 logs/n2"
 
-start_test "Check that the connect command can generate certs for two nodes."
+start_test "Check that the connect init command can generate certs for two nodes."
 set spawn_id $shell1_spawn_id
-send "$argv connect --num-expected-initial-nodes 2 --init-token=abc --listen-addr=`cat hostname.txt`:26257 --http-addr=`cat hostname.txt`:8080 --join=`cat hostname.txt`:26258 --certs-dir=certs/n1 --log='file-defaults: {dir: logs/n1}\r"
+send "$argv connect init --num-expected-initial-nodes 2 --init-token=abc --listen-addr=`cat hostname.txt`:26257 --http-addr=`cat hostname.txt`:8080 --join=`cat hostname.txt`:26258 --certs-dir=certs/n1 --log='file-defaults: {dir: logs/n1}\r"
 send "sinks: {stderr: {filter: NONE}}'\r"
 eexpect "waiting for handshake"
 
 set spawn_id $shell2_spawn_id
-send "$argv connect --num-expected-initial-nodes 2 --init-token=abc --listen-addr=`cat hostname.txt`:26258 --http-addr=`cat hostname.txt`:8081 --join=`cat hostname.txt`:26257 --certs-dir=certs/n2 --log='file-defaults: {dir: logs/n2}\r"
+send "$argv connect init --num-expected-initial-nodes 2 --init-token=abc --listen-addr=`cat hostname.txt`:26258 --http-addr=`cat hostname.txt`:8081 --join=`cat hostname.txt`:26257 --certs-dir=certs/n2 --log='file-defaults: {dir: logs/n2}\r"
 send "sinks: {stderr: {filter: NONE}}'\r"
 eexpect "waiting for handshake"
 eexpect "trusted peer"
@@ -92,7 +92,7 @@ set spawn_id $shell1_spawn_id
 eexpect "CockroachDB node starting"
 end_test
 
-start_test "Check we can connect a SQL client to the newly initialized two nodes"
+start_test "Check we can connect init a SQL client to the newly initialized two nodes"
 system "$argv sql --certs-dir=certs/n1 --host=`cat hostname.txt`:26257 -e 'select 1'"
 system "$argv sql --certs-dir=certs/n2 --host=`cat hostname.txt`:26258 -e 'select 1'"
 end_test

@@ -9,6 +9,7 @@ go_library(
         "cli.go",
         "client_url.go",
         "connect.go",
+        "connect_join.go",
         "context.go",
         "cpuprofile.go",
         "debug.go",
@@ -264,6 +265,7 @@ go_test(
     srcs = [
         "cli_debug_test.go",
         "cli_test.go",
+        "connect_join_test.go",
         "debug_check_store_test.go",
         "debug_list_files_test.go",
         "debug_merge_logs_test.go",
@@ -310,6 +312,7 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/server/status",
         "//pkg/server/status/statuspb:statuspb_go_proto",
+        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/lex",
