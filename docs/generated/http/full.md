@@ -1369,7 +1369,7 @@ Support status: [reserved](#support-status)
 
 
 
-Request object for issuing a query cancel request.
+Request object for issing a query cancel request.
 
 
 | Field | Type | Label | Description | Support status |
@@ -1410,22 +1410,14 @@ Response returned by target query's gateway node.
 ListContentionEvents retrieves the contention events across the entire
 cluster.
 
-For SQL keys the following orderings are maintained:
-- on the highest level, all IndexContentionEvents objects are ordered
-  according to their importance (as defined by the number of contention
-  events within each object).
-- on the middle level, all SingleKeyContention objects are ordered by their
-  keys lexicographically.
-- on the lowest level, all SingleTxnContention objects are ordered by the
-  number of times that transaction was observed to contend with other
-  transactions.
-
-For non-SQL keys the following orderings are maintained:
-- on the top level, all SingleNonSQLKeyContention objects are ordered
-  by their keys lexicographically.
-- on the bottom level, all SingleTxnContention objects are ordered by the
-  number of times that transaction was observed to contend with other
-  transactions.
+On the highest level, all IndexContentionEvents objects are ordered
+according to their importance (as defined by the number of contention
+events within each object).
+On the middle level, all SingleKeyContention objects are ordered by their
+keys lexicographically.
+On the lowest level, all SingleTxnContention objects are ordered by the
+number of times that transaction was observed to contend with other
+transactions.
 
 Support status: [reserved](#support-status)
 
@@ -1453,7 +1445,7 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| events | [cockroach.sql.contentionpb.SerializedRegistry](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.SerializedRegistry) |  | All available contention information on this node or cluster. | [reserved](#support-status) |
+| events | [cockroach.sql.contentionpb.IndexContentionEvents](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.IndexContentionEvents) | repeated | A list of contention events on this node or cluster. | [reserved](#support-status) |
 | errors | [ListContentionEventsError](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListContentionEventsError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
 
 
@@ -1482,22 +1474,14 @@ An error wrapper object for ListContentionEventsResponse.
 
 ListLocalContentionEvents retrieves the contention events on this node.
 
-For SQL keys the following orderings are maintained:
-- on the highest level, all IndexContentionEvents objects are ordered
-  according to their importance (as defined by the number of contention
-  events within each object).
-- on the middle level, all SingleKeyContention objects are ordered by their
-  keys lexicographically.
-- on the lowest level, all SingleTxnContention objects are ordered by the
-  number of times that transaction was observed to contend with other
-  transactions.
-
-For non-SQL keys the following orderings are maintained:
-- on the top level, all SingleNonSQLKeyContention objects are ordered
-  by their keys lexicographically.
-- on the bottom level, all SingleTxnContention objects are ordered by the
-  number of times that transaction was observed to contend with other
-  transactions.
+On the highest level, all IndexContentionEvents objects are ordered
+according to their importance (as defined by the number of contention
+events within each object).
+On the middle level, all SingleKeyContention objects are ordered by their
+keys lexicographically.
+On the lowest level, all SingleTxnContention objects are ordered by the
+number of times that transaction was observed to contend with other
+transactions.
 
 Support status: [reserved](#support-status)
 
@@ -1525,7 +1509,7 @@ Response object for ListContentionEvents and ListLocalContentionEvents.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| events | [cockroach.sql.contentionpb.SerializedRegistry](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.SerializedRegistry) |  | All available contention information on this node or cluster. | [reserved](#support-status) |
+| events | [cockroach.sql.contentionpb.IndexContentionEvents](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.sql.contentionpb.IndexContentionEvents) | repeated | A list of contention events on this node or cluster. | [reserved](#support-status) |
 | errors | [ListContentionEventsError](#cockroach.server.serverpb.ListContentionEventsResponse-cockroach.server.serverpb.ListContentionEventsError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
 
 
@@ -2726,6 +2710,7 @@ Support status: [reserved](#support-status)
 | id | [int64](#cockroach.server.serverpb.StatementDiagnosticsResponse-int64) |  |  | [reserved](#support-status) |
 | statement_fingerprint | [string](#cockroach.server.serverpb.StatementDiagnosticsResponse-string) |  |  | [reserved](#support-status) |
 | collected_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| trace | [string](#cockroach.server.serverpb.StatementDiagnosticsResponse-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -2834,9 +2819,9 @@ Support status: [reserved](#support-status)
 
 
 
-## ResetSQLStats
+## RequestCA
 
-`POST /_status/resetsqlstats`
+`GET /_join/v1/ca`
 
 
 
@@ -2847,12 +2832,10 @@ Support status: [reserved](#support-status)
 
 
 
-Request object for issuing a SQL stats reset request.
+CaRequest requests the CA cert anchoring this service.
 
+No information needed.
 
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| node_id | [string](#cockroach.server.serverpb.ResetSQLStatsRequest-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -2865,8 +2848,60 @@ Request object for issuing a SQL stats reset request.
 
 
 
-Response object returned by ResetSQLStats.
+CaResponse contains a PEM encoded copy of the CA cert for this service.
 
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ca_cert | [bytes](#cockroach.server.serverpb.CaResponse-bytes) |  | query is the SQL query string. | [reserved](#support-status) |
+
+
+
+
+
+
+
+## RequestCertBundle
+
+`GET /_join/v1/requestbundle`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+BundleRequest requests the bundle of initialization CAs for a new node.
+It provides authentication in the form of a joinToken containing a
+sharedSecret.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| token_id | [string](#cockroach.server.serverpb.BundleRequest-string) |  | sharedSecret | [reserved](#support-status) |
+| shared_secret | [string](#cockroach.server.serverpb.BundleRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+BundleResponse contains a copy of all CAs needed to intialize TLS for
+a new node.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| bundle | [bytes](#cockroach.server.serverpb.BundleResponse-bytes) |  | query is the SQL query string. | [reserved](#support-status) |
 
 
 
