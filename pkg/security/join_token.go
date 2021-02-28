@@ -70,8 +70,7 @@ func (j *JoinToken) sign(caCert []byte) {
 func (j *JoinToken) VerifySignature(caCert []byte) bool {
 	signer := hmac.New(sha256.New, j.SharedSecret)
 	_, _ = signer.Write(caCert)
-	// TODO(aaron-crl): Avoid timing attacks here.
-	return bytes.Equal(signer.Sum(nil), j.fingerprint)
+	return hmac.Equal(signer.Sum(nil), j.fingerprint)
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.

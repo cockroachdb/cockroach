@@ -24,23 +24,41 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// connectCmd triggers a TLS initialization handshake and writes
-// certificates in the specified certs-dir for use with start.
+// Sub-commands for connect command.
+var connectCmds = []*cobra.Command{
+	connectInitCmd,
+	connectJoinCmd,
+}
+
 var connectCmd = &cobra.Command{
-	Use:   "connect --certs-dir=<path to cockroach certs dir> --init-token=<shared secret> --join=<host 1>,<host 2>,...,<host N>",
+	Use:   "connect [command]",
+	Short: "Create certificates for securely connecting with clusters\n",
+	Long: `
+Bootstrap security certificates for connecting to new or existing clusters.`,
+	RunE: usageAndErr,
+}
+
+func init() {
+	connectCmd.AddCommand(connectCmds...)
+}
+
+// connectInitCmd triggers a TLS initialization handshake and writes
+// certificates in the specified certs-dir for use with start.
+var connectInitCmd = &cobra.Command{
+	Use:   "init --certs-dir=<path to cockroach certs dir> --init-token=<shared secret> --join=<host 1>,<host 2>,...,<host N>",
 	Short: "auto-build TLS certificates for use with the start command",
 	Long: `
 Connects to other nodes and negotiates an initialization bundle for use with
 secure inter-node connections.
 `,
 	Args: cobra.NoArgs,
-	RunE: MaybeDecorateGRPCError(runConnect),
+	RunE: MaybeDecorateGRPCError(runConnectInit),
 }
 
-// runConnect connects to other nodes and negotiates an initialization bundle
+// runConnectInit connects to other nodes and negotiates an initialization bundle
 // for use with secure inter-node connections.
-func runConnect(cmd *cobra.Command, args []string) (retErr error) {
-	if err := validateConnectFlags(cmd, true /* requireExplicitFlags */); err != nil {
+func runConnectInit(cmd *cobra.Command, args []string) (retErr error) {
+	if err := validateConnectInitFlags(cmd, true /* requireExplicitFlags */); err != nil {
 		return err
 	}
 
@@ -120,7 +138,7 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 	return server.InitHandshake(ctx, reporter, baseCfg, startCtx.initToken, startCtx.numExpectedNodes, peers, baseCfg.SSLCertsDir, rpcLn)
 }
 
-func validateConnectFlags(cmd *cobra.Command, requireExplicitFlags bool) error {
+func validateConnectInitFlags(cmd *cobra.Command, requireExplicitFlags bool) error {
 	if requireExplicitFlags {
 		f := flagSetForCmd(cmd)
 		if !(f.Lookup(cliflags.SingleNode.Name).Changed ||

@@ -1091,7 +1091,8 @@ func TestFlagUsage(t *testing.T) {
 Available Commands:
   start             start a node in a multi-node cluster
   start-single-node start a single-node cluster
-  connect           auto-build TLS certificates for use with the start command
+  connect           Create certificates for securely connecting with clusters
+
   init              initialize a cluster
   cert              create ca, node, and client certs
   sql               open a sql shell
