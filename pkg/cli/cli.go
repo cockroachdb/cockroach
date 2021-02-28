@@ -79,14 +79,6 @@ func Main() {
 }
 
 func doMain(cmd *cobra.Command, cmdName string) error {
-	if cmd != nil && !cmdHasCustomLoggingSetup(cmd) {
-		// the customLoggingSetupCmds do their own calls to setupLogging().
-		if err := setupLogging(context.Background(), cmd,
-			false /* isServerCmd */, true /* applyConfig */); err != nil {
-			return err
-		}
-	}
-
 	logcrash.SetupCrashReporter(
 		context.Background(),
 		cmdName,

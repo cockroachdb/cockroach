@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"net"
 	"path/filepath"
@@ -250,13 +251,27 @@ func init() {
 
 	// Every command but start will inherit the following setting.
 	AddPersistentPreRunE(cockroachCmd, func(cmd *cobra.Command, _ []string) error {
-		return extraClientFlagInit()
+		if err := extraClientFlagInit(); err != nil {
+			return err
+		}
+		// Set up logging if the command does not define
+		// it itself.
+		if !cmdHasCustomLoggingSetup(cmd) {
+			if err := setupLogging(context.Background(), cmd,
+				false /* isServerCmd */, true /* applyConfig */); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 
 	// Add a pre-run command for `start` and `start-single-node`, as well as the
 	// multi-tenancy related commands that start long-running servers.
 	for _, cmd := range serverCmds {
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
+			// Note: we do not need to call setupLogging() here.
+			// All the server commands do this explicitly elsewhere.
+
 			// Finalize the configuration of network settings.
 			return extraServerFlagInit(cmd)
 		})

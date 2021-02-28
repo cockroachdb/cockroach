@@ -63,5 +63,23 @@ eexpect "parsing \"cantparse\": invalid syntax"
 eexpect ":/# "
 end_test
 
+start_test "Check that conflicting legacy and new flags are properly rejected for server commands"
+send "$argv start-single-node --insecure --logtostderr=true --log=abc\r"
+eexpect "log is incompatible with legacy discrete logging flag"
+eexpect ":/# "
+end_test
+
+start_test "Check that conflicting legacy and new flags are properly rejected for client commands"
+send "$argv sql --insecure --logtostderr=true --log=abc\r"
+eexpect "log is incompatible with legacy discrete logging flag"
+eexpect ":/# "
+end_test
+
+start_test "Check that the log flag is properly recognized for non-server commands"
+send "$argv debug reset-quorum 123 --log='sinks: {stderr: {format: json }}'\r"
+eexpect "\"severity\":\"ERROR\""
+eexpect "connection to server failed"
+eexpect ":/# "
+
 send "exit 0\r"
 eexpect eof
