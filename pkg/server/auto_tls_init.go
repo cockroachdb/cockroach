@@ -318,7 +318,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		cl.CAKeyPath(),
 		initLifespan,
 		security.NodeUser,
-		"InterNode Service",
+		"cockroach-node",
 		rpcHostName,
 	)
 	if err != nil {
@@ -334,7 +334,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		cl.ClientCACertPath(),
 		cl.ClientCAKeyPath(),
 		initLifespan,
-		"User Authentication",
+		"cockroach-client",
 	)
 	if err != nil {
 		err = errors.Wrap(err,
@@ -350,7 +350,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		cl.SQLServiceCAKeyPath(),
 		initLifespan,
 		security.NodeUser,
-		"SQL Service",
+		"cockroach-sql",
 		sqlHostName,
 	)
 	if err != nil {
@@ -367,7 +367,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		cl.RPCServiceCAKeyPath(),
 		initLifespan,
 		security.NodeUser,
-		"RPC Service",
+		"cockroach-rpc",
 		rpcHostName, // TODO(aaron-crl): Add RPC variable to config.
 	)
 	if err != nil {
@@ -384,7 +384,7 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) (err error) {
 		cl.UICAKeyPath(),
 		initLifespan,
 		httpHostName,
-		"AdminUI Service",
+		"cockroach-http",
 		httpHostName,
 	)
 	if err != nil {
