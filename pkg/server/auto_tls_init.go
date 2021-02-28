@@ -282,6 +282,11 @@ func (b *CertificateBundle) InitializeFromConfig(c base.Config) error {
 			err, "interNodeHost certificate access issue")
 	}
 
+	// Create the target directory if it does not exist yet.
+	if err := cl.EnsureCertsDirectory(); err != nil {
+		return err
+	}
+
 	// Start by loading or creating the InterNode certificates.
 	err := b.InterNode.loadOrCreateServiceCertificates(
 		cl.NodeCertPath(),
@@ -373,6 +378,10 @@ func (b *CertificateBundle) InitializeNodeFromBundle(c base.Config) error {
 		return errors.New("interNodeHost certificate already present")
 	} else if !oserror.IsNotExist(err) {
 		// Something else went wrong accessing the path
+		return err
+	}
+
+	if err := cl.EnsureCertsDirectory(); err != nil {
 		return err
 	}
 
