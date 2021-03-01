@@ -162,7 +162,8 @@ func NewTraceAnalyzer(flowsMetadata *FlowsMetadata) *TraceAnalyzer {
 // If makeDeterministic is set, statistics that can vary from run to run are set
 // to fixed values; see ComponentStats.MakeDeterministic.
 func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterministic bool) error {
-	m := execinfrapb.ExtractStatsFromSpans(trace, makeDeterministic)
+	m, cleanup := execinfrapb.ExtractStatsFromSpans(trace, makeDeterministic)
+	defer cleanup()
 	// Annotate the maps with stats extracted from the trace.
 	for component, componentStats := range m {
 		if !component.FlowID.Equal(a.flowID) {

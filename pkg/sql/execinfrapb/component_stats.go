@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -351,15 +352,34 @@ func (s *ComponentStats) MakeDeterministic() {
 	}
 }
 
+var statsMapPool = sync.Pool{
+	New: func() interface{} {
+		return make(map[ComponentID]*ComponentStats)
+	},
+}
+
+var componentStatsPool = sync.Pool{
+	New: func() interface{} {
+		return &ComponentStats{}
+	},
+}
+
+// release releases a ComponentStats object back to the pool.
+func release(stats *ComponentStats) {
+	*stats = ComponentStats{}
+	componentStatsPool.Put(stats)
+}
+
 // ExtractStatsFromSpans extracts all ComponentStats from a set of tracing
-// spans.
+// spans. It returns a cleanup function that must be called once the caller is
+// done with the map.
 func ExtractStatsFromSpans(
 	spans []tracingpb.RecordedSpan, makeDeterministic bool,
-) map[ComponentID]*ComponentStats {
-	statsMap := make(map[ComponentID]*ComponentStats)
+) (map[ComponentID]*ComponentStats, func()) {
+	statsMap := statsMapPool.Get().(map[ComponentID]*ComponentStats)
 	for i := range spans {
 		span := &spans[i]
-		var stats ComponentStats
+		stats := componentStatsPool.Get().(*ComponentStats)
 
 		found := false
 		// TODO(radu): there's nothing stopping us from having multiple
@@ -368,10 +388,10 @@ func ExtractStatsFromSpans(
 			if found {
 				return
 			}
-			if !types.Is(item, &stats) {
+			if !types.Is(item, stats) {
 				return
 			}
-			if err := protoutil.Unmarshal(item.Value, &stats); err != nil {
+			if err := protoutil.Unmarshal(item.Value, stats); err != nil {
 				return
 			}
 			found = true
@@ -385,14 +405,20 @@ func ExtractStatsFromSpans(
 		}
 		existing := statsMap[stats.Component]
 		if existing == nil {
-			statsMap[stats.Component] = &stats
+			statsMap[stats.Component] = stats
 		} else {
 			// In the vectorized flow we can have multiple statistics entries for one
 			// component. Merge the stats together.
 			// TODO(radu): figure out a way to emit the statistics correctly in the
 			// first place.
-			statsMap[stats.Component] = existing.Union(&stats)
+			statsMap[stats.Component] = existing.Union(stats)
 		}
 	}
-	return statsMap
+	return statsMap, func() {
+		for k, s := range statsMap {
+			release(s)
+			delete(statsMap, k)
+		}
+		statsMapPool.Put(statsMap)
+	}
 }
