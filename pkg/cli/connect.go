@@ -53,6 +53,9 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 		return errors.Newf("node certificate already exists in %s", baseCfg.SSLCertsDir)
 	}
 
+	// Ensure that log files are populated when the process terminates.
+	defer log.Flush()
+
 	peers := []string(serverCfg.JoinList)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
