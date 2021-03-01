@@ -10,7 +10,12 @@
 
 package kvprober
 
-import "context"
+import (
+	"context"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+)
 
 // Below are exported to enable testing from kvprober_test.
 
@@ -26,4 +31,10 @@ func (p *Prober) Probe(ctx context.Context, db dbGet) {
 
 func (p *Prober) PlannerNext(ctx context.Context) (Step, error) {
 	return p.planner.next(ctx)
+}
+
+func (p *Prober) SetPlanningRateLimit(d time.Duration) {
+	p.planner.(*meta2Planner).getRateLimit = func(settings *cluster.Settings) time.Duration {
+		return d
+	}
 }
