@@ -720,6 +720,19 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 	return nil
 }
 
+// convertToSQLStringRepresentation takes an array of bytes (the physical
+// representation of an enum) and converts it into a string that can be used
+// in a SQL predicate.
+func convertToSQLStringRepresentation(bytes []byte) string {
+	var byteRep strings.Builder
+	byteRep.WriteString("b'")
+	for _, b := range bytes {
+		byteRep.WriteByte(b)
+	}
+	byteRep.WriteString("'")
+	return byteRep.String()
+}
+
 // canRemoveEnumValue returns an error if the enum value is in use and therefore
 // can't be removed.
 func (t *typeSchemaChanger) canRemoveEnumValue(
@@ -729,19 +742,6 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	member *descpb.TypeDescriptor_EnumMember,
 	descsCol *descs.Collection,
 ) error {
-	// convertToSQLStringRepresentation takes an array of bytes (the physical
-	// representation of an enum) and converts it into a string that can be used
-	// in a SQL predicate.
-	convertToSQLStringRepresentation := func(bytes []byte) string {
-		var byteRep strings.Builder
-		byteRep.WriteString("b'")
-		for _, b := range bytes {
-			byteRep.WriteByte(b)
-		}
-		byteRep.WriteString("'")
-		return byteRep.String()
-	}
-
 	for _, ID := range typeDesc.ReferencingDescriptorIDs {
 		desc, err := descsCol.GetImmutableTableByID(ctx, txn, ID, tree.ObjectLookupFlags{})
 		if err != nil {
@@ -814,8 +814,90 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			}
 		}
 	}
-	// We have ascertained that the value is not in use, and can therefore be
-	// safely removed.
+
+	// Do validation for the array type now.
+	arrayTypeDesc, err := descsCol.GetImmutableTypeByID(
+		ctx, txn, typeDesc.ArrayTypeID, tree.ObjectLookupFlags{})
+	if err != nil {
+		return err
+	}
+
+	return t.canRemoveEnumValueFromArrayUsages(ctx, arrayTypeDesc, member, txn, descsCol)
+}
+
+// canRemoveEnumValueFromArrayUsages returns an error if the enum member is used
+// as a value by a table/view column which type resolves to a the given array
+// type.
+func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
+	ctx context.Context,
+	arrayTypeDesc *typedesc.Immutable,
+	member *descpb.TypeDescriptor_EnumMember,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+) error {
+	const validationErr = "could not validate removal of enum value %q"
+	for _, ID := range arrayTypeDesc.ReferencingDescriptorIDs {
+		desc, err := descsCol.GetImmutableTableByID(ctx, txn, ID, tree.ObjectLookupFlags{})
+		if err != nil {
+			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
+		}
+		var unionUnnests strings.Builder
+		var query strings.Builder
+
+		// Construct a query of the form:
+		// SELECT unnest FROM (
+		//  		SELECT unnest(c1) FROM [SELECT %d AS t]
+		// 		UNION
+		//			SELECT unnest(c2) FROM [SELECT %d AS t]
+		// 		...
+		//	) WHERE unnest = 'enum_value'
+		firstClause := true
+		for _, col := range desc.PublicColumns() {
+			if arrayTypeDesc.ID == typedesc.GetTypeDescID(col.GetType()) {
+				if !firstClause {
+					unionUnnests.WriteString(" UNION ")
+				}
+				unionUnnests.WriteString(fmt.Sprintf("SELECT unnest(%s) FROM [%d AS t]", col.GetName(), ID))
+				firstClause = false
+			}
+		}
+		// Unfortunately, we install a backreference to both the type descriptor and
+		// its array alias type regardless of the actual type of the table column.
+		// This means we may not actually construct a valid query after going
+		// through the columns, in which case there's no validation to do.
+		if firstClause {
+			continue
+		}
+		query.WriteString("SELECT unnest FROM (")
+		query.WriteString(unionUnnests.String())
+		query.WriteString(fmt.Sprintf(") WHERE unnest = %s", convertToSQLStringRepresentation(member.PhysicalRepresentation)))
+
+		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+			ctx, txn, arrayTypeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
+		if err != nil {
+			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
+		}
+		override := sessiondata.InternalExecutorOverride{
+			User:     security.RootUserName(),
+			Database: dbDesc.Name,
+		}
+		rows, err := t.execCfg.InternalExecutor.QueryRowEx(
+			ctx,
+			"count-array-type-value-usage",
+			txn,
+			override,
+			query.String(),
+		)
+		if err != nil {
+			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
+		}
+		if len(rows) > 0 {
+			return errors.Newf("could not remove enum value %q as it is being used by table %q",
+				member.LogicalRepresentation, desc.GetName(),
+			)
+		}
+	}
+	// None of the tables use the enum member in their rows.
 	return nil
 }
 
