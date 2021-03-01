@@ -193,7 +193,7 @@ func (t *Tracer) Close() {
 
 func (t *Tracer) setShadowTracer(manager shadowTracerManager, tr opentracing.Tracer) {
 	var shadow *shadowTracer
-	if manager != nil {
+	if manager != nil && tr != nil {
 		shadow = &shadowTracer{
 			Tracer:  tr,
 			manager: manager,
