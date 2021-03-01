@@ -409,7 +409,7 @@ func (m *minimumBoundRadiusGen) Values() (tree.Datums, error) {
 		tree.NewDFloat(tree.DFloat(m.radius))}, nil
 }
 
-func (m *minimumBoundRadiusGen) Close() {}
+func (m *minimumBoundRadiusGen) Close(_ context.Context) {}
 
 func makeSubdividedGeometriesGeneratorFactory(expectMaxVerticesArg bool) tree.GeneratorFactory {
 	return func(
@@ -441,7 +441,7 @@ type subdividedGeometriesGen struct {
 
 func (s *subdividedGeometriesGen) ResolvedType() *types.T { return types.Geometry }
 
-func (s *subdividedGeometriesGen) Close() {}
+func (s *subdividedGeometriesGen) Close(_ context.Context) {}
 
 func (s *subdividedGeometriesGen) Start(_ context.Context, _ *kv.Txn) error {
 	s.curr = -1
