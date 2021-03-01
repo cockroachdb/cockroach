@@ -14,12 +14,17 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
+
+const sizeOfInt64 = int64(unsafe.Sizeof(int64(0)))
 
 // alterAddFKStatements represents the column name for alter_statements in
 // crdb_internal.create_statements.
@@ -39,26 +44,28 @@ const foreignKeyValidationWarning = "-- Validate foreign key constraints. These 
 // the table that uses the sequence).
 // The tables are sorted by table id first to guarantee stable ordering.
 func getTopologicallySortedTableIDs(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, dbName string, ts string,
+	ctx context.Context,
+	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
+	dbName string,
+	ts string,
+	acc *mon.BoundAccount,
 ) ([]int64, error) {
-	tids, err := getTableIDs(ctx, ie, txn, ts, dbName)
+	ids, err := getTableIDs(ctx, ie, txn, ts, dbName, acc)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(tids) == 0 {
+	if len(ids) == 0 {
 		return nil, nil
 	}
 
-	var ids []int64
-
+	sizeOfMap := int64(0)
 	// dependsOnIDs maps an id of a table to the ids it depends on.
 	// We perform the topological sort on dependsOnIDs instead of on the
 	// byID map to reduce memory usage.
 	dependsOnIDs := make(map[int64][]int64)
-	for _, tid := range tids {
-		ids = append(ids, tid)
-
+	for _, tid := range ids {
 		query := fmt.Sprintf(`
 		SELECT dependson_id
 		FROM %s.crdb_internal.backward_dependencies
@@ -86,6 +93,14 @@ func getTopologicallySortedTableIDs(
 		if err != nil {
 			return nil, err
 		}
+
+		// Account for memory of map.
+		sizeOfKeyValue := int64(unsafe.Sizeof(tid)) + int64(len(refs))*sizeOfInt64
+		sizeOfMap += sizeOfKeyValue
+		if err = acc.Grow(ctx, sizeOfKeyValue); err != nil {
+			return nil, err
+		}
+
 		dependsOnIDs[tid] = refs
 	}
 
@@ -99,24 +114,43 @@ func getTopologicallySortedTableIDs(
 	// for views and sequences creation, hence simple alphabetical sort won't
 	// be enough.
 	var topologicallyOrderedIDs []int64
+
+	// The sort relies on creating a new array for the ids.
+	acc.Grow(ctx, int64(len(ids))*sizeOfInt64)
 	seen := make(map[int64]bool)
 	for _, id := range ids {
-		topologicalSort(id, dependsOnIDs, seen, &topologicallyOrderedIDs)
+		topologicalSort(ctx, id, dependsOnIDs, seen, &topologicallyOrderedIDs, acc)
 	}
 
+	// The lengths should match. This is also important for memory accounting,
+	// the two arrays should have the same length.
+	if len(ids) != len(topologicallyOrderedIDs) {
+		errors.AssertionFailedf("show_create_all_tables_builtin failed. "+
+			"len(ids):% d not equal to len(topologicallySortedIDs): %d",
+			len(ids), len(topologicallyOrderedIDs))
+	}
+	acc.Shrink(ctx, int64(len(ids))*sizeOfInt64)
+	acc.Shrink(ctx, sizeOfMap)
 	return topologicallyOrderedIDs, nil
 }
 
 // getTableIDs returns the set of table ids from
 // crdb_internal.show_create_all_tables for a specified database.
 func getTableIDs(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, ts string, dbName string,
+	ctx context.Context,
+	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
+	ts string,
+	dbName string,
+	acc *mon.BoundAccount,
 ) ([]int64, error) {
 	query := fmt.Sprintf(`
 		SELECT descriptor_id
 		FROM %s.crdb_internal.create_statements
 		AS OF SYSTEM TIME %s
-		WHERE database_name = $1 AND schema_name NOT LIKE $2
+		WHERE database_name = $1 
+			AND is_virtual = FALSE
+			AND is_temporary = FALSE
 		`, dbName, ts)
 	it, err := ie.QueryIteratorEx(
 		ctx,
@@ -125,7 +159,6 @@ func getTableIDs(
 		sessiondata.NoSessionDataOverride,
 		query,
 		dbName,
-		sessiondata.PgTempSchemaName+"%",
 	)
 	if err != nil {
 		return nil, err
@@ -138,6 +171,9 @@ func getTableIDs(
 		tid := tree.MustBeDInt(it.Cur()[0])
 
 		tableIDs = append(tableIDs, int64(tid))
+		if err = acc.Grow(ctx, int64(unsafe.Sizeof(tid))); err != nil {
+			return nil, err
+		}
 	}
 	if err != nil {
 		return tableIDs, err
@@ -152,7 +188,12 @@ func getTableIDs(
 // for views and sequences creation, hence simple alphabetical sort won't
 // be enough.
 func topologicalSort(
-	tid int64, dependsOnIDs map[int64][]int64, seen map[int64]bool, collected *[]int64,
+	ctx context.Context,
+	tid int64,
+	dependsOnIDs map[int64][]int64,
+	seen map[int64]bool,
+	collected *[]int64,
+	acc *mon.BoundAccount,
 ) {
 	// has this table already been collected previously?
 	// We need this check because a table could be traversed to multiple times
@@ -165,9 +206,10 @@ func topologicalSort(
 
 	seen[tid] = true
 	for _, dep := range dependsOnIDs[tid] {
-		topologicalSort(dep, dependsOnIDs, seen, collected)
+		topologicalSort(ctx, dep, dependsOnIDs, seen, collected, acc)
 	}
 
+	acc.Grow(ctx, int64(unsafe.Sizeof(tid)))
 	*collected = append(*collected, tid)
 }
 
