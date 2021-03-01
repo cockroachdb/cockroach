@@ -258,14 +258,14 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 			return nil
 		}
 		schema, err := p.Descriptors().GetMutableDescriptorByID(
-			ctx, parentID, p.txn,
+			ctx, parentSchemaID, p.txn,
 		)
 		if err != nil {
 			return err
 		}
 		if _, isSchema := schema.(catalog.SchemaDescriptor); !isSchema {
 			return pgerror.Newf(pgcode.InvalidCatalogName,
-				"parentSchemaID %d is a %T, not a schema", parentID, schema)
+				"parentSchemaID %d is a %T, not a schema", parentSchemaID, schema)
 		}
 		return nil
 	}
