@@ -158,3 +158,130 @@ FROM (VALUES
 1
 2
 3
+
+# Builtins for forcing geometries into other dimensions
+query T
+SELECT st_astext(st_force2d(geom)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('POINT M EMPTY'::geometry),
+  ('GEOMETRYCOLLECTION Z EMPTY'::geometry)
+) AS t(geom)
+----
+POINT (1 2)
+POINT (1 2)
+POINT (1 2)
+POINT (1 2)
+POINT EMPTY
+GEOMETRYCOLLECTION EMPTY
+
+query T
+SELECT st_astext(st_force3d(geom)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('GEOMETRYCOLLECTION(POINT(1 2))'::geometry)
+) AS t(geom)
+----
+POINT Z (1 2 0)
+POINT Z (1 2 0)
+POINT Z (1 2 3)
+POINT Z (1 2 3)
+GEOMETRYCOLLECTION Z (POINT Z (1 2 0))
+
+query T
+SELECT st_astext(st_force3dz(geom, 7)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('GEOMETRYCOLLECTION(LINESTRING(1 2, 3 4))'::geometry)
+) AS t(geom)
+----
+POINT Z (1 2 7)
+POINT Z (1 2 7)
+POINT Z (1 2 3)
+POINT Z (1 2 3)
+GEOMETRYCOLLECTION Z (LINESTRING Z (1 2 7, 3 4 7))
+
+query T
+SELECT st_astext(st_force3dm(geom)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('GEOMETRYCOLLECTION(MULTIPOINT((1 2 3), (4 5 6)))'::geometry)
+) AS t(geom)
+----
+POINT M (1 2 0)
+POINT M (1 2 3)
+POINT M (1 2 0)
+POINT M (1 2 4)
+GEOMETRYCOLLECTION M (MULTIPOINT M (1 2 0, 4 5 0))
+
+query T
+SELECT st_astext(st_force3dm(geom, 7)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry)
+) AS t(geom)
+----
+POINT M (1 2 7)
+POINT M (1 2 3)
+POINT M (1 2 7)
+POINT M (1 2 4)
+
+query T
+SELECT st_astext(st_force4d(geom)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('POLYGON((1 2, 5 5, 0 8, 1 2))'::geometry)
+) AS t(geom)
+----
+POINT ZM (1 2 0 0)
+POINT ZM (1 2 0 3)
+POINT ZM (1 2 3 0)
+POINT ZM (1 2 3 4)
+POLYGON ZM ((1 2 0 0, 5 5 0 0, 0 8 0 0, 1 2 0 0))
+
+query T
+SELECT st_astext(st_force4d(geom, 7)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry)
+) AS t(geom)
+----
+POINT ZM (1 2 7 0)
+POINT ZM (1 2 7 3)
+POINT ZM (1 2 3 0)
+POINT ZM (1 2 3 4)
+
+query T
+SELECT st_astext(st_force4d(geom, 7, 17)) FROM
+( VALUES
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry),
+  ('GEOMETRYCOLLECTION(POINT EMPTY, LINESTRING(1 2, 3 4))'::geometry)
+) AS t(geom)
+----
+POINT ZM (1 2 7 17)
+POINT ZM (1 2 7 3)
+POINT ZM (1 2 3 17)
+POINT ZM (1 2 3 4)
+GEOMETRYCOLLECTION ZM (POINT ZM EMPTY, LINESTRING ZM (1 2 7 17, 3 4 7 17))

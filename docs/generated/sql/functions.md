@@ -1700,7 +1700,25 @@ Bottom Left.</p>
 </span></td></tr>
 <tr><td><a name="st_flipcoordinates"></a><code>st_flipcoordinates(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a new geometry with the X and Y axes flipped.</p>
 </span></td></tr>
-<tr><td><a name="st_force2d"></a><code>st_force2d(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry which only contains X and Y coordinates.</p>
+<tr><td><a name="st_force2d"></a><code>st_force2d(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XY layout with any Z or M dimensions discarded.</p>
+</span></td></tr>
+<tr><td><a name="st_force3d"></a><code>st_force3d(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XYZ layout. If a Z coordinate doesn’t exist, it will be set to 0. If a M coordinate is present, it will be discarded.</p>
+</span></td></tr>
+<tr><td><a name="st_force3d"></a><code>st_force3d(geometry: geometry, defaultZ: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XYZ layout. If a Z coordinate doesn’t exist, it will be set to the specified default Z value. If a M coordinate is present, it will be discarded.</p>
+</span></td></tr>
+<tr><td><a name="st_force3dm"></a><code>st_force3dm(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XYM layout. If a M coordinate doesn’t exist, it will be set to 0. If a Z coordinate is present, it will be discarded.</p>
+</span></td></tr>
+<tr><td><a name="st_force3dm"></a><code>st_force3dm(geometry: geometry, defaultM: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XYM layout. If a M coordinate doesn’t exist, it will be set to the specified default M value. If a Z coordinate is present, it will be discarded.</p>
+</span></td></tr>
+<tr><td><a name="st_force3dz"></a><code>st_force3dz(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XYZ layout. If a Z coordinate doesn’t exist, it will be set to 0. If a M coordinate is present, it will be discarded.</p>
+</span></td></tr>
+<tr><td><a name="st_force3dz"></a><code>st_force3dz(geometry: geometry, defaultZ: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XYZ layout. If a Z coordinate doesn’t exist, it will be set to the specified default Z value. If a M coordinate is present, it will be discarded.</p>
+</span></td></tr>
+<tr><td><a name="st_force4d"></a><code>st_force4d(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XYZM layout. If a Z coordinate doesn’t exist, it will be set to 0. If a M coordinate doesn’t exist, it will be set to 0.</p>
+</span></td></tr>
+<tr><td><a name="st_force4d"></a><code>st_force4d(geometry: geometry, defaultZ: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XYZ layout. If a Z coordinate doesn’t exist, it will be set to the specified default Z value. If a M coordinate doesn’t exist, it will be set to 0.</p>
+</span></td></tr>
+<tr><td><a name="st_force4d"></a><code>st_force4d(geometry: geometry, defaultZ: <a href="float.html">float</a>, defaultM: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a Geometry that is forced into XYZ layout. If a Z coordinate doesn’t exist, it will be set to the specified Z value. If a M coordinate doesn’t exist, it will be set to the specified M value.</p>
 </span></td></tr>
 <tr><td><a name="st_forcecollection"></a><code>st_forcecollection(geometry: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Converts the geometry into a GeometryCollection.</p>
 </span></td></tr>

@@ -2388,10 +2388,141 @@ The requested number of points must be not larger than 65336.`,
 			},
 			types.Geometry,
 			infoBuilder{
-				info: "Returns a Geometry which only contains X and Y coordinates.",
+				info: "Returns a Geometry that is forced into XY layout with any Z or M dimensions discarded.",
 			},
 			tree.VolatilityImmutable,
 		),
+	),
+	// TODO(ayang): see if it's possible to refactor default args
+	"st_force3dz": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ForceLayout(g.Geometry, geom.XYZ)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a Geometry that is forced into XYZ layout. " +
+					"If a Z coordinate doesn't exist, it will be set to 0. " +
+					"If a M coordinate is present, it will be discarded.",
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				defaultZ := tree.MustBeDFloat(args[1])
+
+				ret, err := geomfn.ForceLayoutWithDefaultZ(g.Geometry, geom.XYZ, float64(defaultZ))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{info: "Returns a Geometry that is forced into XYZ layout. " +
+				"If a Z coordinate doesn't exist, it will be set to the specified default Z value. " +
+				"If a M coordinate is present, it will be discarded."}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_force3dm": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ForceLayout(g.Geometry, geom.XYM)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a Geometry that is forced into XYM layout. " +
+					"If a M coordinate doesn't exist, it will be set to 0. " +
+					"If a Z coordinate is present, it will be discarded.",
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultM", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				defaultM := tree.MustBeDFloat(args[1])
+
+				ret, err := geomfn.ForceLayoutWithDefaultM(g.Geometry, geom.XYM, float64(defaultM))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{info: "Returns a Geometry that is forced into XYM layout. " +
+				"If a M coordinate doesn't exist, it will be set to the specified default M value. " +
+				"If a Z coordinate is present, it will be discarded."}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_force4d": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ForceLayout(g.Geometry, geom.XYZM)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns a Geometry that is forced into XYZM layout. " +
+					"If a Z coordinate doesn't exist, it will be set to 0. " +
+					"If a M coordinate doesn't exist, it will be set to 0.",
+			},
+			tree.VolatilityImmutable,
+		),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				defaultZ := tree.MustBeDFloat(args[1])
+
+				ret, err := geomfn.ForceLayoutWithDefaultZ(g.Geometry, geom.XYZM, float64(defaultZ))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{info: "Returns a Geometry that is forced into XYZ layout. " +
+				"If a Z coordinate doesn't exist, it will be set to the specified default Z value. " +
+				"If a M coordinate doesn't exist, it will be set to 0."}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"defaultZ", types.Float}, {"defaultM", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				defaultZ := tree.MustBeDFloat(args[1])
+				defaultM := tree.MustBeDFloat(args[2])
+
+				ret, err := geomfn.ForceLayoutWithDefaultZM(g.Geometry, geom.XYZM, float64(defaultZ), float64(defaultM))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{info: "Returns a Geometry that is forced into XYZ layout. " +
+				"If a Z coordinate doesn't exist, it will be set to the specified Z value. " +
+				"If a M coordinate doesn't exist, it will be set to the specified M value."}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_forcepolygoncw": makeBuiltin(
 		defProps(),
@@ -6439,6 +6570,7 @@ func initGeoBuiltins() {
 		{"st_geomfromtext", "st_geometryfromtext"},
 		{"st_numinteriorring", "st_numinteriorrings"},
 		{"st_symmetricdifference", "st_symdifference"},
+		{"st_force3d", "st_force3dz"},
 	} {
 		if _, ok := geoBuiltins[alias.builtinName]; !ok {
 			panic("expected builtin definition for alias: " + alias.builtinName)
