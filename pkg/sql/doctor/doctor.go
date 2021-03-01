@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -124,6 +123,7 @@ func ExamineDescriptors(
 	if err != nil {
 		return false, err
 	}
+
 	nMap := newNamespaceMap(namespaceTable)
 
 	var problemsFound bool
@@ -140,61 +140,9 @@ func ExamineDescriptors(
 			continue
 		}
 
-		_, parentExists := descGetter[desc.GetParentID()]
-		parentSchema, parentSchemaExists := descGetter[desc.GetParentSchemaID()]
-		var skipParentIDCheck bool
-		skipParentSchemaCheck := desc.Dropped()
-		switch d := desc.(type) {
-		case catalog.TableDescriptor:
-			if err := d.Validate(ctx, descGetter); err != nil {
-				problemsFound = true
-				fmt.Fprint(stdout, reportMsg(desc, "%s", err))
-			}
-			// Table has been already validated.
-			skipParentIDCheck = true
-		case catalog.TypeDescriptor:
-			typ := typedesc.NewImmutable(*d.TypeDesc())
-			if err := typ.Validate(ctx, descGetter); err != nil {
-				problemsFound = true
-				fmt.Fprint(stdout, reportMsg(desc, "%s", err))
-			}
-		case catalog.SchemaDescriptor:
-			// parent schema id is always 0.
-			skipParentSchemaCheck = true
-		}
-
-		// TODO(postamar): The following descriptor checks on parent id, parent
-		// schema id and parent schema parent id should instead be performed by the
-		// descriptor validation logic.
-		// For doctor to still be useful this will require rewriting it such that it
-		// return multiple errors instead of only the first it encounters.
-		invalidParentID := !parentExists &&
-			desc.GetParentID() != descpb.InvalidID
-
-		if !skipParentIDCheck && invalidParentID {
+		for _, err := range validateSafely(ctx, descGetter, desc) {
 			problemsFound = true
-			fmt.Fprint(stdout, reportMsg(desc, "invalid parent id %d", desc.GetParentID()))
-		}
-
-		invalidParentSchemaID := !parentSchemaExists &&
-			desc.GetParentSchemaID() != descpb.InvalidID &&
-			desc.GetParentSchemaID() != keys.PublicSchemaID
-
-		invalidParentSchemaParentID := !invalidParentID &&
-			desc.GetParentSchemaID() != descpb.InvalidID &&
-			desc.GetParentSchemaID() != keys.PublicSchemaID &&
-			parentSchemaExists &&
-			parentSchema.GetParentID() != desc.GetParentID()
-
-		if !skipParentSchemaCheck {
-			if invalidParentSchemaID {
-				problemsFound = true
-				fmt.Fprint(stdout, reportMsg(desc, "invalid parent schema id %d", desc.GetParentSchemaID()))
-			}
-			if invalidParentSchemaParentID {
-				problemsFound = true
-				fmt.Fprint(stdout, reportMsg(desc, "invalid parent id of parent schema, expected %d, found %d", desc.GetParentID(), parentSchema.GetParentID()))
-			}
+			fmt.Fprint(stdout, reportMsg(desc, "%s", err))
 		}
 
 		// Process namespace entries pointing to this descriptor.
@@ -289,6 +237,23 @@ func ExamineDescriptors(
 	return !problemsFound, err
 }
 
+func validateSafely(
+	ctx context.Context, descGetter catalog.MapDescGetter, desc catalog.Descriptor,
+) (errs []error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err, ok := r.(error)
+			if !ok {
+				err = errors.Newf("%v", r)
+			}
+			err = errors.WithAssertionFailure(errors.Wrap(err, "validation"))
+			errs = append(errs, err)
+		}
+	}()
+	errs = append(errs, catalog.Validate(ctx, descGetter, catalog.ValidationLevelSelfAndCrossReferences, desc).Errors()...)
+	return errs
+}
+
 // ExamineJobs runs a suite of consistency checks over the system.jobs table.
 func ExamineJobs(
 	ctx context.Context,
@@ -339,18 +304,13 @@ func ExamineJobs(
 }
 
 func reportMsg(desc catalog.Descriptor, format string, args ...interface{}) string {
-	var header string
-	switch desc.(type) {
-	case catalog.TypeDescriptor:
-		header = "    Type"
-	case catalog.TableDescriptor:
-		header = "   Table"
-	case catalog.SchemaDescriptor:
-		header = "  Schema"
-	case catalog.DatabaseDescriptor:
-		header = "Database"
+	msg := fmt.Sprintf(format, args...)
+	// Add descriptor-identifying prefix if it isn't there already.
+	// The prefix has the same format as the validation error wrapper.
+	msgPrefix := fmt.Sprintf("%s %q (%d): ", desc.TypeName(), desc.GetName(), desc.GetID())
+	if msg[:len(msgPrefix)] == msgPrefix {
+		msgPrefix = ""
 	}
-	return fmt.Sprintf("%s %3d: ParentID %3d, ParentSchemaID %2d, Name '%s': ",
-		header, desc.GetID(), desc.GetParentID(), desc.GetParentSchemaID(), desc.GetName()) +
-		fmt.Sprintf(format, args...) + "\n"
+	return fmt.Sprintf("  ParentID %3d, ParentSchemaID %2d: %s%s\n",
+		desc.GetParentID(), desc.GetParentSchemaID(), msgPrefix, msg)
 }

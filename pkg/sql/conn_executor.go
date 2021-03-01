@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1322,13 +1321,6 @@ func (ex *connExecutor) Ctx() context.Context {
 	// stateInternalError is used by the InternalExecutor.
 	if _, ok := ex.machine.CurState().(stateInternalError); ok {
 		ctx = ex.ctxHolder.ctx()
-	}
-	return ex.DescriptorValidationContext(ctx)
-}
-
-func (ex *connExecutor) DescriptorValidationContext(ctx context.Context) context.Context {
-	if ex.server.cfg.TestingKnobs.TestingDescriptorValidation {
-		return context.WithValue(ctx, tabledesc.PerformTestingDescriptorValidation, true)
 	}
 	return ctx
 }

@@ -60,8 +60,28 @@ var validTableDesc = &descpb.Descriptor{
 	},
 }
 
-func toBytes(t *testing.T, pb protoutil.Message) []byte {
-	res, err := protoutil.Marshal(pb)
+func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
+	if desc.GetDatabase() != nil {
+		if desc.GetDatabase().Privileges == nil {
+			descpb.MaybeFixPrivileges(desc.GetDatabase().GetID(), &desc.GetDatabase().Privileges)
+		}
+	} else if desc.GetSchema() != nil {
+		if desc.GetSchema().Privileges == nil {
+			descpb.MaybeFixPrivileges(desc.GetSchema().GetID(), &desc.GetSchema().Privileges)
+		}
+	} else if tbl := descpb.TableFromDescriptor(desc, hlc.Timestamp{}); tbl != nil {
+		if tbl.Privileges == nil {
+			descpb.MaybeFixPrivileges(tbl.GetID(), &tbl.Privileges)
+		}
+		if tbl.FormatVersion == 0 {
+			tbl.FormatVersion = descpb.InterleavedFormatVersion
+		}
+	} else if typ := descpb.TypeFromDescriptor(desc, hlc.Timestamp{}); typ != nil {
+		if typ.Privileges == nil {
+			descpb.MaybeFixPrivileges(typ.GetID(), &typ.Privileges)
+		}
+	}
+	res, err := protoutil.Marshal(desc)
 	require.NoError(t, err)
 	return res
 }
@@ -104,7 +124,7 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			expected: `Examining 1 descriptors and 0 namespace entries...
-   Table   2: ParentID   0, ParentSchemaID 29, Name '': different id in descriptor table: 1
+  ParentID   0, ParentSchemaID 29: relation "" (2): different id in descriptor table: 1
 `,
 		},
 		{
@@ -117,7 +137,8 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			expected: `Examining 1 descriptors and 0 namespace entries...
-   Table   1: ParentID   0, ParentSchemaID 29, Name 'foo': invalid parent ID 0
+  ParentID   0, ParentSchemaID 29: relation "foo" (1): invalid parent ID 0
+  ParentID   0, ParentSchemaID 29: relation "foo" (1): table must contain at least 1 column
 `,
 		},
 		{
@@ -133,7 +154,8 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "foo"}, ID: 1},
 			},
 			expected: `Examining 1 descriptors and 1 namespace entries...
-   Table   1: ParentID   0, ParentSchemaID 29, Name 'foo': invalid parent ID 0
+  ParentID   0, ParentSchemaID 29: relation "foo" (1): invalid parent ID 0
+  ParentID   0, ParentSchemaID 29: relation "foo" (1): table must contain at least 1 column
 `,
 		},
 		{
@@ -146,7 +168,7 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			expected: `Examining 1 descriptors and 0 namespace entries...
-Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but no namespace entry found
+  ParentID   0, ParentSchemaID  0: database "db" (1): not being dropped but no namespace entry found
 `,
 		},
 		{
@@ -164,8 +186,8 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-   Table   1: ParentID   2, ParentSchemaID 29, Name 't': namespace entry {ParentID:0 ParentSchemaID:29 Name:t} not found in draining names
-   Table   1: ParentID   2, ParentSchemaID 29, Name 't': could not find name in namespace table
+  ParentID   2, ParentSchemaID 29: relation "t" (1): namespace entry {ParentID:0 ParentSchemaID:29 Name:t} not found in draining names
+  ParentID   2, ParentSchemaID 29: relation "t" (1): could not find name in namespace table
 `,
 		},
 		{
@@ -181,7 +203,7 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 				{NameInfo: descpb.NameInfo{ParentID: 2, Name: "schema"}, ID: 1},
 			},
 			expected: `Examining 1 descriptors and 1 namespace entries...
-  Schema   1: ParentID   2, ParentSchemaID  0, Name 'schema': invalid parent id 2
+  ParentID   2, ParentSchemaID  0: schema "schema" (1): referenced database ID 2: descriptor not found
 `,
 		},
 		{
@@ -197,7 +219,8 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 				{NameInfo: descpb.NameInfo{Name: "type"}, ID: 1},
 			},
 			expected: `Examining 1 descriptors and 1 namespace entries...
-    Type   1: ParentID   0, ParentSchemaID  0, Name 'type': invalid parentID 0
+  ParentID   0, ParentSchemaID  0: type "type" (1): invalid parentID 0
+  ParentID   0, ParentSchemaID  0: type "type" (1): invalid parent schema ID 0
 `,
 		},
 		{
@@ -205,16 +228,63 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 				{
 					ID: 1,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Type{
-						Type: &descpb.TypeDescriptor{Name: "type", ID: 1, ParentSchemaID: 2},
+						Type: &descpb.TypeDescriptor{Name: "type", ID: 1, ParentID: 3, ParentSchemaID: 2},
+					}}),
+				},
+				{
+					ID: 3,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 3},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
-				{NameInfo: descpb.NameInfo{ParentSchemaID: 2, Name: "type"}, ID: 1},
+				{NameInfo: descpb.NameInfo{ParentID: 3, ParentSchemaID: 2, Name: "type"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 3},
 			},
-			expected: `Examining 1 descriptors and 1 namespace entries...
-    Type   1: ParentID   0, ParentSchemaID  2, Name 'type': invalid parentID 0
-    Type   1: ParentID   0, ParentSchemaID  2, Name 'type': invalid parent schema id 2
+			expected: `Examining 2 descriptors and 2 namespace entries...
+  ParentID   3, ParentSchemaID  2: type "type" (1): referenced schema ID 2: descriptor not found
+  ParentID   3, ParentSchemaID  2: type "type" (1): arrayTypeID 0 does not exist for "ENUM": referenced type ID 0: descriptor not found
+`,
+		},
+		{
+			descTable: doctor.DescriptorTable{
+				{
+					ID: 51,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 51},
+					}}),
+				},
+				{
+					ID: 52,
+					DescBytes: func() []byte {
+						// Skip `toBytes` to produce a descriptor with unset privileges field.
+						// The purpose of this is to produce a nil dereference during validation
+						// in order to test that doctor recovers from this.
+						//
+						// Note that it might be the case that validation aught to check that
+						// this field is not nil in the first place, in which case this test case
+						// will need to craft a corrupt descriptor serialization in a more
+						// creative way. Ideally validation code should never cause runtime errors
+						// but there's no way to guarantee that short of formally verifying it. We
+						// therefore have to consider the possibility of runtime errors (sadly) and
+						// doctor should absolutely make every possible effort to continue executing
+						// in the face of these, considering its main use case!
+						desc := &descpb.Descriptor{Union: &descpb.Descriptor_Type{
+							Type: &descpb.TypeDescriptor{Name: "type", ID: 52, ParentID: 51, ParentSchemaID: keys.PublicSchemaID},
+						}}
+						res, err := protoutil.Marshal(desc)
+						require.NoError(t, err)
+						return res
+					}(),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 51},
+				{NameInfo: descpb.NameInfo{ParentID: 51, ParentSchemaID: keys.PublicSchemaID, Name: "type"}, ID: 52},
+			},
+			expected: `Examining 2 descriptors and 2 namespace entries...
+  ParentID  51, ParentSchemaID 29: type "type" (52): validation: runtime error: invalid memory address or nil pointer dereference
 `,
 		},
 		{
@@ -229,17 +299,25 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': not being dropped but 
 				{
 					ID: 3,
 					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Schema{
-						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 3, ParentID: 0},
+						Schema: &descpb.SchemaDescriptor{Name: "schema", ID: 3, ParentID: 4},
+					}}),
+				},
+				{
+					ID: 4,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db2", ID: 4},
 					}}),
 				},
 			},
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 3, Name: "t"}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
-				{NameInfo: descpb.NameInfo{ParentID: 0, Name: "schema"}, ID: 3},
+				{NameInfo: descpb.NameInfo{ParentID: 4, Name: "schema"}, ID: 3},
+				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 4},
 			},
-			expected: `Examining 3 descriptors and 3 namespace entries...
-   Table   1: ParentID   2, ParentSchemaID  3, Name 't': invalid parent id of parent schema, expected 2, found 0
+			expected: `Examining 4 descriptors and 4 namespace entries...
+  ParentID   2, ParentSchemaID  3: relation "t" (1): parent schema 3 is in different database 4
+  ParentID   4, ParentSchemaID  0: schema "schema" (3): not present in parent database [4] schemas mapping
 `,
 		},
 		{
@@ -319,7 +397,7 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 1},
 			},
 			expected: `Examining 1 descriptors and 3 namespace entries...
-Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names found [{ParentID:0 ParentSchemaID:0 Name:db3}]
+  ParentID   0, ParentSchemaID  0: database "db" (1): extra draining names found [{ParentID:0 ParentSchemaID:0 Name:db3}]
 `,
 		},
 		{
@@ -337,7 +415,7 @@ Database   1: ParentID   0, ParentSchemaID  0, Name 'db': extra draining names f
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-   Table   1: ParentID   2, ParentSchemaID 29, Name 't': dropped but namespace entry(s) found: [{2 29 t}]
+  ParentID   2, ParentSchemaID 29: relation "t" (1): dropped but namespace entry(s) found: [{2 29 t}]
 `,
 		},
 	}

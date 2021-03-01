@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -788,4 +789,11 @@ func (p *planner) CompactEngineSpan(
 	}
 	_, err = client.CompactEngineSpan(ctx, req)
 	return err
+}
+
+// validateDescriptor is a convenience function for validating
+// descriptors in the context of a planner.
+func validateDescriptor(ctx context.Context, p *planner, descriptor catalog.Descriptor) error {
+	bdg := catalogkv.NewOneLevelUncachedDescGetter(p.Txn(), p.ExecCfg().Codec)
+	return catalog.ValidateSelfAndCrossReferences(ctx, bdg, descriptor)
 }

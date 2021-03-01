@@ -911,7 +911,7 @@ SHOW ENUMS FROM drop_region_db
 schema  name                  values                         owner
 public  crdb_internal_region  {ap-southeast-2,ca-central-1}  root
 
-statement error pq: region "us-east-1" has not been added to database "drop_region_db"
+statement error pq: relation "t" \([0-9]+\): invalid locality config: region "us-east-1" has not been added to database "drop_region_db"
 CREATE TABLE drop_region_db.public.t(a int) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 statement ok

@@ -28,6 +28,8 @@ go_test(
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/schemadesc",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/util/leaktest",

@@ -650,7 +650,7 @@ BEGIN
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
-statement error pq: unimplemented: cannot perform other schema changes in the same transaction as a primary key change
+statement error pq: relation "t" \([0-9]+\): unimplemented: cannot perform other schema changes in the same transaction as a primary key change
 CREATE INDEX ON t (y)
 
 statement ok
@@ -666,7 +666,7 @@ BEGIN
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 
-statement error pq: unimplemented: cannot perform other schema changes in the same transaction as a primary key change
+statement error pq: relation "t" \([0-9]+\): unimplemented: cannot perform other schema changes in the same transaction as a primary key change
 ALTER TABLE t ADD COLUMN z INT
 
 statement ok
@@ -799,7 +799,7 @@ statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, FAMILY (x), FAMILY (y))
 
-statement error pq: unimplemented: primary key of table t dropped without subsequent addition of new primary key
+statement error pq: relation "t" \([0-9]+\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 ALTER TABLE t DROP CONSTRAINT "primary"
 
 statement error pq: multiple primary keys for table "t" are not allowed
@@ -960,7 +960,7 @@ ALTER TABLE t1 DROP CONSTRAINT "primary"
 statement ok
 INSERT INTO t2 VALUES (1)
 
-statement error pq: unimplemented: primary key of table t1 dropped without subsequent addition of new primary key
+statement error pq: relation "t1" \([0-9]+\): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
 COMMIT
 
 query I
