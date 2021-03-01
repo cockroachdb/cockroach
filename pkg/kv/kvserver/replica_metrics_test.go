@@ -27,17 +27,26 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 	// Regression test for a bug, see:
 	// https://github.com/cockroachdb/cockroach/pull/39936#pullrequestreview-359059629
 
-	desc := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax,
+	threeVotersAndSingleNonVoter := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax,
 		roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
 			{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: roachpb.ReplicaTypeVoterFull()},
 			{NodeID: 100, StoreID: 110, ReplicaID: 120, Type: roachpb.ReplicaTypeVoterFull()},
 			{NodeID: 1000, StoreID: 1100, ReplicaID: 1200, Type: roachpb.ReplicaTypeVoterFull()},
+			{NodeID: 2000, StoreID: 2100, ReplicaID: 2200, Type: roachpb.ReplicaTypeNonVoter()},
+		}))
+
+	oneVoterAndThreeNonVoters := roachpb.NewRangeDescriptor(123, roachpb.RKeyMin, roachpb.RKeyMax,
+		roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
+			{NodeID: 10, StoreID: 11, ReplicaID: 12, Type: roachpb.ReplicaTypeVoterFull()},
+			{NodeID: 100, StoreID: 110, ReplicaID: 120, Type: roachpb.ReplicaTypeNonVoter()},
+			{NodeID: 1000, StoreID: 1100, ReplicaID: 1200, Type: roachpb.ReplicaTypeNonVoter()},
+			{NodeID: 2000, StoreID: 2100, ReplicaID: 2200, Type: roachpb.ReplicaTypeNonVoter()},
 		}))
 
 	{
-		ctr, down, under, over := calcRangeCounter(1100 /* storeID */, desc, liveness.IsLiveMap{
+		ctr, down, under, over := calcRangeCounter(1100, threeVotersAndSingleNonVoter, liveness.IsLiveMap{
 			1000: liveness.IsLiveMapEntry{IsLive: true}, // by NodeID
-		}, 3, 3)
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
 
 		require.True(t, ctr)
 		require.True(t, down)
@@ -46,9 +55,9 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 	}
 
 	{
-		ctr, down, under, over := calcRangeCounter(1000, desc, liveness.IsLiveMap{
+		ctr, down, under, over := calcRangeCounter(1000, threeVotersAndSingleNonVoter, liveness.IsLiveMap{
 			1000: liveness.IsLiveMapEntry{IsLive: false},
-		}, 3, 3)
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
 
 		// Does not confuse a non-live entry for a live one. In other words,
 		// does not think that the liveness map has only entries for live nodes.
@@ -56,5 +65,64 @@ func TestCalcRangeCounterIsLiveMap(t *testing.T) {
 		require.False(t, down)
 		require.False(t, under)
 		require.False(t, over)
+	}
+
+	{
+		ctr, down, under, over := calcRangeCounter(11, threeVotersAndSingleNonVoter, liveness.IsLiveMap{
+			10:   liveness.IsLiveMapEntry{IsLive: true},
+			100:  liveness.IsLiveMapEntry{IsLive: true},
+			1000: liveness.IsLiveMapEntry{IsLive: true},
+			2000: liveness.IsLiveMapEntry{IsLive: true},
+		}, 3 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
+
+		require.True(t, ctr)
+		require.False(t, down)
+		require.False(t, under)
+		require.False(t, over)
+	}
+
+	{
+		// Single non-voter dead
+		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, liveness.IsLiveMap{
+			10:   liveness.IsLiveMapEntry{IsLive: true},
+			100:  liveness.IsLiveMapEntry{IsLive: true},
+			1000: liveness.IsLiveMapEntry{IsLive: false},
+			2000: liveness.IsLiveMapEntry{IsLive: true},
+		}, 1 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
+
+		require.True(t, ctr)
+		require.False(t, down)
+		require.True(t, under)
+		require.False(t, over)
+	}
+
+	{
+		// All non-voters are dead, but range is not unavailable
+		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, liveness.IsLiveMap{
+			10:   liveness.IsLiveMapEntry{IsLive: true},
+			100:  liveness.IsLiveMapEntry{IsLive: false},
+			1000: liveness.IsLiveMapEntry{IsLive: false},
+			2000: liveness.IsLiveMapEntry{IsLive: false},
+		}, 1 /* numVoters */, 4 /* numReplicas */, 4 /* clusterNodes */)
+
+		require.True(t, ctr)
+		require.False(t, down)
+		require.True(t, under)
+		require.False(t, over)
+	}
+
+	{
+		// More non-voters than needed
+		ctr, down, under, over := calcRangeCounter(11, oneVoterAndThreeNonVoters, liveness.IsLiveMap{
+			10:   liveness.IsLiveMapEntry{IsLive: true},
+			100:  liveness.IsLiveMapEntry{IsLive: true},
+			1000: liveness.IsLiveMapEntry{IsLive: true},
+			2000: liveness.IsLiveMapEntry{IsLive: true},
+		}, 1 /* numVoters */, 3 /* numReplicas */, 4 /* clusterNodes */)
+
+		require.True(t, ctr)
+		require.False(t, down)
+		require.False(t, under)
+		require.True(t, over)
 	}
 }
