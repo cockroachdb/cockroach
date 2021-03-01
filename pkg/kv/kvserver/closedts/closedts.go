@@ -46,6 +46,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+// IssueTrackingRemovalOfOldClosedTimestampsCode is the Github issue tracking
+// the deletion of the "old" closed timestamps code (i.e. everything around
+// here) in 21.2, now that 21.1 has a new Raft-based closed-timestamps
+// mechanism. The old mechanism is disabled when the cluster version is
+// sufficiently high, and all the tests failing because of it are skipped with
+// this issue.
+const IssueTrackingRemovalOfOldClosedTimestampsCode = 61299
+
 // ReleaseFunc is a closure returned from Track which is used to record the
 // LeaseAppliedIndex (LAI) given to a tracked proposal. The supplied epoch must
 // match that of the lease under which the proposal was proposed.
