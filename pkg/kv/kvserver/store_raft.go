@@ -617,6 +617,26 @@ func (s *Store) processRaft(ctx context.Context) {
 	s.stopper.AddCloser(stop.CloserFn(func() {
 		s.cfg.Transport.Stop(s.StoreID())
 	}))
+
+	// We'll want to cancel all in-flight proposals. Proposals embed tracing
+	// spans in them, and we don't want to be leaking any.
+	s.stopper.AddCloser(stop.CloserFn(func() {
+		s.VisitReplicas(func(r *Replica) (more bool) {
+			r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
+			r.mu.Lock()
+			for k, prop := range r.mu.proposals {
+				delete(r.mu.proposals, k)
+				prop.finishApplication(
+					context.Background(),
+					proposalResult{
+						Err: roachpb.NewError(roachpb.NewAmbiguousResultError("store is stopping")),
+					},
+				)
+			}
+			r.mu.Unlock()
+			return true
+		})
+	}))
 }
 
 func (s *Store) raftTickLoop(ctx context.Context) {
