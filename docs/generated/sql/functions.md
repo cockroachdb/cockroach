@@ -2365,7 +2365,7 @@ SQL statement omitting multi-region related zone configuration fields.
 If the CONFIGURE ZONE statement can be inferred by the database’s or
 table’s zone configuration this will return NULL.</p>
 </span></td></tr>
-<tr><td><a name="crdb_internal.show_create_all_tables"></a><code>crdb_internal.show_create_all_tables(dbName: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a rows CREATE table statements followed by
+<tr><td><a name="crdb_internal.show_create_all_tables"></a><code>crdb_internal.show_create_all_tables(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE table statements followed by
 ALTER table statements that add table constraints. The rows are ordered
 by dependencies. All foreign keys are added after the creation of the table
 in the alter statements.
