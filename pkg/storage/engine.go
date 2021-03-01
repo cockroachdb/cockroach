@@ -234,6 +234,26 @@ type EngineIterator interface {
 	// GetRawIter is a low-level method only for use in the storage package,
 	// that returns the underlying pebble Iterator.
 	GetRawIter() *pebble.Iterator
+	// SeekEngineKeyGEWithLimit is similar to SeekEngineKeyGE, but takes an
+	// additional exclusive upper limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	SeekEngineKeyGEWithLimit(key EngineKey, limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// SeekEngineKeyLTWithLimit is similar to SeekEngineKeyLT, but takes an
+	// additional inclusive lower limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	SeekEngineKeyLTWithLimit(key EngineKey, limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// NextEngineKeyWithLimit is similar to NextEngineKey, but takes an
+	// additional exclusive upper limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	NextEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
+	// PrevEngineKeyWithLimit is similar to PrevEngineKey, but takes an
+	// additional inclusive lower limit parameter. The limit is semantically
+	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
+	// some pathological situations (uncompacted deleted locks).
+	PrevEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.

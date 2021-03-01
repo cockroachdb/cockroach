@@ -813,6 +813,8 @@ func intentInterleavingIterBench(b *testing.B, runFunc func(b *testing.B, state 
 }
 
 func BenchmarkIntentInterleavingIterNext(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
 		b.Run(state.benchPrefix,
 			func(b *testing.B) {
@@ -848,6 +850,8 @@ func BenchmarkIntentInterleavingIterNext(b *testing.B) {
 }
 
 func BenchmarkIntentInterleavingIterPrev(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
 		b.Run(state.benchPrefix,
 			func(b *testing.B) {
@@ -883,6 +887,8 @@ func BenchmarkIntentInterleavingIterPrev(b *testing.B) {
 }
 
 func BenchmarkIntentInterleavingSeekGEAndIter(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	intentInterleavingIterBench(b, func(b *testing.B, state benchState) {
 		for _, seekStride := range []int{1, 10} {
 			b.Run(fmt.Sprintf("%s/seekStride=%d", state.benchPrefix, seekStride),

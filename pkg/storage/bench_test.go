@@ -46,6 +46,7 @@ import (
 
 func BenchmarkMVCCGarbageCollect(b *testing.B) {
 	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
 
 	// NB: To debug #16068, test only 128-128-15000-6.
 	keySizes := []int{128}
@@ -103,6 +104,8 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 }
 
 func BenchmarkExportToSst(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
 	numKeys := []int{64, 512, 1024, 8192, 65536}
 	numRevisions := []int{1, 10, 100}
 	exportAllRevisions := []bool{false, true}
@@ -202,6 +205,8 @@ func setupKeysWithIntent(
 // reading the intent and latest version for a range of keys.
 func BenchmarkIntentScan(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
+	defer log.Scope(b).Close(b)
+
 	for _, sep := range []bool{false, true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
 			for _, numVersions := range []int{10, 100, 200, 400} {
@@ -217,7 +222,6 @@ func BenchmarkIntentScan(b *testing.B) {
 								LowerBound: lower,
 								UpperBound: makeKey(nil, numIntentKeys),
 							})
-							iter.SeekGE(MVCCKey{Key: lower})
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
 								valid, err := iter.Valid()
@@ -265,6 +269,8 @@ func BenchmarkIntentScan(b *testing.B) {
 // have been resolved.
 func BenchmarkScanAllIntentsResolved(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
+	defer log.Scope(b).Close(b)
+
 	for _, sep := range []bool{false, true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
 			for _, numVersions := range []int{200} {
@@ -276,19 +282,37 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 							numFlushedVersions := (percentFlushed * numVersions) / 100
 							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true /* resolveAll */)
 							lower := makeKey(nil, 0)
-							iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-								LowerBound: lower,
-								UpperBound: makeKey(nil, numIntentKeys),
-							})
-							iter.SeekGE(MVCCKey{Key: lower})
+							var iter MVCCIterator
 							var buf []byte
 							b.ResetTimer()
 							for i := 0; i < b.N; i++ {
-								valid, err := iter.Valid()
+								var valid bool
+								var err error
+								if iter != nil {
+									valid, err = iter.Valid()
+								}
 								if err != nil {
 									b.Fatal(err)
 								}
 								if !valid {
+									// Create a new MVCCIterator. Simply seeking to the earlier
+									// key is not representative of a real workload where
+									// iterator reuse always seeks to a later key (because of
+									// the sorting in a BatchRequest). Seeking to an earlier key
+									// allows for an optimization in lock table iteration when
+									// not using the *WithLimit() operations on the underlying
+									// pebble.Iterator, where the SeekGE can be turned into a
+									// noop since the original SeekGE is what was remembered
+									// (and this seek is to the same position as the original
+									// seek). This optimization won't fire in this manner in
+									// practice, so we don't want it to happen in this Benchmark
+									// either.
+									b.StopTimer()
+									iter = eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+										LowerBound: lower,
+										UpperBound: makeKey(nil, numIntentKeys),
+									})
+									b.StartTimer()
 									iter.SeekGE(MVCCKey{Key: lower})
 								} else {
 									// Read latest version.
@@ -310,10 +334,66 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 	}
 }
 
+// BenchmarkScanOneAllIntentsResolved compares separated and interleaved
+// intents, when reading the latest version for a range of keys, when all the
+// intents have been resolved. Unlike the previous benchmark, each scan reads
+// one key.
+func BenchmarkScanOneAllIntentsResolved(b *testing.B) {
+	skip.UnderShort(b, "setting up unflushed data takes too long")
+	defer log.Scope(b).Close(b)
+
+	for _, sep := range []bool{false, true} {
+		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
+			for _, numVersions := range []int{200} {
+				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
+					for _, percentFlushed := range []int{0, 50, 90, 100} {
+						b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
+							eng := setupMVCCInMemPebbleWithSettings(
+								b, makeSettingsForSeparatedIntents(false, sep))
+							numFlushedVersions := (percentFlushed * numVersions) / 100
+							setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true /* resolveAll */)
+							lower := makeKey(nil, 0)
+							upper := makeKey(nil, numIntentKeys)
+							buf := append([]byte(nil), lower...)
+							b.ResetTimer()
+							for i := 0; i < b.N; i++ {
+								iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+									LowerBound: buf,
+									UpperBound: upper,
+								})
+								iter.SeekGE(MVCCKey{Key: buf})
+								valid, err := iter.Valid()
+								if err != nil {
+									b.Fatal(err)
+								}
+								if !valid {
+									buf = append(buf[:0], lower...)
+								} else {
+									// Read latest version.
+									k := iter.UnsafeKey()
+									if !k.IsValue() {
+										b.Fatalf("expected value %s", k.String())
+									}
+									// Skip to next key.
+									buf = append(buf[:0], k.Key...)
+									buf = roachpb.BytesNext(buf)
+									iter.Close()
+								}
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
 // BenchmarkIntentResolution compares separated and interleaved intents, when
 // doing intent resolution for individual intents.
 func BenchmarkIntentResolution(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
+	defer log.Scope(b).Close(b)
+
 	for _, sep := range []bool{false, true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
 			for _, numVersions := range []int{10, 100, 200, 400} {
@@ -356,6 +436,8 @@ func BenchmarkIntentResolution(b *testing.B) {
 // when doing ranged intent resolution.
 func BenchmarkIntentRangeResolution(b *testing.B) {
 	skip.UnderShort(b, "setting up unflushed data takes too long")
+	defer log.Scope(b).Close(b)
+
 	for _, sep := range []bool{false, true} {
 		b.Run(fmt.Sprintf("separated=%t", sep), func(b *testing.B) {
 			for _, numVersions := range []int{10, 100, 200, 400} {

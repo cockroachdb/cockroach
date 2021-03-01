@@ -289,6 +289,48 @@ func (i *EngineIterator) PrevEngineKey() (valid bool, err error) {
 	return i.checkKeyAllowed()
 }
 
+// SeekEngineKeyGEWithLimit is part of the storage.EngineIterator interface.
+func (i *EngineIterator) SeekEngineKeyGEWithLimit(
+	key storage.EngineKey, limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	state, err = i.i.SeekEngineKeyGEWithLimit(key, limit)
+	if state != pebble.IterValid {
+		return state, err
+	}
+	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
+		return pebble.IterExhausted, err
+	}
+	return state, err
+}
+
+// SeekEngineKeyLTWithLimit is part of the storage.EngineIterator interface.
+func (i *EngineIterator) SeekEngineKeyLTWithLimit(
+	key storage.EngineKey, limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	state, err = i.i.SeekEngineKeyLTWithLimit(key, limit)
+	if state != pebble.IterValid {
+		return state, err
+	}
+	if err = i.spans.CheckAllowed(SpanReadOnly, roachpb.Span{EndKey: key.Key}); err != nil {
+		return pebble.IterExhausted, err
+	}
+	return state, err
+}
+
+// NextEngineKeyWithLimit is part of the storage.EngineIterator interface.
+func (i *EngineIterator) NextEngineKeyWithLimit(
+	limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	return i.i.NextEngineKeyWithLimit(limit)
+}
+
+// PrevEngineKeyWithLimit is part of the storage.EngineIterator interface.
+func (i *EngineIterator) PrevEngineKeyWithLimit(
+	limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	return i.i.PrevEngineKeyWithLimit(limit)
+}
+
 func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	key, err := i.i.UnsafeEngineKey()
 	if err != nil {
