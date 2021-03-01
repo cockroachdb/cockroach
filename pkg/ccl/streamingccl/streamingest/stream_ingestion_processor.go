@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -166,6 +167,9 @@ func newStreamIngestionDataProcessor(
 		maxFlushRateTimer:   timeutil.NewTimer(),
 		cutoverCh:           make(chan struct{}),
 		closePoller:         make(chan struct{}),
+		// lastFlushTime is set to be far in the future so we always flush when we
+		// see the first checkpoint event.
+		lastFlushTime: timeutil.Unix(math.MaxInt64, 0),
 	}
 
 	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
