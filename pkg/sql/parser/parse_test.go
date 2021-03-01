@@ -1729,6 +1729,8 @@ func TestParse(t *testing.T) {
 
 		{`RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar'`},
 		{`RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1`},
+		{`RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar' AS OF SYSTEM TIME '1'`},
+		{`RESTORE TENANT 123 FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME '1'`},
 
 		// Currently, we only support TENANT as a target. We have grammar rules for
 		// all targets supported by RESTORE but these will error out during the

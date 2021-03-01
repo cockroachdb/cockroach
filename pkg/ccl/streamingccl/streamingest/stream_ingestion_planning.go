@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -92,11 +93,19 @@ func ingestionPlanHook(
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
 
 		prefix := keys.MakeTenantPrefix(ingestionStmt.Targets.Tenant)
+		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+		if ingestionStmt.AsOf.Expr != nil {
+			var err error
+			startTime, err = p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
+			if err != nil {
+				return err
+			}
+		}
+
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
 			StreamAddress: streamingccl.StreamAddress(from[0]),
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
-			// TODO: Figure out what the initial ts should be.
-			StartTime: hlc.Timestamp{},
+			StartTime:     startTime,
 		}
 
 		jobDescription, err := streamIngestionJobDescription(p, ingestionStmt)

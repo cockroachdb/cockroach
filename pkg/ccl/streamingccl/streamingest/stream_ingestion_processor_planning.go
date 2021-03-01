@@ -45,6 +45,7 @@ func distStreamIngestionPlanSpecs(
 		if i < len(nodes) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
 				JobID:              int64(jobID),
+				StartTime:          initialHighWater,
 				StreamAddress:      streamAddress,
 				PartitionAddresses: make([]streamingccl.PartitionAddress, 0),
 			}

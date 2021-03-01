@@ -68,12 +68,8 @@ func newCountAggregator(
 }
 
 func (ag *countAggregator) Start(ctx context.Context) {
-	ag.input.Start(ctx)
 	ctx = ag.StartInternal(ctx, countRowsProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
+	ag.input.Start(ctx)
 }
 
 func (ag *countAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {

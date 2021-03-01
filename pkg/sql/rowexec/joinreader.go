@@ -700,12 +700,8 @@ func (jr *joinReader) emitRow() (
 
 // Start is part of the RowSource interface.
 func (jr *joinReader) Start(ctx context.Context) {
-	jr.input.Start(ctx)
 	ctx = jr.StartInternal(ctx, joinReaderProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
+	jr.input.Start(ctx)
 	jr.runningState = jrReadingInput
 }
 

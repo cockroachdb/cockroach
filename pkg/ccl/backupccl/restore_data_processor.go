@@ -80,12 +80,8 @@ func newRestoreDataProcessor(
 
 // Start is part of the RowSource interface.
 func (rd *restoreDataProcessor) Start(ctx context.Context) {
-	rd.input.Start(ctx)
 	ctx = rd.StartInternal(ctx, restoreDataProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
+	rd.input.Start(ctx)
 }
 
 // Next is part of the RowSource interface.

@@ -140,12 +140,8 @@ func (mtr *MetadataTestReceiver) checkRowNumMetadata() *execinfrapb.ProducerMeta
 
 // Start is part of the RowSource interface.
 func (mtr *MetadataTestReceiver) Start(ctx context.Context) {
-	mtr.input.Start(ctx)
 	ctx = mtr.StartInternal(ctx, metadataTestReceiverProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
+	mtr.input.Start(ctx)
 }
 
 // Next is part of the RowSource interface.
