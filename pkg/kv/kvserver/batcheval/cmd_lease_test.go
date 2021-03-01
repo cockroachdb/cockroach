@@ -190,6 +190,10 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			manual := hlc.NewManualClock(123)
 			clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 
+			prevLease := roachpb.Lease{
+				Replica:  replicas[0],
+				Sequence: 1,
+			}
 			nextLease := roachpb.Lease{
 				Replica: replicas[1],
 				Start:   clock.NowAsClockTimestamp(),
@@ -209,16 +213,19 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			}
 			currentReadSummary := rspb.FromTimestamp(maxPriorReadTS)
 
+			evalCtx := &MockEvalCtx{
+				ClusterSettings:    cluster.MakeTestingClusterSettings(),
+				StoreID:            1,
+				Desc:               &desc,
+				Clock:              clock,
+				Lease:              prevLease,
+				CurrentReadSummary: currentReadSummary,
+			}
 			cArgs := CommandArgs{
-				EvalCtx: (&MockEvalCtx{
-					ClusterSettings:    cluster.MakeTestingClusterSettings(),
-					StoreID:            1,
-					Desc:               &desc,
-					Clock:              clock,
-					CurrentReadSummary: currentReadSummary,
-				}).EvalContext(),
+				EvalCtx: evalCtx.EvalContext(),
 				Args: &roachpb.TransferLeaseRequest{
-					Lease: nextLease,
+					Lease:     nextLease,
+					PrevLease: prevLease,
 				},
 			}
 
@@ -233,6 +240,10 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			require.NotNil(t, propLease)
 			require.True(t, nextLease.Start.Less(propLease.Start))
 			require.True(t, beforeEval.Less(propLease.Start))
+			require.Equal(t, prevLease.Sequence+1, propLease.Sequence)
+
+			// The previous lease should have been revoked.
+			require.Equal(t, prevLease.Sequence, evalCtx.RevokedLeaseSeq)
 
 			// The prior read summary should reflect the maximum read times
 			// served under the current leaseholder.

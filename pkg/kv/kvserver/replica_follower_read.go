@@ -158,17 +158,20 @@ func (r *Replica) maxClosedRLocked(ctx context.Context) (_ hlc.Timestamp, ok boo
 	return maxClosed, true
 }
 
-// GetFrozenClosedTimestamp returns the closed timestamp. Unlike
-// MaxClosedTimestamp, it only looks at the "new" closed timestamp mechanism,
-// ignoring the old one. It returns an empty result if the new mechanism is not
-// enabled yet. The new mechanism has better properties than the old one -
-// namely the closing of timestamps is synchronized with subsumption requests
-// (through latches). Callers who need that property should be prepared to get
-// an empty result back, meaning that the closed timestamp cannot be known.
-func (r *Replica) GetFrozenClosedTimestamp() hlc.Timestamp {
+// ClosedTimestampV2 returns the closed timestamp. Unlike MaxClosedTimestamp, it
+// only looks at the "new" closed timestamp mechanism, ignoring the old one. It
+// returns an empty result if the new mechanism is not enabled yet. The new
+// mechanism has better properties than the old one - namely the closing of
+// timestamps is synchronized with lease transfers and subsumption requests.
+// Callers who need that property should be prepared to get an empty result
+// back, meaning that the closed timestamp cannot be known.
+func (r *Replica) ClosedTimestampV2() hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	// TODO(andrei): Make sure that this synchronizes with the closed timestamps
-	// side-transport once the side-transport is written.
+	return r.closedTimestampV2RLocked()
+}
+
+func (r *Replica) closedTimestampV2RLocked() hlc.Timestamp {
+	// TODO(andrei,nvanbenschoten): include sideTransportClosedTimestamp.
 	return r.mu.state.ClosedTimestamp
 }

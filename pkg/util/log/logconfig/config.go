@@ -564,7 +564,7 @@ func parseChannelList(s string) ([]logpb.Channel, error) {
 
 	// Special case: "ALL" selects all channels.
 	if s == "ALL" {
-		return selectAllChannels(), nil
+		return SelectAllChannels(), nil
 	}
 
 	// If channels starts with "all except", we invert the selection.
@@ -597,7 +597,7 @@ func selectChannels(invert bool, parts []string) ([]logpb.Channel, error) {
 			if len(parts) != 1 {
 				return nil, errors.New("cannot use ALL if there are other channel names present in the list")
 			}
-			return selectAllChannels(), nil
+			return SelectAllChannels(), nil
 		}
 
 		// Verify the channel name is known.
@@ -636,9 +636,9 @@ func selectChannels(invert bool, parts []string) ([]logpb.Channel, error) {
 	return selected, nil
 }
 
-// selectAllChannels returns a copy of channelValues,
+// SelectAllChannels returns a copy of channelValues,
 // for use in the ALL configuration.
-func selectAllChannels() []logpb.Channel {
+func SelectAllChannels() []logpb.Channel {
 	// Copy the default in case the code that uses a Config overwrites
 	// its channel list in-place.
 	chans := make([]logpb.Channel, 0, len(channelValues))

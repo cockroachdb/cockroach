@@ -97,18 +97,33 @@ type EvalContext interface {
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
 	GetRangeInfo(context.Context) roachpb.RangeInfo
-	GetFrozenClosedTimestamp() hlc.Timestamp
 
 	// GetCurrentReadSummary returns a new ReadSummary reflecting all reads
 	// served by the range to this point. The method requires a write latch
 	// across all keys in the range (see declareAllKeys), because it will only
 	// return a meaningful summary if the caller has serialized with all other
 	// requests on the range.
-	GetCurrentReadSummary() rspb.ReadSummary
+	//
+	// The method also returns the current closed timestamp on the range. This
+	// closed timestamp is already incorporated into the read summary, but some
+	// callers also need is separated out. It is expected that a caller will
+	// have performed some action (either calling RevokeLease or WatchForMerge)
+	// to freeze further progression of the closed timestamp before calling this
+	// method.
+	GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp)
 
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
 	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
 		error)
+
+	// RevokeLease stops the replica from using its current lease, if that lease
+	// matches the provided lease sequence. All future calls to leaseStatus on
+	// this node with the current lease will now return a PROSCRIBED status.
+	RevokeLease(context.Context, roachpb.LeaseSequence)
+
+	// WatchForMerge arranges to block all requests until the in-progress merge
+	// completes. Returns an error if no in-progress merge is detected.
+	WatchForMerge(ctx context.Context) error
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
@@ -126,6 +141,7 @@ type MockEvalCtx struct {
 	CanCreateTxn       func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason)
 	Lease              roachpb.Lease
 	CurrentReadSummary rspb.ReadSummary
+	RevokedLeaseSeq    roachpb.LeaseSequence
 }
 
 // EvalContext returns the MockEvalCtx as an EvalContext. It will reflect future
@@ -194,9 +210,6 @@ func (m *mockEvalCtxImpl) GetLeaseAppliedIndex() uint64 {
 func (m *mockEvalCtxImpl) GetTracker() closedts.TrackerI {
 	panic("unimplemented")
 }
-func (m *mockEvalCtxImpl) GetFrozenClosedTimestamp() hlc.Timestamp {
-	panic("unimplemented")
-}
 func (m *mockEvalCtxImpl) Desc() *roachpb.RangeDescriptor {
 	return m.MockEvalCtx.Desc
 }
@@ -226,8 +239,8 @@ func (m *mockEvalCtxImpl) GetLease() (roachpb.Lease, roachpb.Lease) {
 func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	return roachpb.RangeInfo{Desc: *m.Desc(), Lease: m.Lease}
 }
-func (m *mockEvalCtxImpl) GetCurrentReadSummary() rspb.ReadSummary {
-	return m.CurrentReadSummary
+func (m *mockEvalCtxImpl) GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp) {
+	return m.CurrentReadSummary, hlc.Timestamp{}
 }
 func (m *mockEvalCtxImpl) GetExternalStorage(
 	ctx context.Context, dest roachpb.ExternalStorage,
@@ -237,5 +250,11 @@ func (m *mockEvalCtxImpl) GetExternalStorage(
 func (m *mockEvalCtxImpl) GetExternalStorageFromURI(
 	ctx context.Context, uri string, user security.SQLUsername,
 ) (cloud.ExternalStorage, error) {
+	panic("unimplemented")
+}
+func (m *mockEvalCtxImpl) RevokeLease(_ context.Context, seq roachpb.LeaseSequence) {
+	m.RevokedLeaseSeq = seq
+}
+func (m *mockEvalCtxImpl) WatchForMerge(ctx context.Context) error {
 	panic("unimplemented")
 }
