@@ -238,6 +238,35 @@ var validationMap = []struct {
 			"RegionConfig":             {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
+	{
+		obj: descpb.DatabaseDescriptor{},
+		fieldMap: map[string]validationStatusInfo{
+			"Name":             {status: iSolemnlySwearThisFieldIsValidated},
+			"ID":               {status: iSolemnlySwearThisFieldIsValidated},
+			"Version":          {status: thisFieldReferencesNoObjects},
+			"ModificationTime": {status: thisFieldReferencesNoObjects},
+			"DrainingNames":    {status: thisFieldReferencesNoObjects},
+			"Privileges":       {status: iSolemnlySwearThisFieldIsValidated},
+			"Schemas":          {status: iSolemnlySwearThisFieldIsValidated},
+			"State":            {status: thisFieldReferencesNoObjects},
+			"OfflineReason":    {status: thisFieldReferencesNoObjects},
+			"RegionConfig":     {status: iSolemnlySwearThisFieldIsValidated},
+		},
+	},
+	{
+		obj: descpb.SchemaDescriptor{},
+		fieldMap: map[string]validationStatusInfo{
+			"Name":             {status: iSolemnlySwearThisFieldIsValidated},
+			"ID":               {status: iSolemnlySwearThisFieldIsValidated},
+			"State":            {status: thisFieldReferencesNoObjects},
+			"OfflineReason":    {status: thisFieldReferencesNoObjects},
+			"ModificationTime": {status: thisFieldReferencesNoObjects},
+			"Version":          {status: thisFieldReferencesNoObjects},
+			"DrainingNames":    {status: thisFieldReferencesNoObjects},
+			"ParentID":         {status: iSolemnlySwearThisFieldIsValidated},
+			"Privileges":       {status: iSolemnlySwearThisFieldIsValidated},
+		},
+	},
 }
 
 type validationStatusInfo struct {
