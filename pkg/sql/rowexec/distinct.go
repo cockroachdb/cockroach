@@ -142,22 +142,14 @@ func newDistinct(
 
 // Start is part of the RowSource interface.
 func (d *distinct) Start(ctx context.Context) {
-	d.input.Start(ctx)
 	ctx = d.StartInternal(ctx, distinctProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
+	d.input.Start(ctx)
 }
 
 // Start is part of the RowSource interface.
 func (d *sortedDistinct) Start(ctx context.Context) {
-	d.input.Start(ctx)
 	ctx = d.StartInternal(ctx, sortedDistinctProcName)
-	// Go around "this value of ctx is never used" linter error. We do it this
-	// way instead of omitting the assignment to ctx above so that if in the
-	// future other initialization is added, the correct ctx is used.
-	_ = ctx
+	d.input.Start(ctx)
 }
 
 func (d *distinct) matchLastGroupKey(row rowenc.EncDatumRow) (bool, error) {

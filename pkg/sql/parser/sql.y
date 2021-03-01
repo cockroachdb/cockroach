@@ -2639,11 +2639,12 @@ restore_stmt:
       Options: *($8.restoreOptions()),
     }
   }
-| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list
+| RESTORE targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_of_clause
   {
    $$.val = &tree.StreamIngestion{
      Targets: $2.targetList(),
      From: $7.stringOrPlaceholderOptList(),
+     AsOf: $8.asOfClause(),
    }
   }
 | RESTORE error // SHOW HELP: RESTORE

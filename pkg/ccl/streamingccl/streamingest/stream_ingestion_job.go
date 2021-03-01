@@ -30,6 +30,7 @@ type streamIngestionResumer struct {
 func ingest(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
+	startTime hlc.Timestamp,
 	streamAddress streamingccl.StreamAddress,
 	progress jobspb.Progress,
 	jobID jobspb.JobID,
@@ -49,7 +50,7 @@ func ingest(
 	// KVs. We can skip to ingesting after this resolved ts. Plumb the
 	// initialHighwatermark to the ingestion processor spec based on what we read
 	// from the job progress.
-	var initialHighWater hlc.Timestamp
+	initialHighWater := startTime
 	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
 		initialHighWater = *h
 	}
@@ -80,7 +81,7 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 	p := execCtx.(sql.JobExecContext)
 
 	// Start ingesting KVs from the replication stream.
-	err := ingest(resumeCtx, p, details.StreamAddress, s.job.Progress(), s.job.ID())
+	err := ingest(resumeCtx, p, details.StartTime, details.StreamAddress, s.job.Progress(), s.job.ID())
 	if err != nil {
 		return err
 	}
