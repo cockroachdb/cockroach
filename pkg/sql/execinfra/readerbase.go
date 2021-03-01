@@ -13,6 +13,7 @@ package execinfra
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -63,7 +64,7 @@ func MisplannedRanges(
 	ctx context.Context, spans []roachpb.Span, nodeID roachpb.NodeID, rdc *rangecache.RangeCache,
 ) (misplannedRanges []roachpb.RangeInfo) {
 	log.VEvent(ctx, 2, "checking range cache to see if range info updates should be communicated to the gateway")
-	misplanned := make(map[roachpb.RangeID]struct{})
+	var misplanned map[roachpb.RangeID]struct{}
 	for _, sp := range spans {
 		rSpan, err := keys.SpanAddr(sp)
 		if err != nil {
@@ -81,21 +82,32 @@ func MisplannedRanges(
 			l := ri.Lease()
 			if l != nil && l.Replica.NodeID != nodeID {
 				misplannedRanges = append(misplannedRanges, roachpb.RangeInfo{
-					Desc:  *ri.Desc(),
-					Lease: *l,
+					Desc:                  *ri.Desc(),
+					Lease:                 *l,
+					ClosedTimestampPolicy: ri.ClosedTimestampPolicy(),
 				})
+
+				if misplanned == nil {
+					misplanned = make(map[roachpb.RangeID]struct{})
+				}
+				misplanned[ri.Desc().RangeID] = struct{}{}
 			}
 		}
 	}
 
-	if len(misplannedRanges) != 0 {
-		var msg string
-		if len(misplannedRanges) < 3 {
-			msg = fmt.Sprintf("%+v", misplannedRanges[0].Desc)
-		} else {
-			msg = fmt.Sprintf("%+v...", misplannedRanges[:3])
+	if len(misplannedRanges) != 0 && log.ExpensiveLogEnabled(ctx, 2) {
+		var b strings.Builder
+		for i := range misplannedRanges {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			if i > 3 {
+				b.WriteString("...")
+				break
+			}
+			fmt.Fprintf(&b, "%+v", misplannedRanges[i])
 		}
-		log.VEventf(ctx, 2, "misplanned ranges: %s", msg)
+		log.VEventf(ctx, 2, "misplanned ranges: %s", b.String())
 	}
 
 	return misplannedRanges
