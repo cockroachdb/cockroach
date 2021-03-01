@@ -1223,3 +1223,13 @@ project                  ·                    ·                               
 ·                        estimated row count  10 (missing stats)                      ·                            ·
 ·                        table                pg_attribute@pg_attribute_attrelid_idx  ·                            ·
 ·                        spans                [/ab - /ab]                             ·                            ·
+
+# Regression test for #61248: insert fast path with no rows.
+query TTT
+EXPLAIN INSERT INTO t2 SELECT x FROM t2 WHERE false
+----
+·                 distribution  local
+·                 vectorized    true
+insert fast path  ·             ·
+·                 into          t2(x)
+·                 auto commit   ·
