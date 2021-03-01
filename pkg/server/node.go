@@ -610,7 +610,15 @@ func (n *Node) bootstrapStores(
 				log.Warningf(ctx, "error doing initial gossiping: %s", err)
 			}
 
-			sIdent.StoreID++
+			if sIdent.StoreID == firstStoreID {
+				// After assigning the firstStoreID, we need to ensure continue
+				// from startID. It's possible that other stores elsewhere may
+				// have allocated store IDs between firstStoreID and startID.
+				// See TestMultiStoreIDAlloc and #61218.
+				sIdent.StoreID = startID
+			} else {
+				sIdent.StoreID++
+			}
 		}
 	}
 
