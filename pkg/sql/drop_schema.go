@@ -233,7 +233,8 @@ func (p *planner) createDropSchemaJob(
 			// drop schemas.
 			FormatVersion: jobspb.DatabaseJobFormatVersion,
 		},
-		Progress: jobspb.SchemaChangeProgress{},
+		Progress:      jobspb.SchemaChangeProgress{},
+		NonCancelable: true,
 	})
 	return err
 }
