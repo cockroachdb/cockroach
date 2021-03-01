@@ -40,7 +40,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1064.02
+ ├── cost: 1074.61
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
@@ -140,7 +140,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1064.02
+ ├── cost: 1074.61
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
@@ -447,7 +447,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1104.02
+ ├── cost: 1115.01
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
@@ -518,7 +518,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1104.02
+ ├── cost: 1115.01
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
@@ -592,7 +592,7 @@ SELECT * FROM abc
 scan t.public.abc
  ├── columns: a:1(int!null) b:2(int) c:3(string)
  ├── stats: [rows=1000]
- ├── cost: 1084.02
+ ├── cost: 1094.81
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)~~>(1)
  ├── prune: (1-3)
