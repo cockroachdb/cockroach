@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/provider",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/roachpb",
@@ -31,6 +32,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
