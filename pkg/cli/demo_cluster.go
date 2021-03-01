@@ -892,18 +892,18 @@ func (c *transientCluster) listDemoNodes(w io.Writer, justOne bool) {
 			serverURL.Path = server.DemoLoginPath
 			serverURL.RawQuery = pwauth.Encode()
 		}
-		fmt.Fprintf(w, "  (console) %s\n", serverURL)
+		fmt.Fprintln(w, "  (console) ", serverURL)
 		// Print unix socket if defined.
 		if c.useSockets {
 			sock := c.sockForServer(nodeID)
-			fmt.Fprintln(w, "  (sql)    ", sock)
+			fmt.Fprintln(w, "  (sql/unix)", sock)
 		}
 		// Print network URL if defined.
 		netURL, err := c.getNetworkURLForServer(i, nil, false /*includeAppName*/)
 		if err != nil {
 			fmt.Fprintln(stderr, errors.Wrap(err, "retrieving network URL"))
 		} else {
-			fmt.Fprintln(w, "  (sql/tcp)", netURL)
+			fmt.Fprintln(w, "  (sql)     ", netURL)
 		}
 		fmt.Fprintln(w)
 	}

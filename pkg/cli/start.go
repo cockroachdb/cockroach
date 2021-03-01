@@ -607,7 +607,7 @@ If problems persist, please see %s.`
 			buf.Printf("CockroachDB node starting at %s (took %0.1fs)\n", timeutil.Now(), timeutil.Since(tBegin).Seconds())
 			buf.Printf("build:\t%s %s @ %s (%s)\n",
 				redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
-			buf.Printf("webui:\t%s\n", serverCfg.AdminURL())
+			buf.Printf("console:\t%s\n", serverCfg.AdminURL())
 
 			// (Re-)compute the client connection URL. We cannot do this
 			// earlier (e.g. above, in the runStart function) because
