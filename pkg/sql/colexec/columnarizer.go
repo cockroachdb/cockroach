@@ -69,7 +69,13 @@ func NewColumnarizer(
 		processorID,
 		nil, /* output */
 		nil, /* memMonitor */
-		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{input}},
+		execinfra.ProcStateOpts{
+			InputsToDrain: []execinfra.RowSource{input},
+			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+				// Close never returns an error.
+				_ = c.Close(ctx)
+				return nil
+			}},
 	); err != nil {
 		return nil, err
 	}
@@ -84,6 +90,7 @@ func (c *Columnarizer) Init() {
 	// we have this check in place.
 	if c.initStatus == OperatorNotInitialized {
 		c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
+		c.ctx = c.StartInternalNoSpan(c.ctx)
 		c.input.Start(c.ctx)
 		c.initStatus = OperatorInitialized
 	}
@@ -175,7 +182,7 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 
 // Close is part of the Operator interface.
 func (c *Columnarizer) Close(ctx context.Context) error {
-	c.input.ConsumerClosed()
+	c.InternalClose()
 	return nil
 }
 
