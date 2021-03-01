@@ -116,9 +116,7 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input execinfra.RowS
 }
 
 func (p *planNodeToRowSource) Start(ctx context.Context) {
-	// We do not call p.StartInternal to avoid creating a span. Only the context
-	// needs to be set.
-	p.Ctx = ctx
+	ctx = p.StartInternalNoSpan(ctx)
 	p.params.ctx = ctx
 	if !p.started {
 		p.started = true

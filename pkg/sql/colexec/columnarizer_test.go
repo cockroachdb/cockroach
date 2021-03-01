@@ -80,34 +80,53 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	rb := distsqlutils.NewRowBuffer([]*types.T{types.Int}, nil /* rows */, distsqlutils.RowBufferArgs{})
 	flowCtx := &execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st},
 		EvalCtx: &evalCtx,
 	}
 
-	const errMsg = "artificial error"
-	rb.Push(nil, &execinfrapb.ProducerMetadata{Err: errors.New(errMsg)})
-	c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, rb)
-	require.NoError(t, err)
+	for _, tc := range []struct {
+		name           string
+		consumerClosed bool
+	}{
+		{
+			name:           "ConsumerClosed",
+			consumerClosed: true,
+		}, {
+			name:           "ConsumerDone",
+			consumerClosed: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const errMsg = "artificial error"
+			rb := distsqlutils.NewRowBuffer([]*types.T{types.Int}, nil /* rows */, distsqlutils.RowBufferArgs{})
+			rb.Push(nil, &execinfrapb.ProducerMetadata{Err: errors.New(errMsg)})
+			c, err := NewBufferingColumnarizer(ctx, testAllocator, flowCtx, 0 /* processorID */, rb)
+			require.NoError(t, err)
 
-	c.Init()
+			c.Init()
 
-	// If the metadata is obtained through this Next call, the Columnarizer still
-	// returns it in DrainMeta.
-	err = colexecerror.CatchVectorizedRuntimeError(func() { c.Next(ctx) })
-	require.True(t, testutils.IsError(err, errMsg), "unexpected error %v", err)
+			// If the metadata is obtained through this Next call, the Columnarizer still
+			// returns it in DrainMeta.
+			err = colexecerror.CatchVectorizedRuntimeError(func() { c.Next(ctx) })
+			require.True(t, testutils.IsError(err, errMsg), "unexpected error %v", err)
 
-	// Calling DrainMeta from the vectorized execution engine should propagate to
-	// non-vectorized components as calling ConsumerDone and then draining their
-	// metadata.
-	meta := c.DrainMeta(ctx)
-	require.True(t, len(meta) == 0)
-	require.True(t, rb.Done)
-	require.Equal(t, execinfra.DrainRequested, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
-	// Closing the Columnarizer should call ConsumerClosed on the processor.
-	require.NoError(t, c.Close(ctx))
-	require.Equal(t, execinfra.ConsumerClosed, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
+			if tc.consumerClosed {
+				// Closing the Columnarizer should call ConsumerClosed on the processor.
+				require.NoError(t, c.Close(ctx))
+				require.Equal(t, execinfra.ConsumerClosed, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
+			} else {
+				// Calling DrainMeta from the vectorized execution engine should propagate to
+				// non-vectorized components as calling ConsumerDone and then draining their
+				// metadata.
+				meta := c.DrainMeta(ctx)
+				require.True(t, len(meta) == 0)
+				require.True(t, rb.Done)
+				require.Equal(t, execinfra.DrainRequested, rb.ConsumerStatus, "unexpected consumer status %d", rb.ConsumerStatus)
+			}
+			require.True(t, c.Closed, "the ProcessorBase.Closed bool should be set in either case")
+		})
+	}
 }
 
 func BenchmarkColumnarize(b *testing.B) {
