@@ -144,6 +144,7 @@ go_test(
     tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cli/exit",
+        "//pkg/settings/cluster",
         "//pkg/util/leaktest",
         "//pkg/util/log/channel",
         "//pkg/util/log/eventpb",

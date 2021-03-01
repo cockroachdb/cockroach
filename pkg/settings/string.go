@@ -61,6 +61,12 @@ func (s *StringSetting) Validate(sv *Values, v string) error {
 	return nil
 }
 
+// Override sets the setting to the given value, assuming
+// it passes validation.
+func (s *StringSetting) Override(sv *Values, v string) {
+	_ = s.set(sv, v)
+}
+
 func (s *StringSetting) set(sv *Values, v string) error {
 	if err := s.Validate(sv, v); err != nil {
 		return err
