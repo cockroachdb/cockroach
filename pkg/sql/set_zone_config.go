@@ -966,8 +966,10 @@ func RemoveIndexZoneConfigs(
 	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
 	if err != nil {
 		return err
-	} else if zone == nil {
-		zone = zonepb.NewZoneConfig()
+	}
+	// If there are no zone configs, there's nothing to remove.
+	if zone == nil {
+		return nil
 	}
 
 	for _, indexDesc := range indexDescs {
