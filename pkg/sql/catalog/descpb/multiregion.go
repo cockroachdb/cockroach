@@ -10,6 +10,11 @@
 
 package descpb
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
+)
+
 // RegionName is an alias for a region stored on the database.
 type RegionName string
 
@@ -44,4 +49,23 @@ func (cfg *DatabaseDescriptor_RegionConfig) PrimaryRegionString() string {
 		return ""
 	}
 	return string(cfg.PrimaryRegion)
+}
+
+// TelemetryName returns the name to use for the given locality.
+func (cfg *TableDescriptor_LocalityConfig) TelemetryName() string {
+	switch l := cfg.Locality.(type) {
+	case *TableDescriptor_LocalityConfig_Global_:
+		return tree.TelemetryNameGlobal
+	case *TableDescriptor_LocalityConfig_RegionalByTable_:
+		if l.RegionalByTable.Region != nil {
+			return tree.TelemetryNameRegionalByTableIn
+		}
+		return tree.TelemetryNameRegionalByTable
+	case *TableDescriptor_LocalityConfig_RegionalByRow_:
+		if l.RegionalByRow.As != nil {
+			return tree.TelemetryNameRegionalByRowAs
+		}
+		return tree.TelemetryNameRegionalByRow
+	}
+	panic(errors.AssertionFailedf("unknown locality: %#v", *cfg))
 }
