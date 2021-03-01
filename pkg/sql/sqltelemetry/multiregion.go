@@ -22,10 +22,10 @@ var (
 	CreateMultiRegionDatabaseCounter = telemetry.GetCounterOnce(
 		"sql.multiregion.create_database",
 	)
-	// NewMultiRegionDatabaseUsingAlterCounter is to be incremented when
+	// SetInitialPrimaryRegionCounter is to be incremented when
 	// a multi-region database is created using ALTER DATABASE ... PRIMARY KEY.
-	NewMultiRegionDatabaseUsingAlterCounter = telemetry.GetCounterOnce(
-		"sql.multiregion.alter_database.set_primary_region.new_multiregion",
+	SetInitialPrimaryRegionCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.alter_database.set_primary_region.initial_multiregion",
 	)
 	// SwitchPrimaryRegionCounter is to be incremented when
 	// a multi-region database has its primary region changed.
@@ -62,4 +62,20 @@ func CreateDatabaseSurvivalGoalCounter(goal string) telemetry.Counter {
 // on a multi-region database is being altered.
 func AlterDatabaseSurvivalGoalCounter(goal string) telemetry.Counter {
 	return telemetry.GetCounter(fmt.Sprintf("sql.multiregion.alter_database.survival_goal.%s", goal))
+}
+
+// CreateTableLocalityCounter is to be incremented every time a locality
+// is set on a table.
+func CreateTableLocalityCounter(locality string) telemetry.Counter {
+	return telemetry.GetCounter(
+		fmt.Sprintf("sql.multiregion.create_table.locality.%s", locality),
+	)
+}
+
+// AlterTableLocalityCounter is to be incremented every time a locality
+// is changed on a table.
+func AlterTableLocalityCounter(from, to string) telemetry.Counter {
+	return telemetry.GetCounter(
+		fmt.Sprintf("sql.multiregion.alter_table.locality.from.%s.to.%s", from, to),
+	)
 }

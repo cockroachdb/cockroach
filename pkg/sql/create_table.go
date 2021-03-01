@@ -2306,6 +2306,11 @@ func NewTableDesc(
 	}
 
 	if regionEnumID != descpb.InvalidID || n.Locality != nil {
+		localityTelemetryName := "unspecified"
+		if n.Locality != nil {
+			localityTelemetryName = n.Locality.TelemetryName()
+		}
+		telemetry.Inc(sqltelemetry.CreateTableLocalityCounter(localityTelemetryName))
 		if n.Locality == nil {
 			// The absence of a locality on the AST node indicates that the table must
 			// be homed in the primary region.
