@@ -60,8 +60,10 @@ func wrapRowSources(
 		// Optimization: if the input is a Columnarizer, its input is necessarily a
 		// execinfra.RowSource, so remove the unnecessary conversion.
 		if c, ok := input.(*colexec.Columnarizer); ok {
-			// TODO(asubiotto): We might need to do some extra work to remove references
-			// to this operator (e.g. streamIDToOp).
+			// Since this Columnarizer has been previously added to Closers and
+			// MetadataSources, this call ensures that all future calls are noops.
+			// Modifying the slices at this stage is difficult.
+			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
 			toWrapInput, err := colexec.NewMaterializer(
