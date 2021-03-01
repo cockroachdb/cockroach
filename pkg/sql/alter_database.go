@@ -583,7 +583,7 @@ func addDefaultLocalityConfigToAllTables(
 // setInitialPrimaryRegion sets the primary region in cases where the database
 // is already a multi-region database.
 func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParams) error {
-	telemetry.Inc(sqltelemetry.NewMultiRegionDatabaseUsingAlterCounter)
+	telemetry.Inc(sqltelemetry.SetInitialPrimaryRegionCounter)
 	// Create the region config structure to be added to the database descriptor.
 	regionConfig, err := params.p.createRegionConfig(
 		params.ctx,
