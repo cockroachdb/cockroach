@@ -925,7 +925,7 @@ func (b *propBuf) TrackEvaluatingRequest(
 //    tracked by the evalTracker). We can't close timestamps at or above these
 //    requests' write timestamps.
 func (b *propBuf) MaybeForwardClosedLocked(ctx context.Context, target hlc.Timestamp) bool {
-	if lb := b.evalTracker.LowerBound(ctx); lb.LessEq(target) {
+	if lb := b.evalTracker.LowerBound(ctx); !lb.IsEmpty() && lb.LessEq(target) {
 		return false
 	}
 	return b.forwardClosedTimestampLocked(target)
