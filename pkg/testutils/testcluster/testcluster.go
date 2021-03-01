@@ -142,7 +142,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 				return nil
 			}
 			var buf strings.Builder
-			buf.WriteString("unexpectedly found active spans:\n")
+			fmt.Fprintf(&buf, "unexpectedly found %d active spans:\n", len(sps))
 			for _, sp := range sps {
 				fmt.Fprintln(&buf, sp.GetRecording())
 				fmt.Fprintln(&buf)
