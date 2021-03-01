@@ -282,22 +282,21 @@ func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 	// Read a different intent on each replica. All should begin waiting on the
 	// intents by pushing the transaction that wrote them. None should complete.
 	ts := txn.WriteTimestamp
-	respCh := make(chan struct{}, len(keys))
+	respCh := make(chan error, len(keys))
 	for i, key := range keys {
 		go func(repl *kvserver.Replica, key roachpb.Key) {
 			baRead := makeTxnReadBatchForDesc(desc, ts)
-			testutils.SucceedsSoon(t, func() error {
+			respCh <- testutils.SucceedsSoonError(func() error {
 				// Expect 0 rows, because the intents will be aborted.
 				_, err := expectRows(0)(repl.Send(ctx, baRead))
 				return err
 			})
-			respCh <- struct{}{}
 		}(repls[i], key)
 	}
 
 	select {
-	case <-respCh:
-		t.Fatal("request unexpectedly succeeded, should block")
+	case err := <-respCh:
+		t.Fatalf("request unexpectedly returned, should block; err: %v", err)
 	case <-time.After(20 * time.Millisecond):
 	}
 
@@ -312,7 +311,7 @@ func TestClosedTimestampCanServeWithConflictingIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range keys {
-		<-respCh
+		require.NoError(t, <-respCh)
 	}
 }
 
