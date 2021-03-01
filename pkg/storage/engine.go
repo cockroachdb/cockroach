@@ -232,6 +232,11 @@ type EngineIterator interface {
 	// GetRawIter is a low-level method only for use in the storage package,
 	// that returns the underlying pebble Iterator.
 	GetRawIter() *pebble.Iterator
+
+	SeekEngineKeyGEWithLimit(key EngineKey, limit roachpb.Key) (state pebble.IterValidityState, err error)
+	SeekEngineKeyLTWithLimit(key EngineKey, limit roachpb.Key) (state pebble.IterValidityState, err error)
+	NextEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
+	PrevEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
 }
 
 // IterOptions contains options used to create an {MVCC,Engine}Iterator.

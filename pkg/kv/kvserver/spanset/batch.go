@@ -289,6 +289,29 @@ func (i *EngineIterator) PrevEngineKey() (valid bool, err error) {
 	return i.checkKeyAllowed()
 }
 
+// TODO: add checking of key.
+
+func (i *EngineIterator) SeekEngineKeyGEWithLimit(
+	key storage.EngineKey, limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	return i.i.SeekEngineKeyGEWithLimit(key, limit)
+}
+func (i *EngineIterator) SeekEngineKeyLTWithLimit(
+	key storage.EngineKey, limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	return i.i.SeekEngineKeyLTWithLimit(key, limit)
+}
+func (i *EngineIterator) NextEngineKeyWithLimit(
+	limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	return i.i.NextEngineKeyWithLimit(limit)
+}
+func (i *EngineIterator) PrevEngineKeyWithLimit(
+	limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	return i.i.PrevEngineKeyWithLimit(limit)
+}
+
 func (i *EngineIterator) checkKeyAllowed() (valid bool, err error) {
 	key, err := i.i.UnsafeEngineKey()
 	if err != nil {

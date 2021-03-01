@@ -287,6 +287,30 @@ func (p *pebbleIterator) SeekEngineKeyGE(key EngineKey) (valid bool, err error) 
 	return false, p.iter.Error()
 }
 
+func (p *pebbleIterator) SeekEngineKeyGEWithLimit(
+	key EngineKey, limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	p.keyBuf = key.EncodeToBuf(p.keyBuf[:0])
+	if limit != nil {
+		if p.prefix {
+			panic("prefix iteration does not permit a limit")
+		}
+		limit = append(limit, '\x00')
+	}
+	if p.prefix {
+		state = pebble.IterExhausted
+		if p.iter.SeekPrefixGE(p.keyBuf) {
+			state = pebble.IterValid
+		}
+	} else {
+		state = p.iter.SeekGEWithLimit(p.keyBuf, limit)
+	}
+	if state == pebble.IterExhausted {
+		return state, p.iter.Error()
+	}
+	return state, nil
+}
+
 // Valid implements the MVCCIterator interface. Must not be called from
 // methods of EngineIterator.
 func (p *pebbleIterator) Valid() (bool, error) {
@@ -341,6 +365,19 @@ func (p *pebbleIterator) NextEngineKey() (valid bool, err error) {
 		return true, nil
 	}
 	return false, p.iter.Error()
+}
+
+func (p *pebbleIterator) NextEngineKeyWithLimit(
+	limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	if limit != nil {
+		limit = append(limit, '\x00')
+	}
+	state = p.iter.NextWithLimit(limit)
+	if state == pebble.IterExhausted {
+		return state, p.iter.Error()
+	}
+	return state, nil
 }
 
 // NextKey implements the MVCCIterator interface.
@@ -436,6 +473,20 @@ func (p *pebbleIterator) SeekEngineKeyLT(key EngineKey) (valid bool, err error) 
 	return false, p.iter.Error()
 }
 
+func (p *pebbleIterator) SeekEngineKeyLTWithLimit(
+	key EngineKey, limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	p.keyBuf = key.EncodeToBuf(p.keyBuf[:0])
+	if limit != nil {
+		limit = append(limit, '\x00')
+	}
+	state = p.iter.SeekLTWithLimit(p.keyBuf, limit)
+	if state == pebble.IterExhausted {
+		return state, p.iter.Error()
+	}
+	return state, nil
+}
+
 // Prev implements the MVCCIterator interface.
 func (p *pebbleIterator) Prev() {
 	if !p.mvccDirIsReverse {
@@ -458,6 +509,19 @@ func (p *pebbleIterator) PrevEngineKey() (valid bool, err error) {
 		return true, nil
 	}
 	return false, p.iter.Error()
+}
+
+func (p *pebbleIterator) PrevEngineKeyWithLimit(
+	limit roachpb.Key,
+) (state pebble.IterValidityState, err error) {
+	if limit != nil {
+		limit = append(limit, '\x00')
+	}
+	state = p.iter.PrevWithLimit(limit)
+	if state == pebble.IterExhausted {
+		return state, p.iter.Error()
+	}
+	return state, nil
 }
 
 // Key implements the MVCCIterator interface.
