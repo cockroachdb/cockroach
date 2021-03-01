@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -107,32 +105,24 @@ func ingestionPlanHook(
 		}
 
 		jr := jobs.Record{
-			Description: jobDescription,
-			Username:    p.User(),
-			Progress:    jobspb.StreamIngestionProgress{},
-			Details:     streamIngestionDetails,
+			Description:   jobDescription,
+			Username:      p.User(),
+			Progress:      jobspb.StreamIngestionProgress{},
+			Details:       streamIngestionDetails,
+			NonCancelable: true,
 		}
 
-		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr)
-		}); err != nil {
-			if sj != nil {
-				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
-				}
-			}
+		sj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr,
+			jobID, p.ExtendedEvalContext().Txn)
+		if err != nil {
 			return err
 		}
-
-		if err := sj.Start(ctx); err != nil {
-			return err
-		}
-		return sj.AwaitCompletion(ctx)
+		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID()))}
+		return nil
 	}
 
-	return fn, utilccl.BulkJobExecutionResultHeader, nil, false, nil
+	return fn, utilccl.DetachedJobExecutionResultHeader, nil, false, nil
 }
 
 func init() {

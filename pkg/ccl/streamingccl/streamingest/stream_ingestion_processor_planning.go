@@ -31,6 +31,7 @@ func distStreamIngestionPlanSpecs(
 	topology streamingccl.Topology,
 	nodes []roachpb.NodeID,
 	initialHighWater hlc.Timestamp,
+	jobID jobspb.JobID,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {
 
 	// For each stream partition in the topology, assign it to a node.
@@ -43,6 +44,7 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(nodes) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
+				JobID:              int64(jobID),
 				StreamAddress:      streamAddress,
 				PartitionAddresses: make([]streamingccl.PartitionAddress, 0),
 			}
@@ -133,7 +135,7 @@ func distStreamIngest(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)()
 	return rw.Err()
 }
 

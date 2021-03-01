@@ -33,6 +33,7 @@ import { howAreCapacityMetricsCalculated } from "src/util/docs";
 interface ClusterSummaryProps {
   nodeSources: string[];
   nodesSummary: NodesSummary;
+  nodesSummaryValid: boolean;
 }
 
 /**
@@ -40,8 +41,8 @@ interface ClusterSummaryProps {
  * and their current liveness status.
  */
 function ClusterNodeTotals(props: ClusterSummaryProps) {
-  if (!props.nodesSummary || !props.nodesSummary.nodeSums) {
-    return;
+  if (!props.nodesSummaryValid) {
+    return null;
   }
   const { nodeCounts } = props.nodesSummary.nodeSums;
   let children: React.ReactNode;

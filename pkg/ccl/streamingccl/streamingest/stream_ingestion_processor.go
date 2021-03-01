@@ -11,6 +11,7 @@ package streamingest
 import (
 	"context"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -42,6 +43,16 @@ var minimumFlushInterval = settings.RegisterPublicDurationSettingWithExplicitUni
 	nil, /* validateFn */
 )
 
+// checkForCutoverSignalFrequency is the frequency at which the resumer polls
+// the system.jobs table to check whether the stream ingestion job has been
+// signaled to cutover.
+var cutoverSignalPollInterval = settings.RegisterDurationSetting(
+	"bulkio.stream_ingestion.cutover_signal_poll_interval",
+	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
+	30*time.Second,
+	settings.NonNegativeDuration,
+)
+
 var streamIngestionResultTypes = []*types.T{
 	types.Bytes, // jobspb.ResolvedSpans
 }
@@ -66,8 +77,8 @@ type streamIngestionProcessor struct {
 	// than MVCCKeys.
 	curBatch mvccKeyValues
 	// batcher is used to flush SSTs to the storage layer.
-	batcher *bulk.SSTBatcher
-	timer   *timeutil.Timer
+	batcher           *bulk.SSTBatcher
+	maxFlushRateTimer *timeutil.Timer
 
 	// client is a streaming client which provides a stream of events from a given
 	// address.
@@ -88,8 +99,24 @@ type streamIngestionProcessor struct {
 	// that it can be forwarded through the DistSQL flow.
 	ingestionErr error
 
+	// pollingErr stores any error that is returned from the poller checking for a
+	// cutover signal so that it can be forwarded through the DistSQL flow.
+	pollingErr error
+
+	// pollingWaitGroup registers the polling goroutine and waits for it to return
+	// when the processor is being drained.
+	pollingWaitGroup sync.WaitGroup
+
 	// eventCh is the merged event channel of all of the partition event streams.
 	eventCh chan partitionEvent
+
+	// cutoverCh is used to convey that the ingestion job has been signaled to
+	// cutover.
+	cutoverCh chan struct{}
+
+	// closePoller is used to shutdown the poller that checks the job for a
+	// cutover signal.
+	closePoller chan struct{}
 }
 
 // partitionEvent augments a normal event with the partition it came from.
@@ -136,7 +163,9 @@ func newStreamIngestionDataProcessor(
 		curBatch:            make([]storage.MVCCKeyValue, 0),
 		client:              streamClient,
 		bufferedCheckpoints: make(map[streamingccl.PartitionAddress]hlc.Timestamp),
-		timer:               timeutil.NewTimer(),
+		maxFlushRateTimer:   timeutil.NewTimer(),
+		cutoverCh:           make(chan struct{}),
+		closePoller:         make(chan struct{}),
 	}
 
 	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
@@ -168,6 +197,17 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		return
 	}
 
+	// Start a poller that checks if the stream ingestion job has been signaled to
+	// cutover.
+	sip.pollingWaitGroup.Add(1)
+	go func() {
+		defer sip.pollingWaitGroup.Done()
+		err := sip.checkForCutoverSignal(ctx, sip.closePoller)
+		if err != nil {
+			sip.pollingErr = errors.Wrap(err, "error while polling job for cutover signal")
+		}
+	}()
+
 	// Initialize the event streams.
 	startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
 	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
@@ -191,6 +231,11 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 // Next is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if sip.State != execinfra.StateRunning {
+		return nil, sip.DrainHelper()
+	}
+
+	if sip.pollingErr != nil {
+		sip.MoveToDraining(sip.pollingErr)
 		return nil, sip.DrainHelper()
 	}
 
@@ -231,8 +276,66 @@ func (sip *streamIngestionProcessor) close() {
 		if sip.batcher != nil {
 			sip.batcher.Close()
 		}
-		if sip.timer != nil {
-			sip.timer.Stop()
+		if sip.maxFlushRateTimer != nil {
+			sip.maxFlushRateTimer.Stop()
+		}
+		if sip.closePoller != nil {
+			close(sip.closePoller)
+			// Wait for the goroutine to return so that we do not access processor
+			// state once it has shutdown.
+			sip.pollingWaitGroup.Wait()
+		}
+	}
+}
+
+// checkForCutoverSignal periodically loads the job progress to check for the
+// sentinel value that signals the ingestion job to complete.
+func (sip *streamIngestionProcessor) checkForCutoverSignal(
+	ctx context.Context, stopPoller chan struct{},
+) error {
+	sv := &sip.flowCtx.Cfg.Settings.SV
+	registry := sip.flowCtx.Cfg.JobRegistry
+	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
+	jobID := sip.spec.JobID
+	defer tick.Stop()
+	for {
+		select {
+		case <-stopPoller:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+			j, err := registry.LoadJob(ctx, jobspb.JobID(jobID))
+			if err != nil {
+				return err
+			}
+			progress := j.Progress()
+			var sp *jobspb.Progress_StreamIngest
+			var ok bool
+			if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
+				return errors.Newf("unknown progress type %T in stream ingestion job %d",
+					j.Progress().Progress, jobID)
+			}
+			// Job has been signaled to complete.
+			if !sp.StreamIngest.CutoverTime.IsEmpty() {
+				// Sanity check that the requested cutover time is less than equal to
+				// the resolved ts recorded in the job progress. This should already
+				// have been enforced when the cutover was signaled via the builtin.
+				// TODO(adityamaru): Remove this when we allow users to specify a
+				// cutover time in the future.
+				resolvedTimestamp := progress.GetHighWater()
+				if resolvedTimestamp == nil {
+					return errors.AssertionFailedf("cutover has been requested before job %d has had a chance to"+
+						" record a resolved ts", jobID)
+				}
+				if resolvedTimestamp.Less(sp.StreamIngest.CutoverTime) {
+					return errors.AssertionFailedf("requested cutover time %s is before the resolved time %s recorded"+
+						" in job %d", sp.StreamIngest.CutoverTime.String(), resolvedTimestamp.String(),
+						jobID)
+				}
+				sip.cutoverCh <- struct{}{}
+				return nil
+			}
 		}
 	}
 }
@@ -332,7 +435,7 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 					// that will trigger a flush eventually.
 					// TODO: This resets the timer every checkpoint event, but we only
 					// need to reset it once.
-					sip.timer.Reset(time.Until(sip.lastFlushTime.Add(minFlushInterval)))
+					sip.maxFlushRateTimer.Reset(time.Until(sip.lastFlushTime.Add(minFlushInterval)))
 					continue
 				}
 
@@ -340,8 +443,18 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 			default:
 				return nil, errors.Newf("unknown streaming event type %v", event.Type())
 			}
-		case <-sip.timer.C:
-			sip.timer.Read = true
+		case <-sip.cutoverCh:
+			// TODO(adityamaru): Currently, the cutover time can only be <= resolved
+			// ts written to the job progress and so there is no point flushing
+			// buffered KVs only to be reverted. When we allow users to specify a
+			// cutover ts in the future, this will need to change.
+			//
+			// On receiving a cutover signal, the processor must shutdown gracefully.
+			sip.internalDrained = true
+			return nil, nil
+
+		case <-sip.maxFlushRateTimer.C:
+			sip.maxFlushRateTimer.Read = true
 			return sip.flush()
 		}
 	}
