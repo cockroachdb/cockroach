@@ -583,6 +583,10 @@ func (n *Node) bootstrapStores(
 		}
 		startID, err := allocateStoreIDs(ctx, n.Descriptor.NodeID, storeIDAlloc, n.storeCfg.DB)
 		if firstStoreID == 0 {
+			// It's not possible for startID == 0. We're only ever hitting this
+			// code-path when initializing additional stores (i.e. stores other
+			// than the very first one). Given we're incrementing the store ID
+			// generator key, we're guaranteed that it's non-zero.
 			firstStoreID = startID
 		}
 		if err != nil {
@@ -610,7 +614,17 @@ func (n *Node) bootstrapStores(
 				log.Warningf(ctx, "error doing initial gossiping: %s", err)
 			}
 
-			sIdent.StoreID++
+			if sIdent.StoreID == firstStoreID && firstStoreID != startID {
+				// After assigning the firstStoreID, we need to ensure we
+				// continue from startID. It's possible that other stores
+				// elsewhere may have allocated store IDs between firstStoreID
+				// and startID. See TestMultiStoreIDAlloc and #61218.
+				sIdent.StoreID = startID
+			} else {
+				// We're allocating from the block of IDs retrieved from
+				// allocateStoreIDs above.
+				sIdent.StoreID++
+			}
 		}
 	}
 
