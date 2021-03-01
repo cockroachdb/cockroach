@@ -74,3 +74,21 @@ var numStepsToPlanAtOnce = settings.RegisterIntSetting(
 		}
 		return nil
 	})
+
+var plannerRateLimit = settings.RegisterDurationSetting(
+	"kv.prober.planner.rate_limit",
+	"planning is attempted whenever kvprober has no next Step to make "+
+		"(no next range to probe); this setting controls the max rate of "+
+		"planning attempts, to protect CRBD from possible bad effects of repeated "+
+		"planning failures; note that planning involves both scanning meta2 & "+
+		"unmarshalling to proto; also note that if this is set so high that "+
+		"kv.prober.planner.num_steps_to_plan_at_once done every"+
+		"kv.prober.planner.rate_limit does not provide enough Steps given "+
+		"kv.prober.read.interval, kvprober will report errors, as it won't be "+
+		"able to consistently decide what ranges to probe next",
+	5*time.Minute, func(duration time.Duration) error {
+		if duration <= 0 {
+			return errors.New("param must be >0")
+		}
+		return nil
+	})

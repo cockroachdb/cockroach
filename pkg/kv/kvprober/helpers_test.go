@@ -18,6 +18,7 @@ var (
 	ReadEnabled          = readEnabled
 	ReadInterval         = readInterval
 	NumStepsToPlanAtOnce = numStepsToPlanAtOnce
+	PlannerRateLimit     = plannerRateLimit
 )
 
 func (p *Prober) Probe(ctx context.Context, db dbGet) {

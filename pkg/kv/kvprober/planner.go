@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,8 +54,24 @@ type meta2Planner struct {
 	// cursor points to a key in meta2 at which scanning should resume when new
 	// plans are needed.
 	cursor roachpb.Key
-	// meta2Planner makes plans of size NumPrefetchedPlan as per below.
+	// meta2Planner makes plans of size numStepsToPlanAtOnce as per below.
 	plan []Step
+	// lastPlanTime records the last time the meta2Planner made a plan of size
+	// numStepsToPlanAtOnce; this is recorded in order to implement a rate limit.
+	//
+	// Note that crashes clear this field, so the rate limit is not enforced in
+	// case of a crash loop.
+	lastPlanTime time.Time
+
+	// Swappable for testing.
+	now          func() time.Time
+	getNMeta2KVs func(
+		ctx context.Context,
+		db dbScan,
+		n int64,
+		cursor roachpb.Key,
+		timeout time.Duration) ([]kv.KeyValue, roachpb.Key, error)
+	meta2KVsToPlan func(kvs []kv.KeyValue) ([]Step, error)
 }
 
 func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
@@ -62,6 +79,13 @@ func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
 		db:       db,
 		settings: settings,
 		cursor:   keys.Meta2Prefix,
+		// At kvprober start time, this field is set to the unix epoch, implying
+		// that planning will be allowed on the first call to next no matter what.
+		// After that, the field will be set correctly.
+		lastPlanTime:   timeutil.Unix(0, 0),
+		now:            timeutil.Now,
+		getNMeta2KVs:   getNMeta2KVsImpl,
+		meta2KVsToPlan: meta2KVsToPlanImpl,
 	}
 }
 
@@ -111,15 +135,25 @@ func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
 //   we pay a smaller CPU cost more often.
 func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 	if len(p.plan) == 0 {
+		// Protect CRDB from planning executing too often, due to either issues
+		// with CRDB (meta2 unavailability) or bugs in kvprober.
+		rateLimit := plannerRateLimit.Get(&p.settings.SV)
+		timSinceLastPlan := p.now().Sub(p.lastPlanTime) // since
+		if timSinceLastPlan < rateLimit {
+			return Step{}, errors.Newf("planner rate limit hit: "+
+				"timSinceLastPlan=%v, rateLimit=%v", timSinceLastPlan, rateLimit)
+		}
+		p.lastPlanTime = p.now()
+
 		timeout := scanMeta2Timeout.Get(&p.settings.SV)
-		kvs, cursor, err := getNMeta2KVs(
+		kvs, cursor, err := p.getNMeta2KVs(
 			ctx, p.db, numStepsToPlanAtOnce.Get(&p.settings.SV), p.cursor, timeout)
 		if err != nil {
 			return Step{}, errors.Wrapf(err, "failed to get meta2 rows")
 		}
 		p.cursor = cursor
 
-		plan, err := meta2KVsToPlan(kvs)
+		plan, err := p.meta2KVsToPlan(kvs)
 		if err != nil {
 			return Step{}, errors.Wrapf(err, "failed to make plan from meta2 rows")
 		}
@@ -142,7 +176,7 @@ type dbScan interface {
 	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]kv.KeyValue, error)
 }
 
-func getNMeta2KVs(
+func getNMeta2KVsImpl(
 	ctx context.Context, db dbScan, n int64, cursor roachpb.Key, timeout time.Duration,
 ) ([]kv.KeyValue, roachpb.Key, error) {
 	var kvs []kv.KeyValue
@@ -175,7 +209,7 @@ func getNMeta2KVs(
 	return kvs, cursor, nil
 }
 
-func meta2KVsToPlan(kvs []kv.KeyValue) ([]Step, error) {
+func meta2KVsToPlanImpl(kvs []kv.KeyValue) ([]Step, error) {
 	plans := make([]Step, len(kvs))
 
 	var rangeDesc roachpb.RangeDescriptor
