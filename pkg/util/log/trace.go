@@ -92,7 +92,7 @@ func FinishEventLog(ctx context.Context) {
 // false.
 func getSpanOrEventLog(ctx context.Context) (*tracing.Span, *ctxEventLog, bool) {
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
-		if !sp.IsVerbose() {
+		if !sp.IsVerbose() && !sp.Tracer().HasExternalSink() {
 			return nil, nil, false
 		}
 		return sp, nil, true

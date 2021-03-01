@@ -78,7 +78,7 @@ var lightstepToken = settings.RegisterStringSetting(
 	envutil.EnvOrDefaultString("COCKROACH_TEST_LIGHTSTEP_TOKEN", ""),
 ).WithPublic()
 
-var zipkinCollector = settings.RegisterStringSetting(
+var ZipkinCollector = settings.RegisterStringSetting(
 	"trace.zipkin.collector",
 	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set",
 	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
@@ -162,7 +162,7 @@ func (t *Tracer) Configure(sv *settings.Values) {
 	reconfigure := func() {
 		if lsToken := lightstepToken.Get(sv); lsToken != "" {
 			t.setShadowTracer(createLightStepTracer(lsToken))
-		} else if zipkinAddr := zipkinCollector.Get(sv); zipkinAddr != "" {
+		} else if zipkinAddr := ZipkinCollector.Get(sv); zipkinAddr != "" {
 			t.setShadowTracer(createZipkinTracer(zipkinAddr))
 		} else {
 			t.setShadowTracer(nil, nil)
@@ -178,7 +178,13 @@ func (t *Tracer) Configure(sv *settings.Values) {
 
 	enableNetTrace.SetOnChange(sv, reconfigure)
 	lightstepToken.SetOnChange(sv, reconfigure)
-	zipkinCollector.SetOnChange(sv, reconfigure)
+	ZipkinCollector.SetOnChange(sv, reconfigure)
+}
+
+// HasExternalSink returns whether the tracer is configured to report
+// to an external tracing collector.
+func (t *Tracer) HasExternalSink() bool {
+	return t.getShadowTracer() != nil || t.useNetTrace()
 }
 
 func (t *Tracer) useNetTrace() bool {
