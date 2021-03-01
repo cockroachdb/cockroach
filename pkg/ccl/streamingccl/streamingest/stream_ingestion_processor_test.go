@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -275,6 +276,7 @@ func makeTestStreamURI(
 // stream workload.
 func TestRandomClientGeneration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 61287, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
