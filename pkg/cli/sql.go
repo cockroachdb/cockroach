@@ -546,7 +546,7 @@ func (c *cliState) handleDemo(cmd []string, nextState, errState cliStateEnum) cl
 	}
 
 	if len(cmd) != 2 {
-		return c.invalidSyntax(errState, `\demo expects 2 parameters`)
+		return c.invalidSyntax(errState, `\demo expects 2 parameters, but passed %v`, len(cmd))
 	}
 
 	// Special case the add command it takes a string instead of a node number.
@@ -588,7 +588,7 @@ func (c *cliState) handleDemoNodeCommands(
 		return c.invalidSyntax(
 			errState,
 			"%s",
-			errors.Wrapf(err, "cannot convert %s to string", cmd[2]).Error(),
+			errors.Wrapf(err, "cannot convert %s to string", cmd[1]),
 		)
 	}
 

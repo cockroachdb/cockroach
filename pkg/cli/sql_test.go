@@ -234,6 +234,18 @@ func TestHandleCliCmdSlashDInvalidSyntax(t *testing.T) {
 	}
 }
 
+func TestHandleDemoNodeCommandsInvalidNodeName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	initCLIDefaults()
+
+	demoNodeCommandTests := []string{"shutdown", "*"}
+
+	c := setupTestCliState()
+	c.handleDemoNodeCommands(demoNodeCommandTests, cliStateEnum(0), cliStateEnum(1))
+	assert.Equal(t, errInvalidSyntax, c.exitErr)
+}
+
 func setupTestCliState() cliState {
 	c := cliState{}
 	c.ins = noLineEditor
