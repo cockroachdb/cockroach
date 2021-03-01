@@ -34,6 +34,207 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill tests that
+// the zone configurations are properly set up before the LOCALITY REGIONAL BY ROW
+// backfill begins.
+func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	var chunkSize int64 = 100
+	var maxValue = 4000
+	if util.RaceEnabled {
+		// Race builds are a lot slower, so use a smaller number of rows.
+		maxValue = 200
+		chunkSize = 5
+	}
+
+	ctx := context.Background()
+
+	type intermediateZoneConfigurations struct {
+		showConfigStatement string
+		expectedTarget      string
+		expectedSQL         string
+	}
+
+	testCases := []struct {
+		desc                                   string
+		setupQuery                             string
+		alterQuery                             string
+		expectedIntermediateZoneConfigurations []intermediateZoneConfigurations
+	}{
+		{
+			desc:       "REGIONAL BY TABLE to REGIONAL BY ROW",
+			setupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY TABLE`,
+			alterQuery: `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
+			expectedIntermediateZoneConfigurations: []intermediateZoneConfigurations{
+				{
+					showConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
+					expectedTarget:      `DATABASE t`,
+					expectedSQL: `ALTER DATABASE t CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 3,
+	num_voters = 3,
+	constraints = '{+region=ajstorm-1: 1}',
+	voter_constraints = '[+region=ajstorm-1]',
+	lease_preferences = '[[+region=ajstorm-1]]'`,
+				},
+				{
+					showConfigStatement: `SHOW ZONE CONFIGURATION FOR PARTITION "ajstorm-1" OF INDEX t.test@new_primary_key`,
+					expectedTarget:      `PARTITION "ajstorm-1" OF INDEX t.public.test@new_primary_key`,
+					expectedSQL: `ALTER PARTITION "ajstorm-1" OF INDEX t.public.test@new_primary_key CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 3,
+	num_voters = 3,
+	constraints = '{+region=ajstorm-1: 1}',
+	voter_constraints = '[+region=ajstorm-1]',
+	lease_preferences = '[[+region=ajstorm-1]]'`,
+				},
+			},
+		},
+		{
+			desc:       "GLOBAL to REGIONAL BY ROW",
+			setupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY GLOBAL`,
+			alterQuery: `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
+			expectedIntermediateZoneConfigurations: []intermediateZoneConfigurations{
+				{
+					showConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
+					expectedTarget:      `TABLE t.public.test`,
+					expectedSQL: `ALTER TABLE t.public.test CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	global_reads = true,
+	num_replicas = 3,
+	num_voters = 3,
+	constraints = '{+region=ajstorm-1: 1}',
+	voter_constraints = '[+region=ajstorm-1]',
+	lease_preferences = '[[+region=ajstorm-1]]'`,
+				},
+				{
+					showConfigStatement: `SHOW ZONE CONFIGURATION FOR PARTITION "ajstorm-1" OF INDEX t.test@new_primary_key`,
+					expectedTarget:      `PARTITION "ajstorm-1" OF INDEX t.public.test@new_primary_key`,
+					expectedSQL: `ALTER PARTITION "ajstorm-1" OF INDEX t.public.test@new_primary_key CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 3,
+	num_voters = 3,
+	constraints = '{+region=ajstorm-1: 1}',
+	voter_constraints = '[+region=ajstorm-1]',
+	lease_preferences = '[[+region=ajstorm-1]]'`,
+				},
+			},
+		},
+		{
+			desc:       "REGIONAL BY ROW to REGIONAL BY TABLE",
+			setupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
+			alterQuery: `ALTER TABLE t.test SET LOCALITY REGIONAL BY TABLE`,
+			expectedIntermediateZoneConfigurations: []intermediateZoneConfigurations{
+				{
+					showConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
+					expectedTarget:      `DATABASE t`,
+					expectedSQL: `ALTER DATABASE t CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 3,
+	num_voters = 3,
+	constraints = '{+region=ajstorm-1: 1}',
+	voter_constraints = '[+region=ajstorm-1]',
+	lease_preferences = '[[+region=ajstorm-1]]'`,
+				},
+			},
+		},
+		{
+			desc:       "REGIONAL BY ROW to GLOBAL",
+			setupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
+			alterQuery: `ALTER TABLE t.test SET LOCALITY GLOBAL`,
+			expectedIntermediateZoneConfigurations: []intermediateZoneConfigurations{
+				{
+					showConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
+					expectedTarget:      `DATABASE t`,
+					expectedSQL: `ALTER DATABASE t CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 90000,
+	num_replicas = 3,
+	num_voters = 3,
+	constraints = '{+region=ajstorm-1: 1}',
+	voter_constraints = '[+region=ajstorm-1]',
+	lease_preferences = '[[+region=ajstorm-1]]'`,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			var db *gosql.DB
+			params, _ := tests.CreateTestServerParams()
+			params.Locality.Tiers = []roachpb.Tier{
+				{Key: "region", Value: "ajstorm-1"},
+			}
+
+			runCheck := false
+			params.Knobs = base.TestingKnobs{
+				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+					BackfillChunkSize: chunkSize,
+				},
+				DistSQL: &execinfra.TestingKnobs{
+					RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+						if runCheck {
+							for _, subTC := range tc.expectedIntermediateZoneConfigurations {
+								t.Run(subTC.showConfigStatement, func(t *testing.T) {
+									var target, sql string
+									require.NoError(
+										t,
+										db.QueryRow(subTC.showConfigStatement).Scan(&target, &sql),
+									)
+									require.Equal(t, subTC.expectedTarget, target)
+									require.Equal(t, subTC.expectedSQL, sql)
+								})
+							}
+							runCheck = false
+						}
+						return nil
+					},
+				},
+			}
+			s, sqlDB, _ := serverutils.StartServer(t, params)
+			db = sqlDB
+			defer s.Stopper().Stop(ctx)
+
+			// Disable strict GC TTL enforcement because we're going to shove a zero-value
+			// TTL into the system with AddImmediateGCZoneConfig.
+			defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+
+			if _, err := sqlDB.Exec(fmt.Sprintf(`
+CREATE DATABASE t PRIMARY REGION "ajstorm-1";
+USE t;
+%s
+`, tc.setupQuery)); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := sqltestutils.BulkInsertIntoTable(sqlDB, maxValue); err != nil {
+				t.Fatal(err)
+			}
+
+			runCheck = true
+			_, err := sqlDB.Exec(tc.alterQuery)
+			require.NoError(t, err)
+		})
+	}
+}
+
 // TestAlterTableLocalityRegionalByRowError tests an alteration involving
 // REGIONAL BY ROW which gets its async job interrupted by some sort of
 // error or cancellation. After this, we expect the table to retain
@@ -60,7 +261,11 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 	ctx := context.Background()
 
 	const showCreateTableStringSQL = `SELECT create_statement FROM [SHOW CREATE TABLE t.test]`
-	const showZoneConfigurationSQL = `SHOW ZONE CONFIGURATION FROM TABLE t.test`
+	const zoneConfigureSQLStatements = `
+		SELECT coalesce(string_agg(raw_config_sql, ';' ORDER BY raw_config_sql), 'NULL')
+		FROM crdb_internal.zones
+		WHERE database_name = 't' AND table_name = 'test'
+	`
 
 	// alterState is a struct that contains an action for a base test case
 	// to execute ALTER TABLE t.test SET LOCALITY <locality> against.
@@ -262,7 +467,7 @@ USE t;
 							require.Error(t, err)
 							require.Contains(t, err.Error(), errorMode.errorContains)
 
-							// Grab a copy of SHOW CREATE TABLE and SHOW ZONE CONFIGURATION before we run
+							// Grab a copy of SHOW CREATE TABLE and zone configuration data before we run
 							// any ALTER query. The result should match if the operation fails.
 							var originalCreateTableOutput string
 							require.NoError(
@@ -270,10 +475,10 @@ USE t;
 								sqlDB.QueryRow(showCreateTableStringSQL).Scan(&originalCreateTableOutput),
 							)
 
-							var originalTarget, originalZoneConfig string
+							var originalZoneConfig string
 							require.NoError(
 								t,
-								sqlDB.QueryRow(showZoneConfigurationSQL).Scan(&originalTarget, &originalZoneConfig),
+								sqlDB.QueryRow(zoneConfigureSQLStatements).Scan(&originalZoneConfig),
 							)
 
 							// Ensure that the mutations corresponding to the primary key change are cleaned up and
@@ -316,16 +521,14 @@ USE t;
 								}
 
 								// Ensure SHOW ZONE CONFIGURATION has not changed.
-								var target, zoneConfig string
+								var zoneConfig string
 								require.NoError(
 									t,
-									sqlDB.QueryRow(showZoneConfigurationSQL).Scan(&target, &zoneConfig),
+									sqlDB.QueryRow(zoneConfigureSQLStatements).Scan(&zoneConfig),
 								)
-								if !(target == originalTarget && zoneConfig == originalZoneConfig) {
+								if zoneConfig != originalZoneConfig {
 									return errors.Errorf(
-										"expected zone configuration to not have changed, got %s/%s, sql %s/%s",
-										originalTarget,
-										target,
+										"expected zone configuration statements to not have changed, got %s, sql %s",
 										originalZoneConfig,
 										zoneConfig,
 									)
