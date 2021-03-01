@@ -1718,9 +1718,9 @@
     regenerator-runtime "^0.13.2"
 
 "@babel/runtime@^7.12.13":
-  version "7.12.13"
-  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.12.13.tgz#0a21452352b02542db0ffb928ac2d3ca7cb6d66d"
-  integrity sha512-8+3UMPBrjFa/6TtKi/7sehPKqfAm4g6K+YQjyyFOLUTxzOngcRZTlAVY8sc2CORJYqdHQY8gRPHmn+qo15rCBw==
+  version "7.13.7"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.13.7.tgz#d494e39d198ee9ca04f4dcb76d25d9d7a1dc961a"
+  integrity sha512-h+ilqoX998mRVM5FtB5ijRuHUDVt5l3yfoOi2uh18Z/O3hvyaHQ39NpxVkCIG5yFs+mLq/ewFp8Bss6zmWv6ZA==
   dependencies:
     regenerator-runtime "^0.13.4"
 
@@ -1813,13 +1813,13 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/cluster-ui@^0.2.3":
-  version "0.2.3"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.3.tgz#b7d078c87f455d6f9af8d0f1c443dd7adf4aba4a"
-  integrity sha512-wcn58R61/KlX0+wy0u6H4Rg69SnZ/GYTik4EOZxEeqHswuyZsAwee1rwfPsVbX7TDE9HyqeZZ5q1kwrzHFuIZQ==
+"@cockroachlabs/cluster-ui@^0.2.11":
+  version "0.2.11"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.11.tgz#fa139b7240551d73a0e21ab0d60017d5c93f26b9"
+  integrity sha512-Zjqbz/U/sBteH+OlWEfeCWPHMshS4ac8YVkG2IdY2hpl5wm8fwmHdGFHqGwQDDZ5vVkWPR817YlBnwCUspkfDg==
   dependencies:
     "@babel/runtime" "^7.12.13"
-    "@cockroachlabs/crdb-protobuf-client" "^0.0.6"
+    "@cockroachlabs/crdb-protobuf-client" "^0.0.7"
     "@cockroachlabs/icons" "0.3.0"
     "@cockroachlabs/ui-components" "0.2.14-alpha.0"
     "@popperjs/core" "^2.4.0"
@@ -1836,10 +1836,10 @@
     react-select "^1.2.1"
     reselect "^4.0.0"
 
-"@cockroachlabs/crdb-protobuf-client@^0.0.6":
-  version "0.0.6"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.6.tgz#e3ccc5b81987be7c525c6f71d52e2a2fced22deb"
-  integrity sha512-8A9QiLJ/9PlFJTtzzMTMCGb/VCt3jckHtwt/XWWqbFyZn4JuekUhZVM3XwiWf/vYG+rtrVaRpxuUKy8dLMw1pA==
+"@cockroachlabs/crdb-protobuf-client@^0.0.7":
+  version "0.0.7"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/crdb-protobuf-client/-/crdb-protobuf-client-0.0.7.tgz#b0b405f04acc56932ed698a7d532c71c0b7f43bd"
+  integrity sha512-LjpKVeeeIrUG91uxi5jq3g6AXU6oj/HgvfnhL2YJaUeVC4S12AcSVMLMQ2S06mgB7pVXBs66mH2Lt4R0s6l4Lg==
 
 "@cockroachlabs/eslint-config@^0.1.11":
   version "0.1.11"
@@ -2016,9 +2016,9 @@
     fastq "^1.6.0"
 
 "@popperjs/core@^2.4.0", "@popperjs/core@^2.4.3":
-  version "2.6.0"
-  resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.6.0.tgz#f022195afdfc942e088ee2101285a1d31c7d727f"
-  integrity sha512-cPqjjzuFWNK3BSKLm0abspP0sp/IGOli4p5I5fKFAzdS8fvjdOwDCfZqAaIiXd9lPkOWi3SUUfZof3hEb7J/uw==
+  version "2.8.4"
+  resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.8.4.tgz#6f1744b0f69f507a433f42874cc3b2eb4b11b337"
+  integrity sha512-h0lY7g36rhjNV8KVHKS3/BEOgfsxu0AiRI8+ry5IFBGEsQFkpjxtcpVc9ndN8zrKUeMZXAWMc7eQMepfgykpxQ==
 
 "@protobufjs/aspromise@^1.1.1", "@protobufjs/aspromise@^1.1.2":
   version "1.1.2"
@@ -7505,15 +7505,10 @@ he@1.2.0, he@^1.2.0:
   resolved "https://registry.yarnpkg.com/he/-/he-1.2.0.tgz#84ae65fa7eafb165fddb61566ae14baf05664f0f"
   integrity sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==
 
-highlight.js@*, highlight.js@^10.6.0:
+highlight.js@*, highlight.js@^10.2.0, highlight.js@^10.6.0:
   version "10.6.0"
   resolved "https://registry.yarnpkg.com/highlight.js/-/highlight.js-10.6.0.tgz#0073aa71d566906965ba6e1b7be7b2682f5e18b6"
   integrity sha512-8mlRcn5vk/r4+QcqerapwBYTe+iPL5ih6xrNylxrnBdHQiijDETfXX7VIxC3UiCRiINBJfANBAsPzAvRQj8RpQ==
-
-highlight.js@^10.2.0:
-  version "10.5.0"
-  resolved "https://registry.yarnpkg.com/highlight.js/-/highlight.js-10.5.0.tgz#3f09fede6a865757378f2d9ebdcbc15ba268f98f"
-  integrity sha512-xTmvd9HiIHR6L53TMC7TKolEj65zG1XU+Onr8oi86mYa+nLcIbxTTWkpW7CsEwv/vK7u1zb8alZIMLDqqN6KTw==
 
 highlight.js@~9.12.0:
   version "9.12.0"
