@@ -465,4 +465,34 @@ statement error enum value "a" is being dropped
 BEGIN;
 ALTER TYPE a DROP VALUE 'a';
 ALTER TYPE a RENAME VALUE 'a' TO 'new_name';
-ROLLBACK;
+
+statement ok
+ROLLBACK
+
+# Ensure changes to the type are picked up by the array type descriptor as well.
+subtest regression_58710
+
+statement ok
+CREATE TYPE ab_58710 AS ENUM ('a', 'b')
+
+# NB: This step is important as it hydrates the array type alias based on the
+# state of the underlying enum type descriptor.
+statement error invalid input value for enum ab_58710: "c"
+SELECT ARRAY['c']::_ab_58710
+
+statement ok
+SELECT ARRAY['a']::_ab_58710;
+
+statement ok
+ALTER TYPE ab_58710 ADD VALUE 'c';
+
+statement ok
+ALTER TYPE ab_58710 DROP VALUE 'a';
+
+# 'c' was added to the enum above and 'a' was dropped, so the array type alias
+# should reflect this.
+statement ok
+SELECT ARRAY['c']::_ab_58710;
+
+statement error invalid input value for enum ab_58710: "a"
+SELECT ARRAY['a']::_ab_58710
