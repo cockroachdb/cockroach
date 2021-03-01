@@ -280,10 +280,10 @@ func TestCollectionScaleRelativeToOrigin(t *testing.T) {
 		},
 		{
 			desc:     "scale empty collection",
-			input:    geom.NewGeometryCollection(),
+			input:    geom.NewGeometryCollection().MustSetLayout(geom.XY),
 			factor:   geom.NewPointFlat(geom.XY, []float64{2, 2}),
 			origin:   geom.NewPointFlat(geom.XY, []float64{1, 1}),
-			expected: geom.NewGeometryCollection(),
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XY),
 		},
 	}
 
