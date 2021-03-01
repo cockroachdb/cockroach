@@ -461,10 +461,10 @@ project
  ├── values
  │    ├── columns: column1:1
  │    ├── cardinality: [1 - 1]
- │    ├── immutable, has-placeholder
+ │    ├── has-placeholder
  │    ├── key: ()
  │    ├── fd: ()-->(1)
- │    └── ($1::INT8,)
+ │    └── ($1,)
  └── projections
       ├── column1:1 + 1 [as="?column?":3, outer=(1), immutable]
       └── 3 [as="?column?":4]
