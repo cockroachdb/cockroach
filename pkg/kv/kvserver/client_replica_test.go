@@ -3770,3 +3770,92 @@ func TestRaftSchedulerPrioritizesNodeLiveness(t *testing.T) {
 	priorityID := store.RaftSchedulerPriorityID()
 	require.Equal(t, livenessRangeID, priorityID)
 }
+
+func TestUnavailableRangeChecker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var key, proberKey roachpb.Key
+	var incrementCmdKey, proberCmdKey kvserverbase.CmdIDKey
+	blockApplication, blockProber := make(chan struct{}), make(chan struct{})
+	// We can't block on proposal filter as that will block the proposal itself,
+	// and the unavailable range checker will also end up being clocked. We have
+	// to block in the apply.
+	proposalFilter := func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+		if req, ok := args.Req.GetArg(roachpb.Increment); ok {
+			if req.(*roachpb.IncrementRequest).Key.Compare(key) == 0 {
+				incrementCmdKey = args.CmdID
+			}
+		}
+		if req, ok := args.Req.GetArg(roachpb.Put); ok {
+			if req.(*roachpb.PutRequest).Key.Compare(proberKey) == 0 {
+				proberCmdKey = args.CmdID
+			}
+		}
+		return nil
+	}
+	applyFilter := func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+		if args.CmdID == incrementCmdKey {
+			<-blockApplication
+		}
+		if args.CmdID == proberCmdKey {
+			<-blockProber
+		}
+		return 0, nil
+	}
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingProposalFilter: proposalFilter,
+					TestingApplyFilter:    applyFilter,
+				},
+			},
+			RaftConfig: base.RaftConfig{
+				// We don't want leadership or leases moving around.
+				RaftElectionTimeoutTicks: 1000000,
+			},
+		},
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	store := tc.GetFirstStoreFromServer(t, 0)
+	key = tc.ScratchRange(t)
+	proberKey = keys.MakeRangeKey(roachpb.RKey(key), keys.LocalRangeProbeSuffix, nil)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	// We block the proposal of this above, so need to run into a separate goroutine.
+	tc.Stopper().RunAsyncTask(ctx, "inc-value", func(ctx context.Context) {
+		if _, err := kv.SendWrapped(ctx, store.TestSender(), incrementArgs(key, 5)); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// Confirm that the values were not written.
+	tc.WaitForValues(t, key, []int64{0, 0, 0})
+
+	leader := tc.GetRaftLeader(t, roachpb.RKey(key))
+	testutils.SucceedsSoon(t, func() error {
+		if leader.IsMaybeUnavailable() {
+			return nil
+		}
+		return errors.Errorf("Expected replica %v to be marked as unavailable", leader)
+	})
+
+	// Release the prober, so it can mark the range as available.
+	close(blockProber)
+	// Stop blocking Raft application to allow the next request to go through.
+	close(blockApplication)
+
+	testutils.SucceedsSoon(t, func() error {
+		if leader.IsMaybeUnavailable() {
+			return errors.Errorf("Expected replica %v to be marked as available", leader)
+		}
+		return nil
+	})
+
+	// Confirm the original request went through.
+	tc.WaitForValues(t, key, []int64{5, 5, 5})
+}

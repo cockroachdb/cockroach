@@ -544,6 +544,11 @@ type Replica struct {
 		failureToGossipSystemConfig bool
 
 		tenantID roachpb.TenantID // Set when first initialized, not modified after
+
+		// maybeUnavailable is set if we detect that a proposal for this range had
+		// a timeout and the range is not making any progress, i.e. the applied
+		// index has not moved in that time.
+		maybeUnavailable bool
 	}
 
 	rangefeedMu struct {
@@ -1204,6 +1209,11 @@ func (r *Replica) checkExecutionCanProceed(
 	// an error than to panic in checkSpanInRangeRLocked.
 	if !r.isInitializedRLocked() {
 		return kvserverpb.LeaseStatus{}, errors.Errorf("%s not initialized", r)
+	}
+
+	if r.mu.maybeUnavailable && !r.isRangeCheckerRequest(ba) &&
+		!ba.IsLeaseRequest() && !ba.IsAdmin(){
+		return kvserverpb.LeaseStatus{}, errors.Errorf("%s is unavailable", r)
 	}
 
 	// Is the replica destroyed?

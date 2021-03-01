@@ -30,6 +30,10 @@ const (
 	// request to be "slow".
 	SlowRequestThreshold = 60 * time.Second
 
+	// UnavailableRangeCheckThreshold is the amount of time to wait before checking
+	// if a range is stuck and unavailable.
+	UnavailableRangeCheckThreshold = 5 * time.Second
+
 	// ChunkRaftCommandThresholdBytes is the threshold in bytes at which
 	// to chunk or otherwise limit commands being sent to Raft.
 	ChunkRaftCommandThresholdBytes = 256 * 1000

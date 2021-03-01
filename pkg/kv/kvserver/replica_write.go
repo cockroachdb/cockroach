@@ -12,9 +12,11 @@ package kvserver
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -28,8 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -136,6 +140,7 @@ func (r *Replica) executeWriteBatch(
 		return nil, g, roachpb.NewError(errors.Wrapf(err, "aborted before proposing"))
 	}
 
+	currentAppliedIndex := r.State().RaftAppliedIndex
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose.
@@ -183,6 +188,9 @@ func (r *Replica) executeWriteBatch(
 			)
 		}
 	}()
+	unavailableRangeTimer := timeutil.NewTimer()
+	defer unavailableRangeTimer.Stop()
+	unavailableRangeTimer.Reset(base.UnavailableRangeCheckThreshold)
 
 	for {
 		select {
@@ -263,15 +271,33 @@ func (r *Replica) executeWriteBatch(
 					uint64(maxLeaseIndex))
 				propResult.Err = roachpb.NewError(applicationErr)
 			}
+			// Always mark the replica as available once a proposal succeeds, in case
+			// it was previously marked as unavailable.
+			r.markAvailable()
 			return propResult.Reply, nil, propResult.Err
 		case <-slowTimer.C:
 			slowTimer.Read = true
 			r.store.metrics.SlowRaftRequests.Inc(1)
-
-			var s redact.StringBuilder
-			rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
-				r.RaftStatus(), ba, timeutil.Since(startPropTime))
-			log.Errorf(ctx, "range unavailable: %v", s)
+		case <-unavailableRangeTimer.C:
+			unavailableRangeTimer.Read = true
+			if !r.isRangeCheckerRequest(ba) {
+				newAppliedIndex := r.State().RaftAppliedIndex
+				// if the applied index has not moved, there is a high probability that this
+				// range is unavailable, so we want to fail fast here to prevent requests
+				// form piling up and potentially causing the whole cluster to go down.
+				if currentAppliedIndex >= newAppliedIndex {
+					var s redact.StringBuilder
+					rangeUnavailableMessage(&s, r.Desc(), r.store.cfg.NodeLiveness.GetIsLiveMap(),
+						r.RaftStatus(), ba, timeutil.Since(startPropTime))
+					log.Errorf(ctx, "range unavailable: %v", s)
+					if err := r.checkRangeAvailable(); err != nil {
+						log.Errorf(ctx, "unexpected failure %v while checking if the range has become available", err)
+					}
+				} else {
+					currentAppliedIndex = newAppliedIndex
+					unavailableRangeTimer.Reset(base.UnavailableRangeCheckThreshold)
+				}
+			}
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
 			// which indicates to the caller that the command may have executed.
@@ -754,4 +780,61 @@ func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	// epochs then they couldn't have left any intents that they now need to
 	// clean up.
 	return ba.Txn.Epoch == 0 || etArg.Require1PC
+}
+
+// isRangeCheckerRequest determines if this request is a probe issued by the
+// unavailable range checker defined in checkRangeAvailable.
+func (r *Replica) isRangeCheckerRequest(ba *roachpb.BatchRequest) bool {
+	if req, ok := ba.GetArg(roachpb.Put); ok {
+		key := keys.MakeRangeKey(r.Desc().StartKey, keys.LocalRangeProbeSuffix, nil)
+		if req.(*roachpb.PutRequest).Key.Compare(key) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// markAvailable marks the replica as available.
+func (r *Replica) markAvailable() {
+	r.mu.Lock()
+	r.mu.maybeUnavailable = false
+	r.mu.Unlock()
+}
+
+// checkRangeAvailable starts an async task to check if this range becomes
+// available. We do this by submitting an empty proposal to raft and seeing
+// if it gets applied correctly.
+func (r *Replica) checkRangeAvailable() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// If the flag is set, that means the async task is already running and
+	// we dont need to kick off a new one.
+	if r.mu.maybeUnavailable {
+		return nil
+	}
+	r.mu.maybeUnavailable = true
+	return r.store.stopper.RunAsyncTask(context.Background(), "range-unavailable-checker", func(ctx context.Context) {
+		randomizer := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		for {
+			key := keys.MakeRangeKey(r.Desc().StartKey, keys.LocalRangeProbeSuffix, nil)
+			ba := &roachpb.BatchRequest{
+				Header: roachpb.Header{
+					Timestamp: r.store.Clock().Now(),
+				},
+			}
+			ba.Add(&roachpb.PutRequest{
+				RequestHeader: roachpb.RequestHeader{Key: key},
+				Value:         roachpb.MakeValueFromBytes(randutil.RandBytes(randomizer, 10)),
+			})
+			err := contextutil.RunWithTimeout(ctx, "range-unavailable-checker-send", 60*time.Second, func(ctx context.Context) error {
+				_, pErr := r.sendWithRangeID(ctx, r.RangeID, ba)
+				return pErr.GoError()
+			})
+			// We only exit out of the probe loop if the request was successful or
+			// we got a non-timeout error.
+			if err == nil || !errors.HasType(err, (*contextutil.TimeoutError)(nil)) {
+				return
+			}
+		}
+	})
 }

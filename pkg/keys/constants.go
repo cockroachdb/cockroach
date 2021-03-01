@@ -213,6 +213,8 @@ var (
 	LockTableSingleKeyEnd = roachpb.Key(
 		makeKey(LocalRangeLockTablePrefix, roachpb.Key(LockTableSingleKeyInfix).PrefixEnd()))
 
+	LocalRangeProbeSuffix = roachpb.RKey("prbw")
+
 	// The global keyspace includes the meta{1,2}, system, system tenant SQL
 	// keys, and non-system tenant SQL keys.
 

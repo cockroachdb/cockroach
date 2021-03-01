@@ -494,6 +494,15 @@ func (r *Replica) IsQuiescent() bool {
 	return r.mu.quiescent
 }
 
+// IsMaybeUnavailable returns if the replica thinks this range is unavailable.
+// This value would only be set correctly on the leader, since we determine
+// this during a proposal.
+func (r *Replica) IsMaybeUnavailable() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.maybeUnavailable
+}
+
 // GetQueueLastProcessed returns the last processed timestamp for the
 // specified queue, or the zero timestamp if not available.
 func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.Timestamp, error) {
