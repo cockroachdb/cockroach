@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -179,6 +180,9 @@ type TestServerInterface interface {
 	// ClusterSettings returns the ClusterSettings shared by all components of
 	// this server.
 	ClusterSettings() *cluster.Settings
+
+	// Decommission idempotently sets the decommissioning flag for specified nodes.
+	Decommission(ctx context.Context, targetStatus livenesspb.MembershipStatus, nodeIDs []roachpb.NodeID) error
 
 	// SplitRange splits the range containing splitKey.
 	SplitRange(splitKey roachpb.Key) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)

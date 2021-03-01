@@ -245,7 +245,6 @@ go_test(
         "auto_tls_init_test.go",
         "config_test.go",
         "connectivity_test.go",
-        "decommission_test.go",
         "drain_test.go",
         "graphite_test.go",
         "idle_monitor_test.go",

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -1129,4 +1130,36 @@ func TestGWRuntimeMarshalProto(t *testing.T) {
 		nil, /* request */
 		errors.New("boom"),
 	)
+}
+
+func TestDecommissionNodeStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+	})
+	defer tc.Stopper().Stop(ctx)
+	decomNodeID := tc.Server(2).NodeID()
+
+	// Make sure node status entries have been created.
+	for i := 0; i < tc.NumServers(); i++ {
+		srv := tc.Server(i)
+		entry, err := srv.DB().Get(ctx, keys.NodeStatusKey(srv.NodeID()))
+		require.NoError(t, err)
+		require.NotNil(t, entry.Value, "node status entry not found for node %d", srv.NodeID())
+	}
+
+	// Decommission the node.
+	srv := tc.Server(0)
+	require.NoError(t, srv.Decommission(
+		ctx, livenesspb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decomNodeID}))
+	require.NoError(t, srv.Decommission(
+		ctx, livenesspb.MembershipStatus_DECOMMISSIONED, []roachpb.NodeID{decomNodeID}))
+
+	// The node status entry should now have been cleaned up.
+	entry, err := srv.DB().Get(ctx, keys.NodeStatusKey(decomNodeID))
+	require.NoError(t, err)
+	require.Nil(t, entry.Value, "found stale node status entry for node %d", decomNodeID)
 }
