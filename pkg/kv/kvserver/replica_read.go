@@ -180,16 +180,6 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 		lResult.AcquiredLocks = nil
 	}
 
-	if !lResult.FreezeStart.IsEmpty() {
-		// A merge is (likely) about to be carried out, and this replica needs to
-		// block all non-read traffic until the merge either commits or aborts. See
-		// docs/tech-notes/range-merges.md.
-		if err := r.maybeWatchForMerge(ctx, lResult.FreezeStart); err != nil {
-			return roachpb.NewError(err)
-		}
-		lResult.FreezeStart = hlc.Timestamp{}
-	}
-
 	if !lResult.IsZero() {
 		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}

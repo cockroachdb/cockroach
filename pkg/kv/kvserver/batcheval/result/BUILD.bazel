@@ -13,7 +13,6 @@ go_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
-        "//pkg/util/hlc",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_kr_pretty//:pretty",

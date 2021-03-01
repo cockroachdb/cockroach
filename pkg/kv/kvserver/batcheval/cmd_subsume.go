@@ -110,6 +110,21 @@ func Subsume(
 		return result.Result{}, errors.AssertionFailedf("non-deletion intent on local range descriptor")
 	}
 
+	// NOTE: the deletion intent on the range's meta2 descriptor is just as
+	// important to correctness as the deletion intent on the local descriptor,
+	// but the check is too expensive as it would involve a network roundtrip on
+	// most nodes.
+
+	// Freeze the range. Do so by blocking all requests while a newly launched
+	// async goroutine watches (pushes with low priority) the merge transaction.
+	// This will also block the closed timestamp side-transport from closing new
+	// timestamps, meaning that the following call to GetCurrentReadSummary is
+	// guaranteed to observe the highest closed timestamp ever published by this
+	// range (if the merge eventually completes).
+	if err := cArgs.EvalCtx.WatchForMerge(ctx); err != nil {
+		return result.Result{}, errors.Wrap(err, "watching for merge during subsume")
+	}
+
 	// We prevent followers of the RHS from being able to serve follower reads on
 	// timestamps that fall in the timestamp window representing the range's
 	// subsumed state (i.e. between the subsumption time (FreezeStart) and the
@@ -142,33 +157,25 @@ func Subsume(
 	// is subsumed, we ensure that the initial MLAI update broadcast by the new
 	// leaseholder respects the invariant in question, in much the same way we do
 	// here. Take a look at `EmitMLAI()` in replica_closedts.go for more details.
+	//
+	// TODO(nvanbenschoten): remove this in v21.2 when the rest of the v1 closed
+	// timestamp system disappears.
 	_, untrack := cArgs.EvalCtx.GetTracker().Track(ctx)
 	lease, _ := cArgs.EvalCtx.GetLease()
 	lai := cArgs.EvalCtx.GetLeaseAppliedIndex()
 	untrack(ctx, ctpb.Epoch(lease.Epoch), desc.RangeID, ctpb.LAI(lai+1))
 
-	// NOTE: the deletion intent on the range's meta2 descriptor is just as
-	// important to correctness as the deletion intent on the local descriptor,
-	// but the check is too expensive as it would involve a network roundtrip on
-	// most nodes.
-
+	// Now that the range is frozen, collect some information to ship to the LHS
+	// leaseholder through the merge trigger.
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
 	reply.LeaseAppliedIndex = lai
 	reply.FreezeStart = cArgs.EvalCtx.Clock().NowAsClockTimestamp()
-	// FrozenClosedTimestamp might return an empty timestamp if the Raft-based
-	// closed timestamp transport hasn't been enabled yet. That's OK because, if
-	// the new transport is not enabled, then ranges with leading closed
-	// timestamps can't exist yet, and so the closed timestamp must be below the
-	// FreezeStart. The FreezeStart is used by Store.MergeRange to bump the RHS'
-	// ts cache if LHS/RHS leases are not collocated. The case when the leases are
-	// collocated also works out because then the closed timestamp (according to
-	// the old mechanism) is the same for both ranges being merged.
-	reply.ClosedTimestamp = cArgs.EvalCtx.GetFrozenClosedTimestamp()
+
 	// Collect a read summary from the RHS leaseholder to ship to the LHS
 	// leaseholder. This is used to instruct the LHS on how to update its
 	// timestamp cache to ensure that no future writes are allowed to invalidate
 	// prior reads performed to this point on the RHS range.
-	priorReadSum := cArgs.EvalCtx.GetCurrentReadSummary()
+	priorReadSum, closedTS := cArgs.EvalCtx.GetCurrentReadSummary()
 	// For now, forward this summary to the freeze time. This may appear to
 	// undermine the benefit of the read summary, but it doesn't entirely. Until
 	// we ship higher-resolution read summaries, the read summary doesn't
@@ -181,8 +188,16 @@ func Subsume(
 	// think about.
 	priorReadSum.Merge(rspb.FromTimestamp(reply.FreezeStart.ToTimestamp()))
 	reply.ReadSummary = &priorReadSum
+	// NOTE FOR v21.1: GetCurrentReadSummary might return an empty timestamp if
+	// the Raft-based closed timestamp transport hasn't been enabled yet. That's
+	// OK because, if the new transport is not enabled, then ranges with leading
+	// closed timestamps can't exist yet, and so the closed timestamp must be
+	// below the FreezeStart. The FreezeStart is used by Store.MergeRange to
+	// bump the RHS' ts cache if LHS/RHS leases are not collocated. The case
+	// when the leases are collocated also works out because then the closed
+	// timestamp (according to the old mechanism) is the same for both ranges
+	// being merged.
+	reply.ClosedTimestamp = closedTS
 
-	return result.Result{
-		Local: result.LocalResult{FreezeStart: reply.FreezeStart.ToTimestamp()},
-	}, nil
+	return result.Result{}, nil
 }

@@ -785,18 +785,6 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			return nil, nil, errors.Errorf("unable to find store %d in range %+v", target, desc)
 		}
 
-		// For now, don't allow replicas of type LEARNER to be leaseholders, see
-		// comments in RequestLease and TransferLease for why.
-		//
-		// TODO(dan): We shouldn't need this, the checks in RequestLease and
-		// TransferLease are the canonical ones and should be sufficient. Sadly, the
-		// `r.mu.minLeaseProposedTS = status.Timestamp` line below will likely play
-		// badly with that. This would be an issue even without learners, but
-		// omitting this check would make it worse. Fixme.
-		if t := nextLeaseHolder.GetType(); t != roachpb.VOTER_FULL {
-			return nil, nil, errors.Errorf(`cannot transfer lease to replica of type %s`, t)
-		}
-
 		if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok &&
 			nextLease.Replica != nextLeaseHolder {
 			repDesc, err := r.getReplicaDescriptorRLocked()
@@ -813,15 +801,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 			return nil, nil, newNotLeaseHolderError(nextLease, r.store.StoreID(), desc,
 				"another transfer to a different store is in progress")
 		}
-		// Stop using the current lease. All future calls to leaseStatus on this
-		// node with the current lease will now return a PROSCRIBED status.
-		//
-		// TODO(nvanbenschoten): since we aren't pulling the transfer time here
-		// anymore, we could also move this below latching as well, similar to
-		// how a Subsume request sets the FreezeStart time and pauses closed
-		// timestamps during evaluation and communicates this back up using the
-		// LocalResult.
-		r.mu.minLeaseProposedTS = now
+
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(
 			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
 		)
@@ -875,6 +855,17 @@ func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 		return *r.mu.state.Lease, nextLease
 	}
 	return *r.mu.state.Lease, roachpb.Lease{}
+}
+
+// RevokeLease stops the replica from using its current lease, if that lease
+// matches the provided lease sequence. All future calls to leaseStatus on this
+// node with the current lease will now return a PROSCRIBED status.
+func (r *Replica) RevokeLease(ctx context.Context, seq roachpb.LeaseSequence) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.mu.state.Lease.Sequence == seq {
+		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
+	}
 }
 
 // newNotLeaseHolderError returns a NotLeaseHolderError initialized with the

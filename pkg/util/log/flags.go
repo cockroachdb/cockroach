@@ -53,10 +53,8 @@ func init() {
 	// Default stderrThreshold to log everything to the process'
 	// external stderr (OrigStderr).
 	defaultConfig.Sinks.Stderr.Filter = severity.INFO
-	// We only register it for the DEV channels. No other
-	// channels get a configuration, whereby every channel
-	// ends up sharing the DEV logger (debugLog).
-	defaultConfig.Sinks.Stderr.Channels.Channels = []logpb.Channel{channel.DEV}
+	// Ensure all channels go to stderr.
+	defaultConfig.Sinks.Stderr.Channels.Channels = logconfig.SelectAllChannels()
 	// We also don't capture internal writes to fd2 by default:
 	// let the writes go to the external stderr.
 	defaultConfig.CaptureFd2.Enable = false

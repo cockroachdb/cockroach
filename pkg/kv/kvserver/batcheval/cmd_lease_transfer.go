@@ -77,11 +77,38 @@ func TransferLease(
 	newLease.Start.Forward(cArgs.EvalCtx.Clock().NowAsClockTimestamp())
 	args.Lease = roachpb.Lease{} // prevent accidental use below
 
+	// If this check is removed at some point, the filtering of learners on the
+	// sending side would have to be removed as well.
+	if err := roachpb.CheckCanReceiveLease(newLease.Replica, cArgs.EvalCtx.Desc()); err != nil {
+		return newFailedLeaseTrigger(true /* isTransfer */), err
+	}
+
+	// Stop using the current lease. All future calls to leaseStatus on this
+	// node with the current lease will now return a PROSCRIBED status. This
+	// includes calls to leaseStatus from the closed timestamp side-transport,
+	// meaning that the following call to GetCurrentReadSummary is guaranteed to
+	// observe the highest closed timestamp published under this lease.
+	//
+	// We perform this action during evaluation to ensure that the lease
+	// revocation takes place regardless of whether the corresponding Raft
+	// proposal succeeds, fails, or is ambiguous - in which case there's no
+	// guarantee that the transfer will not still apply. This means that if the
+	// proposal fails, we'll have relinquished the current lease but not managed
+	// to give the lease to someone else, so we'll have to re-acquire the lease
+	// again through a RequestLease request to recover. This situation is tested
+	// in TestBehaviorDuringLeaseTransfer/transferSucceeds=false.
+	//
+	// NOTE: RevokeLease will be a no-op if the lease has already changed. In
+	// such cases, we could detect that here and fail fast, but it's safe and
+	// easier to just let the TransferLease be proposed under the wrong lease
+	// and be rejected with the correct error below Raft.
+	cArgs.EvalCtx.RevokeLease(ctx, args.PrevLease.Sequence)
+
 	// Collect a read summary from the outgoing leaseholder to ship to the
 	// incoming leaseholder. This is used to instruct the new leaseholder on how
 	// to update its timestamp cache to ensure that no future writes are allowed
 	// to invalidate prior reads.
-	priorReadSum := cArgs.EvalCtx.GetCurrentReadSummary()
+	priorReadSum, _ := cArgs.EvalCtx.GetCurrentReadSummary()
 	// For now, forward this summary to the proposed lease's start time. This
 	// may appear to undermine the benefit of the read summary, but it doesn't
 	// entirely. Until we ship higher-resolution read summaries, the read
@@ -93,12 +120,6 @@ func TransferLease(
 	// summaries and have a per-range closed timestamp system that is easier to
 	// think about.
 	priorReadSum.Merge(rspb.FromTimestamp(newLease.Start.ToTimestamp()))
-
-	// If this check is removed at some point, the filtering of learners on the
-	// sending side would have to be removed as well.
-	if err := roachpb.CheckCanReceiveLease(newLease.Replica, cArgs.EvalCtx.Desc()); err != nil {
-		return newFailedLeaseTrigger(true /* isTransfer */), err
-	}
 
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, newLease)
 	return evalNewLease(ctx, cArgs.EvalCtx, readWriter, cArgs.Stats,
