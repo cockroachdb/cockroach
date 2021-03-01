@@ -189,6 +189,7 @@ go_library(
         "@com_github_cockroachdb_cockroach_go//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//tool",
         "@com_github_cockroachdb_redact//:redact",

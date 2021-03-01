@@ -118,6 +118,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/util/timeutil/pgdate/field_string.go
 # gazelle:exclude pkg/util/timeutil/pgdate/parsemode_string.go
 # gazelle:exclude pkg/workload/schemachange/optype_string.go
+# gazelle:exclude pkg/geo/wkt/wkt_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/backfill_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/mutation_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/validation_visitor_generated.go

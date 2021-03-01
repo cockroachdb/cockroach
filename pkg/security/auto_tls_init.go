@@ -12,6 +12,7 @@ package security
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // TODO(aaron-crl): This shared a name and purpose with the value in
@@ -53,11 +55,39 @@ func createCertificateSerialNumber() (serialNumber *big.Int, err error) {
 	return
 }
 
+// LoggerFn is the type we use to inject logging functions into the
+// security package to avoid circular dependencies.
+type LoggerFn = func(ctx context.Context, format string, args ...interface{})
+
+func describeCert(cert *x509.Certificate) redact.RedactableString {
+	var buf redact.StringBuilder
+	buf.SafeString("{\n")
+	buf.Printf("  SN: %s,\n", cert.SerialNumber)
+	buf.Printf("  CA: %v,\n", cert.IsCA)
+	buf.Printf("  Issuer: %q,\n", cert.Issuer)
+	buf.Printf("  Subject: %q,\n", cert.Subject)
+	buf.Printf("  NotBefore: %s,\n", cert.NotBefore)
+	buf.Printf("  NotAfter: %s", cert.NotAfter)
+	buf.Printf(" (Validity: %s),\n", cert.NotAfter.Sub(timeutil.Now()))
+	if !cert.IsCA {
+		buf.Printf("  DNS: %v,\n", cert.DNSNames)
+		buf.Printf("  IP: %v\n", cert.IPAddresses)
+	}
+	buf.SafeString("}")
+	return buf.RedactableString()
+}
+
+const (
+	crlOrg      = "Cockroach Labs"
+	crlIssuerOU = "automatic cert generator"
+	crlC        = "US"
+)
+
 // CreateCACertAndKey will create a CA with a validity beginning
 // now() and expiring after `lifespan`. This is a utility function to help
 // with cluster auto certificate generation.
 func CreateCACertAndKey(
-	lifespan time.Duration, service string,
+	ctx context.Context, loggerFn LoggerFn, lifespan time.Duration, service string,
 ) (certPEM []byte, keyPEM []byte, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
@@ -71,10 +101,15 @@ func CreateCACertAndKey(
 	// Create short lived initial CA template.
 	ca := &x509.Certificate{
 		SerialNumber: serialNumber,
+		Issuer: pkix.Name{
+			Organization:       []string{crlOrg},
+			OrganizationalUnit: []string{crlIssuerOU},
+			Country:            []string{crlC},
+		},
 		Subject: pkix.Name{
-			Organization:       []string{"Cockroach Labs"},
+			Organization:       []string{crlOrg},
 			OrganizationalUnit: []string{service},
-			Country:            []string{"US"},
+			Country:            []string{crlC},
 		},
 		NotBefore:             notBefore,
 		NotAfter:              notAfter,
@@ -82,6 +117,9 @@ func CreateCACertAndKey(
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
 		MaxPathLenZero:        true,
+	}
+	if loggerFn != nil {
+		loggerFn(ctx, "creating CA cert from template: %s", describeCert(ca))
 	}
 
 	// Create private and public key for CA.
@@ -104,6 +142,9 @@ func CreateCACertAndKey(
 		return nil, nil, err
 	}
 
+	if loggerFn != nil {
+		loggerFn(ctx, "signing CA cert")
+	}
 	// Create CA certificate then PEM encode it.
 	caBytes, err := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
 	if err != nil {
@@ -128,7 +169,14 @@ func CreateCACertAndKey(
 // CreateServiceCertAndKey creates a cert/key pair signed by the provided CA.
 // This is a utility function to help with cluster auto certificate generation.
 func CreateServiceCertAndKey(
-	lifespan time.Duration, service string, hostnames []string, caCertPEM []byte, caKeyPEM []byte,
+	ctx context.Context,
+	loggerFn LoggerFn,
+	lifespan time.Duration,
+	commonName, service string,
+	hostnames []string,
+	caCertPEM []byte,
+	caKeyPEM []byte,
+	serviceCertIsAlsoValidAsClient bool,
 ) (certPEM []byte, keyPEM []byte, err error) {
 	notBefore := timeutil.Now().Add(-notBeforeMargin)
 	notAfter := timeutil.Now().Add(lifespan)
@@ -169,15 +217,25 @@ func CreateServiceCertAndKey(
 	// pkg/security/x509.go until we can consolidate them.
 	serviceCert := &x509.Certificate{
 		SerialNumber: serialNumber,
+		Issuer: pkix.Name{
+			Organization:       []string{crlOrg},
+			OrganizationalUnit: []string{crlIssuerOU},
+			Country:            []string{crlC},
+		},
 		Subject: pkix.Name{
-			Organization:       []string{"Cockroach Labs"},
+			Organization:       []string{crlOrg},
 			OrganizationalUnit: []string{service},
-			Country:            []string{"US"},
+			Country:            []string{crlC},
+			CommonName:         commonName,
 		},
 		NotBefore:   notBefore,
 		NotAfter:    notAfter,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+	}
+
+	if serviceCertIsAlsoValidAsClient {
+		serviceCert.ExtKeyUsage = append(serviceCert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
 	}
 
 	// Attempt to parse hostname as IP, if successful add it as an IP
@@ -192,11 +250,18 @@ func CreateServiceCertAndKey(
 		}
 	}
 
+	if loggerFn != nil {
+		loggerFn(ctx, "creating service cert from template: %s", describeCert(serviceCert))
+	}
+
 	servicePrivKey, err := rsa.GenerateKey(rand.Reader, defaultKeySize)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	if loggerFn != nil {
+		loggerFn(ctx, "signing service cert")
+	}
 	serviceCertBytes, err := x509.CreateCertificate(rand.Reader, serviceCert, caCert, &servicePrivKey.PublicKey, caKey)
 	if err != nil {
 		return nil, nil, err
