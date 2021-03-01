@@ -4862,6 +4862,26 @@ POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((4.9 5.7, 6 9, 8
 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((4 3, 5 6, 7 10, 6 7, 4 3))
 POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((5 6, 6 9, 8 13, 7 10, 5 6))
 
+query TT
+SELECT
+  ST_AsText(a.geom) d,
+  ST_AsText(ST_Affine(a.geom, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12), 3)
+FROM geom_operators_test a
+ORDER BY d ASC
+----
+NULL                                                   NULL
+GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))  GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (10 11)))
+GEOMETRYCOLLECTION EMPTY                               GEOMETRYCOLLECTION EMPTY
+LINESTRING (-0.5 0.5, 0.5 0.5)                         LINESTRING (10.5 11.5, 11.5 15.5)
+LINESTRING EMPTY                                       LINESTRING EMPTY
+POINT (-0.5 0.5)                                       POINT (10.5 11.5)
+POINT (0.5 0.5)                                        POINT (11.5 15.5)
+POINT (5 5)                                            POINT (25 56)
+POINT EMPTY                                            POINT EMPTY
+POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((9.9 10.6, 11 15, 13 20, 11.9 15.6, 9.9 10.6))
+POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((9 7, 10 11, 12 16, 11 12, 9 7))
+POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((10 11, 11 15, 13 20, 12 16, 10 11))
+
 query T
 SELECT ST_Summary('POINT(0 0)'::geometry)
 ----

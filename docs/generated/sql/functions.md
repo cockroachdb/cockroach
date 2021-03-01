@@ -1273,6 +1273,13 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td></tr>
 <tr><td><a name="st_addpoint"></a><code>st_addpoint(line_string: geometry, point: geometry, index: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Adds a Point to a LineString at the given 0-based index (-1 to append).</p>
 </span></td></tr>
+<tr><td><a name="st_affine"></a><code>st_affine(geometry: geometry, a: <a href="float.html">float</a>, b: <a href="float.html">float</a>, c: <a href="float.html">float</a>, d: <a href="float.html">float</a>, e: <a href="float.html">float</a>, f: <a href="float.html">float</a>, g: <a href="float.html">float</a>, h: <a href="float.html">float</a>, i: <a href="float.html">float</a>, x_off: <a href="float.html">float</a>, y_off: <a href="float.html">float</a>, z_off: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Applies a 3D affine transformation to the given geometry.</p>
+<p>The matrix transformation will be applied as follows for each coordinate:
+/ a  b  c x_off \  / x <br />
+| d  e  f y_off |  | y |
+| g  h  i z_off |  | z |
+\ 0  0  0     1 /  \ 0 /</p>
+</span></td></tr>
 <tr><td><a name="st_affine"></a><code>st_affine(geometry: geometry, a: <a href="float.html">float</a>, b: <a href="float.html">float</a>, d: <a href="float.html">float</a>, e: <a href="float.html">float</a>, x_off: <a href="float.html">float</a>, y_off: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Applies a 2D affine transformation to the given geometry.</p>
 <p>The matrix transformation will be applied as follows for each coordinate:
 / a  b  x_off \  / x <br />
