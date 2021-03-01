@@ -348,20 +348,20 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 9.41
+ ├── cost: 14.71
  ├── key: ()
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=1]
- │    ├── cost: 9.39
+ │    ├── cost: 14.69
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── scan tj
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1]
- │    │    ├── cost: 9.32
+ │    │    ├── cost: 14.62
  │    │    ├── limit hint: 5.00
  │    │    └── prune: (1)
  │    └── filters
