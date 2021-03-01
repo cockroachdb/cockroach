@@ -317,20 +317,20 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 226.059998
+ ├── cost: 226.049998
  ├── key: ()
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=10.0000001, distinct(1)=1, null(1)=10]
- │    ├── cost: 226.039998
+ │    ├── cost: 226.029998
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── scan tj
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    │    ├── cost: 216.019998
+ │    │    ├── cost: 216.009998
  │    │    ├── limit hint: 100.00
  │    │    └── prune: (1)
  │    └── filters
@@ -348,20 +348,20 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 9.41
+ ├── cost: 14.7
  ├── key: ()
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=1]
- │    ├── cost: 9.39
+ │    ├── cost: 14.68
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── scan tj
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1]
- │    │    ├── cost: 9.32
+ │    │    ├── cost: 14.61
  │    │    ├── limit hint: 5.00
  │    │    └── prune: (1)
  │    └── filters

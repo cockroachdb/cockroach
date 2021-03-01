@@ -3660,14 +3660,14 @@ group-by
  ├── columns: firstcol:1(int!null) secondcol:2(int) thirdcol:2(int)
  ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
- ├── cost: 1124.05
+ ├── cost: 1134.74
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1,+2)
  └── project
       ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
       ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
-      ├── cost: 1084.03
+      ├── cost: 1094.72
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1,2)
@@ -3675,7 +3675,7 @@ group-by
       └── scan t.public.xyz
            ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int) t.public.xyz.z:3(float) t.public.xyz.crdb_internal_mvcc_timestamp:4(decimal)
            ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
-           ├── cost: 1074.02
+           ├── cost: 1084.71
            ├── key: (1)
            ├── fd: (1)-->(2-4)
            ├── prune: (1-4)

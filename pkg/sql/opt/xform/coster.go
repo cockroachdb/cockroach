@@ -138,6 +138,11 @@ const (
 	// plan that could satisfy the hints.
 	hugeCost memo.Cost = 1e100
 
+	// fullScanRowCountPenalty adds a penalty to full table scans. This is especially
+	// useful for empty or very small tables, where we would get plans that are
+	// surprising to users (like full scans instead of point lookups).
+	fullScanRowCountPenalty = 10
+
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
 	preferLookupJoinFactor = 1e-6
@@ -579,17 +584,6 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	rowCount := scan.Relational().Stats.RowCount
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
 
-	if required.LimitHint != 0 {
-		rowCount = math.Min(rowCount, required.LimitHint*scanSoftLimitMultiplier)
-	}
-
-	if ordering.ScanIsReverse(scan, &required.Ordering) {
-		if rowCount > 1 {
-			// Need to do binary search to seek to the previous row.
-			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
-		}
-	}
-
 	numSpans := 1
 	if scan.Constraint != nil {
 		numSpans = scan.Constraint.Spans.Count()
@@ -603,11 +597,11 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		baseCost += virtualScanTableDescriptorFetchCost
 	}
 
-	// Add a small cost if the scan is unconstrained, so all else being equal, we
-	// will prefer a constrained scan. This is important if our row count
-	// estimate turns out to be smaller than the actual row count.
+	// Add a penalty to full table scans. All else being equal, we prefer a
+	// constrained scan. Adding a few rows worth of cost helps prevent surprising
+	// plans for very small tables.
 	if scan.IsUnfiltered(c.mem.Metadata()) {
-		baseCost += cpuCostFactor
+		rowCount += fullScanRowCountPenalty
 
 		// For tables with multiple partitions, add the cost of visiting each
 		// partition.
@@ -617,6 +611,17 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 			// Subtract 1 since we already accounted for the first partition when
 			// counting spans.
 			baseCost += memo.Cost(partitionCount-1) * randIOCostFactor
+		}
+	}
+
+	if required.LimitHint != 0 {
+		rowCount = math.Min(rowCount, required.LimitHint*scanSoftLimitMultiplier)
+	}
+
+	if ordering.ScanIsReverse(scan, &required.Ordering) {
+		if rowCount > 1 {
+			// Need to do binary search to seek to the previous row.
+			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
 		}
 	}
 

@@ -17,21 +17,21 @@ expr
 inner-join (hash)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:6(int!null) t.public.def.e:7(int) t.public.def.f:8(int)
  ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
- ├── cost: 2276.07
+ ├── cost: 2297.45
  ├── fd: (1)==(6), (6)==(1)
  ├── prune: (2,3,7,8)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1074.02
+ │    ├── cost: 1084.71
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2)
  │    └── unfiltered-cols: (1-5)
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
- │    ├── cost: 1074.02
+ │    ├── cost: 1084.71
  │    ├── prune: (6-8)
  │    └── unfiltered-cols: (6-10)
  └── filters
@@ -50,11 +50,11 @@ left-join (lookup t.public.abc@ab)
  ├── columns: t.public.abc.a:6(int) t.public.abc.b:7(int)
  ├── key columns: [6] = [6]
  ├── stats: [rows=3333.33333, distinct(6)=100, null(6)=33.3333333]
- ├── cost: 41664.04
+ ├── cost: 41674.63
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
  │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
- │    ├── cost: 1064.02
+ │    ├── cost: 1074.61
  │    └── prune: (1,2)
  └── filters
       └── gt [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
@@ -80,31 +80,31 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +6
  ├── stats: [rows=9801, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
- ├── cost: 2764.71137
+ ├── cost: 2786.09137
  ├── fd: (1)==(6), (6)==(1)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1323.34569
+ │    ├── cost: 1334.03569
  │    ├── ordering: +1
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2)
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │         ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │         ├── cost: 1074.02
+ │         ├── cost: 1084.71
  │         ├── prune: (1-3)
  │         └── interesting orderings: (+1,+2)
  ├── sort
  │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  │    ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
- │    ├── cost: 1323.34569
+ │    ├── cost: 1334.03569
  │    ├── ordering: +6
  │    ├── prune: (6-8)
  │    └── scan t.public.def
  │         ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  │         ├── stats: [rows=1000, distinct(6)=100, null(6)=10]
- │         ├── cost: 1074.02
+ │         ├── cost: 1084.71
  │         └── prune: (6-8)
  └── filters (true)
 
@@ -123,30 +123,30 @@ inner-join-apply
  ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  ├── immutable
  ├── stats: [rows=333333.333]
- ├── cost: 5649.40451
+ ├── cost: 5670.78451
  ├── prune: (8)
  ├── interesting orderings: (+1,+2)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1213.68784
+ │    ├── cost: 1224.37784
  │    ├── interesting orderings: (+1,+2)
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │         ├── stats: [rows=1000]
- │         ├── cost: 1074.02
+ │         ├── cost: 1084.71
  │         └── interesting orderings: (+1,+2)
  ├── select
  │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  │    ├── outer: (1)
  │    ├── immutable
  │    ├── stats: [rows=333.333333, distinct(1)=1, null(1)=0]
- │    ├── cost: 1084.04
+ │    ├── cost: 1094.73
  │    ├── prune: (8)
  │    ├── scan t.public.def
  │    │    ├── columns: t.public.def.d:6(int) t.public.def.e:7(int) t.public.def.f:8(int)
  │    │    ├── stats: [rows=1000]
- │    │    ├── cost: 1074.02
+ │    │    ├── cost: 1084.71
  │    │    └── prune: (6-8)
  │    └── filters
  │         └── eq [type=bool, outer=(1,6,7), immutable, constraints=(/1: (/NULL - ])]
