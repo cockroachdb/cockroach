@@ -77,7 +77,7 @@ func NewOrderValidator(topic string) Validator {
 	}
 }
 
-// NewStreamOrderValidator wraps and orderValidator as described above, and
+// NewStreamOrderValidator wraps an orderValidator as described above, and
 // exposes additional methods for introspection.
 func NewStreamOrderValidator() StreamValidator {
 	return &orderValidator{
