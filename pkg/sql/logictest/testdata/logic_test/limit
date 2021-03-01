@@ -319,3 +319,15 @@ SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'large') OFFS
 query I
 SELECT a FROM probe ORDER BY a LIMIT (SELECT v FROM vals WHERE k = 'maxint64') OFFSET (SELECT v FROM vals WHERE k = 'maxint64');
 ----
+
+# Regression test for incorrectly treating LIMIT query as containing full scan (Issue #60751).
+statement ok
+SET disallow_full_table_scans = true;
+
+query I
+SELECT w FROM t ORDER BY k LIMIT 1;
+----
+1
+
+statement ok
+SET disallow_full_table_scans = false;
