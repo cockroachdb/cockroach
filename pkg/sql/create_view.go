@@ -72,7 +72,6 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	viewName := n.viewName.Object()
-	persistence := n.persistence
 	log.VEventf(params.ctx, 2, "dependencies for view %s:\n%s", viewName, n.planDeps.String())
 
 	// Check that the view does not contain references to other databases.
@@ -92,24 +91,28 @@ func (n *createViewNode) startExec(params runParams) error {
 	// First check the backrefs and see if any of them are temporary.
 	// If so, promote this view to temporary.
 	backRefMutables := make(map[descpb.ID]*tabledesc.Mutable, len(n.planDeps))
+	hasTempBackref := false
 	for id, updated := range n.planDeps {
 		backRefMutable := params.p.Descriptors().GetUncommittedTableByID(id)
 		if backRefMutable == nil {
 			backRefMutable = tabledesc.NewExistingMutable(*updated.desc.TableDesc())
 		}
-		if !persistence.IsTemporary() && backRefMutable.Temporary {
-			// This notice is sent from pg, let's imitate.
-			params.p.BufferClientNotice(
-				params.ctx,
-				pgnotice.Newf(`view "%s" will be a temporary view`, viewName),
-			)
-			persistence = tree.PersistenceTemporary
+		if !n.persistence.IsTemporary() && backRefMutable.Temporary {
+			hasTempBackref = true
 		}
 		backRefMutables[id] = backRefMutable
 	}
+	if hasTempBackref {
+		n.persistence = tree.PersistenceTemporary
+		// This notice is sent from pg, let's imitate.
+		params.p.BufferClientNotice(
+			params.ctx,
+			pgnotice.Newf(`view "%s" will be a temporary view`, viewName),
+		)
+	}
 
 	var replacingDesc *tabledesc.Mutable
-	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), persistence, n.viewName,
+	tKey, schemaID, err := getTableCreateParams(params, n.dbDesc.GetID(), n.persistence, n.viewName,
 		tree.ResolveRequireViewDesc, n.ifNotExists)
 	if err != nil {
 		switch {
@@ -258,8 +261,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		return err
 	}
 
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
-	if err := newDesc.Validate(params.ctx, dg); err != nil {
+	if err := validateDescriptor(params.ctx, params.p, newDesc); err != nil {
 		return err
 	}
 

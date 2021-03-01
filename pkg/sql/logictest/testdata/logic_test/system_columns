@@ -138,7 +138,7 @@ statement error pq: column \"crdb_internal_mvcc_timestamp\" does not exist
 INSERT INTO t VALUES (1, 2, 3) RETURNING crdb_internal_mvcc_timestamp
 
 # Ensure that we can't create columns that conflict with system column names.
-statement error pq: column name "crdb_internal_mvcc_timestamp" conflicts with a system column name
+statement error pq: relation "bad" \([0-9]+\): column name "crdb_internal_mvcc_timestamp" conflicts with a system column name
 CREATE TABLE bad (crdb_internal_mvcc_timestamp int)
 
 statement error pq: column name "crdb_internal_mvcc_timestamp" conflicts with a system column name
@@ -196,5 +196,5 @@ SELECT tableoid, x FROM tab3@i WHERE x = 1
 ----
 58 1
 
-statement error pq: column name "tableoid" conflicts with a system column name
+statement error pq: relation "bad" \([0-9]+\): column name "tableoid" conflicts with a system column name
 CREATE TABLE bad (tableoid int)

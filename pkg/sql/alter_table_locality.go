@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -135,7 +134,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 
 	// Finalize the alter by writing a new table descriptor and updating the zone
 	// configuration.
-	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
+	if err := n.writeNewTableLocalityAndZoneConfig(
 		params,
 		n.dbDesc,
 	); err != nil {
@@ -167,7 +166,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
 
 	// Finalize the alter by writing a new table descriptor and updating the zone
 	// configuration.
-	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
+	if err := n.writeNewTableLocalityAndZoneConfig(
 		params,
 		n.dbDesc,
 	); err != nil {
@@ -208,7 +207,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 	}
 
 	// Finalize the alter by writing a new table descriptor and updating the zone configuration.
-	if err := n.validateAndWriteNewTableLocalityAndZoneConfig(
+	if err := n.writeNewTableLocalityAndZoneConfig(
 		params,
 		n.dbDesc,
 	); err != nil {
@@ -539,21 +538,11 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		})
 }
 
-// validateAndWriteNewTableLocalityAndZoneConfig validates the newly updated
-// LocalityConfig in a table descriptor, writes that table descriptor, and
-// writes a new zone configuration for the given table.
-func (n *alterTableSetLocalityNode) validateAndWriteNewTableLocalityAndZoneConfig(
+// writeNewTableLocalityAndZoneConfig writes the table descriptor with the newly
+// updated LocalityConfig and writes a new zone configuration for the table.
+func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 	params runParams, dbDesc *dbdesc.Immutable,
 ) error {
-	// Validate the new locality before updating the table descriptor.
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.EvalContext().Codec)
-	if err := n.tableDesc.ValidateTableLocalityConfig(
-		params.ctx,
-		dg,
-	); err != nil {
-		return err
-	}
-
 	// Write out the table descriptor update.
 	if err := params.p.writeSchemaChange(
 		params.ctx,

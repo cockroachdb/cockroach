@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -219,8 +218,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 
 	// Validate the type descriptor after the changes. We have to do this explicitly here, because
 	// we're using an internal call to addEnumValue above which doesn't perform validation.
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
-	if err := typeDesc.Validate(params.ctx, dg); err != nil {
+	if err := validateDescriptor(params.ctx, params.p, typeDesc); err != nil {
 		return err
 	}
 
@@ -519,12 +517,6 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	// Update the primary region in the type descriptor, and write it back out.
 	typeDesc.RegionConfig.PrimaryRegion = descpb.RegionName(n.n.PrimaryRegion)
 	if err := params.p.writeTypeDesc(params.ctx, typeDesc); err != nil {
-		return err
-	}
-
-	// Validate the type descriptor after the changes.
-	dg := catalogkv.NewOneLevelUncachedDescGetter(params.p.txn, params.ExecCfg().Codec)
-	if err := typeDesc.Validate(params.ctx, dg); err != nil {
 		return err
 	}
 

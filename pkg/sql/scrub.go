@@ -423,7 +423,17 @@ func createConstraintCheckOperations(
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
 	dg := catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec)
-	constraints, err := tableDesc.GetConstraintInfo(ctx, dg)
+	constraints, err := tableDesc.GetConstraintInfoWithLookup(func(id descpb.ID) (catalog.TableDescriptor, error) {
+		desc, err := dg.GetDesc(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		table, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			return nil, catalog.WrapTableDescRefErr(id, catalog.ErrDescriptorNotFound)
+		}
+		return table, nil
+	})
 	if err != nil {
 		return nil, err
 	}

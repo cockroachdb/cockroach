@@ -217,6 +217,10 @@ type Collection struct {
 	// a mutable descriptor by name or ID when a matching synthetic descriptor
 	// exists is illegal.
 	syntheticDescriptors []catalog.Descriptor
+
+	// skipValidationOnWrite should only be set to true during forced descriptor
+	// repairs.
+	skipValidationOnWrite bool
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
@@ -958,6 +962,12 @@ func (tc *Collection) getDescriptorByID(
 		ctx, txn, id, flags, mutable, false /* setTxnDeadline */)
 }
 
+// SkipValidationOnWrite avoids validating uncommitted descriptors prior to
+// a transaction commit.
+func (tc *Collection) SkipValidationOnWrite() {
+	tc.skipValidationOnWrite = true
+}
+
 // getDescriptorByIDMaybeSetTxnDeadline returns a descriptor according to the
 // provided lookup flags. Note that flags.Required is ignored, and an error is
 // always returned if no descriptor with the ID exists.
@@ -1075,6 +1085,16 @@ func (tc *Collection) GetMutableDescriptorByIDWithFlags(
 		return nil, err
 	}
 	return desc.(catalog.MutableDescriptor), nil
+}
+
+// GetImmutableDescriptorByID returns an immmutable implementation of the
+// descriptor with the requested id. An error is returned if no descriptor exists.
+// Deprecated in favor of GetMutableDescriptorByIDWithFlags.
+func (tc *Collection) GetImmutableDescriptorByID(
+	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags,
+) (catalog.Descriptor, error) {
+	log.VEventf(ctx, 2, "planner getting immutable descriptor for id %d", id)
+	return tc.getDescriptorByID(ctx, txn, id, flags, false /* mutable */)
 }
 
 // GetMutableSchemaByID returns a ResolvedSchema wrapping a mutable
@@ -1382,8 +1402,8 @@ func (tc *Collection) WriteDescToBatch(
 	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
 ) error {
 	desc.MaybeIncrementVersion()
-	if ValidateOnWriteEnabled.Get(&tc.settings.SV) {
-		if err := desc.ValidateSelf(ctx); err != nil {
+	if !tc.skipValidationOnWrite && ValidateOnWriteEnabled.Get(&tc.settings.SV) {
+		if err := catalog.ValidateSelf(desc); err != nil {
 			return err
 		}
 	}
@@ -1430,41 +1450,25 @@ func (tc *Collection) GetUncommittedTables() (tables []catalog.TableDescriptor) 
 	return tables
 }
 
-type collectionDescGetter struct {
-	tc  *Collection
-	txn *kv.Txn
-}
-
-var _ catalog.DescGetter = collectionDescGetter{}
-
-func (cdg collectionDescGetter) GetDesc(
-	ctx context.Context, id descpb.ID,
-) (catalog.Descriptor, error) {
-	flags := tree.CommonLookupFlags{
-		Required: true,
-		// Include everything, we want to cast the net as wide as we can.
-		IncludeOffline: true,
-		IncludeDropped: true,
-		// Avoid leased descriptors, if we're leasing the previous version then this
-		// older version may be returned and this may cause validation to fail.
-		AvoidCached: true,
-	}
-	return cdg.tc.getDescriptorByID(ctx, cdg.txn, id, flags, false /* mutable */)
-}
-
-// ValidateUncommittedDescriptors validates all uncommitted descriptors
+// ValidateUncommittedDescriptors validates all uncommitted descriptors.
+// Validation includes cross-reference checks. Referenced descriptors are
+// read from the store unless they happen to also be part of the uncommitted
+// descriptor set. We purposefully avoid using leased descriptors as those may
+// be one version behind, in which case it's possible (and legitimate) that
+// those are missing back-references which would cause validation to fail.
 func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) error {
-	if !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
+	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
 		return nil
 	}
-	cdg := collectionDescGetter{tc: tc, txn: txn}
-	for i, n := 0, len(tc.uncommittedDescriptors); i < n; i++ {
-		desc := tc.uncommittedDescriptors[i].immutable
-		if err := desc.ValidateTxnCommit(ctx, cdg); err != nil {
-			return err
-		}
+	descs := make([]catalog.Descriptor, len(tc.uncommittedDescriptors))
+	for i, ud := range tc.uncommittedDescriptors {
+		descs[i] = ud.immutable
 	}
-	return nil
+	if len(descs) == 0 {
+		return nil
+	}
+	bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, tc.codec())
+	return catalog.Validate(ctx, bdg, catalog.ValidationLevelAllPreTxnCommit, descs...).CombinedError()
 }
 
 // User defined type accessors.

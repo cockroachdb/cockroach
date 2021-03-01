@@ -564,7 +564,7 @@ func TestFixPrivileges(t *testing.T) {
 			desc.Grant(u, p)
 		}
 
-		if a, e := MaybeFixPrivileges(testCase.id, desc), testCase.modified; a != e {
+		if a, e := MaybeFixPrivileges(testCase.id, &desc), testCase.modified; a != e {
 			t.Errorf("#%d: expected modified=%t, got modified=%t", num, e, a)
 			continue
 		}

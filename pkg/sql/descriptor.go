@@ -174,40 +174,22 @@ func (p *planner) createDescriptorWithID(
 	if !ok {
 		log.Fatalf(ctx, "unexpected type %T when creating descriptor", descriptor)
 	}
+
 	isTable := false
-	switch desc := mutDesc.(type) {
-	case *typedesc.Mutable:
-		dg := catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec)
-		if err := desc.Validate(ctx, dg); err != nil {
-			return err
-		}
-		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
-			return err
-		}
+	addUncommitted := false
+	switch mutDesc.(type) {
+	case *dbdesc.Mutable, *schemadesc.Mutable, *typedesc.Mutable:
+		addUncommitted = true
 	case *tabledesc.Mutable:
+		addUncommitted = true
 		isTable = true
-		if err := desc.ValidateSelf(ctx); err != nil {
-			return err
-		}
-		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
-			return err
-		}
-	case *dbdesc.Mutable:
-		if err := desc.ValidateSelf(ctx); err != nil {
-			return err
-		}
-		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
-			return err
-		}
-	case *schemadesc.Mutable:
-		if err := desc.ValidateSelf(ctx); err != nil {
-			return err
-		}
-		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
-			return err
-		}
 	default:
 		log.Fatalf(ctx, "unexpected type %T when creating descriptor", mutDesc)
+	}
+	if addUncommitted {
+		if err := p.Descriptors().AddUncommittedDescriptor(mutDesc); err != nil {
+			return err
+		}
 	}
 
 	if err := p.txn.Run(ctx, b); err != nil {

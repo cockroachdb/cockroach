@@ -203,26 +203,32 @@ func desiredKindError(desc catalog.Descriptor, kind DescriptorKind, id descpb.ID
 // some of the logic in physical_accessor.go.
 func requiredError(kind DescriptorKind, id descpb.ID) error {
 	var err error
+	var wrapper func(descpb.ID, error) error
 	switch kind {
 	case TableDescriptorKind:
 		err = sqlerrors.NewUndefinedRelationError(&tree.TableRef{TableID: int64(id)})
+		wrapper = catalog.WrapTableDescRefErr
 	case DatabaseDescriptorKind:
 		err = sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
+		wrapper = catalog.WrapDatabaseDescRefErr
 	case SchemaDescriptorKind:
 		err = sqlerrors.NewUnsupportedSchemaUsageError(fmt.Sprintf("[%d]", id))
+		wrapper = catalog.WrapSchemaDescRefErr
 	case TypeDescriptorKind:
 		err = sqlerrors.NewUndefinedTypeError(tree.NewUnqualifiedTypeName(tree.Name(fmt.Sprintf("[%d]", id))))
+		wrapper = catalog.WrapTypeDescRefErr
 	default:
 		err = errors.Errorf("failed to find descriptor [%d]", id)
+		wrapper = func(_ descpb.ID, err error) error { return err }
 	}
-	return errors.CombineErrors(catalog.ErrDescriptorNotFound, err)
+	return errors.CombineErrors(wrapper(id, catalog.ErrDescriptorNotFound), err)
 }
 
 // NewOneLevelUncachedDescGetter returns a new DescGetter backed by the passed
 // Txn. It will use the transaction to resolve mutable descriptors using
 // GetDescriptorByID but will pass a nil DescGetter into those lookup calls to
 // ensure that the entire graph of dependencies is not traversed.
-func NewOneLevelUncachedDescGetter(txn *kv.Txn, codec keys.SQLCodec) catalog.DescGetter {
+func NewOneLevelUncachedDescGetter(txn *kv.Txn, codec keys.SQLCodec) catalog.BatchDescGetter {
 	return &oneLevelUncachedDescGetter{
 		txn:   txn,
 		codec: codec,
@@ -312,7 +318,11 @@ func unwrapDescriptor(
 		return nil, nil
 	}
 	if validate {
-		if err := unwrapped.Validate(ctx, dg); err != nil {
+		var level catalog.ValidationLevel
+		if dg != nil {
+			level = catalog.ValidationLevelSelfAndCrossReferences
+		}
+		if err := catalog.Validate(ctx, dg, level, unwrapped).CombinedError(); err != nil {
 			return nil, err
 		}
 	}
@@ -329,29 +339,25 @@ func unwrapDescriptorMutable(
 	table, database, typ, schema :=
 		descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
 		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
+	var err error
+	var mut catalog.MutableDescriptor
 	switch {
 	case table != nil:
-		mutTable, err := tabledesc.NewFilledInExistingMutable(ctx, dg, false /* skipFKsWithMissingTable */, table)
-		if err != nil {
-			return nil, err
-		}
-		if err := mutTable.ValidateSelf(ctx); err != nil {
-			return nil, err
-		}
-		return mutTable, nil
+		mut, err = tabledesc.NewFilledInExistingMutable(ctx, dg, false /* skipFKsWithMissingTable */, table)
 	case database != nil:
-		dbDesc := dbdesc.NewExistingMutable(*database)
-		if err := dbDesc.Validate(ctx, dg); err != nil {
-			return nil, err
-		}
-		return dbDesc, nil
+		mut, err = dbdesc.NewExistingMutable(*database), nil
 	case typ != nil:
-		return typedesc.NewExistingMutable(*typ), nil
+		mut, err = typedesc.NewExistingMutable(*typ), nil
 	case schema != nil:
-		return schemadesc.NewMutableExisting(*schema), nil
-	default:
-		return nil, nil
+		mut, err = schemadesc.NewMutableExisting(*schema), nil
 	}
+	if mut != nil && err == nil {
+		err = catalog.ValidateSelf(mut)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return mut, nil
 }
 
 // CountUserDescriptors returns the number of descriptors present that were
@@ -416,10 +422,8 @@ func GetAllDescriptors(
 	for _, desc := range descs {
 		dg[desc.GetID()] = desc
 	}
-	for _, desc := range descs {
-		if err := desc.Validate(ctx, dg); err != nil {
-			return nil, err
-		}
+	if err := catalog.ValidateSelfAndCrossReferences(ctx, dg, descs...); err != nil {
+		return nil, err
 	}
 	return descs, nil
 }
@@ -578,7 +582,11 @@ func MustGetSchemaDescByID(
 }
 
 func getDescriptorsFromIDs(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	ids []descpb.ID,
+	wrapFn func(id descpb.ID, err error) error,
 ) ([]catalog.Descriptor, error) {
 	b := txn.NewBatch()
 	for _, id := range ids {
@@ -617,7 +625,7 @@ func getDescriptorsFromIDs(
 		}
 
 		if catalogDesc == nil {
-			return nil, catalog.ErrDescriptorNotFound
+			return nil, wrapFn(ids[i], catalog.ErrDescriptorNotFound)
 		}
 		results = append(results, catalogDesc)
 	}
@@ -633,19 +641,19 @@ func getDescriptorsFromIDs(
 func GetDatabaseDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
 ) ([]*dbdesc.Immutable, error) {
-	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids)
+	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids, catalog.WrapDatabaseDescRefErr)
 	if err != nil {
 		return nil, err
 	}
 	res := make([]*dbdesc.Immutable, len(descs))
-	for i := range descs {
+	for i, id := range ids {
 		desc := descs[i]
 		if desc == nil {
-			return nil, catalog.ErrDescriptorNotFound
+			return nil, catalog.WrapDatabaseDescRefErr(id, catalog.ErrDescriptorNotFound)
 		}
 		db, ok := desc.(*dbdesc.Immutable)
 		if !ok {
-			return nil, errors.AssertionFailedf("%q is not a database", desc.GetName())
+			return nil, catalog.WrapDatabaseDescRefErr(id, catalog.NewDescriptorTypeError(desc))
 		}
 		res[i] = db
 	}
@@ -658,16 +666,19 @@ func GetDatabaseDescriptorsFromIDs(
 func GetSchemaDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
 ) ([]*schemadesc.Immutable, error) {
-	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids)
+	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids, catalog.WrapSchemaDescRefErr)
 	if err != nil {
 		return nil, err
 	}
 	res := make([]*schemadesc.Immutable, len(descs))
-	for i := range descs {
+	for i, id := range ids {
 		desc := descs[i]
+		if desc == nil {
+			return nil, catalog.WrapSchemaDescRefErr(id, catalog.ErrDescriptorNotFound)
+		}
 		schema, ok := desc.(*schemadesc.Immutable)
 		if !ok {
-			return nil, errors.AssertionFailedf("%q is not a schema", desc.GetName())
+			return nil, catalog.WrapSchemaDescRefErr(id, catalog.NewDescriptorTypeError(desc))
 		}
 		res[i] = schema
 	}

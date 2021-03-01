@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -506,11 +505,10 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
-	if err := tableDesc.Validate(
-		ctx, catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.ExecCfg().Codec),
-	); err != nil {
+	if err := validateDescriptor(ctx, p, tableDesc); err != nil {
 		return err
 	}
+
 	mutationID := tableDesc.ClusterVersion.NextMutationID
 	if err := p.writeSchemaChange(ctx, tableDesc, mutationID, jobDesc); err != nil {
 		return err

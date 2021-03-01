@@ -1277,15 +1277,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							localityConfigToSwapTo,
 						)
 					}
-
-					// Validate the new locality before updating the table descriptor.
-					dg := catalogkv.NewOneLevelUncachedDescGetter(txn, sc.execCfg.Codec)
-					if err := scTable.ValidateTableLocalityConfig(
-						ctx,
-						dg,
-					); err != nil {
-						return err
-					}
 				}
 
 				// If any old index had an interleaved parent, remove the

@@ -128,9 +128,6 @@ type TestServerArgs struct {
 
 	// IF set, the demo login endpoint will be enabled.
 	EnableDemoLoginEndpoint bool
-
-	// If set, testing specific descriptor validation will be disabled. even if the server
-	DisableTestingDescriptorValidation bool
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
