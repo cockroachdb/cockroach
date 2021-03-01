@@ -1162,7 +1162,8 @@ If set, disable cockroach demo from attempting to obtain a temporary license.`,
 	}
 
 	UseEmptyDatabase = FlagInfo{
-		Name: "empty",
+		Name:   "empty-database",
+		EnvVar: "COCKROACH_EMPTY_DATABASE",
 		Description: `
 Start with an empty database: avoid pre-loading a default dataset in
 the demo shell.`,

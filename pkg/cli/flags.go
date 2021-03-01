@@ -753,7 +753,7 @@ func init() {
 		// Mark the --global flag as hidden until we investigate it more.
 		boolFlag(f, &demoCtx.simulateLatency, cliflags.Global)
 		_ = f.MarkHidden(cliflags.Global.Name)
-		// The --empty flag is only valid for the top level demo command,
+		// The --empty-database flag is only valid for the top level demo command,
 		// so we use the regular flag set.
 		boolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase)
 		// We also support overriding the GEOS library path for 'demo'.

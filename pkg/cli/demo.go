@@ -36,7 +36,7 @@ Start an in-memory, standalone, single-node CockroachDB instance, and open an
 interactive SQL prompt to it. Various datasets are available to be preloaded as
 subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 
-By default, the 'movr' dataset is pre-loaded. You can also use --empty
+By default, the 'movr' dataset is pre-loaded. You can also use --empty-database
 to avoid pre-loading a dataset.
 
 cockroach demo attempts to connect to a Cockroach Labs server to obtain a
@@ -176,7 +176,7 @@ func checkDemoConfiguration(
 	cmd *cobra.Command, gen workload.Generator,
 ) (workload.Generator, error) {
 	if gen == nil && !demoCtx.useEmptyDatabase {
-		// Use a default dataset unless prevented by --empty.
+		// Use a default dataset unless prevented by --empty-database.
 		gen = defaultGenerator
 	}
 

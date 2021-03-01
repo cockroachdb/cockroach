@@ -80,7 +80,7 @@ eexpect {Failed running "start"}
 end_test
 
 start_test "Check that demo start-up flags are reported to telemetry"
-send "$argv demo --empty --echo-sql --logtostderr=WARNING\r"
+send "$argv demo --empty-database --echo-sql --logtostderr=WARNING\r"
 eexpect "defaultdb>"
 send "SELECT * FROM crdb_internal.feature_usage WHERE feature_name LIKE 'cli.demo.%' ORDER BY 1;\r"
 eexpect feature_name

@@ -417,7 +417,7 @@ func Example_demo() {
 
 	testData := [][]string{
 		{`demo`, `-e`, `show database`},
-		{`demo`, `-e`, `show database`, `--empty`},
+		{`demo`, `-e`, `show database`, `--empty-database`},
 		{`demo`, `-e`, `show application_name`},
 		{`demo`, `--format=table`, `-e`, `show database`},
 		{`demo`, `-e`, `select 1 as "1"`, `-e`, `select 3 as "3"`},
@@ -448,7 +448,7 @@ func Example_demo() {
 	// demo -e show database
 	// database
 	// movr
-	// demo -e show database --empty
+	// demo -e show database --empty-database
 	// database
 	// defaultdb
 	// demo -e show application_name

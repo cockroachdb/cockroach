@@ -117,7 +117,7 @@ func reduceSQL(path, contains string, workers int, verbose bool) (string, error)
 		// Disable telemetry and license generation.
 		cmd := exec.CommandContext(ctx, path,
 			"demo",
-			"--empty",
+			"--empty-database",
 			"--disable-demo-license",
 		)
 		cmd.Env = []string{"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", "true"}
