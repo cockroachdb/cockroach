@@ -269,7 +269,8 @@ func (m *Manager) Publish(
 	updates := func(_ *kv.Txn, descs map[descpb.ID]catalog.MutableDescriptor) error {
 		desc, ok := descs[id]
 		if !ok {
-			return errors.AssertionFailedf("required descriptor with ID %d not provided to update closure", id)
+			return errors.AssertionFailedf(
+				"required descriptor with ID %d not provided to update closure", id)
 		}
 		return update(desc)
 	}
