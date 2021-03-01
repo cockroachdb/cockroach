@@ -100,6 +100,7 @@ func tableHasDependencies(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
                      WHERE c.relname = $1 AND ns.nspname = $2
                 )
            AND fd.descriptor_id != fd.dependedonby_id
+           AND fd.dependedonby_type != 'sequence'
        )
 	`, tableName.Object(), tableName.Schema())
 }
@@ -135,6 +136,7 @@ func columnIsDependedOn(tx *pgx.Tx, tableName *tree.TableName, columnName string
 			                   AS fd
 			            WHERE fd.descriptor_id
 			                  = $1::REGCLASS
+                    AND fd.dependedonby_type != 'sequence'
 			          )
 			   UNION  (
 			           SELECT unnest(confkey) AS column_id
@@ -632,11 +634,8 @@ SELECT EXISTS(
 `, tableName.String(), columnName)
 }
 
-func columnNotNullConstraintInMutation(
-	tx *pgx.Tx, tableName *tree.TableName, columnName string,
-) (bool, error) {
-	return scanBool(tx, `
-  WITH descriptors AS (
+// A pair of CTE definitions that expect the first argument to be a table name.
+const descriptorsAndConstraintMutationsCTE = `descriptors AS (
                     SELECT crdb_internal.pb_to_json(
                             'cockroach.sql.sqlbase.Descriptor',
                             descriptor
@@ -653,7 +652,30 @@ func columnNotNullConstraintInMutation(
                                           FROM descriptors
                                        )
                                  WHERE (mut->'constraint') IS NOT NULL
-                            ),
+                            )`
+
+func constraintInDroppingState(
+	tx *pgx.Tx, tableName *tree.TableName, constraintName string,
+) (bool, error) {
+	// TODO(ajwerner): Figure out how to plumb the column name into this query.
+	return scanBool(tx, `
+  WITH `+descriptorsAndConstraintMutationsCTE+`
+SELECT true
+       IN (
+            SELECT (t.f).value @> json_set('{"validity": "Dropping"}', ARRAY['name'], to_json($2:::STRING))
+              FROM (
+                    SELECT json_each(mut->'constraint') AS f
+                      FROM constraint_mutations
+                   ) AS t
+        );
+`, tableName.String(), constraintName)
+}
+
+func columnNotNullConstraintInMutation(
+	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	return scanBool(tx, `
+  WITH `+descriptorsAndConstraintMutationsCTE+`,
        col AS (
             SELECT (c->>'id')::INT8 AS id
               FROM (

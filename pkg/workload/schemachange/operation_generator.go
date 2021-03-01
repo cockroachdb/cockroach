@@ -1134,6 +1134,14 @@ func (og *operationGenerator) dropConstraint(tx *pgx.Tx) (string, error) {
 		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
+	constraintBeingDropped, err := constraintInDroppingState(tx, tableName, constraintName)
+	if err != nil {
+		return "", err
+	}
+	if constraintBeingDropped {
+		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
+
 	return fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, tableName, constraintName), nil
 }
 
