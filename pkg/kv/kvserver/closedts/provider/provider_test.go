@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,6 +38,7 @@ import (
 
 func TestProviderSubscribeNotify(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, closedts.IssueTrackingRemovalOfOldClosedTimestampsCode)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -293,6 +295,7 @@ func TestProviderSubscribeConcurrent(t *testing.T) {
 // value re-enables it.
 func TestProviderTargetDurationSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, closedts.IssueTrackingRemovalOfOldClosedTimestampsCode)
 
 	st := cluster.MakeTestingClusterSettings()
 	closedts.TargetDuration.Override(&st.SV, time.Millisecond)
