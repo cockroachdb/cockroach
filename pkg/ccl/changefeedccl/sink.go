@@ -422,6 +422,8 @@ func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
 		config = defaultSaramaConfig
 	}
 	return
+}
+
 func (s *kafkaSink) setTargets(targets jobspb.ChangefeedTargets) {
 	s.topics = make(map[string]struct{})
 	s.cfg.targetNames = make(map[descpb.ID]string)
