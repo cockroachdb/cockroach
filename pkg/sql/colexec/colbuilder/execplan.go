@@ -72,6 +72,10 @@ func wrapRowSources(
 		// necessarily a execinfra.RowSource, so remove the unnecessary
 		// conversion.
 		if c, ok := input.(*colexec.Columnarizer); ok {
+			// Since this Columnarizer has been previously added to Closers and
+			// MetadataSources, this call ensures that all future calls are noops.
+			// Modifying the slices at this stage is difficult.
+			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
 			// Note that this materializer is *not* added to the set of

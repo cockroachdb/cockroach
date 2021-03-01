@@ -3,6 +3,7 @@
 remove_files_on_exit() {
   rm -f .google-credentials.json
   rm -f .cockroach-teamcity-key
+  rm -rf ~/.docker
 }
 trap remove_files_on_exit EXIT
 
