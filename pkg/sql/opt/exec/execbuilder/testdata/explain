@@ -1187,20 +1187,20 @@ inner-join (hash)
  ├── columns: a:1 b:2 k:6 v:7
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
- ├── cost: 2227.96
+ ├── cost: 2249.74
  ├── fd: (6)-->(7), (1)==(6), (6)==(1)
  ├── prune: (2,7)
  ├── scan tc
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1104.02
+ │    ├── cost: 1115.01
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
  │    └── unfiltered-cols: (1-5)
  ├── scan t
  │    ├── columns: k:6 v:7
  │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
- │    ├── cost: 1084.02
+ │    ├── cost: 1094.81
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    ├── prune: (6,7)
@@ -1228,7 +1228,7 @@ sort
  ├── columns: a:1 b:2  [hidden: column6:6]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1193.26548
+ ├── cost: 1204.25548
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── prune: (1,2,6)
@@ -1237,7 +1237,7 @@ sort
       ├── columns: column6:6 a:1 b:2
       ├── immutable
       ├── stats: [rows=333.333333]
-      ├── cost: 1120.71667
+      ├── cost: 1131.70667
       ├── fd: (1,2)-->(6)
       ├── prune: (1,2,6)
       ├── interesting orderings: (+1)
@@ -1245,12 +1245,12 @@ sort
       │    ├── columns: a:1 b:2
       │    ├── immutable
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1114.04
+      │    ├── cost: 1125.03
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1 b:2
       │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1104.02
+      │    │    ├── cost: 1115.01
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters
@@ -1265,7 +1265,7 @@ sort
  ├── columns: a:1(int) b:2(int)  [hidden: column6:6(int)]
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1193.26548
+ ├── cost: 1204.25548
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── prune: (1,2,6)
@@ -1274,7 +1274,7 @@ sort
       ├── columns: column6:6(int) a:1(int) b:2(int)
       ├── immutable
       ├── stats: [rows=333.333333]
-      ├── cost: 1120.71667
+      ├── cost: 1131.70667
       ├── fd: (1,2)-->(6)
       ├── prune: (1,2,6)
       ├── interesting orderings: (+1)
@@ -1282,12 +1282,12 @@ sort
       │    ├── columns: a:1(int) b:2(int)
       │    ├── immutable
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1114.04
+      │    ├── cost: 1125.03
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
       │    │    ├── columns: a:1(int) b:2(int)
       │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1104.02
+      │    │    ├── cost: 1115.01
       │    │    ├── prune: (1,2)
       │    │    └── interesting orderings: (+1)
       │    └── filters

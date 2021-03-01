@@ -498,10 +498,10 @@ memo (optimized, ~5KB, required=[presentation: min:6])
  ├── G2: (scan abc,cols=(1))
  │    ├── [ordering: +1] [limit hint: 1.00]
  │    │    ├── best: (scan abc,cols=(1))
- │    │    └── cost: 6.12
+ │    │    └── cost: 6.11
  │    └── []
  │         ├── best: (scan abc,cols=(1))
- │         └── cost: 1054.02
+ │         └── cost: 1064.51
  ├── G3: (aggregations G6)
  ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1)
  │    └── []
@@ -520,28 +520,28 @@ memo (optimized, ~6KB, required=[presentation: min:6])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:6]
  │         ├── best: (scalar-group-by G2 G3 cols=())
- │         └── cost: 1064.05
+ │         └── cost: 1074.54
  ├── G2: (scan abc,cols=(2))
  │    ├── [ordering: +2] [limit hint: 1.01]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1283.35
+ │    │    └── cost: 1293.84
  │    └── []
  │         ├── best: (scan abc,cols=(2))
- │         └── cost: 1054.02
+ │         └── cost: 1064.51
  ├── G3: (aggregations G6)
  ├── G4: (limit G7 G8 ordering=+2)
  │    └── []
  │         ├── best: (limit G7="[ordering: +2] [limit hint: 1.00]" G8 ordering=+2)
- │         └── cost: 1290.81
+ │         └── cost: 1301.30
  ├── G5: (aggregations G9)
  ├── G6: (min G10)
  ├── G7: (select G2 G11)
  │    ├── [ordering: +2] [limit hint: 1.00]
  │    │    ├── best: (sort G7)
- │    │    └── cost: 1290.79
+ │    │    └── cost: 1301.28
  │    └── []
  │         ├── best: (select G2 G11)
- │         └── cost: 1064.04
+ │         └── cost: 1074.53
  ├── G8: (const 1)
  ├── G9: (const-agg G10)
  ├── G10: (variable b)
@@ -560,10 +560,10 @@ memo (optimized, ~5KB, required=[presentation: max:6])
  ├── G2: (scan abc,cols=(1))
  │    ├── [ordering: -1] [limit hint: 1.00]
  │    │    ├── best: (scan abc,rev,cols=(1))
- │    │    └── cost: 6.14
+ │    │    └── cost: 6.13
  │    └── []
  │         ├── best: (scan abc,cols=(1))
- │         └── cost: 1054.02
+ │         └── cost: 1064.51
  ├── G3: (aggregations G6)
  ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev))
  │    └── []
@@ -582,28 +582,28 @@ memo (optimized, ~6KB, required=[presentation: max:6])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:6]
  │         ├── best: (scalar-group-by G2 G3 cols=())
- │         └── cost: 1064.05
+ │         └── cost: 1074.54
  ├── G2: (scan abc,cols=(2))
  │    ├── [ordering: -2] [limit hint: 1.01]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1283.35
+ │    │    └── cost: 1293.84
  │    └── []
  │         ├── best: (scan abc,cols=(2))
- │         └── cost: 1054.02
+ │         └── cost: 1064.51
  ├── G3: (aggregations G6)
  ├── G4: (limit G7 G8 ordering=-2)
  │    └── []
  │         ├── best: (limit G7="[ordering: -2] [limit hint: 1.00]" G8 ordering=-2)
- │         └── cost: 1290.81
+ │         └── cost: 1301.30
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)
  │    ├── [ordering: -2] [limit hint: 1.00]
  │    │    ├── best: (sort G7)
- │    │    └── cost: 1290.79
+ │    │    └── cost: 1301.28
  │    └── []
  │         ├── best: (select G2 G11)
- │         └── cost: 1064.04
+ │         └── cost: 1074.53
  ├── G8: (const 1)
  ├── G9: (const-agg G10)
  ├── G10: (variable b)
@@ -690,28 +690,28 @@ memo (optimized, ~6KB, required=[presentation: max:6])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:6]
  │         ├── best: (scalar-group-by G2 G3 cols=())
- │         └── cost: 1064.05
+ │         └── cost: 1074.54
  ├── G2: (scan abc,cols=(2))
  │    ├── [ordering: -2] [limit hint: 1.01]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1283.35
+ │    │    └── cost: 1293.84
  │    └── []
  │         ├── best: (scan abc,cols=(2))
- │         └── cost: 1054.02
+ │         └── cost: 1064.51
  ├── G3: (aggregations G6)
  ├── G4: (limit G7 G8 ordering=-2)
  │    └── []
  │         ├── best: (limit G7="[ordering: -2] [limit hint: 1.00]" G8 ordering=-2)
- │         └── cost: 1290.81
+ │         └── cost: 1301.30
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)
  │    ├── [ordering: -2] [limit hint: 1.00]
  │    │    ├── best: (sort G7)
- │    │    └── cost: 1290.79
+ │    │    └── cost: 1301.28
  │    └── []
  │         ├── best: (select G2 G11)
- │         └── cost: 1064.04
+ │         └── cost: 1074.53
  ├── G8: (const 1)
  ├── G9: (const-agg G10)
  ├── G10: (variable b)
@@ -1124,28 +1124,28 @@ memo (optimized, ~7KB, required=[presentation: array_agg:6])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
- │         └── cost: 1124.05
+ │         └── cost: 1134.74
  ├── G2: (group-by G4 G5 cols=(2,3),ordering=+4 opt(2,3)) (group-by G4 G5 cols=(2,3),ordering=+2,+3,+4) (group-by G4 G5 cols=(2,3),ordering=+4,+3,+2) (group-by G4 G5 cols=(2,3),ordering=+3,+4)
  │    └── []
  │         ├── best: (group-by G4="[ordering: +2,+3,+4]" G5 cols=(2,3),ordering=+2,+3,+4)
- │         └── cost: 1114.04
+ │         └── cost: 1124.73
  ├── G3: (projections)
  ├── G4: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +3,+4]
  │    │    ├── best: (scan kuvw@vw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +4 opt(2,3)]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +4,+3,+2]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G5: (aggregations G6)
  ├── G6: (array-agg G7)
  └── G7: (variable w)
@@ -1158,25 +1158,25 @@ memo (optimized, ~6KB, required=[presentation: sum:6])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:6]
  │         ├── best: (project G2 G3 sum)
- │         └── cost: 1134.05
+ │         └── cost: 1144.74
  ├── G2: (group-by G4 G5 cols=(2-4)) (group-by G4 G5 cols=(2-4),ordering=+2,+3,+4) (group-by G4 G5 cols=(2-4),ordering=+4,+3,+2) (group-by G4 G5 cols=(2-4),ordering=+3,+4)
  │    └── []
  │         ├── best: (group-by G4="[ordering: +2,+3,+4]" G5 cols=(2-4),ordering=+2,+3,+4)
- │         └── cost: 1124.04
+ │         └── cost: 1134.73
  ├── G3: (projections)
  ├── G4: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +3,+4]
  │    │    ├── best: (scan kuvw@vw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +4,+3,+2]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G5: (aggregations G6)
  ├── G6: (sum G7)
  └── G7: (variable w)
@@ -1189,19 +1189,19 @@ memo (optimized, ~6KB, required=[presentation: sum:6])
  ├── G1: (project G2 G3 sum)
  │    └── [presentation: sum:6]
  │         ├── best: (project G2 G3 sum)
- │         └── cost: 1086.05
+ │         └── cost: 1096.64
  ├── G2: (group-by G4 G5 cols=(3)) (group-by G4 G5 cols=(3),ordering=+3)
  │    └── []
  │         ├── best: (group-by G4="[ordering: +3]" G5 cols=(3),ordering=+3)
- │         └── cost: 1085.04
+ │         └── cost: 1095.63
  ├── G3: (projections)
  ├── G4: (scan kuvw,cols=(3,4)) (scan kuvw@uvw,cols=(3,4)) (scan kuvw@wvu,cols=(3,4)) (scan kuvw@vw,cols=(3,4)) (scan kuvw@w,cols=(3,4))
  │    ├── [ordering: +3]
  │    │    ├── best: (scan kuvw@vw,cols=(3,4))
- │    │    └── cost: 1064.02
+ │    │    └── cost: 1074.61
  │    └── []
  │         ├── best: (scan kuvw,cols=(3,4))
- │         └── cost: 1064.02
+ │         └── cost: 1074.61
  ├── G5: (aggregations G6)
  ├── G6: (sum G7)
  └── G7: (variable w)
@@ -1214,25 +1214,25 @@ memo (optimized, ~7KB, required=[presentation: array_agg:6])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
- │         └── cost: 1106.05
+ │         └── cost: 1116.74
  ├── G2: (group-by G4 G5 cols=(3),ordering=+2,+4 opt(3)) (group-by G4 G5 cols=(3),ordering=+2,+3,+4)
  │    └── []
  │         ├── best: (group-by G4="[ordering: +2,+4 opt(3)]" G5 cols=(3),ordering=+2,+4 opt(3))
- │         └── cost: 1105.04
+ │         └── cost: 1115.73
  ├── G3: (projections)
  ├── G4: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +2,+4 opt(3)]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +2]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G5: (aggregations G6)
  ├── G6: (array-agg G7)
  └── G7: (variable w)
@@ -1271,22 +1271,22 @@ memo (optimized, ~12KB, required=[presentation: array_agg:6])
  ├── G6: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +2 opt(4)]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
- │    │    └── cost: 1084.02
+ │    │    └── cost: 1094.81
  │    ├── [ordering: +2,+4]
  │    │    ├── best: (sort G6="[ordering: +2]")
- │    │    └── cost: 1220.47
+ │    │    └── cost: 1231.26
  │    ├── [ordering: +2]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
- │    │    └── cost: 1084.02
+ │    │    └── cost: 1094.81
  │    ├── [ordering: +4,+2]
  │    │    ├── best: (sort G6="[ordering: +4]")
- │    │    └── cost: 1220.47
+ │    │    └── cost: 1231.26
  │    ├── [ordering: +4]
  │    │    ├── best: (scan kuvw@wvu,cols=(1-4))
- │    │    └── cost: 1084.02
+ │    │    └── cost: 1094.81
  │    └── []
  │         ├── best: (scan kuvw,cols=(1-4))
- │         └── cost: 1084.02
+ │         └── cost: 1094.81
  ├── G7: (filters G11)
  ├── G8: (scan kuvw@uvw,cols=(1-4),constrained)
  │    ├── [ordering: +2 opt(4)]
@@ -1359,13 +1359,13 @@ memo (optimized, ~12KB, required=[presentation: sum:6])
  ├── G6: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +2]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
- │    │    └── cost: 1084.02
+ │    │    └── cost: 1094.81
  │    ├── [ordering: +4]
  │    │    ├── best: (scan kuvw@wvu,cols=(1-4))
- │    │    └── cost: 1084.02
+ │    │    └── cost: 1094.81
  │    └── []
  │         ├── best: (scan kuvw,cols=(1-4))
- │         └── cost: 1084.02
+ │         └── cost: 1094.81
  ├── G7: (filters G11)
  ├── G8: (scan kuvw@uvw,cols=(1-4),constrained)
  │    ├── [ordering: +2]
@@ -1401,19 +1401,19 @@ memo (optimized, ~6KB, required=[presentation: array_agg:6])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:6]
  │         ├── best: (project G2 G3 array_agg)
- │         └── cost: 1233.71
+ │         └── cost: 1245.54
  ├── G2: (group-by G4 G5 cols=(2,3),ordering=-4 opt(2,3))
  │    └── []
  │         ├── best: (group-by G4="[ordering: -4 opt(2,3)]" G5 cols=(2,3),ordering=-4 opt(2,3))
- │         └── cost: 1223.70
+ │         └── cost: 1235.53
  ├── G3: (projections)
  ├── G4: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: -4 opt(2,3)]
  │    │    ├── best: (scan kuvw@uvw,rev,cols=(2-4))
- │    │    └── cost: 1173.68
+ │    │    └── cost: 1185.51
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G5: (aggregations G6)
  ├── G6: (array-agg G7)
  └── G7: (variable w)
@@ -1427,20 +1427,20 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2-4)) (distinct-on G2 G3 cols=(2-4),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2-4),ordering=+4,+3,+2) (distinct-on G2 G3 cols=(2-4),ordering=+3,+4)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2-4),ordering=+2,+3,+4)
- │         └── cost: 1114.04
+ │         └── cost: 1124.73
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +3,+4]
  │    │    ├── best: (scan kuvw@vw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +4,+3,+2]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  └── G3: (aggregations)
 
 # Orderings +u,+v and +v can be used.
@@ -1451,17 +1451,17 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2,3)) (distinct-on G2 G3 cols=(2,3),ordering=+2,+3) (distinct-on G2 G3 cols=(2,3),ordering=+3)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2,+3]" G3 cols=(2,3),ordering=+2,+3)
- │         └── cost: 1114.04
+ │         └── cost: 1124.73
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,+3]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +3]
  │    │    ├── best: (scan kuvw@vw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4)
  ├── G4: (first-agg G5)
  └── G5: (variable w)
@@ -1474,14 +1474,14 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(2)) (distinct-on G2 G3 cols=(2),ordering=+2)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +2]" G3 cols=(2),ordering=+2)
- │         └── cost: 1105.04
+ │         └── cost: 1115.73
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4 G5)
  ├── G4: (first-agg G6)
  ├── G5: (first-agg G7)
@@ -1496,14 +1496,14 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(3)) (distinct-on G2 G3 cols=(3),ordering=+3)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +3]" G3 cols=(3),ordering=+3)
- │         └── cost: 1105.04
+ │         └── cost: 1115.73
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +3]
  │    │    ├── best: (scan kuvw@vw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4 G5)
  ├── G4: (first-agg G6)
  ├── G5: (first-agg G7)
@@ -1518,14 +1518,14 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
  ├── G1: (distinct-on G2 G3 cols=(4)) (distinct-on G2 G3 cols=(4),ordering=+4)
  │    └── [presentation: u:2,v:3,w:4]
  │         ├── best: (distinct-on G2="[ordering: +4]" G3 cols=(4),ordering=+4)
- │         └── cost: 1105.04
+ │         └── cost: 1115.73
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +4]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4 G5)
  ├── G4: (first-agg G6)
  ├── G5: (first-agg G7)
@@ -1540,26 +1540,26 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
  ├── G1: (distinct-on G2 G3 cols=(2),ordering=+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+4)
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1133.34
+ │    │    └── cost: 1144.03
  │    └── []
  │         ├── best: (distinct-on G2="[ordering: +4 opt(2)]" G3 cols=(2),ordering=+4 opt(2))
- │         └── cost: 1115.04
+ │         └── cost: 1125.73
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,+4]
  │    │    ├── best: (sort G2="[ordering: +2]")
- │    │    └── cost: 1200.47
+ │    │    └── cost: 1211.16
  │    ├── [ordering: +2]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +4 opt(2)]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +4]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4 G5)
  ├── G4: (first-agg G6)
  ├── G5: (first-agg G7)
@@ -1574,23 +1574,23 @@ memo (optimized, ~5KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
  ├── G1: (distinct-on G2 G3 cols=(2),ordering=+3,+4 opt(2)) (distinct-on G2 G3 cols=(2),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2),ordering=+3,+4)
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
  │    │    ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2),ordering=+3,+4 opt(2))
- │    │    └── cost: 1105.04
+ │    │    └── cost: 1115.73
  │    └── []
  │         ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2),ordering=+2,+3,+4)
- │         └── cost: 1105.04
+ │         └── cost: 1115.73
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +3,+4 opt(2)]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +3,+4]
  │    │    ├── best: (scan kuvw@vw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4 G5)
  ├── G4: (first-agg G6)
  ├── G5: (first-agg G7)
@@ -1605,23 +1605,23 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
  ├── G1: (distinct-on G2 G3 cols=(2,4),ordering=-3 opt(2,4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4,+2]
  │    │    ├── best: (distinct-on G2="[ordering: +4,+2,-3]" G3 cols=(2,4),ordering=-3 opt(2,4))
- │    │    └── cost: 1244.81
+ │    │    └── cost: 1255.50
  │    └── []
  │         ├── best: (distinct-on G2="[ordering: -3 opt(2,4)]" G3 cols=(2,4),ordering=-3 opt(2,4))
- │         └── cost: 1223.70
+ │         └── cost: 1235.53
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +4,+2,-3]
  │    │    ├── best: (sort G2="[ordering: +4]")
- │    │    └── cost: 1204.79
+ │    │    └── cost: 1215.48
  │    ├── [ordering: +4]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: -3 opt(2,4)]
  │    │    ├── best: (scan kuvw@uvw,rev,cols=(2-4))
- │    │    └── cost: 1173.68
+ │    │    └── cost: 1185.51
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4)
  ├── G4: (first-agg G5)
  └── G5: (variable v)
@@ -1633,23 +1633,23 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
  │    │    ├── best: (distinct-on G2="[ordering: +4,-2,+3]" G3 cols=(4),ordering=-2,+3 opt(4))
- │    │    └── cost: 1235.81
+ │    │    └── cost: 1246.50
  │    └── []
  │         ├── best: (distinct-on G2="[ordering: -2,+3 opt(4)]" G3 cols=(4),ordering=-2,+3 opt(4))
- │         └── cost: 1375.33
+ │         └── cost: 1386.02
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +4,-2,+3]
  │    │    ├── best: (sort G2="[ordering: +4]")
- │    │    └── cost: 1204.79
+ │    │    └── cost: 1215.48
  │    ├── [ordering: +4]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: -2,+3 opt(4)]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1334.31
+ │    │    └── cost: 1345.00
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4 G5)
  ├── G4: (first-agg G6)
  ├── G5: (first-agg G7)
@@ -1663,20 +1663,20 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: -4]
  │    │    ├── best: (distinct-on G2="[ordering: -4,-2,+3]" G3 cols=(4),ordering=-2,+3 opt(4))
- │    │    └── cost: 1366.43
+ │    │    └── cost: 1377.12
  │    └── []
  │         ├── best: (distinct-on G2="[ordering: -2,+3 opt(4)]" G3 cols=(4),ordering=-2,+3 opt(4))
- │         └── cost: 1375.33
+ │         └── cost: 1386.02
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: -2,+3 opt(4)]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1334.31
+ │    │    └── cost: 1345.00
  │    ├── [ordering: -4,-2,+3]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1335.41
+ │    │    └── cost: 1346.10
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4 G5)
  ├── G4: (first-agg G6)
  ├── G5: (first-agg G7)
@@ -1690,26 +1690,26 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=+2,-3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
  │    │    ├── best: (distinct-on G2="[ordering: +4,+2,-3]" G3 cols=(4),ordering=+2,-3 opt(4))
- │    │    └── cost: 1235.81
+ │    │    └── cost: 1246.50
  │    └── []
  │         ├── best: (distinct-on G2="[ordering: +2,-3 opt(4)]" G3 cols=(4),ordering=+2,-3 opt(4))
- │         └── cost: 1241.49
+ │         └── cost: 1252.18
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,-3 opt(4)]
  │    │    ├── best: (sort G2="[ordering: +2]")
- │    │    └── cost: 1200.47
+ │    │    └── cost: 1211.16
  │    ├── [ordering: +2]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    ├── [ordering: +4,+2,-3]
  │    │    ├── best: (sort G2="[ordering: +4]")
- │    │    └── cost: 1204.79
+ │    │    └── cost: 1215.48
  │    ├── [ordering: +4]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G3: (aggregations G4 G5)
  ├── G4: (first-agg G6)
  ├── G5: (first-agg G7)
@@ -1724,32 +1724,32 @@ memo (optimized, ~37KB, required=[presentation: w:10] [ordering: +11,+1])
  ├── G1: (project G2 G3 x)
  │    ├── [presentation: w:10] [ordering: +11,+1]
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1390.34
+ │    │    └── cost: 1400.63
  │    └── []
  │         ├── best: (project G2 G3 x)
- │         └── cost: 1130.04
+ │         └── cost: 1140.33
  ├── G2: (ensure-distinct-on G4 G5 cols=(1)) (ensure-distinct-on G4 G5 cols=(1),ordering=+1)
  │    └── []
  │         ├── best: (ensure-distinct-on G4="[ordering: +1]" G5 cols=(1),ordering=+1)
- │         └── cost: 1100.03
+ │         └── cost: 1110.32
  ├── G3: (projections G6 G7)
  ├── G4: (left-join G8 G9 G10) (left-join G8 G9 G10) (right-join G9 G8 G10) (merge-join G8 G9 G11 left-join,+1,+6) (lookup-join G12 G11 kuvw@uvw,keyCols=[1 12],outCols=(1,6-8)) (lookup-join G13 G10 kuvw@vw,keyCols=[13],outCols=(1,6-8)) (right-join G9 G8 G10) (merge-join G8 G9 G11 left-join,+1,+6) (lookup-join G14 G11 kuvw@uvw,keyCols=[1 14],outCols=(1,6-8)) (lookup-join G15 G10 kuvw@vw,keyCols=[15],outCols=(1,6-8)) (merge-join G9 G8 G11 right-join,+6,+1) (merge-join G9 G8 G11 right-join,+6,+1)
  │    ├── [ordering: +1]
  │    │    ├── best: (merge-join G8="[ordering: +1]" G9="[ordering: +6 opt(7)]" G11 left-join,+1,+6)
- │    │    └── cost: 1070.01
+ │    │    └── cost: 1080.30
  │    └── []
  │         ├── best: (merge-join G8="[ordering: +1]" G9="[ordering: +6 opt(7)]" G11 left-join,+1,+6)
- │         └── cost: 1070.01
+ │         └── cost: 1080.30
  ├── G5: (aggregations G16)
  ├── G6: (variable kuvw.w)
  ├── G7: (plus G17 G18)
  ├── G8: (scan xyz,cols=(1)) (scan xyz@xy,cols=(1)) (scan xyz@zyx,cols=(1)) (scan xyz@yy,cols=(1))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan xyz@xy,cols=(1))
- │    │    └── cost: 1034.02
+ │    │    └── cost: 1044.31
  │    └── []
  │         ├── best: (scan xyz@xy,cols=(1))
- │         └── cost: 1034.02
+ │         └── cost: 1044.31
  ├── G9: (select G19 G20) (scan kuvw@vw,cols=(6-8),constrained)
  │    ├── [ordering: +6 opt(7)]
  │    │    ├── best: (sort G9)
@@ -1762,41 +1762,41 @@ memo (optimized, ~37KB, required=[presentation: w:10] [ordering: +11,+1])
  ├── G12: (project G8 G22 x)
  │    ├── [ordering: +1]
  │    │    ├── best: (project G8="[ordering: +1]" G22 x)
- │    │    └── cost: 1054.03
+ │    │    └── cost: 1064.32
  │    └── []
  │         ├── best: (project G8 G22 x)
- │         └── cost: 1054.03
+ │         └── cost: 1064.32
  ├── G13: (project G8 G22 x)
  │    ├── [ordering: +1]
  │    │    ├── best: (project G8="[ordering: +1]" G22 x)
- │    │    └── cost: 1054.03
+ │    │    └── cost: 1064.32
  │    └── []
  │         ├── best: (project G8 G22 x)
- │         └── cost: 1054.03
+ │         └── cost: 1064.32
  ├── G14: (project G8 G22 x)
  │    ├── [ordering: +1]
  │    │    ├── best: (project G8="[ordering: +1]" G22 x)
- │    │    └── cost: 1054.03
+ │    │    └── cost: 1064.32
  │    └── []
  │         ├── best: (project G8 G22 x)
- │         └── cost: 1054.03
+ │         └── cost: 1064.32
  ├── G15: (project G8 G22 x)
  │    ├── [ordering: +1]
  │    │    ├── best: (project G8="[ordering: +1]" G22 x)
- │    │    └── cost: 1054.03
+ │    │    └── cost: 1064.32
  │    └── []
  │         ├── best: (project G8 G22 x)
- │         └── cost: 1054.03
+ │         └── cost: 1064.32
  ├── G16: (const-agg G6)
  ├── G17: (variable x)
  ├── G18: (const 1)
  ├── G19: (scan kuvw,cols=(6-8)) (scan kuvw@uvw,cols=(6-8)) (scan kuvw@wvu,cols=(6-8)) (scan kuvw@vw,cols=(6-8)) (scan kuvw@w,cols=(6-8))
  │    ├── [ordering: +6 opt(7)]
  │    │    ├── best: (scan kuvw@uvw,cols=(6-8))
- │    │    └── cost: 1074.02
+ │    │    └── cost: 1084.71
  │    └── []
  │         ├── best: (scan kuvw,cols=(6-8))
- │         └── cost: 1074.02
+ │         └── cost: 1084.71
  ├── G20: (filters G23)
  ├── G21: (eq G17 G24)
  ├── G22: (projections G18)
@@ -1812,35 +1812,35 @@ memo (optimized, ~30KB, required=[])
  ├── G1: (insert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (insert G2 G3 G4 xyz)
- │         └── cost: 2147.99
+ │         └── cost: 2168.87
  ├── G2: (upsert-distinct-on G5 G6 cols=(7)) (upsert-distinct-on G5 G6 cols=(7),ordering=+7 opt(10))
  │    └── []
  │         ├── best: (upsert-distinct-on G5 G6 cols=(7))
- │         └── cost: 2147.98
+ │         └── cost: 2168.86
  ├── G3: (unique-checks)
  ├── G4: (f-k-checks)
  ├── G5: (anti-join G7 G8 G9) (anti-join G7 G8 G9) (merge-join G7 G8 G10 anti-join,+7,+11) (lookup-join G7 G10 xyz,keyCols=[7],outCols=(7,8,10,11)) (lookup-join G7 G10 xyz@xy,keyCols=[7],outCols=(7,8,10,11)) (merge-join G7 G8 G10 anti-join,+7,+11) (lookup-join G7 G10 xyz,keyCols=[7],outCols=(7,8,10,11)) (lookup-join G7 G10 xyz@xy,keyCols=[7],outCols=(7,8,10,11))
  │    ├── [ordering: +7 opt(10)]
  │    │    ├── best: (merge-join G7="[ordering: +7 opt(10)]" G8="[ordering: +11]" G10 anti-join,+7,+11)
- │    │    └── cost: 2147.96
+ │    │    └── cost: 2168.84
  │    └── []
  │         ├── best: (merge-join G7="[ordering: +7 opt(10)]" G8="[ordering: +11]" G10 anti-join,+7,+11)
- │         └── cost: 2147.96
+ │         └── cost: 2168.84
  ├── G6: (aggregations G11 G12)
  ├── G7: (project G13 G14 v w)
  │    ├── [ordering: +7 opt(10)]
  │    │    ├── best: (project G13="[ordering: +7]" G14 v w)
- │    │    └── cost: 1084.03
+ │    │    └── cost: 1094.62
  │    └── []
  │         ├── best: (project G13 G14 v w)
- │         └── cost: 1084.03
+ │         └── cost: 1094.62
  ├── G8: (scan xyz,cols=(11)) (scan xyz@xy,cols=(11)) (scan xyz@zyx,cols=(11)) (scan xyz@yy,cols=(11))
  │    ├── [ordering: +11]
  │    │    ├── best: (scan xyz@xy,cols=(11))
- │    │    └── cost: 1034.02
+ │    │    └── cost: 1044.31
  │    └── []
  │         ├── best: (scan xyz@xy,cols=(11))
- │         └── cost: 1034.02
+ │         └── cost: 1044.31
  ├── G9: (filters G15)
  ├── G10: (filters)
  ├── G11: (first-agg G16)
@@ -1848,10 +1848,10 @@ memo (optimized, ~30KB, required=[])
  ├── G13: (scan kuvw,cols=(7,8)) (scan kuvw@uvw,cols=(7,8)) (scan kuvw@wvu,cols=(7,8)) (scan kuvw@vw,cols=(7,8)) (scan kuvw@w,cols=(7,8))
  │    ├── [ordering: +7]
  │    │    ├── best: (scan kuvw@vw,cols=(7,8))
- │    │    └── cost: 1064.02
+ │    │    └── cost: 1074.61
  │    └── []
  │         ├── best: (scan kuvw,cols=(7,8))
- │         └── cost: 1064.02
+ │         └── cost: 1074.61
  ├── G14: (projections G18)
  ├── G15: (eq G19 G20)
  ├── G16: (variable w)
@@ -1868,50 +1868,50 @@ memo (optimized, ~27KB, required=[])
  ├── G1: (upsert G2 G3 G4 xyz)
  │    └── []
  │         ├── best: (upsert G2 G3 G4 xyz)
- │         └── cost: 2238.10
+ │         └── cost: 2259.28
  ├── G2: (project G5 G6 v w ?column? x y z)
  │    └── []
  │         ├── best: (project G5 G6 v w ?column? x y z)
- │         └── cost: 2238.09
+ │         └── cost: 2259.27
  ├── G3: (unique-checks)
  ├── G4: (f-k-checks)
  ├── G5: (left-join G7 G8 G9) (left-join G7 G8 G9) (right-join G8 G7 G9) (lookup-join G7 G10 xyz,keyCols=[7],outCols=(7,8,10-13)) (lookup-join G11 G10 xyz,keyCols=[11],outCols=(7,8,10-13)) (right-join G8 G7 G9) (lookup-join G7 G10 xyz,keyCols=[7],outCols=(7,8,10-13)) (lookup-join G12 G10 xyz,keyCols=[11],outCols=(7,8,10-13)) (merge-join G8 G7 G10 right-join,+11,+7) (merge-join G8 G7 G10 right-join,+11,+7)
  │    └── []
  │         ├── best: (merge-join G8="[ordering: +11]" G7="[ordering: +7 opt(10)]" G10 right-join,+11,+7)
- │         └── cost: 2218.08
+ │         └── cost: 2239.26
  ├── G6: (projections G13)
  ├── G7: (ensure-upsert-distinct-on G14 G15 cols=(7)) (ensure-upsert-distinct-on G14 G15 cols=(7),ordering=+7 opt(10))
  │    ├── [ordering: +7 opt(10)]
  │    │    ├── best: (ensure-upsert-distinct-on G14="[ordering: +7 opt(10)]" G15 cols=(7))
- │    │    └── cost: 1124.05
+ │    │    └── cost: 1134.64
  │    └── []
  │         ├── best: (ensure-upsert-distinct-on G14="[ordering: +7 opt(10)]" G15 cols=(7),ordering=+7 opt(10))
- │         └── cost: 1124.05
+ │         └── cost: 1134.64
  ├── G8: (scan xyz,cols=(11-13)) (scan xyz@zyx,cols=(11-13))
  │    ├── [ordering: +11]
  │    │    ├── best: (scan xyz,cols=(11-13))
- │    │    └── cost: 1064.02
+ │    │    └── cost: 1074.61
  │    └── []
  │         ├── best: (scan xyz,cols=(11-13))
- │         └── cost: 1064.02
+ │         └── cost: 1074.61
  ├── G9: (filters G16)
  ├── G10: (filters)
  ├── G11: (lookup-join G7 G10 xyz@xy,keyCols=[7],outCols=(7,8,10-12))
  │    └── []
  │         ├── best: (lookup-join G7 G10 xyz@xy,keyCols=[7],outCols=(7,8,10-12))
- │         └── cost: 7174.06
+ │         └── cost: 7184.65
  ├── G12: (lookup-join G7 G10 xyz@xy,keyCols=[7],outCols=(7,8,10-12))
  │    └── []
  │         ├── best: (lookup-join G7 G10 xyz@xy,keyCols=[7],outCols=(7,8,10-12))
- │         └── cost: 7174.06
+ │         └── cost: 7184.65
  ├── G13: (case G17 G18 G19)
  ├── G14: (project G20 G21 v w)
  │    ├── [ordering: +7 opt(10)]
  │    │    ├── best: (project G20="[ordering: +7]" G21 v w)
- │    │    └── cost: 1084.03
+ │    │    └── cost: 1094.62
  │    └── []
  │         ├── best: (project G20 G21 v w)
- │         └── cost: 1084.03
+ │         └── cost: 1094.62
  ├── G15: (aggregations G22 G23)
  ├── G16: (eq G24 G25)
  ├── G17: (true)
@@ -1920,10 +1920,10 @@ memo (optimized, ~27KB, required=[])
  ├── G20: (scan kuvw,cols=(7,8)) (scan kuvw@uvw,cols=(7,8)) (scan kuvw@wvu,cols=(7,8)) (scan kuvw@vw,cols=(7,8)) (scan kuvw@w,cols=(7,8))
  │    ├── [ordering: +7]
  │    │    ├── best: (scan kuvw@vw,cols=(7,8))
- │    │    └── cost: 1064.02
+ │    │    └── cost: 1074.61
  │    └── []
  │         ├── best: (scan kuvw,cols=(7,8))
- │         └── cost: 1064.02
+ │         └── cost: 1074.61
  ├── G21: (projections G27)
  ├── G22: (first-agg G28)
  ├── G23: (first-agg G29)
