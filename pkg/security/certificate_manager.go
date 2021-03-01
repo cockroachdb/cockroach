@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 )
 
 var (
@@ -262,6 +263,12 @@ func (cl CertsLocator) CACertPath() string {
 	return filepath.Join(cl.certsDir, CACertFilename())
 }
 
+// EnsureCertsDirectory ensures that the certs directory exists by
+// creating it if does not exist yet.
+func (cl CertsLocator) EnsureCertsDirectory() error {
+	return os.MkdirAll(cl.certsDir, 0700)
+}
+
 // CACertFilename returns the expected file name for the CA certificate.
 func CACertFilename() string { return "ca" + certExtension }
 
@@ -312,6 +319,18 @@ func (cl CertsLocator) UICAKeyPath() string {
 // NodeCertPath returns the expected file path for the node certificate.
 func (cl CertsLocator) NodeCertPath() string {
 	return filepath.Join(cl.certsDir, NodeCertFilename())
+}
+
+// HasNodeCert returns true iff the node certificate file already exists.
+func (cl CertsLocator) HasNodeCert() (bool, error) {
+	_, err := os.Stat(cl.NodeCertPath())
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // NodeCertFilename returns the expected file name for the node certificate.

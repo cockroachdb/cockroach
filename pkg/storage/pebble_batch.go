@@ -229,18 +229,18 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if iter.inuse {
 		panic("iterator already in use")
 	}
+	// Ensures no timestamp hints etc.
+	checkOptionsForIterReuse(opts)
 
 	if iter.iter != nil {
-		iter.setOptions(opts)
+		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
 			iter.init(p.batch, p.iter, opts)
 		} else {
 			iter.init(p.db, p.iter, opts)
 		}
-		// The timestamp hints should be empty given the earlier code, but we are
-		// being defensive.
-		if p.iter == nil && opts.MaxTimestampHint.IsEmpty() && opts.MinTimestampHint.IsEmpty() {
+		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
@@ -271,18 +271,18 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.inuse {
 		panic("iterator already in use")
 	}
+	// Ensures no timestamp hints etc.
+	checkOptionsForIterReuse(opts)
 
 	if iter.iter != nil {
-		iter.setOptions(opts)
+		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
 			iter.init(p.batch, p.iter, opts)
 		} else {
 			iter.init(p.db, p.iter, opts)
 		}
-		// The timestamp hints should be empty given this is an EngineIterator,
-		// but we are being defensive.
-		if p.iter == nil && opts.MaxTimestampHint.IsEmpty() && opts.MinTimestampHint.IsEmpty() {
+		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}

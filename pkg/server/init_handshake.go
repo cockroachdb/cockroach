@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 const (
@@ -128,13 +129,27 @@ func pemToSignature(caCertPEM []byte) ([]byte, error) {
 }
 
 func createNodeInitTempCertificates(
-	hostnames []string, lifespan time.Duration,
+	ctx context.Context, hostnames []string, lifespan time.Duration,
 ) (certs ServiceCertificateBundle, err error) {
-	caCert, caKey, err := security.CreateCACertAndKey(lifespan, initServiceName)
+	log.Ops.Infof(ctx, "creating temporary initial certificates for hosts %+v, duration %s", hostnames, lifespan)
+
+	caCtx := logtags.AddTag(ctx, "create-temp-ca", nil)
+	caCert, caKey, err := security.CreateCACertAndKey(caCtx, log.Ops.Infof, lifespan, initServiceName)
 	if err != nil {
 		return certs, err
 	}
-	serviceCert, serviceKey, err := security.CreateServiceCertAndKey(lifespan, initServiceName, hostnames, caCert, caKey)
+	serviceCtx := logtags.AddTag(ctx, "create-temp-service", nil)
+	serviceCert, serviceKey, err := security.CreateServiceCertAndKey(
+		serviceCtx,
+		log.Ops.Infof,
+		lifespan,
+		security.NodeUser,
+		initServiceName,
+		hostnames,
+		caCert,
+		caKey,
+		false, /* serviceCertIsAlsoValidAsClient */
+	)
 	if err != nil {
 		return certs, err
 	}
@@ -150,7 +165,7 @@ func createNodeInitTempCertificates(
 
 func sendBadRequestError(ctx context.Context, err error, w http.ResponseWriter) {
 	http.Error(w, "invalid request message", http.StatusBadRequest)
-	log.Warningf(ctx, "bad request: %s", err)
+	log.Ops.Warningf(ctx, "bad request: %s", err)
 }
 
 func generateURLForClient(peer string, endpoint string) string {
@@ -159,7 +174,6 @@ func generateURLForClient(peer string, endpoint string) string {
 
 // tlsInitHandshaker takes in a list of peers
 type tlsInitHandshaker struct {
-	ctx    context.Context
 	server *http.Server
 
 	token      []byte
@@ -173,7 +187,7 @@ type tlsInitHandshaker struct {
 	wg           sync.WaitGroup
 }
 
-func (t *tlsInitHandshaker) init() error {
+func (t *tlsInitHandshaker) init(ctx context.Context) error {
 	serverCert, err := tls.X509KeyPair(t.tempCerts.HostCertificate, t.tempCerts.HostKey)
 	if err != nil {
 		return err
@@ -189,8 +203,8 @@ func (t *tlsInitHandshaker) init() error {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(trustInitURL, t.onTrustInit)
-	mux.HandleFunc(deliverBundleURL, t.onDeliverBundle)
+	mux.HandleFunc(trustInitURL, enhanceHandlerContextWithHTTPClient(ctx, t.onTrustInit))
+	mux.HandleFunc(deliverBundleURL, enhanceHandlerContextWithHTTPClient(ctx, t.onDeliverBundle))
 
 	t.server = &http.Server{
 		Addr:      t.listenAddr,
@@ -200,20 +214,31 @@ func (t *tlsInitHandshaker) init() error {
 	return nil
 }
 
-// Handler for initial challenge and ack containing the ephemeral node CAs
-func (t *tlsInitHandshaker) onTrustInit(res http.ResponseWriter, req *http.Request) {
+func enhanceHandlerContextWithHTTPClient(
+	baseCtx context.Context, fn func(ctx context.Context, w http.ResponseWriter, req *http.Request),
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		ctx := logtags.AddTag(baseCtx, "peer", req.RemoteAddr)
+		fn(ctx, w, req)
+	}
+}
+
+// Handler for initial challenge and ack containing the ephemeral node CAs.
+func (t *tlsInitHandshaker) onTrustInit(
+	ctx context.Context, res http.ResponseWriter, req *http.Request,
+) {
 	var challenge nodeHostnameAndCA
 
 	// TODO(aaron-crl): [Security] Make this more error resilient to size and shape attacks.
 	err := json.NewDecoder(req.Body).Decode(&challenge)
 	if err != nil {
-		sendBadRequestError(t.ctx, errors.Wrap(err, "error when unmarshalling challenge"), res)
+		sendBadRequestError(ctx, errors.Wrap(err, "error when unmarshalling challenge"), res)
 		return
 	}
 	defer req.Body.Close()
 
 	if !challenge.validHMAC(t.token) {
-		sendBadRequestError(t.ctx, errInvalidHMAC, res)
+		sendBadRequestError(ctx, errInvalidHMAC, res)
 		// Non-blocking channel send.
 		select {
 		case t.errors <- errInvalidHMAC:
@@ -222,6 +247,8 @@ func (t *tlsInitHandshaker) onTrustInit(res http.ResponseWriter, req *http.Reque
 
 		return
 	}
+
+	log.Ops.Infof(ctx, "received valid challenge and CA from: %s", challenge.HostAddress)
 
 	t.trustedPeers <- challenge
 
@@ -238,27 +265,33 @@ func (t *tlsInitHandshaker) onTrustInit(res http.ResponseWriter, req *http.Reque
 }
 
 // Handler to allow peer to deliver internode CA trust bundle.
-func (t *tlsInitHandshaker) onDeliverBundle(res http.ResponseWriter, req *http.Request) {
+func (t *tlsInitHandshaker) onDeliverBundle(
+	ctx context.Context, res http.ResponseWriter, req *http.Request,
+) {
 	bundle := nodeTrustBundle{}
 	err := json.NewDecoder(req.Body).Decode(&bundle)
 	defer req.Body.Close()
 	if err != nil {
-		sendBadRequestError(t.ctx, errors.Wrap(err, "error when unmarshalling bundle"), res)
+		sendBadRequestError(ctx, errors.Wrap(err, "error when unmarshalling bundle"), res)
 		return
 	}
-	if bundle.validHMAC(t.token) {
-		// Successfully provisioned.
-		t.finishedInit <- &bundle.Bundle
-		close(t.finishedInit)
+	if !bundle.validHMAC(t.token) {
+		sendBadRequestError(ctx, errors.New("invalid bundle HMAC"), res)
+		return
+	}
+
+	log.Ops.Infof(ctx, "received valid cert bundle from trust leader")
+	// Successfully provisioned.
+	select {
+	case t.finishedInit <- &bundle.Bundle:
+		// Done.
+	case <-ctx.Done():
+		log.Ops.Warningf(ctx, "context canceled while receiving bundle")
 	}
 }
 
-func (t *tlsInitHandshaker) startServer(listener net.Listener) {
-	go func() {
-		// Start the server.
-		_ = t.server.ServeTLS(listener, "", "")
-		t.wg.Done()
-	}()
+func (t *tlsInitHandshaker) startServer(listener net.Listener) error {
+	return t.server.ServeTLS(listener, "", "")
 }
 
 func (t *tlsInitHandshaker) stopServer() {
@@ -335,8 +368,9 @@ func (t *tlsInitHandshaker) getPeerCACert(
 	return msg, nil
 }
 
-func (t *tlsInitHandshaker) runClient(peerHostname string, selfAddress string) {
-	defer t.wg.Done()
+func (t *tlsInitHandshaker) runClient(
+	ctx context.Context, peerHostname string, selfAddress string,
+) {
 	// Sleep for 500ms between attempts.
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
@@ -345,13 +379,14 @@ func (t *tlsInitHandshaker) runClient(peerHostname string, selfAddress string) {
 
 	for {
 		select {
-		case <-t.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
 
 		peerHostnameAndCa, err := t.getPeerCACert(client, peerHostname, selfAddress)
 		if err != nil {
+			log.Ops.Warningf(ctx, "peer CA retrieval error: %v", err)
 			// Non-blocking channel send.
 			select {
 			case t.errors <- err:
@@ -364,14 +399,14 @@ func (t *tlsInitHandshaker) runClient(peerHostname string, selfAddress string) {
 		}
 		select {
 		case t.trustedPeers <- peerHostnameAndCa:
-		case <-t.ctx.Done():
+		case <-ctx.Done():
 		}
 		return
 	}
 }
 
 func (t *tlsInitHandshaker) sendBundle(
-	address string, peerCACert []byte, caBundle nodeTrustBundle,
+	ctx context.Context, address string, peerCACert []byte, caBundle nodeTrustBundle,
 ) (err error) {
 	rootCAs, _ := x509.SystemCertPool()
 	rootCAs.AppendCertsFromPEM(peerCACert)
@@ -384,12 +419,14 @@ func (t *tlsInitHandshaker) sendBundle(
 		return err
 	}
 
+	every := log.Every(time.Second)
+
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	var lastError error
 	for {
 		select {
-		case <-t.ctx.Done():
+		case <-ctx.Done():
 			if lastError != nil {
 				return lastError
 			}
@@ -402,6 +439,9 @@ func (t *tlsInitHandshaker) sendBundle(
 			break
 		}
 		lastError = err
+		if every.ShouldLog() {
+			log.Ops.Warningf(ctx, "cannot send bundle: %v", err)
+		}
 	}
 
 	return nil
@@ -409,13 +449,22 @@ func (t *tlsInitHandshaker) sendBundle(
 
 func initHandshakeHelper(
 	ctx context.Context,
+	reporter func(string, ...interface{}),
 	cfg *base.Config,
 	token string,
-	numExpectedPeers int,
+	numExpectedNodes int,
 	peers []string,
 	certsDir string,
 	listener net.Listener,
 ) error {
+	if len(token) == 0 {
+		return errors.AssertionFailedf("programming error: token cannot be empty")
+	}
+	if numExpectedNodes <= 0 {
+		return errors.AssertionFailedf("programming error: must expect more than 1 node")
+	}
+	numExpectedPeers := numExpectedNodes - 1
+
 	addr := listener.Addr()
 	var listenHost string
 	switch netAddr := addr.(type) {
@@ -424,13 +473,13 @@ func initHandshakeHelper(
 	default:
 		return errors.New("unsupported listener protocol: only TCP listeners supported")
 	}
-	tempCerts, err := createNodeInitTempCertificates([]string{listenHost}, defaultInitLifespan)
+	tempCerts, err := createNodeInitTempCertificates(ctx, []string{listenHost}, defaultInitLifespan)
 	if err != nil {
 		return errors.Wrap(err, "failed to create certificates")
 	}
 
+	log.Infof(ctx, "initializing temporary TLS handshake server, listen addr: %s", addr)
 	handshaker := &tlsInitHandshaker{
-		ctx:          ctx,
 		token:        []byte(token),
 		certsDir:     certsDir,
 		listenAddr:   addr.String(),
@@ -439,39 +488,68 @@ func initHandshakeHelper(
 		errors:       make(chan error, numExpectedPeers*2),
 		finishedInit: make(chan *CertificateBundle, 1),
 	}
-	if err := handshaker.init(); err != nil {
+	if err := handshaker.init(ctx); err != nil {
 		return errors.Wrap(err, "error when initializing tls handshaker")
 	}
 
-	// Add to waitGroup for every client (= len(peers)) and server (= 1) goroutine
-	// instantiated. The calls to wg.Done() are made by the server/client
-	// goroutines themselves.
-	handshaker.wg.Add(len(peers) + 1)
+	// Wait for the server and all the clients to terminate before returning.
 	defer handshaker.wg.Wait()
 
-	handshaker.startServer(listener)
-	defer handshaker.stopServer()
-
-	for _, peerAddress := range peers {
-		go handshaker.runClient(peerAddress, addr.String())
-	}
-
-	// Wait until we have numExpectedPeers peer certificates.
 	peerCACerts := make(map[string]([]byte))
-	for len(peerCACerts) < numExpectedPeers {
-		select {
-		case p := <-handshaker.trustedPeers:
-			peerCACerts[p.HostAddress] = p.CACertificate
-		case err := <-handshaker.errors:
-			if errors.Is(err, errInvalidHMAC) {
-				// Either this peer, or another peer, has the wrong token. Fail
-				// fast.
-				return errors.New("invalid signature in messages from peers; likely due to token mismatch")
+
+	if numExpectedPeers > 0 {
+		handshaker.wg.Add(1)
+		go func() {
+			defer handshaker.wg.Done()
+
+			log.Ops.Infof(ctx, "starting handshake server")
+			defer log.Ops.Infof(ctx, "handshake server stopped")
+			if err := handshaker.startServer(listener); !errors.Is(err, http.ErrServerClosed) {
+				log.Ops.Errorf(ctx, "handshake server failed: %v", err)
 			}
-			log.Errorf(ctx, "error from client when connecting to peers (retrying): %s", err)
-		case <-ctx.Done():
-			return errors.New("context canceled before peers connected")
+		}()
+		// Terminate the server before exiting.
+		defer handshaker.stopServer()
+
+		for _, peerAddress := range peers {
+			handshaker.wg.Add(1)
+			go func(peerAddress string) {
+				defer handshaker.wg.Done()
+
+				peerCtx := logtags.AddTag(ctx, "peer", peerAddress)
+				log.Ops.Infof(peerCtx, "starting handshake client for peer")
+				handshaker.runClient(peerCtx, peerAddress, addr.String())
+			}(peerAddress)
 		}
+
+		if reporter != nil {
+			reporter("waiting for handshake for %d peers", numExpectedPeers)
+		}
+
+		// Wait until we have numExpectedPeers peer certificates.
+		for len(peerCACerts) < numExpectedPeers {
+			select {
+			case p := <-handshaker.trustedPeers:
+				log.Ops.Infof(ctx, "received CA certificate for peer: %s", p.HostAddress)
+				if reporter != nil {
+					reporter("trusted peer: %s", p.HostAddress)
+				}
+				peerCACerts[p.HostAddress] = p.CACertificate
+
+			case err := <-handshaker.errors:
+				if errors.Is(err, errInvalidHMAC) {
+					// Either this peer, or another peer, has the wrong token. Fail
+					// fast.
+					log.Ops.Errorf(ctx, "HMAC error from client when connecting to peer: %v", err)
+					return errors.New("invalid signature in messages from peers; likely due to token mismatch")
+				}
+				log.Ops.Warningf(ctx, "error from client when connecting to peers (retrying): %s", err)
+
+			case <-ctx.Done():
+				return errors.New("context canceled before all peers connected")
+			}
+		}
+		log.Ops.Infof(ctx, "received response from all peers; choosing trust leader")
 	}
 
 	// Order nodes by certificates.
@@ -494,10 +572,16 @@ func initHandshakeHelper(
 	// Initialize if this node is the trust leader. If not, wait for trust bundle
 	// to come from another node.
 	if trustLeader {
+		if reporter != nil {
+			reporter("generating cert bundle for cluster")
+		}
+		log.Ops.Infof(ctx, "we are trust leader; initializing certificate bundle")
+		leaderCtx := logtags.AddTag(ctx, "trust-leader", nil)
+
 		var b CertificateBundle
 		// TODO(bilal): See if we can get rid of the need to store a base.Config
 		// pointer. This is the only place in this method where it is necessary.
-		if err := b.InitializeFromConfig(*cfg); err != nil {
+		if err := b.InitializeFromConfig(leaderCtx, *cfg); err != nil {
 			return errors.Wrap(err, "error when creating initialization bundle")
 		}
 
@@ -508,9 +592,16 @@ func initHandshakeHelper(
 
 		trustBundle := nodeTrustBundle{Bundle: peerInit}
 		trustBundle.signHMAC(handshaker.token)
+
+		if reporter != nil {
+			reporter("sending cert bundle to peers")
+		}
+
 		// For each peer, use its CA to establish a secure connection and deliver the trust bundle.
 		for p := range peerCACerts {
-			if err := handshaker.sendBundle(p, peerCACerts[p], trustBundle); err != nil {
+			peerCtx := logtags.AddTag(leaderCtx, "peer", p)
+			log.Ops.Infof(peerCtx, "delivering bundle to peer")
+			if err := handshaker.sendBundle(peerCtx, p, peerCACerts[p], trustBundle); err != nil {
 				// TODO(bilal): sendBundle should fail fast instead of retrying (or
 				// waiting for ctx cancellation) if the error returned is due to a
 				// mismatching CA cert than peerCACerts[p]. This would likely mean
@@ -522,12 +613,23 @@ func initHandshakeHelper(
 		return nil
 	}
 
+	if reporter != nil {
+		reporter("waiting for cert bundle")
+	}
+	log.Ops.Infof(ctx, "we are not trust leader; now waiting for bundle from trust leader")
+
 	select {
 	case b := <-handshaker.finishedInit:
+		if reporter != nil {
+			reporter("received cert bundle")
+		}
+
 		if b == nil {
 			return errors.New("expected non-nil init bundle to be received from trust leader")
 		}
-		return b.InitializeNodeFromBundle(*cfg)
+		log.Ops.Infof(ctx, "received bundle, now initializing node certificate files")
+		return b.InitializeNodeFromBundle(ctx, *cfg)
+
 	case <-ctx.Done():
 		return errors.New("context canceled before init bundle received from leader")
 	}
@@ -538,9 +640,10 @@ func initHandshakeHelper(
 // negotiates an inter-node CA and puts it in certsDir.
 func InitHandshake(
 	ctx context.Context,
+	reporter func(string, ...interface{}),
 	cfg *base.Config,
 	token string,
-	numExpectedPeers int,
+	numExpectedNodes int,
 	peers []string,
 	certsDir string,
 	listener net.Listener,
@@ -548,6 +651,7 @@ func InitHandshake(
 	// TODO(bilal): Allow defaultInitLifespan to be configurable, possibly through
 	// base.Config.
 	return contextutil.RunWithTimeout(ctx, "init handshake", defaultInitLifespan, func(ctx context.Context) error {
-		return initHandshakeHelper(ctx, cfg, token, numExpectedPeers, peers, certsDir, listener)
+		ctx = logtags.AddTag(ctx, "init-tls-handshake", nil)
+		return initHandshakeHelper(ctx, reporter, cfg, token, numExpectedNodes, peers, certsDir, listener)
 	})
 }

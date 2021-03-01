@@ -110,8 +110,8 @@ func TestFlipCoordinates(t *testing.T) {
 		},
 		{
 			desc:     "flip coordinates of an empty collection",
-			input:    geom.NewGeometryCollection(),
-			expected: geom.NewGeometryCollection(),
+			input:    geom.NewGeometryCollection().MustSetLayout(geom.XY),
+			expected: geom.NewGeometryCollection().MustSetLayout(geom.XY),
 		},
 	}
 
