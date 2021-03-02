@@ -1935,7 +1935,9 @@ CREATE TABLE crdb_internal.create_statements (
   alter_statements              STRING[] NOT NULL,
   validate_statements           STRING[] NOT NULL,
   has_partitions                BOOL NOT NULL,
-	is_multi_region               BOOL NOT NULL,
+  is_multi_region               BOOL NOT NULL,
+  is_virtual                    BOOL NOT NULL,
+  is_temporary                  BOOL NOT NULL,
   INDEX(descriptor_id)
 )
 `, virtualCurrentDB, false, /* includesIndexEntries */
@@ -2004,6 +2006,8 @@ CREATE TABLE crdb_internal.create_statements (
 			validateStmts,
 			tree.MakeDBool(tree.DBool(hasPartitions)),
 			tree.MakeDBool(tree.DBool(db != nil && db.IsMultiRegion())),
+			tree.MakeDBool(tree.DBool(table.IsVirtualTable())),
+			tree.MakeDBool(tree.DBool(table.IsTemporary())),
 		)
 	})
 
