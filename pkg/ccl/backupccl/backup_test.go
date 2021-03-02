@@ -5868,6 +5868,7 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 	})
 
 	t.Run("interleaved-spans", func(t *testing.T) {
+		skip.WithIssue(t, 57546, "flaky test")
 		runner.Exec(t, "CREATE DATABASE test; USE test;")
 		runner.Exec(t, "CREATE TABLE grandparent (a INT PRIMARY KEY, v BYTES, INDEX gpindex (v))")
 		runner.Exec(t, "CREATE TABLE parent (a INT, b INT, v BYTES, "+
@@ -5886,6 +5887,7 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 	})
 
 	t.Run("revs-span-merge", func(t *testing.T) {
+		skip.WithIssue(t, 57546, "flaky test")
 		runner.Exec(t, "CREATE DATABASE test; USE test;")
 		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
 			"INDEX baz(name), INDEX bar (v))")
@@ -5919,6 +5921,7 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 	})
 
 	t.Run("last-index-dropped", func(t *testing.T) {
+		skip.WithIssue(t, 57546, "flaky test")
 		runner.Exec(t, "CREATE DATABASE test; USE test;")
 		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
 		runner.Exec(t, "CREATE TABLE foo2 (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
