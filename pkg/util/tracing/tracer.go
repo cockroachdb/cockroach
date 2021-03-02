@@ -41,14 +41,14 @@ import (
 const verboseTracingBaggageKey = "sb"
 
 const (
-	// maxLogsPerSpan limits the number of logs in a Span; use a comfortable
-	// limit.
-	maxLogsPerSpan = 1000
-	// maxStructuredBytesPerSpan limits the size of structured events in a span;
+	// maxRecordedBytesPerSpan limits the size of logs and structured in a span;
 	// use a comfortable limit.
-	maxStructuredBytesPerSpan = 1 << 10 // 1 KiB
+	maxRecordedBytesPerSpan = 10 * (1 << 10) // 10 KiB
 	// maxChildrenPerSpan limits the number of (direct) child spans in a Span.
 	maxChildrenPerSpan = 1000
+	// maxLogsPerSpanExternal limits the number of logs in a Span for external
+	// tracers (net/trace, lightstep); use a comfortable limit.
+	maxLogsPerSpanExternal = 1000
 )
 
 // These constants are used to form keys to represent tracing context
@@ -318,7 +318,7 @@ func (t *Tracer) startSpanGeneric(
 	var netTr trace.Trace
 	if t.useNetTrace() {
 		netTr = trace.New("tracing", opName)
-		netTr.SetMaxEvents(maxLogsPerSpan)
+		netTr.SetMaxEvents(maxLogsPerSpanExternal)
 
 		// If LogTags are given, pass them as tags to the shadow span.
 		// Regular tags are populated later, via the top-level Span.
