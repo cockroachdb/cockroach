@@ -372,7 +372,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 					if rb.statsCollectionEnabled {
 						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes()))
 						ro.stats.Exec.MaxAllocatedDisk.Set(uint64(ro.diskMonitor.MaximumBytes()))
-						span.SetSpanStats(&ro.stats)
+						span.RecordStructured(&ro.stats)
 						span.Finish()
 						if trace := execinfra.GetTraceData(ctx); trace != nil {
 							ro.mu.Unlock()
