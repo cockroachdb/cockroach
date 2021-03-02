@@ -219,13 +219,18 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 	sp := tr.StartSpan("root", WithForceRealSpan())
 	defer sp.Finish()
 
+	offset := 1000 // we start at a high enough integer to not have to worry about variable payload sizes
+	payload := func(i int) Structured { return &types.Int32Value{Value: int32(i)} }
+
+	numPayloads := maxStructuredBytesPerSpan / payload(offset).Size()
 	const extra = 10
-	for i := int32(1); i <= maxStructuredEventsPerSpan+extra; i++ {
-		sp.RecordStructured(&types.Int32Value{Value: i})
+	for i := offset + 1; i <= offset+numPayloads+extra; i++ {
+		sp.RecordStructured(payload(i))
 	}
+
 	rec := sp.GetRecording()
 	require.Len(t, rec, 1)
-	require.Len(t, rec[0].InternalStructured, maxStructuredEventsPerSpan)
+	require.Len(t, rec[0].InternalStructured, numPayloads)
 
 	first := rec[0].InternalStructured[0]
 	last := rec[0].InternalStructured[len(rec[0].InternalStructured)-1]
@@ -235,10 +240,10 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 
 	var res int32
 	require.NoError(t, types.StdInt32Unmarshal(&res, first.Value))
-	require.Equal(t, res, int32(maxStructuredEventsPerSpan+extra))
+	require.Equal(t, res, int32(offset+numPayloads+extra))
 
 	require.NoError(t, types.StdInt32Unmarshal(&res, last.Value))
-	require.Equal(t, res, int32(extra+1))
+	require.Equal(t, res, int32(offset+extra+1))
 }
 
 func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
