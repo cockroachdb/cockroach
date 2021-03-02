@@ -1,4 +1,5 @@
-import { combineReducers } from "redux";
+import { combineReducers, createStore } from "redux";
+import { createAction, createReducer } from "@reduxjs/toolkit";
 import { StatementsState, reducer as statements } from "./statements";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
 import {
@@ -13,6 +14,7 @@ import {
   reducer as terminateQuery,
 } from "./terminateQuery";
 import { UIConfigState, reducer as uiConfig } from "./uiConfig";
+import { DOMAIN_NAME } from "./utils";
 
 export type AdminUiState = {
   statements: StatementsState;
@@ -29,7 +31,7 @@ export type AppState = {
   adminUI: AdminUiState;
 };
 
-export const rootReducer = combineReducers<AdminUiState>({
+export const reducers = combineReducers<AdminUiState>({
   localStorage,
   statementDiagnostics,
   statements,
@@ -38,4 +40,17 @@ export const rootReducer = combineReducers<AdminUiState>({
   sessions,
   terminateQuery,
   uiConfig,
+});
+
+export const rootActions = {
+  resetState: createAction(`${DOMAIN_NAME}/RESET_STATE`),
+};
+
+/**
+ * rootReducer consolidates reducers slices and cases for handling global actions related to entire state.
+ **/
+export const rootReducer = createReducer(undefined, builder => {
+  builder
+    .addCase(rootActions.resetState, () => createStore(reducers).getState())
+    .addDefaultCase(reducers);
 });
