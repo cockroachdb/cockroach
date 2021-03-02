@@ -156,17 +156,6 @@ func TestTraceAnalyzer(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			nodeLevelStats := tc.analyzer.GetNodeLevelStats()
-			require.Equal(
-				t, numNodes-1, len(nodeLevelStats.NetworkBytesSentGroupedByNode), "expected all nodes minus the gateway node to have sent bytes",
-			)
-			require.Equal(
-				t, numNodes, len(nodeLevelStats.MaxMemoryUsageGroupedByNode), "expected all nodes to have specified maximum memory usage",
-			)
-			require.Equal(
-				t, numNodes, len(nodeLevelStats.MaxDiskUsageGroupedByNode), "expected all nodes to have specified maximum disk usage",
-			)
-
 			queryLevelStats := tc.analyzer.GetQueryLevelStats()
 
 			// The stats don't count the actual bytes, but they are a synthetic value

@@ -98,21 +98,6 @@ func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMeta
 	return a
 }
 
-// NodeLevelStats returns all the flow level stats that correspond to the given
-// traces and flow metadata.
-// TODO(asubiotto): Flatten this struct, we're currently allocating a map per
-//  stat.
-type NodeLevelStats struct {
-	NetworkBytesSentGroupedByNode map[base.SQLInstanceID]int64
-	MaxMemoryUsageGroupedByNode   map[base.SQLInstanceID]int64
-	MaxDiskUsageGroupedByNode     map[base.SQLInstanceID]int64
-	KVBytesReadGroupedByNode      map[base.SQLInstanceID]int64
-	KVRowsReadGroupedByNode       map[base.SQLInstanceID]int64
-	KVTimeGroupedByNode           map[base.SQLInstanceID]time.Duration
-	NetworkMessagesGroupedByNode  map[base.SQLInstanceID]int64
-	ContentionTimeGroupedByNode   map[base.SQLInstanceID]time.Duration
-}
-
 // QueryLevelStats returns all the query level stats that correspond to the
 // given traces and flow metadata.
 // NOTE: When adding fields to this struct, be sure to update Accumulate.
@@ -147,7 +132,6 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 // flow metadata and an accompanying trace of the flows' execution.
 type TraceAnalyzer struct {
 	*FlowsMetadata
-	nodeLevelStats  NodeLevelStats
 	queryLevelStats QueryLevelStats
 }
 
@@ -209,17 +193,6 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 // ProcessStats returns the combined errors to the caller but continues
 // calculating other stats.
 func (a *TraceAnalyzer) ProcessStats() error {
-	// Process node level stats.
-	a.nodeLevelStats = NodeLevelStats{
-		NetworkBytesSentGroupedByNode: make(map[base.SQLInstanceID]int64),
-		MaxMemoryUsageGroupedByNode:   make(map[base.SQLInstanceID]int64),
-		MaxDiskUsageGroupedByNode:     make(map[base.SQLInstanceID]int64),
-		KVBytesReadGroupedByNode:      make(map[base.SQLInstanceID]int64),
-		KVRowsReadGroupedByNode:       make(map[base.SQLInstanceID]int64),
-		KVTimeGroupedByNode:           make(map[base.SQLInstanceID]time.Duration),
-		NetworkMessagesGroupedByNode:  make(map[base.SQLInstanceID]int64),
-		ContentionTimeGroupedByNode:   make(map[base.SQLInstanceID]time.Duration),
-	}
 	var errs error
 
 	// Process processorStats.
@@ -227,11 +200,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if stats.stats == nil {
 			continue
 		}
-		instanceID := base.SQLInstanceID(stats.nodeID)
-		a.nodeLevelStats.KVBytesReadGroupedByNode[instanceID] += int64(stats.stats.KV.BytesRead.Value())
-		a.nodeLevelStats.KVRowsReadGroupedByNode[instanceID] += int64(stats.stats.KV.TuplesRead.Value())
-		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.stats.KV.KVTime.Value()
-		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.stats.KV.ContentionTime.Value()
+		a.queryLevelStats.KVBytesRead += int64(stats.stats.KV.BytesRead.Value())
+		a.queryLevelStats.KVRowsRead += int64(stats.stats.KV.TuplesRead.Value())
+		a.queryLevelStats.KVTime += stats.stats.KV.KVTime.Value()
+		a.queryLevelStats.ContentionTime += stats.stats.KV.ContentionTime.Value()
 	}
 
 	// Process streamStats.
@@ -239,14 +211,12 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if stats.stats == nil {
 			continue
 		}
-		originInstanceID := base.SQLInstanceID(stats.originNodeID)
-
 		// Set networkBytesSentGroupedByNode.
 		bytes, err := getNetworkBytesFromComponentStats(stats.stats)
 		if err != nil {
 			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating network bytes sent"))
 		} else {
-			a.nodeLevelStats.NetworkBytesSentGroupedByNode[originInstanceID] += bytes
+			a.queryLevelStats.NetworkBytesSent += bytes
 		}
 
 		// The row execution flow attaches flow stats to a stream stat with the
@@ -260,13 +230,13 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		// well.
 		if stats.stats.FlowStats.MaxMemUsage.HasValue() {
 			memUsage := int64(stats.stats.FlowStats.MaxMemUsage.Value())
-			if memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[originInstanceID] {
-				a.nodeLevelStats.MaxMemoryUsageGroupedByNode[originInstanceID] = memUsage
+			if memUsage > a.queryLevelStats.MaxMemUsage {
+				a.queryLevelStats.MaxMemUsage = memUsage
 			}
 		}
 		if stats.stats.FlowStats.MaxDiskUsage.HasValue() {
-			if diskUsage := int64(stats.stats.FlowStats.MaxDiskUsage.Value()); diskUsage > a.nodeLevelStats.MaxDiskUsageGroupedByNode[originInstanceID] {
-				a.nodeLevelStats.MaxDiskUsageGroupedByNode[originInstanceID] = diskUsage
+			if diskUsage := int64(stats.stats.FlowStats.MaxDiskUsage.Value()); diskUsage > a.queryLevelStats.MaxDiskUsage {
+				a.queryLevelStats.MaxDiskUsage = diskUsage
 			}
 		}
 
@@ -274,69 +244,31 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if err != nil {
 			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating number of network messages"))
 		} else {
-			a.nodeLevelStats.NetworkMessagesGroupedByNode[originInstanceID] += numMessages
+			a.queryLevelStats.NetworkMessages += numMessages
 		}
 	}
 
 	// Process flowStats.
-	for instanceID, stats := range a.flowStats {
+	for _, stats := range a.flowStats {
 		if stats.stats == nil {
 			continue
 		}
 
 		for _, v := range stats.stats {
 			if v.FlowStats.MaxMemUsage.HasValue() {
-				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] {
-					a.nodeLevelStats.MaxMemoryUsageGroupedByNode[instanceID] = memUsage
+				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.queryLevelStats.MaxMemUsage {
+					a.queryLevelStats.MaxMemUsage = memUsage
 				}
 			}
 			if v.FlowStats.MaxDiskUsage.HasValue() {
-				if diskUsage := int64(v.FlowStats.MaxDiskUsage.Value()); diskUsage > a.nodeLevelStats.MaxDiskUsageGroupedByNode[instanceID] {
-					a.nodeLevelStats.MaxDiskUsageGroupedByNode[instanceID] = diskUsage
+				if diskUsage := int64(v.FlowStats.MaxDiskUsage.Value()); diskUsage > a.queryLevelStats.MaxDiskUsage {
+					a.queryLevelStats.MaxDiskUsage = diskUsage
 				}
 
 			}
 		}
 	}
 
-	// Process query level stats.
-	a.queryLevelStats = QueryLevelStats{}
-
-	for _, bytesSentByNode := range a.nodeLevelStats.NetworkBytesSentGroupedByNode {
-		a.queryLevelStats.NetworkBytesSent += bytesSentByNode
-	}
-
-	for _, maxMemUsage := range a.nodeLevelStats.MaxMemoryUsageGroupedByNode {
-		if maxMemUsage > a.queryLevelStats.MaxMemUsage {
-			a.queryLevelStats.MaxMemUsage = maxMemUsage
-		}
-	}
-
-	for _, maxDiskUsage := range a.nodeLevelStats.MaxDiskUsageGroupedByNode {
-		if maxDiskUsage > a.queryLevelStats.MaxDiskUsage {
-			a.queryLevelStats.MaxDiskUsage = maxDiskUsage
-		}
-	}
-
-	for _, kvBytesRead := range a.nodeLevelStats.KVBytesReadGroupedByNode {
-		a.queryLevelStats.KVBytesRead += kvBytesRead
-	}
-
-	for _, kvRowsRead := range a.nodeLevelStats.KVRowsReadGroupedByNode {
-		a.queryLevelStats.KVRowsRead += kvRowsRead
-	}
-
-	for _, kvTime := range a.nodeLevelStats.KVTimeGroupedByNode {
-		a.queryLevelStats.KVTime += kvTime
-	}
-
-	for _, networkMessages := range a.nodeLevelStats.NetworkMessagesGroupedByNode {
-		a.queryLevelStats.NetworkMessages += networkMessages
-	}
-
-	for _, contentionTime := range a.nodeLevelStats.ContentionTimeGroupedByNode {
-		a.queryLevelStats.ContentionTime += contentionTime
-	}
 	return errs
 }
 
@@ -378,12 +310,6 @@ func getNumNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) (in
 	// If neither BytesReceived or BytesSent is set, this ComponentStat belongs to
 	// a local component, e.g. a local hashrouter output.
 	return 0, nil
-}
-
-// GetNodeLevelStats returns the node level stats calculated and stored in the
-// TraceAnalyzer.
-func (a *TraceAnalyzer) GetNodeLevelStats() NodeLevelStats {
-	return a.nodeLevelStats
 }
 
 // GetQueryLevelStats returns the query level stats calculated and stored in
