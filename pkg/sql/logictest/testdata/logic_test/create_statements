@@ -190,7 +190,9 @@ CREATE TABLE crdb_internal.create_statements (
    validate_statements STRING[] NOT NULL,
    has_partitions BOOL NOT NULL,
    is_multi_region BOOL NOT NULL,
-   INDEX create_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_type, descriptor_name, create_statement, state, create_nofks, alter_statements, validate_statements, has_partitions, is_multi_region)
+   is_virtual BOOL NOT NULL,
+   is_temporary BOOL NOT NULL,
+   INDEX create_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_type, descriptor_name, create_statement, state, create_nofks, alter_statements, validate_statements, has_partitions, is_multi_region, is_virtual, is_temporary)
 )  CREATE TABLE crdb_internal.create_statements (
    database_id INT8 NULL,
    database_name STRING NULL,
@@ -205,7 +207,9 @@ CREATE TABLE crdb_internal.create_statements (
    validate_statements STRING[] NOT NULL,
    has_partitions BOOL NOT NULL,
    is_multi_region BOOL NOT NULL,
-   INDEX create_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_type, descriptor_name, create_statement, state, create_nofks, alter_statements, validate_statements, has_partitions, is_multi_region)
+   is_virtual BOOL NOT NULL,
+   is_temporary BOOL NOT NULL,
+   INDEX create_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_type, descriptor_name, create_statement, state, create_nofks, alter_statements, validate_statements, has_partitions, is_multi_region, is_virtual, is_temporary)
 )  {}  {}
 CREATE TABLE crdb_internal.create_type_statements (
    database_id INT8 NULL,
