@@ -129,6 +129,7 @@ var oldFriendsMap = map[string]string{
 	"tamird":       "tbg",
 	"rohany":       "solongordon",
 	"vivekmenezes": "",
+	"lucy-zhang":   "ajwerner",
 }
 
 func (p *poster) getAssignee(
