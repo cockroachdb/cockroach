@@ -41,33 +41,42 @@ func TestTimerStop(t *testing.T) {
 	for sleepMult := time.Duration(0); sleepMult < 3; sleepMult++ {
 		sleepDur := sleepMult * timeStep
 		t.Run(fmt.Sprintf("sleepDur=%d*timeStep", sleepMult), func(t *testing.T) {
-			var timer Timer
-			timer.Reset(timeStep)
-			time.Sleep(sleepDur)
+			for _, exclusive := range []bool{false, true} {
+				t.Run(fmt.Sprintf("exclusive=%t", exclusive), func(t *testing.T) {
+					var timer Timer
+					timer.Reset(timeStep)
+					time.Sleep(sleepDur)
 
-			// Get a handle to the timer channel before calling Stop, because Stop
-			// clears the struct.
-			c := timer.C
+					// Get a handle to the timer channel before calling Stop, because Stop
+					// clears the struct.
+					c := timer.C
 
-			// Even though we sleep for a certain duration which we know to be more
-			// or less than the timer's duration, we can't assert whether the timer
-			// fires before calling timer.Stop because we have no control over the
-			// scheduler. Instead, we handle both cases to avoid flakiness and assert
-			// that Stop returns the correct status.
-			stopped := timer.Stop()
-			select {
-			case <-c:
-				if stopped {
-					t.Errorf("timer unexpectedly fired after stopping")
-				}
-			case <-time.After(5 * timeStep):
-				if !stopped {
-					t.Errorf("timer did not fire after failing to stop")
-				}
+					// Even though we sleep for a certain duration which we know to be more
+					// or less than the timer's duration, we can't assert whether the timer
+					// fires before calling timer.Stop because we have no control over the
+					// scheduler. Instead, we handle both cases to avoid flakiness and assert
+					// that Stop returns the correct status.
+					var stopped bool
+					if exclusive {
+						timer.StopExclusive()
+						stopped = true
+					} else {
+						stopped = timer.Stop()
+					}
+					select {
+					case <-c:
+						if stopped {
+							t.Errorf("timer unexpectedly fired after stopping")
+						}
+					case <-time.After(5 * timeStep):
+						if !stopped {
+							t.Errorf("timer did not fire after failing to stop")
+						}
+					}
+				})
 			}
 		})
 	}
-
 }
 
 func TestTimerUninitializedStopNoop(t *testing.T) {

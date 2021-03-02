@@ -178,15 +178,16 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				s.buf.Close()
 			}()
 
-			var timer timeutil.Timer
-			defer timer.Stop()
+			timer := timeutil.NewTimer()
+			defer timer.StopExclusive()
 			for {
 				interval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
 				if interval > 0 {
-					timer.Reset(closedts.SideTransportCloseInterval.Get(&s.st.SV))
+					timer.Reset(interval)
 				} else {
 					// Disable the side-transport.
-					timer.Stop()
+					timer.StopExclusive()
+					timer = timeutil.NewTimer()
 				}
 				select {
 				case <-timer.C:

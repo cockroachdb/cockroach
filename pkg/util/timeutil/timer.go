@@ -92,10 +92,38 @@ func (t *Timer) Reset(d time.Duration) {
 // close the channel, to prevent a read from succeeding incorrectly.
 // Note that a Timer must never be used again after calls to Stop as the timer
 // object will be put into an object pool for reuse.
+//
+// See also StopExclusive.
 func (t *Timer) Stop() bool {
+	return t.stopInternal(false /* safeToConsume */)
+}
+
+// StopExclusive is like Stop, but it's more efficient because it
+// unconditionally puts the Timer back in the pool. When you can, prefer
+// StopExclusive to Stop.
+//
+// Unlike Stop, StopExclusive cannot be called concurrently with receiving from
+// t.C.
+func (t *Timer) StopExclusive() {
+	t.stopInternal(true /* safeToConsume */)
+}
+
+// safeToConsume, if set, guarantees that there's no concurrent receivers on
+// t.C. This allows us to consume t.C in case we detect that the timer has
+// already fired, which in turn allows us to always return the Timer to the
+// pool.
+func (t *Timer) stopInternal(safeToConsume bool) bool {
 	var res bool
 	if t.timer != nil {
 		res = t.timer.Stop()
+		// Consume t.C if the timer had already fired and safeToConsume is set. Note
+		// that we don't check t.Read if safeToConsume is set to avoid data-racing
+		// with t.C receivers (which write to t.Read). If safeToConsume is set, the
+		// caller promised that there's no concurrent receivers.
+		if !res && safeToConsume && !t.Read {
+			<-t.C
+			res = true
+		}
 		if res {
 			// Only place the timer back in the pool if we successfully stopped
 			// it. Otherwise, we'd have to read from the channel if !t.Read.
