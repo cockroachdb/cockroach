@@ -361,8 +361,11 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	grpcutil.LowerSeverity(severity.WARNING)
 
 	// Tweak GOMAXPROCS if we're in a cgroup / container that has cpu limits set.
-	// The GO default for GOMAXPROCS is runtime.NumCPU(), however this is less
+	// The GO default for GOMAXPROCS is NumCPU(), however this is less
 	// than ideal if the cgruop is limited to a number lower than that.
+	//
+	// TODO(bilal): various global settings have already been initialized based on
+	// GOMAXPROCS(0) by now.
 	cgroups.AdjustMaxProcs(ctx)
 
 	// Check the --join flag.

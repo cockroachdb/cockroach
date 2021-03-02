@@ -153,7 +153,7 @@ func checkStoreRangeStats(
 	inCh := make(chan checkInput)
 	outCh := make(chan checkResult, 1000)
 
-	n := runtime.NumCPU()
+	n := runtime.GOMAXPROCS(0)
 	var g errgroup.Group
 	for i := 0; i < n; i++ {
 		g.Go(func() error {

@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
@@ -447,7 +448,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		Args:              os.Args,
 		Env:               envutil.GetEnvVarsUsed(),
 		Activity:          activity,
-		NumCpus:           int32(runtime.NumCPU()),
+		NumCpus:           int32(system.NumCPU()),
 		TotalSystemMemory: systemMemory,
 	}
 
