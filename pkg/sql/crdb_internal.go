@@ -1938,7 +1938,7 @@ CREATE TABLE crdb_internal.create_statements (
 	is_multi_region               BOOL NOT NULL,
   INDEX(descriptor_id)
 )
-`, virtualOnce, false, /* includesIndexEntries */
+`, virtualCurrentDB, false, /* includesIndexEntries */
 	func(ctx context.Context, p *planner, h oidHasher, db *dbdesc.Immutable, scName string,
 		table catalog.TableDescriptor, lookup simpleSchemaResolver, addRow func(...tree.Datum) error) error {
 		contextName := ""

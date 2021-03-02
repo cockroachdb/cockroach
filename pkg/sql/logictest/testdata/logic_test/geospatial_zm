@@ -100,3 +100,9 @@ POINT (1 2)
 POINT Z (1 2 3)
 POINT ZM (1 2 3 4)
 POINT M (1 2 3)
+
+query T
+SELECT ST_AsEWKT(ST_Affine(the_geom, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, pi()/2, pi()), 3)
+	FROM (SELECT ST_GeomFromEWKT('LINESTRING(1 2 3, 4 5 6, 7 8 9)') AS the_geom) AS _;
+----
+LINESTRING Z (24 33.571 53.142, 42 78.571 125.142, 60 123.571 197.142)

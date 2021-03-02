@@ -133,6 +133,31 @@ load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 protobuf_deps()
 
+# Load up the pinned clang toolchain.
+
+http_archive(
+    name = "com_grail_bazel_toolchain",
+    sha256 = "b924b102adc0c3368d38a19bd971cb4fa75362a27bc363d0084b90ca6877d3f0",
+    strip_prefix = "bazel-toolchain-0.5.7",
+    urls = ["https://github.com/grailbio/bazel-toolchain/archive/0.5.7.tar.gz"],
+)
+
+load("@com_grail_bazel_toolchain//toolchain:deps.bzl", "bazel_toolchain_dependencies")
+
+bazel_toolchain_dependencies()
+
+load("@com_grail_bazel_toolchain//toolchain:rules.bzl", "llvm_toolchain")
+
+llvm_toolchain(
+    name = "llvm_toolchain",
+    absolute_paths = True,
+    llvm_version = "10.0.0",
+)
+
+load("@llvm_toolchain//:toolchains.bzl", "llvm_register_toolchains")
+
+llvm_register_toolchains()
+
 # Load up cockroachdb's go dependencies (the ones listed under go.mod). The
 # `DEPS.bzl` file is kept up to date using the `update-repos` Gazelle command
 # (see `make bazel-generate`).
@@ -148,15 +173,15 @@ load("//c-deps:REPOSITORIES.bzl", "c_deps")
 c_deps()
 
 # Load the bazel utility that lets us build C/C++ projects using
-# cmake/make/etc. We point our fork which adds autoconf support
-# (https://github.com/bazelbuild/rules_foreign_cc/pull/432) and BSD support
-# (https://github.com/bazelbuild/rules_foreign_cc/pull/387).
+# cmake/make/etc. We point to our fork which adds BSD support
+# (https://github.com/bazelbuild/rules_foreign_cc/pull/387) and sysroot
+# support (https://github.com/bazelbuild/rules_foreign_cc/pull/532).
 #
 # TODO(irfansharif): Point to an upstream SHA once maintainers pick up the
 # aforementioned PRs.
 git_repository(
     name = "rules_foreign_cc",
-    commit = "8fdca4480f3fa9c084f4a73749a46fa17996beb1",
+    commit = "6127817283221408069d4ae6765f2d8144f09b9f",
     remote = "https://github.com/cockroachdb/rules_foreign_cc",
 )
 
