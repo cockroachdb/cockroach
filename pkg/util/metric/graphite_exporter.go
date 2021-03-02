@@ -16,7 +16,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus/graphite"
 )
@@ -60,7 +59,9 @@ func (ge *GraphiteExporter) Push(ctx context.Context, endpoint string) error {
 		Timeout:       10 * time.Second,
 		ErrorHandling: graphite.AbortOnError,
 		Logger: loggerFunc(func(args ...interface{}) {
-			log.InfofDepth(ctx, 1, "", args...)
+			// NB: if logging is desired here, we need to refactor the graphite
+			// exporter into a separate package. We cannot import our logging library
+			// in the metric package due to import order: log -> tracing -> metric.
 		}),
 	}); err != nil {
 		return err

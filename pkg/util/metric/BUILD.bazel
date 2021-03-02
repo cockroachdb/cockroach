@@ -16,7 +16,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/metric",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
