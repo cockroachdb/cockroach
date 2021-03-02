@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +32,7 @@ type dropCascadeState struct {
 	objectNamesToDelete []tree.ObjectName
 
 	td                      []toDelete
+	toDeleteByID            map[descpb.ID]*toDelete
 	allTableObjectsToDelete []*tabledesc.Mutable
 	typesToDelete           []*typedesc.Mutable
 
@@ -165,6 +167,10 @@ func (d *dropCascadeState) resolveCollectedObjects(
 	}
 	d.allTableObjectsToDelete = allObjectsToDelete
 	d.td = filterImplicitlyDeletedObjects(d.td, implicitDeleteMap)
+	d.toDeleteByID = make(map[descpb.ID]*toDelete)
+	for i := range d.td {
+		d.toDeleteByID[d.td[i].desc.GetID()] = &d.td[i]
+	}
 	return nil
 }
 
@@ -192,6 +198,9 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 
 	// Now delete all of the types.
 	for _, typ := range d.typesToDelete {
+		if err := d.canDropType(ctx, p, typ); err != nil {
+			return err
+		}
 		// Drop the types. Note that we set queueJob to be false because the types
 		// will be dropped in bulk as part of the DROP DATABASE job.
 		if err := p.dropTypeImpl(ctx, typ, "", false /* queueJob */); err != nil {
@@ -200,6 +209,37 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 	}
 
 	return nil
+}
+
+func (d *dropCascadeState) canDropType(
+	ctx context.Context, p *planner, typ *typedesc.Mutable,
+) error {
+	var referencedButNotDropping []descpb.ID
+	for _, id := range typ.ReferencingDescriptorIDs {
+		if _, exists := d.toDeleteByID[id]; exists {
+			continue
+		}
+		referencedButNotDropping = append(referencedButNotDropping, id)
+	}
+	if len(referencedButNotDropping) == 0 {
+		return nil
+	}
+	dependentNames, err := p.getFullyQualifiedTableNamesFromIDs(ctx, referencedButNotDropping)
+	if err != nil {
+		return errors.Wrapf(err, "type %q has dependent objects", typ.Name)
+	}
+	fqName, err := getTypeNameFromTypeDescriptor(
+		oneAtATimeSchemaResolver{ctx, p},
+		typ,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "type %q has dependent objects", typ.Name)
+	}
+	return unimplemented.NewWithIssueDetailf(51480, "DROP TYPE CASCADE is not yet supported",
+		"cannot drop type %q because other objects (%v) still depend on it",
+		fqName.FQString(),
+		dependentNames,
+	)
 }
 
 func (d *dropCascadeState) getDroppedTableDetails() []jobspb.DroppedTableDetails {
