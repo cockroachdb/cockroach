@@ -331,12 +331,14 @@
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
 <tr><td><a name="age"></a><code>age(end: <a href="timestamp.html">timestamptz</a>, begin: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between <code>begin</code> and <code>end</code>, normalized into years, months and days.</p>
-<pre><code>		Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context.
-		To avoid normalizing days into months and years, use the timestamptz subtraction operator.</code></pre>
+<p>Note this may not be an accurate time span since years and months are normalized
+from days, and years and months are out of context. To avoid normalizing days into
+months and years, use the timestamptz subtraction operator.</p>
 </span></td></tr>
 <tr><td><a name="age"></a><code>age(val: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between <code>val</code> and the current time, normalized into years, months and days.</p>
-<pre><code>		Note this may not be an accurate time span since years and months are normalized from days, and years and months are out of context.
-		To avoid normalizing days into months and years, use `now() - timestamptz`.</code></pre>
+<p>Note this may not be an accurate time span since years and months are normalized
+from days, and years and months are out of context. To avoid normalizing days into
+months and years, use <code>now() - timestamptz</code>.</p>
 </span></td></tr>
 <tr><td><a name="clock_timestamp"></a><code>clock_timestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the current system time on one of the cluster nodes.</p>
 </span></td></tr>
