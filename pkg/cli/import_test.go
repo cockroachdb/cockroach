@@ -34,7 +34,7 @@ import (
 // method ensures that the upload and deletion semantics to userfile are working
 // as expected.
 func runImportCLICommand(
-	ctx context.Context, t *testing.T, cliCmd string, dumpFilePath string, c cliTest,
+	ctx context.Context, t *testing.T, cliCmd string, dumpFilePath string, c TestCLI,
 ) string {
 	knobs, unsetImportCLIKnobs := setImportCLITestingKnobs()
 	defer unsetImportCLIKnobs()
@@ -80,8 +80,8 @@ func runImportCLICommand(
 func TestImportCLI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
 
 	ctx := context.Background()
 
