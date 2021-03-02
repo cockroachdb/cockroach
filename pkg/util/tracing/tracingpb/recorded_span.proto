@@ -65,12 +65,6 @@ message RecordedSpan {
   // Events logged in the span.
   repeated LogRecord logs = 9 [(gogoproto.nullable) = false];
 
-  // Stats collected in this span.
-  //
-  // TODO(tbg): remove in 21.2 cycle. Stats will use the structured field below;
-  // 21.1 nodes already know to look there.
-  google.protobuf.Any deprecated_stats = 10;
-
   // InternalStructured are payloads attached to this Span.
   //
   // Do not use directly, but call Structured() instead.
@@ -83,6 +77,8 @@ message RecordedSpan {
 
   // True if the span has been Finish()ed, false otherwise.
   bool finished = 13;
+
+  reserved 10;
 }
 
 // NormalizedSpan is a representation of a RecordedSpan from a trace with all

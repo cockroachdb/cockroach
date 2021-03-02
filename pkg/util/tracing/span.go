@@ -318,9 +318,6 @@ func (s *spanInner) SetSpanStats(stats SpanStats) {
 		return
 	}
 	s.RecordStructured(stats)
-	s.crdb.mu.Lock()
-	s.crdb.mu.stats = stats
-	s.crdb.mu.Unlock()
 }
 
 func (s *spanInner) Finish() {
