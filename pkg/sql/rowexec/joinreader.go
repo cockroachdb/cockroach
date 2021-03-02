@@ -281,7 +281,7 @@ func newJoinReader(
 				// We need to generate metadata before closing the processor
 				// because InternalClose() updates jr.Ctx to the "original"
 				// context.
-				trailingMeta := jr.generateMeta(jr.Ctx)
+				trailingMeta := jr.generateMeta()
 				jr.close()
 				return trailingMeta
 			},
@@ -747,13 +747,13 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.RowsRead = jr.rowsRead
 	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx, jr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta

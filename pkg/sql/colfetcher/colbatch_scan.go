@@ -78,11 +78,11 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	if !s.InitHelper.Init(ctx) {
 		return
 	}
-	if execinfra.ShouldCollectStats(s.Ctx, s.flowCtx) {
-		// We need to start a child span so that the only contention events
-		// present in the recording would be because of this cFetcher.
-		s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
-	}
+	// If tracing is enabled, we need to start a child span so that the only
+	// contention events present in the recording would be because of this
+	// cFetcher. Note that ProcessorSpan method itself will check whether
+	// tracing is enabled.
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
 		s.flowCtx.Txn, s.spans, limitBatches, s.limitHint, s.flowCtx.TraceKV,
@@ -108,7 +108,7 @@ func (s *ColBatchScan) Next() coldata.Batch {
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
-func (s *ColBatchScan) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
+func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	var trailingMeta []execinfrapb.ProducerMetadata
 	if !s.flowCtx.Local {
 		nodeID, ok := s.flowCtx.NodeID.OptionalNodeID()
@@ -127,18 +127,8 @@ func (s *ColBatchScan) DrainMeta(context.Context) []execinfrapb.ProducerMetadata
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
 	trailingMeta = append(trailingMeta, *meta)
-	if s.tracingSpan != nil {
-		// If tracingSpan is non-nil, then we have derived a new context in
-		// Init() and we have to collect the trace data.
-		//
-		// If tracingSpan is nil, then we used the same context that was passed
-		// in Init() and it is the responsibility of the caller-component
-		// (either materializer, or wrapped processor, or an outbox) to collect
-		// the trace data. If we were to do it here too, we would see duplicate
-		// spans.
-		if trace := execinfra.GetTraceData(s.Ctx); trace != nil {
-			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
-		}
+	if trace := execinfra.GetTraceData(s.Ctx); trace != nil {
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 	}
 	return trailingMeta
 }

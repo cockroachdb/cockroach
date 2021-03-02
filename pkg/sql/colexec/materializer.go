@@ -134,7 +134,7 @@ func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 		d.statsCollectors = nil
 	}
 	if d.bufferedMeta == nil {
-		d.bufferedMeta = d.sources.DrainMeta(d.ctx)
+		d.bufferedMeta = d.sources.DrainMeta()
 		if d.bufferedMeta == nil {
 			// Still nil, avoid more calls to DrainMeta.
 			d.bufferedMeta = []execinfrapb.ProducerMetadata{}
