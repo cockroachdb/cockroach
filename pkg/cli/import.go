@@ -42,14 +42,14 @@ Uploads and imports a table from the local dump file into the cockroach cluster 
 	RunE: maybeShoutError(runDumpTableImport),
 }
 
-// importCLITestingKnobs are set when the CLI import command is run from a unit
+// importCliTestingKnobs are set when the CLI import command is run from a unit
 // test. Since import is a CCL feature there is currently no infrastructure to
 // test it without replicating a lot of the test utility methods found in
 // pkg/cli, in pkg/cliccl.
 // Considering IMPORT is a well tested feature, the testing knobs allow us to
 // bypass the run of an actual IMPORT but test all CLI logic upto the point
 // where we run the IMPORT query.
-type importCLITestingKnobs struct {
+type importCliTestingKnobs struct {
 	// returnQuery when set to true, ensures that the fully constructed IMPORT SQL
 	// query is printed to stdout, instead of being run.
 	returnQuery      bool
@@ -57,7 +57,7 @@ type importCLITestingKnobs struct {
 	uploadComplete   chan struct{}
 }
 
-var importCLIKnobs importCLITestingKnobs
+var importCLIKnobs importCliTestingKnobs
 
 type importMode int
 
@@ -66,15 +66,15 @@ const (
 	singleTable
 )
 
-func setImportCLITestingKnobs() (importCLITestingKnobs, func()) {
-	importCLIKnobs = importCLITestingKnobs{
+func setImportCliTestingKnobs() (importCliTestingKnobs, func()) {
+	importCLIKnobs = importCliTestingKnobs{
 		pauseAfterUpload: make(chan struct{}, 1),
 		uploadComplete:   make(chan struct{}, 1),
 		returnQuery:      true,
 	}
 
 	return importCLIKnobs, func() {
-		importCLIKnobs = importCLITestingKnobs{}
+		importCLIKnobs = importCliTestingKnobs{}
 	}
 }
 
