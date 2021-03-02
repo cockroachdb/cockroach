@@ -1549,10 +1549,10 @@ func GenerateBatchSize() int {
 // CallbackMetadataSource is a utility struct that implements the
 // colexecop.MetadataSource interface by calling a provided callback.
 type CallbackMetadataSource struct {
-	DrainMetaCb func(context.Context) []execinfrapb.ProducerMetadata
+	DrainMetaCb func() []execinfrapb.ProducerMetadata
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
-func (s CallbackMetadataSource) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return s.DrainMetaCb(ctx)
+func (s CallbackMetadataSource) DrainMeta() []execinfrapb.ProducerMetadata {
+	return s.DrainMetaCb()
 }

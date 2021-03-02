@@ -321,7 +321,7 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 			},
 		})
 	}
-	for _, meta := range o.metadataSources.DrainMeta(ctx) {
+	for _, meta := range o.metadataSources.DrainMeta() {
 		msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 	}
 	if len(msg.Data.Metadata) == 0 {
