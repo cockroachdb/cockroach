@@ -179,7 +179,8 @@ func (ih *instrumentationHelper) Setup(
 			// If we need to collect stats, create a non-verbose child span. Stats
 			// will be added as structured metadata and processed in Finish.
 			sp := tracing.SpanFromContext(ctx)
-			if sp == nil {
+			if sp == nil { // HACK
+				panic("this is dead code actually")
 				ih.origCtx = ctx
 				newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement")
 				return newCtx, true
