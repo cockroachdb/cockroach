@@ -44,9 +44,9 @@ const (
 	// maxLogsPerSpan limits the number of logs in a Span; use a comfortable
 	// limit.
 	maxLogsPerSpan = 1000
-	// maxStructuredEventsPerSpan limits the number of structured events in a
-	// span; use a comfortable limit.
-	maxStructuredEventsPerSpan = 50
+	// maxStructuredBytesPerSpan limits the size of structured events in a span;
+	// use a comfortable limit.
+	maxStructuredBytesPerSpan = 1 << 10 // 1 KiB
 	// maxChildrenPerSpan limits the number of (direct) child spans in a Span.
 	maxChildrenPerSpan = 1000
 	// maxSpanRegistrySize limits the number of local root spans tracked in
@@ -368,7 +368,6 @@ func (t *Tracer) startSpanGeneric(
 			duration: -1, // unfinished
 		},
 	}
-	helper.crdbSpan.mu.structured.Reserve(maxStructuredEventsPerSpan)
 	helper.span.i = spanInner{
 		tracer: t,
 		crdb:   &helper.crdbSpan,

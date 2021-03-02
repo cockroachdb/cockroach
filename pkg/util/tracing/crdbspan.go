@@ -79,7 +79,8 @@ type crdbSpanMu struct {
 	// those that were set before recording started)?
 	tags opentracing.Tags
 
-	structured ring.Buffer // of Structured events
+	bytesStructured int64
+	structured      ring.Buffer // of Structured events
 
 	// The Span's associated baggage.
 	baggage map[string]string
@@ -225,9 +226,13 @@ func (s *crdbSpan) recordStructured(item Structured) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.mu.structured.Len() == maxStructuredEventsPerSpan {
+	s.mu.bytesStructured += int64(item.Size())
+	for s.mu.bytesStructured > maxStructuredBytesPerSpan {
+		last := s.mu.structured.GetLast().(Structured)
 		s.mu.structured.RemoveLast()
+		s.mu.bytesStructured -= int64(last.Size())
 	}
+
 	s.mu.structured.AddFirst(item)
 }
 
