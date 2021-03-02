@@ -224,8 +224,10 @@ func TestOutboxInbox(t *testing.T) {
 
 		outboxMemAcc := testMemMonitor.MakeBoundAccount()
 		defer outboxMemAcc.Close(ctx)
-		outbox, err :=
-			NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, nil /* metadataSource */, nil /* toClose */)
+		outbox, err := NewOutbox(
+			colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
+			input, typs, nil /* metadataSource */, nil /* toClose */, nil, /* getStats */
+		)
 		require.NoError(t, err)
 
 		inboxMemAcc := testMemMonitor.MakeBoundAccount()
@@ -499,13 +501,15 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			if tc.overrideExpectedMetadata != nil {
 				expectedMetadata = tc.overrideExpectedMetadata
 			}
-			outbox, err := NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, []execinfrapb.MetadataSource{
-				execinfrapb.CallbackMetadataSource{
-					DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
-						return expectedMetadata
+			outbox, err := NewOutbox(
+				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
+				input, typs, []execinfrapb.MetadataSource{
+					execinfrapb.CallbackMetadataSource{
+						DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
+							return expectedMetadata
+						},
 					},
-				},
-			}, nil /* toClose */)
+				}, nil /* toClose */, nil /* getStats */)
 			require.NoError(t, err)
 
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
@@ -577,8 +581,10 @@ func BenchmarkOutboxInbox(b *testing.B) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err :=
-		NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err := NewOutbox(
+		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
+		input, typs, nil /* metadataSources */, nil /* toClose */, nil, /* getStats */
+	)
 	require.NoError(b, err)
 
 	inboxMemAcc := testMemMonitor.MakeBoundAccount()
@@ -639,8 +645,10 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
-	outbox, err :=
-		NewOutbox(colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory), input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err := NewOutbox(
+		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
+		input, typs, nil /* metadataSources */, nil /* toClose */, nil, /* getStats */
+	)
 	require.NoError(t, err)
 
 	outboxDone := make(chan struct{})
