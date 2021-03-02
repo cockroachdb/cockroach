@@ -113,7 +113,13 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 				// for Next to be called even though it's not technically supported to
 				// ensure that a zero-length batch is returned.
 				meta := s.DrainMeta(ctx)
-				require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
+				if batchesReturned == 0 {
+					// If Next() hasn't been called, then the input goroutines
+					// haven't been spawned, and there will be no metadata.
+					require.Equal(t, 0, len(meta), "metadata length mismatch, returned metadata is: %v", meta)
+				} else {
+					require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
+				}
 				expectZeroBatch = true
 			}
 			var b coldata.Batch

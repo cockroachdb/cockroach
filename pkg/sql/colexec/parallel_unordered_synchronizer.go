@@ -50,7 +50,7 @@ const (
 	// ParallelUnorderedSynchronizer is in when a drain has been requested through
 	// DrainMeta. All input goroutines will call DrainMeta on its input and exit.
 	parallelUnorderedSynchronizerStateDraining
-	// parallelUnorderedSyncrhonizerStateDone is the state the
+	// parallelUnorderedSynchronizerStateDone is the state the
 	// ParallelUnorderedSynchronizer is in when draining has completed.
 	parallelUnorderedSynchronizerStateDone
 )
@@ -180,6 +180,8 @@ func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchron
 	atomic.SwapInt32(&s.state, int32(state))
 }
 
+const parallelUnorderedSynchronizerInputString = "parallel unordered synchronizer input"
+
 // init starts one goroutine per input to read from each input asynchronously
 // and push to batchCh. Canceling the context results in all goroutines
 // terminating, otherwise they keep on pushing batches until a zero-length batch
@@ -204,10 +206,11 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 			defer func() {
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)
+					close(s.errCh)
 				}
 				// We need to close all of the closers of this input before we
 				// notify the wait groups.
-				input.ToClose.CloseAndLogOnErr(ctx, "parallel unordered synchronizer input")
+				input.ToClose.CloseAndLogOnErr(ctx, parallelUnorderedSynchronizerInputString)
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
 			}()
@@ -355,11 +358,26 @@ func (s *ParallelUnorderedSynchronizer) notifyInputToReadNextBatch(inputIdx int)
 func (s *ParallelUnorderedSynchronizer) DrainMeta(
 	ctx context.Context,
 ) []execinfrapb.ProducerMetadata {
-	prevState := s.getState()
-	s.setState(parallelUnorderedSynchronizerStateDraining)
-	if prevState == parallelUnorderedSynchronizerStateUninitialized {
-		s.init(ctx)
+	if prevState := s.getState(); prevState == parallelUnorderedSynchronizerStateUninitialized {
+		// After DrainMeta call, Next shouldn't be called anymore, but if it is,
+		// we want to just return a zero-length batch.
+		s.setState(parallelUnorderedSynchronizerStateDone)
+		// Next hasn't been called yet (and it won't be), so there is no
+		// metadata to return. However, we still need to clean up all of the
+		// infrastructure created in the constructor. Note that it is safe to
+		// close all of this from DrainMeta/Next goroutine because the internal
+		// goroutines haven't been spawned up.
+		close(s.batchCh)
+		close(s.errCh)
+		for i := range s.inputs {
+			s.inputs[i].MetadataSources.DrainMeta(ctx)
+			s.inputs[i].ToClose.CloseAndLogOnErr(ctx, parallelUnorderedSynchronizerInputString)
+			close(s.readNextBatch[i])
+		}
+		return nil
 	}
+
+	s.setState(parallelUnorderedSynchronizerStateDraining)
 
 	// Non-blocking drain of batchCh. This is important mostly because of the
 	// following edge case: all n inputs have pushed batches to the batchCh, so
@@ -403,8 +421,12 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta(
 	// Buffer any errors that may have happened without blocking on the channel.
 	for exitLoop := false; !exitLoop; {
 		select {
-		case err := <-s.errCh:
-			s.bufferedMeta = append(s.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
+		case err, ok := <-s.errCh:
+			if ok {
+				s.bufferedMeta = append(s.bufferedMeta, execinfrapb.ProducerMetadata{Err: err})
+			} else {
+				exitLoop = true
+			}
 		default:
 			exitLoop = true
 		}
