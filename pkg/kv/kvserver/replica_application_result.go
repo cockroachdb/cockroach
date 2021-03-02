@@ -119,6 +119,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
+			Req:                  cmd.proposal.Request,
 		})
 		if cmd.proposalRetry == 0 {
 			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)

@@ -12,19 +12,327 @@ package kvserver_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
+
+// TestBumpSideTransportClosed tests the various states that a replica can find
+// itself in when its TestBumpSideTransportClosed is called. It verifies that
+// the method only returns successfully if it can bump its closed timestamp to
+// the target.
+func TestBumpSideTransportClosed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	type setupArgs struct {
+		tc                  *testcluster.TestCluster
+		leftDesc, rightDesc roachpb.RangeDescriptor
+		repl                *kvserver.Replica
+		now                 hlc.ClockTimestamp
+		target              hlc.Timestamp
+		filterC             chan chan struct{}
+	}
+	testCases := []struct {
+		name string
+		exp  bool
+		// Optional, to configure testing filters.
+		knobs func() (_ *kvserver.StoreTestingKnobs, filterC chan chan struct{})
+		// Configures the replica to test different situtations.
+		setup func(_ setupArgs) (unblockFilterC chan struct{}, asyncErrC chan error, _ error)
+	}{
+		{
+			name: "basic",
+			exp:  true,
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				// Nothing going on.
+				return nil, nil, nil
+			},
+		},
+		{
+			name: "replica destroyed",
+			exp:  false,
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				// Merge the range away to destroy it.
+				_, err := a.tc.Server(0).MergeRanges(a.leftDesc.StartKey.AsRawKey())
+				return nil, nil, err
+			},
+		},
+		{
+			name: "lease invalid",
+			exp:  false,
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				// Revoke the range's lease to prevent it from being valid.
+				l, _ := a.repl.GetLease()
+				a.repl.RevokeLease(ctx, l.Sequence)
+				return nil, nil, nil
+			},
+		},
+		{
+			name: "lease owned elsewhere",
+			exp:  false,
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				// Transfer the range's lease.
+				return nil, nil, a.tc.TransferRangeLease(a.rightDesc, a.tc.Target(1))
+			},
+		},
+		{
+			name: "merge in progress",
+			exp:  false,
+			knobs: func() (*kvserver.StoreTestingKnobs, chan chan struct{}) {
+				mergeC := make(chan chan struct{})
+				testingResponseFilter := func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+					if ba.IsSingleSubsumeRequest() {
+						unblockC := make(chan struct{})
+						mergeC <- unblockC
+						<-unblockC
+					}
+					return nil
+				}
+				return &kvserver.StoreTestingKnobs{TestingResponseFilter: testingResponseFilter}, mergeC
+			},
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				// Initiate a range merge and pause it after subsumption.
+				errC := make(chan error, 1)
+				_ = a.tc.Stopper().RunAsyncTask(ctx, "merge", func(context.Context) {
+					_, err := a.tc.Server(0).MergeRanges(a.leftDesc.StartKey.AsRawKey())
+					errC <- err
+				})
+				unblockFilterC := <-a.filterC
+				return unblockFilterC, errC, nil
+			},
+		},
+		{
+			name: "raft application in progress",
+			exp:  false,
+			knobs: func() (*kvserver.StoreTestingKnobs, chan chan struct{}) {
+				applyC := make(chan chan struct{})
+				var once sync.Once // ignore reproposals
+				testingApplyFilter := func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+					if filterArgs.Req != nil && filterArgs.Req.IsSingleRequest() {
+						put := filterArgs.Req.Requests[0].GetPut()
+						if put != nil && put.Key.Equal(roachpb.Key("key_filter")) {
+							once.Do(func() {
+								unblockC := make(chan struct{})
+								applyC <- unblockC
+								<-unblockC
+							})
+						}
+					}
+					return 0, nil
+				}
+				return &kvserver.StoreTestingKnobs{TestingApplyFilter: testingApplyFilter}, applyC
+			},
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				// Initiate a Raft proposal and pause it during application.
+				errC := make(chan error, 1)
+				_ = a.tc.Stopper().RunAsyncTask(ctx, "write", func(context.Context) {
+					errC <- a.tc.Server(0).DB().Put(ctx, "key_filter", "val")
+				})
+				unblockFilterC := <-a.filterC
+				return unblockFilterC, errC, nil
+			},
+		},
+		{
+			name: "evaluating request below closed timestamp target",
+			exp:  false,
+			knobs: func() (*kvserver.StoreTestingKnobs, chan chan struct{}) {
+				proposeC := make(chan chan struct{})
+				testingProposalFilter := func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+					if args.Req.IsSingleRequest() {
+						put := args.Req.Requests[0].GetPut()
+						if put != nil && put.Key.Equal(roachpb.Key("key_filter")) {
+							unblockC := make(chan struct{})
+							proposeC <- unblockC
+							<-unblockC
+						}
+					}
+					return nil
+				}
+				return &kvserver.StoreTestingKnobs{TestingProposalFilter: testingProposalFilter}, proposeC
+			},
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				// Initiate a write and pause it during evaluation.
+				errC := make(chan error, 1)
+				_ = a.tc.Stopper().RunAsyncTask(ctx, "write", func(context.Context) {
+					ts := a.target.Add(-1, 0)
+					putArgs := putArgs(roachpb.Key("key_filter"), []byte("val"))
+					sender := a.tc.Server(0).DB().NonTransactionalSender()
+					_, pErr := kv.SendWrappedWith(ctx, sender, roachpb.Header{Timestamp: ts}, putArgs)
+					errC <- pErr.GoError()
+				})
+				unblockFilterC := <-a.filterC
+				return unblockFilterC, errC, nil
+			},
+		},
+		{
+			name: "evaluating request at closed timestamp target",
+			exp:  false,
+			knobs: func() (*kvserver.StoreTestingKnobs, chan chan struct{}) {
+				proposeC := make(chan chan struct{})
+				testingProposalFilter := func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+					if args.Req.IsSingleRequest() {
+						put := args.Req.Requests[0].GetPut()
+						if put != nil && put.Key.Equal(roachpb.Key("key_filter")) {
+							unblockC := make(chan struct{})
+							proposeC <- unblockC
+							<-unblockC
+						}
+					}
+					return nil
+				}
+				return &kvserver.StoreTestingKnobs{TestingProposalFilter: testingProposalFilter}, proposeC
+			},
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				// Initiate a write and pause it during evaluation.
+				errC := make(chan error, 1)
+				_ = a.tc.Stopper().RunAsyncTask(ctx, "write", func(context.Context) {
+					ts := a.target
+					putArgs := putArgs(roachpb.Key("key_filter"), []byte("val"))
+					sender := a.tc.Server(0).DB().NonTransactionalSender()
+					_, pErr := kv.SendWrappedWith(ctx, sender, roachpb.Header{Timestamp: ts}, putArgs)
+					errC <- pErr.GoError()
+				})
+				unblockFilterC := <-a.filterC
+				return unblockFilterC, errC, nil
+			},
+		},
+		{
+			name: "evaluating request above closed timestamp target",
+			exp:  true,
+			knobs: func() (*kvserver.StoreTestingKnobs, chan chan struct{}) {
+				proposeC := make(chan chan struct{})
+				testingProposalFilter := func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+					if args.Req.IsSingleRequest() {
+						put := args.Req.Requests[0].GetPut()
+						if put != nil && put.Key.Equal(roachpb.Key("key_filter")) {
+							unblockC := make(chan struct{})
+							proposeC <- unblockC
+							<-unblockC
+						}
+					}
+					return nil
+				}
+				return &kvserver.StoreTestingKnobs{TestingProposalFilter: testingProposalFilter}, proposeC
+			},
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				// Initiate a write and pause it during evaluation.
+				errC := make(chan error, 1)
+				_ = a.tc.Stopper().RunAsyncTask(ctx, "write", func(context.Context) {
+					ts := a.target.Add(1, 0)
+					putArgs := putArgs(roachpb.Key("key_filter"), []byte("val"))
+					sender := a.tc.Server(0).DB().NonTransactionalSender()
+					_, pErr := kv.SendWrappedWith(ctx, sender, roachpb.Header{Timestamp: ts}, putArgs)
+					errC <- pErr.GoError()
+				})
+				unblockFilterC := <-a.filterC
+				return unblockFilterC, errC, nil
+			},
+		},
+		{
+			name: "existing closed timestamp before",
+			exp:  true,
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+				targets[roachpb.LAG_BY_CLUSTER_SETTING] = a.target.Add(-1, 0)
+				ok, _, _ := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
+				require.True(t, ok)
+				return nil, nil, nil
+			},
+		},
+		{
+			name: "existing closed timestamp equal",
+			exp:  false,
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+				targets[roachpb.LAG_BY_CLUSTER_SETTING] = a.target
+				ok, _, _ := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
+				require.True(t, ok)
+				return nil, nil, nil
+			},
+		},
+		{
+			name: "existing closed timestamp above",
+			exp:  false,
+			setup: func(a setupArgs) (chan struct{}, chan error, error) {
+				var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+				targets[roachpb.LAG_BY_CLUSTER_SETTING] = a.target.Add(1, 0)
+				ok, _, _ := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
+				require.True(t, ok)
+				return nil, nil, nil
+			},
+		},
+	}
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			var knobs base.ModuleTestingKnobs
+			var filterC chan chan struct{}
+			if test.knobs != nil {
+				knobs, filterC = test.knobs()
+			}
+
+			tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Store: knobs,
+					},
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
+
+			leftDesc, rightDesc, err := tc.SplitRange(roachpb.Key("key"))
+			require.NoError(t, err)
+			tc.AddVotersOrFatal(t, leftDesc.StartKey.AsRawKey(), tc.Target(1))
+			tc.AddVotersOrFatal(t, rightDesc.StartKey.AsRawKey(), tc.Target(1))
+			store := tc.GetFirstStoreFromServer(t, 0)
+			require.NoError(t, err)
+			repl := store.LookupReplica(rightDesc.StartKey)
+			require.NotNil(t, repl)
+
+			now := tc.Server(0).Clock().NowAsClockTimestamp()
+			var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+			target := now.ToTimestamp()
+			targets[roachpb.LAG_BY_CLUSTER_SETTING] = target
+
+			// Run the setup function to get the replica in the desired state.
+			unblockFilterC, asyncErrC, err := test.setup(setupArgs{
+				tc:        tc,
+				leftDesc:  leftDesc,
+				rightDesc: rightDesc,
+				repl:      repl,
+				now:       now,
+				target:    target,
+				filterC:   filterC,
+			})
+			require.NoError(t, err)
+
+			// Try to bump the closed timestamp.
+			ok, _, _ := repl.BumpSideTransportClosed(ctx, now, targets)
+			require.Equal(t, test.exp, ok)
+
+			// Clean up, if necessary.
+			if unblockFilterC != nil {
+				close(unblockFilterC)
+				require.NoError(t, <-asyncErrC)
+			}
+		})
+	}
+}
 
 // BenchmarkBumpSideTransportClosed measures the latency of a single call to
 // (*Replica).BumpSideTransportClosed. The closed timestamp side-transport was
