@@ -3395,8 +3395,8 @@ Square overlapping left and right square  NULL  POLYGON ((-0.1 0, 1 0, 1 1, -0.1
 # Point specific operations
 query RR
 SELECT
-  ST_X(a.geom),
-  ST_Y(a.geom)
+  st_x(a.geom),
+  st_y(a.geom)
 FROM (VALUES
   ('POINT(1.0 2.0)'::geometry),
   ('POINT(33.0 66.0)'::geometry),
@@ -3407,11 +3407,11 @@ FROM (VALUES
 33    66
 NULL  NULL
 
-statement error argument to ST_X\(\) must have shape POINT
-SELECT ST_X('LINESTRING(0.0 0.0, 1.0 1.0)')
+statement error argument to st_x\(\) must have shape POINT
+SELECT st_x('LINESTRING(0.0 0.0, 1.0 1.0)')
 
-statement error argument to ST_Y\(\) must have shape POINT
-SELECT ST_Y('LINESTRING(0.0 0.0, 1.0 1.0)')
+statement error argument to st_y\(\) must have shape POINT
+SELECT st_y('LINESTRING(0.0 0.0, 1.0 1.0)')
 
 # LineString specific operations
 query TTITTTTT
