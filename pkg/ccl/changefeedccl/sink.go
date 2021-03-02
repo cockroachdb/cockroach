@@ -99,6 +99,8 @@ func getSink(
 	switch {
 	case u.Scheme == changefeedbase.SinkSchemeBuffer:
 		makeSink = func() (Sink, error) { return &bufferSink{}, nil }
+	case u.Scheme == changefeedbase.SinkSchemeNull:
+		makeSink = func() (Sink, error) { return &nullSink{}, nil }
 	case u.Scheme == changefeedbase.SinkSchemeKafka:
 		var cfg kafkaSinkConfig
 		cfg.kafkaTopicPrefix = q.Get(changefeedbase.SinkParamTopicPrefix)
@@ -918,3 +920,37 @@ func (s *bufferSink) Close() error {
 	s.closed = true
 	return nil
 }
+
+type nullSink struct {
+}
+
+func (n *nullSink) EmitRow(
+	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+) error {
+	log.Dev.VInfof(ctx, 2, "emitting row %s@%s", key, updated.String())
+	return nil
+}
+
+func (n *nullSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	if log.V(2) {
+		log.Infof(ctx, "emitting resolved %s", resolved.String())
+	}
+
+	return nil
+}
+
+func (n *nullSink) Flush(ctx context.Context) error {
+	if log.V(2) {
+		log.Info(ctx, "flushing")
+	}
+
+	return nil
+}
+
+func (n *nullSink) Close() error {
+	return nil
+}
+
+var _ Sink = (*nullSink)(nil)
