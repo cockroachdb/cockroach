@@ -687,6 +687,7 @@ vectorized: true
 │           │ pred: column15 != crdb_region
 │           │
 │           └── • cross join
+│               │ estimated row count: 3
 │               │
 │               ├── • values
 │               │     size: 1 column, 3 rows
@@ -705,6 +706,7 @@ vectorized: true
 │           │ pred: (column1 != pk) OR (column15 != crdb_region)
 │           │
 │           └── • cross join
+│               │ estimated row count: 3
 │               │
 │               ├── • values
 │               │     size: 1 column, 3 rows
@@ -723,6 +725,7 @@ vectorized: true
             │ pred: (column1 != pk) OR (column15 != crdb_region)
             │
             └── • cross join
+                │ estimated row count: 3
                 │
                 ├── • values
                 │     size: 1 column, 3 rows
@@ -831,6 +834,7 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
+│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 5 columns, 2 rows
@@ -1156,6 +1160,7 @@ vectorized: true
             │ pred: (column1 != pk) OR (column10 != crdb_region_col)
             │
             └── • cross join
+                │ estimated row count: 3
                 │
                 ├── • values
                 │     size: 1 column, 3 rows

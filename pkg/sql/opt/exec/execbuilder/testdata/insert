@@ -377,8 +377,10 @@ vectorized: true
 │ auto commit
 │
 └── • render
+    │ estimated row count: 1
     │
     └── • limit
+        │ estimated row count: 1
         │ count: 1
         │
         └── • values
@@ -395,11 +397,14 @@ vectorized: true
 │ auto commit
 │
 └── • render
+    │ estimated row count: 1
     │
     └── • limit
+        │ estimated row count: 1
         │ count: 1
         │
         └── • sort
+            │ estimated row count: 2
             │ order: +column2
             │
             └── • values
@@ -416,11 +421,14 @@ vectorized: true
 │ auto commit
 │
 └── • render
+    │ estimated row count: 1
     │
     └── • limit
+        │ estimated row count: 1
         │ count: 1
         │
         └── • sort
+            │ estimated row count: 2
             │ order: +column2
             │
             └── • values
@@ -437,11 +445,14 @@ vectorized: true
 │ auto commit
 │
 └── • render
+    │ estimated row count: 1
     │
     └── • limit
+        │ estimated row count: 1
         │ count: 1
         │
         └── • sort
+            │ estimated row count: 2
             │ order: +column2
             │
             └── • values

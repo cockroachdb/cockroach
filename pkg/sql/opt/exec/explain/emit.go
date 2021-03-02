@@ -348,11 +348,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	if stats, ok := n.annotations[exec.EstimatedStatsID]; ok {
 		s := stats.(*exec.EstimatedStats)
 
-		// In verbose mode, we show the estimated row count for all nodes (except
-		// Values, where it is redundant). In non-verbose mode, we only show it for
-		// scans (and when it is based on real statistics), where it is most useful
-		// and accurate.
-		if n.op != valuesOp && (e.ob.flags.Verbose || n.op == scanOp) {
+		// Show the estimated row count (except Values, where it is redundant).
+		if n.op != valuesOp {
 			count := uint64(math.Round(s.RowCount))
 			if s.TableStatsAvailable {
 				if n.op == scanOp && s.TableRowCount != 0 {
@@ -381,10 +378,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				// No stats available.
 				if e.ob.flags.Verbose {
 					e.ob.Attrf("estimated row count", "%s (missing stats)", humanizeutil.Count(count))
-				} else {
+				} else if n.op == scanOp {
 					// In non-verbose mode, don't show the row count (which is not based
-					// on reality); only show a "missing stats" field. Don't show it for
-					// virtual tables though, where we expect no stats.
+					// on reality); only show a "missing stats" field for scans. Don't
+					// show it for virtual tables though, where we expect no stats.
 					if !n.args.(*scanArgs).Table.IsVirtualTable() {
 						e.ob.AddField("missing stats", "")
 					}

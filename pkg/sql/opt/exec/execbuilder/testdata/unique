@@ -271,6 +271,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -287,6 +288,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # No need to plan checks for w since it's always null.
@@ -322,6 +324,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
@@ -475,6 +478,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 ├── • constraint-check
@@ -487,6 +491,7 @@ vectorized: true
 │           │ pred: column2 != b
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -503,6 +508,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Insert with non-constant input.
@@ -592,6 +598,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -610,6 +617,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -626,6 +634,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # Combine unique checks with foreign keys. There should be two foreign key
@@ -645,6 +654,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -663,6 +673,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 2
 │                 label: buffer 1
 │
 ├── • constraint-check
@@ -986,9 +997,11 @@ vectorized: true
 │           │         spans: FULL SCAN
 │           │
 │           └── • filter
+│               │ estimated row count: 1
 │               │ filter: column3 > 0
 │               │
 │               └── • scan buffer
+│                     estimated row count: 2
 │                     label: buffer 1
 │
 └── • constraint-check
@@ -1008,9 +1021,11 @@ vectorized: true
             │         spans: FULL SCAN
             │
             └── • filter
+                │ estimated row count: 1
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # No need to plan checks for a since it's always null.
@@ -1048,9 +1063,11 @@ vectorized: true
             │         spans: FULL SCAN
             │
             └── • filter
+                │ estimated row count: 1
                 │ filter: column3 > 0
                 │
                 └── • scan buffer
+                      estimated row count: 2
                       label: buffer 1
 
 # Use all the unique indexes and constraints as arbiters for DO NOTHING with no
@@ -1441,6 +1458,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows
@@ -1459,6 +1477,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 2
                   label: buffer 1
 
 # By default, we do not require checks on UUID columns set to gen_random_uuid(),
@@ -1495,6 +1514,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 # The default value of id1 is gen_random_uuid(), so we don't need to plan checks
@@ -1532,6 +1552,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 # We can also detect gen_random_uuid() when it is a projection.
@@ -1608,6 +1629,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 1
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -1625,6 +1647,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok
@@ -2710,6 +2733,7 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
+│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 3 columns, 2 rows
@@ -2772,6 +2796,7 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
+│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 3 columns, 2 rows
@@ -2835,6 +2860,7 @@ vectorized: true
 │               │ locking strength: for update
 │               │
 │               └── • render
+│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 2 columns, 2 rows
@@ -2971,6 +2997,7 @@ vectorized: true
 │               │     spans: FULL SCAN
 │               │
 │               └── • render
+│                   │ estimated row count: 2
 │                   │
 │                   └── • values
 │                         size: 3 columns, 2 rows
@@ -3160,11 +3187,13 @@ vectorized: true
 │               │ equality cols are key
 │               │
 │               └── • distinct
+│                   │ estimated row count: 2
 │                   │ distinct on: column10
 │                   │ nulls are distinct
 │                   │ error on duplicate
 │                   │
 │                   └── • render
+│                       │ estimated row count: 2
 │                       │
 │                       └── • values
 │                             size: 3 columns, 2 rows
@@ -3242,6 +3271,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ estimated row count: 2
 │           │
 │           └── • values
 │                 size: 3 columns, 2 rows

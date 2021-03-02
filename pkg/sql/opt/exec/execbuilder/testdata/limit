@@ -408,24 +408,33 @@ distribution: local
 vectorized: true
 ·
 • limit
+│ estimated row count: 5
 │ count: 5
 │
 └── • sort
+    │ estimated row count: 40
     │ order: +date_should_be_completed
     │
     └── • union
+        │ estimated row count: 40
         │
         ├── • union
+        │   │ estimated row count: 35
         │   │
         │   ├── • union
+        │   │   │ estimated row count: 30
         │   │   │
         │   │   ├── • union
+        │   │   │   │ estimated row count: 25
         │   │   │   │
         │   │   │   ├── • union
+        │   │   │   │   │ estimated row count: 20
         │   │   │   │   │
         │   │   │   │   ├── • union
+        │   │   │   │   │   │ estimated row count: 15
         │   │   │   │   │   │
         │   │   │   │   │   ├── • union
+        │   │   │   │   │   │   │ estimated row count: 10
         │   │   │   │   │   │   │
         │   │   │   │   │   │   ├── • scan
         │   │   │   │   │   │   │     estimated row count: 5 (0.05% of the table)
