@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -29,15 +28,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,340 +42,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type cliTest struct {
-	*server.TestServer
-	certsDir    string
-	cleanupFunc func() error
-	prevStderr  *os.File
-
-	// t is the testing.T instance used for this test.
-	// Example_xxx tests may have this set to nil.
-	t *testing.T
-	// logScope binds the lifetime of the log files to this test, when t
-	// is not nil
-	logScope *log.TestLogScope
-	// if true, doesn't print args during RunWithArgs
-	omitArgs bool
-}
-
-type cliTestParams struct {
-	t           *testing.T
-	insecure    bool
-	noServer    bool
-	storeSpecs  []base.StoreSpec
-	locality    roachpb.Locality
-	noNodelocal bool
-}
-
-// testTempFilePrefix is a sentinel marker to be used as the prefix of a
-// test file name. It is used to extract the file name from a uniquely
-// generated (temp directory) file path.
-const testTempFilePrefix = "test-temp-prefix-"
-
-func (c *cliTest) fail(err interface{}) {
-	if c.t != nil {
-		defer c.logScope.Close(c.t)
-		c.t.Fatal(err)
-	} else {
-		panic(err)
-	}
-}
-
-func createTestCerts(certsDir string) (cleanup func() error) {
-	// Copy these assets to disk from embedded strings, so this test can
-	// run from a standalone binary.
-	// Disable embedded certs, or the security library will try to load
-	// our real files as embedded assets.
-	security.ResetAssetLoader()
-
-	assets := []string{
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCAKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootCert),
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedRootKey),
-
-		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantClientCACert),
-	}
-
-	for _, a := range assets {
-		_, err := securitytest.RestrictedCopy(a, certsDir, filepath.Base(a))
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return func() error {
-		security.SetAssetLoader(securitytest.EmbeddedAssets)
-		return os.RemoveAll(certsDir)
-	}
-}
-
-func newCLITest(params cliTestParams) cliTest {
-	c := cliTest{t: params.t}
-
-	certsDir, err := ioutil.TempDir("", "cli-test")
-	if err != nil {
-		c.fail(err)
-	}
-	c.certsDir = certsDir
-
-	if c.t != nil {
-		c.logScope = log.Scope(c.t)
-	}
-
-	c.cleanupFunc = func() error { return nil }
-
-	if !params.noServer {
-		if !params.insecure {
-			c.cleanupFunc = createTestCerts(certsDir)
-			baseCfg.SSLCertsDir = certsDir
-		}
-
-		args := base.TestServerArgs{
-			Insecure:      params.insecure,
-			SSLCertsDir:   c.certsDir,
-			StoreSpecs:    params.storeSpecs,
-			Locality:      params.locality,
-			ExternalIODir: filepath.Join(certsDir, "extern"),
-		}
-		if params.noNodelocal {
-			args.ExternalIODir = ""
-		}
-		s, err := serverutils.StartServerRaw(args)
-		if err != nil {
-			c.fail(err)
-		}
-		c.TestServer = s.(*server.TestServer)
-
-		log.Infof(context.Background(), "server started at %s", c.ServingRPCAddr())
-		log.Infof(context.Background(), "SQL listener at %s", c.ServingSQLAddr())
-	}
-
-	baseCfg.User = security.NodeUserName()
-
-	// Ensure that CLI error messages and anything meant for the
-	// original stderr is redirected to stdout, where it can be
-	// captured.
-	c.prevStderr = stderr
-	stderr = os.Stdout
-
-	return c
-}
-
-// setCLIDefaultsForTests invokes initCLIDefaults but pretends the
-// output is not a terminal, even if it happens to be. This ensures
-// e.g. that tests ran with -v have the same output as those without.
-func setCLIDefaultsForTests() {
-	initCLIDefaults()
-	cliCtx.terminalOutput = false
-	sqlCtx.showTimes = false
-	// Even though we pretend there is no terminal, most tests want
-	// pretty tables.
-	cliCtx.tableDisplayFormat = tableDisplayTable
-}
-
-// stopServer stops the test server.
-func (c *cliTest) stopServer() {
-	if c.TestServer != nil {
-		log.Infof(context.Background(), "stopping server at %s / %s",
-			c.ServingRPCAddr(), c.ServingSQLAddr())
-		c.Stopper().Stop(context.Background())
-	}
-}
-
-// restartServer stops and restarts the test server. The ServingRPCAddr() may
-// have changed after this method returns.
-func (c *cliTest) restartServer(params cliTestParams) {
-	c.stopServer()
-	log.Info(context.Background(), "restarting server")
-	s, err := serverutils.StartServerRaw(base.TestServerArgs{
-		Insecure:    params.insecure,
-		SSLCertsDir: c.certsDir,
-		StoreSpecs:  params.storeSpecs,
-	})
-	if err != nil {
-		c.fail(err)
-	}
-	c.TestServer = s.(*server.TestServer)
-	log.Infof(context.Background(), "restarted server at %s / %s",
-		c.ServingRPCAddr(), c.ServingSQLAddr())
-}
-
-// cleanup cleans up after the test, stopping the server if necessary.
-// The log files are removed if the test has succeeded.
-func (c *cliTest) cleanup() {
-	defer func() {
-		if c.t != nil {
-			c.logScope.Close(c.t)
-		}
-	}()
-
-	// Restore stderr.
-	stderr = c.prevStderr
-
-	log.Info(context.Background(), "stopping server and cleaning up CLI test")
-
-	c.stopServer()
-
-	if err := c.cleanupFunc(); err != nil {
-		panic(err)
-	}
-}
-
-func (c cliTest) Run(line string) {
-	a := strings.Fields(line)
-	c.RunWithArgs(a)
-}
-
-// RunWithCapture runs c and returns a string containing the output of c
-// and any error that may have occurred capturing the output. We do not propagate
-// errors in executing c, because those will be caught when the test verifies
-// the output of c.
-func (c cliTest) RunWithCapture(line string) (out string, err error) {
-	return captureOutput(func() {
-		c.Run(line)
-	})
-}
-
-func (c cliTest) RunWithCaptureArgs(args []string) (string, error) {
-	return captureOutput(func() {
-		c.RunWithArgs(args)
-	})
-}
-
-// captureOutput runs f and returns a string containing the output and any
-// error that may have occurred capturing the output.
-func captureOutput(f func()) (out string, err error) {
-	// Heavily inspired by Go's testing/example.go:runExample().
-
-	// Funnel stdout into a pipe.
-	stdoutSave, stderrRedirSave := os.Stdout, stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		return "", err
-	}
-	os.Stdout = w
-	stderr = w
-
-	// Send all bytes from piped stdout through the output channel.
-	type captureResult struct {
-		out string
-		err error
-	}
-	outC := make(chan captureResult)
-	go func() {
-		var buf bytes.Buffer
-		_, err := io.Copy(&buf, r)
-		r.Close()
-		outC <- captureResult{buf.String(), err}
-	}()
-
-	// Clean up and record output in separate function to handle panics.
-	defer func() {
-		// Close pipe and restore normal stdout.
-		w.Close()
-		os.Stdout = stdoutSave
-		stderr = stderrRedirSave
-		outResult := <-outC
-		out, err = outResult.out, outResult.err
-		if x := recover(); x != nil {
-			err = errors.Errorf("panic: %v", x)
-		}
-	}()
-
-	// Run the command. The output will be returned in the defer block.
-	f()
-	return
-}
-
-func isSQLCommand(args []string) (bool, error) {
-	cmd, _, err := cockroachCmd.Find(args)
-	if err != nil {
-		return false, err
-	}
-	// We use --echo-sql as a marker of SQL-only commands.
-	if f := flagSetForCmd(cmd).Lookup(cliflags.EchoSQL.Name); f != nil {
-		return true, nil
-	}
-	return false, nil
-}
-
-func (c cliTest) RunWithArgs(origArgs []string) {
-	TestingReset()
-
-	if err := func() error {
-		args := append([]string(nil), origArgs[:1]...)
-		if c.TestServer != nil {
-			addr := c.ServingRPCAddr()
-			if isSQL, err := isSQLCommand(origArgs); err != nil {
-				return err
-			} else if isSQL {
-				addr = c.ServingSQLAddr()
-			}
-			h, p, err := net.SplitHostPort(addr)
-			if err != nil {
-				return err
-			}
-			args = append(args, fmt.Sprintf("--host=%s", net.JoinHostPort(h, p)))
-			if c.Cfg.Insecure {
-				args = append(args, "--insecure=true")
-			} else {
-				args = append(args, "--insecure=false")
-				args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
-			}
-		}
-		args = append(args, origArgs[1:]...)
-
-		// `nodelocal upload` CLI tests create test files in unique temp
-		// directories. Given that the expected output for such tests is defined as
-		// a static comment, it is not possible to match against the full file path.
-		// So, we trim the file path upto the sentinel prefix marker, and use only
-		// the file name for comparing against the expected output.
-		if len(origArgs) >= 3 && strings.Contains(origArgs[2], testTempFilePrefix) {
-			splitFilePath := strings.Split(origArgs[2], testTempFilePrefix)
-			origArgs[2] = splitFilePath[1]
-		}
-
-		if !c.omitArgs {
-			fmt.Fprintf(os.Stderr, "%s\n", args)
-			fmt.Println(strings.Join(origArgs, " "))
-		}
-
-		return Run(args)
-	}(); err != nil {
-		cliOutputError(os.Stdout, err, true /*showSeverity*/, false /*verbose*/)
-	}
-}
-
-func (c cliTest) RunWithCAArgs(origArgs []string) {
-	TestingReset()
-
-	if err := func() error {
-		args := append([]string(nil), origArgs[:1]...)
-		if c.TestServer != nil {
-			args = append(args, fmt.Sprintf("--ca-key=%s", filepath.Join(c.certsDir, security.EmbeddedCAKey)))
-			args = append(args, fmt.Sprintf("--certs-dir=%s", c.certsDir))
-		}
-		args = append(args, origArgs[1:]...)
-
-		fmt.Fprintf(os.Stderr, "%s\n", args)
-		fmt.Println(strings.Join(origArgs, " "))
-
-		return Run(args)
-	}(); err != nil {
-		fmt.Println(err)
-	}
-}
-
 func TestQuit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	skip.UnderShort(t)
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
 
 	c.Run("quit")
 	// Wait until this async command cleanups the server.
@@ -389,8 +56,8 @@ func TestQuit(t *testing.T) {
 }
 
 func Example_logging() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{`sql`, `--logtostderr=false`, `-e`, `select 1 as "1"`})
 	c.RunWithArgs([]string{`sql`, `--logtostderr=true`, `-e`, `select 1 as "1"`})
@@ -409,8 +76,8 @@ func Example_logging() {
 }
 
 func Example_demo() {
-	c := newCLITest(cliTestParams{noServer: true})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{NoServer: true})
+	defer c.Cleanup()
 
 	defer func(b bool) { testingForceRandomizeDemoPorts = b }(testingForceRandomizeDemoPorts)
 	testingForceRandomizeDemoPorts = true
@@ -497,8 +164,8 @@ func Example_demo() {
 }
 
 func Example_sql() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{`sql`, `-e`, `show application_name`})
 	c.RunWithArgs([]string{`sql`, `-e`, `create database t; create table t.f (x int, y int); insert into t.f values (42, 69)`})
@@ -595,8 +262,8 @@ func Example_sql() {
 }
 
 func Example_sql_watch() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{`sql`, `-e`, `create table d(x int); insert into d values(3)`})
 	c.RunWithArgs([]string{`sql`, `--watch`, `.1s`, `-e`, `update d set x=x-1 returning 1/x as dec`})
@@ -614,8 +281,8 @@ func Example_sql_watch() {
 }
 
 func Example_sql_format() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.times (bare timestamp, withtz timestamptz)"})
 	c.RunWithArgs([]string{"sql", "-e", "insert into t.times values ('2016-01-25 10:10:10', '2016-01-25 10:10:10-05:00')"})
@@ -632,8 +299,8 @@ func Example_sql_format() {
 }
 
 func Example_sql_column_labels() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	testData := []string{
 		`f"oo`,
@@ -788,8 +455,8 @@ thenshort`,
 }
 
 func Example_sql_empty_table() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t;" +
 		"create table t.norows(x int);" +
@@ -890,8 +557,8 @@ func Example_sql_empty_table() {
 }
 
 func Example_csv_tsv_quoting() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	testData := []string{
 		`ab`,
@@ -1045,8 +712,8 @@ def`,
 }
 
 func Example_sql_table() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	testData := []struct {
 		str, desc string
@@ -1348,8 +1015,8 @@ func TestRenderHTML(t *testing.T) {
 }
 
 func Example_misc_table() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
 	c.RunWithArgs([]string{"sql", "--format=table", "-e", "select '  hai' as x"})
@@ -1379,8 +1046,8 @@ func Example_misc_table() {
 }
 
 func Example_cert() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	c.RunWithCAArgs([]string{"cert", "create-client", "foo"})
 	c.RunWithCAArgs([]string{"cert", "create-client", "Ομηρος"})
@@ -1501,8 +1168,8 @@ Use "cockroach [command] --help" for more information about a command.
 }
 
 func Example_node() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.WriteSummaries(); err != nil {
@@ -1536,8 +1203,8 @@ func Example_node() {
 func TestCLITimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
 
 	// Wrap the meat of the test in a retry loop. Setting a timeout like this is
 	// racy as the operation may have succeeded by the time the scheduler gives
@@ -1568,8 +1235,8 @@ func TestNodeStatus(t *testing.T) {
 	skip.WithIssue(t, 38151)
 
 	start := timeutil.Now()
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.WriteSummaries(); err != nil {
@@ -1625,7 +1292,7 @@ func TestNodeStatus(t *testing.T) {
 	checkNodeStatus(t, c, out, start)
 }
 
-func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
+func checkNodeStatus(t *testing.T, c TestCLI, output string, start time.Time) {
 	buf := bytes.NewBufferString(output)
 	s := bufio.NewScanner(buf)
 
@@ -1900,8 +1567,8 @@ func TestGenAutocomplete(t *testing.T) {
 func TestJunkPositionalArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t, noServer: true})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
 
 	for i, test := range []string{
 		"start",
@@ -1925,8 +1592,8 @@ func TestJunkPositionalArguments(t *testing.T) {
 func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{noServer: true})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{NoServer: true})
+	defer c.Cleanup()
 
 	out, err := c.RunWithCapture("workload init --help")
 	if err != nil {
@@ -1943,10 +1610,10 @@ func Example_in_memory() {
 	if err != nil {
 		panic(err)
 	}
-	c := newCLITest(cliTestParams{
-		storeSpecs: []base.StoreSpec{spec},
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{spec},
 	})
-	defer c.cleanup()
+	defer c.Cleanup()
 
 	// Test some sql to ensure that the in memory store is working.
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
@@ -1962,8 +1629,8 @@ func Example_in_memory() {
 }
 
 func Example_pretty_print_numerical_strings() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	// All strings in pretty-print output should be aligned to left regardless of their contents
 	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.t (s string, d string);"})
@@ -1995,8 +1662,8 @@ func Example_pretty_print_numerical_strings() {
 }
 
 func Example_sqlfmt() {
-	c := newCLITest(cliTestParams{noServer: true})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{NoServer: true})
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sqlfmt", "-e", ";"})
 	c.RunWithArgs([]string{"sqlfmt", "-e", "delete from t"})
@@ -2048,8 +1715,8 @@ func Example_sqlfmt() {
 // The input file contains a mix of client-side and
 // server-side commands to ensure that both are supported with -f.
 func Example_read_from_file() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", "select 1", "-f", "testdata/inputfile.sql"})
 	c.RunWithArgs([]string{"sql", "-f", "testdata/inputfile.sql"})
@@ -2075,8 +1742,8 @@ func Example_read_from_file() {
 
 // Example_includes tests the \i command.
 func Example_includes() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-f", "testdata/i_twolevels1.sql"})
 	c.RunWithArgs([]string{"sql", "-f", "testdata/i_multiline.sql"})

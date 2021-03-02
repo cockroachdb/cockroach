@@ -21,8 +21,8 @@ import (
 // This test doctoring a secure cluster.
 func TestDoctorCluster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
 
 	// Introduce a corruption in the descriptor table by adding a table and
 	// removing its parent.
@@ -50,8 +50,8 @@ func TestDoctorCluster(t *testing.T) {
 // This test the operation of zip over secure clusters.
 func TestDoctorZipDir(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	c := newCLITest(cliTestParams{t: t, noServer: true})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
 
 	out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip")
 	if err != nil {
