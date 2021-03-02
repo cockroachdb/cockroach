@@ -130,8 +130,8 @@ func (ib *IndexBackfillPlanner) plan(
 			true /* distribute */)
 		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
 		// batch size. Also plumb in a testing knob.
-		spec, err := initIndexBackfillerSpec(
-			*td.TableDesc(), readAsOf, indexBackfillBatchSize, indexesToBackfill)
+		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
+		spec, err := initIndexBackfillerSpec(*td.TableDesc(), readAsOf, chunkSize, indexesToBackfill)
 		if err != nil {
 			return err
 		}

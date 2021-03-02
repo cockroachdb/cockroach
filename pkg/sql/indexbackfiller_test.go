@@ -522,9 +522,8 @@ INSERT INTO foo VALUES (1), (10), (100);
 			tableID, 1, execCfg.NodeID.SQLInstanceID(), s0.DB(), lm, jr, &execCfg, settings)
 		changer.SetJob(j)
 		spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, test.indexToBackfill)}
-		require.NoError(t, changer.TestingDistIndexBackfill(
-			ctx, table.GetVersion(), spans, []descpb.IndexID{test.indexToBackfill}, backfill.IndexMutationFilter, 10,
-		))
+		require.NoError(t, changer.TestingDistIndexBackfill(ctx, table.GetVersion(), spans,
+			[]descpb.IndexID{test.indexToBackfill}, backfill.IndexMutationFilter))
 
 		// Make the mutation complete, then read the index and validate that it
 		// has the expected contents.
