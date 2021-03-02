@@ -11,6 +11,7 @@ yarn.opt.installed
 dist*/**
 !distccl/distccl.go
 !distoss/distoss.go
+!dist*/**/BUILD.bazel
 *manifest.json
 
 cypress/screenshots/*

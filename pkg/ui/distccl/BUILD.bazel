@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "distccl",
+    srcs = [
+        "bindata.go",
+        "distccl.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ui/distccl",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/ui"],
+)
