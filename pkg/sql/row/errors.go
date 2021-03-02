@@ -96,12 +96,16 @@ func NewUniquenessConstraintViolationError(
 			"duplicate key value: decoding err=%s", err)
 	}
 
+	// Exclude implicit partitioning columns from the error message.
+	numImplicitCols := index.Partitioning.NumImplicitColumns
 	return errors.WithDetail(
 		pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
 			"duplicate key value violates unique constraint %q", index.Name,
 		), index.Name),
 		fmt.Sprintf(
-			"Key (%s)=(%s) already exists.", strings.Join(names, ","), strings.Join(values, ","),
+			"Key (%s)=(%s) already exists.",
+			strings.Join(names[numImplicitCols:], ","),
+			strings.Join(values[numImplicitCols:], ","),
 		),
 	)
 }
