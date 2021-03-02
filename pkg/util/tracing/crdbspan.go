@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 )
 
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
@@ -56,13 +55,22 @@ type crdbSpanMu struct {
 	// duration is initialized to -1 and set on Finish().
 	duration time.Duration
 
-	// recording maintains state once StartRecording() is called.
 	recording struct {
 		// recordingType is the recording type of the ongoing recording, if any.
 		// Its 'load' method may be called without holding the surrounding mutex,
 		// but its 'swap' method requires the mutex.
 		recordingType atomicRecordingType
-		recordedLogs  []opentracing.LogRecord
+
+		logBytes int64
+		logs     ring.Buffer // of tracingpb.LogRecords
+
+		structuredBytes int64
+		structured      ring.Buffer // of Structured events
+
+		// dropped is true if the span has capped out it's memory limits for
+		// logs and structured events, and has had to drop some.
+		dropped bool
+
 		// children contains the list of child spans started after this Span
 		// started recording.
 		children []*crdbSpan
@@ -78,9 +86,6 @@ type crdbSpanMu struct {
 	// TODO(radu): perhaps we want a recording to capture all the tags (even
 	// those that were set before recording started)?
 	tags opentracing.Tags
-
-	bytesStructured int64
-	structured      ring.Buffer // of Structured events
 
 	// The Span's associated baggage.
 	baggage map[string]string
@@ -123,7 +128,12 @@ func (s *crdbSpan) resetRecording() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.mu.recording.recordedLogs = nil
+	s.mu.recording.logs.Reset()
+	s.mu.recording.logBytes = 0
+	s.mu.recording.structured.Reset()
+	s.mu.recording.structuredBytes = 0
+	s.mu.recording.dropped = false
+
 	s.mu.recording.children = nil
 	s.mu.recording.remoteSpans = nil
 }
@@ -210,30 +220,43 @@ func (s *crdbSpan) record(msg string) {
 		return
 	}
 
+	logRecord := tracingpb.LogRecord{
+		Time: time.Now(),
+		Fields: []tracingpb.LogRecord_Field{
+			{Key: tracingpb.LogMessageField, Value: msg},
+		},
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.mu.recording.recordedLogs) < maxLogsPerSpan {
-		s.mu.recording.recordedLogs = append(s.mu.recording.recordedLogs, opentracing.LogRecord{
-			Timestamp: time.Now(),
-			Fields: []otlog.Field{
-				otlog.String(tracingpb.LogMessageField, msg),
-			},
-		})
+
+	s.mu.recording.logBytes += int64(logRecord.Size())
+	if s.mu.recording.logBytes > maxLogBytesPerSpan {
+		s.mu.recording.dropped = true
 	}
+	for s.mu.recording.logBytes > maxLogBytesPerSpan {
+		first := s.mu.recording.logs.GetFirst().(tracingpb.LogRecord)
+		s.mu.recording.logs.RemoveFirst()
+		s.mu.recording.logBytes -= int64(first.Size())
+	}
+	s.mu.recording.logs.AddLast(logRecord)
 }
 
 func (s *crdbSpan) recordStructured(item Structured) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.mu.bytesStructured += int64(item.Size())
-	for s.mu.bytesStructured > maxStructuredBytesPerSpan {
-		last := s.mu.structured.GetLast().(Structured)
-		s.mu.structured.RemoveLast()
-		s.mu.bytesStructured -= int64(last.Size())
+	s.mu.recording.structuredBytes += int64(item.Size())
+	if s.mu.recording.structuredBytes > maxStructuredBytesPerSpan {
+		s.mu.recording.dropped = true
+	}
+	for s.mu.recording.structuredBytes > maxStructuredBytesPerSpan {
+		last := s.mu.recording.structured.GetLast().(Structured)
+		s.mu.recording.structured.RemoveLast()
+		s.mu.recording.structuredBytes -= int64(last.Size())
 	}
 
-	s.mu.structured.AddFirst(item)
+	s.mu.recording.structured.AddFirst(item)
 }
 
 func (s *crdbSpan) setBaggageItemAndTag(restrictedKey, value string) {
@@ -299,12 +322,15 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		if s.mu.recording.recordingType.load() == RecordingVerbose {
 			addTag("_verbose", "1")
 		}
+		if s.mu.recording.dropped {
+			addTag("_dropped", "1")
+		}
 	}
 
-	if numEvents := s.mu.structured.Len(); numEvents != 0 {
+	if numEvents := s.mu.recording.structured.Len(); numEvents != 0 {
 		rs.InternalStructured = make([]*types.Any, 0, numEvents)
 		for i := 0; i < numEvents; i++ {
-			event := s.mu.structured.Get(i).(Structured)
+			event := s.mu.recording.structured.Get(i).(Structured)
 			item, err := types.MarshalAny(event)
 			if err != nil {
 				// An error here is an error from Marshal; these
@@ -335,15 +361,10 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		}
 	}
 
-	rs.Logs = make([]tracingpb.LogRecord, len(s.mu.recording.recordedLogs))
-	for i, r := range s.mu.recording.recordedLogs {
-		rs.Logs[i].Time = r.Timestamp
-		rs.Logs[i].Fields = make([]tracingpb.LogRecord_Field, len(r.Fields))
-		for j, f := range r.Fields {
-			rs.Logs[i].Fields[j] = tracingpb.LogRecord_Field{
-				Key:   f.Key(),
-				Value: fmt.Sprint(f.Value()),
-			}
+	if numLogs := s.mu.recording.logs.Len(); numLogs != 0 {
+		rs.Logs = make([]tracingpb.LogRecord, numLogs)
+		for i := 0; i < numLogs; i++ {
+			rs.Logs[i] = s.mu.recording.logs.Get(i).(tracingpb.LogRecord)
 		}
 	}
 
