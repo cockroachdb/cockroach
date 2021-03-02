@@ -39,6 +39,7 @@ import (
 // testProposer is a testing implementation of proposer.
 type testProposer struct {
 	syncutil.RWMutex
+	clock      *hlc.Clock
 	ds         destroyStatus
 	lai        uint64
 	enqueued   int
@@ -120,8 +121,13 @@ func (t *testProposer) enqueueUpdateCheck() {
 	t.enqueued++
 }
 
-func (t *testProposer) closeTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
-	return t.rangePolicy
+func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
+	if t.clock == nil {
+		return hlc.Timestamp{}
+	}
+	return closedts.TargetForPolicy(
+		t.clock.NowAsClockTimestamp(), t.clock.MaxOffset(), time.Second, t.rangePolicy,
+	)
 }
 
 func (t *testProposer) raftTransportClosedTimestampEnabled() bool {
@@ -651,45 +657,6 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 	}
 }
 
-func TestProposalBufferComputeClosedTimestampTarget(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const nowNanos = 100
-	const maxOffsetNanos = 20
-	manualClock := hlc.NewManualClock(nowNanos)
-	clock := hlc.NewClock(manualClock.UnixNano, maxOffsetNanos)
-
-	const lagTargetNanos = 10
-	st := cluster.MakeTestingClusterSettings()
-	closedts.TargetDuration.Override(&st.SV, lagTargetNanos)
-
-	for _, tc := range []struct {
-		rangePolicy       roachpb.RangeClosedTimestampPolicy
-		expClosedTSTarget hlc.Timestamp
-	}{
-		{
-			rangePolicy:       roachpb.LAG_BY_CLUSTER_SETTING,
-			expClosedTSTarget: hlc.Timestamp{WallTime: nowNanos - lagTargetNanos},
-		},
-		{
-			rangePolicy:       roachpb.LEAD_FOR_GLOBAL_READS,
-			expClosedTSTarget: hlc.Timestamp{WallTime: nowNanos - lagTargetNanos},
-			// TODO(andrei, nvanbenschoten): What we should be expecting here is the following, once
-			// the propBuf starts properly implementing this timestamp closing policy:
-			// expClosedTSTarget: hlc.Timestamp{WallTime: nowNanos + 2*maxOffsetNanos, Synthetic: true},
-		},
-	} {
-		t.Run(tc.rangePolicy.String(), func(t *testing.T) {
-			var p testProposer
-			p.rangePolicy = tc.rangePolicy
-			var b propBuf
-			b.Init(&p, tracker.NewLockfreeTracker(), clock, st)
-			require.Equal(t, tc.expClosedTSTarget, b.computeClosedTimestampTarget())
-		})
-	}
-}
-
 // Test that the propBuf properly assigns closed timestamps to proposals being
 // flushed out of it. Each subtest proposes one command and checks for the
 // expected closed timestamp being written to the proposal by the propBuf.
@@ -860,8 +827,10 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &testProposerRaft{}
 			p := testProposer{
-				lai:       10,
-				raftGroup: r,
+				clock:       clock,
+				lai:         10,
+				raftGroup:   r,
+				rangePolicy: tc.rangePolicy,
 			}
 			tracker := mockTracker{
 				lowerBound: tc.trackerLowerBound,

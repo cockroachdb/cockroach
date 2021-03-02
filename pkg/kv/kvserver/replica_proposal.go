@@ -442,7 +442,7 @@ func (r *Replica) leasePostApplyLocked(
 
 	// Inform the propBuf about the new lease so that it can initialize its closed
 	// timestamp tracking.
-	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.ClosedTimestamp)
+	r.mu.proposalBuf.OnLeaseChangeLocked(iAmTheLeaseHolder, r.mu.state.RaftClosedTimestamp)
 
 	// Ordering is critical here. We only install the new lease after we've
 	// checked for an in-progress merge and updated the timestamp cache. If the
@@ -518,6 +518,13 @@ func (r *Replica) leasePostApplyLocked(
 			// This logging is useful to troubleshoot incomplete drains.
 			log.Info(ctx, "is now leaseholder")
 		}
+	}
+
+	// Inform the store of this lease.
+	if iAmTheLeaseHolder {
+		r.store.registerLeaseholder(ctx, r, newLease.Sequence)
+	} else {
+		r.store.unregisterLeaseholder(ctx, r)
 	}
 
 	// Mark the new lease in the replica's lease history.

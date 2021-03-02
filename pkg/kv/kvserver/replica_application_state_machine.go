@@ -134,13 +134,17 @@ func (r *Replica) shouldApplyCommand(
 		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
 	)
 	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr == nil && filter != nil {
-		var newPropRetry int
-		newPropRetry, cmd.forcedErr = filter(kvserverbase.ApplyFilterArgs{
+		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
-		})
+		}
+		if cmd.IsLocal() {
+			args.Req = cmd.proposal.Request
+		}
+		var newPropRetry int
+		newPropRetry, cmd.forcedErr = filter(args)
 		if cmd.proposalRetry == 0 {
 			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
 		}
@@ -454,9 +458,9 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		// cmd.proposal.Request filled in.
 		if cmd.IsLocal() && cmd.proposal.Request.IsIntentWrite() {
 			wts := cmd.proposal.Request.WriteTimestamp()
-			if wts.LessEq(b.state.ClosedTimestamp) {
+			if wts.LessEq(b.state.RaftClosedTimestamp) {
 				return nil, makeNonDeterministicFailure("writing at %s below closed ts: %s (%s)",
-					wts, b.state.ClosedTimestamp.String(), cmd.proposal.Request.String())
+					wts, b.state.RaftClosedTimestamp.String(), cmd.proposal.Request.String())
 			}
 		}
 		log.Event(ctx, "applying command")
@@ -824,12 +828,12 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
 	if cts := cmd.raftCmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
-		if cts.Less(b.state.ClosedTimestamp) {
+		if cts.Less(b.state.RaftClosedTimestamp) {
 			log.Fatalf(ctx,
 				"closed timestamp regressing from %s to %s when applying command %x",
-				b.state.ClosedTimestamp, cts, cmd.idKey)
+				b.state.RaftClosedTimestamp, cts, cmd.idKey)
 		}
-		b.state.ClosedTimestamp = *cts
+		b.state.RaftClosedTimestamp = *cts
 		if clockTS, ok := cts.TryToClockTimestamp(); ok {
 			b.maxTS.Forward(clockTS)
 		}
@@ -892,7 +896,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	r.mu.Lock()
 	r.mu.state.RaftAppliedIndex = b.state.RaftAppliedIndex
 	r.mu.state.LeaseAppliedIndex = b.state.LeaseAppliedIndex
-	closedTimestampUpdated := r.mu.state.ClosedTimestamp.Forward(b.state.ClosedTimestamp)
+	closedTimestampUpdated := r.mu.state.RaftClosedTimestamp.Forward(b.state.RaftClosedTimestamp)
 	prevStats := *r.mu.state.Stats
 	*r.mu.state.Stats = *b.state.Stats
 
@@ -963,7 +967,7 @@ func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
 		// lease index along with the mvcc stats, all in one key.
 		if err := loader.SetRangeAppliedState(
 			ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex,
-			b.state.Stats, &b.state.ClosedTimestamp,
+			b.state.Stats, &b.state.RaftClosedTimestamp,
 		); err != nil {
 			return wrapWithNonDeterministicFailure(err, "unable to set range applied state")
 		}

@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -154,7 +153,8 @@ type propBuf struct {
 	// assignedClosedTimestamp is the largest "closed timestamp" - i.e. the largest
 	// timestamp that was communicated to other replicas as closed, representing a
 	// promise that this leaseholder will not evaluate writes below this timestamp
-	// any more.
+	// any more. It is set when proposals are flushed from the buffer, and also
+	// by the side-transport which closes timestamps out of band.
 	//
 	// Note that this field is not used by the local replica (or by anybody)
 	// directly to decide whether follower reads can be served. See
@@ -213,7 +213,7 @@ type proposer interface {
 	destroyed() destroyStatus
 	leaseAppliedIndex() uint64
 	enqueueUpdateCheck()
-	closeTimestampPolicy() roachpb.RangeClosedTimestampPolicy
+	closedTimestampTarget() hlc.Timestamp
 	// raftTransportClosedTimestampEnabled returns whether the range has switched
 	// to the Raft-based closed timestamp transport.
 	// TODO(andrei): This shouldn't be needed any more in 21.2, once the Raft
@@ -473,7 +473,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// lease applied index advances outside of this proposer's control (i.e.
 	// other leaseholders commit some stuff and then we get the lease back),
 	// future proposals will be given sufficiently high max lease indexes.
-	defer b.forwardLeaseIndexBase(b.p.leaseAppliedIndex())
+	defer b.forwardLeaseIndexBaseLocked(b.p.leaseAppliedIndex())
 
 	// We hold the write lock while reading from and flushing the proposal
 	// buffer. This ensures that we synchronize with all producers and other
@@ -495,7 +495,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 
 	// Update the maximum lease index base value, based on the maximum lease
 	// index assigned since the last flush.
-	b.forwardLeaseIndexBase(b.liBase + res.leaseIndexOffset())
+	b.forwardLeaseIndexBaseLocked(b.liBase + res.leaseIndexOffset())
 
 	// Iterate through the proposals in the buffer and propose them to Raft.
 	// While doing so, build up batches of entries and submit them to Raft all
@@ -518,7 +518,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		}
 	}
 
-	closedTSTarget := b.computeClosedTimestampTarget()
+	closedTSTarget := b.p.closedTimestampTarget()
 
 	// Remember the first error that we see when proposing the batch. We don't
 	// immediately return this error because we want to finish clearing out the
@@ -677,29 +677,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	return used, proposeBatch(raftGroup, b.p.replicaID(), ents)
 }
 
-// computeClosedTimestampTarget computes the timestamp we'd like to close for
-// our range. Note that we might not be able to ultimately close this timestamp
-// if there's requests in flight.
-func (b *propBuf) computeClosedTimestampTarget() hlc.Timestamp {
-	now := b.clock.Now().WallTime
-	closedTSPolicy := b.p.closeTimestampPolicy()
-	var closedTSTarget hlc.Timestamp
-	switch closedTSPolicy {
-	case roachpb.LAG_BY_CLUSTER_SETTING, roachpb.LEAD_FOR_GLOBAL_READS:
-		targetDuration := closedts.TargetDuration.Get(&b.settings.SV)
-		closedTSTarget = hlc.Timestamp{WallTime: now - targetDuration.Nanoseconds()}
-		// TODO(andrei,nvanbenschoten): Resolve all the issues preventing us from closing
-		// timestamps in the future (which, in turn, forces future-time writes on
-		// global ranges), and enable the proper logic below.
-		//case roachpb.LEAD_FOR_GLOBAL_READS:
-		//	closedTSTarget = hlc.Timestamp{
-		//		WallTime:  now + 2*b.clock.MaxOffset().Nanoseconds(),
-		//		Synthetic: true,
-		//	}
-	}
-	return closedTSTarget
-}
-
 // assignClosedTimestampToProposalLocked assigns a closed timestamp to be carried by
 // an outgoing proposal.
 //
@@ -792,10 +769,15 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 	return err
 }
 
-func (b *propBuf) forwardLeaseIndexBase(v uint64) {
+func (b *propBuf) forwardLeaseIndexBaseLocked(v uint64) {
 	if b.liBase < v {
 		b.liBase = v
 	}
+}
+
+// forwardClosedTimestamp forwards the closed timestamp tracked by the propBuf.
+func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
+	return b.assignedClosedTimestamp.Forward(closedTS)
 }
 
 func proposeBatch(raftGroup proposerRaft, replID roachpb.ReplicaID, ents []raftpb.Entry) error {
@@ -842,11 +824,6 @@ func (b *propBuf) OnLeaseChangeLocked(leaseOwned bool, closedTS hlc.Timestamp) {
 		// Zero out to avoid any confusion.
 		b.assignedClosedTimestamp = hlc.Timestamp{}
 	}
-}
-
-// forwardClosedTimestamp forwards the closed timestamp tracked by the propBuf.
-func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) {
-	b.assignedClosedTimestamp.Forward(closedTS)
 }
 
 // EvaluatingRequestsCount returns the count of requests currently tracked by
@@ -933,6 +910,25 @@ func (b *propBuf) TrackEvaluatingRequest(
 	wts.Forward(minTS)
 	tok := b.evalTracker.Track(ctx, wts)
 	return minTS, TrackedRequestToken{tok: tok, b: b}
+}
+
+// MaybeForwardClosedLocked checks whether the closed timestamp can be advanced
+// to target. If so, the assigned closed timestamp is forwarded to the target,
+// ensuring that no future writes ever write below it.
+//
+// Returns false in the following cases:
+// 1) target is below the propBuf's closed timestamp. This ensures that the
+//    side-transport (the caller) is prevented from publishing closed timestamp
+//    regressions. In other words, for a given LAI, the side-transport only
+//    publishes closed timestamps higher than what Raft published.
+// 2) There are requests evaluating at timestamps equal to or below target (as
+//    tracked by the evalTracker). We can't close timestamps at or above these
+//    requests' write timestamps.
+func (b *propBuf) MaybeForwardClosedLocked(ctx context.Context, target hlc.Timestamp) bool {
+	if lb := b.evalTracker.LowerBound(ctx); !lb.IsEmpty() && lb.LessEq(target) {
+		return false
+	}
+	return b.forwardClosedTimestampLocked(target)
 }
 
 const propBufArrayMinSize = 4
@@ -1027,12 +1023,12 @@ func (rp *replicaProposer) enqueueUpdateCheck() {
 	rp.store.enqueueRaftUpdateCheck(rp.RangeID)
 }
 
-func (rp *replicaProposer) closeTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
-	return (*Replica)(rp).closedTimestampPolicyRLocked()
+func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
+	return (*Replica)(rp).closedTimestampTargetRLocked()
 }
 
 func (rp *replicaProposer) raftTransportClosedTimestampEnabled() bool {
-	return !(*Replica)(rp).mu.state.ClosedTimestamp.IsEmpty()
+	return !(*Replica)(rp).mu.state.RaftClosedTimestamp.IsEmpty()
 }
 
 func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {

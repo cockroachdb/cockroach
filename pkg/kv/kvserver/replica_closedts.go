@@ -13,7 +13,10 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // EmitMLAI registers the replica's last assigned max lease index with the
@@ -56,4 +59,94 @@ func (r *Replica) EmitMLAI() {
 			untrack(ctx, ctpb.Epoch(epoch), r.RangeID, ctpb.LAI(lai))
 		}
 	}
+}
+
+// BumpSideTransportClosed advances the range's closed timestamp if it can. If
+// the closed timestamp is advanced, the function synchronizes with incoming
+// requests, making sure that future requests are not allowed to write below the
+// new closed timestamp.
+//
+// Returns false is the desired timestamp could not be closed. This can happen if the
+// lease is no longer valid, if the range has proposals in-flight, if there are
+// requests evaluating above the desired closed timestamp, or if the range has already
+// closed a higher timestamp.
+//
+// If the closed timestamp was advanced, the function returns a LAI to be
+// attached to the newly closed timestamp.
+//
+// This is called by the closed timestamp side-transport. The desired closed timestamp
+// is passed as a map from range policy to timestamp; this function looks up the entry
+// for this range.
+func (r *Replica) BumpSideTransportClosed(
+	ctx context.Context,
+	now hlc.ClockTimestamp,
+	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+) (ok bool, _ ctpb.LAI, _ roachpb.RangeClosedTimestampPolicy) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// This method can be called even after a Replica is destroyed and removed
+	// from the Store's replicas map, because unlinkReplicaByRangeIDLocked does
+	// not synchronize with sidetransport.Sender.publish, which maintains a
+	// local copy of its leaseholder map. To avoid issues resulting from this,
+	// we first check if the replica is destroyed.
+	if _, err := r.isDestroyedRLocked(); err != nil {
+		return false, 0, 0
+	}
+
+	lai := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
+	policy := r.closedTimestampPolicyRLocked()
+	target := targetByPolicy[policy]
+
+	// We can't close timestamps outside our lease.
+	st := r.leaseStatusForRequestRLocked(ctx, now, target)
+	if !st.IsValid() || !st.OwnedBy(r.StoreID()) {
+		return false, 0, 0
+	}
+
+	// If the range is merging into its left-hand neighbor, we can't close
+	// timestamps any more because the joint-range would not be aware of reads
+	// performed based on this advanced closed timestamp.
+	if r.mergeInProgressRLocked() {
+		return false, 0, 0
+	}
+
+	// If there are pending Raft proposals in-flight or committed entries that
+	// have yet to be applied, the side-transport doesn't advance the closed
+	// timestamp. The side-transport can't publish a closed timestamp with an
+	// LAI that takes the in-flight LAIs into consideration, because the
+	// in-flight proposals might not actually end up applying. In order to
+	// publish a closed timestamp with an LAI that doesn't consider these
+	// in-flight proposals we'd have to check that they're all trying to write
+	// above `target`; that's too expensive.
+	//
+	// Note that the proposals in the proposalBuf don't matter here; these
+	// proposals and their timestamps are still tracked in proposal buffer's
+	// tracker, and they'll be considered below.
+	if len(r.mu.proposals) > 0 || r.mu.applyingEntries {
+		return false, 0, 0
+	}
+
+	// MaybeForwardClosedLocked checks that there are no evaluating requests
+	// writing under target.
+	if !r.mu.proposalBuf.MaybeForwardClosedLocked(ctx, target) {
+		return false, 0, 0
+	}
+
+	// Update the replica directly since there's no side-transport connection to
+	// the local node.
+	r.mu.sideTransportClosedTimestamp = target
+	r.mu.sideTransportCloseTimestampLAI = lai
+	return true, lai, policy
+}
+
+// closedTimestampTargetRLocked computes the timestamp we'd like to close for
+// this range. Note that we might not be able to ultimately close this timestamp
+// if there are requests in flight.
+func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
+	now := r.Clock().NowAsClockTimestamp()
+	maxClockOffset := r.Clock().MaxOffset()
+	lagTargetDuration := closedts.TargetDuration.Get(&r.ClusterSettings().SV)
+	policy := r.closedTimestampPolicyRLocked()
+	return closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, policy)
 }

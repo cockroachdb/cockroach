@@ -37,3 +37,12 @@ var CloseFraction = settings.RegisterFloatSetting(
 		}
 		return nil
 	})
+
+// SideTransportCloseInterval determines the ClosedTimestampSender's frequency.
+var SideTransportCloseInterval = settings.RegisterDurationSetting(
+	"kv.closed_timestamp.side_transport_interval",
+	"the interval at which the closed-timestamp side-transport attempts to "+
+		"advance each range's closed timestamp; set to 0 to disable the side-transport",
+	200*time.Millisecond,
+	settings.NonNegativeDuration,
+)
