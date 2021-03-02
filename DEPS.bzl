@@ -525,8 +525,8 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sum = "h1:EyzONynthydmrlGVcEiyNmbLwDejSGb9Rzyn1NcEtNw=",
-        version = "v0.0.0-20210217155127-444296cfa2bb",
+        sum = "h1:1OofRBEfi6kh5Iym7Qzl5uOSoaGLX8p2TM+6MzELbLc=",
+        version = "v0.0.0-20210302170351-6eee4f6b45b1",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
@@ -2086,8 +2086,8 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sum = "h1:0hzRabrMN4tSTvMfnL3SCv1ZGeAP23ynzodBgaHeMeg=",
-        version = "v1.11.7",
+        sum = "h1:5OCMOdde1TCT2sookEuVeEZzA8bmRSFV3AwPDZAG8AA=",
+        version = "v1.11.9",
     )
     go_repository(
         name = "com_github_klauspost_cpuid",

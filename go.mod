@@ -40,7 +40,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
-	github.com/cockroachdb/pebble v0.0.0-20210217155127-444296cfa2bb
+	github.com/cockroachdb/pebble v0.0.0-20210302170351-6eee4f6b45b1
 	github.com/cockroachdb/redact v1.0.9
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2
@@ -94,6 +94,7 @@ require (
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.2.0
 	github.com/kisielk/gotool v1.0.0
+	github.com/klauspost/compress v1.11.9 // indirect
 	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.2.1
