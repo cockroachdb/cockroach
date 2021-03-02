@@ -8,6 +8,7 @@ go_library(
         "client.go",
         "entry.go",
         "server.go",
+        "service.go",
     ],
     embed = [":ctpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb",
@@ -24,6 +25,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb:roachpb_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@go_googleapis//google/api:annotations_proto",
@@ -37,6 +39,7 @@ go_proto_library(
     proto = ":ctpb_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
