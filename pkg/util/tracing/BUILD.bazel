@@ -11,6 +11,7 @@ go_library(
         "recording.go",
         "shadow.go",
         "span.go",
+        "span_inner.go",
         "span_options.go",
         "tags.go",
         "test_utils.go",
