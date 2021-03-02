@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/logtags"
 	"golang.org/x/net/trace"
 )
 
@@ -52,71 +51,6 @@ func compareTraces(expected, actual events) bool {
 	return true
 }
 
-// noLogV returns a verbosity level that will not result in VEvents and
-// VErrEvents being logged.
-func noLogV() Level {
-	return logging.vmoduleConfig.verbosity.get() + 1
-}
-
-func TestTrace(t *testing.T) {
-	ctx := context.Background()
-
-	// Events to context without a trace should be no-ops.
-	Event(ctx, "should-not-show-up")
-
-	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
-	sp.SetVerbose(true)
-	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
-	Event(ctxWithSpan, "test1")
-	VEvent(ctxWithSpan, noLogV(), "test2")
-	VErrEvent(ctxWithSpan, noLogV(), "testerr")
-	Info(ctxWithSpan, "log")
-
-	// Events to parent context should still be no-ops.
-	Event(ctx, "should-not-show-up")
-
-	sp.Finish()
-
-	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
-		span: s
-			tags: _verbose=1
-			event: test1
-			event: test2
-			event: testerr
-			event: log
-	`); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestTraceWithTags(t *testing.T) {
-	ctx := context.Background()
-	ctx = logtags.AddTag(ctx, "tag", 1)
-
-	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
-	ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
-	sp.SetVerbose(true)
-
-	Event(ctxWithSpan, "test1")
-	VEvent(ctxWithSpan, noLogV(), "test2")
-	VErrEvent(ctxWithSpan, noLogV(), "testerr")
-	Info(ctxWithSpan, "log")
-
-	sp.Finish()
-	if err := tracing.TestingCheckRecordedSpans(sp.GetRecording(), `
-		span: s
-			tags: _verbose=1
-			event: [tag=1] test1
-			event: [tag=1] test2
-			event: [tag=1] testerr
-			event: [tag=1] log
-	`); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // testingEventLog is a simple implementation of trace.EventLog.
 type testingEventLog struct {
 	ev events
@@ -146,8 +80,8 @@ func TestEventLog(t *testing.T) {
 	ctxWithEventLog := withEventLogInternal(ctx, el)
 
 	Eventf(ctxWithEventLog, "test%d", 1)
-	VEventf(ctxWithEventLog, noLogV(), "test%d", 2)
-	VErrEvent(ctxWithEventLog, noLogV(), "testerr")
+	VEventf(ctxWithEventLog, NoLogV(), "test%d", 2)
+	VErrEvent(ctxWithEventLog, NoLogV(), "testerr")
 	Info(ctxWithEventLog, "log")
 	Errorf(ctxWithEventLog, "errlog%d", 1)
 
@@ -178,8 +112,8 @@ func TestEventLogAndTrace(t *testing.T) {
 	ctxWithEventLog := withEventLogInternal(ctx, el)
 
 	Event(ctxWithEventLog, "test1")
-	VEventf(ctxWithEventLog, noLogV(), "test2")
-	VErrEvent(ctxWithEventLog, noLogV(), "testerr")
+	VEventf(ctxWithEventLog, NoLogV(), "test2")
+	VErrEvent(ctxWithEventLog, NoLogV(), "testerr")
 
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("s", tracing.WithForceRealSpan())
@@ -187,8 +121,8 @@ func TestEventLogAndTrace(t *testing.T) {
 	ctxWithBoth := tracing.ContextWithSpan(ctxWithEventLog, sp)
 	// Events should only go to the trace.
 	Event(ctxWithBoth, "test3")
-	VEventf(ctxWithBoth, noLogV(), "test4")
-	VErrEventf(ctxWithBoth, noLogV(), "%s", "test5err")
+	VEventf(ctxWithBoth, NoLogV(), "test4")
+	VErrEventf(ctxWithBoth, NoLogV(), "%s", "test5err")
 
 	// Events to parent context should still go to the event log.
 	Event(ctxWithEventLog, "test6")
