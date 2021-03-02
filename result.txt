@@ -1,2 +1,2 @@
 name                                 old time/op  new time/op  delta
-KV/Scan/SQL/rows=1/sample_rate=X-16   281µs ± 5%   298µs ± 9%  +6.19%  (p=0.019 n=10+10)
+KV/Scan/SQL/rows=1/sample_rate=X-16   275µs ± 8%   303µs ± 7%  +10.11%  (p=0.000 n=20+19)

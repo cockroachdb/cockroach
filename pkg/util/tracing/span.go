@@ -187,6 +187,7 @@ func (sp *Span) RecordStructured(item Structured) {
 //
 // TODO(tbg): remove this in the 21.2 cycle.
 func (sp *Span) SetSpanStats(stats SpanStats) {
+	return // HACK
 	if sp.done() {
 		return
 	}

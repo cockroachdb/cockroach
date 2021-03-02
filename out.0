@@ -3,20 +3,30 @@ GOPATH set to /home/tobias/go
 mkdir -p lib
 rm -f lib/lib{geos,geos_c}.so
 cp -L /home/tobias/go/native/x86_64-linux-gnu/geos/lib/lib{geos,geos_c}.so lib
-GOFLAGS= go test   -mod=vendor -tags ' gss make x86_64_linux_gnu' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags "" -X "github.com/cockroachdb/cockroach/pkg/build.tag=v21.1.0-alpha.3-1029-gf516abdc37-dirty" -X "github.com/cockroachdb/cockroach/pkg/build.rev=f516abdc373a070a1a26b02757593c107db41154" -X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-linux-gnu"  ' -run "-" -bench "BenchmarkKV/Scan/SQL/rows=1/sample_rate=0\.00" -timeout 5m ./pkg/sql/tests -benchtime=5000x -count 10
-I210302 12:16:27.495787 1 (gostd) rand.go:92  [-] 1  random seed: -869892229434488572
+GOFLAGS= go test   -mod=vendor -tags ' gss make x86_64_linux_gnu' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags "" -X "github.com/cockroachdb/cockroach/pkg/build.tag=v21.1.0-alpha.3-1030-gfaeba88b30-dirty" -X "github.com/cockroachdb/cockroach/pkg/build.rev=faeba88b30a0d5b61cf0f36efc2c2b10a39ef922" -X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-linux-gnu"  ' -run "-" -bench "BenchmarkKV/Scan/SQL/rows=1/sample_rate=0\.00" -timeout 5m ./pkg/sql/tests -benchtime=3000x -count 20
+I210302 12:28:30.907259 1 (gostd) rand.go:92  [-] 1  random seed: 1232528034101975790
 goos: linux
 goarch: amd64
 pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    276800 ns/op
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    272483 ns/op
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    266120 ns/op
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    283082 ns/op
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    290536 ns/op
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    271827 ns/op
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    288625 ns/op
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    283629 ns/op
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    289329 ns/op
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    284417 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    290594 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    277427 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    277836 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    288490 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    253150 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    277249 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    271222 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    268595 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    291882 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    253751 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    265447 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    283924 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    280204 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    255957 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    294507 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    284348 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    271860 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    262364 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    257773 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    3000	    293295 ns/op
 PASS
-ok  	github.com/cockroachdb/cockroach/pkg/sql/tests	17.443s
+ok  	github.com/cockroachdb/cockroach/pkg/sql/tests	23.018s
