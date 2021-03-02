@@ -214,6 +214,12 @@ func (sp *Span) SetBaggageItem(restrictedKey, value string) {
 	sp.i.SetBaggageItem(restrictedKey, value)
 }
 
+// GetSpanID retrieves any span's ID. Used for testing toggling a span's
+// verbosity on and off via its ID.
+func (sp *Span) GetSpanID() uint64 {
+	return sp.i.crdb.spanID
+}
+
 // TODO(tbg): move spanInner and its methods into a separate file.
 
 type spanInner struct {

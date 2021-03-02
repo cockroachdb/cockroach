@@ -3635,6 +3635,45 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	// TODO(angelapwen): Does it make more sense for this builtin to take a trace ID?
+	// Toggles the requested root span and its children to verbose or non-verbose.
+	"crdb_internal.set_verbosity_of_root_span_and_descendants": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"root_span_id", types.Int},
+				{"verbosity", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// The user must be an admin to use this builtin.
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					if err := checkPrivilegedUser(ctx); err != nil {
+						return nil, err
+					}
+				}
+
+				rootSpanID := uint64(*(args[0].(*tree.DInt)))
+				verbosity := bool(*(args[1].(*tree.DBool)))
+
+				rootSpan, found := ctx.Settings.Tracer.GetActiveRootSpanFromID(rootSpanID)
+				if !found {
+					return tree.DBoolFalse, nil
+				}
+
+				rootSpan.SetVerbose(verbosity)
+				ctx.Settings.Tracer.SetAllDescendantsSpanVerbosity(rootSpan, verbosity)
+				return tree.DBoolTrue, nil
+			},
+			Info:       "Returns true if root span was found and verbosity was set, false otherwise.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.locality_value": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
