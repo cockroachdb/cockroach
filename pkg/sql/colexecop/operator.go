@@ -369,7 +369,7 @@ type MetadataSource interface {
 	// Implementers can choose what to do on subsequent calls (if such occur).
 	// TODO(yuzefovich): modify the contract to require returning nil on all
 	// calls after the first one.
-	DrainMeta(context.Context) []execinfrapb.ProducerMetadata
+	DrainMeta() []execinfrapb.ProducerMetadata
 }
 
 // MetadataSources is a slice of MetadataSource.
@@ -378,11 +378,11 @@ type MetadataSources []MetadataSource
 // DrainMeta calls DrainMeta on all MetadataSources and returns a single slice
 // with all the accumulated metadata. Note that this method wraps the draining
 // with the panic-catcher so that the callers don't have to.
-func (s MetadataSources) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (s MetadataSources) DrainMeta() []execinfrapb.ProducerMetadata {
 	var result []execinfrapb.ProducerMetadata
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
 		for _, src := range s {
-			result = append(result, src.DrainMeta(ctx)...)
+			result = append(result, src.DrainMeta()...)
 		}
 	}); err != nil {
 		meta := execinfrapb.GetProducerMeta()

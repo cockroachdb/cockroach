@@ -100,12 +100,12 @@ func (i *InvariantsChecker) Next() coldata.Batch {
 }
 
 // DrainMeta implements the colexecop.MetadataSource interface.
-func (i *InvariantsChecker) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (i *InvariantsChecker) DrainMeta() []execinfrapb.ProducerMetadata {
 	if shortCircuit := i.assertInitWasCalled(); shortCircuit {
 		return nil
 	}
 	if i.metadataSource == nil {
 		return nil
 	}
-	return i.metadataSource.DrainMeta(ctx)
+	return i.metadataSource.DrainMeta()
 }

@@ -387,7 +387,7 @@ func (o *OrderedSynchronizer) Init(ctx context.Context) {
 	}
 }
 
-func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	var bufferedMeta []execinfrapb.ProducerMetadata
 	if o.span != nil {
 		for i := range o.inputs {
@@ -400,7 +400,7 @@ func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.Produ
 		}
 	}
 	for _, input := range o.inputs {
-		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(o.Ctx)...)
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta()...)
 	}
 	return bufferedMeta
 }
