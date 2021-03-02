@@ -1444,7 +1444,7 @@ func makePayloadsForSpanGenerator(
 		)
 	}
 	spanID := uint64(*(args[0].(*tree.DInt)))
-	span, found := ctx.Settings.Tracer.GetActiveSpanFromID(spanID)
+	span, found := ctx.Settings.Tracer.GetActiveRootSpanFromID(spanID)
 	if !found {
 		return nil, nil
 	}

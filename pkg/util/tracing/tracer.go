@@ -124,7 +124,7 @@ type Tracer struct {
 	// removed on .Finish().
 	//
 	// The map can be introspected by `Tracer.VisitSpans`. A Span can also be
-	// retrieved from its ID by `Tracer.GetActiveSpanFromID`.
+	// retrieved from its ID by `Tracer.GetActiveRootSpanFromID`.
 	activeSpans struct {
 		// NB: it might be tempting to use a sync.Map here, but
 		// this incurs an allocation per Span (sync.Map does
@@ -646,12 +646,39 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (*SpanMeta, error) {
 	}, nil
 }
 
-// GetActiveSpanFromID retrieves any active span given its span ID.
-func (t *Tracer) GetActiveSpanFromID(spanID uint64) (*Span, bool) {
+// GetActiveRootSpanFromID retrieves any active span given its span ID.
+func (t *Tracer) GetActiveRootSpanFromID(spanID uint64) (*Span, bool) {
 	t.activeSpans.Lock()
 	span, found := t.activeSpans.m[spanID]
 	t.activeSpans.Unlock()
 	return span, found
+}
+
+// SetAllDescendantsSpanVerbosity takes a root Span and sets all its
+// descendant spans' verbosity using setAllChildrenSpanVerbosity.
+func (t *Tracer) SetAllDescendantsSpanVerbosity(rootSpan *Span, to bool) {
+	// Set verbosity for all descendants of a root span.
+	rootCrdbSpan := rootSpan.i.crdb
+	t.setAllChildrenSpanVerbosity(rootCrdbSpan, to)
+}
+
+// SetAllChildrenSpanVerbosity takes a root crdbSpan, sets its children's
+// verbosity if they are not already set appropriately, and makes a recursive
+// call on its children if they have their own children.
+func (t *Tracer) setAllChildrenSpanVerbosity(rootCrdbSpan *crdbSpan, to bool) {
+	// TODO(angelapwen): Do we need to check that root is not a noop the way we do in `SetVerbose`?
+	rootCrdbSpan.mu.Lock()
+	for _, child := range rootCrdbSpan.mu.recording.children {
+		if to && child.mu.recording.recordingType.load() == RecordingOff {
+			child.enableRecording(nil /* parent */, RecordingVerbose)
+		} else if !to && child.mu.recording.recordingType.load() == RecordingVerbose {
+			child.disableRecording()
+		}
+		if len(child.mu.recording.children) > 0 {
+			t.setAllChildrenSpanVerbosity(child, to)
+		}
+	}
+	rootCrdbSpan.mu.Unlock()
 }
 
 // VisitSpans invokes the visitor with all active Spans. The function will
