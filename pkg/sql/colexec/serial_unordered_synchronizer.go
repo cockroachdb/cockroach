@@ -88,7 +88,7 @@ func (s *SerialUnorderedSynchronizer) Next() coldata.Batch {
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
-func (s *SerialUnorderedSynchronizer) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
+func (s *SerialUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	var bufferedMeta []execinfrapb.ProducerMetadata
 	if s.span != nil {
 		for i := range s.inputs {
@@ -101,7 +101,7 @@ func (s *SerialUnorderedSynchronizer) DrainMeta(context.Context) []execinfrapb.P
 		}
 	}
 	for _, input := range s.inputs {
-		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(s.Ctx)...)
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta()...)
 	}
 	return bufferedMeta
 }

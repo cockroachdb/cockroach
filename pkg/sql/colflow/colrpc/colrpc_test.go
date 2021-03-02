@@ -468,7 +468,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				for i := 0; i < numNextsBeforeDrain; i++ {
 					inbox.Next()
 				}
-				return inbox.DrainMeta(ctx)
+				return inbox.DrainMeta()
 			},
 		},
 		{
@@ -483,7 +483,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 						break
 					}
 				}
-				return inbox.DrainMeta(ctx)
+				return inbox.DrainMeta()
 			},
 		},
 		{
@@ -542,7 +542,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 				input, typs, nil /* getStats */, []colexecop.MetadataSource{
 					colexectestutils.CallbackMetadataSource{
-						DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
+						DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 							return expectedMetadata
 						},
 					},
@@ -649,7 +649,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	b.StopTimer()
 
 	// This is a way of telling the Outbox we're satisfied with the data received.
-	meta := inbox.DrainMeta(ctx)
+	meta := inbox.DrainMeta()
 	require.True(b, len(meta) == 0)
 
 	require.NoError(b, <-streamHandlerErrCh)
@@ -728,20 +728,20 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 	testCases := []struct {
 		name string
 		// test is the body of the test to be run.
-		test func(context.Context, *Inbox)
+		test func(*Inbox)
 	}{
 		{
 			// CtxTaggedInNext verifies that Next adds StreamID to the Context in maybeInit.
 			name: "CtxTaggedInNext",
-			test: func(ctx context.Context, inbox *Inbox) {
+			test: func(inbox *Inbox) {
 				inbox.Next()
 			},
 		},
 		{
 			// CtxTaggedInDrainMeta verifies that DrainMeta adds StreamID to the Context in maybeInit.
 			name: "CtxTaggedInDrainMeta",
-			test: func(ctx context.Context, inbox *Inbox) {
-				inbox.DrainMeta(ctx)
+			test: func(inbox *Inbox) {
+				inbox.DrainMeta()
 			},
 		},
 	}
@@ -770,7 +770,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 			inboxTested := make(chan struct{})
 			go func() {
 				inbox.Init(ctx)
-				tc.test(ctx, inbox)
+				tc.test(inbox)
 				inboxTested <- struct{}{}
 			}()
 

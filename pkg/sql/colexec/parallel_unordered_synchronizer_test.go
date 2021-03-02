@@ -62,7 +62,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 		inputs[i].Root = source
 		inputIdx := i
 		inputs[i].MetadataSources = []colexecop.MetadataSource{
-			colexectestutils.CallbackMetadataSource{DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
+			colexectestutils.CallbackMetadataSource{DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 				return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d test-induced metadata", inputIdx)}}
 			}},
 		}
@@ -114,7 +114,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 				// Call DrainMeta before the input is finished. Intentionally allow
 				// for Next to be called even though it's not technically supported to
 				// ensure that a zero-length batch is returned.
-				meta := s.DrainMeta(ctx)
+				meta := s.DrainMeta()
 				require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
 				expectZeroBatch = true
 			}
@@ -130,7 +130,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 			if b.Length() == 0 {
 				if terminationScenario == synchronizerGracefulTermination {
 					// Successful run, check that all inputs have returned metadata.
-					meta := s.DrainMeta(ctx)
+					meta := s.DrainMeta()
 					require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
 				}
 				break
@@ -191,7 +191,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		// Loop until we get an error.
 	}
 	// The caller must call DrainMeta on error.
-	require.Zero(t, len(s.DrainMeta(ctx)))
+	require.Zero(t, len(s.DrainMeta()))
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
 }

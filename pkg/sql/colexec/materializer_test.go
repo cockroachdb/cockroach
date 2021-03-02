@@ -184,7 +184,7 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testError := errors.New("test-induced error")
-	metadataSource := &colexectestutils.CallbackMetadataSource{DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
+	metadataSource := &colexectestutils.CallbackMetadataSource{DrainMetaCb: func() []execinfrapb.ProducerMetadata {
 		colexecerror.InternalError(testError)
 		// Unreachable
 		return nil
