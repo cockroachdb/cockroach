@@ -125,8 +125,11 @@ func newColumnarizer(
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-				if err := c.Close(ctx); util.CrdbTestBuild && err != nil {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				// Close will call InternalClose(). Note that we don't return
+				// any trailing metadata here because the columnarizers
+				// propagate it in DrainMeta.
+				if err := c.Close(c.Ctx); util.CrdbTestBuild && err != nil {
 					// Close never returns an error.
 					colexecerror.InternalError(errors.AssertionFailedf("unexpected error %v from Columnarizer.Close", err))
 				}
@@ -257,8 +260,8 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	return c.accumulatedMeta
 }
 
-// Close is part of the Operator interface.
-func (c *Columnarizer) Close(ctx context.Context) error {
+// Close is part of the colexecop.Operator interface.
+func (c *Columnarizer) Close(context.Context) error {
 	if c.removedFromFlow {
 		return nil
 	}

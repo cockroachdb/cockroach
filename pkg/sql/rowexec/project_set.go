@@ -278,12 +278,6 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) rowenc.EncDa
 	return rowenc.DatumToEncDatum(ctyp, d)
 }
 
-// ConsumerClosed is part of the RowSource interface.
-func (ps *projectSetProcessor) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	ps.InternalClose()
-}
-
 // ChildCount is part of the execinfra.OpNode interface.
 func (ps *projectSetProcessor) ChildCount(verbose bool) int {
 	if _, ok := ps.input.(execinfra.OpNode); ok {

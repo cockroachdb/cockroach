@@ -236,9 +236,3 @@ func (sp *bulkRowWriter) convertLoop(
 
 	return nil
 }
-
-// ConsumerClosed is part of the RowSource interface.
-func (sp *bulkRowWriter) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	sp.InternalClose()
-}

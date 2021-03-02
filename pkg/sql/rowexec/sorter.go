@@ -116,11 +116,10 @@ func (s *sorterBase) close() {
 		if s.i != nil {
 			s.i.Close()
 		}
-		ctx := s.Ctx
-		s.rows.Close(ctx)
-		s.MemMonitor.Stop(ctx)
+		s.rows.Close(s.Ctx)
+		s.MemMonitor.Stop(s.Ctx)
 		if s.diskMonitor != nil {
-			s.diskMonitor.Stop(ctx)
+			s.diskMonitor.Stop(s.Ctx)
 		}
 	}
 }
@@ -214,7 +213,7 @@ func newSortAllProcessor(
 		spec.OrderingMatchLen,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -326,7 +325,7 @@ func newSortTopKProcessor(
 		ordering, spec.OrderingMatchLen,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				proc.close()
 				return nil
 			},
@@ -423,7 +422,7 @@ func newSortChunksProcessor(
 		proc, flowCtx, processorID, sortChunksProcName, input, post, out, ordering, spec.OrderingMatchLen,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				proc.close()
 				return nil
 			},

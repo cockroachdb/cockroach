@@ -86,7 +86,7 @@ func newMergeJoiner(
 		post, output,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{leftSource, rightSource},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				m.close()
 				return nil
 			},
@@ -259,9 +259,8 @@ func (m *mergeJoiner) nextRow() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 
 func (m *mergeJoiner) close() {
 	if m.InternalClose() {
-		ctx := m.Ctx
-		m.streamMerger.close(ctx)
-		m.MemMonitor.Stop(ctx)
+		m.streamMerger.close(m.Ctx)
+		m.MemMonitor.Stop(m.Ctx)
 	}
 }
 

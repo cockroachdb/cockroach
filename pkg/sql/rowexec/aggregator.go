@@ -89,7 +89,7 @@ func (ag *aggregatorBase) init(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
-	trailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata,
+	trailingMetaCallback func() []execinfrapb.ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
@@ -278,7 +278,7 @@ func newAggregator(
 		input,
 		post,
 		output,
-		func(context.Context) []execinfrapb.ProducerMetadata {
+		func() []execinfrapb.ProducerMetadata {
 			ag.close()
 			return nil
 		},
@@ -311,7 +311,7 @@ func newOrderedAggregator(
 		input,
 		post,
 		output,
-		func(context.Context) []execinfrapb.ProducerMetadata {
+		func() []execinfrapb.ProducerMetadata {
 			ag.close()
 			return nil
 		},

@@ -71,7 +71,7 @@ func NewMetadataTestReceiver(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				var trailingMeta []execinfrapb.ProducerMetadata
 				if mtr.rowCounts != nil {
 					if meta := mtr.checkRowNumMetadata(); meta != nil {
@@ -235,10 +235,4 @@ func (mtr *MetadataTestReceiver) Next() (rowenc.EncDatumRow, *execinfrapb.Produc
 
 		return outRow, nil
 	}
-}
-
-// ConsumerClosed is part of the RowSource interface.
-func (mtr *MetadataTestReceiver) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	mtr.InternalClose()
 }

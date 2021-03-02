@@ -147,7 +147,7 @@ func newChangeAggregatorProcessor(
 		output,
 		memMonitor,
 		execinfra.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				ca.close()
 				return nil
 			},
@@ -191,10 +191,13 @@ func newChangeAggregatorProcessor(
 
 // Start is part of the RowSource interface.
 func (ca *changeAggregator) Start(ctx context.Context) {
-	ctx, ca.cancel = context.WithCancel(ctx)
-	// StartInternal called at the beginning of the function because there are
-	// early returns if errors are detected.
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
+
+	// Derive a separate context so that we can shutdown the poller. Note that
+	// we need to update both ctx (used throughout this function) and
+	// ProcessorBase.Ctx (used in all other methods) to the new context.
+	ctx, ca.cancel = context.WithCancel(ctx)
+	ca.Ctx = ctx
 
 	spans := ca.setupSpansAndFrontier()
 	timestampOracle := &changeAggregatorLowerBoundOracle{sf: ca.spanFrontier, initialInclusiveLowerBound: ca.spec.Feed.StatementTime}
@@ -369,10 +372,11 @@ func (ca *changeAggregator) setupSpansAndFrontier() []roachpb.Span {
 // checking.
 func (ca *changeAggregator) close() {
 	if ca.InternalClose() {
-		// Shut down the poller if it wasn't already.
-		if ca.cancel != nil {
-			ca.cancel()
-		}
+		// Shut down the poller if it wasn't already. Note that it will cancel
+		// the context used by all components, but ca.Ctx has been updated by
+		// InternalClose() to the "original" context (the one passed into
+		// StartInternal()).
+		ca.cancel()
 		// Wait for the poller to finish shutting down.
 		if ca.kvFeedDoneCh != nil {
 			<-ca.kvFeedDoneCh
@@ -874,7 +878,7 @@ func newChangeFrontierProcessor(
 		output,
 		memMonitor,
 		execinfra.ProcStateOpts{
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				cf.close()
 				return nil
 			},
