@@ -20,12 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -62,8 +64,8 @@ func init() {
 		},
 	}
 
-	f := loadCmds.Flags()
-	f.StringVarP(
+	loadFlags := loadCmds.Flags()
+	loadFlags.StringVarP(
 		&externalIODir,
 		cliflags.ExternalIODir.Name,
 		cliflags.ExternalIODir.Shorthand,
@@ -72,6 +74,7 @@ func init() {
 
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadShowCmd)
+	loadShowCmd.Flags().AddFlagSet(loadFlags)
 }
 
 func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClient, error) {
@@ -165,7 +168,9 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	}
 
 	if _, ok := options[descriptors]; ok {
-		showDescriptor(desc)
+		if err := showDescriptor(desc); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -204,39 +209,56 @@ func showFiles(desc backupccl.BackupManifest, showHeaders bool) {
 	}
 	for _, f := range desc.Files {
 		fmt.Printf("%s%s:\n", tabfmt, f.Path)
-		fmt.Printf("	Span: %s\n", f.Span)
-		fmt.Printf("	Sha512: %0128x\n", f.Sha512)
-		fmt.Printf("	DataSize: %d (%s)\n", f.EntryCounts.DataSize, humanizeutil.IBytes(f.EntryCounts.DataSize))
-		fmt.Printf("	Rows: %d\n", f.EntryCounts.Rows)
-		fmt.Printf("	IndexEntries: %d\n", f.EntryCounts.IndexEntries)
+		fmt.Printf("%s	Span: %s\n", tabfmt, f.Span)
+		fmt.Printf("%s	Sha512: %0128x\n", tabfmt, f.Sha512)
+		fmt.Printf("%s	DataSize: %d (%s)\n", tabfmt, f.EntryCounts.DataSize, humanizeutil.IBytes(f.EntryCounts.DataSize))
+		fmt.Printf("%s	Rows: %d\n", tabfmt, f.EntryCounts.Rows)
+		fmt.Printf("%s	IndexEntries: %d\n", tabfmt, f.EntryCounts.IndexEntries)
 	}
 }
 
-func showDescriptor(desc backupccl.BackupManifest) {
+func showDescriptor(desc backupccl.BackupManifest) error {
 	// Note that these descriptors could be from any past version of the cluster,
 	// in case more fields need to be added to the output.
+	dbIDs := make([]descpb.ID, 0)
 	dbIDToName := make(map[descpb.ID]string)
+	schemaIDs := make([]descpb.ID, 0)
+	schemaIDs = append(schemaIDs, keys.PublicSchemaID)
+	schemaIDToName := make(map[descpb.ID]string)
+	schemaIDToName[keys.PublicSchemaID] = sessiondata.PublicSchemaName
 	for i := range desc.Descriptors {
 		d := &desc.Descriptors[i]
 		id := descpb.GetDescriptorID(d)
 		if d.GetDatabase() != nil {
 			dbIDToName[id] = descpb.GetDescriptorName(d)
+			dbIDs = append(dbIDs, id)
+		} else if d.GetSchema() != nil {
+			schemaIDToName[id] = descpb.GetDescriptorName(d)
+			schemaIDs = append(schemaIDs, id)
 		}
 	}
 
 	fmt.Printf("Databases:\n")
-	for i := range dbIDToName {
+	for _, id := range dbIDs {
 		fmt.Printf("	%s\n",
-			dbIDToName[i])
+			dbIDToName[id])
+	}
+
+	fmt.Printf("Schemas:\n")
+	for _, id := range schemaIDs {
+		fmt.Printf("	%s\n",
+			schemaIDToName[id])
 	}
 
 	fmt.Printf("Tables:\n")
 	for i := range desc.Descriptors {
 		d := &desc.Descriptors[i]
 		if descpb.TableFromDescriptor(d, hlc.Timestamp{}) != nil {
-			desc := catalogkv.UnwrapDescriptorRaw(nil, d)
-			fmt.Printf("	%s (%s) \n",
-				descpb.GetDescriptorName(d), dbIDToName[desc.GetParentID()])
+			tbDesc := tabledesc.NewImmutable(*descpb.TableFromDescriptor(d, hlc.Timestamp{}))
+			dbName := dbIDToName[tbDesc.GetParentID()]
+			schemaName := schemaIDToName[tbDesc.GetParentSchemaID()]
+			fmt.Printf("	%s.%s.%s\n", dbName, schemaName, descpb.GetDescriptorName(d))
 		}
 	}
+	return nil
 }

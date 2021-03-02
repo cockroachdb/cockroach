@@ -21,7 +21,7 @@ import (
 )
 
 func Example_debug_decode_key_value() {
-	cliTest{}.RunWithArgs([]string{"debug", "decode-value", "016b12bd8980c0b6c2e211ba5182000172647363", "884d186d03089b09120bbd8980c0b6c2e211ba51821a0bbd8980c0b9e7c5c610e99622060801100118012206080410041802220608021002180428053004"})
+	TestCLI{}.RunWithArgs([]string{"debug", "decode-value", "016b12bd8980c0b6c2e211ba5182000172647363", "884d186d03089b09120bbd8980c0b6c2e211ba51821a0bbd8980c0b9e7c5c610e99622060801100118012206080410041802220608021002180428053004"})
 
 	// Output:
 	// debug decode-value 016b12bd8980c0b6c2e211ba5182000172647363 884d186d03089b09120bbd8980c0b6c2e211ba51821a0bbd8980c0b9e7c5c610e99622060801100118012206080410041802220608021002180428053004
@@ -43,7 +43,7 @@ func TestDebugKeysHex(t *testing.T) {
 	createStore(t, storePath)
 
 	{
-		out, err := cliTest{}.RunWithCapture("debug keys " + storePath +
+		out, err := TestCLI{}.RunWithCapture("debug keys " + storePath +
 			" --from hex:016b12bd898090d79e52e79b0144000174786e2d733fb094e9aa4d67974c71486b9823b900" +
 			" --to   hex:016b12bd898090d79e52e79b0144000174786e2d733fb094e9aa4d67974c71486b9823b900")
 		if err != nil {
@@ -56,7 +56,7 @@ func TestDebugKeysHex(t *testing.T) {
 	}
 
 	// Test invalid key, verify we get a good suggestion back.
-	out, err := cliTest{}.RunWithCapture("debug keys " + storePath +
+	out, err := TestCLI{}.RunWithCapture("debug keys " + storePath +
 		" --to hex:01")
 	if err != nil {
 		t.Fatal(err)
