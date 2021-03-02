@@ -671,7 +671,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
-%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
+%token <str> PARENT PARTIAL PARTITION PARTITIONED PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
@@ -7393,6 +7393,25 @@ locality:
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
+| LOCALITY REGIONAL IN region_name
+  {
+    $$.val = &tree.Locality{
+      TableRegion: tree.Name($4),
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
+| LOCALITY REGIONAL IN PRIMARY REGION
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
+| LOCALITY REGIONAL
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
 | LOCALITY REGIONAL BY TABLE
   {
     $$.val = &tree.Locality{
@@ -7410,6 +7429,32 @@ locality:
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
       RegionalByRowColumn: tree.Name($6),
+    }
+  }
+| LOCALITY REGIONAL PARTITIONED
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
+    }
+  }
+| LOCALITY REGIONAL PARTITIONED AS name
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
+      RegionalByRowColumn: tree.Name($5),
+    }
+  }
+| LOCALITY PARTITIONED REGIONAL
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
+    }
+  }
+| LOCALITY PARTITIONED REGIONAL AS name
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelRow,
+      RegionalByRowColumn: tree.Name($5),
     }
   }
 | REGIONAL AFFINITY TO NONE
@@ -12524,6 +12569,7 @@ unreserved_keyword:
 | PARENT
 | PARTIAL
 | PARTITION
+| PARTITIONED
 | PARTITIONS
 | PASSWORD
 | PAUSE
