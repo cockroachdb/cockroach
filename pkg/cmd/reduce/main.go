@@ -43,7 +43,7 @@ var (
 		// 4-6: 2
 		// 7-9: 3
 		// etc.
-		n := (runtime.NumCPU() + 2) / 3
+		n := (runtime.GOMAXPROCS(0) + 2) / 3
 		if n < 1 {
 			n = 1
 		}
