@@ -196,7 +196,7 @@ func TestEval(t *testing.T) {
 				nil, /* output */
 				result.MetadataSources,
 				nil, /* toClose */
-				nil, /* execStatsForTrace */
+				nil, /* getStats */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)

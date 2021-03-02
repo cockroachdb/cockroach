@@ -44,7 +44,8 @@ func (c callbackRemoteComponentCreator) newOutbox(
 	input colexecop.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
-	toClose []colexecop.Closer,
+	_ []colexecop.Closer,
+	_ func() []*execinfrapb.ComponentStats,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(allocator, input, typs, metadataSources)
 }
@@ -202,7 +203,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			// expect from the input DAG.
 			require.Len(t, sources, 1)
 			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
-			return colrpc.NewOutbox(allocator, op, typs, sources, nil /* toClose */)
+			return colrpc.NewOutbox(allocator, op, typs, sources, nil /* toClose */, nil /* getStats */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
 			inbox, err := colrpc.NewInbox(context.Background(), allocator, typs, streamID)

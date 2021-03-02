@@ -12,7 +12,6 @@ package colflow
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -23,14 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
 // vectorizedStatsCollector is the common interface implemented by collectors.
 type vectorizedStatsCollector interface {
 	colexecop.Operator
-	outputStats(ctx context.Context)
+	getStats() *execinfrapb.ComponentStats
 }
 
 // childStatsCollector gives access to the stopwatches of a
@@ -145,8 +143,8 @@ type vectorizedStatsCollectorImpl struct {
 	diskMonitors []*mon.BytesMonitor
 }
 
-// finish returns the collected stats.
-func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
+// getStats is part of the vectorizedStatsCollector interface.
+func (vsc *vectorizedStatsCollectorImpl) getStats() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := vsc.batchInfoCollector.finish()
 
 	s := &execinfrapb.ComponentStats{Component: vsc.componentID}
@@ -191,12 +189,6 @@ func (vsc *vectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
 	return s
 }
 
-// outputStats is part of the vectorizedStatsCollector interface.
-func (vsc *vectorizedStatsCollectorImpl) outputStats(ctx context.Context) {
-	s := vsc.finish()
-	createStatsSpan(ctx, fmt.Sprintf("%T", vsc.Operator), s)
-}
-
 // newNetworkVectorizedStatsCollector creates a new vectorizedStatsCollector
 // for streams. In addition to the base stats, newNetworkVectorizedStatsCollector
 // collects the network latency for a stream.
@@ -223,8 +215,8 @@ type networkVectorizedStatsCollectorImpl struct {
 	latency time.Duration
 }
 
-// finish returns the collected stats.
-func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.ComponentStats {
+// getStats is part of the vectorizedStatsCollector interface.
+func (nvsc *networkVectorizedStatsCollectorImpl) getStats() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := nvsc.batchInfoCollector.finish()
 
 	s := &execinfrapb.ComponentStats{Component: nvsc.componentID}
@@ -240,20 +232,4 @@ func (nvsc *networkVectorizedStatsCollectorImpl) finish() *execinfrapb.Component
 	s.Output.NumTuples.Set(numTuples)
 
 	return s
-}
-
-// outputStats is part of the vectorizedStatsCollector interface.
-func (nvsc *networkVectorizedStatsCollectorImpl) outputStats(ctx context.Context) {
-	s := nvsc.finish()
-	createStatsSpan(ctx, fmt.Sprintf("%T", nvsc.Operator), s)
-}
-
-func createStatsSpan(ctx context.Context, opName string, stats *execinfrapb.ComponentStats) {
-	// We're creating a new span for every component setting the appropriate
-	// tag so that it is displayed correctly on the flow diagram.
-	// TODO(yuzefovich): these spans are created and finished right away which
-	// is not the way they are supposed to be used, so this should be fixed.
-	_, span := tracing.ChildSpan(ctx, opName)
-	span.RecordStructured(stats)
-	span.Finish()
 }

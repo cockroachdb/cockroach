@@ -37,7 +37,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 		typs     = []*types.T{types.Int}
 		rpcLayer = makeMockFlowStreamRPCLayer()
 	)
-	outbox, err := NewOutbox(testAllocator, input, typs, nil /* metadataSources */, nil /* toClose */)
+	outbox, err := NewOutbox(testAllocator, input, typs, nil /* metadataSources */, nil /* toClose */, nil /* getStats */)
 	require.NoError(t, err)
 
 	// This test relies on the fact that BatchBuffer panics when there are no
@@ -98,7 +98,7 @@ func TestOutboxDrainsMetadataSources(t *testing.T) {
 					return nil
 				},
 			},
-		}, nil /* toClose */)
+		}, nil /* toClose */, nil /* getStats */)
 		if err != nil {
 			return nil, nil, err
 		}
