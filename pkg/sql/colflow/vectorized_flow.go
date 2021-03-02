@@ -960,7 +960,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 							// At the last outbox, we can accurately retrieve stats for the
 							// whole flow from parent monitors. These stats are added to a
 							// flow-level span.
-							span.SetSpanStats(&execinfrapb.ComponentStats{
+							span.RecordStructured(&execinfrapb.ComponentStats{
 								Component: execinfrapb.FlowComponentID(base.SQLInstanceID(outputStream.OriginNodeID), flowCtx.ID),
 								FlowStats: execinfrapb.FlowStats{
 									MaxMemUsage:  optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),

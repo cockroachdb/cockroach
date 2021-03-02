@@ -433,7 +433,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		// span. Note that non-gateway nodes use the last outbox to send this
 		// information over.
 		if sp := tracing.SpanFromContext(ctx); sp != nil {
-			sp.SetSpanStats(&execinfrapb.ComponentStats{
+			sp.RecordStructured(&execinfrapb.ComponentStats{
 				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.EvalCtx.Mon.MaximumBytes())),

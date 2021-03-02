@@ -12,8 +12,6 @@ package execinfrapb
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -67,34 +65,7 @@ const (
 
 	// ProcessorIDTagKey is the key used for processor id tags in tracing spans.
 	ProcessorIDTagKey = tracing.TagPrefix + "processorid"
-
-	// StatTagPrefix is prefixed to all stats output in Span tags.
-	StatTagPrefix = tracing.TagPrefix + "stat."
 )
-
-// StatsTags is part of the tracing.SpanStats interface.
-func (s *ComponentStats) StatsTags() map[string]string {
-	result := make(map[string]string, 4)
-	if s.Component != (ComponentID{}) {
-		result[FlowIDTagKey] = s.Component.FlowID.String()
-		switch s.Component.Type {
-		case ComponentID_PROCESSOR:
-			result[ProcessorIDTagKey] = strconv.Itoa(int(s.Component.ID))
-		case ComponentID_STREAM:
-			result[StreamIDTagKey] = strconv.Itoa(int(s.Component.ID))
-		case ComponentID_FLOW:
-			// Nothing extra to set.
-		}
-	}
-
-	s.formatStats(func(key string, value interface{}) {
-		// The key becomes a tracing span tag. Replace spaces with dots and use
-		// only lowercase characters.
-		key = strings.ToLower(strings.ReplaceAll(key, " ", "."))
-		result[StatTagPrefix+key] = fmt.Sprint(value)
-	})
-	return result
-}
 
 // StatsForQueryPlan returns the statistics as a list of strings that can be
 // displayed in query plans and diagrams.
