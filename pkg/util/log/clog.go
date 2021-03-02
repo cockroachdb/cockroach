@@ -19,6 +19,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -158,31 +159,88 @@ type sinkInfo struct {
 	redact, redactable bool
 }
 
+// sinkInfoList is a list of []*sinkInfo stored as unsafe pointer
+// to allow lock-free modifications.
+type sinkInfoList struct {
+	ptr unsafe.Pointer
+}
+
+// load loads the list stored in the pointer, and returns loaded
+// address along with the sink info list.
+func (l *sinkInfoList) load() (unsafe.Pointer, []*sinkInfo) {
+	addr := atomic.LoadPointer(&l.ptr)
+	infos := (*[]*sinkInfo)(addr)
+	if infos == nil {
+		return addr, nil
+	}
+	return addr, *infos
+}
+
+// get is a convenience function that returns current sink info list.
+// NB: do not mutate returned array -- doing so will likely result in a crash.
+// use append/delete methods.
+func (l *sinkInfoList) get() []*sinkInfo {
+	_, list := l.load()
+	return list
+}
+
+// append appends specified sink info to the list.
+func (l *sinkInfoList) append(si *sinkInfo) {
+	for {
+		oldAddr, oldInfos := l.load()
+		// NB: must make infos copy to add si.  That's okay
+		// since appends usually happen once during initialization.
+		newInfos := make([]*sinkInfo, len(oldInfos)+1)
+		copy(newInfos, oldInfos)
+		newInfos[len(oldInfos)] = si
+		if atomic.CompareAndSwapPointer(&l.ptr, oldAddr, unsafe.Pointer(&newInfos)) {
+			break
+		}
+	}
+}
+
+// delete removes specified sink info that was previously added to this list.
+func (l *sinkInfoList) delete(si *sinkInfo) {
+	yank := func(infos []*sinkInfo) []*sinkInfo {
+		for i, info := range infos {
+			if info == si {
+				// NB: must make infos copy to remove si.  That's okay
+				// since deletes only happen when removing interceptors.
+				newInfos := make([]*sinkInfo, len(infos)-1)
+				copy(newInfos, infos[:i])
+				copy(newInfos[i:], infos[i+1:])
+				return newInfos
+			}
+		}
+		panic("cannot delete sink info")
+	}
+
+	for {
+		oldAddr, oldInfos := l.load()
+		newInfos := yank(oldInfos)
+		if atomic.CompareAndSwapPointer(&l.ptr, oldAddr, unsafe.Pointer(&newInfos)) {
+			break
+		}
+	}
+}
+
 // loggerT represents the logging source for a given log channel.
 type loggerT struct {
 	// sinkInfos stores the destinations for log entries.
-	sinkInfos []*sinkInfo
+	sinkInfos sinkInfoList
 
 	// outputMu is used to coordinate output to the sinks, to guarantee
 	// that the ordering of events the same on all sinks.
 	outputMu syncutil.Mutex
 }
 
-// getFileSinkIndex retrieves the index of the fileSink, if defined,
-// in the sinkInfos. Returns -1 if there is no file sink.
-func (l *loggerT) getFileSinkIndex() int {
-	for i, s := range l.sinkInfos {
-		if _, ok := s.sink.(*fileSink); ok {
-			return i
-		}
-	}
-	return -1
-}
-
 // getFileSink retrieves the file sink if defined.
 func (l *loggerT) getFileSink() *fileSink {
-	if i := l.getFileSinkIndex(); i != -1 {
-		return l.sinkInfos[i].sink.(*fileSink)
+	infos := l.sinkInfos.get()
+	for _, si := range infos {
+		if fs, ok := si.sink.(*fileSink); ok {
+			return fs
+		}
 	}
 	return nil
 }
@@ -268,6 +326,8 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	var fatalTrigger chan struct{}
 	extraFlush := false
 
+	sinkInfos := l.sinkInfos.get()
+
 	if entry.sev == severity.FATAL {
 		extraFlush = true
 		logging.signalFatalCh()
@@ -279,7 +339,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 			entry.stacks = getStacks(true)
 		}
 
-		for _, s := range l.sinkInfos {
+		for _, s := range sinkInfos {
 			entry.stacks = s.sink.attachHints(entry.stacks)
 		}
 
@@ -329,7 +389,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	// We need different buffers because the different sinks use different formats.
 	// For example, the fluent sink needs JSON, and the file sink does not use
 	// the terminal escape codes that the stderr sink uses.
-	bufs := getBufferSlice(len(l.sinkInfos))
+	bufs := getBufferSlice(len(sinkInfos))
 	defer putBufferSlice(bufs)
 
 	// The following code constructs / populates the formatted entries
@@ -337,7 +397,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	// We only do the work if the sink is active and the filtering does
 	// not eliminate the event.
 	someSinkActive := false
-	for i, s := range l.sinkInfos {
+	for i, s := range sinkInfos {
 		// Note: we need to use the .Get() method instead of reading the
 		// severity threshold directly, because some tests are unruly and
 		// let goroutines live and perform log calls beyond their
@@ -374,7 +434,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 
 		var outputErr error
 		var outputErrExitCode exit.Code
-		for i, s := range l.sinkInfos {
+		for i, s := range sinkInfos {
 			if bufs.b[i] == nil {
 				// The sink was not accepting entries at this level. Nothing to do.
 				continue

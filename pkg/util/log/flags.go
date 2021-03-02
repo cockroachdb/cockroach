@@ -186,7 +186,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		}
 
 		// Connect the sink to the logger.
-		secLogger.sinkInfos = []*sinkInfo{fileSinkInfo}
+		secLogger.sinkInfos.append(fileSinkInfo)
 
 		// Force a log entry. This does two things: it forces the creation
 		// of a file and it also introduces a timestamp marker.
@@ -252,7 +252,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		// Note: we connect stderr even if the severity is NONE
 		// so that tests can raise the severity after configuration.
 		l := chans[ch]
-		l.sinkInfos = append(l.sinkInfos, &stderrSinkInfo)
+		l.sinkInfos.append(&stderrSinkInfo)
 	}
 
 	// Create the file sinks.
@@ -274,7 +274,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		// Connect the channels for this sink.
 		for _, ch := range fc.Channels.Channels {
 			l := chans[ch]
-			l.sinkInfos = append(l.sinkInfos, fileSinkInfo)
+			l.sinkInfos.append(fileSinkInfo)
 		}
 	}
 
@@ -294,7 +294,7 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		// Connect the channels for this sink.
 		for _, ch := range fc.Channels.Channels {
 			l := chans[ch]
-			l.sinkInfos = append(l.sinkInfos, fluentSinkInfo)
+			l.sinkInfos.append(fluentSinkInfo)
 		}
 	}
 
@@ -392,7 +392,7 @@ func DescribeAppliedConfig() string {
 	// Describe the fd2 capture, if installed.
 	if logging.testingFd2CaptureLogger != nil {
 		config.CaptureFd2.Enable = true
-		fs := logging.testingFd2CaptureLogger.sinkInfos[0].sink.(*fileSink)
+		fs := logging.testingFd2CaptureLogger.sinkInfos.get()[0].sink.(*fileSink)
 		fs.mu.Lock()
 		dir := fs.mu.logDir
 		fs.mu.Unlock()
@@ -407,7 +407,7 @@ func DescribeAppliedConfig() string {
 
 	describeConnections := func(l *loggerT, ch Channel,
 		target *sinkInfo, list *logconfig.ChannelList) {
-		for _, s := range l.sinkInfos {
+		for _, s := range l.sinkInfos.get() {
 			if s == target {
 				list.Channels = append(list.Channels, ch)
 			}
@@ -428,7 +428,7 @@ func DescribeAppliedConfig() string {
 	// Describe the file sinks.
 	config.Sinks.FileGroups = make(map[string]*logconfig.FileSinkConfig)
 	_ = allSinkInfos.iter(func(l *sinkInfo) error {
-		if cl := logging.testingFd2CaptureLogger; cl != nil && cl.sinkInfos[0] == l {
+		if cl := logging.testingFd2CaptureLogger; cl != nil && cl.sinkInfos.get()[0] == l {
 			// Not a real sink. Omit.
 			return nil
 		}

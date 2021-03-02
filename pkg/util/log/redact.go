@@ -206,14 +206,15 @@ func renderTagsAsRedactable(tags *logtags.Buffer) redact.RedactableString {
 //
 // This is not safe for concurrent use with logging operations.
 func TestingSetRedactable(redactableLogs bool) (cleanup func()) {
-	prevEditors := make([]redactEditor, len(debugLog.sinkInfos))
-	for i := range debugLog.sinkInfos {
-		prevEditors[i] = debugLog.sinkInfos[i].editor
-		debugLog.sinkInfos[i].editor = getEditor(SelectEditMode(false /* redact */, redactableLogs))
+	sinkInfos := debugLog.sinkInfos.get()
+	prevEditors := make([]redactEditor, len(sinkInfos))
+	for i := range sinkInfos {
+		prevEditors[i] = sinkInfos[i].editor
+		sinkInfos[i].editor = getEditor(SelectEditMode(false /* redact */, redactableLogs))
 	}
 	return func() {
 		for i, e := range prevEditors {
-			debugLog.sinkInfos[i].editor = e
+			sinkInfos[i].editor = e
 		}
 	}
 }

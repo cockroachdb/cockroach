@@ -94,7 +94,7 @@ func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 	// e.g. to the OPS channel, if we are reporting an error while writing
 	// to a non-OPS channel.
 
-	for _, s := range l.sinkInfos {
+	for _, s := range l.sinkInfos.get() {
 		sink := s.sink
 		if logpb.Severity_ERROR >= s.threshold && sink.active() {
 			buf := s.formatter.formatEntry(entry)

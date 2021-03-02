@@ -749,7 +749,7 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer ScopeWithoutShowLogs(t).Close(t)
 
 	var debugFileSinkInfo *sinkInfo
-	for _, si := range debugLog.sinkInfos {
+	for _, si := range debugLog.sinkInfos.get() {
 		si.threshold = severity.ERROR
 		if _, ok := si.sink.(*fileSink); ok {
 			debugFileSinkInfo = si
@@ -792,11 +792,12 @@ func TestExitOnFullDisk(t *testing.T) {
 	})
 
 	fs := &fileSink{}
-	l := &loggerT{sinkInfos: []*sinkInfo{{
+	l := &loggerT{}
+	l.sinkInfos.append(&sinkInfo{
 		sink:        fs,
 		editor:      func(r redactablePackage) redactablePackage { return r },
 		criticality: true,
-	}}}
+	})
 	fs.mu.file = &syncBuffer{
 		fileSink: fs,
 		Writer:   bufio.NewWriterSize(&outOfSpaceWriter{}, 1),
@@ -858,7 +859,7 @@ func TestLogEntryPropagation(t *testing.T) {
 
 	// Enable output to stderr (the Scope disabled it).
 	l := logging.getLogger(channel.DEV)
-	for _, si := range l.sinkInfos {
+	for _, si := range l.sinkInfos.get() {
 		if si.sink == &logging.stderrSink {
 			si.threshold.SetValue(severity.INFO)
 		}
@@ -866,8 +867,11 @@ func TestLogEntryPropagation(t *testing.T) {
 
 	// Make stderr non-critical.
 	// We assume that the stderr sink is the first one.
-	defer func(prevCriticality bool) { debugLog.sinkInfos[0].criticality = prevCriticality }(debugLog.sinkInfos[0].criticality)
-	debugLog.sinkInfos[0].criticality = false
+	defer func(prevCriticality bool) {
+		debugLog.sinkInfos.get()[0].criticality = prevCriticality
+	}(debugLog.sinkInfos.get()[0].criticality)
+
+	debugLog.sinkInfos.get()[0].criticality = false
 
 	// Now emit the log message. If criticality is respected, the
 	// failure to write on stderr is graceful and the message gets

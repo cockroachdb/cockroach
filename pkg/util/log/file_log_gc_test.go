@@ -60,7 +60,7 @@ func TestSecondaryGC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	logger.sinkInfos = []*sinkInfo{si}
+	logger.sinkInfos.append(si)
 
 	// Enable the garbage collector.
 	go fileSink.gcDaemon(ctx)
