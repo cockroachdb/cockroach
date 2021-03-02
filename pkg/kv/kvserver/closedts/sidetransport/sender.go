@@ -163,6 +163,15 @@ func NewSender(
 func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 	s.nodeID = nodeID
 
+	confCh := make(chan struct{}, 1)
+	confChanged := func() {
+		select {
+		case confCh <- struct{}{}:
+		default:
+		}
+	}
+	closedts.SideTransportCloseInterval.SetOnChange(&s.st.SV, confChanged)
+
 	_ /* err */ = s.stopper.RunAsyncTask(ctx, "closedts side-transport publisher",
 		func(ctx context.Context) {
 			defer func() {
@@ -173,7 +182,13 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 			var timer timeutil.Timer
 			defer timer.Stop()
 			for {
-				timer.Reset(closingPeriod)
+				interval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
+				if interval > 0 {
+					timer.Reset(closedts.SideTransportCloseInterval.Get(&s.st.SV))
+				} else {
+					// Disable the side-transport.
+					timer.Stop()
+				}
 				select {
 				case <-timer.C:
 					timer.Read = true
@@ -181,6 +196,9 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 						continue
 					}
 					s.publish(ctx)
+				case <-confCh:
+					// Loop around to use the updated timer.
+					continue
 				case <-s.stopper.ShouldQuiesce():
 					return
 				}
