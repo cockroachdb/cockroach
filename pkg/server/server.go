@@ -480,7 +480,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	sTS := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, stopper)
 
-	ctSender := sidetransport.NewSender(stopper, nodeDialer, clock, st)
+	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
 
 	// The InternalExecutor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
