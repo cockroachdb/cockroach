@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // UniquenessChecksForGenRandomUUIDClusterMode controls the cluster setting for
@@ -151,7 +152,7 @@ func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
 // constraint are being updated (according to updateColIDs). When the unique
 // constraint has a partial predicate, it also returns true if the predicate
 // references any of the columns being updated.
-func (mb *mutationBuilder) uniqueColsUpdated(uniqueOrdinal int) bool {
+func (mb *mutationBuilder) uniqueColsUpdated(uniqueOrdinal cat.UniqueOrdinal) bool {
 	uc := mb.tab.Unique(uniqueOrdinal)
 
 	for i, n := 0, uc.ColumnCount(); i < n; i++ {
@@ -379,7 +380,26 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 		keyCols = append(keyCols, withScanScope.cols[i].id)
 	}
 
-	return f.ConstructUniqueChecksItem(semiJoin, &memo.UniqueChecksItemPrivate{
+	// Project only a single column so that normalization rules prune any
+	// unnecessary columns from the expression. The column type and value does
+	// not matter. The unique check will fail if there are any rows produced by
+	// the expression regardless of the values in the row. We project the first
+	// column in the unique constraint from the WithScan side of the semi-join
+	// because it will always be needed in the semi-join filter. This guarantees
+	// that we don't project a column that is otherwise not needed.
+	uniqueColOrd, ok := h.uniqueOrdinals.Next(0)
+	if !ok {
+		panic(errors.AssertionFailedf("uniqueOrdinals cannot be empty"))
+	}
+	var passthrough opt.ColSet
+	passthrough.Add(withScanScope.cols[uniqueColOrd].id)
+	project := f.ConstructProject(
+		semiJoin,
+		nil, /* projections */
+		passthrough,
+	)
+
+	return f.ConstructUniqueChecksItem(project, &memo.UniqueChecksItemPrivate{
 		Table:        h.mb.tabID,
 		CheckOrdinal: h.uniqueOrdinal,
 		KeyCols:      keyCols,
