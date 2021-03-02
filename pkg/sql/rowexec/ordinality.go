@@ -58,10 +58,7 @@ func newOrdinalityProcessor(
 		nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{o.input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
-				o.ConsumerClosed()
-				return nil
-			}},
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -105,12 +102,6 @@ func (o *ordinalityProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 	}
 	return nil, o.DrainHelper()
 
-}
-
-// ConsumerClosed is part of the RowSource interface.
-func (o *ordinalityProcessor) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	o.InternalClose()
 }
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.

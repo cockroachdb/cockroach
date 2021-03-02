@@ -131,12 +131,6 @@ func (v *valuesProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 }
 
-// ConsumerClosed is part of the RowSource interface.
-func (v *valuesProcessor) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	v.InternalClose()
-}
-
 // ChildCount is part of the execinfra.OpNode interface.
 func (v *valuesProcessor) ChildCount(verbose bool) int {
 	return 0

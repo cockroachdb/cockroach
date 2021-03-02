@@ -168,7 +168,7 @@ func newWindower(
 		output,
 		limitedMon,
 		execinfra.ProcStateOpts{InputsToDrain: []execinfra.RowSource{w.input},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				w.close()
 				return nil
 			}},
