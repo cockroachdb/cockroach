@@ -60,7 +60,7 @@ func TestRecordingString(t *testing.T) {
 	remoteChild.Finish()
 
 	remoteRec := remoteChild.GetRecording()
-	require.NoError(t, root.ImportRemoteSpans(remoteRec))
+	root.ImportRemoteSpans(remoteRec)
 
 	root.Record("root 3")
 
@@ -153,7 +153,7 @@ func TestRecordingInRecording(t *testing.T) {
 	// code at the RPC boundaries).
 	grandChild := tr.StartSpan("grandchild", WithParentAndManualCollection(child.Meta()))
 	grandChild.Finish()
-	require.NoError(t, child.ImportRemoteSpans(grandChild.GetRecording()))
+	child.ImportRemoteSpans(grandChild.GetRecording())
 	child.Finish()
 	root.Finish()
 
@@ -191,7 +191,7 @@ func TestSpan_ImportRemoteSpans(t *testing.T) {
 	ch.Record("foo")
 	ch.SetVerbose(false)
 	ch.Finish()
-	require.NoError(t, sp.ImportRemoteSpans(ch.GetRecording()))
+	sp.ImportRemoteSpans(ch.GetRecording())
 	sp.Finish()
 
 	require.NoError(t, TestingCheckRecordedSpans(sp.GetRecording(), `

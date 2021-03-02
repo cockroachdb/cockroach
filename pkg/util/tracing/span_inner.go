@@ -79,8 +79,8 @@ func (s *spanInner) GetRecording() Recording {
 	return s.crdb.getRecording(s.tracer.TracingVerbosityIndependentSemanticsIsActive(), wantTags)
 }
 
-func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
-	return s.crdb.importRemoteSpans(remoteSpans)
+func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
+	s.crdb.importRemoteSpans(remoteSpans)
 }
 
 func (s *spanInner) Finish() {
