@@ -651,11 +651,8 @@ func (r *DistSQLReceiver) Push(
 			r.rangeCache.Insert(r.ctx, meta.Ranges...)
 		}
 		if len(meta.TraceData) > 0 {
-			span := tracing.SpanFromContext(r.ctx)
-			if span == nil {
-				// Nothing to do.
-			} else if err := span.ImportRemoteSpans(meta.TraceData); err != nil {
-				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
+			if span := tracing.SpanFromContext(r.ctx); span != nil {
+				span.ImportRemoteSpans(meta.TraceData)
 			}
 			var ev roachpb.ContentionEvent
 			for i := range meta.TraceData {

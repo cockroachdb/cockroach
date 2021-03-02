@@ -103,11 +103,10 @@ func (sp *Span) GetRecording() Recording {
 // ImportRemoteSpans adds RecordedSpan data to the recording of the given Span;
 // these spans will be part of the result of GetRecording. Used to import
 // recorded traces from other nodes.
-func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
-	if sp.done() {
-		return nil
+func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
+	if !sp.done() {
+		sp.i.ImportRemoteSpans(remoteSpans)
 	}
-	return sp.i.ImportRemoteSpans(remoteSpans)
 }
 
 // Meta returns the information which needs to be propagated across process
