@@ -66,6 +66,7 @@ distribution: full
 vectorized: false
 ·
 • group (scalar)
+│ estimated row count: 1
 │
 └── • scan
       estimated row count: 100 (100% of the table)
@@ -84,6 +85,7 @@ distribution: full
 vectorized: true
 ·
 • group (scalar)
+│ estimated row count: 1
 │
 └── • scan
       estimated row count: 100 (100% of the table)
@@ -114,6 +116,7 @@ distribution: full
 vectorized: true
 ·
 • group (scalar)
+│ estimated row count: 1
 │
 └── • scan
       estimated row count: 100,000 (100% of the table)
@@ -132,6 +135,7 @@ distribution: full
 vectorized: false
 ·
 • group (scalar)
+│ estimated row count: 1
 │
 └── • scan
       estimated row count: 100,000 (100% of the table)
@@ -150,6 +154,7 @@ distribution: full
 vectorized: true
 ·
 • merge join
+│ estimated row count: 100
 │ equality: (a) = (a)
 │ left cols are key
 │ right cols are key
