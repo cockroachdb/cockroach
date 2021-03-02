@@ -118,7 +118,6 @@ go_proto_library(
     proto = ":execinfrapb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/streamingccl",  # keep
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",

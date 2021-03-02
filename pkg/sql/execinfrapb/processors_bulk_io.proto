@@ -142,12 +142,12 @@ message ReadImportDataSpec {
 
 message StreamIngestionDataSpec {
   // PartitionAddresses locate the partitions that produce events to be
-  // ingested.
-  repeated string partition_addresses = 1 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl.PartitionAddress",(gogoproto.nullable) = false];
+  // ingested. We don't set the casttype to avoid depending on ccl packages.
+  repeated string partition_addresses = 1;
   // The processor will ingest events from StartTime onwards.
   optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
   // StreamAddress locate the stream so that a stream client can be initialized.
-  optional string stream_address = 3 [(gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl.StreamAddress",(gogoproto.nullable) = false];
+  optional string stream_address = 3 [(gogoproto.nullable) = false];
   // JobID is the job ID of the stream ingestion job.
   optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
 }
