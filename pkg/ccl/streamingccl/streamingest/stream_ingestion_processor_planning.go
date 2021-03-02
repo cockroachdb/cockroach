@@ -46,14 +46,14 @@ func distStreamIngestionPlanSpecs(
 			spec := &execinfrapb.StreamIngestionDataSpec{
 				JobID:              int64(jobID),
 				StartTime:          initialHighWater,
-				StreamAddress:      streamAddress,
-				PartitionAddresses: make([]streamingccl.PartitionAddress, 0),
+				StreamAddress:      string(streamAddress),
+				PartitionAddresses: make([]string, 0),
 			}
 			streamIngestionSpecs = append(streamIngestionSpecs, spec)
 		}
 		n := i % len(nodes)
 		streamIngestionSpecs[n].PartitionAddresses = append(streamIngestionSpecs[n].PartitionAddresses,
-			partition)
+			string(partition))
 		partitionKey := roachpb.Key(partition)
 		// We create "fake" spans to uniquely identify the partition. This is used
 		// to keep track of the resolved ts received for a particular partition in
