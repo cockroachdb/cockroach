@@ -4301,3 +4301,13 @@ udt_schema  udt_name
 sh          d
 public      e
 pg_catalog  int8
+
+# Testing information_schema.columns.is_identity which for now is False for every column
+statement ok
+SET DATABASE = "";
+
+query T colnames
+SELECT distinct is_identity FROM information_schema.columns
+----
+is_identity
+NO
