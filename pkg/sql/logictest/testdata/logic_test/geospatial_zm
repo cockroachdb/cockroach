@@ -106,3 +106,55 @@ SELECT ST_AsEWKT(ST_Affine(the_geom, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, pi()/2, pi()
 	FROM (SELECT ST_GeomFromEWKT('LINESTRING(1 2 3, 4 5 6, 7 8 9)') AS the_geom) AS _;
 ----
 LINESTRING Z (24 33.571 53.142, 42 78.571 125.142, 60 123.571 197.142)
+
+# Point specific operations
+query RRRRI
+SELECT
+  st_x(a.geom),
+  st_y(a.geom),
+  st_z(a.geom),
+  st_m(a.geom),
+  st_zmflag(a.geom)
+FROM (VALUES
+  (NULL::geometry),
+  ('POINT EMPTY'::geometry),
+  ('POINT M EMPTY'::geometry),
+  ('POINT Z EMPTY'::geometry),
+  ('POINT ZM EMPTY'::geometry),
+  ('POINT(1 2)'::geometry),
+  ('POINT M (1 2 3)'::geometry),
+  ('POINT(1 2 3)'::geometry),
+  ('POINT(1 2 3 4)'::geometry)
+) a(geom)
+----
+NULL  NULL  NULL  NULL  NULL
+NULL  NULL  NULL  NULL  0
+NULL  NULL  NULL  NULL  1
+NULL  NULL  NULL  NULL  2
+NULL  NULL  NULL  NULL  3
+1     2     NULL  NULL  0
+1     2     NULL  3     1
+1     2     3     NULL  2
+1     2     3     4     3
+
+statement error argument to st_z\(\) must have shape POINT
+SELECT st_z('LINESTRING(0 0 0, 1 1 1)')
+
+statement error argument to st_m\(\) must have shape POINT
+SELECT st_m('LINESTRING M (0 0 0, 1 1 1)')
+
+# ST_Zmflag tests
+query I
+SELECT
+  ST_Zmflag(a.geom)
+FROM (VALUES
+  ('GEOMETRYCOLLECTION EMPTY'::geometry),
+  ('GEOMETRYCOLLECTION M EMPTY'::geometry),
+  ('GEOMETRYCOLLECTION Z EMPTY'::geometry),
+  ('GEOMETRYCOLLECTION ZM EMPTY'::geometry)
+) a(geom)
+----
+0
+1
+2
+3
