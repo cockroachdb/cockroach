@@ -106,12 +106,6 @@ func (f *filtererProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 	return nil, f.DrainHelper()
 }
 
-// ConsumerClosed is part of the RowSource interface.
-func (f *filtererProcessor) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	f.InternalClose()
-}
-
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (f *filtererProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(f.input)

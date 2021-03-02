@@ -193,11 +193,6 @@ func (p *planNodeToRowSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 	return nil, p.DrainHelper()
 }
 
-func (p *planNodeToRowSource) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	p.InternalClose()
-}
-
 // forwardMetadata will be called by any upstream rowSourceToPlanNode processors
 // that need to forward metadata to the end of the flow. They can't pass
 // metadata through local processors, so they instead add the metadata to our
