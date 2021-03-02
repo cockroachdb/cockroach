@@ -254,6 +254,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							idToClosed.Unlock()
 							return nil
 						}}},
+						nil, /* getStats */
 					)
 
 					require.NoError(t, err)
@@ -360,7 +361,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						materializerCalledClose = true
 						return nil
 					}}}, /* toClose */
-					nil, /* execStatsForTrace */
+					nil, /* getStats */
 					func() context.CancelFunc { return cancelLocal },
 				)
 				require.NoError(t, err)

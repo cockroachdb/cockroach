@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -60,18 +61,28 @@ type Outbox struct {
 		msg *execinfrapb.ProducerMessage
 	}
 
+	span *tracing.Span
+	// getStats, when non-nil, returns all of the execution statistics of the
+	// operators that are in the same tree as this Outbox. The stats will be
+	// added into the span as Structured payload and returned to the gateway as
+	// execinfrapb.ProducerMetadata.
+	getStats func() []*execinfrapb.ComponentStats
+
 	// A copy of Run's caller ctx, with no StreamID tag.
 	// Used to pass a clean context to the input.Next.
 	runnerCtx context.Context
 }
 
 // NewOutbox creates a new Outbox.
+// - getStats, when non-nil, returns all of the execution statistics of the
+//   operators that are in the same tree as this Outbox.
 func NewOutbox(
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
+	getStats func() []*execinfrapb.ComponentStats,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -90,6 +101,7 @@ func NewOutbox(
 		serializer:      s,
 		metadataSources: metadataSources,
 		closers:         toClose,
+		getStats:        getStats,
 	}
 	o.scratch.buf = &bytes.Buffer{}
 	o.scratch.msg = &execinfrapb.ProducerMessage{}
@@ -127,6 +139,11 @@ func (o *Outbox) Run(
 	cancelFn context.CancelFunc,
 	connectionTimeout time.Duration,
 ) {
+	ctx, o.span = execinfra.ProcessorSpan(ctx, "outbox")
+	if o.span != nil {
+		defer o.span.Finish()
+	}
+
 	o.runnerCtx = ctx
 	ctx = logtags.AddTag(ctx, "streamID", streamID)
 	log.VEventf(ctx, 2, "Outbox Dialing %s", nodeID)
@@ -275,6 +292,11 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 		msg.Data.Metadata = append(
 			msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, execinfrapb.ProducerMetadata{Err: errToSend}),
 		)
+	}
+	if o.span != nil && o.getStats != nil {
+		for _, s := range o.getStats() {
+			o.span.RecordStructured(s)
+		}
 	}
 	if trace := execinfra.GetTraceData(ctx); trace != nil {
 		msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.RemoteProducerMetadata{

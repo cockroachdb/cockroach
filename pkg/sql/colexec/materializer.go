@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -74,6 +75,7 @@ type drainHelper struct {
 	sources      execinfrapb.MetadataSources
 	ctx          context.Context
 	bufferedMeta []execinfrapb.ProducerMetadata
+	getStats     func() []*execinfrapb.ComponentStats
 }
 
 var _ execinfra.RowSource = &drainHelper{}
@@ -85,9 +87,12 @@ var drainHelperPool = sync.Pool{
 	},
 }
 
-func newDrainHelper(sources execinfrapb.MetadataSources) *drainHelper {
+func newDrainHelper(
+	sources execinfrapb.MetadataSources, getStats func() []*execinfrapb.ComponentStats,
+) *drainHelper {
 	d := drainHelperPool.Get().(*drainHelper)
 	d.sources = sources
+	d.getStats = getStats
 	return d
 }
 
@@ -121,7 +126,21 @@ func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 }
 
 // ConsumerDone implements the RowSource interface.
-func (d *drainHelper) ConsumerDone() {}
+func (d *drainHelper) ConsumerDone() {
+	if d.getStats != nil {
+		// If getStats is non-nil, then the drainHelper is responsible for
+		// attaching the execution statistics to the span, yet we don't get the
+		// recording from the span - that is left to the materializer (more
+		// precisely to the embedded ProcessorBase) which is necessary in order
+		// to not collect same trace data twice.
+		if sp := tracing.SpanFromContext(d.ctx); sp != nil {
+			for _, s := range d.getStats() {
+				sp.RecordStructured(s)
+			}
+		}
+		d.getStats = nil
+	}
+}
 
 // ConsumerClosed implements the RowSource interface.
 func (d *drainHelper) ConsumerClosed() {}
@@ -153,7 +172,8 @@ var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
 // - typs is the output types scheme.
 // - metadataSourcesQueue are all of the metadata sources that are planned on
 // the same node as the Materializer and that need to be drained.
-// - outputStatsToTrace (when tracing is enabled) finishes the stats.
+// - getStats (when tracing is enabled) returns all of the execution statistics
+// of operators which the materializer is responsible for.
 // - cancelFlow should return the context cancellation function that cancels
 // the context of the flow (i.e. it is Flow.ctxCancel). It should only be
 // non-nil in case of a root Materializer (i.e. not when we're wrapping a row
@@ -168,7 +188,7 @@ func NewMaterializer(
 	output execinfra.RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
-	execStatsForTrace func() *execinfrapb.ComponentStats,
+	getStats func() []*execinfrapb.ComponentStats,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := materializerPool.Get().(*Materializer)
@@ -176,7 +196,7 @@ func NewMaterializer(
 		ProcessorBase: m.ProcessorBase,
 		input:         input,
 		typs:          typs,
-		drainHelper:   newDrainHelper(metadataSourcesQueue),
+		drainHelper:   newDrainHelper(metadataSourcesQueue, getStats),
 		converter:     colconv.NewAllVecToDatumConverter(len(typs)),
 		row:           make(rowenc.EncDatumRow, len(typs)),
 		closers:       toClose,
@@ -209,7 +229,6 @@ func NewMaterializer(
 		return nil, err
 	}
 	m.AddInputToDrain(m.drainHelper)
-	m.ExecStatsForTrace = execStatsForTrace
 	m.cancelFlow = cancelFlow
 	return m, nil
 }
