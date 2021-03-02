@@ -126,7 +126,7 @@ func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
 		return hlc.Timestamp{}
 	}
 	return closedts.TargetForPolicy(
-		t.clock.NowAsClockTimestamp(), t.clock.MaxOffset(), time.Second,t.rangePolicy,
+		t.clock.NowAsClockTimestamp(), t.clock.MaxOffset(), time.Second, t.rangePolicy,
 	)
 }
 
