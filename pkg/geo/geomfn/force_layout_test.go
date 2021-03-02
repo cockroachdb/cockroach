@@ -202,7 +202,7 @@ func TestForceLayout(t *testing.T) {
 			).SetSRID(4326),
 		},
 		{
-			geom.NewGeometryCollection().MustPush(
+			geom.NewGeometryCollection().MustSetLayout(geom.XYZ).MustPush(
 				geom.NewPointFlat(geom.XYZ, []float64{1, 2, 3}),
 				geom.NewLineStringFlat(geom.XYZ, []float64{1, 2, 3, 4, 5, 6}),
 				geom.NewMultiPointFlat(geom.XYZ, []float64{1, 2, 3, 4, 5, 6}, geom.NewMultiPointFlatOptionWithEnds([]int{3, 3, 6})),
@@ -210,7 +210,7 @@ func TestForceLayout(t *testing.T) {
 				geom.NewMultiPolygonFlat(geom.XYZ, []float64{1, 2, 3, 4, 5, 6, 7, 8, 9, 1, 2, 3}, [][]int{{12}, {12}}),
 			).SetSRID(4326),
 			geom.XY,
-			geom.NewGeometryCollection().MustPush(
+			geom.NewGeometryCollection().MustSetLayout(geom.XY).MustPush(
 				geom.NewPointFlat(geom.XY, []float64{1, 2}),
 				geom.NewLineStringFlat(geom.XY, []float64{1, 2, 4, 5}),
 				geom.NewMultiPointFlat(geom.XY, []float64{1, 2, 4, 5}, geom.NewMultiPointFlatOptionWithEnds([]int{2, 2, 4})),
@@ -219,7 +219,7 @@ func TestForceLayout(t *testing.T) {
 			).SetSRID(4326),
 		},
 		{
-			geom.NewGeometryCollection().MustPush(
+			geom.NewGeometryCollection().MustSetLayout(geom.XY).MustPush(
 				geom.NewPointFlat(geom.XY, []float64{1, 2}),
 				geom.NewLineStringFlat(geom.XY, []float64{1, 2, 4, 5}),
 				geom.NewMultiPointFlat(geom.XY, []float64{1, 2, 4, 5}, geom.NewMultiPointFlatOptionWithEnds([]int{2, 2, 4})),
@@ -227,7 +227,7 @@ func TestForceLayout(t *testing.T) {
 				geom.NewMultiPolygonFlat(geom.XY, []float64{1, 2, 4, 5, 7, 8, 1, 2}, [][]int{{8}, {8}}),
 			).SetSRID(4326),
 			geom.XYZ,
-			geom.NewGeometryCollection().MustPush(
+			geom.NewGeometryCollection().MustSetLayout(geom.XYZ).MustPush(
 				geom.NewPointFlat(geom.XYZ, []float64{1, 2, 0}),
 				geom.NewLineStringFlat(geom.XYZ, []float64{1, 2, 0, 4, 5, 0}),
 				geom.NewMultiPointFlat(geom.XYZ, []float64{1, 2, 0, 4, 5, 0}, geom.NewMultiPointFlatOptionWithEnds([]int{3, 3, 6})),
@@ -241,7 +241,7 @@ func TestForceLayout(t *testing.T) {
 		text, err := wkt.Marshal(tc.g)
 		require.NoError(t, err)
 		t.Run(fmt.Sprintf("%s->%s", text, tc.layout), func(t *testing.T) {
-			ret, err := forceLayout(tc.g, tc.layout)
+			ret, err := forceLayout(tc.g, tc.layout, 0, 0)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, ret)
 		})
