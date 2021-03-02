@@ -1,0 +1,22 @@
+Running make with -j16
+GOPATH set to /home/tobias/go
+mkdir -p lib
+rm -f lib/lib{geos,geos_c}.so
+cp -L /home/tobias/go/native/x86_64-linux-gnu/geos/lib/lib{geos,geos_c}.so lib
+GOFLAGS= go test   -mod=vendor -tags ' gss make x86_64_linux_gnu' -ldflags '-X github.com/cockroachdb/cockroach/pkg/build.typ=development -extldflags "" -X "github.com/cockroachdb/cockroach/pkg/build.tag=v21.1.0-alpha.3-1028-ga2541ba568" -X "github.com/cockroachdb/cockroach/pkg/build.rev=a2541ba568e1bb45e268e5f2b5f2d4869977aaa4" -X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=x86_64-linux-gnu"  ' -run "-" -bench "BenchmarkKV/Scan/SQL/rows=1/sample_rate=0\.00" -timeout 5m ./pkg/sql/tests -benchtime=5000x -count 10
+I210302 11:06:17.713469 1 (gostd) rand.go:92  [-] 1  random seed: -6356839178504662445
+goos: linux
+goarch: amd64
+pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    271775 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    289103 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    289865 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    263153 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    294795 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    263991 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    290005 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    294793 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    273125 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    290935 ns/op
+PASS
+ok  	github.com/cockroachdb/cockroach/pkg/sql/tests	17.332s
