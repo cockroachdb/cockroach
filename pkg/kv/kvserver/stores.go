@@ -62,7 +62,7 @@ func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
 // IsMeta1Leaseholder returns whether the specified stores owns
 // the meta1 lease. Returns an error if any.
 func (ls *Stores) IsMeta1Leaseholder(ctx context.Context, now hlc.ClockTimestamp) (bool, error) {
-	repl, _, err := ls.GetReplicaForRangeID(1)
+	repl, _, err := ls.GetReplicaForRangeID(ctx, 1)
 	if roachpb.IsRangeNotFoundError(err) {
 		return false, nil
 	}
@@ -138,21 +138,18 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 // specified range. If the replica is not found on any store then
 // roachpb.RangeNotFoundError will be returned.
 func (ls *Stores) GetReplicaForRangeID(
-	rangeID roachpb.RangeID,
-) (replica *Replica, store *Store, err error) {
-	err = ls.VisitStores(func(s *Store) error {
-		r, err := s.GetReplica(rangeID)
-		if err == nil {
+	ctx context.Context, rangeID roachpb.RangeID,
+) (*Replica, *Store, error) {
+	var replica *Replica
+	var store *Store
+	if err := ls.VisitStores(func(s *Store) error {
+		r := s.GetReplicaIfExists(rangeID)
+		if r != nil {
 			replica, store = r, s
-			return nil
 		}
-		if errors.HasType(err, (*roachpb.RangeNotFoundError)(nil)) {
-			return nil
-		}
-		return err
-	})
-	if err != nil {
-		return nil, nil, err
+		return nil
+	}); err != nil {
+		log.Fatalf(ctx, "unexpected error: %s", err)
 	}
 	if replica == nil {
 		return nil, nil, roachpb.NewRangeNotFoundError(rangeID, 0)
