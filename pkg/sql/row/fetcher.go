@@ -303,6 +303,7 @@ func (rf *Fetcher) Reset() {
 func (rf *Fetcher) Close(ctx context.Context) {
 	if rf.kvFetcher != nil {
 		rf.kvFetcher.Close(ctx)
+		rf.kvFetcher = nil
 	}
 	if rf.mon != nil {
 		rf.mon.Stop(ctx)
