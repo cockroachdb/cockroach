@@ -22,6 +22,7 @@ go_test(
     size = "medium",
     srcs = ["dep_test.go"],
     embed = [":cockroach-oss_lib"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/testutils/buildutil",
         "//pkg/util/leaktest",

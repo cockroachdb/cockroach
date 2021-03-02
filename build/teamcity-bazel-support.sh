@@ -1,1 +1,1 @@
-BAZEL_IMAGE=cockroachdb/bazel:20210301-143622
+BAZEL_IMAGE=cockroachdb/bazel:20210302-163751
