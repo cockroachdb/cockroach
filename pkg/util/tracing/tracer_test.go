@@ -13,10 +13,14 @@ package tracing
 import (
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/log"
+	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 )
@@ -323,51 +327,106 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	require.NotZero(t, sp2.i.crdb.spanID)
 }
 
-func TestLightstepContext(t *testing.T) {
-	tr := NewTracer()
-	lsTr := lightstep.NewTracer(lightstep.Options{
-		AccessToken: "invalid",
-		Collector: lightstep.Endpoint{
-			Host:      "127.0.0.1",
-			Port:      65535,
-			Plaintext: true,
+func TestShadowTracer(t *testing.T) {
+	zipMgr, _ := createZipkinTracer("127.0.0.1:900000")
+	zipRec := zipkin.NewInMemoryRecorder()
+	zipTr, err := zipkin.NewTracer(zipRec)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		mgr   shadowTracerManager
+		str   opentracing.Tracer
+		check func(t *testing.T, sp opentracing.Span)
+	}{
+		{
+			mgr: lightStepManager{},
+			str: lightstep.NewTracer(lightstep.Options{
+				AccessToken: "invalid",
+				// Massaged the creation here to not erroneously send crap to
+				// lightstep's API. One of the ways below would've done it but
+				// can't hurt to block it in multiple ways just in case.
+				MinReportingPeriod: time.Hour,
+				Collector: lightstep.Endpoint{
+					Host:      "127.0.0.1",
+					Port:      65535,
+					Plaintext: true,
+				},
+				MaxLogsPerSpan: maxLogsPerSpan,
+				UseGRPC:        true,
+			}),
 		},
-		MaxLogsPerSpan: maxLogsPerSpan,
-		UseGRPC:        true,
+		{
+			mgr: zipMgr,
+			str: zipTr,
+			check: func(t *testing.T, spi opentracing.Span) {
+				rs := zipRec.GetSpans()
+				require.Len(t, rs, 1)
+				require.Len(t, rs[0].Logs, 1)
+				require.Equal(t, log.String("event", "hello"), rs[0].Logs[0].Fields[0])
+			},
+		},
+	} {
+		t.Run(tc.mgr.Name(), func(t *testing.T) {
+			tr := NewTracer()
+			tr.setShadowTracer(tc.mgr, tc.str)
+			s := tr.StartSpan("test")
+			defer func() {
+				if tc.check != nil {
+					tc.check(t, s.i.ot.shadowSpan)
+				}
+			}()
+			defer s.Finish()
+			// The span is not verbose, but has a sink (i.e. the log messages
+			// go somewhere), though we'll actually check that end-to-end below
+			// at least for the mock tracer.
+			require.False(t, s.IsVerbose())
+			require.True(t, s.i.hasVerboseSink())
+			// Put something in the span.
+			s.Record("hello")
+
+			const testBaggageKey = "test-baggage"
+			const testBaggageVal = "test-val"
+			s.SetBaggageItem(testBaggageKey, testBaggageVal)
+
+			carrier := metadataCarrier{metadata.MD{}}
+			if err := tr.InjectMetaInto(s.Meta(), carrier); err != nil {
+				t.Fatal(err)
+			}
+
+			// ExtractMetaFrom also extracts the embedded lightstep context.
+			wireSpanMeta, err := tr.ExtractMetaFrom(carrier)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
+			s2Ctx := s2.i.ot.shadowSpan.Context()
+
+			// Verify that the baggage is correct in both the tracer context and in the
+			// lightstep context.
+			shadowBaggage := make(map[string]string)
+			s2Ctx.ForeachBaggageItem(func(k, v string) bool {
+				shadowBaggage[k] = v
+				return true
+			})
+			exp := map[string]string{
+				testBaggageKey: testBaggageVal,
+			}
+			require.Equal(t, exp, s2.Meta().Baggage)
+			require.Equal(t, exp, shadowBaggage)
+		})
+	}
+
+}
+
+func TestShadowTracerNilTracer(t *testing.T) {
+	tr := NewTracer()
+	// The lightstep tracer is nil when lightstep find that it is
+	// misconfigured or can't instantiate a connection. Make sure
+	// this does not lead to a crash.
+	require.NotPanics(t, func() {
+		tr.setShadowTracer(lightStepManager{}, nil)
 	})
-	tr.setShadowTracer(lightStepManager{}, lsTr)
-	s := tr.StartSpan("test")
-
-	const testBaggageKey = "test-baggage"
-	const testBaggageVal = "test-val"
-	s.SetBaggageItem(testBaggageKey, testBaggageVal)
-
-	carrier := metadataCarrier{metadata.MD{}}
-	if err := tr.InjectMetaInto(s.Meta(), carrier); err != nil {
-		t.Fatal(err)
-	}
-
-	// ExtractMetaFrom also extracts the embedded lightstep context.
-	wireSpanMeta, err := tr.ExtractMetaFrom(carrier)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	s2 := tr.StartSpan("child", WithParentAndManualCollection(wireSpanMeta))
-	s2Ctx := s2.i.ot.shadowSpan.Context()
-
-	// Verify that the baggage is correct in both the tracer context and in the
-	// lightstep context.
-	shadowBaggage := make(map[string]string)
-	s2Ctx.ForeachBaggageItem(func(k, v string) bool {
-		shadowBaggage[k] = v
-		return true
-	})
-	exp := map[string]string{
-		testBaggageKey: testBaggageVal,
-	}
-	require.Equal(t, exp, s2.Meta().Baggage)
-	require.Equal(t, exp, shadowBaggage)
 }
 
 // TestActiveSpanVisitorErrors confirms that the visitor of the Tracer's
