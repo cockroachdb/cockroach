@@ -94,6 +94,12 @@ func (sp *Span) Finish() {
 // As a performance optimization, GetRecording does not return tags when the
 // underlying Span is not verbose. Returning tags requires expensive
 // stringification.
+//
+// A few internal tags are added to denote span properties:
+//
+//    "_unfinished"	The span was never Finish()ed
+//    "_verbose"	The span is a verbose one
+//    "_dropped"	The span dropped recordings due to sizing constraints
 func (sp *Span) GetRecording() Recording {
 	// It's always valid to get the recording, even for a finished span.
 	return sp.i.GetRecording()
@@ -149,7 +155,8 @@ func (sp *Span) IsVerbose() bool {
 	return sp.i.IsVerbose()
 }
 
-// Record provides a way to record free-form text into verbose spans.
+// Record provides a way to record free-form text into verbose spans. Recordings
+// may be dropped due to sizing constraints.
 //
 // TODO(irfansharif): We don't currently have redactability with trace
 // recordings (both here, and using RecordStructured above). We'll want to do this
@@ -171,7 +178,8 @@ func (sp *Span) Recordf(format string, args ...interface{}) {
 
 // RecordStructured adds a Structured payload to the Span. It will be added to
 // the recording even if the Span is not verbose; however it will be discarded
-// if the underlying Span has been optimized out (i.e. is a noop span).
+// if the underlying Span has been optimized out (i.e. is a noop span). Payloads
+// may also be dropped due to sizing constraints.
 //
 // The caller must not mutate the item once RecordStructured has been called.
 func (sp *Span) RecordStructured(item Structured) {
