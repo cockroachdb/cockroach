@@ -309,9 +309,9 @@ func newZigzagJoiner(
 		post,
 		output,
 		execinfra.ProcStateOpts{
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				z.close()
-				return z.generateMeta(ctx)
+				return z.generateMeta(z.Ctx)
 			},
 		},
 	)

@@ -198,7 +198,7 @@ func NewMaterializer(
 		execinfra.ProcStateOpts{
 			// We append drainHelper to inputs to drain below in order to reuse
 			// the same underlying slice from the pooled materializer.
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				m.close()
 				return nil
 			},

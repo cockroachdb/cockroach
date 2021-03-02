@@ -282,9 +282,9 @@ func newJoinReader(
 		output,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{jr.input},
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				jr.close()
-				return jr.generateMeta(ctx)
+				return jr.generateMeta(jr.Ctx)
 			},
 		},
 	); err != nil {

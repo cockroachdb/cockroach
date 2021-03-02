@@ -169,10 +169,9 @@ func newTableReader(
 	return tr, nil
 }
 
-func (tr *tableReader) generateTrailingMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	trailingMeta := tr.generateMeta(ctx)
+func (tr *tableReader) generateTrailingMeta() []execinfrapb.ProducerMetadata {
 	tr.close()
-	return trailingMeta
+	return tr.generateMeta(tr.Ctx)
 }
 
 // Start is part of the RowSource interface.

@@ -486,7 +486,7 @@ type ProcessorBase struct {
 	// other than what has otherwise been manually put in trailingMeta) and no
 	// closing other than InternalClose is needed, then no callback needs to be
 	// specified.
-	trailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata
+	trailingMetaCallback func() []execinfrapb.ProducerMetadata
 	// trailingMeta is scratch space where metadata is stored to be returned
 	// later.
 	trailingMeta []execinfrapb.ProducerMetadata
@@ -724,7 +724,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	// generally calls InternalClose, indirectly, which switches the context and
 	// the span.
 	if pb.trailingMetaCallback != nil {
-		pb.trailingMeta = append(pb.trailingMeta, pb.trailingMetaCallback(pb.Ctx)...)
+		pb.trailingMeta = append(pb.trailingMeta, pb.trailingMetaCallback()...)
 	} else {
 		pb.InternalClose()
 	}
@@ -780,7 +780,7 @@ func (pb *ProcessorBase) Run(ctx context.Context) {
 type ProcStateOpts struct {
 	// TrailingMetaCallback, if specified, is a callback to be called by
 	// moveToTrailingMeta(). See ProcessorBase.TrailingMetaCallback.
-	TrailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata
+	TrailingMetaCallback func() []execinfrapb.ProducerMetadata
 	// InputsToDrain, if specified, will be drained by DrainHelper().
 	// MoveToDraining() calls ConsumerDone() on them, InternalClose() calls
 	// ConsumerClosed() on them.
