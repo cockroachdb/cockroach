@@ -201,6 +201,19 @@ func (sp *Span) SetBaggageItem(restrictedKey, value string) {
 	sp.i.SetBaggageItem(restrictedKey, value)
 }
 
+// TraceID retrieves a span's trace ID. Used for testing toggling a trace's
+// spans' verbosity on and off via the trace ID.
+func (sp *Span) TraceID() uint64 {
+	return sp.i.TraceID()
+}
+
+// SetVerboseRecursively sets the span to the appropriate verbosity,
+// and sets all its descendant spans' verbosity using
+// crdbSpan.setVerboseRecursively.
+func (sp *Span) SetVerboseRecursively(to bool) {
+	sp.i.SetVerboseRecursively(to)
+}
+
 // TODO(tbg): move spanInner and its methods into a separate file.
 
 type spanInner struct {
@@ -255,6 +268,10 @@ func (sm *SpanMeta) String() string {
 	return fmt.Sprintf("[spanID: %d, traceID: %d]", sm.spanID, sm.traceID)
 }
 
+func (s *spanInner) TraceID() uint64 {
+	return s.crdb.traceID
+}
+
 func (s *spanInner) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.ot == (otSpan{})
 }
@@ -275,6 +292,11 @@ func (s *spanInner) SetVerbose(to bool) {
 	} else {
 		s.crdb.disableRecording()
 	}
+}
+
+func (s *spanInner) SetVerboseRecursively(to bool) {
+	s.SetVerbose(to)
+	s.crdb.setVerboseRecursively(to)
 }
 
 func (s *spanInner) ResetRecording() {
