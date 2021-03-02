@@ -816,3 +816,22 @@ query TT
 SELECT schema_name, table_name FROM [SHOW TABLES FROM for_show.sc1]
 ----
 sc1    t1
+
+# Unit test for #61149
+statement ok
+CREATE SCHEMA sc2
+
+statement ok
+CREATE TYPE sc3 as enum('foo')
+
+statement ok
+BEGIN
+
+statement ok
+DROP SCHEMA sc2
+
+statement error pgcode 55000 schema "sc2" is being dropped, try again later
+CREATE SCHEMA IF NOT EXISTS sc2
+
+statement ok
+END

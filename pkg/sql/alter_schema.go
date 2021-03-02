@@ -184,7 +184,7 @@ func (p *planner) renameSchema(
 	ctx context.Context, db *dbdesc.Mutable, desc *schemadesc.Mutable, newName string, jobDesc string,
 ) error {
 	// Check that there isn't a name collision with the new name.
-	found, err := schemaExists(ctx, p.txn, p.ExecCfg().Codec, db.ID, newName)
+	found, _, err := schemaExists(ctx, p.txn, p.ExecCfg().Codec, db.ID, newName)
 	if err != nil {
 		return err
 	}

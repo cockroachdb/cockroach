@@ -58,13 +58,27 @@ func CreateUserDefinedSchemaDescriptor(
 	}
 
 	// Ensure there aren't any name collisions.
-	exists, err := schemaExists(ctx, txn, execCfg.Codec, db.ID, schemaName)
+	exists, schemaID, err := schemaExists(ctx, txn, execCfg.Codec, db.ID, schemaName)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if exists {
 		if n.IfNotExists {
+			// Virtual schemas will return an InvalidID
+			// and can't be in a dropping state.
+			if schemaID != descpb.InvalidID {
+				// Check if the object already exists in a dropped state
+				desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, execCfg.Codec, schemaID, catalogkv.Immutable)
+				if err != nil {
+					return nil, nil, err
+				}
+				if desc.Dropped() {
+					return nil, nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"schema %q is being dropped, try again later",
+						schemaName)
+				}
+			}
 			return nil, nil, nil
 		}
 		return nil, nil, pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", schemaName)
