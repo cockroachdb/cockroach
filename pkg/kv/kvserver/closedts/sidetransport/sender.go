@@ -36,11 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// closingPeriod dictates how often the Sender will close timestamps.
-// TODO(andrei): make this a cluster setting which, when set to 0, disables
-// the sidetransport.
-const closingPeriod = 200 * time.Millisecond
-
 // Sender represents the sending-side of the closed timestamps "side-transport".
 // Its role is to periodically advance the closed timestamps of all the ranges
 // with leases on the current node and to communicate these closed timestamps to
