@@ -807,6 +807,7 @@ var syncCmd = &cobra.Command{
 var lockFile = os.ExpandEnv("$HOME/.roachprod/LOCK")
 
 var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
+var zshCompletion = os.ExpandEnv("$HOME/.roachprod/zsh-completion.sh")
 
 // syncCloud grabs an exclusive lock on the roachprod state and then proceeds to
 // read the current state from the cloud and write it out to disk. The locking
@@ -886,6 +887,7 @@ func syncCloud(quiet bool) (*cld.Cloud, error) {
 	}
 
 	_ = rootCmd.GenBashCompletionFile(bashCompletion)
+	_ = rootCmd.GenZshCompletionFile(zshCompletion)
 
 	if err := vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
 		return p.ConfigSSH()

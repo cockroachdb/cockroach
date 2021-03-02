@@ -30,4 +30,21 @@ func init() {
 		bashCmd.Hidden = userFacing
 		return bashCmd
 	})
+	AddSubCmd(func(userFacing bool) *cobra.Command {
+		var bashCmd = SetCmdDefaults(&cobra.Command{
+			Use:   `gen-zsh-completions <output-file>`,
+			Short: `generate zsh completions for workload command`,
+			Args:  cobra.ExactArgs(1),
+		})
+		bashCmd.Run = func(cmd *cobra.Command, args []string) {
+			for parent := cmd.Parent(); parent != nil; parent = cmd.Parent() {
+				cmd = parent
+			}
+			if err := cmd.GenZshCompletionFile(args[0]); err != nil {
+				panic(err)
+			}
+		}
+		bashCmd.Hidden = userFacing
+		return bashCmd
+	})
 }
