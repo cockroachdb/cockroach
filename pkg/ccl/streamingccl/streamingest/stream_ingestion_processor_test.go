@@ -404,9 +404,12 @@ func runStreamIngestionProcessor(
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	spec.StreamAddress = streamingccl.StreamAddress(streamAddr)
+	spec.StreamAddress = streamAddr
 
-	spec.PartitionAddresses = partitionAddresses
+	spec.PartitionAddresses = make([]string, len(partitionAddresses))
+	for i, pa := range partitionAddresses {
+		spec.PartitionAddresses[i] = string(pa)
+	}
 	spec.StartTime = startTime
 	processorID := int32(0)
 	proc, err := newStreamIngestionDataProcessor(&flowCtx, processorID, spec, &post, out)

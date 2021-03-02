@@ -113,7 +113,7 @@ func ingestionPlanHook(
 		}
 
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
-			StreamAddress: streamAddress,
+			StreamAddress: string(streamAddress),
 			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			StartTime:     startTime,
 		}

@@ -138,7 +138,7 @@ func newStreamIngestionDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	streamClient, err := streamclient.NewStreamClient(spec.StreamAddress)
+	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(spec.StreamAddress))
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +212,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	// Initialize the event streams.
 	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
 	errChs := make(map[streamingccl.PartitionAddress]chan error)
-	for _, partitionAddress := range sip.spec.PartitionAddresses {
+	for _, pa := range sip.spec.PartitionAddresses {
+		partitionAddress := streamingccl.PartitionAddress(pa)
 		eventCh, errCh, err := sip.client.ConsumePartition(ctx, partitionAddress, sip.spec.StartTime)
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", partitionAddress))
