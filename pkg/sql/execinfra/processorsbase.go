@@ -461,6 +461,11 @@ type ProcessorBase struct {
 	// used).
 	Ctx  context.Context
 	span *tracing.Span
+	// SkipTraceData indicates whether the trace data should be collected from
+	// Ctx when the processor moves into the draining state. If true, it is the
+	// processor implementation's responsibility to collect it (most likely in
+	// trailingMetaCallback).
+	SkipTraceData bool
 	// origCtx is the context from which ctx was derived. InternalClose() resets
 	// ctx to this.
 	origCtx context.Context
@@ -707,8 +712,10 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 				pb.span.RecordStructured(stats)
 			}
 		}
-		if trace := pb.span.GetRecording(); trace != nil {
-			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+		if !pb.SkipTraceData {
+			if trace := pb.span.GetRecording(); trace != nil {
+				pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+			}
 		}
 	}
 

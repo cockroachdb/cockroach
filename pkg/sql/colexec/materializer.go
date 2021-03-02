@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -153,7 +154,8 @@ var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
 // - typs is the output types scheme.
 // - metadataSourcesQueue are all of the metadata sources that are planned on
 // the same node as the Materializer and that need to be drained.
-// - outputStatsToTrace (when tracing is enabled) finishes the stats.
+// - getStats (when tracing is enabled) returns all of the execution statistics
+// of operators which the materializer is responsible for.
 // - cancelFlow should return the context cancellation function that cancels
 // the context of the flow (i.e. it is Flow.ctxCancel). It should only be
 // non-nil in case of a root Materializer (i.e. not when we're wrapping a row
@@ -168,7 +170,7 @@ func NewMaterializer(
 	output execinfra.RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
-	execStatsForTrace func() *execinfrapb.ComponentStats,
+	getStats func() []*execinfrapb.ComponentStats,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := materializerPool.Get().(*Materializer)
@@ -199,15 +201,27 @@ func NewMaterializer(
 			// We append drainHelper to inputs to drain below in order to reuse
 			// the same underlying slice from the pooled materializer.
 			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+				var trailingMeta []execinfrapb.ProducerMetadata
+				if sp := tracing.SpanFromContext(m.Ctx); sp != nil {
+					if getStats != nil {
+						for _, s := range getStats() {
+							sp.RecordStructured(s)
+						}
+					}
+					trailingMeta = []execinfrapb.ProducerMetadata{{TraceData: sp.GetRecording()}}
+				}
 				m.close()
-				return nil
+				return trailingMeta
 			},
 		},
 	); err != nil {
 		return nil, err
 	}
+	// We will collect the trace data (possibly with stats information) in the
+	// trailing meta callback, so we tell the ProcessorBase to skip trace data.
+	// If we don't do so, then we would get duplicate traces.
+	m.SkipTraceData = true
 	m.AddInputToDrain(m.drainHelper)
-	m.ExecStatsForTrace = execStatsForTrace
 	m.cancelFlow = cancelFlow
 	return m, nil
 }
