@@ -151,7 +151,7 @@ func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
 // constraint are being updated (according to updateColIDs). When the unique
 // constraint has a partial predicate, it also returns true if the predicate
 // references any of the columns being updated.
-func (mb *mutationBuilder) uniqueColsUpdated(uniqueOrdinal int) bool {
+func (mb *mutationBuilder) uniqueColsUpdated(uniqueOrdinal cat.UniqueOrdinal) bool {
 	uc := mb.tab.Unique(uniqueOrdinal)
 
 	for i, n := 0, uc.ColumnCount(); i < n; i++ {
@@ -379,7 +379,13 @@ func (h *uniqueCheckHelper) buildInsertionCheck() memo.UniqueChecksItem {
 		keyCols = append(keyCols, withScanScope.cols[i].id)
 	}
 
-	return f.ConstructUniqueChecksItem(semiJoin, &memo.UniqueChecksItemPrivate{
+	// Create a Project that passes-through only the key columns. This allows
+	// normalization rules to prune any unnecessary columns from the expression.
+	// The key columns are always needed in order to display the constraint
+	// violation error.
+	project := f.ConstructProject(semiJoin, nil /* projections */, keyCols.ToSet())
+
+	return f.ConstructUniqueChecksItem(project, &memo.UniqueChecksItemPrivate{
 		Table:        h.mb.tabID,
 		CheckOrdinal: h.uniqueOrdinal,
 		KeyCols:      keyCols,
