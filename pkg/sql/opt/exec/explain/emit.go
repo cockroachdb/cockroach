@@ -617,7 +617,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 				"FK check", fmt.Sprintf("%s@%s", fk.ReferencedTable.Name(), fk.ReferencedIndex.Name()),
 			)
 		}
-		e.emitTuples(a.Rows, len(a.Rows[0]))
+		if len(a.Rows) > 0 {
+			e.emitTuples(a.Rows, len(a.Rows[0]))
+		}
 
 	case upsertOp:
 		a := n.args.(*upsertArgs)
