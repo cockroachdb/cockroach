@@ -14,7 +14,6 @@ import (
 	"context"
 	"math/rand"
 	"net/url"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/host"
@@ -148,7 +148,7 @@ func populateHardwareInfo(ctx context.Context, e *diagnosticspb.Environment) {
 		e.Hardware.Mem.Total = m.Total
 	}
 
-	e.Hardware.Cpu.Numcpu = int32(runtime.NumCPU())
+	e.Hardware.Cpu.Numcpu = int32(system.NumCPU())
 	if cpus, err := cpu.InfoWithContext(ctx); err == nil && len(cpus) > 0 {
 		e.Hardware.Cpu.Sockets = int32(len(cpus))
 		c := cpus[0]

@@ -103,14 +103,13 @@ const (
 
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 	// For small machines, we scale the scheduler concurrency by the number of
-	// CPUs. 8*runtime.NumCPU() was determined in 9a68241 (April 2017) as the
-	// optimal concurrency level on 8 CPU machines. For larger machines, we've
-	// seen (#56851) that this scaling curve can be too aggressive and lead to
-	// too much contention in the Raft scheduler, so we cap the concurrency
-	// level at 96.
+	// CPUs. 8*NumCPU was determined in 9a68241 (April 2017) as the optimal
+	// concurrency level on 8 CPU machines. For larger machines, we've seen
+	// (#56851) that this scaling curve can be too aggressive and lead to too much
+	// contention in the Raft scheduler, so we cap the concurrency level at 96.
 	//
 	// As of November 2020, this default value could be re-tuned.
-	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.NumCPU(), 96))
+	"COCKROACH_SCHEDULER_CONCURRENCY", min(8*runtime.GOMAXPROCS(0), 96))
 
 var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 	"COCKROACH_LOG_SST_INFO_TICKS_INTERVAL", 60)
@@ -875,7 +874,7 @@ func NewStore(
 
 	// On low-CPU instances, a default limit value may still allow ExportRequests
 	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
-	exportCores := runtime.NumCPU() - 1
+	exportCores := runtime.GOMAXPROCS(0) - 1
 	if exportCores < 1 {
 		exportCores = 1
 	}

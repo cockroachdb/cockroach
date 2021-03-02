@@ -874,6 +874,40 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestNumCPU", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`runtime\.NumCPU\(\)`,
+			"--",
+			"*.go",
+			":!testutils/lint/*.go",
+			":!util/system/*.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden, use system.NumCPU instead (after reading that function's comment)", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestTParallel", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(

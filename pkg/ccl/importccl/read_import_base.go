@@ -542,7 +542,7 @@ func runParallelImport(
 	// Start consumers.
 	parallelism := importCtx.numWorkers
 	if parallelism <= 0 {
-		parallelism = runtime.NumCPU()
+		parallelism = runtime.GOMAXPROCS(0)
 	}
 
 	minEmited := make([]int64, parallelism)

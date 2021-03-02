@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 )
 
@@ -398,7 +399,7 @@ func (c CPUUsage) CPUShares() float64 {
 // GetCgroupCPU returns the CPU usage and quota for the current cgroup.
 func GetCgroupCPU() (CPUUsage, error) {
 	cpuusage, err := getCgroupCPU("/")
-	cpuusage.NumCPU = runtime.NumCPU()
+	cpuusage.NumCPU = system.NumCPU()
 	return cpuusage, err
 }
 
@@ -449,14 +450,14 @@ func getCgroupCPU(root string) (CPUUsage, error) {
 
 // AdjustMaxProcs sets GOMAXPROCS (if not overridden by env variables) to be
 // the CPU limit of the current cgroup, if running inside a cgroup with a cpu
-// limit lower than runtime.NumCPU(). This is preferable to letting it fall back
-// to Go default, which is runtime.NumCPU(), as the Go scheduler would be
-// running more OS-level threads than can ever be concurrently scheduled.
+// limit lower than system.NumCPU(). This is preferable to letting it fall back
+// to Go default, which is system.NumCPU(), as the Go scheduler would be running
+// more OS-level threads than can ever be concurrently scheduled.
 func AdjustMaxProcs(ctx context.Context) {
 	if _, set := os.LookupEnv("GOMAXPROCS"); !set {
 		if cpuInfo, err := GetCgroupCPU(); err == nil {
 			numCPUToUse := int(math.Ceil(cpuInfo.CPUShares()))
-			if numCPUToUse < runtime.NumCPU() && numCPUToUse > 0 {
+			if numCPUToUse < system.NumCPU() && numCPUToUse > 0 {
 				log.Infof(ctx, "running in a container; setting GOMAXPROCS to %d", numCPUToUse)
 				runtime.GOMAXPROCS(numCPUToUse)
 			}

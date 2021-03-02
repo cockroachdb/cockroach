@@ -593,3 +593,104 @@ func TestTransScale(t *testing.T) {
 		})
 	}
 }
+
+func TestRotateX(t *testing.T) {
+	testCases := []struct {
+		desc       string
+		input      geom.T
+		rotRadians float64
+		expected   geom.T
+	}{
+		{
+			desc:       "rotate a 2D point where angle is 2Pi",
+			input:      geom.NewPointFlat(geom.XY, []float64{10, 10}),
+			rotRadians: 2 * math.Pi,
+			expected:   geom.NewPointFlat(geom.XY, []float64{10, 10}),
+		},
+		{
+			desc:       "rotate a 2D point where angle is Pi",
+			input:      geom.NewPointFlat(geom.XY, []float64{10, 10}),
+			rotRadians: math.Pi,
+			expected:   geom.NewPointFlat(geom.XY, []float64{10, -10}),
+		},
+		{
+			desc:       "rotate a 2D point where angle is Pi/4",
+			input:      geom.NewPointFlat(geom.XY, []float64{10, 10}),
+			rotRadians: math.Pi / 4,
+			expected:   geom.NewPointFlat(geom.XY, []float64{10, 7.071067811865476}),
+		},
+		{
+			desc:       "rotate a 3D point where angle is 2Pi",
+			input:      geom.NewPointFlat(geom.XYZ, []float64{10, 10, 10}),
+			rotRadians: 2 * math.Pi,
+			expected:   geom.NewPointFlat(geom.XYZ, []float64{10, 10, 10}),
+		},
+		{
+			desc:       "rotate a 3D point where angle is Pi",
+			input:      geom.NewPointFlat(geom.XYZ, []float64{10, 10, 10}),
+			rotRadians: math.Pi,
+			expected:   geom.NewPointFlat(geom.XYZ, []float64{10, -10, -10}),
+		},
+		{
+			desc:       "rotate a 3D point where angle is Pi/4",
+			input:      geom.NewPointFlat(geom.XYZ, []float64{10, 10, 10}),
+			rotRadians: math.Pi / 4,
+			expected:   geom.NewPointFlat(geom.XYZ, []float64{10, 8.881784197001252e-16, 14.142135623730951}),
+		},
+		{
+			desc:       "rotate a 2D line string where angle is Pi/3",
+			input:      geom.NewLineStringFlat(geom.XY, []float64{10, 15, 20, 25}),
+			rotRadians: math.Pi / 3,
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{10, 7.5, 20, 12.5}),
+		},
+		{
+			desc:       "rotate a 2D line string where angle is Pi/5",
+			input:      geom.NewLineStringFlat(geom.XY, []float64{10, 15, 20, 25, 30, 35}),
+			rotRadians: math.Pi / 5,
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{10, 12.135254915624213, 20, 20.225424859373685, 30, 28.31559480312316}),
+		},
+		{
+			desc:       "rotate a line polygon where angle is 0.5 radians",
+			input:      geom.NewPolygonFlat(geom.XY, []float64{1, 1, 5, 5, 1, 10, 1, 1}, []int{8}),
+			rotRadians: 0.5,
+			expected:   geom.NewPolygonFlat(geom.XY, []float64{1, 0.877582561890373, 5, 4.387912809451864, 1, 8.775825618903728, 1, 0.877582561890373}, []int{8}),
+		},
+		{
+			desc:       "rotate multiple 2D points where angle is Pi/5",
+			input:      geom.NewMultiPointFlat(geom.XY, []float64{10, 10, 20, 20, 30, 30}),
+			rotRadians: math.Pi / 5,
+			expected:   geom.NewMultiPointFlat(geom.XY, []float64{10, 8.090169943749475, 20, 16.18033988749895, 30, 24.270509831248425}),
+		},
+		{
+			desc:       "rotate multiple line strings where angle is Pi/4",
+			input:      geom.NewMultiLineStringFlat(geom.XY, []float64{10, 15, 20, 25, 30, 35, 40, 45}, []int{4, 8}),
+			rotRadians: math.Pi / 4,
+			expected:   geom.NewMultiLineStringFlat(geom.XY, []float64{10, 10.606601717798213, 20, 17.67766952966369, 30, 24.748737341529164, 40, 31.81980515339464}, []int{4, 8}),
+		},
+		{
+			desc:       "rotate multiple polygon strings where angle is Pi",
+			input:      geom.NewMultiPolygonFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3, 1, 1, 4, 4, 5, 5, 6, 6, 4, 4}, [][]int{{8}, {16}}),
+			rotRadians: math.Pi,
+			expected:   geom.NewMultiPolygonFlat(geom.XY, []float64{1, -1, 2, -2, 3, -3, 1, -1, 4, -4, 5, -5, 6, -6, 4, -4}, [][]int{{8}, {16}}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
+			require.NoError(t, err)
+
+			actual, err := RotateX(geometry, tc.rotRadians)
+			require.NoError(t, err)
+
+			// Compare FlatCoords and assert they are within epsilon.
+			// This is because they exact matches may encounter rounding issues.
+			actualGeomT, err := actual.AsGeomT()
+			require.NoError(t, err)
+			require.Equal(t, tc.expected.SRID(), actualGeomT.SRID())
+			require.Equal(t, tc.expected.Layout(), actualGeomT.Layout())
+			require.IsType(t, tc.expected, actualGeomT)
+			require.InEpsilonSlice(t, tc.expected.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
+		})
+	}
+}

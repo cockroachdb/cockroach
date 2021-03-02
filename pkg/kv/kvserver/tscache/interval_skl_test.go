@@ -984,7 +984,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 				// We run a goroutine for each slot. Goroutines insert new value
 				// over random intervals, but verify that the value in their
 				// slot always ratchets.
-				slots := 4 * runtime.NumCPU()
+				slots := 4 * runtime.GOMAXPROCS(0)
 				if util.RaceEnabled {
 					// We add in a lot of preemption points when race detection
 					// is enabled, so things will already be very slow. Reduce
@@ -1087,7 +1087,7 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 		// We run a goroutine for each slot. Goroutines insert new value
 		// over random intervals, but verify that the value in their
 		// slot always ratchets.
-		slots := 4 * runtime.NumCPU()
+		slots := 4 * runtime.GOMAXPROCS(0)
 		if util.RaceEnabled {
 			// We add in a lot of preemption points when race detection
 			// is enabled, so things will already be very slow. Reduce
