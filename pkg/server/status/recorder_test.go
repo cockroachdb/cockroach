@@ -15,7 +15,6 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
-	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
 )
@@ -347,7 +347,7 @@ func TestMetricsRecorder(t *testing.T) {
 			},
 		},
 		TotalSystemMemory: totalMemory,
-		NumCpus:           int32(runtime.NumCPU()),
+		NumCpus:           int32(system.NumCPU()),
 	}
 
 	// Make sure there is at least one environment variable that will be

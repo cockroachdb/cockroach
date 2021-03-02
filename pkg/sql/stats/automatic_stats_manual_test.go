@@ -90,7 +90,7 @@ func TestAdaptiveThrottling(t *testing.T) {
 		// Set up a load on each CPU.
 		cancel := make(chan struct{})
 		var wg sync.WaitGroup
-		for i := 0; i < runtime.NumCPU(); i++ {
+		for i := 0; i < runtime.GOMAXPROCS(0); i++ {
 			wg.Add(1)
 			go func() {
 				runLoad(load, cancel)

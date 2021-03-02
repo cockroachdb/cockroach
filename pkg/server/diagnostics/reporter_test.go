@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -38,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -463,7 +463,7 @@ func verifyEnvironment(
 ) {
 	require.NotEqual(t, 0, env.Hardware.Mem.Total)
 	require.NotEqual(t, 0, env.Hardware.Mem.Available)
-	require.Equal(t, int32(runtime.NumCPU()), env.Hardware.Cpu.Numcpu)
+	require.Equal(t, int32(system.NumCPU()), env.Hardware.Cpu.Numcpu)
 	require.NotEqual(t, 0, env.Hardware.Cpu.Sockets)
 	require.NotEqual(t, 0.0, env.Hardware.Cpu.Mhz)
 	require.NotEqual(t, 0.0, env.Os.Platform)

@@ -81,7 +81,7 @@ const (
 
 // Reduce executes the test case reduction algorithm. logger, if not nil, will
 // log progress output. numGoroutines is the number of parallel workers, or 0
-// for runtime.NumCPU().
+// for GOMAXPROCS.
 func Reduce(
 	logger io.Writer,
 	originalTestCase File,
@@ -97,7 +97,7 @@ func Reduce(
 		fmt.Fprintf(logger, format, args...)
 	}
 	if numGoroutines < 1 {
-		numGoroutines = runtime.NumCPU()
+		numGoroutines = runtime.GOMAXPROCS(0)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
