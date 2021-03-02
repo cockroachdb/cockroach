@@ -106,7 +106,7 @@ func makeShadowSpan(
 func createLightStepTracer(token string) (shadowTracerManager, opentracing.Tracer) {
 	return lightStepManager{}, lightstep.NewTracer(lightstep.Options{
 		AccessToken:      token,
-		MaxLogsPerSpan:   maxLogsPerSpan,
+		MaxLogsPerSpan:   maxLogsPerSpanExternal,
 		MaxBufferedSpans: 10000,
 		UseGRPC:          true,
 	})
