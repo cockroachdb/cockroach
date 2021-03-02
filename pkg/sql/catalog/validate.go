@@ -48,10 +48,15 @@ func Validate(
 	// Collect descriptors referenced by the validated descriptors.
 	// These are their immediate neighbors in the reference graph, and in some
 	// special cases those neighbors' immediate neighbors also.
-	vdg, err := collectDescriptorsForValidation(ctx, maybeBatchDescGetter, descriptors)
-	if err != nil {
-		vea.wrapPrefix = "collecting referenced descriptors"
-		vea.Report(err)
+	vdg, descGetterErr := collectDescriptorsForValidation(ctx, maybeBatchDescGetter, descriptors)
+	if descGetterErr != nil {
+		// Contrary to all other errors collected during Validate via vea.Report(),
+		// the descGetterErr may be a transaction error, which may trigger retries.
+		// It's therefore important that the combined error produced by the
+		// returned ValidationErrors interface unwraps to descGetterErr. For this
+		// reason we place it at the head of the errors slice.
+		vea.errors = append(make([]error, 1, 1+len(vea.errors)), vea.errors...)
+		vea.errors[0] = errors.Wrap(descGetterErr, "collecting referenced descriptors")
 		return &vea
 	}
 	// Perform cross-reference checks.
