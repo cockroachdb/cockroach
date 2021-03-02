@@ -115,7 +115,7 @@ func runTestPrettyData(
 				}
 				return nil
 			}
-			for i := 0; i < runtime.NumCPU(); i++ {
+			for i := 0; i < runtime.GOMAXPROCS(0); i++ {
 				g.Go(worker)
 			}
 			if err := g.Wait(); err != nil {
