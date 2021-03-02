@@ -26,22 +26,22 @@ import (
 
 func schemaExists(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, parentID descpb.ID, schema string,
-) (bool, error) {
+) (bool, descpb.ID, error) {
 	// Check statically known schemas.
 	if schema == tree.PublicSchema {
-		return true, nil
+		return true, descpb.InvalidID, nil
 	}
 	for _, s := range virtualSchemas {
 		if s.name == schema {
-			return true, nil
+			return true, descpb.InvalidID, nil
 		}
 	}
 	// Now lookup in the namespace for other schemas.
-	exists, _, err := catalogkv.LookupObjectID(ctx, txn, codec, parentID, keys.RootNamespaceID, schema)
+	exists, schemaID, err := catalogkv.LookupObjectID(ctx, txn, codec, parentID, keys.RootNamespaceID, schema)
 	if err != nil {
-		return false, err
+		return false, descpb.InvalidID, err
 	}
-	return exists, nil
+	return exists, schemaID, nil
 }
 
 func (p *planner) writeSchemaDesc(ctx context.Context, desc *schemadesc.Mutable) error {
