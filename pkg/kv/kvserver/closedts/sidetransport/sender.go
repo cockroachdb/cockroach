@@ -142,15 +142,10 @@ type Replica interface {
 func NewSender(
 	stopper *stop.Stopper, dialer *nodedialer.Dialer, clock *hlc.Clock, st *cluster.Settings,
 ) *Sender {
-	// TODO(andrei): rationalize this a little bit.
-	bufSize := 3 * time.Second.Nanoseconds() / closingPeriod.Nanoseconds()
-	if bufSize < 2 {
-		bufSize = 2
-	}
 	s := &Sender{
 		stopper: stopper,
 		dialer:  dialer,
-		buf:     newUpdatesBuf(int(bufSize)),
+		buf:     newUpdatesBuf(),
 		clock:   clock,
 		st:      st,
 	}
@@ -425,10 +420,14 @@ type updatesBuf struct {
 	}
 }
 
-func newUpdatesBuf(size int) *updatesBuf {
+// Size the buffer such that a stream sender goroutine can be blocked for a
+// little while and not have to send a snapshot when it resumes.
+const updatesBufSize = 50
+
+func newUpdatesBuf() *updatesBuf {
 	buf := &updatesBuf{}
 	buf.mu.updated.L = &buf.mu
-	buf.mu.data = make([]*ctpb.Update, size)
+	buf.mu.data = make([]*ctpb.Update, updatesBufSize)
 	return buf
 }
 
