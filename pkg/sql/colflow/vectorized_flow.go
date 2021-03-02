@@ -1091,6 +1091,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 					err = localErr
 					return
 				}
+				if util.CrdbTestBuild {
+					input = newInvariantsChecker(input)
+				}
 				metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
 				toClose = append(toClose, closers...)
 				inputs = append(inputs, input)
@@ -1127,7 +1130,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
 			}
-			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
+			if util.CrdbTestBuild {
 				result.Op = newInvariantsChecker(result.Op)
 			}
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
