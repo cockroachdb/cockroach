@@ -233,6 +233,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if cfg.AmbientCtx.Tracer == nil {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
+	registry := metric.NewRegistry()
+	registry.AddMetricStruct(cfg.AmbientCtx.Tracer.Metrics())
 
 	var clock *hlc.Clock
 	if cfg.ClockDevicePath != "" {
@@ -248,7 +250,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	} else {
 		clock = hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
 	}
-	registry := metric.NewRegistry()
 	// If the tracer has a Close function, call it after the server stops.
 	stopper.AddCloser(cfg.AmbientCtx.Tracer)
 

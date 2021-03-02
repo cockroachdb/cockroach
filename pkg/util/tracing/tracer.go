@@ -112,6 +112,8 @@ type Tracer struct {
 	// True if tracing to the debug/requests endpoint. Accessed via t.useNetTrace().
 	_useNetTrace int32 // updated atomically
 
+	metrics *Metrics
+
 	// Pointer to shadowTracer, if using one.
 	shadowTracer unsafe.Pointer
 
@@ -155,7 +157,13 @@ func NewTracer() *Tracer {
 	// The noop span is marked as finished so that even in the case of a bug,
 	// it won't soak up data.
 	t.noopSpan = &Span{numFinishCalled: 1, i: spanInner{tracer: t}}
+	t.metrics = newMetrics()
 	return t
+}
+
+// Metrics returns the metrics of this Tracer.
+func (t *Tracer) Metrics() *Metrics {
+	return t.metrics
 }
 
 // Configure sets up the Tracer according to the cluster settings (and keeps
@@ -273,6 +281,9 @@ func (t *Tracer) startSpanGeneric(
 	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan) {
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
+
+	// We're going to create a real span.
+	t.metrics.SpanCreated.Inc(1)
 
 	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.i.isNoop() {
 		// If no log tags are specified in the options, use the parent
@@ -414,7 +425,9 @@ func (t *Tracer) startSpanGeneric(
 			// spans. `Span.Finish` takes care of deleting it again.
 			t.activeSpans.Lock()
 			t.activeSpans.m[spanID] = s
+			n := len(t.activeSpans.m) // nb: len(map) is fast
 			t.activeSpans.Unlock()
+			t.metrics.NumLocalRootSpans.Update(int64(n))
 		}
 
 		if opts.RemoteParent != nil {

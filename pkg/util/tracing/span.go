@@ -323,7 +323,9 @@ func (s *spanInner) Finish() {
 	}
 	s.tracer.activeSpans.Lock()
 	delete(s.tracer.activeSpans.m, s.crdb.spanID)
+	n := len(s.tracer.activeSpans.m) // len(map) is fast
 	s.tracer.activeSpans.Unlock()
+	s.tracer.metrics.NumLocalRootSpans.Update(int64(n))
 }
 
 func (s *spanInner) Meta() *SpanMeta {
