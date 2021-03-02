@@ -1096,6 +1096,67 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMergeTxnRefresh verifies that in cases where the range merge
+// transaction's timestamp is bumped, it is able to refresh even after it has
+// entered the critical phase of the merge and subsumed the RHS.
+func TestStoreRangeMergeTxnRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var sawMergeRefresh int32
+	testingResponseFilter := func(
+		ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+	) *roachpb.Error {
+		switch v := ba.Requests[0].GetInner().(type) {
+		case *roachpb.ConditionalPutRequest:
+			// Detect the range merge's deletion of the local range descriptor
+			// and use it as an opportunity to bump the merge transaction's
+			// write timestamp. This will necessitate a refresh.
+			//
+			// Also mark as synthetic, while we're here, to simulate the
+			// behavior of a range merge across two ranges with the
+			// LEAD_FOR_GLOBAL_READS closed timestamp policy.
+			if !v.Value.IsPresent() && bytes.HasSuffix(v.Key, keys.LocalRangeDescriptorSuffix) {
+				br.Txn.WriteTimestamp = br.Txn.WriteTimestamp.
+					Add(100*time.Millisecond.Nanoseconds(), 0).
+					WithSynthetic(true)
+			}
+		case *roachpb.RefreshRequest:
+			if bytes.HasSuffix(v.Key, keys.LocalRangeDescriptorSuffix) {
+				atomic.AddInt32(&sawMergeRefresh, 1)
+			}
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						TestingResponseFilter: testingResponseFilter,
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+	store := tc.GetFirstStoreFromServer(t, 0)
+
+	// Create the ranges to be merged.
+	lhsDesc, _, err := tc.Servers[0].ScratchRangeEx()
+	require.NoError(t, err)
+
+	// Launch the merge.
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
+	require.Nil(t, pErr)
+
+	// Verify that the range merge refreshed.
+	require.Greater(t, atomic.LoadInt32(&sawMergeRefresh), int32(1))
+}
+
 // TestStoreRangeSplitMergeGeneration verifies that splits and merges both
 // update the range descriptor generations of the involved ranges according to
 // the comment on the RangeDescriptor.Generation field.
@@ -2042,8 +2103,8 @@ func TestStoreRangeMergeConcurrentRequests(t *testing.T) {
 	testingResponseFilter := func(
 		ctx context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse,
 	) *roachpb.Error {
-		del := ba.Requests[0].GetDelete()
-		if del != nil && bytes.HasSuffix(del.Key, keys.LocalRangeDescriptorSuffix) && rand.Int()%4 == 0 {
+		cput := ba.Requests[0].GetConditionalPut()
+		if cput != nil && !cput.Value.IsPresent() && bytes.HasSuffix(cput.Key, keys.LocalRangeDescriptorSuffix) && rand.Int()%4 == 0 {
 			// After every few deletions of the local range descriptor, expire all
 			// range leases. This makes the following sequence of events quite likely:
 			//
