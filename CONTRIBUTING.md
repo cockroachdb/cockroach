@@ -9,7 +9,7 @@ For tech writers and docs enthusiasts | Help improve CockroachDB docs: [List of 
 
 ## Contributor Guidelines
 
-Our contributor guidelines are available on [the public wiki at **wiki.crdb.io**(https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204033/Contributing+to+CockroachDB).
+Our contributor guidelines are available on [the public wiki at **wiki.crdb.io**](https://wiki.crdb.io/wiki/spaces/CRDB/pages/73204033/Contributing+to+CockroachDB).
 
 At this location, we share our team guidelines and knowledge base
 regarding:
