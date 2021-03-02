@@ -361,9 +361,9 @@ func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 	return nil
 }
 
-// DrainMeta is part of the MetadataGenerator interface. DrainMeta may not be
-// called concurrently with Next.
-func (i *Inbox) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
+// DrainMeta is part of the colexecop.MetadataSource interface. DrainMeta may
+// not be called concurrently with Next.
+func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 	allMeta := i.bufferedMeta
 	i.bufferedMeta = i.bufferedMeta[:0]
 

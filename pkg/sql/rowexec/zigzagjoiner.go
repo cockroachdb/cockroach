@@ -306,7 +306,7 @@ func newZigzagJoiner(
 				// We need to generate metadata before closing the processor
 				// because InternalClose() updates z.Ctx to the "original"
 				// context.
-				trailingMeta := z.generateMeta(z.Ctx)
+				trailingMeta := z.generateMeta()
 				z.close()
 				return trailingMeta
 			},
@@ -1024,13 +1024,13 @@ func (z *zigzagJoiner) getRowsRead() int64 {
 	return rowsRead
 }
 
-func (z *zigzagJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = z.getBytesRead()
 	meta.Metrics.RowsRead = z.getRowsRead()
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, z.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx, z.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta

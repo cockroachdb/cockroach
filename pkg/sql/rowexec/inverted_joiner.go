@@ -250,7 +250,7 @@ func newInvertedJoiner(
 				// We need to generate metadata before closing the processor
 				// because InternalClose() updates ij.Ctx to the "original"
 				// context.
-				trailingMeta := ij.generateMeta(ij.Ctx)
+				trailingMeta := ij.generateMeta()
 				ij.close()
 				return trailingMeta
 			},
@@ -786,13 +786,13 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-func (ij *invertedJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+func (ij *invertedJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = ij.fetcher.GetBytesRead()
 	meta.Metrics.RowsRead = ij.rowsRead
-	if tfs := execinfra.GetLeafTxnFinalState(ctx, ij.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(ij.Ctx, ij.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta

@@ -272,7 +272,7 @@ var (
 )
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
-func (c *Columnarizer) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
+func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	if c.removedFromFlow {
 		return nil
 	}
