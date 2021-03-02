@@ -4232,6 +4232,51 @@ The matrix transformation will be applied as follows for each coordinate:
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"a", types.Float},
+				{"b", types.Float},
+				{"c", types.Float},
+				{"d", types.Float},
+				{"e", types.Float},
+				{"f", types.Float},
+				{"g", types.Float},
+				{"h", types.Float},
+				{"i", types.Float},
+				{"x_off", types.Float},
+				{"y_off", types.Float},
+				{"z_off", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				ret, err := geomfn.Affine(
+					g.Geometry,
+					geomfn.AffineMatrix([][]float64{
+						{float64(tree.MustBeDFloat(args[1])), float64(tree.MustBeDFloat(args[2])), float64(tree.MustBeDFloat(args[3])), float64(tree.MustBeDFloat(args[10]))},
+						{float64(tree.MustBeDFloat(args[4])), float64(tree.MustBeDFloat(args[5])), float64(tree.MustBeDFloat(args[6])), float64(tree.MustBeDFloat(args[11]))},
+						{float64(tree.MustBeDFloat(args[7])), float64(tree.MustBeDFloat(args[8])), float64(tree.MustBeDFloat(args[9])), float64(tree.MustBeDFloat(args[12]))},
+						{0, 0, 0, 1},
+					}),
+				)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Applies a 3D affine transformation to the given geometry.
+
+The matrix transformation will be applied as follows for each coordinate:
+/ a  b  c x_off \  / x \
+| d  e  f y_off |  | y |
+| g  h  i z_off |  | z |
+\ 0  0  0     1 /  \ 0 /
+				`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
 	),
 	"st_scale": makeBuiltin(
 		defProps(),
