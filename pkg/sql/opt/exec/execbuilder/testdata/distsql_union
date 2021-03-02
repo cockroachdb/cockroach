@@ -237,6 +237,7 @@ distribution: full
 vectorized: true
 ·
 • union
+│ estimated row count: 4
 │
 ├── • values
 │     size: 1 column, 2 rows
