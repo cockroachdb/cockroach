@@ -30,6 +30,7 @@ go_test(
     name = "partitionccl_test",
     size = "medium",
     srcs = [
+        "alter_primary_key_test.go",
         "drop_test.go",
         "main_test.go",
         "partition_test.go",
@@ -60,6 +61,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltestutils",
         "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/testutils",
