@@ -28,38 +28,42 @@ insert uniq
  │    └── (2, 2, 2, 2, 2)
  └── unique-checks
       ├── unique-checks-item: uniq(w)
-      │    └── semi-join (hash)
-      │         ├── columns: k:18!null v:19!null w:20!null x:21!null y:22!null
-      │         ├── with-scan &1
-      │         │    ├── columns: k:18!null v:19!null w:20!null x:21!null y:22!null
-      │         │    └── mapping:
-      │         │         ├──  column1:7 => k:18
-      │         │         ├──  column2:8 => v:19
-      │         │         ├──  column3:9 => w:20
-      │         │         ├──  column4:10 => x:21
-      │         │         └──  column5:11 => y:22
-      │         ├── scan uniq
-      │         │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
-      │         └── filters
-      │              ├── w:20 = uniq.w:14
-      │              └── k:18 != uniq.k:12
+      │    └── project
+      │         ├── columns: w:20!null
+      │         └── semi-join (hash)
+      │              ├── columns: k:18!null v:19!null w:20!null x:21!null y:22!null
+      │              ├── with-scan &1
+      │              │    ├── columns: k:18!null v:19!null w:20!null x:21!null y:22!null
+      │              │    └── mapping:
+      │              │         ├──  column1:7 => k:18
+      │              │         ├──  column2:8 => v:19
+      │              │         ├──  column3:9 => w:20
+      │              │         ├──  column4:10 => x:21
+      │              │         └──  column5:11 => y:22
+      │              ├── scan uniq
+      │              │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
+      │              └── filters
+      │                   ├── w:20 = uniq.w:14
+      │                   └── k:18 != uniq.k:12
       └── unique-checks-item: uniq(x,y)
-           └── semi-join (hash)
-                ├── columns: k:29!null v:30!null w:31!null x:32!null y:33!null
-                ├── with-scan &1
-                │    ├── columns: k:29!null v:30!null w:31!null x:32!null y:33!null
-                │    └── mapping:
-                │         ├──  column1:7 => k:29
-                │         ├──  column2:8 => v:30
-                │         ├──  column3:9 => w:31
-                │         ├──  column4:10 => x:32
-                │         └──  column5:11 => y:33
-                ├── scan uniq
-                │    └── columns: uniq.k:23!null uniq.v:24 uniq.w:25 uniq.x:26 uniq.y:27
-                └── filters
-                     ├── x:32 = uniq.x:26
-                     ├── y:33 = uniq.y:27
-                     └── k:29 != uniq.k:23
+           └── project
+                ├── columns: x:32!null y:33!null
+                └── semi-join (hash)
+                     ├── columns: k:29!null v:30!null w:31!null x:32!null y:33!null
+                     ├── with-scan &1
+                     │    ├── columns: k:29!null v:30!null w:31!null x:32!null y:33!null
+                     │    └── mapping:
+                     │         ├──  column1:7 => k:29
+                     │         ├──  column2:8 => v:30
+                     │         ├──  column3:9 => w:31
+                     │         ├──  column4:10 => x:32
+                     │         └──  column5:11 => y:33
+                     ├── scan uniq
+                     │    └── columns: uniq.k:23!null uniq.v:24 uniq.w:25 uniq.x:26 uniq.y:27
+                     └── filters
+                          ├── x:32 = uniq.x:26
+                          ├── y:33 = uniq.y:27
+                          └── k:29 != uniq.k:23
 
 # Some of the inserted values have nulls.
 build
@@ -81,38 +85,42 @@ insert uniq
  │    └── (3, NULL::INT8, NULL::INT8, NULL::INT8, 3)
  └── unique-checks
       ├── unique-checks-item: uniq(w)
-      │    └── semi-join (hash)
-      │         ├── columns: k:18!null v:19 w:20 x:21 y:22!null
-      │         ├── with-scan &1
-      │         │    ├── columns: k:18!null v:19 w:20 x:21 y:22!null
-      │         │    └── mapping:
-      │         │         ├──  column1:7 => k:18
-      │         │         ├──  column2:8 => v:19
-      │         │         ├──  column3:9 => w:20
-      │         │         ├──  column4:10 => x:21
-      │         │         └──  column5:11 => y:22
-      │         ├── scan uniq
-      │         │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
-      │         └── filters
-      │              ├── w:20 = uniq.w:14
-      │              └── k:18 != uniq.k:12
+      │    └── project
+      │         ├── columns: w:20
+      │         └── semi-join (hash)
+      │              ├── columns: k:18!null v:19 w:20 x:21 y:22!null
+      │              ├── with-scan &1
+      │              │    ├── columns: k:18!null v:19 w:20 x:21 y:22!null
+      │              │    └── mapping:
+      │              │         ├──  column1:7 => k:18
+      │              │         ├──  column2:8 => v:19
+      │              │         ├──  column3:9 => w:20
+      │              │         ├──  column4:10 => x:21
+      │              │         └──  column5:11 => y:22
+      │              ├── scan uniq
+      │              │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
+      │              └── filters
+      │                   ├── w:20 = uniq.w:14
+      │                   └── k:18 != uniq.k:12
       └── unique-checks-item: uniq(x,y)
-           └── semi-join (hash)
-                ├── columns: k:29!null v:30 w:31 x:32 y:33!null
-                ├── with-scan &1
-                │    ├── columns: k:29!null v:30 w:31 x:32 y:33!null
-                │    └── mapping:
-                │         ├──  column1:7 => k:29
-                │         ├──  column2:8 => v:30
-                │         ├──  column3:9 => w:31
-                │         ├──  column4:10 => x:32
-                │         └──  column5:11 => y:33
-                ├── scan uniq
-                │    └── columns: uniq.k:23!null uniq.v:24 uniq.w:25 uniq.x:26 uniq.y:27
-                └── filters
-                     ├── x:32 = uniq.x:26
-                     ├── y:33 = uniq.y:27
-                     └── k:29 != uniq.k:23
+           └── project
+                ├── columns: x:32 y:33!null
+                └── semi-join (hash)
+                     ├── columns: k:29!null v:30 w:31 x:32 y:33!null
+                     ├── with-scan &1
+                     │    ├── columns: k:29!null v:30 w:31 x:32 y:33!null
+                     │    └── mapping:
+                     │         ├──  column1:7 => k:29
+                     │         ├──  column2:8 => v:30
+                     │         ├──  column3:9 => w:31
+                     │         ├──  column4:10 => x:32
+                     │         └──  column5:11 => y:33
+                     ├── scan uniq
+                     │    └── columns: uniq.k:23!null uniq.v:24 uniq.w:25 uniq.x:26 uniq.y:27
+                     └── filters
+                          ├── x:32 = uniq.x:26
+                          ├── y:33 = uniq.y:27
+                          └── k:29 != uniq.k:23
 
 # No need to plan checks for w since it's always null.
 build
@@ -133,22 +141,24 @@ insert uniq
  │    └── (2, 2, NULL::INT8, 2, 2)
  └── unique-checks
       └── unique-checks-item: uniq(x,y)
-           └── semi-join (hash)
-                ├── columns: k:18!null v:19!null w:20 x:21!null y:22!null
-                ├── with-scan &1
-                │    ├── columns: k:18!null v:19!null w:20 x:21!null y:22!null
-                │    └── mapping:
-                │         ├──  column1:7 => k:18
-                │         ├──  column2:8 => v:19
-                │         ├──  column3:9 => w:20
-                │         ├──  column4:10 => x:21
-                │         └──  column5:11 => y:22
-                ├── scan uniq
-                │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
-                └── filters
-                     ├── x:21 = uniq.x:15
-                     ├── y:22 = uniq.y:16
-                     └── k:18 != uniq.k:12
+           └── project
+                ├── columns: x:21!null y:22!null
+                └── semi-join (hash)
+                     ├── columns: k:18!null v:19!null w:20 x:21!null y:22!null
+                     ├── with-scan &1
+                     │    ├── columns: k:18!null v:19!null w:20 x:21!null y:22!null
+                     │    └── mapping:
+                     │         ├──  column1:7 => k:18
+                     │         ├──  column2:8 => v:19
+                     │         ├──  column3:9 => w:20
+                     │         ├──  column4:10 => x:21
+                     │         └──  column5:11 => y:22
+                     ├── scan uniq
+                     │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
+                     └── filters
+                          ├── x:21 = uniq.x:15
+                          ├── y:22 = uniq.y:16
+                          └── k:18 != uniq.k:12
 
 # No need to plan checks for x,y since x is always null.
 build
@@ -169,21 +179,23 @@ insert uniq
  │    └── (2, 2, NULL::INT8, NULL::INT8, 2)
  └── unique-checks
       └── unique-checks-item: uniq(w)
-           └── semi-join (hash)
-                ├── columns: k:18!null v:19!null w:20 x:21 y:22!null
-                ├── with-scan &1
-                │    ├── columns: k:18!null v:19!null w:20 x:21 y:22!null
-                │    └── mapping:
-                │         ├──  column1:7 => k:18
-                │         ├──  column2:8 => v:19
-                │         ├──  column3:9 => w:20
-                │         ├──  column4:10 => x:21
-                │         └──  column5:11 => y:22
-                ├── scan uniq
-                │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
-                └── filters
-                     ├── w:20 = uniq.w:14
-                     └── k:18 != uniq.k:12
+           └── project
+                ├── columns: w:20
+                └── semi-join (hash)
+                     ├── columns: k:18!null v:19!null w:20 x:21 y:22!null
+                     ├── with-scan &1
+                     │    ├── columns: k:18!null v:19!null w:20 x:21 y:22!null
+                     │    └── mapping:
+                     │         ├──  column1:7 => k:18
+                     │         ├──  column2:8 => v:19
+                     │         ├──  column3:9 => w:20
+                     │         ├──  column4:10 => x:21
+                     │         └──  column5:11 => y:22
+                     ├── scan uniq
+                     │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
+                     └── filters
+                          ├── w:20 = uniq.w:14
+                          └── k:18 != uniq.k:12
 
 # No need to plan checks for x,y since y is always null.
 build
@@ -204,21 +216,23 @@ insert uniq
  │    └── (2, 2, 2, 2, NULL::INT8)
  └── unique-checks
       └── unique-checks-item: uniq(w)
-           └── semi-join (hash)
-                ├── columns: k:18!null v:19!null w:20!null x:21!null y:22
-                ├── with-scan &1
-                │    ├── columns: k:18!null v:19!null w:20!null x:21!null y:22
-                │    └── mapping:
-                │         ├──  column1:7 => k:18
-                │         ├──  column2:8 => v:19
-                │         ├──  column3:9 => w:20
-                │         ├──  column4:10 => x:21
-                │         └──  column5:11 => y:22
-                ├── scan uniq
-                │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
-                └── filters
-                     ├── w:20 = uniq.w:14
-                     └── k:18 != uniq.k:12
+           └── project
+                ├── columns: w:20!null
+                └── semi-join (hash)
+                     ├── columns: k:18!null v:19!null w:20!null x:21!null y:22
+                     ├── with-scan &1
+                     │    ├── columns: k:18!null v:19!null w:20!null x:21!null y:22
+                     │    └── mapping:
+                     │         ├──  column1:7 => k:18
+                     │         ├──  column2:8 => v:19
+                     │         ├──  column3:9 => w:20
+                     │         ├──  column4:10 => x:21
+                     │         └──  column5:11 => y:22
+                     ├── scan uniq
+                     │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
+                     └── filters
+                          ├── w:20 = uniq.w:14
+                          └── k:18 != uniq.k:12
 
 # No need to plan any checks, since w, x and y are always null.
 build
@@ -364,22 +378,24 @@ insert uniq
  │              └── column5:11
  └── unique-checks
       └── unique-checks-item: uniq(x,y)
-           └── semi-join (hash)
-                ├── columns: k:24!null v:25!null w:26!null x:27!null y:28!null
-                ├── with-scan &1
-                │    ├── columns: k:24!null v:25!null w:26!null x:27!null y:28!null
-                │    └── mapping:
-                │         ├──  column1:7 => k:24
-                │         ├──  column2:8 => v:25
-                │         ├──  column3:9 => w:26
-                │         ├──  column4:10 => x:27
-                │         └──  column5:11 => y:28
-                ├── scan uniq
-                │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
-                └── filters
-                     ├── x:27 = uniq.x:21
-                     ├── y:28 = uniq.y:22
-                     └── k:24 != uniq.k:18
+           └── project
+                ├── columns: x:27!null y:28!null
+                └── semi-join (hash)
+                     ├── columns: k:24!null v:25!null w:26!null x:27!null y:28!null
+                     ├── with-scan &1
+                     │    ├── columns: k:24!null v:25!null w:26!null x:27!null y:28!null
+                     │    └── mapping:
+                     │         ├──  column1:7 => k:24
+                     │         ├──  column2:8 => v:25
+                     │         ├──  column3:9 => w:26
+                     │         ├──  column4:10 => x:27
+                     │         └──  column5:11 => y:28
+                     ├── scan uniq
+                     │    └── columns: uniq.k:18!null uniq.v:19 uniq.w:20 uniq.x:21 uniq.y:22
+                     └── filters
+                          ├── x:27 = uniq.x:21
+                          ├── y:28 = uniq.y:22
+                          └── k:24 != uniq.k:18
 
 exec-ddl
 CREATE TABLE other (k INT, v INT, w INT NOT NULL, x INT, y INT)
@@ -404,38 +420,42 @@ insert uniq
  │         └── columns: other.k:7 other.v:8 other.w:9!null other.x:10 other.y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13
  └── unique-checks
       ├── unique-checks-item: uniq(w)
-      │    └── semi-join (hash)
-      │         ├── columns: k:20 v:21 w:22!null x:23 y:24
-      │         ├── with-scan &1
-      │         │    ├── columns: k:20 v:21 w:22!null x:23 y:24
-      │         │    └── mapping:
-      │         │         ├──  other.k:7 => k:20
-      │         │         ├──  other.v:8 => v:21
-      │         │         ├──  other.w:9 => w:22
-      │         │         ├──  other.x:10 => x:23
-      │         │         └──  other.y:11 => y:24
-      │         ├── scan uniq
-      │         │    └── columns: uniq.k:14!null uniq.v:15 uniq.w:16 uniq.x:17 uniq.y:18
-      │         └── filters
-      │              ├── w:22 = uniq.w:16
-      │              └── k:20 != uniq.k:14
+      │    └── project
+      │         ├── columns: w:22!null
+      │         └── semi-join (hash)
+      │              ├── columns: k:20 v:21 w:22!null x:23 y:24
+      │              ├── with-scan &1
+      │              │    ├── columns: k:20 v:21 w:22!null x:23 y:24
+      │              │    └── mapping:
+      │              │         ├──  other.k:7 => k:20
+      │              │         ├──  other.v:8 => v:21
+      │              │         ├──  other.w:9 => w:22
+      │              │         ├──  other.x:10 => x:23
+      │              │         └──  other.y:11 => y:24
+      │              ├── scan uniq
+      │              │    └── columns: uniq.k:14!null uniq.v:15 uniq.w:16 uniq.x:17 uniq.y:18
+      │              └── filters
+      │                   ├── w:22 = uniq.w:16
+      │                   └── k:20 != uniq.k:14
       └── unique-checks-item: uniq(x,y)
-           └── semi-join (hash)
-                ├── columns: k:31 v:32 w:33!null x:34 y:35
-                ├── with-scan &1
-                │    ├── columns: k:31 v:32 w:33!null x:34 y:35
-                │    └── mapping:
-                │         ├──  other.k:7 => k:31
-                │         ├──  other.v:8 => v:32
-                │         ├──  other.w:9 => w:33
-                │         ├──  other.x:10 => x:34
-                │         └──  other.y:11 => y:35
-                ├── scan uniq
-                │    └── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
-                └── filters
-                     ├── x:34 = uniq.x:28
-                     ├── y:35 = uniq.y:29
-                     └── k:31 != uniq.k:25
+           └── project
+                ├── columns: x:34 y:35
+                └── semi-join (hash)
+                     ├── columns: k:31 v:32 w:33!null x:34 y:35
+                     ├── with-scan &1
+                     │    ├── columns: k:31 v:32 w:33!null x:34 y:35
+                     │    └── mapping:
+                     │         ├──  other.k:7 => k:31
+                     │         ├──  other.v:8 => v:32
+                     │         ├──  other.w:9 => w:33
+                     │         ├──  other.x:10 => x:34
+                     │         └──  other.y:11 => y:35
+                     ├── scan uniq
+                     │    └── columns: uniq.k:25!null uniq.v:26 uniq.w:27 uniq.x:28 uniq.y:29
+                     └── filters
+                          ├── x:34 = uniq.x:28
+                          ├── y:35 = uniq.y:29
+                          └── k:31 != uniq.k:25
 
 exec-ddl
 CREATE TABLE uniq_overlaps_pk (
@@ -471,52 +491,58 @@ insert uniq_overlaps_pk
  │    └── (2, 2, 2, 2)
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
-      │    └── semi-join (hash)
-      │         ├── columns: a:15!null b:16!null c:17!null d:18!null
-      │         ├── with-scan &1
-      │         │    ├── columns: a:15!null b:16!null c:17!null d:18!null
-      │         │    └── mapping:
-      │         │         ├──  column1:6 => a:15
-      │         │         ├──  column2:7 => b:16
-      │         │         ├──  column3:8 => c:17
-      │         │         └──  column4:9 => d:18
-      │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: uniq_overlaps_pk.a:10!null uniq_overlaps_pk.b:11!null uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13
-      │         └── filters
-      │              ├── b:16 = uniq_overlaps_pk.b:11
-      │              ├── c:17 = uniq_overlaps_pk.c:12
-      │              └── a:15 != uniq_overlaps_pk.a:10
+      │    └── project
+      │         ├── columns: b:16!null c:17!null
+      │         └── semi-join (hash)
+      │              ├── columns: a:15!null b:16!null c:17!null d:18!null
+      │              ├── with-scan &1
+      │              │    ├── columns: a:15!null b:16!null c:17!null d:18!null
+      │              │    └── mapping:
+      │              │         ├──  column1:6 => a:15
+      │              │         ├──  column2:7 => b:16
+      │              │         ├──  column3:8 => c:17
+      │              │         └──  column4:9 => d:18
+      │              ├── scan uniq_overlaps_pk
+      │              │    └── columns: uniq_overlaps_pk.a:10!null uniq_overlaps_pk.b:11!null uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13
+      │              └── filters
+      │                   ├── b:16 = uniq_overlaps_pk.b:11
+      │                   ├── c:17 = uniq_overlaps_pk.c:12
+      │                   └── a:15 != uniq_overlaps_pk.a:10
       ├── unique-checks-item: uniq_overlaps_pk(a)
-      │    └── semi-join (hash)
-      │         ├── columns: a:24!null b:25!null c:26!null d:27!null
-      │         ├── with-scan &1
-      │         │    ├── columns: a:24!null b:25!null c:26!null d:27!null
-      │         │    └── mapping:
-      │         │         ├──  column1:6 => a:24
-      │         │         ├──  column2:7 => b:25
-      │         │         ├──  column3:8 => c:26
-      │         │         └──  column4:9 => d:27
-      │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: uniq_overlaps_pk.a:19!null uniq_overlaps_pk.b:20!null uniq_overlaps_pk.c:21 uniq_overlaps_pk.d:22
-      │         └── filters
-      │              ├── a:24 = uniq_overlaps_pk.a:19
-      │              └── b:25 != uniq_overlaps_pk.b:20
+      │    └── project
+      │         ├── columns: a:24!null
+      │         └── semi-join (hash)
+      │              ├── columns: a:24!null b:25!null c:26!null d:27!null
+      │              ├── with-scan &1
+      │              │    ├── columns: a:24!null b:25!null c:26!null d:27!null
+      │              │    └── mapping:
+      │              │         ├──  column1:6 => a:24
+      │              │         ├──  column2:7 => b:25
+      │              │         ├──  column3:8 => c:26
+      │              │         └──  column4:9 => d:27
+      │              ├── scan uniq_overlaps_pk
+      │              │    └── columns: uniq_overlaps_pk.a:19!null uniq_overlaps_pk.b:20!null uniq_overlaps_pk.c:21 uniq_overlaps_pk.d:22
+      │              └── filters
+      │                   ├── a:24 = uniq_overlaps_pk.a:19
+      │                   └── b:25 != uniq_overlaps_pk.b:20
       └── unique-checks-item: uniq_overlaps_pk(c,d)
-           └── semi-join (hash)
-                ├── columns: a:33!null b:34!null c:35!null d:36!null
-                ├── with-scan &1
-                │    ├── columns: a:33!null b:34!null c:35!null d:36!null
-                │    └── mapping:
-                │         ├──  column1:6 => a:33
-                │         ├──  column2:7 => b:34
-                │         ├──  column3:8 => c:35
-                │         └──  column4:9 => d:36
-                ├── scan uniq_overlaps_pk
-                │    └── columns: uniq_overlaps_pk.a:28!null uniq_overlaps_pk.b:29!null uniq_overlaps_pk.c:30 uniq_overlaps_pk.d:31
-                └── filters
-                     ├── c:35 = uniq_overlaps_pk.c:30
-                     ├── d:36 = uniq_overlaps_pk.d:31
-                     └── (a:33 != uniq_overlaps_pk.a:28) OR (b:34 != uniq_overlaps_pk.b:29)
+           └── project
+                ├── columns: c:35!null d:36!null
+                └── semi-join (hash)
+                     ├── columns: a:33!null b:34!null c:35!null d:36!null
+                     ├── with-scan &1
+                     │    ├── columns: a:33!null b:34!null c:35!null d:36!null
+                     │    └── mapping:
+                     │         ├──  column1:6 => a:33
+                     │         ├──  column2:7 => b:34
+                     │         ├──  column3:8 => c:35
+                     │         └──  column4:9 => d:36
+                     ├── scan uniq_overlaps_pk
+                     │    └── columns: uniq_overlaps_pk.a:28!null uniq_overlaps_pk.b:29!null uniq_overlaps_pk.c:30 uniq_overlaps_pk.d:31
+                     └── filters
+                          ├── c:35 = uniq_overlaps_pk.c:30
+                          ├── d:36 = uniq_overlaps_pk.d:31
+                          └── (a:33 != uniq_overlaps_pk.a:28) OR (b:34 != uniq_overlaps_pk.b:29)
 
 # Insert with non-constant input.
 # Add inequality filters for the primary key columns that are not part of each
@@ -538,52 +564,58 @@ insert uniq_overlaps_pk
  │         └── columns: k:6 v:7 w:8!null x:9 y:10 rowid:11!null other.crdb_internal_mvcc_timestamp:12
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
-      │    └── semi-join (hash)
-      │         ├── columns: a:18 b:19 c:20 d:21
-      │         ├── with-scan &1
-      │         │    ├── columns: a:18 b:19 c:20 d:21
-      │         │    └── mapping:
-      │         │         ├──  k:6 => a:18
-      │         │         ├──  v:7 => b:19
-      │         │         ├──  x:9 => c:20
-      │         │         └──  y:10 => d:21
-      │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: uniq_overlaps_pk.a:13!null uniq_overlaps_pk.b:14!null uniq_overlaps_pk.c:15 uniq_overlaps_pk.d:16
-      │         └── filters
-      │              ├── b:19 = uniq_overlaps_pk.b:14
-      │              ├── c:20 = uniq_overlaps_pk.c:15
-      │              └── a:18 != uniq_overlaps_pk.a:13
+      │    └── project
+      │         ├── columns: b:19 c:20
+      │         └── semi-join (hash)
+      │              ├── columns: a:18 b:19 c:20 d:21
+      │              ├── with-scan &1
+      │              │    ├── columns: a:18 b:19 c:20 d:21
+      │              │    └── mapping:
+      │              │         ├──  k:6 => a:18
+      │              │         ├──  v:7 => b:19
+      │              │         ├──  x:9 => c:20
+      │              │         └──  y:10 => d:21
+      │              ├── scan uniq_overlaps_pk
+      │              │    └── columns: uniq_overlaps_pk.a:13!null uniq_overlaps_pk.b:14!null uniq_overlaps_pk.c:15 uniq_overlaps_pk.d:16
+      │              └── filters
+      │                   ├── b:19 = uniq_overlaps_pk.b:14
+      │                   ├── c:20 = uniq_overlaps_pk.c:15
+      │                   └── a:18 != uniq_overlaps_pk.a:13
       ├── unique-checks-item: uniq_overlaps_pk(a)
-      │    └── semi-join (hash)
-      │         ├── columns: a:27 b:28 c:29 d:30
-      │         ├── with-scan &1
-      │         │    ├── columns: a:27 b:28 c:29 d:30
-      │         │    └── mapping:
-      │         │         ├──  k:6 => a:27
-      │         │         ├──  v:7 => b:28
-      │         │         ├──  x:9 => c:29
-      │         │         └──  y:10 => d:30
-      │         ├── scan uniq_overlaps_pk
-      │         │    └── columns: uniq_overlaps_pk.a:22!null uniq_overlaps_pk.b:23!null uniq_overlaps_pk.c:24 uniq_overlaps_pk.d:25
-      │         └── filters
-      │              ├── a:27 = uniq_overlaps_pk.a:22
-      │              └── b:28 != uniq_overlaps_pk.b:23
+      │    └── project
+      │         ├── columns: a:27
+      │         └── semi-join (hash)
+      │              ├── columns: a:27 b:28 c:29 d:30
+      │              ├── with-scan &1
+      │              │    ├── columns: a:27 b:28 c:29 d:30
+      │              │    └── mapping:
+      │              │         ├──  k:6 => a:27
+      │              │         ├──  v:7 => b:28
+      │              │         ├──  x:9 => c:29
+      │              │         └──  y:10 => d:30
+      │              ├── scan uniq_overlaps_pk
+      │              │    └── columns: uniq_overlaps_pk.a:22!null uniq_overlaps_pk.b:23!null uniq_overlaps_pk.c:24 uniq_overlaps_pk.d:25
+      │              └── filters
+      │                   ├── a:27 = uniq_overlaps_pk.a:22
+      │                   └── b:28 != uniq_overlaps_pk.b:23
       └── unique-checks-item: uniq_overlaps_pk(c,d)
-           └── semi-join (hash)
-                ├── columns: a:36 b:37 c:38 d:39
-                ├── with-scan &1
-                │    ├── columns: a:36 b:37 c:38 d:39
-                │    └── mapping:
-                │         ├──  k:6 => a:36
-                │         ├──  v:7 => b:37
-                │         ├──  x:9 => c:38
-                │         └──  y:10 => d:39
-                ├── scan uniq_overlaps_pk
-                │    └── columns: uniq_overlaps_pk.a:31!null uniq_overlaps_pk.b:32!null uniq_overlaps_pk.c:33 uniq_overlaps_pk.d:34
-                └── filters
-                     ├── c:38 = uniq_overlaps_pk.c:33
-                     ├── d:39 = uniq_overlaps_pk.d:34
-                     └── (a:36 != uniq_overlaps_pk.a:31) OR (b:37 != uniq_overlaps_pk.b:32)
+           └── project
+                ├── columns: c:38 d:39
+                └── semi-join (hash)
+                     ├── columns: a:36 b:37 c:38 d:39
+                     ├── with-scan &1
+                     │    ├── columns: a:36 b:37 c:38 d:39
+                     │    └── mapping:
+                     │         ├──  k:6 => a:36
+                     │         ├──  v:7 => b:37
+                     │         ├──  x:9 => c:38
+                     │         └──  y:10 => d:39
+                     ├── scan uniq_overlaps_pk
+                     │    └── columns: uniq_overlaps_pk.a:31!null uniq_overlaps_pk.b:32!null uniq_overlaps_pk.c:33 uniq_overlaps_pk.d:34
+                     └── filters
+                          ├── c:38 = uniq_overlaps_pk.c:33
+                          ├── d:39 = uniq_overlaps_pk.d:34
+                          └── (a:36 != uniq_overlaps_pk.a:31) OR (b:37 != uniq_overlaps_pk.b:32)
 
 exec-ddl
 CREATE TABLE uniq_hidden_pk (
@@ -621,56 +653,62 @@ insert uniq_hidden_pk
  │         └── unique_rowid() [as=column11:11]
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
-      │    └── semi-join (hash)
-      │         ├── columns: a:18!null b:19!null c:20!null d:21!null rowid:22
-      │         ├── with-scan &1
-      │         │    ├── columns: a:18!null b:19!null c:20!null d:21!null rowid:22
-      │         │    └── mapping:
-      │         │         ├──  column1:7 => a:18
-      │         │         ├──  column2:8 => b:19
-      │         │         ├──  column3:9 => c:20
-      │         │         ├──  column4:10 => d:21
-      │         │         └──  column11:11 => rowid:22
-      │         ├── scan uniq_hidden_pk
-      │         │    └── columns: uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16!null
-      │         └── filters
-      │              ├── b:19 = uniq_hidden_pk.b:13
-      │              ├── c:20 = uniq_hidden_pk.c:14
-      │              └── rowid:22 != uniq_hidden_pk.rowid:16
+      │    └── project
+      │         ├── columns: b:19!null c:20!null
+      │         └── semi-join (hash)
+      │              ├── columns: a:18!null b:19!null c:20!null d:21!null rowid:22
+      │              ├── with-scan &1
+      │              │    ├── columns: a:18!null b:19!null c:20!null d:21!null rowid:22
+      │              │    └── mapping:
+      │              │         ├──  column1:7 => a:18
+      │              │         ├──  column2:8 => b:19
+      │              │         ├──  column3:9 => c:20
+      │              │         ├──  column4:10 => d:21
+      │              │         └──  column11:11 => rowid:22
+      │              ├── scan uniq_hidden_pk
+      │              │    └── columns: uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16!null
+      │              └── filters
+      │                   ├── b:19 = uniq_hidden_pk.b:13
+      │                   ├── c:20 = uniq_hidden_pk.c:14
+      │                   └── rowid:22 != uniq_hidden_pk.rowid:16
       ├── unique-checks-item: uniq_hidden_pk(a,b,d)
-      │    └── semi-join (hash)
-      │         ├── columns: a:29!null b:30!null c:31!null d:32!null rowid:33
-      │         ├── with-scan &1
-      │         │    ├── columns: a:29!null b:30!null c:31!null d:32!null rowid:33
-      │         │    └── mapping:
-      │         │         ├──  column1:7 => a:29
-      │         │         ├──  column2:8 => b:30
-      │         │         ├──  column3:9 => c:31
-      │         │         ├──  column4:10 => d:32
-      │         │         └──  column11:11 => rowid:33
-      │         ├── scan uniq_hidden_pk
-      │         │    └── columns: uniq_hidden_pk.a:23 uniq_hidden_pk.b:24 uniq_hidden_pk.c:25 uniq_hidden_pk.d:26 uniq_hidden_pk.rowid:27!null
-      │         └── filters
-      │              ├── a:29 = uniq_hidden_pk.a:23
-      │              ├── b:30 = uniq_hidden_pk.b:24
-      │              ├── d:32 = uniq_hidden_pk.d:26
-      │              └── rowid:33 != uniq_hidden_pk.rowid:27
+      │    └── project
+      │         ├── columns: a:29!null b:30!null d:32!null
+      │         └── semi-join (hash)
+      │              ├── columns: a:29!null b:30!null c:31!null d:32!null rowid:33
+      │              ├── with-scan &1
+      │              │    ├── columns: a:29!null b:30!null c:31!null d:32!null rowid:33
+      │              │    └── mapping:
+      │              │         ├──  column1:7 => a:29
+      │              │         ├──  column2:8 => b:30
+      │              │         ├──  column3:9 => c:31
+      │              │         ├──  column4:10 => d:32
+      │              │         └──  column11:11 => rowid:33
+      │              ├── scan uniq_hidden_pk
+      │              │    └── columns: uniq_hidden_pk.a:23 uniq_hidden_pk.b:24 uniq_hidden_pk.c:25 uniq_hidden_pk.d:26 uniq_hidden_pk.rowid:27!null
+      │              └── filters
+      │                   ├── a:29 = uniq_hidden_pk.a:23
+      │                   ├── b:30 = uniq_hidden_pk.b:24
+      │                   ├── d:32 = uniq_hidden_pk.d:26
+      │                   └── rowid:33 != uniq_hidden_pk.rowid:27
       └── unique-checks-item: uniq_hidden_pk(a)
-           └── semi-join (hash)
-                ├── columns: a:40!null b:41!null c:42!null d:43!null rowid:44
-                ├── with-scan &1
-                │    ├── columns: a:40!null b:41!null c:42!null d:43!null rowid:44
-                │    └── mapping:
-                │         ├──  column1:7 => a:40
-                │         ├──  column2:8 => b:41
-                │         ├──  column3:9 => c:42
-                │         ├──  column4:10 => d:43
-                │         └──  column11:11 => rowid:44
-                ├── scan uniq_hidden_pk
-                │    └── columns: uniq_hidden_pk.a:34 uniq_hidden_pk.b:35 uniq_hidden_pk.c:36 uniq_hidden_pk.d:37 uniq_hidden_pk.rowid:38!null
-                └── filters
-                     ├── a:40 = uniq_hidden_pk.a:34
-                     └── rowid:44 != uniq_hidden_pk.rowid:38
+           └── project
+                ├── columns: a:40!null
+                └── semi-join (hash)
+                     ├── columns: a:40!null b:41!null c:42!null d:43!null rowid:44
+                     ├── with-scan &1
+                     │    ├── columns: a:40!null b:41!null c:42!null d:43!null rowid:44
+                     │    └── mapping:
+                     │         ├──  column1:7 => a:40
+                     │         ├──  column2:8 => b:41
+                     │         ├──  column3:9 => c:42
+                     │         ├──  column4:10 => d:43
+                     │         └──  column11:11 => rowid:44
+                     ├── scan uniq_hidden_pk
+                     │    └── columns: uniq_hidden_pk.a:34 uniq_hidden_pk.b:35 uniq_hidden_pk.c:36 uniq_hidden_pk.d:37 uniq_hidden_pk.rowid:38!null
+                     └── filters
+                          ├── a:40 = uniq_hidden_pk.a:34
+                          └── rowid:44 != uniq_hidden_pk.rowid:38
 
 # Insert with non-constant input.
 # Add inequality filters for the hidden primary key column.
@@ -696,56 +734,62 @@ insert uniq_hidden_pk
  │         └── unique_rowid() [as=column14:14]
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
-      │    └── semi-join (hash)
-      │         ├── columns: a:21 b:22 c:23 d:24 rowid:25
-      │         ├── with-scan &1
-      │         │    ├── columns: a:21 b:22 c:23 d:24 rowid:25
-      │         │    └── mapping:
-      │         │         ├──  k:7 => a:21
-      │         │         ├──  v:8 => b:22
-      │         │         ├──  x:10 => c:23
-      │         │         ├──  y:11 => d:24
-      │         │         └──  column14:14 => rowid:25
-      │         ├── scan uniq_hidden_pk
-      │         │    └── columns: uniq_hidden_pk.a:15 uniq_hidden_pk.b:16 uniq_hidden_pk.c:17 uniq_hidden_pk.d:18 uniq_hidden_pk.rowid:19!null
-      │         └── filters
-      │              ├── b:22 = uniq_hidden_pk.b:16
-      │              ├── c:23 = uniq_hidden_pk.c:17
-      │              └── rowid:25 != uniq_hidden_pk.rowid:19
+      │    └── project
+      │         ├── columns: b:22 c:23
+      │         └── semi-join (hash)
+      │              ├── columns: a:21 b:22 c:23 d:24 rowid:25
+      │              ├── with-scan &1
+      │              │    ├── columns: a:21 b:22 c:23 d:24 rowid:25
+      │              │    └── mapping:
+      │              │         ├──  k:7 => a:21
+      │              │         ├──  v:8 => b:22
+      │              │         ├──  x:10 => c:23
+      │              │         ├──  y:11 => d:24
+      │              │         └──  column14:14 => rowid:25
+      │              ├── scan uniq_hidden_pk
+      │              │    └── columns: uniq_hidden_pk.a:15 uniq_hidden_pk.b:16 uniq_hidden_pk.c:17 uniq_hidden_pk.d:18 uniq_hidden_pk.rowid:19!null
+      │              └── filters
+      │                   ├── b:22 = uniq_hidden_pk.b:16
+      │                   ├── c:23 = uniq_hidden_pk.c:17
+      │                   └── rowid:25 != uniq_hidden_pk.rowid:19
       ├── unique-checks-item: uniq_hidden_pk(a,b,d)
-      │    └── semi-join (hash)
-      │         ├── columns: a:32 b:33 c:34 d:35 rowid:36
-      │         ├── with-scan &1
-      │         │    ├── columns: a:32 b:33 c:34 d:35 rowid:36
-      │         │    └── mapping:
-      │         │         ├──  k:7 => a:32
-      │         │         ├──  v:8 => b:33
-      │         │         ├──  x:10 => c:34
-      │         │         ├──  y:11 => d:35
-      │         │         └──  column14:14 => rowid:36
-      │         ├── scan uniq_hidden_pk
-      │         │    └── columns: uniq_hidden_pk.a:26 uniq_hidden_pk.b:27 uniq_hidden_pk.c:28 uniq_hidden_pk.d:29 uniq_hidden_pk.rowid:30!null
-      │         └── filters
-      │              ├── a:32 = uniq_hidden_pk.a:26
-      │              ├── b:33 = uniq_hidden_pk.b:27
-      │              ├── d:35 = uniq_hidden_pk.d:29
-      │              └── rowid:36 != uniq_hidden_pk.rowid:30
+      │    └── project
+      │         ├── columns: a:32 b:33 d:35
+      │         └── semi-join (hash)
+      │              ├── columns: a:32 b:33 c:34 d:35 rowid:36
+      │              ├── with-scan &1
+      │              │    ├── columns: a:32 b:33 c:34 d:35 rowid:36
+      │              │    └── mapping:
+      │              │         ├──  k:7 => a:32
+      │              │         ├──  v:8 => b:33
+      │              │         ├──  x:10 => c:34
+      │              │         ├──  y:11 => d:35
+      │              │         └──  column14:14 => rowid:36
+      │              ├── scan uniq_hidden_pk
+      │              │    └── columns: uniq_hidden_pk.a:26 uniq_hidden_pk.b:27 uniq_hidden_pk.c:28 uniq_hidden_pk.d:29 uniq_hidden_pk.rowid:30!null
+      │              └── filters
+      │                   ├── a:32 = uniq_hidden_pk.a:26
+      │                   ├── b:33 = uniq_hidden_pk.b:27
+      │                   ├── d:35 = uniq_hidden_pk.d:29
+      │                   └── rowid:36 != uniq_hidden_pk.rowid:30
       └── unique-checks-item: uniq_hidden_pk(a)
-           └── semi-join (hash)
-                ├── columns: a:43 b:44 c:45 d:46 rowid:47
-                ├── with-scan &1
-                │    ├── columns: a:43 b:44 c:45 d:46 rowid:47
-                │    └── mapping:
-                │         ├──  k:7 => a:43
-                │         ├──  v:8 => b:44
-                │         ├──  x:10 => c:45
-                │         ├──  y:11 => d:46
-                │         └──  column14:14 => rowid:47
-                ├── scan uniq_hidden_pk
-                │    └── columns: uniq_hidden_pk.a:37 uniq_hidden_pk.b:38 uniq_hidden_pk.c:39 uniq_hidden_pk.d:40 uniq_hidden_pk.rowid:41!null
-                └── filters
-                     ├── a:43 = uniq_hidden_pk.a:37
-                     └── rowid:47 != uniq_hidden_pk.rowid:41
+           └── project
+                ├── columns: a:43
+                └── semi-join (hash)
+                     ├── columns: a:43 b:44 c:45 d:46 rowid:47
+                     ├── with-scan &1
+                     │    ├── columns: a:43 b:44 c:45 d:46 rowid:47
+                     │    └── mapping:
+                     │         ├──  k:7 => a:43
+                     │         ├──  v:8 => b:44
+                     │         ├──  x:10 => c:45
+                     │         ├──  y:11 => d:46
+                     │         └──  column14:14 => rowid:47
+                     ├── scan uniq_hidden_pk
+                     │    └── columns: uniq_hidden_pk.a:37 uniq_hidden_pk.b:38 uniq_hidden_pk.c:39 uniq_hidden_pk.d:40 uniq_hidden_pk.rowid:41!null
+                     └── filters
+                          ├── a:43 = uniq_hidden_pk.a:37
+                          └── rowid:47 != uniq_hidden_pk.rowid:41
 
 exec-ddl
 CREATE TABLE uniq_partial (
@@ -773,21 +817,23 @@ insert uniq_partial
  │    └── (2, 2, 2)
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
-           └── semi-join (hash)
-                ├── columns: k:12!null a:13!null b:14!null
-                ├── with-scan &1
-                │    ├── columns: k:12!null a:13!null b:14!null
-                │    └── mapping:
-                │         ├──  column1:5 => k:12
-                │         ├──  column2:6 => a:13
-                │         └──  column3:7 => b:14
-                ├── scan uniq_partial
-                │    └── columns: uniq_partial.k:8!null uniq_partial.a:9 uniq_partial.b:10
-                └── filters
-                     ├── a:13 = uniq_partial.a:9
-                     ├── b:14 > 0
-                     ├── uniq_partial.b:10 > 0
-                     └── k:12 != uniq_partial.k:8
+           └── project
+                ├── columns: a:13!null
+                └── semi-join (hash)
+                     ├── columns: k:12!null a:13!null b:14!null
+                     ├── with-scan &1
+                     │    ├── columns: k:12!null a:13!null b:14!null
+                     │    └── mapping:
+                     │         ├──  column1:5 => k:12
+                     │         ├──  column2:6 => a:13
+                     │         └──  column3:7 => b:14
+                     ├── scan uniq_partial
+                     │    └── columns: uniq_partial.k:8!null uniq_partial.a:9 uniq_partial.b:10
+                     └── filters
+                          ├── a:13 = uniq_partial.a:9
+                          ├── b:14 > 0
+                          ├── uniq_partial.b:10 > 0
+                          └── k:12 != uniq_partial.k:8
 
 # Some of the inserted values have nulls.
 build
@@ -807,21 +853,23 @@ insert uniq_partial
  │    └── (3, NULL::INT8, 3)
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
-           └── semi-join (hash)
-                ├── columns: k:12!null a:13 b:14!null
-                ├── with-scan &1
-                │    ├── columns: k:12!null a:13 b:14!null
-                │    └── mapping:
-                │         ├──  column1:5 => k:12
-                │         ├──  column2:6 => a:13
-                │         └──  column3:7 => b:14
-                ├── scan uniq_partial
-                │    └── columns: uniq_partial.k:8!null uniq_partial.a:9 uniq_partial.b:10
-                └── filters
-                     ├── a:13 = uniq_partial.a:9
-                     ├── b:14 > 0
-                     ├── uniq_partial.b:10 > 0
-                     └── k:12 != uniq_partial.k:8
+           └── project
+                ├── columns: a:13
+                └── semi-join (hash)
+                     ├── columns: k:12!null a:13 b:14!null
+                     ├── with-scan &1
+                     │    ├── columns: k:12!null a:13 b:14!null
+                     │    └── mapping:
+                     │         ├──  column1:5 => k:12
+                     │         ├──  column2:6 => a:13
+                     │         └──  column3:7 => b:14
+                     ├── scan uniq_partial
+                     │    └── columns: uniq_partial.k:8!null uniq_partial.a:9 uniq_partial.b:10
+                     └── filters
+                          ├── a:13 = uniq_partial.a:9
+                          ├── b:14 > 0
+                          ├── uniq_partial.b:10 > 0
+                          └── k:12 != uniq_partial.k:8
 
 # No need to plan checks for a since it's always null.
 build
@@ -959,21 +1007,23 @@ insert uniq_partial
  │         └── columns: other.k:5 v:6 w:7!null x:8 y:9 rowid:10!null other.crdb_internal_mvcc_timestamp:11
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
-           └── semi-join (hash)
-                ├── columns: k:16 a:17 b:18!null
-                ├── with-scan &1
-                │    ├── columns: k:16 a:17 b:18!null
-                │    └── mapping:
-                │         ├──  other.k:5 => k:16
-                │         ├──  v:6 => a:17
-                │         └──  w:7 => b:18
-                ├── scan uniq_partial
-                │    └── columns: uniq_partial.k:12!null uniq_partial.a:13 uniq_partial.b:14
-                └── filters
-                     ├── a:17 = uniq_partial.a:13
-                     ├── b:18 > 0
-                     ├── uniq_partial.b:14 > 0
-                     └── k:16 != uniq_partial.k:12
+           └── project
+                ├── columns: a:17
+                └── semi-join (hash)
+                     ├── columns: k:16 a:17 b:18!null
+                     ├── with-scan &1
+                     │    ├── columns: k:16 a:17 b:18!null
+                     │    └── mapping:
+                     │         ├──  other.k:5 => k:16
+                     │         ├──  v:6 => a:17
+                     │         └──  w:7 => b:18
+                     ├── scan uniq_partial
+                     │    └── columns: uniq_partial.k:12!null uniq_partial.a:13 uniq_partial.b:14
+                     └── filters
+                          ├── a:17 = uniq_partial.a:13
+                          ├── b:18 > 0
+                          ├── uniq_partial.b:14 > 0
+                          └── k:16 != uniq_partial.k:12
 
 exec-ddl
 CREATE TABLE uniq_partial_overlaps_pk (
@@ -1010,57 +1060,63 @@ insert uniq_partial_overlaps_pk
  │    └── (2, 2, 2, 2)
  └── unique-checks
       ├── unique-checks-item: uniq_partial_overlaps_pk(c)
-      │    └── semi-join (hash)
-      │         ├── columns: a:15!null b:16!null c:17!null d:18!null
-      │         ├── with-scan &1
-      │         │    ├── columns: a:15!null b:16!null c:17!null d:18!null
-      │         │    └── mapping:
-      │         │         ├──  column1:6 => a:15
-      │         │         ├──  column2:7 => b:16
-      │         │         ├──  column3:8 => c:17
-      │         │         └──  column4:9 => d:18
-      │         ├── scan uniq_partial_overlaps_pk
-      │         │    └── columns: uniq_partial_overlaps_pk.a:10!null uniq_partial_overlaps_pk.b:11!null uniq_partial_overlaps_pk.c:12 uniq_partial_overlaps_pk.d:13
-      │         └── filters
-      │              ├── c:17 = uniq_partial_overlaps_pk.c:12
-      │              ├── d:18 > 0
-      │              ├── uniq_partial_overlaps_pk.d:13 > 0
-      │              └── (a:15 != uniq_partial_overlaps_pk.a:10) OR (b:16 != uniq_partial_overlaps_pk.b:11)
+      │    └── project
+      │         ├── columns: c:17!null
+      │         └── semi-join (hash)
+      │              ├── columns: a:15!null b:16!null c:17!null d:18!null
+      │              ├── with-scan &1
+      │              │    ├── columns: a:15!null b:16!null c:17!null d:18!null
+      │              │    └── mapping:
+      │              │         ├──  column1:6 => a:15
+      │              │         ├──  column2:7 => b:16
+      │              │         ├──  column3:8 => c:17
+      │              │         └──  column4:9 => d:18
+      │              ├── scan uniq_partial_overlaps_pk
+      │              │    └── columns: uniq_partial_overlaps_pk.a:10!null uniq_partial_overlaps_pk.b:11!null uniq_partial_overlaps_pk.c:12 uniq_partial_overlaps_pk.d:13
+      │              └── filters
+      │                   ├── c:17 = uniq_partial_overlaps_pk.c:12
+      │                   ├── d:18 > 0
+      │                   ├── uniq_partial_overlaps_pk.d:13 > 0
+      │                   └── (a:15 != uniq_partial_overlaps_pk.a:10) OR (b:16 != uniq_partial_overlaps_pk.b:11)
       ├── unique-checks-item: uniq_partial_overlaps_pk(a)
-      │    └── semi-join (hash)
-      │         ├── columns: a:24!null b:25!null c:26!null d:27!null
-      │         ├── with-scan &1
-      │         │    ├── columns: a:24!null b:25!null c:26!null d:27!null
-      │         │    └── mapping:
-      │         │         ├──  column1:6 => a:24
-      │         │         ├──  column2:7 => b:25
-      │         │         ├──  column3:8 => c:26
-      │         │         └──  column4:9 => d:27
-      │         ├── scan uniq_partial_overlaps_pk
-      │         │    └── columns: uniq_partial_overlaps_pk.a:19!null uniq_partial_overlaps_pk.b:20!null uniq_partial_overlaps_pk.c:21 uniq_partial_overlaps_pk.d:22
-      │         └── filters
-      │              ├── a:24 = uniq_partial_overlaps_pk.a:19
-      │              ├── d:27 > 0
-      │              ├── uniq_partial_overlaps_pk.d:22 > 0
-      │              └── b:25 != uniq_partial_overlaps_pk.b:20
+      │    └── project
+      │         ├── columns: a:24!null
+      │         └── semi-join (hash)
+      │              ├── columns: a:24!null b:25!null c:26!null d:27!null
+      │              ├── with-scan &1
+      │              │    ├── columns: a:24!null b:25!null c:26!null d:27!null
+      │              │    └── mapping:
+      │              │         ├──  column1:6 => a:24
+      │              │         ├──  column2:7 => b:25
+      │              │         ├──  column3:8 => c:26
+      │              │         └──  column4:9 => d:27
+      │              ├── scan uniq_partial_overlaps_pk
+      │              │    └── columns: uniq_partial_overlaps_pk.a:19!null uniq_partial_overlaps_pk.b:20!null uniq_partial_overlaps_pk.c:21 uniq_partial_overlaps_pk.d:22
+      │              └── filters
+      │                   ├── a:24 = uniq_partial_overlaps_pk.a:19
+      │                   ├── d:27 > 0
+      │                   ├── uniq_partial_overlaps_pk.d:22 > 0
+      │                   └── b:25 != uniq_partial_overlaps_pk.b:20
       └── unique-checks-item: uniq_partial_overlaps_pk(b,c)
-           └── semi-join (hash)
-                ├── columns: a:33!null b:34!null c:35!null d:36!null
-                ├── with-scan &1
-                │    ├── columns: a:33!null b:34!null c:35!null d:36!null
-                │    └── mapping:
-                │         ├──  column1:6 => a:33
-                │         ├──  column2:7 => b:34
-                │         ├──  column3:8 => c:35
-                │         └──  column4:9 => d:36
-                ├── scan uniq_partial_overlaps_pk
-                │    └── columns: uniq_partial_overlaps_pk.a:28!null uniq_partial_overlaps_pk.b:29!null uniq_partial_overlaps_pk.c:30 uniq_partial_overlaps_pk.d:31
-                └── filters
-                     ├── b:34 = uniq_partial_overlaps_pk.b:29
-                     ├── c:35 = uniq_partial_overlaps_pk.c:30
-                     ├── d:36 > 0
-                     ├── uniq_partial_overlaps_pk.d:31 > 0
-                     └── a:33 != uniq_partial_overlaps_pk.a:28
+           └── project
+                ├── columns: b:34!null c:35!null
+                └── semi-join (hash)
+                     ├── columns: a:33!null b:34!null c:35!null d:36!null
+                     ├── with-scan &1
+                     │    ├── columns: a:33!null b:34!null c:35!null d:36!null
+                     │    └── mapping:
+                     │         ├──  column1:6 => a:33
+                     │         ├──  column2:7 => b:34
+                     │         ├──  column3:8 => c:35
+                     │         └──  column4:9 => d:36
+                     ├── scan uniq_partial_overlaps_pk
+                     │    └── columns: uniq_partial_overlaps_pk.a:28!null uniq_partial_overlaps_pk.b:29!null uniq_partial_overlaps_pk.c:30 uniq_partial_overlaps_pk.d:31
+                     └── filters
+                          ├── b:34 = uniq_partial_overlaps_pk.b:29
+                          ├── c:35 = uniq_partial_overlaps_pk.c:30
+                          ├── d:36 > 0
+                          ├── uniq_partial_overlaps_pk.d:31 > 0
+                          └── a:33 != uniq_partial_overlaps_pk.a:28
 
 # Insert with non-constant input.
 # Do not build uniqueness checks when the primary key columns are a subset of
@@ -1082,57 +1138,63 @@ insert uniq_partial_overlaps_pk
  │         └── columns: k:6 v:7 w:8!null x:9 y:10 rowid:11!null other.crdb_internal_mvcc_timestamp:12
  └── unique-checks
       ├── unique-checks-item: uniq_partial_overlaps_pk(c)
-      │    └── semi-join (hash)
-      │         ├── columns: a:18 b:19 c:20 d:21
-      │         ├── with-scan &1
-      │         │    ├── columns: a:18 b:19 c:20 d:21
-      │         │    └── mapping:
-      │         │         ├──  k:6 => a:18
-      │         │         ├──  v:7 => b:19
-      │         │         ├──  x:9 => c:20
-      │         │         └──  y:10 => d:21
-      │         ├── scan uniq_partial_overlaps_pk
-      │         │    └── columns: uniq_partial_overlaps_pk.a:13!null uniq_partial_overlaps_pk.b:14!null uniq_partial_overlaps_pk.c:15 uniq_partial_overlaps_pk.d:16
-      │         └── filters
-      │              ├── c:20 = uniq_partial_overlaps_pk.c:15
-      │              ├── d:21 > 0
-      │              ├── uniq_partial_overlaps_pk.d:16 > 0
-      │              └── (a:18 != uniq_partial_overlaps_pk.a:13) OR (b:19 != uniq_partial_overlaps_pk.b:14)
+      │    └── project
+      │         ├── columns: c:20
+      │         └── semi-join (hash)
+      │              ├── columns: a:18 b:19 c:20 d:21
+      │              ├── with-scan &1
+      │              │    ├── columns: a:18 b:19 c:20 d:21
+      │              │    └── mapping:
+      │              │         ├──  k:6 => a:18
+      │              │         ├──  v:7 => b:19
+      │              │         ├──  x:9 => c:20
+      │              │         └──  y:10 => d:21
+      │              ├── scan uniq_partial_overlaps_pk
+      │              │    └── columns: uniq_partial_overlaps_pk.a:13!null uniq_partial_overlaps_pk.b:14!null uniq_partial_overlaps_pk.c:15 uniq_partial_overlaps_pk.d:16
+      │              └── filters
+      │                   ├── c:20 = uniq_partial_overlaps_pk.c:15
+      │                   ├── d:21 > 0
+      │                   ├── uniq_partial_overlaps_pk.d:16 > 0
+      │                   └── (a:18 != uniq_partial_overlaps_pk.a:13) OR (b:19 != uniq_partial_overlaps_pk.b:14)
       ├── unique-checks-item: uniq_partial_overlaps_pk(a)
-      │    └── semi-join (hash)
-      │         ├── columns: a:27 b:28 c:29 d:30
-      │         ├── with-scan &1
-      │         │    ├── columns: a:27 b:28 c:29 d:30
-      │         │    └── mapping:
-      │         │         ├──  k:6 => a:27
-      │         │         ├──  v:7 => b:28
-      │         │         ├──  x:9 => c:29
-      │         │         └──  y:10 => d:30
-      │         ├── scan uniq_partial_overlaps_pk
-      │         │    └── columns: uniq_partial_overlaps_pk.a:22!null uniq_partial_overlaps_pk.b:23!null uniq_partial_overlaps_pk.c:24 uniq_partial_overlaps_pk.d:25
-      │         └── filters
-      │              ├── a:27 = uniq_partial_overlaps_pk.a:22
-      │              ├── d:30 > 0
-      │              ├── uniq_partial_overlaps_pk.d:25 > 0
-      │              └── b:28 != uniq_partial_overlaps_pk.b:23
+      │    └── project
+      │         ├── columns: a:27
+      │         └── semi-join (hash)
+      │              ├── columns: a:27 b:28 c:29 d:30
+      │              ├── with-scan &1
+      │              │    ├── columns: a:27 b:28 c:29 d:30
+      │              │    └── mapping:
+      │              │         ├──  k:6 => a:27
+      │              │         ├──  v:7 => b:28
+      │              │         ├──  x:9 => c:29
+      │              │         └──  y:10 => d:30
+      │              ├── scan uniq_partial_overlaps_pk
+      │              │    └── columns: uniq_partial_overlaps_pk.a:22!null uniq_partial_overlaps_pk.b:23!null uniq_partial_overlaps_pk.c:24 uniq_partial_overlaps_pk.d:25
+      │              └── filters
+      │                   ├── a:27 = uniq_partial_overlaps_pk.a:22
+      │                   ├── d:30 > 0
+      │                   ├── uniq_partial_overlaps_pk.d:25 > 0
+      │                   └── b:28 != uniq_partial_overlaps_pk.b:23
       └── unique-checks-item: uniq_partial_overlaps_pk(b,c)
-           └── semi-join (hash)
-                ├── columns: a:36 b:37 c:38 d:39
-                ├── with-scan &1
-                │    ├── columns: a:36 b:37 c:38 d:39
-                │    └── mapping:
-                │         ├──  k:6 => a:36
-                │         ├──  v:7 => b:37
-                │         ├──  x:9 => c:38
-                │         └──  y:10 => d:39
-                ├── scan uniq_partial_overlaps_pk
-                │    └── columns: uniq_partial_overlaps_pk.a:31!null uniq_partial_overlaps_pk.b:32!null uniq_partial_overlaps_pk.c:33 uniq_partial_overlaps_pk.d:34
-                └── filters
-                     ├── b:37 = uniq_partial_overlaps_pk.b:32
-                     ├── c:38 = uniq_partial_overlaps_pk.c:33
-                     ├── d:39 > 0
-                     ├── uniq_partial_overlaps_pk.d:34 > 0
-                     └── a:36 != uniq_partial_overlaps_pk.a:31
+           └── project
+                ├── columns: b:37 c:38
+                └── semi-join (hash)
+                     ├── columns: a:36 b:37 c:38 d:39
+                     ├── with-scan &1
+                     │    ├── columns: a:36 b:37 c:38 d:39
+                     │    └── mapping:
+                     │         ├──  k:6 => a:36
+                     │         ├──  v:7 => b:37
+                     │         ├──  x:9 => c:38
+                     │         └──  y:10 => d:39
+                     ├── scan uniq_partial_overlaps_pk
+                     │    └── columns: uniq_partial_overlaps_pk.a:31!null uniq_partial_overlaps_pk.b:32!null uniq_partial_overlaps_pk.c:33 uniq_partial_overlaps_pk.d:34
+                     └── filters
+                          ├── b:37 = uniq_partial_overlaps_pk.b:32
+                          ├── c:38 = uniq_partial_overlaps_pk.c:33
+                          ├── d:39 > 0
+                          ├── uniq_partial_overlaps_pk.d:34 > 0
+                          └── a:36 != uniq_partial_overlaps_pk.a:31
 
 exec-ddl
 CREATE TABLE uniq_partial_hidden_pk (
@@ -1167,22 +1229,24 @@ insert uniq_partial_hidden_pk
  │         └── unique_rowid() [as=column9:9]
  └── unique-checks
       └── unique-checks-item: uniq_partial_hidden_pk(b)
-           └── semi-join (hash)
-                ├── columns: a:15!null b:16!null c:17 rowid:18
-                ├── with-scan &1
-                │    ├── columns: a:15!null b:16!null c:17 rowid:18
-                │    └── mapping:
-                │         ├──  column1:6 => a:15
-                │         ├──  column2:7 => b:16
-                │         ├──  column8:8 => c:17
-                │         └──  column9:9 => rowid:18
-                ├── scan uniq_partial_hidden_pk
-                │    └── columns: uniq_partial_hidden_pk.a:10 uniq_partial_hidden_pk.b:11 uniq_partial_hidden_pk.c:12 uniq_partial_hidden_pk.rowid:13!null
-                └── filters
-                     ├── b:16 = uniq_partial_hidden_pk.b:11
-                     ├── c:17 > 0
-                     ├── uniq_partial_hidden_pk.c:12 > 0
-                     └── rowid:18 != uniq_partial_hidden_pk.rowid:13
+           └── project
+                ├── columns: b:16!null
+                └── semi-join (hash)
+                     ├── columns: a:15!null b:16!null c:17 rowid:18
+                     ├── with-scan &1
+                     │    ├── columns: a:15!null b:16!null c:17 rowid:18
+                     │    └── mapping:
+                     │         ├──  column1:6 => a:15
+                     │         ├──  column2:7 => b:16
+                     │         ├──  column8:8 => c:17
+                     │         └──  column9:9 => rowid:18
+                     ├── scan uniq_partial_hidden_pk
+                     │    └── columns: uniq_partial_hidden_pk.a:10 uniq_partial_hidden_pk.b:11 uniq_partial_hidden_pk.c:12 uniq_partial_hidden_pk.rowid:13!null
+                     └── filters
+                          ├── b:16 = uniq_partial_hidden_pk.b:11
+                          ├── c:17 > 0
+                          ├── uniq_partial_hidden_pk.c:12 > 0
+                          └── rowid:18 != uniq_partial_hidden_pk.rowid:13
 
 # Add inequality filters for the hidden primary key column.
 build
@@ -1207,22 +1271,24 @@ insert uniq_partial_hidden_pk
  │         └── unique_rowid() [as=column14:14]
  └── unique-checks
       └── unique-checks-item: uniq_partial_hidden_pk(b)
-           └── semi-join (hash)
-                ├── columns: a:20 b:21 c:22 rowid:23
-                ├── with-scan &1
-                │    ├── columns: a:20 b:21 c:22 rowid:23
-                │    └── mapping:
-                │         ├──  k:6 => a:20
-                │         ├──  v:7 => b:21
-                │         ├──  column13:13 => c:22
-                │         └──  column14:14 => rowid:23
-                ├── scan uniq_partial_hidden_pk
-                │    └── columns: uniq_partial_hidden_pk.a:15 uniq_partial_hidden_pk.b:16 uniq_partial_hidden_pk.c:17 uniq_partial_hidden_pk.rowid:18!null
-                └── filters
-                     ├── b:21 = uniq_partial_hidden_pk.b:16
-                     ├── c:22 > 0
-                     ├── uniq_partial_hidden_pk.c:17 > 0
-                     └── rowid:23 != uniq_partial_hidden_pk.rowid:18
+           └── project
+                ├── columns: b:21
+                └── semi-join (hash)
+                     ├── columns: a:20 b:21 c:22 rowid:23
+                     ├── with-scan &1
+                     │    ├── columns: a:20 b:21 c:22 rowid:23
+                     │    └── mapping:
+                     │         ├──  k:6 => a:20
+                     │         ├──  v:7 => b:21
+                     │         ├──  column13:13 => c:22
+                     │         └──  column14:14 => rowid:23
+                     ├── scan uniq_partial_hidden_pk
+                     │    └── columns: uniq_partial_hidden_pk.a:15 uniq_partial_hidden_pk.b:16 uniq_partial_hidden_pk.c:17 uniq_partial_hidden_pk.rowid:18!null
+                     └── filters
+                          ├── b:21 = uniq_partial_hidden_pk.b:16
+                          ├── c:22 > 0
+                          ├── uniq_partial_hidden_pk.c:17 > 0
+                          └── rowid:23 != uniq_partial_hidden_pk.rowid:18
 
 exec-ddl
 CREATE TABLE uniq_partial_constraint_and_index (
@@ -1270,29 +1336,31 @@ insert uniq_partial_constraint_and_index
  │         └── true [as=partial_index_put1:13]
  └── unique-checks
       └── unique-checks-item: uniq_partial_constraint_and_index(a)
-           └── semi-join (hash)
-                ├── columns: k:18!null a:19!null b:20!null
-                ├── select
-                │    ├── columns: k:18!null a:19!null b:20!null
-                │    ├── with-scan &1
-                │    │    ├── columns: k:18!null a:19!null b:20!null
-                │    │    └── mapping:
-                │    │         ├──  column1:5 => k:18
-                │    │         ├──  column2:6 => a:19
-                │    │         └──  column3:7 => b:20
-                │    └── filters
-                │         └── b:20 > 10
-                ├── select
-                │    ├── columns: uniq_partial_constraint_and_index.k:14!null uniq_partial_constraint_and_index.a:15 uniq_partial_constraint_and_index.b:16!null
-                │    ├── scan uniq_partial_constraint_and_index
-                │    │    ├── columns: uniq_partial_constraint_and_index.k:14!null uniq_partial_constraint_and_index.a:15 uniq_partial_constraint_and_index.b:16
-                │    │    └── partial index predicates
-                │    │         └── secondary: filters (true)
-                │    └── filters
-                │         └── uniq_partial_constraint_and_index.b:16 > 10
-                └── filters
-                     ├── a:19 = uniq_partial_constraint_and_index.a:15
-                     └── k:18 != uniq_partial_constraint_and_index.k:14
+           └── project
+                ├── columns: a:19!null
+                └── semi-join (hash)
+                     ├── columns: k:18!null a:19!null b:20!null
+                     ├── select
+                     │    ├── columns: k:18!null a:19!null b:20!null
+                     │    ├── with-scan &1
+                     │    │    ├── columns: k:18!null a:19!null b:20!null
+                     │    │    └── mapping:
+                     │    │         ├──  column1:5 => k:18
+                     │    │         ├──  column2:6 => a:19
+                     │    │         └──  column3:7 => b:20
+                     │    └── filters
+                     │         └── b:20 > 10
+                     ├── select
+                     │    ├── columns: uniq_partial_constraint_and_index.k:14!null uniq_partial_constraint_and_index.a:15 uniq_partial_constraint_and_index.b:16!null
+                     │    ├── scan uniq_partial_constraint_and_index
+                     │    │    ├── columns: uniq_partial_constraint_and_index.k:14!null uniq_partial_constraint_and_index.a:15 uniq_partial_constraint_and_index.b:16
+                     │    │    └── partial index predicates
+                     │    │         └── secondary: filters (true)
+                     │    └── filters
+                     │         └── uniq_partial_constraint_and_index.b:16 > 10
+                     └── filters
+                          ├── a:19 = uniq_partial_constraint_and_index.a:15
+                          └── k:18 != uniq_partial_constraint_and_index.k:14
 
 exec-ddl
 CREATE TABLE uniq_constraint_and_partial_index (
@@ -1474,33 +1542,35 @@ insert uniq_computed_pk
  │         └── column3:11::STRING [as=column13:13]
  └── unique-checks
       └── unique-checks-item: uniq_computed_pk(d)
-           └── semi-join (hash)
-                ├── columns: i:38!null s:39!null d:40!null c_i_expr:41!null c_s:42!null c_d:43!null c_d_expr:44!null
-                ├── with-scan &1
-                │    ├── columns: i:38!null s:39!null d:40!null c_i_expr:41!null c_s:42!null c_d:43!null c_d_expr:44!null
-                │    └── mapping:
-                │         ├──  column1:9 => i:38
-                │         ├──  column2:10 => s:39
-                │         ├──  column3:11 => d:40
-                │         ├──  column12:12 => c_i_expr:41
-                │         ├──  column2:10 => c_s:42
-                │         ├──  column3:11 => c_d:43
-                │         └──  column13:13 => c_d_expr:44
-                ├── project
-                │    ├── columns: uniq_computed_pk.c_s:34 uniq_computed_pk.i:30!null uniq_computed_pk.s:31 uniq_computed_pk.d:32 uniq_computed_pk.c_i_expr:33!null uniq_computed_pk.c_d:35 uniq_computed_pk.c_d_expr:36
-                │    ├── scan uniq_computed_pk
-                │    │    ├── columns: uniq_computed_pk.i:30!null uniq_computed_pk.s:31 uniq_computed_pk.d:32 uniq_computed_pk.c_i_expr:33!null uniq_computed_pk.c_d:35 uniq_computed_pk.c_d_expr:36
-                │    │    └── computed column expressions
-                │    │         ├── uniq_computed_pk.c_i_expr:33
-                │    │         │    └── CASE WHEN uniq_computed_pk.i:30 < 0 THEN 'foo' ELSE 'bar' END
-                │    │         ├── uniq_computed_pk.c_s:34
-                │    │         │    └── uniq_computed_pk.s:31
-                │    │         ├── uniq_computed_pk.c_d:35
-                │    │         │    └── uniq_computed_pk.d:32
-                │    │         └── uniq_computed_pk.c_d_expr:36
-                │    │              └── uniq_computed_pk.d:32::STRING
-                │    └── projections
-                │         └── uniq_computed_pk.s:31 [as=uniq_computed_pk.c_s:34]
-                └── filters
-                     ├── d:40 = uniq_computed_pk.d:32
-                     └── (i:38 != uniq_computed_pk.i:30) OR (c_i_expr:41 != uniq_computed_pk.c_i_expr:33)
+           └── project
+                ├── columns: d:40!null
+                └── semi-join (hash)
+                     ├── columns: i:38!null s:39!null d:40!null c_i_expr:41!null c_s:42!null c_d:43!null c_d_expr:44!null
+                     ├── with-scan &1
+                     │    ├── columns: i:38!null s:39!null d:40!null c_i_expr:41!null c_s:42!null c_d:43!null c_d_expr:44!null
+                     │    └── mapping:
+                     │         ├──  column1:9 => i:38
+                     │         ├──  column2:10 => s:39
+                     │         ├──  column3:11 => d:40
+                     │         ├──  column12:12 => c_i_expr:41
+                     │         ├──  column2:10 => c_s:42
+                     │         ├──  column3:11 => c_d:43
+                     │         └──  column13:13 => c_d_expr:44
+                     ├── project
+                     │    ├── columns: uniq_computed_pk.c_s:34 uniq_computed_pk.i:30!null uniq_computed_pk.s:31 uniq_computed_pk.d:32 uniq_computed_pk.c_i_expr:33!null uniq_computed_pk.c_d:35 uniq_computed_pk.c_d_expr:36
+                     │    ├── scan uniq_computed_pk
+                     │    │    ├── columns: uniq_computed_pk.i:30!null uniq_computed_pk.s:31 uniq_computed_pk.d:32 uniq_computed_pk.c_i_expr:33!null uniq_computed_pk.c_d:35 uniq_computed_pk.c_d_expr:36
+                     │    │    └── computed column expressions
+                     │    │         ├── uniq_computed_pk.c_i_expr:33
+                     │    │         │    └── CASE WHEN uniq_computed_pk.i:30 < 0 THEN 'foo' ELSE 'bar' END
+                     │    │         ├── uniq_computed_pk.c_s:34
+                     │    │         │    └── uniq_computed_pk.s:31
+                     │    │         ├── uniq_computed_pk.c_d:35
+                     │    │         │    └── uniq_computed_pk.d:32
+                     │    │         └── uniq_computed_pk.c_d_expr:36
+                     │    │              └── uniq_computed_pk.d:32::STRING
+                     │    └── projections
+                     │         └── uniq_computed_pk.s:31 [as=uniq_computed_pk.c_s:34]
+                     └── filters
+                          ├── d:40 = uniq_computed_pk.d:32
+                          └── (i:38 != uniq_computed_pk.i:30) OR (c_i_expr:41 != uniq_computed_pk.c_i_expr:33)
