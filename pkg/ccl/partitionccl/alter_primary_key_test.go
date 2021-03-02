@@ -1,0 +1,53 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package partitionccl
+
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+)
+
+func TestAlterPrimaryKeyCorrectZoneConfigBeforeBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []sqltestutils.AlterPrimaryKeyCorrectZoneConfigTestCase{
+		{
+			Desc: "ALTER PRIMARY KEY",
+			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT NOT NULL, INDEX v_idx (v));
+ALTER INDEX t.test@v_idx CONFIGURE ZONE USING gc.ttlseconds = 888
+			`,
+			AlterQuery: `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v)`,
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+				{
+					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR INDEX t.test@v_idx_rewrite_for_primary_key_change`,
+					ExpectedTarget:      `INDEX t.public.test@v_idx_rewrite_for_primary_key_change`,
+					ExpectedSQL: `ALTER INDEX t.public.test@v_idx_rewrite_for_primary_key_change CONFIGURE ZONE USING
+	range_min_bytes = 134217728,
+	range_max_bytes = 536870912,
+	gc.ttlseconds = 888,
+	num_replicas = 1,
+	constraints = '[]',
+	lease_preferences = '[]'`,
+				},
+			},
+		},
+	}
+
+	sqltestutils.AlterPrimaryKeyCorrectZoneConfigTest(
+		t,
+		`CREATE DATABASE t`,
+		testCases,
+	)
+}
