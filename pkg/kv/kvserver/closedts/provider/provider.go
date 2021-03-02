@@ -126,7 +126,7 @@ func (p *Provider) runCloser(ctx context.Context) {
 	// Track whether we've ever been live to avoid logging warnings about not
 	// being live during node startup.
 	var everBeenLive bool
-	var t timeutil.Timer
+	t := timeutil.NewTimer()
 	defer t.Stop()
 	for {
 		closeFraction := closedts.CloseFraction.Get(&p.cfg.Settings.SV)
@@ -134,7 +134,9 @@ func (p *Provider) runCloser(ctx context.Context) {
 		if targetDuration > 0 {
 			t.Reset(time.Duration(closeFraction * targetDuration))
 		} else {
-			t.Stop() // disable closing when the target duration is non-positive
+			// Disable closing when the target duration is non-positive.
+			t.Stop()
+			t = timeutil.NewTimer()
 		}
 		select {
 		case <-p.cfg.Stopper.ShouldQuiesce():
