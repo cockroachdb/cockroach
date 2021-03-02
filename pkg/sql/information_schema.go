@@ -497,13 +497,14 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					dbNameStr,                                                 // udt_catalog
 					udtSchema,                                                 // udt_schema
 					tree.NewDString(column.GetType().PGName()), // udt_name
-					tree.DNull,                        // scope_catalog
-					tree.DNull,                        // scope_schema
-					tree.DNull,                        // scope_name
-					tree.DNull,                        // maximum_cardinality
-					tree.DNull,                        // dtd_identifier
-					tree.DNull,                        // is_self_referencing
-					tree.DNull,                        // is_identity
+					tree.DNull, // scope_catalog
+					tree.DNull, // scope_schema
+					tree.DNull, // scope_name
+					tree.DNull, // maximum_cardinality
+					tree.DNull, // dtd_identifier
+					tree.DNull, // is_self_referencing
+					//TODO: Need to update when supporting identiy columns (Issue #48532)
+					noString,                          // is_identity
 					tree.DNull,                        // identity_generation
 					tree.DNull,                        // identity_start
 					tree.DNull,                        // identity_increment
