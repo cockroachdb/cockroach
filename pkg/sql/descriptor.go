@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -85,6 +87,15 @@ func (p *planner) createDatabase(
 	id, err := catalogkv.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 	if err != nil {
 		return nil, false, err
+	}
+
+	if database.PrimaryRegion != tree.PrimaryRegionNotSpecifiedName {
+		telemetry.Inc(sqltelemetry.CreateMultiRegionDatabaseCounter)
+		telemetry.Inc(
+			sqltelemetry.CreateDatabaseSurvivalGoalCounter(
+				database.SurvivalGoal.TelemetryName(),
+			),
+		)
 	}
 
 	regionConfig, err := p.createRegionConfig(
@@ -319,6 +330,7 @@ func (p *planner) createRegionConfig(
 	if primaryRegion == "" && len(regions) == 0 {
 		return nil, nil
 	}
+
 	liveRegions, err := p.getLiveClusterRegions(ctx)
 	if err != nil {
 		return nil, err

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -168,6 +170,8 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 			n.n.Region.String(),
 		)
 	}
+
+	telemetry.Inc(sqltelemetry.AlterDatabaseAddRegionCounter)
 
 	// Add the region to the database descriptor. This function validates that the region
 	// we're adding is an active member of the cluster and isn't already present in the
@@ -371,6 +375,7 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 	}
 
 	if n.removingPrimaryRegion {
+		telemetry.Inc(sqltelemetry.AlterDatabaseDropPrimaryRegionCounter)
 		for _, desc := range n.toDrop {
 			jobDesc := fmt.Sprintf("drop multi-region enum with ID %d", desc.ID)
 			err := params.p.dropTypeImpl(params.ctx, desc, jobDesc, true /* queueJob */)
@@ -386,6 +391,7 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 
 		n.desc.UnsetMultiRegionConfig()
 	} else {
+		telemetry.Inc(sqltelemetry.AlterDatabaseDropRegionCounter)
 		// dropEnumValue tries to remove the region value from the multi-region type
 		// descriptor. Among other things, it validates that the region is not in
 		// use by any tables. A region is considered "in use" if either a REGIONAL BY
@@ -471,6 +477,7 @@ func (p *planner) AlterDatabasePrimaryRegion(
 // switchPrimaryRegion performs the work in ALTER DATABASE ... PRIMARY REGION for the case
 // where the database is already a multi-region database.
 func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) error {
+	telemetry.Inc(sqltelemetry.SwitchPrimaryRegionCounter)
 	// First check if the new primary region has been added to the database. If not, return
 	// an error, as it must be added before it can be used as a primary region.
 	found := false
@@ -558,7 +565,7 @@ func addDefaultLocalityConfigToAllTables(
 			}
 
 			if err := p.alterTableDescLocalityToRegionalByTable(
-				ctx, tree.PrimaryRegionLocalityName, mutDesc, regionEnumID,
+				ctx, tree.PrimaryRegionNotSpecifiedName, mutDesc, regionEnumID,
 			); err != nil {
 				return err
 			}
@@ -576,6 +583,7 @@ func addDefaultLocalityConfigToAllTables(
 // setInitialPrimaryRegion sets the primary region in cases where the database
 // is already a multi-region database.
 func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParams) error {
+	telemetry.Inc(sqltelemetry.SetInitialPrimaryRegionCounter)
 	// Create the region config structure to be added to the database descriptor.
 	regionConfig, err := params.p.createRegionConfig(
 		params.ctx,
@@ -708,6 +716,12 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 			n.n.Name.String(),
 		)
 	}
+
+	telemetry.Inc(
+		sqltelemetry.AlterDatabaseSurvivalGoalCounter(
+			n.n.SurvivalGoal.TelemetryName(),
+		),
+	)
 
 	// If we're changing to survive a region failure, validate that we have enough regions
 	// in the database.

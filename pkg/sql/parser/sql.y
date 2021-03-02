@@ -4490,7 +4490,7 @@ zone_value:
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
-// SHOW LOCALITY
+// SHOW LOCALITY, SHOW ZONE CONFIGURATION
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -4526,7 +4526,7 @@ show_stmt:
 | show_transaction_stmt     // EXTEND WITH HELP: SHOW TRANSACTION
 | show_transactions_stmt    // EXTEND WITH HELP: SHOW TRANSACTIONS
 | show_users_stmt           // EXTEND WITH HELP: SHOW USERS
-| show_zone_stmt
+| show_zone_stmt            // EXTEND WITH HELP: SHOW ZONE CONFIGURATION
 | SHOW error                // SHOW HELP: SHOW
 | show_last_query_stats_stmt
 
@@ -5226,6 +5226,12 @@ show_roles_stmt:
   }
 | SHOW ROLES error // SHOW HELP: SHOW ROLES
 
+// %Help: SHOW ZONE CONFIGURATION - display current zone configuration
+// %Category: Cfg
+// %Text: SHOW ZONE CONFIGURATION FROM [ RANGE | DATABASE | TABLE | INDEX ] <name>
+// SHOW ZONE CONFIGURATION FROM PARTITION OF [ INDEX | TABLE ] <name>
+// SHOW [ALL] ZONE CONFIGURATIONS
+// %SeeAlso: WEBDOCS/show-zone-configurations.html
 show_zone_stmt:
   SHOW ZONE CONFIGURATION from_with_implicit_for_alias RANGE zone_name
   {
@@ -5265,14 +5271,17 @@ show_zone_stmt:
       Partition: tree.Name($6),
     }}
   }
+| SHOW ZONE CONFIGURATION error // SHOW HELP: SHOW ZONE CONFIGURATION
 | SHOW ZONE CONFIGURATIONS
   {
     $$.val = &tree.ShowZoneConfig{}
   }
+| SHOW ZONE CONFIGURATIONS error // SHOW HELP: SHOW ZONE CONFIGURATION
 | SHOW ALL ZONE CONFIGURATIONS
   {
     $$.val = &tree.ShowZoneConfig{}
   }
+| SHOW ALL ZONE CONFIGURATIONS error // SHOW HELP: SHOW ZONE CONFIGURATION
 
 from_with_implicit_for_alias:
   FROM
