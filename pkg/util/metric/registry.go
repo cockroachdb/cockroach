@@ -17,7 +17,6 @@ import (
 	"reflect"
 	"regexp"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -70,9 +69,6 @@ func (r *Registry) AddMetric(metric Iterable) {
 	r.Lock()
 	defer r.Unlock()
 	r.tracked = append(r.tracked, metric)
-	if log.V(2) {
-		log.Infof(context.TODO(), "added metric: %s (%T)", metric.GetName(), metric)
-	}
 }
 
 // AddMetricStruct examines all fields of metricStruct and adds
@@ -89,9 +85,6 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 		vfield, tfield := v.Field(i), t.Field(i)
 		tname := tfield.Name
 		if !vfield.CanInterface() {
-			if log.V(2) {
-				log.Infof(ctx, "skipping unexported field %s", tname)
-			}
 			continue
 		}
 		switch vfield.Kind() {
@@ -116,11 +109,8 @@ func (r *Registry) addMetricValue(
 ) {
 	if val.Kind() == reflect.Ptr && val.IsNil() {
 		if skipNil {
-			if log.V(2) {
-				log.Infof(ctx, "skipping nil metric field %s", name)
-			}
 		} else {
-			log.Fatalf(ctx, "found nil metric field %s", name)
+			panic(fmt.Sprintf("found nil metric field %s", name))
 		}
 		return
 	}
@@ -130,9 +120,6 @@ func (r *Registry) addMetricValue(
 	case Struct:
 		r.AddMetricStruct(typ)
 	default:
-		if log.V(2) {
-			log.Infof(ctx, "skipping non-metric field %s", name)
-		}
 	}
 }
 
