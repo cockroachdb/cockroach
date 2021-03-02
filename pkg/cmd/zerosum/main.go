@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 )
 
-var workers = flag.Int("w", 2*runtime.NumCPU(), "number of workers")
+var workers = flag.Int("w", 2*runtime.GOMAXPROCS(0), "number of workers")
 var monkeys = flag.Int("m", 3, "number of monkeys")
 var numNodes = flag.Int("n", 4, "number of nodes")
 var numAccounts = flag.Int("a", 1e5, "number of accounts")
