@@ -306,7 +306,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 						m.stats.FlowStats.MaxMemUsage.Set(uint64(m.flowCtx.EvalCtx.Mon.MaximumBytes()))
 						m.stats.FlowStats.MaxDiskUsage.Set(uint64(m.flowCtx.DiskMonitor.MaximumBytes()))
 					}
-					span.SetSpanStats(&m.stats)
+					span.RecordStructured(&m.stats)
 					span.Finish()
 					spanFinished = true
 					if trace := execinfra.GetTraceData(ctx); trace != nil {

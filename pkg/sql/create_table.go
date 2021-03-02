@@ -2306,10 +2306,15 @@ func NewTableDesc(
 	}
 
 	if regionEnumID != descpb.InvalidID || n.Locality != nil {
+		localityTelemetryName := "unspecified"
+		if n.Locality != nil {
+			localityTelemetryName = n.Locality.TelemetryName()
+		}
+		telemetry.Inc(sqltelemetry.CreateTableLocalityCounter(localityTelemetryName))
 		if n.Locality == nil {
 			// The absence of a locality on the AST node indicates that the table must
 			// be homed in the primary region.
-			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
+			desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelTable {
 			desc.SetTableLocalityRegionalByTable(n.Locality.TableRegion)
 		} else if n.Locality.LocalityLevel == tree.LocalityLevelGlobal {

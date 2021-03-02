@@ -254,6 +254,6 @@ func createStatsSpan(ctx context.Context, opName string, stats *execinfrapb.Comp
 	// TODO(yuzefovich): these spans are created and finished right away which
 	// is not the way they are supposed to be used, so this should be fixed.
 	_, span := tracing.ChildSpan(ctx, opName)
-	span.SetSpanStats(stats)
+	span.RecordStructured(stats)
 	span.Finish()
 }

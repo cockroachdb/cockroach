@@ -12,8 +12,8 @@ go_library(
         "index.go",
         "join_type.go",
         "locking.go",
+        "multiregion.go",
         "privilege.go",
-        "region_name.go",
         "structured.go",
         ":gen-formatversion-stringer",  # keep
         ":gen-privilegedescversion-stringer",  # keep

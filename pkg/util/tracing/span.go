@@ -181,19 +181,6 @@ func (sp *Span) RecordStructured(item Structured) {
 	sp.i.RecordStructured(item)
 }
 
-// SetSpanStats sets the stats on a Span. stats.Stats() will also be added to
-// the Span tags.
-//
-// This is deprecated. Use RecordStructured instead.
-//
-// TODO(tbg): remove this in the 21.2 cycle.
-func (sp *Span) SetSpanStats(stats SpanStats) {
-	if sp.done() {
-		return
-	}
-	sp.i.SetSpanStats(stats)
-}
-
 // SetTag adds a tag to the span. If there is a pre-existing tag set for the
 // key, it is overwritten.
 func (sp *Span) SetTag(key string, value interface{}) {
@@ -303,25 +290,6 @@ func (s *spanInner) GetRecording() Recording {
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
 	return s.crdb.importRemoteSpans(remoteSpans)
-}
-
-// SpanStats are stats that can be added to a Span.
-type SpanStats interface {
-	protoutil.Message
-	// StatsTags returns the stats that the object represents as a map of
-	// key/value tags that will be added to the Span tags. The tag keys should
-	// start with TagPrefix.
-	StatsTags() map[string]string
-}
-
-func (s *spanInner) SetSpanStats(stats SpanStats) {
-	if s.isNoop() {
-		return
-	}
-	s.RecordStructured(stats)
-	s.crdb.mu.Lock()
-	s.crdb.mu.stats = stats
-	s.crdb.mu.Unlock()
 }
 
 func (s *spanInner) Finish() {

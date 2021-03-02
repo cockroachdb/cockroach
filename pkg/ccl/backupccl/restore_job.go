@@ -378,7 +378,7 @@ func WriteDescriptors(
 				return err
 			}
 			if dbDesc.GetRegionConfig() != nil && table.GetLocalityConfig() == nil {
-				table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionLocalityName)
+				table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 			}
 
 			if err := descsCol.WriteDescToBatch(

@@ -79,7 +79,6 @@ type crdbSpanMu struct {
 	// those that were set before recording started)?
 	tags opentracing.Tags
 
-	stats      SpanStats
 	structured ring.Buffer // of Structured events
 
 	// The Span's associated baggage.
@@ -295,14 +294,6 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		if s.mu.recording.recordingType.load() == RecordingVerbose {
 			addTag("_verbose", "1")
 		}
-	}
-
-	if s.mu.stats != nil {
-		stats, err := types.MarshalAny(s.mu.stats)
-		if err != nil {
-			panic(err)
-		}
-		rs.DeprecatedStats = stats
 	}
 
 	if numEvents := s.mu.structured.Len(); numEvents != 0 {

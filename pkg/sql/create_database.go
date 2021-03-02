@@ -86,7 +86,7 @@ func (p *planner) CreateDatabase(ctx context.Context, n *tree.CreateDatabase) (p
 		)
 	}
 
-	if n.SurvivalGoal != tree.SurvivalGoalDefault && n.PrimaryRegion == "" {
+	if n.SurvivalGoal != tree.SurvivalGoalDefault && n.PrimaryRegion == tree.PrimaryRegionNotSpecifiedName {
 		return nil, pgerror.New(
 			pgcode.InvalidDatabaseDefinition,
 			"PRIMARY REGION must be specified when using SURVIVE",
