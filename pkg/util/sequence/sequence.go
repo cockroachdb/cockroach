@@ -143,7 +143,7 @@ func ReplaceSequenceNamesWithIDs(
 				return true, expr, nil
 			}
 			return false, &tree.FuncExpr{
-				Func: tree.WrapFunction("nextval"),
+				Func: t.Func,
 				Exprs: tree.Exprs{
 					&tree.AnnotateTypeExpr{
 						Type:       types.RegClass,
