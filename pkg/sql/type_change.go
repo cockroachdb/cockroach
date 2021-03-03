@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -123,6 +124,34 @@ func (t *typeSchemaChanger) getTypeDescFromStore(ctx context.Context) (*typedesc
 	return typeDesc, nil
 }
 
+// refreshTypeDescriptorLeases refreshes the lease on both the type descriptor
+// and its array type descriptor (if one exists). If a descriptor is not found,
+// it is assumed dropped, and the error is swallowed.
+func refreshTypeDescriptorLeases(
+	ctx context.Context, leaseMgr *lease.Manager, typeDesc *typedesc.Immutable,
+) error {
+	var err error
+	var ids = []descpb.ID{typeDesc.ID}
+	if typeDesc.ArrayTypeID != descpb.InvalidID {
+		ids = append(ids, typeDesc.ArrayTypeID)
+	}
+	for _, ID := range ids {
+		if updateErr := WaitToUpdateLeases(ctx, leaseMgr, ID); updateErr != nil {
+			// Swallow the descriptor not found error.
+			if errors.Is(updateErr, catalog.ErrDescriptorNotFound) {
+				log.Infof(ctx,
+					"could not find type descriptor %d to refresh lease; "+
+						"assuming it was dropped and moving on",
+					ID,
+				)
+			} else {
+				err = errors.CombineErrors(err, updateErr)
+			}
+		}
+	}
+	return err
+}
+
 // exec is the entry point for the type schema change process.
 func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	if t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeExec != nil {
@@ -154,8 +183,6 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
 			fn()
 		}
-		// The version of the array type needs to get bumped as well so that
-		// changes to the underlying type are picked up.
 		run := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
 			if err != nil {
@@ -178,6 +205,20 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			); err != nil {
 				return err
 			}
+
+			// The version of the array type needs to get bumped as well so that
+			// changes to the underlying type are picked up. Simply reading the
+			// mutable descriptor and writing it back should do the trick.
+			arrayTypeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, typeDesc.ArrayTypeID)
+			if err != nil {
+				return err
+			}
+			if err := descsCol.WriteDescToBatch(
+				ctx, true /* kvTrace */, arrayTypeDesc, b,
+			); err != nil {
+				return err
+			}
+
 			return txn.Run(ctx, b)
 		}
 		if err := descs.Txn(
@@ -188,11 +229,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		}
 	}
 
-	// Finally, make sure all of the leases are updated.
-	if err := WaitToUpdateLeases(ctx, leaseMgr, t.typeID); err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil
-		}
+	if err := refreshTypeDescriptorLeases(ctx, leaseMgr, typeDesc); err != nil {
 		return err
 	}
 

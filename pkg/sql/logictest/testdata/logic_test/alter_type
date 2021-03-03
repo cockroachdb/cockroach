@@ -265,3 +265,21 @@ DROP TYPE store
 
 statement error pq: type "store" does not exist
 SELECT 'lru'::store
+
+# Ensure changes to the type are picked up by the array type descriptor as well.
+subtest regression_58710
+
+statement ok
+CREATE TYPE ab_58710 AS ENUM ('a', 'b')
+
+# NB: This step is important as it hydrates the array type alias based on the
+# state of the underlying enum type descriptor.
+statement error invalid input value for enum ab_58710: "c"
+SELECT ARRAY['c']::_ab_58710
+
+statement ok
+ALTER TYPE ab_58710 ADD VALUE 'c'
+
+# 'c' was added to the enum above, so the array type alias should reflect this.
+statement ok
+SELECT ARRAY['c']::_ab_58710
