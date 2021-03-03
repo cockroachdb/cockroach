@@ -1310,6 +1310,7 @@ distribution: local
 vectorized: true
 ·
 • group (scalar)
+│ estimated row count: 1
 │
 └── • values
       size: 2 columns, 2 rows

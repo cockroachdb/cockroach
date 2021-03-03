@@ -9,6 +9,7 @@ distribution: local
 vectorized: true
 ·
 • project set
+│ estimated row count: 10
 │
 └── • emptyrow
 
@@ -19,12 +20,15 @@ distribution: local
 vectorized: true
 ·
 • cross join
+│ estimated row count: 100
 │
 ├── • project set
+│   │ estimated row count: 10
 │   │
 │   └── • emptyrow
 │
 └── • project set
+    │ estimated row count: 10
     │
     └── • emptyrow
 
@@ -35,6 +39,7 @@ distribution: local
 vectorized: true
 ·
 • project set
+│ estimated row count: 1
 │
 └── • emptyrow
 
@@ -45,6 +50,7 @@ distribution: local
 vectorized: true
 ·
 • project set
+│ estimated row count: 10
 │
 └── • emptyrow
 
@@ -58,6 +64,7 @@ distribution: local
 vectorized: true
 ·
 • project set
+│ estimated row count: 10
 │
 └── • emptyrow
 

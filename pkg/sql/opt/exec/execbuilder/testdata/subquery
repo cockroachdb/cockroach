@@ -163,6 +163,7 @@ distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 3
 │ order: +foo1
 │
 └── • values
