@@ -302,6 +302,7 @@ func TestNodelocalNotAdmin(t *testing.T) {
 // interact with the FileTable ExternalStorage.
 func TestUserfileNotAdmin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	params, _ := tests.CreateTestServerParams()
 	localExternalDir, cleanup := testutils.TempDir(t)

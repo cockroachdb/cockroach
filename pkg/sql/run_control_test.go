@@ -654,6 +654,7 @@ func isClientsideQueryCanceledErr(err error) bool {
 
 func TestIdleInSessionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	numNodes := 1
@@ -714,6 +715,7 @@ func TestIdleInSessionTimeout(t *testing.T) {
 
 func TestIdleInTransactionSessionTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	numNodes := 1
@@ -774,6 +776,7 @@ func TestIdleInTransactionSessionTimeout(t *testing.T) {
 
 func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	numNodes := 1
@@ -838,6 +841,7 @@ func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
 
 func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	numNodes := 1

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors/oserror"
 )
 
@@ -176,6 +177,7 @@ func rewriteDiffs(t *testing.T, diffs PGMetadataTables, diffsFile string) {
 // TestPGCatalog is the pg_catalog diff tool test which compares pg_catalog with postgres and cockroach
 func TestPGCatalog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	pgTables := loadTestData(t)
 	crdbTables := loadCockroachPgCatalog(t)
 	diffs := loadExpectedDiffs(t)
