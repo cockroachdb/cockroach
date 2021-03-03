@@ -37,6 +37,9 @@ func registerActiveRecord(r *testRegistry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
+		if err := c.PutLibraries(ctx, "./lib"); err != nil {
+			t.Fatal(err)
+		}
 		c.Start(ctx, t, c.All())
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
