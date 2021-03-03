@@ -754,15 +754,30 @@ func getStatisticsFromBackup(
 // being restored. If the descriptorRewrites can re-write the table ID, then that
 // table is being restored.
 func remapRelevantStatistics(
-	tableStatistics []*stats.TableStatisticProto, descriptorRewrites DescRewriteMap,
+	ctx context.Context,
+	tableStatistics []*stats.TableStatisticProto,
+	descriptorRewrites DescRewriteMap,
+	tableDescs []*descpb.TableDescriptor,
 ) []*stats.TableStatisticProto {
 	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(tableStatistics))
 
+	tableHasStatsInBackup := make(map[descpb.ID]struct{})
 	for _, stat := range tableStatistics {
+		tableHasStatsInBackup[stat.TableID] = struct{}{}
 		if tableRewrite, ok := descriptorRewrites[stat.TableID]; ok {
 			// Statistics imported only when table re-write is present.
 			stat.TableID = tableRewrite.ID
 			relevantTableStatistics = append(relevantTableStatistics, stat)
+		}
+	}
+
+	// Check if we are missing stats for any table that is being restored. This
+	// could be because we ran into an error when computing stats during the
+	// backup.
+	for _, desc := range tableDescs {
+		if _, ok := tableHasStatsInBackup[desc.GetID()]; !ok {
+			log.Warningf(ctx, "statistics for table %d not found in the backup. "+
+				"Query performance on this table could suffer until statistics are recomputed.")
 		}
 	}
 
@@ -1386,7 +1401,8 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	if err != nil {
 		return err
 	}
-	latestStats := remapRelevantStatistics(backupStats, details.DescriptorRewrites)
+	latestStats := remapRelevantStatistics(ctx, backupStats, details.DescriptorRewrites,
+		details.TableDescs)
 
 	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 && len(details.TypeDescs) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
