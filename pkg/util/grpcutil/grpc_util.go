@@ -91,11 +91,14 @@ func IsClosedConnection(err error) bool {
 	return netutil.IsClosedConnection(err)
 }
 
-// IsAuthenticationError returns true if err's Cause is an error produced by
-// gRPC due to invalid authentication credentials for the operation.
-func IsAuthenticationError(err error) bool {
+// IsAuthError returns true if err's Cause is an error produced by
+// gRPC due to an authentication or authorization error for the operation.
+func IsAuthError(err error) bool {
 	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
-		return s.Code() == codes.Unauthenticated
+		switch s.Code() {
+		case codes.Unauthenticated, codes.PermissionDenied:
+			return true
+		}
 	}
 	return false
 }

@@ -226,10 +226,10 @@ SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
 function  signature  category  details
 
-query ITTITTTTTTTBB colnames
+query ITTITTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
 ----
-database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state  create_nofks  alter_statements  validate_statements  has_partitions  is_multi_region
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state  create_nofks  alter_statements  validate_statements  has_partitions  is_multi_region  is_virtual  is_temporary
 
 query ITITTBTB colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''
@@ -825,3 +825,32 @@ testdb         root      ALL
 
 statement ok
 SET DATABASE = test
+
+# Test crdb_internal.create_statements functionality.
+
+statement ok
+CREATE TABLE normal_table()
+
+query B
+SELECT is_virtual FROM crdb_internal.create_statements WHERE descriptor_name = 'normal_table'
+----
+false
+
+query B
+SELECT is_virtual FROM crdb_internal.create_statements WHERE descriptor_name = 'pg_views'
+----
+true
+
+query B
+SELECT is_temporary FROM crdb_internal.create_statements WHERE descriptor_name = 'normal_table'
+----
+false
+
+statement ok
+SET experimental_enable_temp_tables = 'on';
+CREATE TEMPORARY TABLE temp()
+
+query B
+SELECT is_temporary FROM crdb_internal.create_statements WHERE descriptor_name = 'temp'
+----
+true

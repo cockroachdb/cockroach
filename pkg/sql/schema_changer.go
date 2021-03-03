@@ -911,6 +911,15 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 		if err != nil {
 			return err
 		}
+		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+			ctx,
+			txn,
+			tbl.GetParentID(),
+			tree.DatabaseLookupFlags{Required: true},
+		)
+		if err != nil {
+			return err
+		}
 		runStatus = ""
 		// Apply mutations belonging to the same version.
 		for i, mutation := range tbl.Mutations {
@@ -945,6 +954,21 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 					tbl.Mutations[i].State = descpb.DescriptorMutation_DELETE_ONLY
 					runStatus = RunningStatusDeleteOnly
 				}
+			}
+			// We might have to update some zone configs for indexes that are
+			// being rewritten. It is important that this is done _before_ the
+			// index swap occurs. The logic that generates spans for subzone
+			// configurations removes spans for indexes in the dropping state,
+			// which we don't want. So, set up the zone configs before we swap.
+			if err := sc.applyZoneConfigChangeForMutation(
+				ctx,
+				txn,
+				dbDesc,
+				tbl,
+				mutation,
+				false, // isDone
+			); err != nil {
+				return err
 			}
 		}
 		if doNothing := runStatus == "" || tbl.Dropped(); doNothing {
@@ -1116,77 +1140,18 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 			}
 
-			// Some primary key change specific operations need to happen before
-			// and after the index swap occurs.
-			if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
-				// We might have to update some zone configs for indexes that are
-				// being rewritten. It is important that this is done _before_ the
-				// index swap occurs. The logic that generates spans for subzone
-				// configurations removes spans for indexes in the dropping state,
-				// which we don't want. So, set up the zone configs before we swap.
-				if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
-					// We will add up to two options - one for the table itself, and one
-					// for all the new indexes associated with the table.
-					opts := make([]applyZoneConfigForMultiRegionTableOption, 0, 2)
-
-					// For locality configs, we need to update the zone configs to match
-					// the new multi-region locality configuration, instead of
-					// copying the old zone configs over.
-					if mutation.Direction == descpb.DescriptorMutation_ADD {
-						opts = append(
-							opts,
-							applyZoneConfigForMultiRegionTableOptionTableNewConfig(
-								lcSwap.NewLocalityConfig,
-							),
-						)
-						switch lcSwap.NewLocalityConfig.Locality.(type) {
-						case *descpb.TableDescriptor_LocalityConfig_Global_,
-							*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-							// Just the table re-writing the locality config change will suffice.
-						case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
-							// Apply new zone configurations for all newly partitioned indexes.
-							opts = append(
-								opts,
-								applyZoneConfigForMultiRegionTableOptionNewIndexes(
-									append(
-										[]descpb.IndexID{pkSwap.NewPrimaryIndexId},
-										pkSwap.NewIndexes...,
-									)...,
-								),
-							)
-						default:
-							return errors.AssertionFailedf(
-								"unknown locality on PK swap: %T",
-								lcSwap.NewLocalityConfig.Locality,
-							)
-						}
-					} else {
-						// DROP is hit on cancellation, in which case we must roll back.
-						opts = append(
-							opts,
-							applyZoneConfigForMultiRegionTableOptionTableNewConfig(
-								lcSwap.OldLocalityConfig,
-							),
-						)
-					}
-
-					if err := ApplyZoneConfigForMultiRegionTable(
-						ctx,
-						txn,
-						sc.execCfg,
-						*dbDesc.RegionConfig,
-						scTable,
-						opts...,
-					); err != nil {
-						return err
-					}
-				} else {
-					// For the normal case, copy the zone configs over.
-					if err := maybeUpdateZoneConfigsForPKChange(
-						ctx, txn, sc.execCfg, scTable, pkSwap); err != nil {
-						return err
-					}
-				}
+			// Ensure that zone configurations are finalized (or rolled back) when
+			// done is called.
+			// This will configure the table zone config for multi-region transformations.
+			if err := sc.applyZoneConfigChangeForMutation(
+				ctx,
+				txn,
+				dbDesc,
+				scTable,
+				mutation,
+				true, // isDone
+			); err != nil {
+				return err
 			}
 
 			// If we are refreshing a materialized view, then create GC jobs for all
@@ -2453,6 +2418,86 @@ func (sc *SchemaChanger) queueCleanupJobs(
 			MutationID: mutationID,
 			JobID:      int64(jobID),
 		})
+	}
+	return nil
+}
+
+func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
+	ctx context.Context,
+	txn *kv.Txn,
+	dbDesc *dbdesc.Immutable,
+	tableDesc *tabledesc.Mutable,
+	mutation descpb.DescriptorMutation,
+	isDone bool,
+) error {
+	if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
+		if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
+			// We will add up to two options - one for the table itself, and one
+			// for all the new indexes associated with the table.
+			opts := make([]applyZoneConfigForMultiRegionTableOption, 0, 2)
+
+			// For locality configs, we need to update the zone configs to match
+			// the new multi-region locality configuration, instead of
+			// copying the old zone configs over.
+			if mutation.Direction == descpb.DescriptorMutation_ADD {
+				// Only apply the zone configuration on the table when the mutation
+				// is complete.
+				if isDone {
+					opts = append(
+						opts,
+						applyZoneConfigForMultiRegionTableOptionTableNewConfig(
+							lcSwap.NewLocalityConfig,
+						),
+					)
+				}
+				switch lcSwap.NewLocalityConfig.Locality.(type) {
+				case *descpb.TableDescriptor_LocalityConfig_Global_,
+					*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+					// Nothing to do here. The table re-writing the locality config is all
+					// that is required.
+				case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
+					// Apply new zone configurations for all newly partitioned indexes.
+					opts = append(
+						opts,
+						applyZoneConfigForMultiRegionTableOptionNewIndexes(
+							append(
+								[]descpb.IndexID{pkSwap.NewPrimaryIndexId},
+								pkSwap.NewIndexes...,
+							)...,
+						),
+					)
+				default:
+					return errors.AssertionFailedf(
+						"unknown locality on PK swap: %T",
+						lcSwap.NewLocalityConfig.Locality,
+					)
+				}
+			} else {
+				// DROP is hit on cancellation, in which case we must roll back.
+				opts = append(
+					opts,
+					applyZoneConfigForMultiRegionTableOptionTableNewConfig(
+						lcSwap.OldLocalityConfig,
+					),
+				)
+			}
+
+			return ApplyZoneConfigForMultiRegionTable(
+				ctx,
+				txn,
+				sc.execCfg,
+				*dbDesc.RegionConfig,
+				tableDesc,
+				opts...,
+			)
+		}
+
+		// For the plain ALTER PRIMARY KEY case, copy the zone configs over
+		// for any new indexes.
+		// Note this is done even for isDone = true, though not strictly necessary.
+		return maybeUpdateZoneConfigsForPKChange(
+			ctx, txn, sc.execCfg, tableDesc, pkSwap,
+		)
 	}
 	return nil
 }

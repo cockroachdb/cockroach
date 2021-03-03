@@ -30,6 +30,7 @@ go_test(
     name = "partitionccl_test",
     size = "medium",
     srcs = [
+        "alter_primary_key_test.go",
         "drop_test.go",
         "main_test.go",
         "partition_test.go",
@@ -40,6 +41,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl/importccl",
         "//pkg/ccl/storageccl",
+        "//pkg/ccl/testutilsccl",
         "//pkg/ccl/utilccl",
         "//pkg/config",
         "//pkg/config/zonepb",

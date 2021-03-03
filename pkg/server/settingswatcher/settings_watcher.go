@@ -106,7 +106,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	) (shouldFail bool) {
 		// TODO(ajwerner): Consider if there are other errors which we want to
 		// treat as permanent.
-		if grpcutil.IsAuthenticationError(err) ||
+		if grpcutil.IsAuthError(err) ||
 			// This is a hack around the fact that we do not get properly structured
 			// errors out of gRPC. See #56208.
 			strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {

@@ -259,8 +259,8 @@ func (ds *DistSender) singleRangeFeed(
 		stream, err := client.RangeFeed(clientCtx, &args)
 		if err != nil {
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
-			if grpcutil.IsAuthenticationError(err) {
-				// Authentication error. Propagate.
+			if grpcutil.IsAuthError(err) {
+				// Authentication or authorization error. Propagate.
 				return args.Timestamp, err
 			}
 			continue

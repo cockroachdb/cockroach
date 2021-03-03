@@ -329,8 +329,8 @@ func (c *Connector) RangeLookup(
 		})
 		if err != nil {
 			log.Warningf(ctx, "error issuing RangeLookup RPC: %v", err)
-			if grpcutil.IsAuthenticationError(err) {
-				// Authentication error. Propagate.
+			if grpcutil.IsAuthError(err) {
+				// Authentication or authorization error. Propagate.
 				return nil, nil, err
 			}
 			// Soft RPC error. Drop client and retry.

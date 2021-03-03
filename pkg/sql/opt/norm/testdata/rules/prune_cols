@@ -3592,8 +3592,6 @@ upsert checks
            └── column2:7 > upsert_b:16 [as=check3:19, outer=(7,16)]
 
 # Do not prune columns from updates that are needed for unique checks.
-# TODO(mgartner): v and z can be pruned because they are not updated and not
-# needed for uniqueness checks.
 norm expect=PruneMutationInputCols
 UPDATE uniq SET w = 1, x = 2 WHERE k = 3
 ----
@@ -3607,19 +3605,19 @@ update uniq
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: w_new:15!null x_new:16!null uniq.k:8!null uniq.v:9 uniq.w:10 uniq.x:11 uniq.y:12 uniq.z:13
+ │    ├── columns: w_new:15!null x_new:16!null uniq.k:8!null uniq.w:10 uniq.x:11 uniq.y:12
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(8-13,15,16)
+ │    ├── fd: ()-->(8,10-12,15,16)
  │    ├── select
- │    │    ├── columns: uniq.k:8!null uniq.v:9 uniq.w:10 uniq.x:11 uniq.y:12 uniq.z:13
+ │    │    ├── columns: uniq.k:8!null uniq.w:10 uniq.x:11 uniq.y:12
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(8-13)
+ │    │    ├── fd: ()-->(8,10-12)
  │    │    ├── scan uniq
- │    │    │    ├── columns: uniq.k:8!null uniq.v:9 uniq.w:10 uniq.x:11 uniq.y:12 uniq.z:13
+ │    │    │    ├── columns: uniq.k:8!null uniq.w:10 uniq.x:11 uniq.y:12
  │    │    │    ├── key: (8)
- │    │    │    └── fd: (8)-->(9-13), (13)~~>(8-12), (10)~~>(8,9,11-13), (11,12)~~>(8-10,13)
+ │    │    │    └── fd: (8)-->(10-12), (10)~~>(8,11,12), (11,12)~~>(8,10)
  │    │    └── filters
  │    │         └── uniq.k:8 = 3 [outer=(8), constraints=(/8: [/3 - /3]; tight), fd=()-->(8)]
  │    └── projections
@@ -3627,60 +3625,61 @@ update uniq
  │         └── 2 [as=x_new:16]
  └── unique-checks
       ├── unique-checks-item: uniq(w)
-      │    └── semi-join (hash)
-      │         ├── columns: k:24!null v:25 w:26!null x:27!null y:28 z:29
+      │    └── project
+      │         ├── columns: w:26!null
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         ├── fd: ()-->(24-29)
-      │         ├── with-scan &1
-      │         │    ├── columns: k:24!null v:25 w:26!null x:27!null y:28 z:29
-      │         │    ├── mapping:
-      │         │    │    ├──  uniq.k:8 => k:24
-      │         │    │    ├──  uniq.v:9 => v:25
-      │         │    │    ├──  w_new:15 => w:26
-      │         │    │    ├──  x_new:16 => x:27
-      │         │    │    ├──  uniq.y:12 => y:28
-      │         │    │    └──  uniq.z:13 => z:29
-      │         │    ├── cardinality: [0 - 1]
-      │         │    ├── key: ()
-      │         │    └── fd: ()-->(24-29)
-      │         ├── scan uniq
-      │         │    ├── columns: uniq.k:17!null uniq.w:19
-      │         │    ├── key: (17)
-      │         │    └── fd: (17)-->(19)
-      │         └── filters
-      │              ├── w:26 = uniq.w:19 [outer=(19,26), constraints=(/19: (/NULL - ]; /26: (/NULL - ]), fd=(19)==(26), (26)==(19)]
-      │              └── k:24 != uniq.k:17 [outer=(17,24), constraints=(/17: (/NULL - ]; /24: (/NULL - ])]
+      │         ├── fd: ()-->(26)
+      │         └── semi-join (hash)
+      │              ├── columns: k:24!null w:26!null
+      │              ├── cardinality: [0 - 1]
+      │              ├── key: ()
+      │              ├── fd: ()-->(24,26)
+      │              ├── with-scan &1
+      │              │    ├── columns: k:24!null w:26!null
+      │              │    ├── mapping:
+      │              │    │    ├──  uniq.k:8 => k:24
+      │              │    │    └──  w_new:15 => w:26
+      │              │    ├── cardinality: [0 - 1]
+      │              │    ├── key: ()
+      │              │    └── fd: ()-->(24,26)
+      │              ├── scan uniq
+      │              │    ├── columns: uniq.k:17!null uniq.w:19
+      │              │    ├── key: (17)
+      │              │    └── fd: (17)-->(19)
+      │              └── filters
+      │                   ├── w:26 = uniq.w:19 [outer=(19,26), constraints=(/19: (/NULL - ]; /26: (/NULL - ]), fd=(19)==(26), (26)==(19)]
+      │                   └── k:24 != uniq.k:17 [outer=(17,24), constraints=(/17: (/NULL - ]; /24: (/NULL - ])]
       └── unique-checks-item: uniq(x,y)
-           └── semi-join (hash)
-                ├── columns: k:37!null v:38 w:39!null x:40!null y:41 z:42
+           └── project
+                ├── columns: x:40!null y:41
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(37-42)
-                ├── with-scan &1
-                │    ├── columns: k:37!null v:38 w:39!null x:40!null y:41 z:42
-                │    ├── mapping:
-                │    │    ├──  uniq.k:8 => k:37
-                │    │    ├──  uniq.v:9 => v:38
-                │    │    ├──  w_new:15 => w:39
-                │    │    ├──  x_new:16 => x:40
-                │    │    ├──  uniq.y:12 => y:41
-                │    │    └──  uniq.z:13 => z:42
-                │    ├── cardinality: [0 - 1]
-                │    ├── key: ()
-                │    └── fd: ()-->(37-42)
-                ├── scan uniq
-                │    ├── columns: uniq.k:30!null uniq.x:33 uniq.y:34
-                │    ├── key: (30)
-                │    └── fd: (30)-->(33,34)
-                └── filters
-                     ├── x:40 = uniq.x:33 [outer=(33,40), constraints=(/33: (/NULL - ]; /40: (/NULL - ]), fd=(33)==(40), (40)==(33)]
-                     ├── y:41 = uniq.y:34 [outer=(34,41), constraints=(/34: (/NULL - ]; /41: (/NULL - ]), fd=(34)==(41), (41)==(34)]
-                     └── k:37 != uniq.k:30 [outer=(30,37), constraints=(/30: (/NULL - ]; /37: (/NULL - ])]
+                ├── fd: ()-->(40,41)
+                └── semi-join (hash)
+                     ├── columns: k:37!null x:40!null y:41
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(37,40,41)
+                     ├── with-scan &1
+                     │    ├── columns: k:37!null x:40!null y:41
+                     │    ├── mapping:
+                     │    │    ├──  uniq.k:8 => k:37
+                     │    │    ├──  x_new:16 => x:40
+                     │    │    └──  uniq.y:12 => y:41
+                     │    ├── cardinality: [0 - 1]
+                     │    ├── key: ()
+                     │    └── fd: ()-->(37,40,41)
+                     ├── scan uniq
+                     │    ├── columns: uniq.k:30!null uniq.x:33 uniq.y:34
+                     │    ├── key: (30)
+                     │    └── fd: (30)-->(33,34)
+                     └── filters
+                          ├── x:40 = uniq.x:33 [outer=(33,40), constraints=(/33: (/NULL - ]; /40: (/NULL - ]), fd=(33)==(40), (40)==(33)]
+                          ├── y:41 = uniq.y:34 [outer=(34,41), constraints=(/34: (/NULL - ]; /41: (/NULL - ]), fd=(34)==(41), (41)==(34)]
+                          └── k:37 != uniq.k:30 [outer=(30,37), constraints=(/30: (/NULL - ]; /37: (/NULL - ])]
 
 # Do not prune columns from updates that are needed for partial unique checks.
-# TODO(mgartner): x can be pruned because it is not updated and not needed for
-# uniqueness checks.
 norm expect=PruneMutationInputCols
 UPDATE uniq_partial SET v = 1 WHERE k = 3
 ----
@@ -3693,60 +3692,64 @@ update uniq_partial
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: v_new:11!null uniq_partial.k:6!null uniq_partial.v:7 uniq_partial.w:8 uniq_partial.x:9
+ │    ├── columns: v_new:11!null uniq_partial.k:6!null uniq_partial.v:7 uniq_partial.w:8
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(6-9,11)
+ │    ├── fd: ()-->(6-8,11)
  │    ├── select
- │    │    ├── columns: uniq_partial.k:6!null uniq_partial.v:7 uniq_partial.w:8 uniq_partial.x:9
+ │    │    ├── columns: uniq_partial.k:6!null uniq_partial.v:7 uniq_partial.w:8
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(6-9)
+ │    │    ├── fd: ()-->(6-8)
  │    │    ├── scan uniq_partial
- │    │    │    ├── columns: uniq_partial.k:6!null uniq_partial.v:7 uniq_partial.w:8 uniq_partial.x:9
+ │    │    │    ├── columns: uniq_partial.k:6!null uniq_partial.v:7 uniq_partial.w:8
  │    │    │    ├── key: (6)
- │    │    │    └── fd: (6)-->(7-9)
+ │    │    │    └── fd: (6)-->(7,8)
  │    │    └── filters
  │    │         └── uniq_partial.k:6 = 3 [outer=(6), constraints=(/6: [/3 - /3]; tight), fd=()-->(6)]
  │    └── projections
  │         └── 1 [as=v_new:11]
  └── unique-checks
       └── unique-checks-item: uniq_partial(v)
-           └── semi-join (hash)
-                ├── columns: k:17!null v:18!null w:19!null x:20
+           └── project
+                ├── columns: v:18!null
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(17-20)
-                ├── select
-                │    ├── columns: k:17!null v:18!null w:19!null x:20
-                │    ├── cardinality: [0 - 1]
-                │    ├── key: ()
-                │    ├── fd: ()-->(17-20)
-                │    ├── with-scan &1
-                │    │    ├── columns: k:17!null v:18!null w:19 x:20
-                │    │    ├── mapping:
-                │    │    │    ├──  uniq_partial.k:6 => k:17
-                │    │    │    ├──  v_new:11 => v:18
-                │    │    │    ├──  uniq_partial.w:8 => w:19
-                │    │    │    └──  uniq_partial.x:9 => x:20
-                │    │    ├── cardinality: [0 - 1]
-                │    │    ├── key: ()
-                │    │    └── fd: ()-->(17-20)
-                │    └── filters
-                │         └── w:19 > 0 [outer=(19), constraints=(/19: [/1 - ]; tight)]
-                ├── select
-                │    ├── columns: uniq_partial.k:12!null uniq_partial.v:13 uniq_partial.w:14!null
-                │    ├── key: (12)
-                │    ├── fd: (12)-->(13,14)
-                │    ├── scan uniq_partial
-                │    │    ├── columns: uniq_partial.k:12!null uniq_partial.v:13 uniq_partial.w:14
-                │    │    ├── key: (12)
-                │    │    └── fd: (12)-->(13,14)
-                │    └── filters
-                │         └── uniq_partial.w:14 > 0 [outer=(14), constraints=(/14: [/1 - ]; tight)]
-                └── filters
-                     ├── v:18 = uniq_partial.v:13 [outer=(13,18), constraints=(/13: (/NULL - ]; /18: (/NULL - ]), fd=(13)==(18), (18)==(13)]
-                     └── k:17 != uniq_partial.k:12 [outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ])]
+                ├── fd: ()-->(18)
+                └── semi-join (hash)
+                     ├── columns: k:17!null v:18!null w:19!null
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(17-19)
+                     ├── select
+                     │    ├── columns: k:17!null v:18!null w:19!null
+                     │    ├── cardinality: [0 - 1]
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(17-19)
+                     │    ├── with-scan &1
+                     │    │    ├── columns: k:17!null v:18!null w:19
+                     │    │    ├── mapping:
+                     │    │    │    ├──  uniq_partial.k:6 => k:17
+                     │    │    │    ├──  v_new:11 => v:18
+                     │    │    │    └──  uniq_partial.w:8 => w:19
+                     │    │    ├── cardinality: [0 - 1]
+                     │    │    ├── key: ()
+                     │    │    └── fd: ()-->(17-19)
+                     │    └── filters
+                     │         └── w:19 > 0 [outer=(19), constraints=(/19: [/1 - ]; tight)]
+                     ├── select
+                     │    ├── columns: uniq_partial.k:12!null uniq_partial.v:13 uniq_partial.w:14!null
+                     │    ├── key: (12)
+                     │    ├── fd: (12)-->(13,14)
+                     │    ├── scan uniq_partial
+                     │    │    ├── columns: uniq_partial.k:12!null uniq_partial.v:13 uniq_partial.w:14
+                     │    │    ├── key: (12)
+                     │    │    └── fd: (12)-->(13,14)
+                     │    └── filters
+                     │         └── uniq_partial.w:14 > 0 [outer=(14), constraints=(/14: [/1 - ]; tight)]
+                     └── filters
+                          ├── v:18 = uniq_partial.v:13 [outer=(13,18), constraints=(/13: (/NULL - ]; /18: (/NULL - ]), fd=(13)==(18), (18)==(13)]
+                          └── k:17 != uniq_partial.k:12 [outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ])]
 
 # Do not prune columns that are needed for foreign key checks or cascades.
 norm expect=PruneMutationInputCols
@@ -3771,16 +3774,16 @@ upsert uniq_fk_parent
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── project
- │    ├── columns: upsert_k:17 upsert_a:18 upsert_b:19 upsert_c:20 upsert_d:21 column1:7!null column2:8!null column9:9 uniq_fk_parent.k:10 uniq_fk_parent.b:12 uniq_fk_parent.c:13
+ │    ├── columns: upsert_k:17 upsert_a:18 upsert_b:19 upsert_c:20 column1:7!null column2:8!null column9:9 uniq_fk_parent.k:10 uniq_fk_parent.b:12 uniq_fk_parent.c:13
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(7-10,12,13,17-21)
+ │    ├── fd: ()-->(7-10,12,13,17-20)
  │    ├── left-join (cross)
- │    │    ├── columns: column1:7!null column2:8!null column9:9 uniq_fk_parent.k:10 uniq_fk_parent.a:11 uniq_fk_parent.b:12 uniq_fk_parent.c:13 uniq_fk_parent.d:14
+ │    │    ├── columns: column1:7!null column2:8!null column9:9 uniq_fk_parent.k:10 uniq_fk_parent.a:11 uniq_fk_parent.b:12 uniq_fk_parent.c:13
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(7-14)
+ │    │    ├── fd: ()-->(7-13)
  │    │    ├── values
  │    │    │    ├── columns: column1:7!null column2:8!null column9:9
  │    │    │    ├── cardinality: [1 - 1]
@@ -3788,14 +3791,14 @@ upsert uniq_fk_parent
  │    │    │    ├── fd: ()-->(7-9)
  │    │    │    └── (2, 1, NULL)
  │    │    ├── select
- │    │    │    ├── columns: uniq_fk_parent.k:10!null uniq_fk_parent.a:11 uniq_fk_parent.b:12 uniq_fk_parent.c:13 uniq_fk_parent.d:14
+ │    │    │    ├── columns: uniq_fk_parent.k:10!null uniq_fk_parent.a:11 uniq_fk_parent.b:12 uniq_fk_parent.c:13
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(10-14)
+ │    │    │    ├── fd: ()-->(10-13)
  │    │    │    ├── scan uniq_fk_parent
- │    │    │    │    ├── columns: uniq_fk_parent.k:10!null uniq_fk_parent.a:11 uniq_fk_parent.b:12 uniq_fk_parent.c:13 uniq_fk_parent.d:14
+ │    │    │    │    ├── columns: uniq_fk_parent.k:10!null uniq_fk_parent.a:11 uniq_fk_parent.b:12 uniq_fk_parent.c:13
  │    │    │    │    ├── key: (10)
- │    │    │    │    └── fd: (10)-->(11-14), (11)~~>(10,12-14), (12,13)~~>(10,11,14)
+ │    │    │    │    └── fd: (10)-->(11-13), (11)~~>(10,12,13), (12,13)~~>(10,11)
  │    │    │    └── filters
  │    │    │         └── uniq_fk_parent.k:10 = 2 [outer=(10), constraints=(/10: [/2 - /2]; tight), fd=()-->(10)]
  │    │    └── filters (true)
@@ -3803,58 +3806,62 @@ upsert uniq_fk_parent
  │         ├── CASE WHEN uniq_fk_parent.k:10 IS NULL THEN column1:7 ELSE uniq_fk_parent.k:10 END [as=upsert_k:17, outer=(7,10)]
  │         ├── CASE WHEN uniq_fk_parent.k:10 IS NULL THEN column2:8 ELSE uniq_fk_parent.a:11 END [as=upsert_a:18, outer=(8,10,11)]
  │         ├── CASE WHEN uniq_fk_parent.k:10 IS NULL THEN column9:9 ELSE uniq_fk_parent.b:12 END [as=upsert_b:19, outer=(9,10,12)]
- │         ├── CASE WHEN uniq_fk_parent.k:10 IS NULL THEN column9:9 ELSE 1 END [as=upsert_c:20, outer=(9,10)]
- │         └── CASE WHEN uniq_fk_parent.k:10 IS NULL THEN column9:9 ELSE uniq_fk_parent.d:14 END [as=upsert_d:21, outer=(9,10,14)]
+ │         └── CASE WHEN uniq_fk_parent.k:10 IS NULL THEN column9:9 ELSE 1 END [as=upsert_c:20, outer=(9,10)]
  └── unique-checks
       ├── unique-checks-item: uniq_fk_parent(a)
-      │    └── semi-join (hash)
-      │         ├── columns: k:28 a:29 b:30 c:31 d:32
+      │    └── project
+      │         ├── columns: a:29
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         ├── fd: ()-->(28-32)
-      │         ├── with-scan &1
-      │         │    ├── columns: k:28 a:29 b:30 c:31 d:32
-      │         │    ├── mapping:
-      │         │    │    ├──  upsert_k:17 => k:28
-      │         │    │    ├──  upsert_a:18 => a:29
-      │         │    │    ├──  upsert_b:19 => b:30
-      │         │    │    ├──  upsert_c:20 => c:31
-      │         │    │    └──  upsert_d:21 => d:32
-      │         │    ├── cardinality: [1 - 1]
-      │         │    ├── key: ()
-      │         │    └── fd: ()-->(28-32)
-      │         ├── scan uniq_fk_parent
-      │         │    ├── columns: uniq_fk_parent.k:22!null uniq_fk_parent.a:23
-      │         │    ├── key: (22)
-      │         │    └── fd: (22)-->(23)
-      │         └── filters
-      │              ├── a:29 = uniq_fk_parent.a:23 [outer=(23,29), constraints=(/23: (/NULL - ]; /29: (/NULL - ]), fd=(23)==(29), (29)==(23)]
-      │              └── k:28 != uniq_fk_parent.k:22 [outer=(22,28), constraints=(/22: (/NULL - ]; /28: (/NULL - ])]
+      │         ├── fd: ()-->(29)
+      │         └── semi-join (hash)
+      │              ├── columns: k:28 a:29
+      │              ├── cardinality: [0 - 1]
+      │              ├── key: ()
+      │              ├── fd: ()-->(28,29)
+      │              ├── with-scan &1
+      │              │    ├── columns: k:28 a:29
+      │              │    ├── mapping:
+      │              │    │    ├──  upsert_k:17 => k:28
+      │              │    │    └──  upsert_a:18 => a:29
+      │              │    ├── cardinality: [1 - 1]
+      │              │    ├── key: ()
+      │              │    └── fd: ()-->(28,29)
+      │              ├── scan uniq_fk_parent
+      │              │    ├── columns: uniq_fk_parent.k:22!null uniq_fk_parent.a:23
+      │              │    ├── key: (22)
+      │              │    └── fd: (22)-->(23)
+      │              └── filters
+      │                   ├── a:29 = uniq_fk_parent.a:23 [outer=(23,29), constraints=(/23: (/NULL - ]; /29: (/NULL - ]), fd=(23)==(29), (29)==(23)]
+      │                   └── k:28 != uniq_fk_parent.k:22 [outer=(22,28), constraints=(/22: (/NULL - ]; /28: (/NULL - ])]
       └── unique-checks-item: uniq_fk_parent(b,c)
-           └── semi-join (hash)
-                ├── columns: k:39 a:40 b:41 c:42 d:43
+           └── project
+                ├── columns: b:41 c:42
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(39-43)
-                ├── with-scan &1
-                │    ├── columns: k:39 a:40 b:41 c:42 d:43
-                │    ├── mapping:
-                │    │    ├──  upsert_k:17 => k:39
-                │    │    ├──  upsert_a:18 => a:40
-                │    │    ├──  upsert_b:19 => b:41
-                │    │    ├──  upsert_c:20 => c:42
-                │    │    └──  upsert_d:21 => d:43
-                │    ├── cardinality: [1 - 1]
-                │    ├── key: ()
-                │    └── fd: ()-->(39-43)
-                ├── scan uniq_fk_parent
-                │    ├── columns: uniq_fk_parent.k:33!null uniq_fk_parent.b:35 uniq_fk_parent.c:36
-                │    ├── key: (33)
-                │    └── fd: (33)-->(35,36)
-                └── filters
-                     ├── b:41 = uniq_fk_parent.b:35 [outer=(35,41), constraints=(/35: (/NULL - ]; /41: (/NULL - ]), fd=(35)==(41), (41)==(35)]
-                     ├── c:42 = uniq_fk_parent.c:36 [outer=(36,42), constraints=(/36: (/NULL - ]; /42: (/NULL - ]), fd=(36)==(42), (42)==(36)]
-                     └── k:39 != uniq_fk_parent.k:33 [outer=(33,39), constraints=(/33: (/NULL - ]; /39: (/NULL - ])]
+                ├── fd: ()-->(41,42)
+                └── semi-join (hash)
+                     ├── columns: k:39 b:41 c:42
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(39,41,42)
+                     ├── with-scan &1
+                     │    ├── columns: k:39 b:41 c:42
+                     │    ├── mapping:
+                     │    │    ├──  upsert_k:17 => k:39
+                     │    │    ├──  upsert_b:19 => b:41
+                     │    │    └──  upsert_c:20 => c:42
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── key: ()
+                     │    └── fd: ()-->(39,41,42)
+                     ├── scan uniq_fk_parent
+                     │    ├── columns: uniq_fk_parent.k:33!null uniq_fk_parent.b:35 uniq_fk_parent.c:36
+                     │    ├── key: (33)
+                     │    └── fd: (33)-->(35,36)
+                     └── filters
+                          ├── b:41 = uniq_fk_parent.b:35 [outer=(35,41), constraints=(/35: (/NULL - ]; /41: (/NULL - ]), fd=(35)==(41), (41)==(35)]
+                          ├── c:42 = uniq_fk_parent.c:36 [outer=(36,42), constraints=(/36: (/NULL - ]; /42: (/NULL - ]), fd=(36)==(42), (42)==(36)]
+                          └── k:39 != uniq_fk_parent.k:33 [outer=(33,39), constraints=(/33: (/NULL - ]; /39: (/NULL - ])]
 
 # Prune inbound foreign key columns when they are not updated.
 norm expect=PruneMutationInputCols
@@ -3913,54 +3920,59 @@ upsert uniq_fk_parent
  │         └── CASE WHEN uniq_fk_parent.k:9 IS NULL THEN column8:8 ELSE 1 END [as=upsert_d:20, outer=(8,9)]
  └── unique-checks
       ├── unique-checks-item: uniq_fk_parent(a)
-      │    └── semi-join (hash)
-      │         ├── columns: k:27 a:28 b:29 c:30 d:31
+      │    └── project
+      │         ├── columns: a:28
       │         ├── cardinality: [0 - 1]
       │         ├── key: ()
-      │         ├── fd: ()-->(27-31)
-      │         ├── with-scan &1
-      │         │    ├── columns: k:27 a:28 b:29 c:30 d:31
-      │         │    ├── mapping:
-      │         │    │    ├──  upsert_k:16 => k:27
-      │         │    │    ├──  upsert_a:17 => a:28
-      │         │    │    ├──  upsert_b:18 => b:29
-      │         │    │    ├──  upsert_c:19 => c:30
-      │         │    │    └──  upsert_d:20 => d:31
-      │         │    ├── cardinality: [1 - 1]
-      │         │    ├── key: ()
-      │         │    └── fd: ()-->(27-31)
-      │         ├── scan uniq_fk_parent
-      │         │    ├── columns: uniq_fk_parent.k:21!null uniq_fk_parent.a:22
-      │         │    ├── key: (21)
-      │         │    └── fd: (21)-->(22)
-      │         └── filters
-      │              ├── a:28 = uniq_fk_parent.a:22 [outer=(22,28), constraints=(/22: (/NULL - ]; /28: (/NULL - ]), fd=(22)==(28), (28)==(22)]
-      │              └── k:27 != uniq_fk_parent.k:21 [outer=(21,27), constraints=(/21: (/NULL - ]; /27: (/NULL - ])]
+      │         ├── fd: ()-->(28)
+      │         └── semi-join (hash)
+      │              ├── columns: k:27 a:28
+      │              ├── cardinality: [0 - 1]
+      │              ├── key: ()
+      │              ├── fd: ()-->(27,28)
+      │              ├── with-scan &1
+      │              │    ├── columns: k:27 a:28
+      │              │    ├── mapping:
+      │              │    │    ├──  upsert_k:16 => k:27
+      │              │    │    └──  upsert_a:17 => a:28
+      │              │    ├── cardinality: [1 - 1]
+      │              │    ├── key: ()
+      │              │    └── fd: ()-->(27,28)
+      │              ├── scan uniq_fk_parent
+      │              │    ├── columns: uniq_fk_parent.k:21!null uniq_fk_parent.a:22
+      │              │    ├── key: (21)
+      │              │    └── fd: (21)-->(22)
+      │              └── filters
+      │                   ├── a:28 = uniq_fk_parent.a:22 [outer=(22,28), constraints=(/22: (/NULL - ]; /28: (/NULL - ]), fd=(22)==(28), (28)==(22)]
+      │                   └── k:27 != uniq_fk_parent.k:21 [outer=(21,27), constraints=(/21: (/NULL - ]; /27: (/NULL - ])]
       └── unique-checks-item: uniq_fk_parent(b,c)
-           └── semi-join (hash)
-                ├── columns: k:38 a:39 b:40 c:41 d:42
+           └── project
+                ├── columns: b:40 c:41
                 ├── cardinality: [0 - 1]
                 ├── key: ()
-                ├── fd: ()-->(38-42)
-                ├── with-scan &1
-                │    ├── columns: k:38 a:39 b:40 c:41 d:42
-                │    ├── mapping:
-                │    │    ├──  upsert_k:16 => k:38
-                │    │    ├──  upsert_a:17 => a:39
-                │    │    ├──  upsert_b:18 => b:40
-                │    │    ├──  upsert_c:19 => c:41
-                │    │    └──  upsert_d:20 => d:42
-                │    ├── cardinality: [1 - 1]
-                │    ├── key: ()
-                │    └── fd: ()-->(38-42)
-                ├── scan uniq_fk_parent
-                │    ├── columns: uniq_fk_parent.k:32!null uniq_fk_parent.b:34 uniq_fk_parent.c:35
-                │    ├── key: (32)
-                │    └── fd: (32)-->(34,35)
-                └── filters
-                     ├── b:40 = uniq_fk_parent.b:34 [outer=(34,40), constraints=(/34: (/NULL - ]; /40: (/NULL - ]), fd=(34)==(40), (40)==(34)]
-                     ├── c:41 = uniq_fk_parent.c:35 [outer=(35,41), constraints=(/35: (/NULL - ]; /41: (/NULL - ]), fd=(35)==(41), (41)==(35)]
-                     └── k:38 != uniq_fk_parent.k:32 [outer=(32,38), constraints=(/32: (/NULL - ]; /38: (/NULL - ])]
+                ├── fd: ()-->(40,41)
+                └── semi-join (hash)
+                     ├── columns: k:38 b:40 c:41
+                     ├── cardinality: [0 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(38,40,41)
+                     ├── with-scan &1
+                     │    ├── columns: k:38 b:40 c:41
+                     │    ├── mapping:
+                     │    │    ├──  upsert_k:16 => k:38
+                     │    │    ├──  upsert_b:18 => b:40
+                     │    │    └──  upsert_c:19 => c:41
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── key: ()
+                     │    └── fd: ()-->(38,40,41)
+                     ├── scan uniq_fk_parent
+                     │    ├── columns: uniq_fk_parent.k:32!null uniq_fk_parent.b:34 uniq_fk_parent.c:35
+                     │    ├── key: (32)
+                     │    └── fd: (32)-->(34,35)
+                     └── filters
+                          ├── b:40 = uniq_fk_parent.b:34 [outer=(34,40), constraints=(/34: (/NULL - ]; /40: (/NULL - ]), fd=(34)==(40), (40)==(34)]
+                          ├── c:41 = uniq_fk_parent.c:35 [outer=(35,41), constraints=(/35: (/NULL - ]; /41: (/NULL - ]), fd=(35)==(41), (41)==(35)]
+                          └── k:38 != uniq_fk_parent.k:32 [outer=(32,38), constraints=(/32: (/NULL - ]; /38: (/NULL - ])]
 
 # Do not prune columns that are needed for foreign key checks or cascades.
 norm expect=PruneMutationInputCols

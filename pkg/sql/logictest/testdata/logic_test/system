@@ -468,110 +468,110 @@ DROP DATABASE system
 statement error user root does not have DROP privilege on relation users
 DROP TABLE system.users
 
-statement error user root does not have ALL privilege on database system
+statement error pq: cannot GRANT on system object
 GRANT ALL ON DATABASE system TO testuser
 
-statement error user root does not have INSERT privilege on database system
+statement error pq: cannot GRANT on system object
 GRANT GRANT, SELECT, INSERT ON DATABASE system TO testuser
 
-statement ok
+statement error pq: cannot GRANT on system object
 GRANT GRANT, SELECT ON DATABASE system TO testuser
 
-statement error user root does not have ALL privilege on relation namespace
+statement error pq: cannot GRANT on system object
 GRANT ALL ON system.namespace TO testuser
 
-statement error user root does not have INSERT privilege on relation namespace
+statement error pq: cannot GRANT on system object
 GRANT GRANT, SELECT, INSERT ON system.namespace TO testuser
 
-statement ok
+statement error pq: cannot GRANT on system object
 GRANT GRANT, SELECT ON system.namespace TO testuser
 
-statement ok
+statement error pq: cannot GRANT on system object
 GRANT SELECT ON system.descriptor TO testuser
 
 # Superusers must have exactly the allowed privileges.
-statement error user root does not have ALL privilege on database system
+statement error pq: cannot GRANT on system object
 GRANT ALL ON DATABASE system TO root
 
-statement error user root does not have DELETE privilege on database system
+statement error pq: cannot GRANT on system object
 GRANT DELETE, INSERT ON DATABASE system TO root
 
-statement error user root does not have ALL privilege on relation namespace
+statement error pq: cannot GRANT on system object
 GRANT ALL ON system.namespace TO root
 
-statement error user root does not have DELETE privilege on relation descriptor
+statement error pq: cannot GRANT on system object
 GRANT DELETE, INSERT ON system.descriptor TO root
 
-statement error user root does not have ALL privilege on relation descriptor
+statement error pq: cannot GRANT on system object
 GRANT ALL ON system.descriptor TO root
 
-statement error user root must have exactly GRANT, SELECT privileges on system database with ID=.*
+statement error pq: cannot REVOKE on system object
 REVOKE GRANT ON DATABASE system FROM root
 
-statement error user root must have exactly GRANT, SELECT privileges on system table with ID=.*
+statement error pq: cannot REVOKE on system object
 REVOKE GRANT ON system.namespace FROM root
 
-statement error user root does not have ALL privilege on relation namespace
+statement error pq: cannot REVOKE on system object
 REVOKE ALL ON system.namespace FROM root
 
-statement error user root does not have privileges over system table with ID=.*
+statement error pq: cannot REVOKE on system object
 REVOKE GRANT,SELECT ON system.namespace FROM root
 
-statement error user root does not have ALL privilege on database system
+statement error pq: cannot GRANT on system object
 GRANT ALL ON DATABASE system TO admin
 
-statement error user root does not have DELETE privilege on database system
+statement error pq: cannot GRANT on system object
 GRANT DELETE, INSERT ON DATABASE system TO admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system database with ID=.*
+statement error pq: cannot REVOKE on system object
 REVOKE GRANT ON DATABASE system FROM admin
 
-statement error user root does not have ALL privilege on relation namespace
+statement error pq: cannot GRANT on system object
 GRANT ALL ON system.namespace TO admin
 
-statement error user root does not have DELETE privilege on relation descriptor
+statement error pq: cannot GRANT on system object
 GRANT DELETE, INSERT ON system.descriptor TO admin
 
-statement error user root does not have ALL privilege on relation descriptor
+statement error pq: cannot GRANT on system object
 GRANT ALL ON system.descriptor TO admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system table with ID=.*
+statement error pq: cannot REVOKE on system object
 REVOKE GRANT ON system.descriptor FROM admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system database with ID=.*
+statement error pq: cannot REVOKE on system object
 REVOKE GRANT ON DATABASE system FROM admin
 
-statement error user admin must have exactly GRANT, SELECT privileges on system table with ID=.*
+statement error pq: cannot REVOKE on system object
 REVOKE GRANT ON system.namespace FROM admin
 
-statement error user root does not have ALL privilege on relation namespace
+statement error pq: cannot REVOKE on system object
 REVOKE ALL ON system.namespace FROM admin
 
-statement error user admin does not have privileges over system table with ID=.*
+statement error pq: cannot REVOKE on system object
 REVOKE GRANT,SELECT ON system.namespace FROM admin
 
 # Some tables (we test system.lease here) used to allow multiple privilege sets for
 # backwards compatibility, and superusers were allowed very wide privileges.
 # We make sure this is no longer the case.
-statement error user root does not have ALL privilege on relation lease
+statement error pq: cannot GRANT on system object
 GRANT ALL ON system.lease TO testuser
 
-statement error user root does not have CREATE privilege on relation lease
+statement error pq: cannot GRANT on system object
 GRANT CREATE on system.lease to root
 
-statement error user root does not have CREATE privilege on relation lease
+statement error pq: cannot GRANT on system object
 GRANT CREATE on system.lease to admin
 
-statement error user root does not have CREATE privilege on relation lease
+statement error pq: cannot GRANT on system object
 GRANT CREATE on system.lease to testuser
 
-statement error user root does not have ALL privilege on relation lease
+statement error pq: cannot GRANT on system object
 GRANT ALL ON system.lease TO root
 
-statement error user root does not have ALL privilege on relation lease
+statement error pq: cannot GRANT on system object
 GRANT ALL ON system.lease TO admin
 
-statement error user root does not have ALL privilege on relation lease
+statement error pq: cannot GRANT on system object
 GRANT ALL ON system.lease TO testuser
 
 # NB: the "order by" is necessary or this test is flaky under DistSQL.
