@@ -696,13 +696,6 @@ func loadTPCCBench(
 		return err
 	}
 
-	// Increase job leniency to prevent restarts due to node liveness.
-	if _, err := db.Exec(`
-		SET CLUSTER SETTING jobs.registry.leniency = '5m';
-	`); err != nil {
-		t.Fatal(err)
-	}
-
 	var loadArgs string
 	var rebalanceWait time.Duration
 	switch b.LoadConfig {

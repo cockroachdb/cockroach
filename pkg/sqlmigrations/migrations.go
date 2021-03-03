@@ -268,25 +268,17 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: nil,
 	},
 	{
-		// Introduced in v20.2.
-		name:   "add created_by columns to system.jobs",
-		workFn: alterSystemJobsAddCreatedByColumns,
-		includedInBootstrap: clusterversion.ByKey(
-			clusterversion.AlterSystemJobsAddCreatedByColumns),
+		// Introduced in v20.2. Baked into v21.1.
+		name: "add created_by columns to system.jobs",
 	},
 	{
-		// Introduced in v20.2.
-		name:                "create new system.scheduled_jobs table",
-		workFn:              createScheduledJobsTable,
-		includedInBootstrap: clusterversion.ByKey(clusterversion.AddScheduledJobsTable),
-		newDescriptorIDs:    staticIDs(keys.ScheduledJobsTableID),
+		// Introduced in v20.2. Baked into v21.1.
+		name:             "create new system.scheduled_jobs table",
+		newDescriptorIDs: staticIDs(keys.ScheduledJobsTableID),
 	},
 	{
-		// Introduced in v20.2.
-		name:   "add new sqlliveness table and claim columns to system.jobs",
-		workFn: alterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-		includedInBootstrap: clusterversion.ByKey(
-			clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable),
+		// Introduced in v20.2. Baked into v21.1.
+		name: "add new sqlliveness table and claim columns to system.jobs",
 	},
 	{
 		// Introduced in v20.2.
@@ -299,10 +291,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
 	{
-		// Introduced in v20.2.
-		name:                "alter scheduled jobs",
-		workFn:              alterSystemScheduledJobsFixTableSchema,
-		includedInBootstrap: clusterversion.ByKey(clusterversion.UpdateScheduledJobsSchema),
+		// Introduced in v20.2. Baked into v21.1.
+		name: "alter scheduled jobs",
 	},
 	{
 		// Introduced in v20.2.
@@ -976,71 +966,7 @@ func updateSystemLocationData(ctx context.Context, r runner) error {
 	}
 	return nil
 }
-func alterSystemJobsAddCreatedByColumns(ctx context.Context, r runner) error {
-	// NB: we use family name as it existed in the original system.jobs schema to
-	// minimize migration work needed (avoid renames).
-	addColsStmt := `
-ALTER TABLE system.jobs
-ADD COLUMN IF NOT EXISTS created_by_type STRING FAMILY fam_0_id_status_created_payload,
-ADD COLUMN IF NOT EXISTS created_by_id INT FAMILY fam_0_id_status_created_payload
-`
-	addIdxStmt := `
-CREATE INDEX IF NOT EXISTS jobs_created_by_type_created_by_id_idx
-ON system.jobs (created_by_type, created_by_id)
-STORING (status)
-`
-	asNode := sessiondata.InternalExecutorOverride{
-		User: security.NodeUserName(),
-	}
-
-	if _, err := r.sqlExecutor.ExecEx(
-		ctx, "add-jobs-cols", nil, asNode, addColsStmt); err != nil {
-		return err
-	}
-
-	_, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-idx", nil, asNode, addIdxStmt)
-	return err
-}
-
-func createScheduledJobsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, systemschema.ScheduledJobsTable)
-}
-
-func alterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable(
-	ctx context.Context, r runner,
-) error {
-	addColsStmt := `
-ALTER TABLE system.jobs
-ADD COLUMN IF NOT EXISTS claim_session_id BYTES CREATE FAMILY claim,
-ADD COLUMN IF NOT EXISTS claim_instance_id INT8 FAMILY claim
-`
-	asNode := sessiondata.InternalExecutorOverride{
-		User: security.NodeUserName(),
-	}
-	if _, err := r.sqlExecutor.ExecEx(ctx, "add-jobs-claim-cols", nil, asNode, addColsStmt); err != nil {
-		return err
-	}
-	return createSystemTable(ctx, r, systemschema.SqllivenessTable)
-}
 
 func createTenantsTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, systemschema.TenantsTable)
-}
-
-func alterSystemScheduledJobsFixTableSchema(ctx context.Context, r runner) error {
-	setOwner := "UPDATE system.scheduled_jobs SET owner='root' WHERE owner IS NULL"
-	asNode := sessiondata.InternalExecutorOverride{User: security.NodeUserName()}
-
-	if _, err := r.sqlExecutor.ExecEx(ctx, "set-schedule-owner", nil, asNode, setOwner); err != nil {
-		return err
-	}
-
-	alterSchedules := `
-ALTER TABLE system.scheduled_jobs
-ADD COLUMN IF NOT EXISTS schedule_state BYTES FAMILY sched,
-ALTER COLUMN owner SET NOT NULL,
-DROP COLUMN IF EXISTS schedule_changes
-`
-	_, err := r.sqlExecutor.ExecEx(ctx, "alter-scheduled-jobs", nil, asNode, alterSchedules)
-	return err
 }
