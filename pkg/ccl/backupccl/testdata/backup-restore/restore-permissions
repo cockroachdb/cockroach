@@ -97,3 +97,17 @@ exec-sql server=s3 user=testuser
 RESTORE TABLE d.t FROM 'nodelocal://0/test/'
 ----
 pq: only users with the admin role are allowed to RESTORE from the specified nodelocal URI
+
+
+# Validate that the backup / restore job metrics
+query-sql
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE (feature_name LIKE  'sql.schema.job.%successful' OR
+feature_name LIKE  'sql.schema.job.%failed' OR
+feature_name LIKE 'sql.schema.job.%canceled') AND
+usage_count > 1 and usage_count < 100
+ORDER BY feature_name DESC
+----
+sql.schema.job.schema_change_successful
+sql.schema.job.restore_successful
+sql.schema.job.backup_successful

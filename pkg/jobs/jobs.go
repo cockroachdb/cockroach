@@ -20,10 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -571,6 +573,7 @@ func (j *Job) canceled(
 		}
 		ju.UpdateStatus(StatusCanceled)
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		IncrementJobCanceled(md)
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -594,6 +597,7 @@ func (j *Job) failed(
 		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		IncrementJobFailed(md)
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -618,6 +622,7 @@ func (j *Job) succeeded(
 		}
 		ju.UpdateStatus(StatusSucceeded)
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		IncrementJobSuccess(md)
 		ju.UpdatePayload(md.Payload)
 		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
 			FractionCompleted: 1.0,
@@ -927,4 +932,100 @@ func (sj *StartableJob) CleanupOnRollback(ctx context.Context) error {
 func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, sj.ID())
+}
+
+// IncrementJobCanceled increments the canceled job counters based
+// on the type of job.
+func IncrementJobCanceled(md JobMetadata) {
+	if md.Payload != nil {
+		if _, ok := md.Payload.Details.(*jobspb.Payload_SchemaChange); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_SchemaChangeGC); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaGCCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_TypeSchemaChange); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_NewSchemaChange); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Backup); ok {
+			telemetry.Inc(sqltelemetry.JobsForBackupCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Restore); ok {
+			telemetry.Inc(sqltelemetry.JobsForRestoreCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Import); ok {
+			telemetry.Inc(sqltelemetry.JobsForImportCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Changefeed); ok {
+			telemetry.Inc(sqltelemetry.JobsForChangeFeedCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_CreateStats); ok {
+			telemetry.Inc(sqltelemetry.JobsForCreateStatsCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_StreamIngestion); ok {
+			telemetry.Inc(sqltelemetry.JobsForStreamIngestionCanceled)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Migration); ok {
+			telemetry.Inc(sqltelemetry.JobsForMigrationCanceled)
+		} else {
+			panic("Unknown job type")
+		}
+	}
+}
+
+// IncrementJobSuccess increments the successful job counters based
+// on the type of job.
+func IncrementJobSuccess(md JobMetadata) {
+	if md.Payload != nil {
+		if _, ok := md.Payload.Details.(*jobspb.Payload_SchemaChange); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_SchemaChangeGC); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaGCSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_TypeSchemaChange); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_NewSchemaChange); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Backup); ok {
+			telemetry.Inc(sqltelemetry.JobsForBackupSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Restore); ok {
+			telemetry.Inc(sqltelemetry.JobsForRestoreSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Import); ok {
+			telemetry.Inc(sqltelemetry.JobsForImportSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Changefeed); ok {
+			telemetry.Inc(sqltelemetry.JobsForChangeFeedSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_CreateStats); ok {
+			telemetry.Inc(sqltelemetry.JobsForCreateStatsSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_StreamIngestion); ok {
+			telemetry.Inc(sqltelemetry.JobsForStreamIngestionSuccess)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Migration); ok {
+			telemetry.Inc(sqltelemetry.JobsForMigrationSuccess)
+		} else {
+			panic("Unknown job type")
+		}
+	}
+}
+
+// IncrementJobFailed increments the failed job counters based
+// on the type of job.
+func IncrementJobFailed(md JobMetadata) {
+	if md.Payload != nil {
+		if _, ok := md.Payload.Details.(*jobspb.Payload_SchemaChange); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_SchemaChangeGC); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaGCFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_TypeSchemaChange); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_NewSchemaChange); ok {
+			telemetry.Inc(sqltelemetry.JobsForSchemaFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Backup); ok {
+			telemetry.Inc(sqltelemetry.JobsForBackupFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Restore); ok {
+			telemetry.Inc(sqltelemetry.JobsForRestoreFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Import); ok {
+			telemetry.Inc(sqltelemetry.JobsForImportFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Changefeed); ok {
+			telemetry.Inc(sqltelemetry.JobsForChangeFeedFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_CreateStats); ok {
+			telemetry.Inc(sqltelemetry.JobsForCreateStatsFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_StreamIngestion); ok {
+			telemetry.Inc(sqltelemetry.JobsForStreamIngestionFailed)
+		} else if _, ok := md.Payload.Details.(*jobspb.Payload_Migration); ok {
+			telemetry.Inc(sqltelemetry.JobsForMigrationFailed)
+		} else {
+			panic("Unknown job type")
+		}
+	}
 }

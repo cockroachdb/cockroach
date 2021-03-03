@@ -1065,3 +1065,14 @@ SHOW STATISTICS USING JSON FOR TABLE greeting_stats
 
 statement ok
 ALTER TABLE greeting_stats INJECT STATISTICS '$stats'
+
+# Validate that the schema_change_successful metric
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE (feature_name LIKE  'sql.schema.job.%successful' OR
+feature_name LIKE  'sql.schema.job.%failed' OR
+feature_name LIKE 'sql.schema.job.%canceled')
+ORDER BY feature_name DESC
+----
+sql.schema.job.schema_change_successful
+sql.schema.job.createstats_successful
