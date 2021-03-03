@@ -130,7 +130,7 @@ func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
 //   kv.prober.planner.n_probes_at_a_time cluster setting.
 //
 // CPU:
-// - Again scales with the the kv.prober.planner.n_probes_at_a_time cluster
+// - Again scales with the kv.prober.planner.n_probes_at_a_time cluster
 //   setting. Note the proto unmarshalling. We also shuffle a slice of size
 //   kv.prober.planner.n_probes_at_a_time. If the setting is set to a high
 //   number, we pay a higher CPU cost less often; if it's set to a low number,
