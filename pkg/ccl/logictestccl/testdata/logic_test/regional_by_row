@@ -23,6 +23,28 @@ CREATE TABLE regional_by_row_table (
 PARTITION BY NOTHING
 LOCALITY REGIONAL BY ROW
 
+statement ok
+SET experimental_enable_hash_sharded_indexes = true
+
+statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
+CREATE TABLE regional_by_row_table (
+  pk INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8
+) LOCALITY REGIONAL BY ROW
+
+statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
+CREATE TABLE regional_by_row_table (
+  pk INT NOT NULL,
+  a INT,
+  PRIMARY KEY(pk) USING HASH WITH BUCKET_COUNT = 8
+) LOCALITY REGIONAL BY ROW
+
+statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
+CREATE TABLE regional_by_row_table (
+  pk INT NOT NULL,
+  a INT,
+  INDEX(a) USING HASH WITH BUCKET_COUNT = 8
+) LOCALITY REGIONAL BY ROW
+
 statement error REGIONAL BY ROW on a table with an INDEX containing PARTITION BY is not supported
 CREATE TABLE regional_by_row_table (
   pk int,
@@ -436,6 +458,13 @@ CREATE TABLE public.regional_by_row_table (
 ) LOCALITY REGIONAL BY ROW;
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING "gc.ttlseconds" = 10
 
+# Prohibit certain actions on a REGIONAL BY ROW table.
+statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
+CREATE INDEX bad_idx ON regional_by_row_table(a) USING HASH WITH BUCKET_COUNT = 8
+
+statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
+ALTER TABLE regional_by_row_table ALTER PRIMARY KEY USING COLUMNS(pk2) USING HASH WITH BUCKET_COUNT = 8
+
 # Insert some rows into the regional_by_row_table.
 query TI
 INSERT INTO regional_by_row_table (pk, pk2, a, b, j) VALUES
@@ -568,7 +597,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/66/1/"@"/1{-/#}, /Table/66/1/"\x80"/1{-/#}, /Table/66/1/"\xc0"/1{-/#}
+Scan /Table/69/1/"@"/1{-/#}, /Table/69/1/"\x80"/1{-/#}, /Table/69/1/"\xc0"/1{-/#}
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -607,7 +636,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/66/1/"@"/1{-/#}
+Scan /Table/69/1/"@"/1{-/#}
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -622,8 +651,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/66/1/"@"/10{-/#}
-Scan /Table/66/1/"\x80"/10{-/#}, /Table/66/1/"\xc0"/10{-/#}
+Scan /Table/69/1/"@"/10{-/#}
+Scan /Table/69/1/"\x80"/10{-/#}, /Table/69/1/"\xc0"/10{-/#}
 fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
 output row: [10 10 11 12 NULL]
 
