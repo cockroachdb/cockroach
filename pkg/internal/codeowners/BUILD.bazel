@@ -18,6 +18,7 @@ go_test(
     size = "small",
     srcs = ["codeowners_test.go"],
     embed = [":codeowners"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/internal/team",
         "@com_github_stretchr_testify//require",
