@@ -70,7 +70,7 @@ primary     crdb_internal_a_shard_10  true
 statement ok
 INSERT INTO sharded_primary values (1), (2), (3)
 
-query error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(crdb_internal_a_shard_10,a\)=\(6,1\) already exists\.
+query error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(a\)=\(1\) already exists\.
 INSERT INTO sharded_primary values (1)
 
 # Ensure that the shard column is assigned into the column family of the first column in

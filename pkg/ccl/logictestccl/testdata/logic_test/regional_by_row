@@ -948,8 +948,7 @@ unique_b_a                   crdb_region  true
 statement ok
 INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1000, 1, 1000, 2000)
 
-# TODO(#59504): we should hide crdb_region.
-statement error Key \(crdb_region,pk2\)=\('ap-southeast-2',1\) already exists.
+statement error Key \(pk2\)=\(1\) already exists\.
 ALTER TABLE regional_by_row_table ALTER PRIMARY KEY USING COLUMNS (pk2)
 
 statement ok
@@ -1168,8 +1167,7 @@ vectorized: true
                 └── • scan buffer
                       label: buffer 1
 
-# TODO(mgartner): Update this error message to remove crdb_region (see #59504).
-statement error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(crdb_region_col,pk\)=\('us-east-1',1\) already exists\.
+statement error pq: duplicate key value violates unique constraint "primary"\nDETAIL: Key \(pk\)=\(1\) already exists\.
 INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
 
 statement ok
