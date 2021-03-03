@@ -37,6 +37,7 @@ func TestStatementReuses(t *testing.T) {
 		`CREATE SEQUENCE s`,
 		`CREATE INDEX woo ON a(b)`,
 		`CREATE USER woo`,
+		`CREATE TYPE test as ENUM('a')`,
 	}
 
 	for _, s := range initStmts {
@@ -54,6 +55,7 @@ func TestStatementReuses(t *testing.T) {
 		`DROP SEQUENCE s`,
 		`DROP VIEW v`,
 		`DROP USER woo`,
+		`DROP TYPE test`,
 
 		// Ditto ALTER first, so that erroneous side effects bork what's
 		// below.

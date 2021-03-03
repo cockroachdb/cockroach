@@ -28,14 +28,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type typeToDrop struct {
-	desc   *typedesc.Mutable
-	fqName string
-}
-
 type dropTypeNode struct {
-	n  *tree.DropType
-	td map[descpb.ID]typeToDrop
+	n      *tree.DropType
+	toDrop map[descpb.ID]*typedesc.Mutable
 }
 
 // Use to satisfy the linter.
@@ -51,8 +46,8 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 	}
 
 	node := &dropTypeNode{
-		n:  n,
-		td: make(map[descpb.ID]typeToDrop),
+		n:      n,
+		toDrop: make(map[descpb.ID]*typedesc.Mutable),
 	}
 	if n.DropBehavior == tree.DropCascade {
 		return nil, unimplemented.NewWithIssue(51480, "DROP TYPE CASCADE is not yet supported")
@@ -67,7 +62,7 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 			continue
 		}
 		// If we've already seen this type, then skip it.
-		if _, ok := node.td[typeDesc.ID]; ok {
+		if _, ok := node.toDrop[typeDesc.ID]; ok {
 			continue
 		}
 		switch typeDesc.Kind {
@@ -105,23 +100,9 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 		if err := p.canDropTypeDesc(ctx, mutArrayDesc, n.DropBehavior); err != nil {
 			return nil, err
 		}
-
 		// Record these descriptors for deletion.
-		node.td[typeDesc.ID] = typeToDrop{
-			desc:   typeDesc,
-			fqName: tree.AsStringWithFQNames(name, p.Ann()),
-		}
-		arrayFQName, err := getTypeNameFromTypeDescriptor(
-			oneAtATimeSchemaResolver{ctx, p},
-			mutArrayDesc,
-		)
-		if err != nil {
-			return nil, err
-		}
-		node.td[mutArrayDesc.ID] = typeToDrop{
-			desc:   mutArrayDesc,
-			fqName: arrayFQName.FQString(),
-		}
+		node.toDrop[typeDesc.ID] = typeDesc
+		node.toDrop[mutArrayDesc.ID] = mutArrayDesc
 	}
 	return node, nil
 }
@@ -148,13 +129,23 @@ func (p *planner) canDropTypeDesc(
 }
 
 func (n *dropTypeNode) startExec(params runParams) error {
-	for _, toDrop := range n.td {
-		typ, fqName := toDrop.desc, toDrop.fqName
-		if err := params.p.dropTypeImpl(params.ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann()), true /* queueJob */); err != nil {
+	for _, typeDesc := range n.toDrop {
+		typeFQName, err := getTypeNameFromTypeDescriptor(
+			oneAtATimeSchemaResolver{params.ctx, params.p},
+			typeDesc,
+		)
+		if err != nil {
 			return err
 		}
+		err = params.p.dropTypeImpl(params.ctx, typeDesc, "dropping type "+typeFQName.FQString(), true /* queueJob */)
+		if err != nil {
+			return err
+		}
+		event := &eventpb.DropType{
+			TypeName: typeFQName.FQString(),
+		}
 		// Log a Drop Type event.
-		if err := params.p.logEvent(params.ctx, typ.ID, &eventpb.DropType{TypeName: fqName}); err != nil {
+		if err := params.p.logEvent(params.ctx, typeDesc.ID, event); err != nil {
 			return err
 		}
 	}
