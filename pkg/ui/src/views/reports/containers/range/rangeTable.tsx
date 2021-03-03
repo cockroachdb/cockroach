@@ -48,7 +48,7 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "id", display: "ID", compareToLeader: false },
   { variable: "keyRange", display: "Key Range", compareToLeader: true },
   { variable: "problems", display: "Problems", compareToLeader: true },
-  { variable: "replicaType", display: "Replica Type", compareToLeader: true },
+  { variable: "replicaType", display: "Replica Type", compareToLeader: false },
   { variable: "raftState", display: "Raft State", compareToLeader: false },
   { variable: "quiescent", display: "Quiescent", compareToLeader: true },
   { variable: "ticking", display: "Ticking", compareToLeader: true },
