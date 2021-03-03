@@ -2043,7 +2043,7 @@ CREATE TABLE crdb_internal.create_statements (
 		var err error
 		if table.IsView() {
 			descType = typeView
-			stmt, err = ShowCreateView(ctx, &name, table)
+			stmt, err = ShowCreateView(ctx, &p.semaCtx, &name, table)
 		} else if table.IsSequence() {
 			descType = typeSequence
 			stmt, err = ShowCreateSequence(ctx, &name, table)
