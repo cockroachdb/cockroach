@@ -1688,3 +1688,14 @@ SELECT count(descriptor_id)
  WHERE descriptor_id = ('test.public.t45985'::REGCLASS)::INT8;
 ----
 0
+
+# Validate that the schema_change_successful metric
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN ('job.schema_change.successful',
+'job.schema_change.failed') AND
+usage_count > 0
+ORDER BY feature_name DESC
+----
+job.schema_change.successful
+job.schema_change.failed
