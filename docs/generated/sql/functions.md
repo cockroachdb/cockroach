@@ -2163,6 +2163,10 @@ Negative azimuth values and values greater than 2π (360 degrees) are supported.
 </span></td></tr>
 <tr><td><a name="st_rotatex"></a><code>st_rotatex(g: geometry, angle_radians: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated about the x axis by a rotation angle.</p>
 </span></td></tr>
+<tr><td><a name="st_rotatey"></a><code>st_rotatey(g: geometry, angle_radians: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated about the y axis by a rotation angle.</p>
+</span></td></tr>
+<tr><td><a name="st_rotatez"></a><code>st_rotatez(g: geometry, angle_radians: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a modified Geometry whose coordinates are rotated about the z axis by a rotation angle.</p>
+</span></td></tr>
 <tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the default index configuration.</p>
 </span></td></tr>
 <tr><td><a name="st_s2covering"></a><code>st_s2covering(geography: geography, settings: <a href="string.html">string</a>) &rarr; geography</code></td><td><span class="funcdesc"><p>Returns a geography which represents the S2 covering used by the index using the index configuration specified
