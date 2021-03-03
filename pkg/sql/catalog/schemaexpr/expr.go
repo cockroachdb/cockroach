@@ -174,7 +174,12 @@ func FormatExprForDisplay(
 	if err != nil {
 		return "", err
 	}
-	return tree.AsStringWithFlags(expr, fmtFlags), nil
+	// Replace any IDs in the expr with their fully qualified names.
+	replacedExpr, err := ReplaceIDsWithFQNames(ctx, expr, semaCtx)
+	if err != nil {
+		return "", err
+	}
+	return tree.AsStringWithFlags(replacedExpr, fmtFlags), nil
 }
 
 func deserializeExprForFormatting(
@@ -189,15 +194,9 @@ func deserializeExprForFormatting(
 		return nil, err
 	}
 
-	// Replace any IDs in the expr with their fully qualified names.
-	seqReplacedExpr, err := replaceIDsWithFQNames(ctx, expr, semaCtx)
-	if err != nil {
-		return nil, err
-	}
-
 	// Replace the column variables with dummyColumns so that they can be
 	// type-checked.
-	replacedExpr, _, err := replaceColumnVars(desc, seqReplacedExpr)
+	replacedExpr, _, err := replaceColumnVars(desc, expr)
 	if err != nil {
 		return nil, err
 	}
