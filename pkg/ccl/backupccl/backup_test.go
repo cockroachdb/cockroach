@@ -5601,6 +5601,39 @@ func TestBackupRestoreSubsetCreatedStats(t *testing.T) {
 	sqlDB.CheckQueryResults(t, getStatsQuery(`"data 2".foo`), [][]string{})
 }
 
+// This test is a reproduction of a scenario that caused backup jobs to fail
+// during stats collection because the stats cache would attempt to resolve a
+// descriptor that had been dropped. Stats collection was made more resilient to
+// such errors in #61222.
+func TestBackupHandlesDroppedTypeStatsCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const dest = "userfile:///basefoo"
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `CREATE TYPE greeting as ENUM ('hello')`)
+	sqlDB.Exec(t, `CREATE TABLE foo (t greeting)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES ('hello')`)
+	sqlDB.Exec(t, `SET sql_safe_updates=false`)
+	sqlDB.Exec(t, `ALTER TABLE foo RENAME COLUMN t to t_old`)
+	sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN t VARCHAR`)
+	sqlDB.Exec(t, `ALTER TABLE foo DROP COLUMN t_old`)
+	sqlDB.Exec(t, `DROP TYPE greeting`)
+
+	// Prior to the fix mentioned above, the stats cache would attempt to resolve
+	// the dropped type when computing the stats for foo at the end of the backup
+	// job. This would result in a `descriptor not found` error.
+
+	// Ensure a full backup completes successfully.
+	sqlDB.Exec(t, `BACKUP foo TO $1`, dest)
+
+	// Ensure an incremental backup completes successfully.
+	sqlDB.Exec(t, `BACKUP foo TO $1`, dest)
+}
+
 // Ensure that statistics are restored from correct backup.
 func TestBackupCreatedStatsFromIncrementalBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
