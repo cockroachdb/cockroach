@@ -17,7 +17,8 @@ go_test(
     size = "small",
     srcs = ["nocopy_test.go"],
     data = glob(["testdata/**"]),
-    tags = ["broken_in_bazel"],
+    tags = ["lint"],
+    visibility = ["//build/bazelutil:__subpackages__"],
     deps = [
         ":nocopy",
         "//pkg/testutils/skip",

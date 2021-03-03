@@ -16,7 +16,8 @@ go_test(
     name = "leaktestcall_test",
     srcs = ["leaktestcall_test.go"],
     data = glob(["testdata/**"]),
-    tags = ["broken_in_bazel"],
+    tags = ["lint"],
+    visibility = ["//build/bazelutil:__subpackages__"],
     deps = [
         ":leaktestcall",
         "//pkg/testutils/skip",

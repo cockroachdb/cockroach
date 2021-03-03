@@ -1,0 +1,55 @@
+load(":lint.bzl", "lint_test_binary")
+
+# These `lint_test_binary` targets capture unit tests of linter components.
+# They can be run with `bazel run`, e.g.
+#   bazel run //build/bazelutil:fmtsafe_lint_tester
+# (We use `bazel run` over `bazel test` because Bazel's sandboxing is
+# problematic for lint stuff.)
+
+# See lint.bzl for a high-level overview of what's happening under the hood
+# here.
+
+lint_test_binary(
+    name = "fmtsafe_lint_tester",
+    test = "//pkg/testutils/lint/passes/fmtsafe:fmtsafe_test",
+)
+
+lint_test_binary(
+    name = "forbiddenmethod_lint_tester",
+    test = "//pkg/testutils/lint/passes/forbiddenmethod:forbiddenmethod_test",
+)
+
+lint_test_binary(
+    name = "hash_lint_tester",
+    test = "//pkg/testutils/lint/passes/hash:hash_test",
+)
+
+lint_test_binary(
+    name = "leaktestcall_lint_tester",
+    test = "//pkg/testutils/lint/passes/leaktestcall:leaktestcall_test",
+)
+
+lint_test_binary(
+    name = "nocopy_lint_tester",
+    test = "//pkg/testutils/lint/passes/nocopy:nocopy_test",
+)
+
+lint_test_binary(
+    name = "passesutil_lint_tester",
+    test = "//pkg/testutils/lint/passes/passesutil:passesutil_test",
+)
+
+lint_test_binary(
+    name = "returnerrcheck_lint_tester",
+    test = "//pkg/testutils/lint/passes/returnerrcheck:returnerrcheck_test",
+)
+
+lint_test_binary(
+    name = "timer_lint_tester",
+    test = "//pkg/testutils/lint/passes/timer:timer_test",
+)
+
+lint_test_binary(
+    name = "unconvert_lint_tester",
+    test = "//pkg/testutils/lint/passes/unconvert:unconvert_test",
+)

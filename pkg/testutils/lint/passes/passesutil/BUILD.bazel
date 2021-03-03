@@ -15,7 +15,8 @@ go_test(
     name = "passesutil_test",
     size = "small",
     srcs = ["passes_util_test.go"],
-    tags = ["broken_in_bazel"],
+    tags = ["lint"],
+    visibility = ["//build/bazelutil:__subpackages__"],
     deps = [
         "//pkg/testutils/lint/passes/forbiddenmethod",
         "//pkg/testutils/lint/passes/unconvert",

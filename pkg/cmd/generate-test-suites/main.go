@@ -54,6 +54,7 @@ test_suite(
     name = "%[1]s_tests",
     tags = [
         "-broken_in_bazel",
+        "-lint",
         "%[1]s",
     ],
     tests = ALL_TESTS,

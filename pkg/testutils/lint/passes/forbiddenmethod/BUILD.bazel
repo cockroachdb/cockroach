@@ -21,7 +21,8 @@ go_test(
     size = "small",
     srcs = ["descriptormarshal_test.go"],
     data = glob(["testdata/**"]),
-    tags = ["broken_in_bazel"],
+    tags = ["lint"],
+    visibility = ["//build/bazelutil:__subpackages__"],
     deps = [
         ":forbiddenmethod",
         "//pkg/testutils/skip",
