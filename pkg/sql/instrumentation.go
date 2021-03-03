@@ -92,9 +92,11 @@ type instrumentationHelper struct {
 	finishCollectionDiagnostics func()
 	withStatementTrace          func(trace tracing.Recording, stmt string)
 
-	sp      *tracing.Span
-	origCtx context.Context
-	evalCtx *tree.EvalContext
+	sp *tracing.Span
+	// If true, the instrumentation helper is responsible for finishing sp.
+	finishSpan bool
+	origCtx    context.Context
+	evalCtx    *tree.EvalContext
 
 	// If savePlanForStats is true, the explainPlan will be collected and returned
 	// via PlanForStats().
@@ -164,7 +166,16 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(fingerprint, implicitTxn)
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
+	var stmtSpan *tracing.Span
+	if stmtSpan = tracing.SpanFromContext(ctx); stmtSpan == nil {
+		if util.CrdbTestBuild {
+			panic(errors.AssertionFailedf("the context doesn't have a tracing span"))
+		}
+		return ctx, false
+	}
+	ih.sp = stmtSpan
+	ih.finishSpan = false
+	if stmtSpan.IsVerbose() {
 		// If verbose tracing was enabled at a higher level, stats collection is
 		// enabled so that stats are shown in the traces, but no extra work is
 		// needed by the instrumentationHelper.
@@ -175,14 +186,10 @@ func (ih *instrumentationHelper) Setup(
 	ih.collectExecStats = collectExecStats
 
 	if !ih.collectBundle && ih.withStatementTrace == nil && ih.outputMode == unmodifiedOutput {
-		if ih.collectExecStats {
-			// If we need to collect stats, create a non-verbose child span. Stats
-			// will be added as structured metadata and processed in Finish.
-			ih.origCtx = ctx
-			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement")
-			return newCtx, true
-		}
-		return ctx, false
+		// The span present in the context is sufficient for us to record stats
+		// as structured metadata, so there is nothing else to do.
+		ih.origCtx = ctx
+		return ctx, collectExecStats
 	}
 
 	ih.collectExecStats = true
@@ -190,6 +197,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
 	newCtx, ih.sp = tracing.StartVerboseTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
+	ih.finishSpan = true
 	return newCtx, true
 }
 
@@ -204,15 +212,13 @@ func (ih *instrumentationHelper) Finish(
 	res RestrictedCommandResult,
 	retErr error,
 ) error {
-	if ih.sp == nil {
-		return retErr
+	ctx := ih.origCtx
+	if ih.finishSpan {
+		ih.sp.Finish()
 	}
 
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
-	ih.sp.Finish()
-	ctx := ih.origCtx
-
 	trace := ih.sp.GetRecording()
 
 	if ih.withStatementTrace != nil {
