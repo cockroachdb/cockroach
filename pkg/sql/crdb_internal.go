@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -655,7 +656,7 @@ CREATE TABLE crdb_internal.jobs (
 
 		// Beware: we're querying system.jobs as root; we need to be careful to filter
 		// out results that the current user is not able to see.
-		query := `SELECT id, status, created, payload, progress FROM system.jobs`
+		query := `SELECT id, status, created, payload, progress, claim_session_id, claim_instance_id FROM system.jobs`
 		it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 			ctx, "crdb-internal-jobs-table", p.txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
@@ -687,7 +688,8 @@ CREATE TABLE crdb_internal.jobs (
 					return nil, err
 				}
 				r := it.Cur()
-				id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
+				id, status, created, payloadBytes, progressBytes, sessionIDBytes, instanceID :=
+					r[0], r[1], r[2], r[3], r[4], r[5], r[6]
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
 					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode,
@@ -707,6 +709,15 @@ CREATE TABLE crdb_internal.jobs (
 					ownedByAdmin, err = p.UserHasAdminRole(ctx, sqlUsername)
 					if err != nil {
 						errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
+					}
+				}
+				if sessionID, ok := sessionIDBytes.(*tree.DBytes); ok {
+					if isAlive, err := p.EvalContext().SQLLivenessReader.IsAlive(
+						ctx, sqlliveness.SessionID(*sessionID),
+					); err != nil {
+						// Silently swallow the error for checking for liveness.
+					} else if instanceID, ok := instanceID.(*tree.DInt); ok && isAlive {
+						leaseNode = instanceID
 					}
 				}
 
@@ -741,9 +752,6 @@ CREATE TABLE crdb_internal.jobs (
 					finished, err = tsOrNull(payload.FinishedMicros)
 					if err != nil {
 						return nil, err
-					}
-					if payload.Lease != nil {
-						leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
 					}
 					errorStr = tree.NewDString(payload.Error)
 				}

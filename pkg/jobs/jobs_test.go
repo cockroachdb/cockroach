@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1412,7 +1413,11 @@ func TestShowJobs(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, rawSQLDB, _ := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	session, err := s.SQLLivenessProvider().(sqlliveness.Provider).Session(ctx)
+	require.NoError(t, err)
 
 	// row represents a row returned from crdb_internal.jobs, but
 	// *not* a row in system.jobs.
@@ -1433,6 +1438,7 @@ func TestShowJobs(t *testing.T) {
 		details           jobspb.Details
 	}
 
+	const instanceID = 7
 	for _, in := range []row{
 		{
 			id:          42,
@@ -1449,7 +1455,7 @@ func TestShowJobs(t *testing.T) {
 			finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
 			modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
 			fractionCompleted: 0.42,
-			coordinatorID:     7,
+			coordinatorID:     instanceID,
 			details:           jobspb.SchemaChangeDetails{},
 		},
 		{
@@ -1470,7 +1476,7 @@ func TestShowJobs(t *testing.T) {
 				WallTime: 1533143242000000,
 				Logical:  4,
 			},
-			coordinatorID: 7,
+			coordinatorID: instanceID,
 			details:       jobspb.ChangefeedDetails{},
 		},
 	} {
@@ -1482,11 +1488,8 @@ func TestShowJobs(t *testing.T) {
 				StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
 				FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
 				UsernameProto:  in.username.EncodeProto(),
-				Lease: &jobspb.Lease{
-					NodeID: 7,
-				},
-				Error:   in.err,
-				Details: jobspb.WrapPayloadDetails(in.details),
+				Error:          in.err,
+				Details:        jobspb.WrapPayloadDetails(in.details),
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -1509,8 +1512,8 @@ func TestShowJobs(t *testing.T) {
 				t.Fatal(err)
 			}
 			sqlDB.Exec(t,
-				`INSERT INTO system.jobs (id, status, created, payload, progress) VALUES ($1, $2, $3, $4, $5)`,
-				in.id, in.status, in.created, inPayload, inProgress,
+				`INSERT INTO system.jobs (id, status, created, payload, progress, claim_session_id, claim_instance_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				in.id, in.status, in.created, inPayload, inProgress, session.ID().UnsafeBytes(), instanceID,
 			)
 
 			var out row
