@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -185,6 +188,15 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 	// we update them in KV below.
 	b := p.txn.NewBatch()
 	for _, descriptor := range descriptors {
+		// Disallow privilege changes on system objects. For more context, see #43842.
+		op := "REVOKE"
+		if n.isGrant {
+			op = "GRANT"
+		}
+		if descriptor.GetID() < keys.MinUserDescID {
+			return pgerror.Newf(pgcode.InsufficientPrivilege, "cannot %s on system object", op)
+		}
+
 		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
 			return err
 		}
