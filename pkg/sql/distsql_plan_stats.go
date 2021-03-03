@@ -53,13 +53,15 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 )
 
 func (dsp *DistSQLPlanner) createStatsPlan(
-	planCtx *PlanningCtx, desc catalog.TableDescriptor, reqStats []requestedStat, job *jobs.Job,
+	planCtx *PlanningCtx,
+	desc catalog.TableDescriptor,
+	reqStats []requestedStat,
+	jobID jobspb.JobID,
+	details jobspb.CreateStatsDetails,
 ) (*PhysicalPlan, error) {
 	if len(reqStats) == 0 {
 		return nil, errors.New("no stats requested")
 	}
-
-	details := job.Details().(jobspb.CreateStatsDetails)
 
 	// Calculate the set of columns we need to scan.
 	var colCfg scanColumnsConfig
@@ -216,7 +218,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		MinSampleSize:    defaultHistogramBuckets,
 		SampledColumnIDs: sampledColumnIDs,
 		TableID:          desc.GetID(),
-		JobID:            job.ID(),
+		JobID:            jobID,
 		RowsExpected:     rowsExpected,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
@@ -236,9 +238,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
-	planCtx *PlanningCtx, job *jobs.Job,
+	planCtx *PlanningCtx, jobID jobspb.JobID, details jobspb.CreateStatsDetails,
 ) (*PhysicalPlan, error) {
-	details := job.Details().(jobspb.CreateStatsDetails)
 	reqStats := make([]requestedStat, len(details.ColumnStats))
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
 	for i := 0; i < len(reqStats); i++ {
@@ -257,7 +258,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	}
 
 	tableDesc := tabledesc.NewBuilder(&details.Table).BuildImmutableTable()
-	return dsp.createStatsPlan(planCtx, tableDesc, reqStats, job)
+	return dsp.createStatsPlan(planCtx, tableDesc, reqStats, jobID, details)
 }
 
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
@@ -270,7 +271,8 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 ) error {
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
 
-	physPlan, err := dsp.createPlanForCreateStats(planCtx, job)
+	details := job.Details().(jobspb.CreateStatsDetails)
+	physPlan, err := dsp.createPlanForCreateStats(planCtx, job.ID(), details)
 	if err != nil {
 		return err
 	}
