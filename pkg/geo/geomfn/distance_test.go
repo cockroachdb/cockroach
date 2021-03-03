@@ -795,6 +795,7 @@ func TestFrechetDistanceDensify(t *testing.T) {
 		// disallow <1e-19 in the code, and test that both of these error. We do
 		// not test larger values, since very small densify values consume a
 		// large amount of memory causing out-of-memory errors.
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-7},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-19},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-20},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-100},
@@ -867,8 +868,6 @@ func TestHausdorffDistanceDensify(t *testing.T) {
 		{"LINESTRING EMPTY", "LINESTRING EMPTY", 0.5, nil},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING EMPTY", 0.5, nil},
 		{"LINESTRING EMPTY", "LINESTRING (10 10, 10 150, 130 10)", 0.5, nil},
-		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-100, pf(14.142135623730951)},
-		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1e-20, pf(14.142135623730951)},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.2, pf(66)},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.4, pf(56.66666666666667)},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.6, pf(70)},
@@ -902,6 +901,7 @@ func TestHausdorffDistanceDensify(t *testing.T) {
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", -1},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", -0.1},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.0},
+		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 0.0000001},
 		{"LINESTRING (130 0, 0 0, 0 150)", "LINESTRING (10 10, 10 150, 130 10)", 1.1},
 	}
 
