@@ -5668,7 +5668,7 @@ func TestImportPgDump(t *testing.T) {
 			if c.expected == expectAll {
 				sqlDB.CheckQueryResults(t, `SHOW CREATE TABLE seqtable`, [][]string{{
 					"seqtable", `CREATE TABLE public.seqtable (
-	a INT8 NULL DEFAULT nextval('public.a_seq':::STRING::REGCLASS),
+	a INT8 NULL DEFAULT nextval('public.a_seq'::REGCLASS),
 	b INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT "primary" PRIMARY KEY (rowid ASC),

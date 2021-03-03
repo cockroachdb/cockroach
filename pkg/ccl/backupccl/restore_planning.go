@@ -132,7 +132,11 @@ func rewriteSequencesInExpr(expr string, rewrites DescRewriteMap) (string, error
 		return "", err
 	}
 	rewriteFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		annotateTypeExpr, id, ok := schemaexpr.GetTypeExprAndSeqID(expr)
+		newExpr, id, ok := schemaexpr.GetTypeExprAndSeqID(expr)
+		if !ok {
+			return true, expr, nil
+		}
+		annotateTypeExpr, ok := newExpr.(*tree.AnnotateTypeExpr)
 		if !ok {
 			return true, expr, nil
 		}
