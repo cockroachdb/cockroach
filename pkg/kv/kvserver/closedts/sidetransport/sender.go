@@ -594,7 +594,10 @@ type rpcConn struct {
 	producer *Sender
 	nodeID   roachpb.NodeID
 	stream   ctpb.SideTransport_PushUpdatesClient
-	closed   int32 // atomic
+	// cleanupStream cleans up the resources (goroutine) associated with stream.
+	// It needs to be called whenever stream is discarded.
+	cleanupStream context.CancelFunc
+	closed        int32 // atomic
 }
 
 func newRPCConn(dialer *nodedialer.Dialer, producer *Sender, nodeID roachpb.NodeID) conn {
@@ -620,7 +623,9 @@ func (r *rpcConn) sendMsg(ctx context.Context, msg *ctpb.Update) error {
 		if err != nil {
 			return err
 		}
-		r.stream, err = ctpb.NewSideTransportClient(conn).PushUpdates(ctx)
+		streamCtx, cancel := context.WithCancel(ctx)
+		r.cleanupStream = cancel
+		r.stream, err = ctpb.NewSideTransportClient(conn).PushUpdates(streamCtx)
 		if err != nil {
 			return err
 		}
@@ -638,6 +643,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				if r.stream != nil {
 					_ /* err */ = r.stream.CloseSend()
 					r.stream = nil
+					r.cleanupStream()
 				}
 			}()
 
@@ -690,7 +696,11 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 					// the circuit breaker if the remote node is still unreachable, we
 					// should have a blocking version of Dial() that we just leave hanging
 					// and get a notification when it succeeds.
-					r.stream = nil
+					if r.stream != nil {
+						r.cleanupStream()
+						r.stream = nil
+						r.cleanupStream = nil
+					}
 				}
 			}
 		})
