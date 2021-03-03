@@ -1542,9 +1542,11 @@ func NewTableDesc(
 
 	// Add implied columns under REGIONAL BY ROW.
 	locality := n.Locality
+	isRegionalByRow := locality != nil && locality.LocalityLevel == tree.LocalityLevelRow
+
 	var partitionAllBy *tree.PartitionBy
 	primaryIndexColumnSet := make(map[string]struct{})
-	if locality != nil && locality.LocalityLevel == tree.LocalityLevelRow {
+	if isRegionalByRow {
 		// Check the table is multi-region enabled.
 		dbDesc, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, evalCtx.Codec, parentID)
 		if err != nil {
@@ -1719,6 +1721,9 @@ func NewTableDesc(
 				if !sessionData.HashShardedIndexesEnabled {
 					return nil, hashShardedIndexesDisabledError
 				}
+				if isRegionalByRow {
+					return nil, hashShardedIndexesOnRegionalByRowError()
+				}
 				if n.PartitionByTable.ContainsPartitions() {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 				}
@@ -1891,6 +1896,9 @@ func NewTableDesc(
 				if d.Interleave != nil {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 				}
+				if isRegionalByRow {
+					return nil, hashShardedIndexesOnRegionalByRowError()
+				}
 				if err := setupShardedIndexForNewTable(d, &idx); err != nil {
 					return nil, err
 				}
@@ -1982,6 +1990,9 @@ func NewTableDesc(
 			if d.Sharded != nil {
 				if n.Interleave != nil && d.PrimaryKey {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
+				}
+				if isRegionalByRow {
+					return nil, hashShardedIndexesOnRegionalByRowError()
 				}
 				if err := setupShardedIndexForNewTable(&d.IndexTableDef, &idx); err != nil {
 					return nil, err
@@ -2783,6 +2794,10 @@ func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.Column
 	c.Nullable.Nullability = tree.NotNull
 	c.DefaultExpr.Expr = defaultExpr
 	return c
+}
+
+func hashShardedIndexesOnRegionalByRowError() error {
+	return pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables")
 }
 
 func checkClusterSupportsPartitionByAll(evalCtx *tree.EvalContext) error {
