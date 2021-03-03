@@ -55,6 +55,7 @@ sql.schema.alter_table
 sql.schema.alter_table.add_column
 sql.schema.alter_table.add_column.references
 sql.schema.alter_table.add_constraint
+sql.schema.job.schema_change.successful
 sql.schema.new_column_type.int8
 
 schema
