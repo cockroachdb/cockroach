@@ -13,6 +13,7 @@ package kvserver_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/stretchr/testify/require"
 )
 
@@ -181,4 +183,62 @@ func TestMergeOfRangeEventTableWhileRunningRangefeed(t *testing.T) {
 	// Cancel the rangefeed and ensure we get the right error.
 	cancel()
 	require.Regexp(t, context.Canceled.Error(), <-rangefeedErrChan)
+}
+
+func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	clusterArgs := aggressiveResolvedTimestampClusterArgs
+	// We want to manually add a non-voter to a range in this test, so disable
+	// the replicateQueue to prevent it from disrupting the test.
+	clusterArgs.ReplicationMode = base.ReplicationManual
+	// NB: setupClusterForClosedTSTesting sets a low closed timestamp target
+	// duration.
+	tc, _, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
+		testingCloseFraction, clusterArgs, "cttest", "kv")
+	defer tc.Stopper().Stop(ctx)
+	tc.AddNonVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1))
+
+	db := tc.Server(1).DB()
+	ds := tc.Server(1).DistSenderI().(*kvcoord.DistSender)
+	_, err := tc.ServerConn(1).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	require.NoError(t, err)
+
+	startTS := db.Clock().Now()
+	rangefeedCtx, rangefeedCancel := context.WithCancel(ctx)
+	rangefeedCtx, getRec, cancel := tracing.ContextWithRecordingSpan(rangefeedCtx,
+		tracing.NewTracer(),
+		"rangefeed over non-voter")
+	defer cancel()
+
+	// Do a read on the range to make sure that the dist sender learns about the
+	// latest state of the range (with the new non-voter).
+	_, err = db.Get(ctx, desc.StartKey.AsRawKey())
+	require.NoError(t, err)
+
+	rangefeedErrChan := make(chan error, 1)
+	eventCh := make(chan *roachpb.RangeFeedEvent, 1000)
+	go func() {
+		rangefeedErrChan <- ds.RangeFeed(
+			rangefeedCtx,
+			desc.RSpan().AsRawSpanWithNoLocals(),
+			startTS,
+			false, /* withDiff */
+			eventCh,
+		)
+	}()
+
+	// Wait for an event to ensure that the rangefeed is set up.
+	select {
+	case <-eventCh:
+	case err := <-rangefeedErrChan:
+		t.Fatalf("rangefeed failed with %s", err)
+	case <-time.After(60 * time.Second):
+		t.Fatalf("rangefeed initialization took too long")
+	}
+	rangefeedCancel()
+	require.Regexp(t, "context canceled", <-rangefeedErrChan)
+	require.Regexp(t, "attempting to create a RangeFeed over replica.*2NON_VOTER", getRec().String())
 }

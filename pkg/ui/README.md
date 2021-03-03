@@ -77,6 +77,14 @@ seem completely unrelated to your changes, try removing `yarn.installed` and
 Be sure to also commit modifications resulting from dependency changes, like
 updates to `package.json` and `yarn.lock`.
 
+### Working with the `cluster-ui` dependency
+
+Many page-level components have been extracted into a
+separate repository for sharing with other applications.
+You can read all about this division in the [README for the
+package](https://github.com/cockroachdb/ui/blob/master/packages/cluster-ui/README.md)
+which describes a dev workflow that fits well with this package.
+
 ### DLLs for speedy builds
 
 To improve Webpack compile times, we split the compile output into three

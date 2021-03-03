@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -146,6 +147,19 @@ func (p *planner) AlterPrimaryKey(
 			tableDesc.Name,
 			sb.String(),
 		)
+	}
+
+	// Validate if the end result is the same as the current
+	// primary index, which would mean nothing needs to be modified
+	// here.
+	{
+		requiresIndexChange, err := p.shouldCreateIndexes(ctx, tableDesc, alterPKNode, alterPrimaryKeyLocalitySwap)
+		if err != nil {
+			return err
+		}
+		if !requiresIndexChange {
+			return nil
+		}
 	}
 
 	nameExists := func(name string) bool {
@@ -509,6 +523,101 @@ func (p *planner) AlterPrimaryKey(
 	)
 
 	return nil
+}
+
+// Given the current table descriptor and the new primary keys
+// index descriptor  this function determines if the two are
+// equivalent and if any index creation operations are needed
+// by comparing properties.
+func (p *planner) shouldCreateIndexes(
+	ctx context.Context,
+	desc *tabledesc.Mutable,
+	alterPKNode *tree.AlterTableAlterPrimaryKey,
+	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
+) (requiresIndexChange bool, err error) {
+	oldPK := desc.GetPrimaryIndex()
+
+	// Validate if basic properties between the two match.
+	if len(oldPK.IndexDesc().ColumnIDs) != len(alterPKNode.Columns) ||
+		oldPK.IsSharded() != (alterPKNode.Sharded != nil) ||
+		oldPK.IsInterleaved() != (alterPKNode.Interleave != nil) {
+		return true, nil
+	}
+
+	// Validate if sharding properties are the same.
+	if alterPKNode.Sharded != nil {
+		shardBuckets, err := tabledesc.EvalShardBucketCount(ctx, &p.semaCtx, p.EvalContext(), alterPKNode.Sharded.ShardBuckets)
+		if err != nil {
+			return true, err
+		}
+		if oldPK.IndexDesc().Sharded.ShardBuckets != shardBuckets {
+			return true, nil
+		}
+	}
+
+	// Validate if interleaving properties match,
+	// specifically the parent table, and the index
+	// involved.
+	if alterPKNode.Interleave != nil {
+		parentTable, err := resolver.ResolveExistingTableObject(
+			ctx, p, &alterPKNode.Interleave.Parent, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc),
+		)
+		if err != nil {
+			return true, err
+		}
+
+		ancestors := oldPK.IndexDesc().Interleave.Ancestors
+		if len(ancestors) == 0 {
+			return true, nil
+		}
+		if ancestors[len(ancestors)-1].TableID !=
+			parentTable.GetID() {
+			return true, nil
+		}
+		if ancestors[len(ancestors)-1].IndexID !=
+			parentTable.GetPrimaryIndexID() {
+			return true, nil
+		}
+	}
+
+	// If the old primary key is dropped, then recreation
+	// is required.
+	if oldPK.IndexDesc().Disabled {
+		return true, nil
+	}
+
+	// Validate the columns on the indexes
+	for idx, elem := range alterPKNode.Columns {
+		col, err := desc.FindColumnWithName(elem.Column)
+		if err != nil {
+			return true, err
+		}
+
+		if col.GetID() != oldPK.IndexDesc().ColumnIDs[idx] {
+			return true, nil
+		}
+		if (elem.Direction == tree.Ascending &&
+			oldPK.IndexDesc().ColumnDirections[idx] != descpb.IndexDescriptor_ASC) ||
+			(elem.Direction == tree.Descending &&
+				oldPK.IndexDesc().ColumnDirections[idx] != descpb.IndexDescriptor_DESC) {
+			return true, nil
+		}
+	}
+
+	// Check partitioning changes based on primary key locality,
+	// either the config changes, or the region column is changed
+	// then recreate indexes.
+	if alterPrimaryKeyLocalitySwap != nil {
+		localitySwapConfig := alterPrimaryKeyLocalitySwap.localityConfigSwap
+		if !localitySwapConfig.NewLocalityConfig.Equal(localitySwapConfig.OldLocalityConfig) {
+			return true, nil
+		}
+		if localitySwapConfig.NewRegionalByRowColumnID != nil &&
+			*localitySwapConfig.NewRegionalByRowColumnID != oldPK.IndexDesc().ColumnIDs[0] {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // We only recreate the old primary key of the table as a unique secondary
