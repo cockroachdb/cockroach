@@ -11,12 +11,12 @@
 package status
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"text/template"
 	"time"
 
@@ -415,12 +415,13 @@ var statsTemplate = template.Must(template.New("runtime stats").Funcs(template.F
 	"oneDecimal":        func(f float64) string { return fmt.Sprintf("%.1f", f) },
 	"oneDecimalPercent": func(f float64) string { return fmt.Sprintf("%.1f", f*100) },
 	"sub":               func(a, b uint64) string { return humanize.IBytes(a - b) },
-}).Parse(`runtime stats: {{iBytes .Mem.Resident}} RSS, {{.NumGoroutines}} goroutines (stacks: {{iBytes .MS.StackSys}}), ` +
-	`{{iBytes .MS.HeapAlloc}}/{{iBytes .GoTotal}} Go alloc/total{{.StaleMsg}} ` +
-	`(heap fragmentation: {{sub .MS.HeapInuse .MS.HeapAlloc}}, heap reserved: {{sub .MS.HeapIdle .MS.HeapReleased}}, heap released: {{iBytes .MS.HeapReleased}}), ` +
-	`{{iBytes .CS.CGoAllocatedBytes}}/{{iBytes .CS.CGoTotalBytes}} CGO alloc/total ({{oneDecimal .CGORate}} CGO/sec), ` +
-	`{{oneDecimalPercent .URate}}/{{oneDecimalPercent .SRate}} %%(u/s)time, {{oneDecimalPercent .GCPauseRatio}} %%gc ({{.GCCount}}x), ` +
-	`{{iBytes .DeltaNet.BytesRecv}}/{{iBytes .DeltaNet.BytesSent}} (r/w)net`))
+}).Parse(`runtime stats:
+  cpu:     {{.NumGoroutines}} goroutines, {{oneDecimalPercent .NormalizedCPURate}} %cpu, {{oneDecimalPercent .URate}}/{{oneDecimalPercent .SRate}} %(u/s)time, {{oneDecimal .CPUShares}} shares {{.OverloadMsg}}
+  memory:  {{iBytes .Mem.Resident}} RSS
+    go:    {{iBytes .MS.HeapAlloc}}/{{iBytes .GoTotal}} alloc/total{{.StaleMsg}} (stacks: {{iBytes .MS.StackSys}}, heap fragmentation: {{sub .MS.HeapInuse .MS.HeapAlloc}}, heap reserved: {{sub .MS.HeapIdle .MS.HeapReleased}}, heap released: {{iBytes .MS.HeapReleased}})
+    cgo:   {{iBytes .CS.CGoAllocatedBytes}}/{{iBytes .CS.CGoTotalBytes}} alloc/total ({{oneDecimal .CGORate}} cgo calls/sec)
+  gc:      {{oneDecimalPercent .GCPauseRatio}} %gc ({{.GCCount}}x)
+  network: {{iBytes .DeltaNet.BytesRecv}}/{{iBytes .DeltaNet.BytesSent}} (r/w)net`))
 
 // SampleEnvironment queries the runtime system for various interesting metrics,
 // storing the resulting values in the set of metric gauges maintained by
@@ -525,28 +526,56 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 	rsr.last.gcPauseTime = uint64(gc.PauseTotal)
 
 	// Log summary of statistics to console.
-	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
+	const overloadThreshold = 0.80
+	cpuOverloaded := combinedNormalizedPerc > overloadThreshold
+	var overloadMsg = ""
+	if cpuOverloaded {
+		overloadMsg = "(overloaded!)"
+	}
 	goMemStatsStale := timeutil.Now().Sub(ms.Collected) > time.Second
 	var staleMsg = ""
 	if goMemStatsStale {
 		staleMsg = "(stale)"
 	}
 	goTotal := ms.Sys - ms.HeapReleased
+	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
 
-	var buf bytes.Buffer
+	var buf strings.Builder
 	if err := statsTemplate.Execute(&buf,
 		struct {
-			MS                                  *GoMemStats
-			Mem                                 gosigar.ProcMem
-			DeltaNet                            net.IOCountersStat
-			CS                                  *CGoMemStats
-			GoTotal                             uint64
-			NumGoroutines, GCCount              int
-			CGORate, URate, SRate, GCPauseRatio float64
-			StaleMsg                            string
+			// CPU
+			NumGoroutines                              int
+			NormalizedCPURate, URate, SRate, CPUShares float64
+			OverloadMsg                                string
+			// Memory
+			Mem      gosigar.ProcMem
+			MS       *GoMemStats
+			GoTotal  uint64
+			StaleMsg string
+			CS       *CGoMemStats
+			CGORate  float64
+			// GC
+			GCPauseRatio float64
+			GCCount      int64
+			// Network
+			DeltaNet net.IOCountersStat
 		}{
-			MS: ms, Mem: mem, DeltaNet: deltaNet, CS: cs, GoTotal: goTotal, NumGoroutines: numGoroutine,
-			CGORate: cgoRate, URate: urate, SRate: srate, GCPauseRatio: gcPauseRatio, StaleMsg: staleMsg,
+			// NOTE: don't use named literals to prevent missing fields.
+			numGoroutine,           // NumGoroutines
+			combinedNormalizedPerc, // NormalizedCPURate
+			urate,                  // URate
+			srate,                  // SRate
+			cpuShare,               // CPUShares
+			overloadMsg,            // OverloadMsg
+			mem,                    // Mem
+			ms,                     // MS
+			goTotal,                // GoTotal
+			staleMsg,               // StaleMsg
+			cs,                     // CS
+			cgoRate,                // CGORate
+			gcPauseRatio,           // GCPauseRatio
+			gc.NumGC,               // GCCount
+			deltaNet,               // DeltaNet
 		}); err != nil {
 		log.Warningf(ctx, "failed to render runtime stats: %s", err)
 	}
