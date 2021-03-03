@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -2831,8 +2832,8 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			if err != nil {
 				return nil, err
 			}
-			job := n.p.ExecCfg().JobRegistry.NewJob(*record, 0)
-			plan, err = dsp.createPlanForCreateStats(planCtx, job)
+			plan, err = dsp.createPlanForCreateStats(planCtx, 0, /* jobID */
+				record.Details.(jobspb.CreateStatsDetails))
 		}
 
 	default:
