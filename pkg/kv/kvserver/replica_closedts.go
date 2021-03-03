@@ -144,9 +144,12 @@ func (r *Replica) BumpSideTransportClosed(
 // this range. Note that we might not be able to ultimately close this timestamp
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
-	now := r.Clock().NowAsClockTimestamp()
-	maxClockOffset := r.Clock().MaxOffset()
-	lagTargetDuration := closedts.TargetDuration.Get(&r.ClusterSettings().SV)
-	policy := r.closedTimestampPolicyRLocked()
-	return closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, policy)
+	return closedts.TargetForPolicy(
+		r.Clock().NowAsClockTimestamp(),
+		r.Clock().MaxOffset(),
+		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
+		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
+		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
+		r.closedTimestampPolicyRLocked(),
+	)
 }

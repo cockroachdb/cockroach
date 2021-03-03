@@ -89,10 +89,15 @@ func newMockReplica(id roachpb.RangeID, nodes ...roachpb.NodeID) *mockReplica {
 }
 
 func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdate {
-	maxClockOffset := s.clock.MaxOffset()
-	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
 	targetForPolicy := func(pol roachpb.RangeClosedTimestampPolicy) hlc.Timestamp {
-		return closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, pol)
+		return closedts.TargetForPolicy(
+			now,
+			s.clock.MaxOffset(),
+			closedts.TargetDuration.Get(&s.st.SV),
+			closedts.LeadForGlobalReadsOverride.Get(&s.st.SV),
+			closedts.SideTransportCloseInterval.Get(&s.st.SV),
+			pol,
+		)
 	}
 	return []ctpb.Update_GroupUpdate{
 		{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(roachpb.LAG_BY_CLUSTER_SETTING)},

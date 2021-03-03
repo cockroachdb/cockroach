@@ -126,7 +126,12 @@ func (t *testProposer) closedTimestampTarget() hlc.Timestamp {
 		return hlc.Timestamp{}
 	}
 	return closedts.TargetForPolicy(
-		t.clock.NowAsClockTimestamp(), t.clock.MaxOffset(), time.Second, t.rangePolicy,
+		t.clock.NowAsClockTimestamp(),
+		t.clock.MaxOffset(),
+		1*time.Second,
+		0,
+		200*time.Millisecond,
+		t.rangePolicy,
 	)
 }
 
@@ -665,20 +670,22 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
+	const maxOffset = 500 * time.Millisecond
 	mc := hlc.NewManualClock((1613588135 * time.Second).Nanoseconds())
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(mc.UnixNano, maxOffset)
 	st := cluster.MakeTestingClusterSettings()
 	closedts.TargetDuration.Override(&st.SV, time.Second)
-	now := clock.Now()
-	newLeaseStart := now.MustToClockTimestamp()
-	nowMinusClosedLag := hlc.Timestamp{
-		WallTime: mc.UnixNano() - closedts.TargetDuration.Get(&st.SV).Nanoseconds(),
-	}
-	nowMinusTwiceClosedLag := hlc.Timestamp{
-		WallTime: mc.UnixNano() - 2*closedts.TargetDuration.Get(&st.SV).Nanoseconds(),
-	}
-	expiredLeaseTimestamp := hlc.Timestamp{WallTime: mc.UnixNano() - 1000}
-	someClosedTS := hlc.Timestamp{WallTime: mc.UnixNano() - 2000}
+	closedts.SideTransportCloseInterval.Override(&st.SV, 200*time.Millisecond)
+	now := clock.NowAsClockTimestamp()
+	nowTS := now.ToTimestamp()
+	nowMinusClosedLag := nowTS.Add(-closedts.TargetDuration.Get(&st.SV).Nanoseconds(), 0)
+	nowMinusTwiceClosedLag := nowTS.Add(-2*closedts.TargetDuration.Get(&st.SV).Nanoseconds(), 0)
+	nowPlusGlobalReadLead := nowTS.Add((maxOffset +
+		275*time.Millisecond /* sideTransportPropTime */ +
+		25*time.Millisecond /* bufferTime */).Nanoseconds(), 0).
+		WithSynthetic(true)
+	expiredLeaseTimestamp := nowTS.Add(-1000, 0)
+	someClosedTS := nowTS.Add(-2000, 0)
 
 	type reqType int
 	checkClosedTS := func(t *testing.T, r *testProposerRaft, exp hlc.Timestamp) {
@@ -687,7 +694,9 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			require.Nil(t, r.lastProps[0].ClosedTimestamp)
 		} else {
 			require.NotNil(t, r.lastProps[0].ClosedTimestamp)
-			require.Equal(t, exp, *r.lastProps[0].ClosedTimestamp)
+			closedTS := *r.lastProps[0].ClosedTimestamp
+			closedTS.Logical = 0 // ignore logical ticks from clock
+			require.Equal(t, exp, closedTS)
 		}
 	}
 
@@ -768,14 +777,14 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			lease: roachpb.Lease{
 				// Higher sequence => this is a brand new lease, not an extension.
 				Sequence: curLease.Sequence + 1,
-				Start:    newLeaseStart,
+				Start:    now,
 			},
 			trackerLowerBound: hlc.Timestamp{},
 			// The current lease can be expired; we won't backtrack the closed
 			// timestamp to this expiration.
 			leaseExp:    expiredLeaseTimestamp,
 			rangePolicy: roachpb.LAG_BY_CLUSTER_SETTING,
-			expClosed:   newLeaseStart.ToTimestamp(),
+			expClosed:   now.ToTimestamp(),
 		},
 		{
 			name:    "lease extension",
@@ -783,7 +792,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			lease: roachpb.Lease{
 				// Same sequence => this is a lease extension.
 				Sequence: curLease.Sequence,
-				Start:    newLeaseStart,
+				Start:    now,
 			},
 			trackerLowerBound: hlc.Timestamp{},
 			// The current lease can be expired; we won't backtrack the closed
@@ -801,7 +810,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			reqType: leaseTransfer,
 			lease: roachpb.Lease{
 				Sequence: curLease.Sequence + 1,
-				Start:    newLeaseStart,
+				Start:    now,
 			},
 			trackerLowerBound: hlc.Timestamp{},
 			leaseExp:          hlc.MaxTimestamp,
@@ -811,17 +820,13 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 		{
 			// With the LEAD_FOR_GLOBAL_READS policy, we're expecting to close
 			// timestamps in the future.
-			// TODO(andrei,nvanbenschoten): The global policy is not actually hooked
-			// up at the moment, so this test expects a past timestamp to be closed.
-			// Once it is hooked up, we should also add another test that checks that
-			// timestamps above the current lease expiration are not closed.
 			name:                "global range",
 			reqType:             regularWrite,
 			trackerLowerBound:   hlc.Timestamp{},
 			leaseExp:            hlc.MaxTimestamp,
 			rangePolicy:         roachpb.LEAD_FOR_GLOBAL_READS,
 			prevClosedTimestamp: hlc.Timestamp{},
-			expClosed:           nowMinusClosedLag,
+			expClosed:           nowPlusGlobalReadLead,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -853,7 +858,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 				var ba roachpb.BatchRequest
 				ba.Add(&roachpb.TransferLeaseRequest{
 					Lease: roachpb.Lease{
-						Start:    now.MustToClockTimestamp(),
+						Start:    now,
 						Sequence: pc.lease.Lease.Sequence + 1,
 					},
 					PrevLease: pc.lease.Lease,

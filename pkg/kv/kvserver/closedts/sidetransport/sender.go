@@ -266,9 +266,18 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	now := s.clock.NowAsClockTimestamp()
 	maxClockOffset := s.clock.MaxOffset()
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
+	leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(&s.st.SV)
+	sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
 	for i := range s.trackedMu.lastClosed {
 		pol := roachpb.RangeClosedTimestampPolicy(i)
-		target := closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, pol)
+		target := closedts.TargetForPolicy(
+			now,
+			maxClockOffset,
+			lagTargetDuration,
+			leadTargetOverride,
+			sideTransportCloseInterval,
+			pol,
+		)
 		s.trackedMu.lastClosed[pol] = target
 		msg.ClosedTimestamps[pol] = ctpb.Update_GroupUpdate{
 			Policy:          pol,
