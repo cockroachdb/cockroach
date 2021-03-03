@@ -1176,6 +1176,17 @@ INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (30, 1, 1)
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_as_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
 INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (2, 1, 1)
 
+# Verify that we plan single-region scans for REGIONAL BY ROW tables with a computed region.
+query T
+EXPLAIN SELECT * FROM regional_by_row_table_as WHERE pk = 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: regional_by_row_table_as@primary
+  spans: [/'us-east-1'/10 - /'us-east-1'/10]
 
 # Tests for altering the survivability of a REGIONAL BY ROW table.
 statement ok

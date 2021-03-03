@@ -2081,19 +2081,10 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 		retryOptions.Closer = m.stopper.ShouldQuiesce()
 		// The retry is required because of errors caused by node restarts. Retry 30 times.
 		if err := retry.WithMaxAttempts(ctx, retryOptions, 30, func() error {
-			it, err := m.storage.internalExecutor.QueryIterator(
+			var err error
+			rows, err = m.storage.internalExecutor.QueryBuffered(
 				ctx, "read orphaned leases", nil /*txn*/, sqlQuery,
 			)
-			if err != nil {
-				return err
-			}
-			rows = rows[:0]
-			// TODO(yuzefovich): use QueryBuffered method once it is added to
-			// sqlutil.InternalExecutor interface.
-			var ok bool
-			for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-				rows = append(rows, it.Cur())
-			}
 			return err
 		}); err != nil {
 			log.Warningf(ctx, "unable to read orphaned leases: %+v", err)

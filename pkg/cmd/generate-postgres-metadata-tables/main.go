@@ -34,17 +34,18 @@ import (
 const getServerVersion = `SELECT current_setting('server_version');`
 
 var (
-	postgresAddr = flag.String("addr", "localhost:5432", "Postgres server address")
-	postgresUser = flag.String("user", "postgres", "Postgres user")
+	postgresAddr   = flag.String("addr", "localhost:5432", "Postgres server address")
+	postgresUser   = flag.String("user", "postgres", "Postgres user")
+	postgresSchema = flag.String("catalog", "pg_catalog", "Catalog or namespace, default: pg_catalog")
 )
 
 func main() {
 	flag.Parse()
 	db := connect()
 	defer closeDB(db)
-	pgCatalogFile := &sql.PGCatalogFile{
-		PgVersion: getPGVersion(db),
-		PgCatalog: sql.PGCatalogTables{},
+	pgCatalogFile := &sql.PGMetadataFile{
+		PGVersion:  getPGVersion(db),
+		PGMetadata: sql.PGMetadataTables{},
 	}
 
 	rows := describePgCatalog(db)
@@ -55,14 +56,14 @@ func main() {
 		if err := rows.Scan(&table, &column, &dataType, &dataTypeOid); err != nil {
 			panic(err)
 		}
-		pgCatalogFile.PgCatalog.AddColumnMetadata(table, column, dataType, dataTypeOid)
+		pgCatalogFile.PGMetadata.AddColumnMetadata(table, column, dataType, dataTypeOid)
 	}
 
 	pgCatalogFile.Save(os.Stdout)
 }
 
 func describePgCatalog(conn *pgx.Conn) *pgx.Rows {
-	rows, err := conn.Query(sql.GetPGCatalogSQL)
+	rows, err := conn.Query(sql.GetPGMetadataSQL, *postgresSchema)
 	if err != nil {
 		panic(err)
 	}
