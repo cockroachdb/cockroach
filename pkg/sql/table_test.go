@@ -419,7 +419,7 @@ CREATE TABLE test.tt (x test.t);
 		var typeDesc catalog.TypeDescriptor
 		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, id,
-				catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
+				catalogkv.Immutable, catalog.Type, true /* required */)
 			if err != nil {
 				return err
 			}

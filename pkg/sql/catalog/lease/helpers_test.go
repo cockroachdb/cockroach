@@ -165,8 +165,7 @@ func (m *Manager) PublishMultiple(
 			for _, id := range ids {
 				// Re-read the current versions of the descriptor, this time
 				// transactionally.
-				desc, err := catalogkv.GetDescriptorByID(ctx, txn, m.storage.codec, id, catalogkv.Mutable,
-					catalogkv.AnyDescriptorKind, true /* required */)
+				desc, err := catalogkv.GetDescriptorByID(ctx, txn, m.storage.codec, id, catalogkv.Mutable, catalog.Any, true /* required */)
 				// Due to details in #51417, it is possible for a user to request a
 				// descriptor which no longer exists. In that case, just return an error.
 				if err != nil {

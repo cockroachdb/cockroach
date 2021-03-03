@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -110,39 +112,35 @@ func (p *planner) UnsafeUpsertDescriptor(
 		previousUserPrivileges = existing.GetPrivileges().Users
 	}
 
-	var objectType privilege.ObjectType
 	switch md := existing.(type) {
 	case *tabledesc.Mutable:
 		md.TableDescriptor = *desc.GetTable() // nolint:descriptormarshal
-		objectType = privilege.Table
 	case *schemadesc.Mutable:
 		md.SchemaDescriptor = *desc.GetSchema()
-		objectType = privilege.Schema
 	case *dbdesc.Mutable:
 		md.DatabaseDescriptor = *desc.GetDatabase()
-		objectType = privilege.Database
 	case *typedesc.Mutable:
 		md.TypeDescriptor = *desc.GetType()
-		objectType = privilege.Type
 	case nil:
-		// nolint:descriptormarshal
-		if tableDesc := desc.GetTable(); tableDesc != nil {
-			existing = tabledesc.NewCreatedMutable(*tableDesc)
-			objectType = privilege.Table
-		} else if schemaDesc := desc.GetSchema(); schemaDesc != nil {
-			existing = schemadesc.NewCreatedMutable(*schemaDesc)
-			objectType = privilege.Schema
-		} else if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			existing = dbdesc.NewCreatedMutable(*dbDesc)
-			objectType = privilege.Database
-		} else if typeDesc := desc.GetType(); typeDesc != nil {
-			existing = typedesc.NewCreatedMutable(*typeDesc)
-			objectType = privilege.Type
-		} else {
+		b := catalogkv.NewBuilder(&desc, hlc.Timestamp{})
+		if b == nil {
 			return pgerror.New(pgcode.InvalidTableDefinition, "invalid ")
 		}
+		existing = b.BuildCreatedMutable()
 	default:
 		return errors.AssertionFailedf("unknown descriptor type %T for id %d", existing, id)
+	}
+
+	objectType := privilege.Any
+	switch existing.TypeName() {
+	case catalog.Database:
+		objectType = privilege.Database
+	case catalog.Table:
+		objectType = privilege.Table
+	case catalog.Type:
+		objectType = privilege.Type
+	case catalog.Schema:
+		objectType = privilege.Schema
 	}
 
 	if force {

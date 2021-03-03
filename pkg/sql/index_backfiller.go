@@ -123,7 +123,7 @@ func (ib *IndexBackfillPlanner) plan(
 	var p *PhysicalPlan
 	var evalCtx extendedEvalContext
 	var planCtx *PlanningCtx
-	td := tabledesc.NewExistingMutable(*tableDesc.TableDesc())
+	td := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildExistingMutableTable()
 	if err := ib.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, ib.ieFactory)
 		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,

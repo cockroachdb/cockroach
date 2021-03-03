@@ -104,14 +104,17 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Descriptors:\n")
 	for i := range desc.Descriptors {
 		d := &desc.Descriptors[i]
-		if desc := descpb.TableFromDescriptor(d, hlc.Timestamp{}); desc != nil {
-			fmt.Printf("	%d: %s (table)\n",
-				descpb.GetDescriptorID(d), descpb.GetDescriptorName(d))
+		table, database, _, _ := descpb.FromDescriptor(d, hlc.Timestamp{})
+		var typeName string
+		if table != nil {
+			typeName = "table"
+		} else if database != nil {
+			typeName = "database"
+		} else {
+			continue
 		}
-		if desc := d.GetDatabase(); desc != nil {
-			fmt.Printf("	%d: %s (database)\n",
-				descpb.GetDescriptorID(d), descpb.GetDescriptorName(d))
-		}
+		fmt.Printf("	%d: %s (%s)\n",
+			descpb.GetDescriptorID(d), descpb.GetDescriptorName(d), typeName)
 	}
 	return nil
 }

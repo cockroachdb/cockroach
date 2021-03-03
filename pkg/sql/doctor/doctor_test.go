@@ -61,25 +61,18 @@ var validTableDesc = &descpb.Descriptor{
 }
 
 func toBytes(t *testing.T, desc *descpb.Descriptor) []byte {
-	if desc.GetDatabase() != nil {
-		if desc.GetDatabase().Privileges == nil {
-			descpb.MaybeFixPrivileges(desc.GetDatabase().GetID(), &desc.GetDatabase().Privileges)
+	table, database, typ, schema := descpb.FromDescriptor(desc, hlc.Timestamp{})
+	if table != nil {
+		descpb.MaybeFixPrivileges(table.GetID(), &table.Privileges)
+		if table.FormatVersion == 0 {
+			table.FormatVersion = descpb.InterleavedFormatVersion
 		}
-	} else if desc.GetSchema() != nil {
-		if desc.GetSchema().Privileges == nil {
-			descpb.MaybeFixPrivileges(desc.GetSchema().GetID(), &desc.GetSchema().Privileges)
-		}
-	} else if tbl := descpb.TableFromDescriptor(desc, hlc.Timestamp{}); tbl != nil {
-		if tbl.Privileges == nil {
-			descpb.MaybeFixPrivileges(tbl.GetID(), &tbl.Privileges)
-		}
-		if tbl.FormatVersion == 0 {
-			tbl.FormatVersion = descpb.InterleavedFormatVersion
-		}
-	} else if typ := descpb.TypeFromDescriptor(desc, hlc.Timestamp{}); typ != nil {
-		if typ.Privileges == nil {
-			descpb.MaybeFixPrivileges(typ.GetID(), &typ.Privileges)
-		}
+	} else if database != nil {
+		descpb.MaybeFixPrivileges(database.GetID(), &database.Privileges)
+	} else if typ != nil {
+		descpb.MaybeFixPrivileges(typ.GetID(), &typ.Privileges)
+	} else if schema != nil {
+		descpb.MaybeFixPrivileges(schema.GetID(), &schema.Privileges)
 	}
 	res, err := protoutil.Marshal(desc)
 	require.NoError(t, err)

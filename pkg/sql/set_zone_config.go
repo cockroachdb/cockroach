@@ -957,7 +957,7 @@ func RemoveIndexZoneConfigs(
 		return nil
 	}
 	desc, err := catalogkv.GetDescriptorByID(ctx, txn, execCfg.Codec, tableID,
-		catalogkv.Mutable, catalogkv.TableDescriptorKind, true)
+		catalogkv.Mutable, catalog.Table, true)
 	if err != nil {
 		return err
 	}

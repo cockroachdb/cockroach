@@ -221,8 +221,8 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext()
 		tableName := &descpb.AnonymousTable
-		expectedDesc := tabledesc.NewImmutable(*expected)
-		gotDesc := tabledesc.NewImmutable(*got)
+		expectedDesc := tabledesc.NewBuilder(expected).BuildImmutableTable()
+		gotDesc := tabledesc.NewBuilder(got).BuildImmutableTable()
 		e, err := catformat.IndexForDisplay(
 			ctx, expectedDesc, tableName, &expected.Indexes[i], "" /* partition */, "" /* interleave */, &semaCtx,
 		)

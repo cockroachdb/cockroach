@@ -85,7 +85,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	for _, dependent := range tableDesc.DependedOnBy {
 		if !dependent.ByID {
 			return nil, p.dependentViewError(
-				ctx, tableDesc.TypeName(), oldTn.String(),
+				ctx, string(tableDesc.TypeName()), oldTn.String(),
 				tableDesc.ParentID, dependent.ID, "rename",
 			)
 		}

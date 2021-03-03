@@ -97,7 +97,7 @@ func MakeKeyRewriterFromRekeys(
 		if table == nil {
 			return nil, errors.New("expected a table descriptor")
 		}
-		descs[descpb.ID(rekey.OldID)] = tabledesc.NewImmutable(*table)
+		descs[descpb.ID(rekey.OldID)] = tabledesc.NewBuilder(table).BuildImmutableTable()
 	}
 	return makeKeyRewriter(codec, descs)
 }

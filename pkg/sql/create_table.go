@@ -627,7 +627,7 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 		// Read the referenced table and see if the foreign key representation has changed. If it has, write
 		// the upgraded descriptor back to disk.
 		desc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id,
-			catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+			catalogkv.Mutable, catalog.Table, true /* required */)
 		if err != nil {
 			return err
 		}

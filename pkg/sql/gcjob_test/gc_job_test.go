@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -94,13 +95,13 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			var myOtherTableDesc *tabledesc.Mutable
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				myDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myTableID,
-					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+					catalogkv.Mutable, catalog.Table, true /* required */)
 				if err != nil {
 					return err
 				}
 				myTableDesc = myDesc.(*tabledesc.Mutable)
 				myOtherDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID,
-					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+					catalogkv.Mutable, catalog.Table, true /* required */)
 				if err != nil {
 					return err
 				}
@@ -228,7 +229,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				myDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myTableID,
-					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+					catalogkv.Mutable, catalog.Table, true /* required */)
 				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 					// We dropped the table, so expect it to not be found.
 					require.EqualError(t, err, "descriptor not found")
@@ -239,7 +240,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				}
 				myTableDesc = myDesc.(*tabledesc.Mutable)
 				myOtherDesc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, myOtherTableID,
-					catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+					catalogkv.Mutable, catalog.Table, true /* required */)
 				if ttlTime != FUTURE && dropItem == DATABASE {
 					// We dropped the entire database, so expect none of the tables to be found.
 					require.EqualError(t, err, "descriptor not found")

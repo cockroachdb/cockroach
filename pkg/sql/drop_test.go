@@ -887,7 +887,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	// the table has been dropped but before the truncation has occurred.
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID,
-			catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+			catalogkv.Mutable, catalog.Table, true /* required */)
 		if err != nil {
 			return err
 		}

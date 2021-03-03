@@ -334,7 +334,7 @@ func spansForAllTableIndexes(
 		// backups and OFFLINE tables.
 		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
 		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
-			tbl := tabledesc.NewImmutable(*rawTbl)
+			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			revSpans, err := getLogicallyMergedTableSpans(tbl, added, execCfg.Codec, rev.Time,
 				checkForKVInBounds)
 			if err != nil {

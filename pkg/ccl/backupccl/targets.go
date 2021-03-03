@@ -139,7 +139,7 @@ func getRelevantDescChanges(
 		if isInterestingID(change.ID) {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
-			desc := catalogkv.UnwrapDescriptorRaw(ctx, change.Desc)
+			desc := catalogkv.NewBuilder(change.Desc, hlc.Timestamp{}).BuildExistingMutable()
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
@@ -195,7 +195,7 @@ func getAllDescChanges(
 				// descriptors to use during restore.
 				// Note that the modification time of descriptors on disk is usually 0.
 				// See the comment on MaybeSetDescriptorModificationTime... for more.
-				descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &desc, rev.Timestamp)
+				descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(&desc, rev.Timestamp)
 
 				// Collect the prior IDs of table descriptors, as the ID may have been
 				// changed during truncate.

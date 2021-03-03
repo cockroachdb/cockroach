@@ -180,7 +180,7 @@ func (t *typeSchemaChanger) getTypeDescFromStore(ctx context.Context) (*typedesc
 	var typeDesc *typedesc.Immutable
 	if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, t.execCfg.Codec, t.typeID,
-			catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
+			catalogkv.Immutable, catalog.Type, true /* required */)
 		if err != nil {
 			return err
 		}

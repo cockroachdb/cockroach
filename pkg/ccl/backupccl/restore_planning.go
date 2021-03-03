@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -393,17 +392,17 @@ func allocateDescriptorRewrites(
 		// DB.
 		descriptorRewrites[tempSysDBID] = &jobspb.RestoreDetails_DescriptorRewrite{ID: tempSysDBID}
 		for _, table := range tablesByID {
-			if table.GetParentID() == systemschema.SystemDB.ID {
+			if table.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[table.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
 			}
 		}
 		for _, sc := range typesByID {
-			if sc.GetParentID() == systemschema.SystemDB.ID {
+			if sc.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[sc.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
 			}
 		}
 		for _, typ := range typesByID {
-			if typ.GetParentID() == systemschema.SystemDB.ID {
+			if typ.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[typ.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
 			}
 		}
@@ -874,8 +873,7 @@ func maybeUpgradeTableDescsInBackupManifests(
 	for _, backupManifest := range backupManifests {
 		for _, desc := range backupManifest.Descriptors {
 			if table := descpb.TableFromDescriptor(&desc, hlc.Timestamp{}); table != nil {
-				descGetter[table.ID] =
-					tabledesc.NewImmutable(*protoutil.Clone(table).(*descpb.TableDescriptor))
+				descGetter[table.ID] = tabledesc.NewBuilder(table).BuildImmutable()
 			}
 		}
 	}
@@ -890,11 +888,12 @@ func maybeUpgradeTableDescsInBackupManifests(
 			if !tabledesc.TableHasDeprecatedForeignKeyRepresentation(table) {
 				continue
 			}
-			desc, err := tabledesc.NewFilledInExistingMutable(ctx, descGetter, skipFKsWithNoMatchingTable, table)
+			b := tabledesc.NewBuilderForFKUpgrade(table, skipFKsWithNoMatchingTable)
+			err := b.RunPostDeserializationChanges(ctx, descGetter)
 			if err != nil {
 				return err
 			}
-			backupManifest.Descriptors[j] = *desc.DescriptorProto()
+			backupManifest.Descriptors[j] = *b.BuildExistingMutable().DescriptorProto()
 		}
 	}
 	return nil

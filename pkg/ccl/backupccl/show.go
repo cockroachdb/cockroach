@@ -317,7 +317,7 @@ func backupShowerDefault(
 					dataSizeDatum := tree.DNull
 					rowCountDatum := tree.DNull
 
-					desc := catalogkv.UnwrapDescriptorRaw(ctx, descriptor)
+					desc := catalogkv.NewBuilder(descriptor, hlc.Timestamp{}).BuildExistingMutable()
 
 					descriptorName := desc.GetName()
 					switch desc := desc.(type) {
@@ -343,7 +343,7 @@ func backupShowerDefault(
 							IgnoreComments: true,
 						}
 						createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-							tabledesc.NewImmutable(*desc.TableDesc()), displayOptions)
+							tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable(), displayOptions)
 						if err != nil {
 							// We expect that we might get an error here due to X-DB
 							// references, which were possible on 20.2 betas and rcs.
@@ -411,21 +411,24 @@ func nullIfEmpty(s string) tree.Datum {
 func showPrivileges(descriptor *descpb.Descriptor) string {
 	var privStringBuilder strings.Builder
 
-	var privDesc *descpb.PrivilegeDescriptor
-	var objectType privilege.ObjectType
-	if db := descriptor.GetDatabase(); db != nil {
-		privDesc = db.GetPrivileges()
-		objectType = privilege.Database
-	} else if typ := descriptor.GetType(); typ != nil {
-		privDesc = typ.GetPrivileges()
-		objectType = privilege.Type
-	} else if table := descpb.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
-		privDesc = table.GetPrivileges()
-		objectType = privilege.Table
-	} else if schema := descriptor.GetSchema(); schema != nil {
-		privDesc = schema.GetPrivileges()
-		objectType = privilege.Schema
+	b := catalogkv.NewBuilder(descriptor, hlc.Timestamp{})
+	if b == nil {
+		return ""
 	}
+	var objectType privilege.ObjectType
+	switch b.TypeName() {
+	case catalog.Database:
+		objectType = privilege.Database
+	case catalog.Table:
+		objectType = privilege.Table
+	case catalog.Type:
+		objectType = privilege.Type
+	case catalog.Schema:
+		objectType = privilege.Schema
+	default:
+		return ""
+	}
+	privDesc := b.BuildImmutable().GetPrivileges()
 	if privDesc == nil {
 		return ""
 	}

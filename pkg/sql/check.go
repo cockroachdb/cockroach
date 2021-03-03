@@ -239,7 +239,7 @@ func validateForeignKey(
 	codec keys.SQLCodec,
 ) error {
 	desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, fk.ReferencedTableID, catalogkv.Immutable,
-		catalogkv.TableDescriptorKind, true /* required */)
+		catalog.Table, true /* required */)
 	if err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",

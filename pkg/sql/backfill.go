@@ -1348,7 +1348,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 	var tableDesc *tabledesc.Mutable
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := catalogkv.GetDescriptorByID(ctx, txn, sc.execCfg.Codec, sc.descID, catalogkv.Mutable,
-			catalogkv.TableDescriptorKind, true /* required */)
+			catalog.Table, true /* required */)
 		if err != nil {
 			return err
 		}
@@ -1862,7 +1862,7 @@ func runSchemaChangesInTxn(
 	// mutations that need to be processed.
 	for i := 0; i < len(tableDesc.Mutations); i++ {
 		m := tableDesc.Mutations[i]
-		immutDesc := tabledesc.NewImmutable(*tableDesc.TableDesc())
+		immutDesc := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildImmutableTable()
 		switch m.Direction {
 		case descpb.DescriptorMutation_ADD:
 			switch m.Descriptor_.(type) {

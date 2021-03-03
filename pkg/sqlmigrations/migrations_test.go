@@ -545,7 +545,7 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	table := tabledesc.NewExistingMutable(*systemschema.NamespaceTable.TableDesc())
+	table := tabledesc.NewBuilder(systemschema.NamespaceTable.TableDesc()).BuildExistingMutableTable()
 	table.ID = keys.MaxReservedDescID
 
 	prevPrivileges, ok := descpb.SystemAllowedPrivileges[table.ID]
@@ -856,7 +856,7 @@ CREATE TABLE system.jobs (
 	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
 
 	jobsTable := systemschema.JobsTable
-	systemschema.JobsTable = tabledesc.NewImmutable(*oldJobsTable.TableDesc())
+	systemschema.JobsTable = tabledesc.NewBuilder(oldJobsTable.TableDesc()).BuildImmutableTable()
 	defer func() {
 		systemschema.JobsTable = jobsTable
 	}()
@@ -937,7 +937,7 @@ func TestVersionAlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable
 	require.Equal(t, oldPrimaryFamilyColumns, oldJobsTable.Families[0].ColumnNames)
 
 	jobsTable := systemschema.JobsTable
-	systemschema.JobsTable = tabledesc.NewImmutable(*oldJobsTable.TableDesc())
+	systemschema.JobsTable = tabledesc.NewBuilder(oldJobsTable.TableDesc()).BuildImmutableTable()
 	defer func() {
 		systemschema.JobsTable = jobsTable
 	}()

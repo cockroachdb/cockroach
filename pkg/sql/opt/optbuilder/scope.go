@@ -35,7 +35,7 @@ import (
 // been bound within the current scope as columnProps. Variables bound in the
 // parent scope are also visible in this scope.
 //
-// See builder.go for more details.
+// See table_desc_builder.go for more details.
 type scope struct {
 	builder *Builder
 	parent  *scope

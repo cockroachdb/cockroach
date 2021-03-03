@@ -857,7 +857,7 @@ func newPgDumpReader(
 	colMap := make(map[*row.DatumRowConverter](map[string]int))
 	for name, table := range descs {
 		if table.Desc.IsTable() {
-			tableDesc := tabledesc.NewImmutable(*table.Desc)
+			tableDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 			colSubMap := make(map[string]int, len(table.TargetCols))
 			targetCols := make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
@@ -875,7 +875,7 @@ func newPgDumpReader(
 			colMap[conv] = colSubMap
 			tableDescs[name] = tableDesc
 		} else if table.Desc.IsSequence() {
-			seqDesc := tabledesc.NewImmutable(*table.Desc)
+			seqDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 			tableDescs[name] = seqDesc
 		}
 	}

@@ -84,6 +84,25 @@ func ResolveSchemaID(
 	return true, schemaID, nil
 }
 
+// NewBuilder takes a descriptor as deserialized from storage, along
+// with its MVCC timestamp, and returns a catalog.DescriptorBuilder object.
+// Returns nil if nothing specific is found in desc.
+func NewBuilder(desc *descpb.Descriptor, mvccTimestamp hlc.Timestamp) catalog.DescriptorBuilder {
+	table, database, typ, schema := descpb.FromDescriptor(desc, mvccTimestamp)
+	switch {
+	case table != nil:
+		return tabledesc.NewBuilder(table)
+	case database != nil:
+		return dbdesc.NewBuilder(database)
+	case typ != nil:
+		return typedesc.NewBuilder(typ)
+	case schema != nil:
+		return schemadesc.NewBuilder(schema)
+	default:
+		return nil
+	}
+}
+
 // TODO(ajwerner): The below flags are suspiciously similar to the flags passed
 // to accessor methods. Furthermore we're pretty darn unhappy with the Accessor
 // API as it provides a handle to the transaction for bad reasons.
@@ -102,27 +121,12 @@ const (
 	Mutable   Mutability = true
 )
 
-//go:generate stringer -type DescriptorKind catalogkv.go
-
-// DescriptorKind is used to indicate the desired kind of descriptor from
-// GetDescriptorByID.
-type DescriptorKind int
-
-// List of DescriptorKind values.
-const (
-	DatabaseDescriptorKind DescriptorKind = iota
-	SchemaDescriptorKind
-	TableDescriptorKind
-	TypeDescriptorKind
-	AnyDescriptorKind // permit any kind
-)
-
 // GetAnyDescriptorByID is a wrapper around GetDescriptorByID which permits
 // missing descriptors and does not restrict the requested kind.
 func GetAnyDescriptorByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID, mutable Mutability,
 ) (catalog.Descriptor, error) {
-	return GetDescriptorByID(ctx, txn, codec, id, mutable, AnyDescriptorKind, false /* required */)
+	return GetDescriptorByID(ctx, txn, codec, id, mutable, catalog.Any, false /* required */)
 }
 
 // GetDescriptorByID looks up the descriptor for `id`. The descriptor
@@ -142,79 +146,62 @@ func GetDescriptorByID(
 	codec keys.SQLCodec,
 	id descpb.ID,
 	mutable Mutability,
-	kind DescriptorKind,
+	expectedType catalog.DescriptorType,
 	required bool,
-) (catalog.Descriptor, error) {
+) (desc catalog.Descriptor, err error) {
 	log.Eventf(ctx, "fetching descriptor with ID %d", id)
 	descKey := catalogkeys.MakeDescMetadataKey(codec, id)
 	raw := &descpb.Descriptor{}
-	ts, err := txn.GetProtoTs(ctx, descKey, raw)
+	var ts hlc.Timestamp
+	ts, err = txn.GetProtoTs(ctx, descKey, raw)
 	if err != nil {
 		return nil, err
 	}
-	var desc catalog.Descriptor
-	dg := NewOneLevelUncachedDescGetter(txn, codec)
-	if mutable {
-		desc, err = unwrapDescriptorMutable(ctx, dg, ts, raw)
-	} else {
-		desc, err = unwrapDescriptor(ctx, dg, ts, raw, true /* validate */)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if desc == nil {
+	b := NewBuilder(raw, ts)
+	if b == nil {
 		if required {
-			return nil, requiredError(kind, id)
+			return nil, requiredError(expectedType, id)
 		}
 		return nil, nil
 	}
-	if err := desiredKindError(desc, kind, id); err != nil {
+	if expectedType != catalog.Any && b.TypeName() != expectedType {
+		return nil, pgerror.Newf(pgcode.WrongObjectType,
+			"descriptor with ID %d is not a %s, instead is a %s", log.Safe(id), expectedType, b.TypeName())
+	}
+	dg := NewOneLevelUncachedDescGetter(txn, codec)
+	err = b.RunPostDeserializationChanges(ctx, dg)
+	if err != nil {
+		return nil, err
+	}
+	if mutable {
+		desc = b.BuildExistingMutable()
+		err = catalog.ValidateSelf(desc)
+	} else {
+		desc = b.BuildImmutable()
+		err = catalog.ValidateSelfAndCrossReferences(ctx, dg, desc)
+	}
+	if err != nil {
 		return nil, err
 	}
 	return desc, nil
 }
 
-func desiredKindError(desc catalog.Descriptor, kind DescriptorKind, id descpb.ID) error {
-	if kind == AnyDescriptorKind {
-		return nil
-	}
-	var kindMismatched bool
-	switch desc.(type) {
-	case catalog.DatabaseDescriptor:
-		kindMismatched = kind != DatabaseDescriptorKind
-	case catalog.SchemaDescriptor:
-		kindMismatched = kind != SchemaDescriptorKind
-	case catalog.TableDescriptor:
-		kindMismatched = kind != TableDescriptorKind
-	case catalog.TypeDescriptor:
-		kindMismatched = kind != TypeDescriptorKind
-	}
-	if !kindMismatched {
-		return nil
-	}
-	return pgerror.Newf(pgcode.WrongObjectType,
-		"%q with ID %d is not a %s", desc, log.Safe(id), kind.String())
-}
-
 // requiredError returns an appropriate error when a descriptor which was
 // required was not found.
-//
-// TODO(ajwerner): This code is rather upsetting and feels like it duplicates
-// some of the logic in physical_accessor.go.
-func requiredError(kind DescriptorKind, id descpb.ID) error {
+func requiredError(expectedObjectType catalog.DescriptorType, id descpb.ID) error {
 	var err error
 	var wrapper func(descpb.ID, error) error
-	switch kind {
-	case TableDescriptorKind:
+	switch expectedObjectType {
+	case catalog.Table:
 		err = sqlerrors.NewUndefinedRelationError(&tree.TableRef{TableID: int64(id)})
 		wrapper = catalog.WrapTableDescRefErr
-	case DatabaseDescriptorKind:
+	case catalog.Database:
 		err = sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 		wrapper = catalog.WrapDatabaseDescRefErr
-	case SchemaDescriptorKind:
+	case catalog.Schema:
 		err = sqlerrors.NewUnsupportedSchemaUsageError(fmt.Sprintf("[%d]", id))
 		wrapper = catalog.WrapSchemaDescRefErr
-	case TypeDescriptorKind:
+	case catalog.Type:
 		err = sqlerrors.NewUndefinedTypeError(tree.NewUnqualifiedTypeName(tree.Name(fmt.Sprintf("[%d]", id))))
 		wrapper = catalog.WrapTypeDescRefErr
 	default:
@@ -249,9 +236,7 @@ func (t *oneLevelUncachedDescGetter) GetDesc(
 	if err != nil {
 		return nil, err
 	}
-	// This mutable unwrapping with a nil desc-getter will avoid doing anything
-	// crazy.
-	return unwrapDescriptorMutable(ctx, nil, ts, raw)
+	return unwrapDescriptor(ctx, raw, ts, nil, catalog.ValidationLevelSelfOnly)
 }
 
 func (t *oneLevelUncachedDescGetter) GetDescs(
@@ -272,7 +257,7 @@ func (t *oneLevelUncachedDescGetter) GetDescs(
 			return nil, err
 		}
 		if desc != (descpb.Descriptor{}) {
-			unwrapped, err := unwrapDescriptorMutable(ctx, nil, res.Rows[0].Value.Timestamp, &desc)
+			unwrapped, err := unwrapDescriptor(ctx, &desc, res.Rows[0].Value.Timestamp, nil, catalog.ValidationLevelSelfOnly)
 			if err != nil {
 				return nil, err
 			}
@@ -286,78 +271,27 @@ func (t *oneLevelUncachedDescGetter) GetDescs(
 
 var _ catalog.DescGetter = (*oneLevelUncachedDescGetter)(nil)
 
-// unwrapDescriptor takes a descriptor retrieved using a transaction and unwraps
-// it into an immutable implementation of Descriptor. It ensures that
-// the ModificationTime is set properly and will validate the descriptor if
-// validate is true.
 func unwrapDescriptor(
 	ctx context.Context,
-	dg catalog.DescGetter,
-	ts hlc.Timestamp,
 	desc *descpb.Descriptor,
-	validate bool,
-) (catalog.Descriptor, error) {
-	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
-	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
-		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
-	var unwrapped catalog.Descriptor
-	switch {
-	case table != nil:
-		immTable, err := tabledesc.NewFilledInImmutable(ctx, dg, table)
-		if err != nil {
-			return nil, err
-		}
-		unwrapped = immTable
-	case database != nil:
-		unwrapped = dbdesc.NewImmutable(*database)
-	case typ != nil:
-		unwrapped = typedesc.NewImmutable(*typ)
-	case schema != nil:
-		unwrapped = schemadesc.NewImmutable(*schema)
-	default:
+	mvccTimestamp hlc.Timestamp,
+	dg catalog.DescGetter,
+	validationLevel catalog.ValidationLevel,
+) (d catalog.Descriptor, err error) {
+	b := NewBuilder(desc, mvccTimestamp)
+	if b == nil {
 		return nil, nil
 	}
-	if validate {
-		var level catalog.ValidationLevel
-		if dg != nil {
-			level = catalog.ValidationLevelSelfAndCrossReferences
-		}
-		if err := catalog.Validate(ctx, dg, level, unwrapped).CombinedError(); err != nil {
-			return nil, err
-		}
-	}
-	return unwrapped, nil
-}
-
-// unwrapDescriptorMutable takes a descriptor retrieved using a transaction and
-// unwraps it into an implementation of catalog.MutableDescriptor. It ensures
-// that the ModificationTime is set properly.
-func unwrapDescriptorMutable(
-	ctx context.Context, dg catalog.DescGetter, ts hlc.Timestamp, desc *descpb.Descriptor,
-) (catalog.MutableDescriptor, error) {
-	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, ts)
-	table, database, typ, schema :=
-		descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
-		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
-	var err error
-	var mut catalog.MutableDescriptor
-	switch {
-	case table != nil:
-		mut, err = tabledesc.NewFilledInExistingMutable(ctx, dg, false /* skipFKsWithMissingTable */, table)
-	case database != nil:
-		mut, err = dbdesc.NewExistingMutable(*database), nil
-	case typ != nil:
-		mut, err = typedesc.NewExistingMutable(*typ), nil
-	case schema != nil:
-		mut, err = schemadesc.NewMutableExisting(*schema), nil
-	}
-	if mut != nil && err == nil {
-		err = catalog.ValidateSelf(mut)
-	}
+	err = b.RunPostDeserializationChanges(ctx, dg)
 	if err != nil {
 		return nil, err
 	}
-	return mut, nil
+	d = b.BuildImmutable()
+	err = catalog.Validate(ctx, dg, validationLevel, d).CombinedError()
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // CountUserDescriptors returns the number of descriptors present that were
@@ -393,16 +327,13 @@ func GetAllDescriptorsUnvalidated(
 	rawDescs := make([]descpb.Descriptor, len(kvs))
 	descs := make([]catalog.Descriptor, len(kvs))
 	dg := NewOneLevelUncachedDescGetter(txn, codec)
-	const validate = false
 	for i, kv := range kvs {
 		desc := &rawDescs[i]
 		if err := kv.ValueProto(desc); err != nil {
 			return nil, err
 		}
 		var err error
-		if descs[i], err = unwrapDescriptor(
-			ctx, dg, kv.Value.Timestamp, desc, validate,
-		); err != nil {
+		if descs[i], err = unwrapDescriptor(ctx, desc, kv.Value.Timestamp, dg, catalog.NoValidation); err != nil {
 			return nil, err
 		}
 	}
@@ -530,8 +461,7 @@ func GetDatabaseID(
 func GetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (*dbdesc.Immutable, error) {
-	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
-		DatabaseDescriptorKind, false /* required */)
+	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable, catalog.Database, false /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -543,8 +473,7 @@ func GetDatabaseDescByID(
 func MustGetTableDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
-		TableDescriptorKind, true /* required */)
+	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable, catalog.Table, true /* required */)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -556,8 +485,7 @@ func MustGetTableDescByID(
 func MustGetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (*dbdesc.Immutable, error) {
-	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
-		DatabaseDescriptorKind, true /* required */)
+	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable, catalog.Database, true /* required */)
 	if err != nil {
 		return nil, err
 	}
@@ -569,8 +497,7 @@ func MustGetDatabaseDescByID(
 func MustGetSchemaDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
 ) (*schemadesc.Immutable, error) {
-	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable,
-		SchemaDescriptorKind, true /* required */)
+	desc, err := GetDescriptorByID(ctx, txn, codec, id, Immutable, catalog.Schema, true /* required */)
 	if err != nil {
 		return nil, err
 	}
@@ -618,7 +545,7 @@ func getDescriptorsFromIDs(
 		var catalogDesc catalog.Descriptor
 		if desc.Union != nil {
 			var err error
-			catalogDesc, err = unwrapDescriptor(ctx, dg, result.Rows[0].Value.Timestamp, desc, true)
+			catalogDesc, err = unwrapDescriptor(ctx, desc, result.Rows[0].Value.Timestamp, dg, catalog.ValidationLevelSelfAndCrossReferences)
 			if err != nil {
 				return nil, err
 			}
@@ -683,32 +610,4 @@ func GetSchemaDescriptorsFromIDs(
 		res[i] = schema
 	}
 	return res, nil
-}
-
-// UnwrapDescriptorRaw takes a descriptor retrieved from a backup manifest or
-// as input to the sql doctor and constructs the appropriate MutableDescriptor
-// object implied by that object. It assumes and will panic if the
-// ModificationTime for the descriptors are already set.
-//
-// TODO(ajwerner): This may prove problematic for backups of database
-// descriptors without modification time.
-//
-// TODO(ajwerner): unify this with the other unwrapping logic.
-func UnwrapDescriptorRaw(ctx context.Context, desc *descpb.Descriptor) catalog.MutableDescriptor {
-	descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, desc, hlc.Timestamp{})
-	table, database, typ, schema := descpb.TableFromDescriptor(desc, hlc.Timestamp{}),
-		desc.GetDatabase(), desc.GetType(), desc.GetSchema()
-	switch {
-	case table != nil:
-		return tabledesc.NewExistingMutable(*table)
-	case database != nil:
-		return dbdesc.NewExistingMutable(*database)
-	case typ != nil:
-		return typedesc.NewExistingMutable(*typ)
-	case schema != nil:
-		return schemadesc.NewMutableExisting(*schema)
-	default:
-		log.Fatalf(ctx, "failed to unwrap descriptor of type %T", desc.Union)
-		return nil // unreachable
-	}
 }

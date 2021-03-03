@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "dbdesc",
-    srcs = ["database_desc.go"],
+    srcs = [
+        "database_desc.go",
+        "database_desc_builder.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc",
     visibility = ["//visibility:public"],
     deps = [

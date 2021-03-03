@@ -61,7 +61,7 @@ func unwrapValidationTest(t *testing.T, descriptorCSVPath string) {
 		if ts == (hlc.Timestamp{}) {
 			ts = hlc.Timestamp{WallTime: 1}
 		}
-		_, err := unwrapDescriptor(context.Background(), m, ts, &desc, true)
+		_, err := unwrapDescriptor(context.Background(), &desc, ts, m, catalog.ValidationLevelSelfAndCrossReferences)
 		require.NoErrorf(t, err, "id: %d", id)
 	}
 }
@@ -84,7 +84,7 @@ func (o oneLevelMapDescGetter) GetDesc(
 	if mt == (hlc.Timestamp{}) {
 		mt = hlc.Timestamp{WallTime: 1}
 	}
-	return unwrapDescriptorMutable(ctx, nil, mt, &desc)
+	return unwrapDescriptor(ctx, &desc, mt, nil, catalog.ValidationLevelSelfOnly)
 }
 
 func decodeDescriptorDSV(t *testing.T, descriptorCSVPath string) oneLevelMapDescGetter {

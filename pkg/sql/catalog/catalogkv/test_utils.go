@@ -59,8 +59,8 @@ func TestingGetImmutableTableDescriptor(
 func TestingGetMutableExistingTableDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
 ) *tabledesc.Mutable {
-	return tabledesc.NewExistingMutable(
-		*TestingGetImmutableTableDescriptor(kvDB, codec, database, table).TableDesc())
+	return tabledesc.NewBuilder(
+		TestingGetImmutableTableDescriptor(kvDB, codec, database, table).TableDesc()).BuildExistingMutableTable()
 }
 
 // TestingGetTypeDescriptorFromSchema retrieves a type descriptor directly from
@@ -153,7 +153,7 @@ func testingGetObjectDescriptor(
 			panic(fmt.Sprintf("object %s not found", object))
 		}
 		desc, err = GetDescriptorByID(
-			ctx, txn, codec, objectID, Immutable, AnyDescriptorKind, true /* required */)
+			ctx, txn, codec, objectID, Immutable, catalog.Any, true /* required */)
 		if err != nil {
 			panic(err)
 		}

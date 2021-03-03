@@ -35,6 +35,9 @@ func Validate(
 ) ValidationErrors {
 	// Check internal descriptor consistency.
 	var vea validationErrorAccumulator
+	if level == NoValidation {
+		return &vea
+	}
 	for _, desc := range descriptors {
 		if level&ValidationLevelSelfOnly == 0 {
 			continue
@@ -80,8 +83,10 @@ func Validate(
 type ValidationLevel uint32
 
 const (
+	// NoValidation means don't perform any validation checks at all.
+	NoValidation ValidationLevel = 0
 	// ValidationLevelSelfOnly means only validate internal descriptor consistency.
-	ValidationLevelSelfOnly ValidationLevel = 1<<(iota+1) - 1
+	ValidationLevelSelfOnly = 1<<(iota+1) - 1
 	// ValidationLevelSelfAndCrossReferences means do the above and also check
 	// cross-references.
 	ValidationLevelSelfAndCrossReferences

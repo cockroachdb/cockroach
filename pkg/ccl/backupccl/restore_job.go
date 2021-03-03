@@ -857,7 +857,7 @@ func spansForAllRestoreTableIndexes(
 		// backups and OFFLINE tables.
 		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
 		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
-			tbl := tabledesc.NewImmutable(*rawTbl)
+			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			for _, idx := range tbl.NonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.GetID(), indexID: idx.GetID()}
 				if !added[key] {
@@ -922,7 +922,7 @@ func createImportingDescriptors(
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
-			mut := tabledesc.NewCreatedMutable(*desc.TableDesc())
+			mut := tabledesc.NewBuilder(desc.TableDesc()).BuildCreatedMutableTable()
 			if shouldPreRestore(mut) {
 				preRestoreTables = append(preRestoreTables, mut)
 			} else {
@@ -933,15 +933,15 @@ func createImportingDescriptors(
 			oldTableIDs = append(oldTableIDs, mut.GetID())
 		case catalog.DatabaseDescriptor:
 			if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
-				mut := dbdesc.NewCreatedMutable(*desc.DatabaseDesc())
+				mut := dbdesc.NewBuilder(desc.DatabaseDesc()).BuildCreatedMutableDatabase()
 				databases = append(databases, mut)
 				mutableDatabases = append(mutableDatabases, mut)
 			}
 		case catalog.SchemaDescriptor:
-			mut := schemadesc.NewCreatedMutable(*desc.SchemaDesc())
+			mut := schemadesc.NewBuilder(desc.SchemaDesc()).BuildCreatedMutableSchema()
 			schemas = append(schemas, mut)
 		case catalog.TypeDescriptor:
-			mut := typedesc.NewCreatedMutable(*desc.TypeDesc())
+			mut := typedesc.NewBuilder(desc.TypeDesc()).BuildCreatedMutableType()
 			types = append(types, mut)
 		}
 	}
@@ -1907,9 +1907,9 @@ func (r *restoreResumer) dropDescriptors(
 
 	// Delete any schema descriptors that this restore created. Also collect the
 	// descriptors so we can update their parent databases later.
-	dbsWithDeletedSchemas := make(map[descpb.ID][]*descpb.SchemaDescriptor)
+	dbsWithDeletedSchemas := make(map[descpb.ID][]catalog.SchemaDescriptor)
 	for _, schemaDesc := range details.SchemaDescs {
-		sc := schemadesc.NewMutableExisting(*schemaDesc)
+		sc := schemadesc.NewBuilder(schemaDesc).BuildImmutable().(catalog.SchemaDescriptor)
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
 		isSchemaEmpty, err := isSchemaEmpty(ctx, txn, sc.GetID(), allDescs, ignoredChildDescIDs)
 		if err != nil {
@@ -1924,19 +1924,19 @@ func (r *restoreResumer) dropDescriptors(
 			ctx,
 			b,
 			codec,
-			sc.ParentID,
+			sc.GetParentID(),
 			keys.RootNamespaceID,
-			sc.Name,
+			sc.GetName(),
 			false, /* kvTrace */
 		)
-		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.ID))
-		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc.SchemaDesc())
+		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.GetID()))
+		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
 	}
 
 	// Delete the database descriptors.
 	deletedDBs := make(map[descpb.ID]struct{})
 	for _, dbDesc := range details.DatabaseDescs {
-		db := dbdesc.NewExistingMutable(*dbDesc)
+		db := dbdesc.NewBuilder(dbDesc).BuildExistingMutable()
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
 		isDBEmpty, err := isDatabaseEmpty(ctx, txn, db.GetID(), allDescs, ignoredChildDescIDs)
 		if err != nil {
@@ -2004,7 +2004,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 	existingTypes := make(map[descpb.ID]*typedesc.Mutable)
 	for i := range details.TypeDescs {
 		typ := details.TypeDescs[i]
-		restoredTypes[typ.ID] = typedesc.NewImmutable(*typ)
+		restoredTypes[typ.ID] = typedesc.NewBuilder(typ).BuildImmutableType()
 	}
 	for _, tbl := range restoredTables {
 		lookup := func(id descpb.ID) (catalog.TypeDescriptor, error) {

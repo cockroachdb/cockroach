@@ -79,7 +79,7 @@ func newScrubTableReader(
 		indexIdx: int(spec.IndexIdx),
 	}
 
-	tr.tableDesc = tabledesc.NewImmutable(spec.Table)
+	tr.tableDesc = tabledesc.NewBuilder(&spec.Table).BuildImmutableTable()
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 
 	if err := tr.Init(

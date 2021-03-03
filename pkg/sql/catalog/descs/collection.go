@@ -388,8 +388,7 @@ func (tc *Collection) getDatabaseByName(
 		// that callers of this method will check the privileges on the descriptor
 		// (like any other database) and return an error.
 		if mutable {
-			return true, dbdesc.NewExistingMutable(
-				*systemschema.MakeSystemDatabaseDesc().DatabaseDesc()), nil
+			return true, dbdesc.NewBuilder(systemschema.MakeSystemDatabaseDesc().DatabaseDesc()).BuildExistingMutableDatabase(), nil
 		}
 		return true, systemschema.MakeSystemDatabaseDesc(), nil
 	}
@@ -998,7 +997,7 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			// TODO (lucy): If the descriptor doesn't exist, should we generate our
 			// own error here instead of using the one from catalogkv?
 			desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id,
-				catalogkv.Mutable, catalogkv.AnyDescriptorKind, true /* required */)
+				catalogkv.Mutable, catalog.Any, true /* required */)
 			if err != nil {
 				return nil, err
 			}
@@ -1258,7 +1257,10 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, getType); err != nil {
 			return nil, err
 		}
-		return tabledesc.NewImmutableWithIsUncommittedVersion(*descBase, t.IsUncommittedVersion()), nil
+		if t.IsUncommittedVersion() {
+			return tabledesc.NewBuilderForUncommittedVersion(descBase).BuildImmutableTable(), nil
+		}
+		return tabledesc.NewBuilder(descBase).BuildImmutableTable(), nil
 	default:
 		return desc, nil
 	}

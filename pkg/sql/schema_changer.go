@@ -542,7 +542,7 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 			sc.execCfg.Codec,
 			sc.descID,
 			catalogkv.Immutable,
-			catalogkv.AnyDescriptorKind,
+			catalog.Any,
 			true, /* required */
 		)
 		return err

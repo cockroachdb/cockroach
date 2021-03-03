@@ -144,9 +144,7 @@ func setDescriptorModificationTime(desc *Descriptor, ts hlc.Timestamp) {
 //
 // It is vital that users which read table descriptor values from the KV store
 // call this method.
-func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
-	ctx context.Context, desc *Descriptor, ts hlc.Timestamp,
-) {
+func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(desc *Descriptor, ts hlc.Timestamp) {
 	switch t := desc.Union.(type) {
 	case nil:
 		// Empty descriptors shouldn't be touched.
@@ -209,19 +207,24 @@ func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
 // this way, this function should be retired and similar or better safeguards
 // for all descriptors should be pursued.
 func TableFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TableDescriptor {
-	//nolint:descriptormarshal
-	t := desc.GetTable()
-	if t != nil {
-		MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.TODO(), desc, ts)
-	}
-	return t
+	table, _, _, _ := FromDescriptor(desc, ts)
+	return table
 }
 
-// TypeFromDescriptor is the same thing as TableFromDescriptor, but for types.
-func TypeFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TypeDescriptor {
-	t := desc.GetType()
-	if t != nil {
-		MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.TODO(), desc, ts)
-	}
-	return t
+// FromDescriptor is the same thing as TableFromDescriptor but for all descriptor subtypes
+func FromDescriptor(
+	desc *Descriptor, ts hlc.Timestamp,
+) (
+	table *TableDescriptor,
+	database *DatabaseDescriptor,
+	typ *TypeDescriptor,
+	schema *SchemaDescriptor,
+) {
+	//nolint:descriptormarshal
+	table = desc.GetTable()
+	database = desc.GetDatabase()
+	typ = desc.GetType()
+	schema = desc.GetSchema()
+	MaybeSetDescriptorModificationTimeFromMVCCTimestamp(desc, ts)
+	return table, database, typ, schema
 }
