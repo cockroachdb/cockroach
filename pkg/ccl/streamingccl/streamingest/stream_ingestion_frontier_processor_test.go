@@ -63,8 +63,11 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	pa1 := streamingccl.PartitionAddress("partition1")
-	pa2 := streamingccl.PartitionAddress("partition2")
+	// The stream address needs to be set with a scheme we support, but this test
+	// will mock out the actual client.
+	spec.StreamAddress = "randomgen://test/"
+	pa1 := streamingccl.PartitionAddress("randomgen://test1/")
+	pa2 := streamingccl.PartitionAddress("randomgen://test2/")
 
 	v := roachpb.MakeValueFromString("value_1")
 	v.Timestamp = hlc.Timestamp{WallTime: 1}

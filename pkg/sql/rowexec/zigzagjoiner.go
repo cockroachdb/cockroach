@@ -309,9 +309,13 @@ func newZigzagJoiner(
 		post,
 		output,
 		execinfra.ProcStateOpts{
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				// We need to generate metadata before closing the processor
+				// because InternalClose() updates z.Ctx to the "original"
+				// context.
+				trailingMeta := z.generateMeta(z.Ctx)
 				z.close()
-				return z.generateMeta(ctx)
+				return trailingMeta
 			},
 		},
 	)

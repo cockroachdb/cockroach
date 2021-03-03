@@ -62,7 +62,7 @@ func (m *mockStreamClient) GetTopology(
 
 // ConsumePartition implements the Client interface.
 func (m *mockStreamClient) ConsumePartition(
-	_ context.Context, address streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, address streamingccl.PartitionAddress, _ hlc.Timestamp,
 ) (chan streamingccl.Event, chan error, error) {
 	var events []streamingccl.Event
 	var ok bool
@@ -94,7 +94,7 @@ func (m *errorStreamClient) GetTopology(
 
 // ConsumePartition implements the streamclient.Client interface.
 func (m *errorStreamClient) ConsumePartition(
-	_ context.Context, _ streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, _ streamingccl.PartitionAddress, _ hlc.Timestamp,
 ) (chan streamingccl.Event, chan error, error) {
 	return nil, nil, errors.New("this client always returns an error")
 }
@@ -130,7 +130,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		partitionAddresses := []streamingccl.PartitionAddress{"partition1", "partition2"}
-		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "some://stream",
+		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test/",
 			partitionAddresses,
 			startTime, nil /* interceptEvents */, mockClient)
 		require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	t.Run("error stream client", func(t *testing.T) {
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		partitionAddresses := []streamingccl.PartitionAddress{"partition1", "partition2"}
-		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "some://stream",
+		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test",
 			partitionAddresses, startTime, nil /* interceptEvents */, &errorStreamClient{})
 		require.NoError(t, err)
 
@@ -264,7 +264,7 @@ func makeTestStreamURI(
 	kvFrequency time.Duration,
 	dupProbability float64,
 ) string {
-	return "test:///" + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
+	return streamclient.RandomGenScheme + ":///" + "?VALUE_RANGE=" + strconv.Itoa(valueRange) +
 		"&EVENT_FREQUENCY=" + strconv.Itoa(int(kvFrequency)) +
 		"&KVS_PER_CHECKPOINT=" + strconv.Itoa(kvsPerResolved) +
 		"&NUM_PARTITIONS=" + strconv.Itoa(numPartitions) +

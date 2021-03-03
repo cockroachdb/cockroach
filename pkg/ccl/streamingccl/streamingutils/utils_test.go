@@ -45,7 +45,7 @@ func TestCutoverBuiltin(t *testing.T) {
 		Description: "test stream ingestion",
 		Username:    security.RootUserName(),
 		Details: jobspb.StreamIngestionDetails{
-			StreamAddress: "some://address/here",
+			StreamAddress: "randomgen://test",
 			Span:          roachpb.Span{Key: keys.LocalMax, EndKey: keys.LocalMax.Next()},
 			StartTime:     startTimestamp,
 		},

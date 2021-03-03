@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -171,7 +172,7 @@ func newStreamIngestionDataProcessor(
 	if err := sip.Init(sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				sip.close()
 				return nil
 			},
@@ -209,11 +210,10 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	}()
 
 	// Initialize the event streams.
-	startTime := timeutil.Unix(0 /* sec */, sip.spec.StartTime.WallTime)
 	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
 	errChs := make(map[streamingccl.PartitionAddress]chan error)
 	for _, partitionAddress := range sip.spec.PartitionAddresses {
-		eventCh, errCh, err := sip.client.ConsumePartition(ctx, partitionAddress, startTime)
+		eventCh, errCh, err := sip.client.ConsumePartition(ctx, partitionAddress, sip.spec.StartTime)
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", partitionAddress))
 			return
@@ -481,6 +481,7 @@ func (sip *streamIngestionProcessor) bufferKV(event partitionEvent) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
+	log.Infof(sip.Ctx, "got checkpoint %v", event.GetResolved())
 	resolvedTimePtr := event.GetResolved()
 	if resolvedTimePtr == nil {
 		return errors.New("checkpoint event expected to have a resolved timestamp")

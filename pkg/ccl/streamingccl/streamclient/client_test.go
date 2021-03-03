@@ -11,7 +11,6 @@ package streamclient
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -35,7 +34,7 @@ func (sc testStreamClient) GetTopology(
 
 // ConsumePartition implements the Client interface.
 func (sc testStreamClient) ConsumePartition(
-	_ context.Context, _ streamingccl.PartitionAddress, _ time.Time,
+	_ context.Context, _ streamingccl.PartitionAddress, _ hlc.Timestamp,
 ) (chan streamingccl.Event, chan error, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
@@ -62,7 +61,7 @@ func ExampleClient() {
 		panic(err)
 	}
 
-	startTimestamp := timeutil.Now()
+	startTimestamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 
 	for _, partition := range topology.Partitions {
 		eventCh, _ /* errCh */, err := client.ConsumePartition(context.Background(), partition, startTimestamp)

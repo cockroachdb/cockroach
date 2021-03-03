@@ -486,7 +486,7 @@ type ProcessorBase struct {
 	// other than what has otherwise been manually put in trailingMeta) and no
 	// closing other than InternalClose is needed, then no callback needs to be
 	// specified.
-	trailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata
+	trailingMetaCallback func() []execinfrapb.ProducerMetadata
 	// trailingMeta is scratch space where metadata is stored to be returned
 	// later.
 	trailingMeta []execinfrapb.ProducerMetadata
@@ -724,7 +724,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	// generally calls InternalClose, indirectly, which switches the context and
 	// the span.
 	if pb.trailingMetaCallback != nil {
-		pb.trailingMeta = append(pb.trailingMeta, pb.trailingMetaCallback(pb.Ctx)...)
+		pb.trailingMeta = append(pb.trailingMeta, pb.trailingMetaCallback()...)
 	} else {
 		pb.InternalClose()
 	}
@@ -780,7 +780,7 @@ func (pb *ProcessorBase) Run(ctx context.Context) {
 type ProcStateOpts struct {
 	// TrailingMetaCallback, if specified, is a callback to be called by
 	// moveToTrailingMeta(). See ProcessorBase.TrailingMetaCallback.
-	TrailingMetaCallback func(context.Context) []execinfrapb.ProducerMetadata
+	TrailingMetaCallback func() []execinfrapb.ProducerMetadata
 	// InputsToDrain, if specified, will be drained by DrainHelper().
 	// MoveToDraining() calls ConsumerDone() on them, InternalClose() calls
 	// ConsumerClosed() on them.
@@ -907,7 +907,8 @@ func (pb *ProcessorBase) startImpl(
 // common close functionality. Returns true iff the processor was not already
 // closed.
 //
-// Notably, it calls ConsumerClosed() on all the inputsToDrain.
+// Notably, it calls ConsumerClosed() on all the inputsToDrain and updates
+// pb.Ctx to the context passed into StartInternal() call.
 //
 //   if pb.InternalClose() {
 //     // Perform processor specific close work.
@@ -939,6 +940,12 @@ func (pb *ProcessorBase) InternalClose() bool {
 // ConsumerDone is part of the RowSource interface.
 func (pb *ProcessorBase) ConsumerDone() {
 	pb.MoveToDraining(nil /* err */)
+}
+
+// ConsumerClosed is part of the RowSource interface.
+func (pb *ProcessorBase) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	pb.InternalClose()
 }
 
 // NewMonitor is a utility function used by processors to create a new
