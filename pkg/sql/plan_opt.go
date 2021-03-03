@@ -69,6 +69,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		*tree.RenameIndex, *tree.RenameTable, *tree.Revoke, *tree.RevokeRole,
 		*tree.RollbackToSavepoint, *tree.RollbackTransaction,
 		*tree.Savepoint, *tree.SetTransaction, *tree.SetTracing, *tree.SetSessionAuthorizationDefault,
+		*tree.DropType,
 		*tree.SetSessionCharacteristics:
 		// These statements do not have result columns and do not support placeholders
 		// so there is no need to do anything during prepare.
