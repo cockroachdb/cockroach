@@ -46,8 +46,7 @@ func MakeStatusFunc(jr *jobs.Registry) ptreconcile.StatusFunc {
 		if err != nil {
 			return false, err
 		}
-		// TODO: This job update should possibly use the txn (#60690).
-		isTerminal := j.CheckTerminalStatus(ctx, nil /* txn */)
+		isTerminal := j.CheckTerminalStatus(ctx, txn)
 		return isTerminal, nil
 	}
 }
