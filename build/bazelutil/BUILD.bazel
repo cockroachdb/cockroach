@@ -1,0 +1,47 @@
+load(":lint.bzl", "lint_binary")
+
+# These tests can be run with `bazel run`, e.g.
+#   bazel run //build/bazelutil:fmtsafe_lint
+# (We use `bazel run` over `bazel test` because the lint needs access to the
+#  entire source tree, which is problematic to link wholesale into the Bazel
+#  sandbox.)
+
+lint_binary(
+    name = "fmtsafe_lint",
+    test = "//pkg/testutils/lint/passes/fmtsafe:fmtsafe_test",
+)
+
+lint_binary(
+    name = "forbiddenmethod_lint",
+    test = "//pkg/testutils/lint/passes/forbiddenmethod:forbiddenmethod_test",
+)
+
+lint_binary(
+    name = "hash_lint",
+    test = "//pkg/testutils/lint/passes/hash:hash_test",
+)
+
+lint_binary(
+    name = "nocopy_lint",
+    test = "//pkg/testutils/lint/passes/nocopy:nocopy_test",
+)
+
+lint_binary(
+    name = "passesutil_lint",
+    test = "//pkg/testutils/lint/passes/passesutil:passesutil_test",
+)
+
+lint_binary(
+    name = "returnerrcheck_lint",
+    test = "//pkg/testutils/lint/passes/returnerrcheck:returnerrcheck_test",
+)
+
+lint_binary(
+    name = "timer_lint",
+    test = "//pkg/testutils/lint/passes/timer:timer_test",
+)
+
+lint_binary(
+    name = "unconvert_lint",
+    test = "//pkg/testutils/lint/passes/unconvert:unconvert_test",
+)

@@ -18,7 +18,8 @@ go_test(
     size = "small",
     srcs = ["unconvert_test.go"],
     data = glob(["testdata/**"]),
-    tags = ["broken_in_bazel"],
+    tags = ["lint"],
+    visibility = ["//build/bazelutil:__subpackages__"],
     deps = [
         ":unconvert",
         "//pkg/testutils/skip",

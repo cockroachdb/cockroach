@@ -361,6 +361,7 @@ test_suite(
     name = "small_tests",
     tags = [
         "-broken_in_bazel",
+        "-lint",
         "small",
     ],
     tests = ALL_TESTS,
@@ -370,6 +371,7 @@ test_suite(
     name = "medium_tests",
     tags = [
         "-broken_in_bazel",
+        "-lint",
         "medium",
     ],
     tests = ALL_TESTS,
@@ -379,6 +381,7 @@ test_suite(
     name = "large_tests",
     tags = [
         "-broken_in_bazel",
+        "-lint",
         "large",
     ],
     tests = ALL_TESTS,
@@ -388,6 +391,7 @@ test_suite(
     name = "enormous_tests",
     tags = [
         "-broken_in_bazel",
+        "-lint",
         "enormous",
     ],
     tests = ALL_TESTS,
