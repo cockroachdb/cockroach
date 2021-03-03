@@ -5189,13 +5189,31 @@ func TestBackupRestoreSequence(t *testing.T) {
 			{"3"},
 		})
 
-		// Verify that we can kkeep inserting into the table, without violating a uniqueness constraint.
+		// Verify that we can keep inserting into the table, without violating a uniqueness constraint.
 		newDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
 
 		// Verify that sequence <=> table dependencies are still in place.
 		newDB.ExpectErr(
 			t, "pq: cannot drop sequence t_id_seq because other objects depend on it",
 			`DROP SEQUENCE t_id_seq`,
+		)
+
+		// Check that we can rename the sequence, and the table is fine.
+		newDB.Exec(t, `ALTER SEQUENCE t_id_seq RENAME TO t_id_seq2`)
+		newDB.Exec(t, `INSERT INTO data.t (v) VALUES ('qux')`)
+		newDB.CheckQueryResults(t, `SELECT last_value FROM t_id_seq2`, [][]string{{"5"}})
+		newDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+			{"1", "foo"},
+			{"2", "bar"},
+			{"3", "baz"},
+			{"4", "bar"},
+			{"5", "qux"},
+		})
+
+		// Verify that sequence <=> table dependencies are still in place.
+		newDB.ExpectErr(
+			t, "pq: cannot drop sequence t_id_seq2 because other objects depend on it",
+			`DROP SEQUENCE t_id_seq2`,
 		)
 	})
 
@@ -5251,6 +5269,99 @@ func TestBackupRestoreSequence(t *testing.T) {
 		// Verify that the reference to the table that used it was removed, and
 		// it can be dropped.
 		newDB.Exec(t, `DROP SEQUENCE t_id_seq`)
+	})
+}
+
+func TestBackupRestoreSequencesInViews(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Test backing up and restoring a database with views referencing sequences.
+	t.Run("database", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `CREATE DATABASE d`)
+		sqlDB.Exec(t, `USE d`)
+		sqlDB.Exec(t, `CREATE SEQUENCE s`)
+		sqlDB.Exec(t, `CREATE VIEW v AS SELECT k FROM (SELECT nextval('s') AS k)`)
+
+		// Backup the database.
+		sqlDB.Exec(t, `BACKUP DATABASE d TO 'nodelocal://0/test/'`)
+
+		// Drop the database and restore into it.
+		sqlDB.Exec(t, `DROP DATABASE d`)
+		sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
+
+		// Check that the view is not corrupted.
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.v`, [][]string{{"1"}})
+
+		// Check that the sequence can still be renamed.
+		sqlDB.Exec(t, `ALTER SEQUENCE d.s RENAME TO d.s2`)
+
+		// Check that after renaming, the view is still fine, and reflects the rename.
+		sqlDB.CheckQueryResults(t, `SELECT * FROM d.v`, [][]string{{"2"}})
+		sqlDB.CheckQueryResults(t, `SHOW CREATE VIEW d.v`, [][]string{{
+			"d.public.v", `CREATE VIEW public.v (k) AS SELECT k FROM (SELECT nextval('public.s2'::REGCLASS) AS k)`,
+		}})
+
+		// Test that references are still tracked.
+		sqlDB.ExpectErr(t, `pq: cannot drop sequence s2 because other objects depend on it`, `DROP SEQUENCE d.s2`)
+	})
+
+	// Test backing up and restoring both view and sequence.
+	t.Run("restore view and sequence", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `CREATE DATABASE d`)
+		sqlDB.Exec(t, `USE d`)
+		sqlDB.Exec(t, `CREATE SEQUENCE s`)
+		sqlDB.Exec(t, `CREATE VIEW v AS (SELECT k FROM (SELECT nextval('s') AS k))`)
+
+		// Backup v and s.
+		sqlDB.Exec(t, `BACKUP TABLE v, s TO 'nodelocal://0/test/'`)
+		// Drop v and s.
+		sqlDB.Exec(t, `DROP VIEW v`)
+		sqlDB.Exec(t, `DROP SEQUENCE s`)
+		// Restore v and s.
+		sqlDB.Exec(t, `RESTORE TABLE s, v FROM 'nodelocal://0/test/'`)
+		sqlDB.CheckQueryResults(t, `SHOW CREATE VIEW d.v`, [][]string{{
+			"d.public.v", `CREATE VIEW public.v (k) AS (SELECT k FROM (SELECT nextval('public.s'::REGCLASS) AS k))`,
+		}})
+
+		// Check that v is not corrupted.
+		sqlDB.CheckQueryResults(t, `SELECT * FROM v`, [][]string{{"1"}})
+
+		// Check that s can be renamed and v reflects the change.
+		sqlDB.Exec(t, `ALTER SEQUENCE s RENAME TO s2`)
+		sqlDB.CheckQueryResults(t, `SHOW CREATE VIEW d.v`, [][]string{{
+			"d.public.v", `CREATE VIEW public.v (k) AS (SELECT k FROM (SELECT nextval('public.s2'::REGCLASS) AS k))`,
+		}})
+		sqlDB.CheckQueryResults(t, `SELECT * FROM v`, [][]string{{"2"}})
+
+		// Test that references are still tracked.
+		sqlDB.ExpectErr(t, `pq: cannot drop sequence s2 because other objects depend on it`, `DROP SEQUENCE s2`)
+	})
+
+	// Test backing up and restoring just the view.
+	t.Run("restore just the view", func(t *testing.T) {
+		_, _, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `CREATE DATABASE d`)
+		sqlDB.Exec(t, `USE d`)
+		sqlDB.Exec(t, `CREATE SEQUENCE s`)
+		sqlDB.Exec(t, `CREATE VIEW v AS (SELECT k FROM (SELECT nextval('s') AS k))`)
+
+		// Backup v and drop.
+		sqlDB.Exec(t, `BACKUP TABLE v TO 'nodelocal://0/test/'`)
+		sqlDB.Exec(t, `DROP VIEW v`)
+		// Restore v.
+		sqlDB.ExpectErr(
+			t, "pq: cannot restore view \"v\" without restoring referenced table \\(or \"skip_missing_views\" option\\)",
+			`RESTORE TABLE v FROM 'nodelocal://0/test/'`,
+		)
 	})
 }
 

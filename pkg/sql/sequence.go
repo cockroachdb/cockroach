@@ -647,36 +647,11 @@ func maybeAddSequenceDependencies(
 		version.IsActive(clusterversion.SequencesRegclass)
 
 	var seqDescs []*tabledesc.Mutable
-	var tn tree.TableName
 	seqNameToID := make(map[string]int64)
 	for _, seqIdentifier := range seqIdentifiers {
-		if seqIdentifier.IsByID() {
-			name, err := sc.GetQualifiedTableNameByID(ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
-			if err != nil {
-				return nil, err
-			}
-			tn = *name
-		} else {
-			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
-			if err != nil {
-				return nil, err
-			}
-			tn = parsedSeqName.ToTableName()
-		}
-
-		var seqDesc *tabledesc.Mutable
-		p, ok := sc.(*planner)
-		if ok {
-			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// This is only executed via IMPORT which uses its own resolver.
-			seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
-			if err != nil {
-				return nil, err
-			}
+		seqDesc, err := GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
+		if err != nil {
+			return nil, err
 		}
 		seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
 
@@ -718,6 +693,44 @@ func maybeAddSequenceDependencies(
 	}
 
 	return seqDescs, nil
+}
+
+// GetSequenceDescFromIdentifier resolves the sequence descriptor for the given
+// sequence identifier.
+func GetSequenceDescFromIdentifier(
+	ctx context.Context, sc resolver.SchemaResolver, seqIdentifier sequence.SeqIdentifier,
+) (*tabledesc.Mutable, error) {
+	var tn tree.TableName
+	if seqIdentifier.IsByID() {
+		name, err := sc.GetQualifiedTableNameByID(ctx, seqIdentifier.SeqID, tree.ResolveRequireSequenceDesc)
+		if err != nil {
+			return nil, err
+		}
+		tn = *name
+	} else {
+		parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
+		if err != nil {
+			return nil, err
+		}
+		tn = parsedSeqName.ToTableName()
+	}
+
+	var seqDesc *tabledesc.Mutable
+	var err error
+	p, ok := sc.(*planner)
+	if ok {
+		seqDesc, err = p.ResolveMutableTableDescriptor(ctx, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// This is only executed via IMPORT which uses its own resolver.
+		seqDesc, err = resolver.ResolveMutableExistingTableObject(ctx, sc, &tn, true /*required*/, tree.ResolveRequireSequenceDesc)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return seqDesc, nil
 }
 
 // dropSequencesOwnedByCol drops all the sequences from col.OwnsSequenceIDs.

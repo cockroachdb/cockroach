@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -86,7 +87,7 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 // statement used to create the given view. It is used in the implementation of
 // the crdb_internal.create_statements virtual table.
 func ShowCreateView(
-	ctx context.Context, tn *tree.TableName, desc catalog.TableDescriptor,
+	ctx context.Context, semaCtx *tree.SemaContext, tn *tree.TableName, desc catalog.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE ")
@@ -104,8 +105,46 @@ func ShowCreateView(
 		f.FormatNameP(&name)
 	}
 	f.WriteString(") AS ")
-	f.WriteString(desc.GetViewQuery())
+
+	// Convert sequences referenced by ID in the view back to their names.
+	decodedViewQuery, err := formatViewQueryForDisplay(ctx, semaCtx, desc)
+	if err != nil {
+		log.Warningf(ctx,
+			"error converting sequence IDs to names for view %s (%v): %+v",
+			desc.GetName(), desc.GetID(), err)
+		f.WriteString(desc.GetViewQuery())
+	} else {
+		f.WriteString(decodedViewQuery)
+	}
 	return f.CloseAndGetString(), nil
+}
+
+// formatViewQueryForDisplay formats the given viewQuery by
+// parsing it into a statement, walking the statement and
+// looking for any IDs in the statement, and replacing the
+// IDs with the descriptor's fully qualified name.
+func formatViewQueryForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, desc catalog.TableDescriptor,
+) (string, error) {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		newExpr, err = schemaexpr.ReplaceIDsWithFQNames(ctx, expr, semaCtx)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, newExpr, nil
+	}
+
+	viewQuery := desc.GetViewQuery()
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return "", err
+	}
+
+	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFunc)
+	if err != nil {
+		return "", err
+	}
+	return newStmt.String(), nil
 }
 
 // showComments prints out the COMMENT statements sufficient to populate a
