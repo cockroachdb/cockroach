@@ -276,11 +276,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	jobRegistry := cfg.circularJobRegistry
 	{
-		regLiveness := cfg.nodeLiveness
-		if testingLiveness := cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
-			regLiveness = optionalnodeliveness.MakeContainer(testingLiveness.(*jobs.FakeNodeLiveness))
-		}
-
 		cfg.sqlLivenessProvider = slprovider.New(
 			cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings,
 		)
@@ -294,7 +289,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.AmbientCtx,
 			cfg.stopper,
 			cfg.clock,
-			regLiveness,
 			cfg.db,
 			cfg.circularInternalExecutor,
 			cfg.nodeIDContainer,

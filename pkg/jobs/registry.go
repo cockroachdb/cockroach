@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -46,8 +45,6 @@ import (
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
 )
-
-const defaultLeniencySetting = 60 * time.Second
 
 var (
 	gcSetting = settings.RegisterDurationSetting(
@@ -102,7 +99,6 @@ const (
 type Registry struct {
 	ac       log.AmbientContext
 	stopper  *stop.Stopper
-	nl       optionalnodeliveness.Container
 	db       *kv.DB
 	ex       sqlutil.InternalExecutor
 	clock    *hlc.Clock
@@ -179,7 +175,6 @@ func MakeRegistry(
 	ac log.AmbientContext,
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
-	nl optionalnodeliveness.Container,
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
 	nodeID *base.SQLIDContainer,
@@ -194,7 +189,6 @@ func MakeRegistry(
 		ac:                  ac,
 		stopper:             stopper,
 		clock:               clock,
-		nl:                  nl,
 		db:                  db,
 		ex:                  ex,
 		nodeID:              nodeID,
@@ -418,8 +412,6 @@ VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBy
 
 	return j, nil
 }
-
-const invalidNodeID = 0
 
 // CreateAdoptableJobWithTxn creates a job which will be adopted for execution
 // at a later time by some node in the cluster.
