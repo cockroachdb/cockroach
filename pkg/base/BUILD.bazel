@@ -53,6 +53,7 @@ go_test(
         "node_id_test.go",
         "store_spec_test.go",
     ],
+    tags = ["broken_in_bazel"],
     deps = [
         ":base",
         "//pkg/roachpb",
