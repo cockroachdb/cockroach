@@ -848,6 +848,7 @@ func TestTrimFlushedStatements(t *testing.T) {
 
 func TestShowLastQueryStatistics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
