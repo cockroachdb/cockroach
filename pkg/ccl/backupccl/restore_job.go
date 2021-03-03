@@ -765,15 +765,31 @@ func getStatisticsFromBackup(
 // being restored. If the descriptorRewrites can re-write the table ID, then that
 // table is being restored.
 func remapRelevantStatistics(
-	tableStatistics []*stats.TableStatisticProto, descriptorRewrites DescRewriteMap,
+	ctx context.Context,
+	tableStatistics []*stats.TableStatisticProto,
+	descriptorRewrites DescRewriteMap,
+	tableDescs []*descpb.TableDescriptor,
 ) []*stats.TableStatisticProto {
 	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(tableStatistics))
 
+	tableHasStatsInBackup := make(map[descpb.ID]struct{})
 	for _, stat := range tableStatistics {
+		tableHasStatsInBackup[stat.TableID] = struct{}{}
 		if tableRewrite, ok := descriptorRewrites[stat.TableID]; ok {
 			// Statistics imported only when table re-write is present.
 			stat.TableID = tableRewrite.ID
 			relevantTableStatistics = append(relevantTableStatistics, stat)
+		}
+	}
+
+	// Check if we are missing stats for any table that is being restored. This
+	// could be because we ran into an error when computing stats during the
+	// backup.
+	for _, desc := range tableDescs {
+		if _, ok := tableHasStatsInBackup[desc.GetID()]; !ok {
+			log.Warningf(ctx, "statistics for table: %s, table ID: %d not found in the backup. "+
+				"Query performance on this table could suffer until statistics are recomputed.",
+				desc.GetName(), desc.GetID())
 		}
 	}
 
@@ -1393,11 +1409,19 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		}
 	}
 	r.execCfg = p.ExecCfg()
-	backupStats, err := getStatisticsFromBackup(ctx, defaultStore, details.Encryption, latestBackupManifest)
-	if err != nil {
-		return err
+	var remappedStats []*stats.TableStatisticProto
+	backupStats, err := getStatisticsFromBackup(ctx, defaultStore, details.Encryption,
+		latestBackupManifest)
+	if err == nil {
+		remappedStats = remapRelevantStatistics(ctx, backupStats, details.DescriptorRewrites,
+			details.TableDescs)
+	} else {
+		// We don't want to fail the restore if we are unable to resolve statistics
+		// from the backup, since they can be recomputed after the restore has
+		// completed.
+		log.Warningf(ctx, "failed to resolve table statistics from backup during restore: %+v",
+			err.Error())
 	}
-	latestStats := remapRelevantStatistics(backupStats, details.DescriptorRewrites)
 
 	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 && len(details.TypeDescs) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).
@@ -1485,7 +1509,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		resTotal.add(res)
 	}
 
-	if err := insertStats(ctx, r.job, p.ExecCfg(), latestStats); err != nil {
+	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
 		return errors.Wrap(err, "inserting table statistics")
 	}
 	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
@@ -1599,6 +1623,10 @@ func insertStats(
 ) error {
 	details := job.Details().(jobspb.RestoreDetails)
 	if details.StatsInserted {
+		return nil
+	}
+
+	if latestStats == nil {
 		return nil
 	}
 
