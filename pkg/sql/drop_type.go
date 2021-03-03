@@ -108,8 +108,7 @@ func (p *planner) DropType(ctx context.Context, n *tree.DropType) (planNode, err
 
 		// Record these descriptors for deletion.
 		node.td[typeDesc.ID] = typeToDrop{
-			desc:   typeDesc,
-			fqName: tree.AsStringWithFQNames(name, p.Ann()),
+			desc: typeDesc,
 		}
 		arrayFQName, err := getTypeNameFromTypeDescriptor(
 			oneAtATimeSchemaResolver{ctx, p},
