@@ -37,6 +37,9 @@ writing: debug/system.namespace.txt.err.txt
 retrieving SQL data for system.namespace2... writing: debug/system.namespace2.txt
 writing: debug/system.namespace2.txt.err.txt
   ^- resulted in ...
+retrieving SQL data for system.scheduled_jobs... writing: debug/system.scheduled_jobs.txt
+writing: debug/system.scheduled_jobs.txt.err.txt
+  ^- resulted in ...
 retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt
 writing: debug/crdb_internal.kv_node_status.txt.err.txt
   ^- resulted in ...
