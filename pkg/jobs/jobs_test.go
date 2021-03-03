@@ -830,10 +830,8 @@ func TestJobLifecycle(t *testing.T) {
 
 	createJob := func(record jobs.Record) (*jobs.Job, expectation) {
 		beforeTime := timeutil.Now()
-		job := registry.NewJob(record, registry.MakeJobID())
-		if err := job.Created(ctx); err != nil {
-			t.Fatal(err)
-		}
+		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, registry.MakeJobID(), nil /* txn */)
+		require.NoError(t, err)
 		payload := job.Payload()
 		return job, expectation{
 			DB:     sqlDB,
@@ -961,11 +959,8 @@ func TestJobLifecycle(t *testing.T) {
 			Before: timeutil.Now(),
 			Error:  "Buzz Lightyear can't fly",
 		}
-		buzzJob := registry.NewJob(buzzRecord, registry.MakeJobID())
-
-		if err := buzzJob.Created(ctx); err != nil {
-			t.Fatal(err)
-		}
+		buzzJob, err := registry.CreateAdoptableJobWithTxn(ctx, buzzRecord, registry.MakeJobID(), nil /* txn */)
+		require.NoError(t, err)
 		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
@@ -1193,18 +1188,21 @@ func TestJobLifecycle(t *testing.T) {
 				t.Fatalf("expected 'unknown details type int', but got: %v", r)
 			}
 		}()
-
-		job := registry.NewJob(jobs.Record{
+		_, _ = registry.CreateAdoptableJobWithTxn(ctx, jobs.Record{
 			Details: 42,
-		}, registry.MakeJobID())
-		_ = job.Created(ctx)
+		}, registry.MakeJobID(), nil /* txn */)
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
-		job := registry.NewJob(jobs.Record{
-			Details:  jobspb.RestoreDetails{},
-			Progress: jobspb.RestoreProgress{},
-		}, registry.MakeJobID())
+		// Attempt to create the job but abort the transaction.
+		var job *jobs.Job
+		require.Regexp(t, "boom", s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			job, _ = registry.CreateAdoptableJobWithTxn(ctx, jobs.Record{
+				Details:  jobspb.RestoreDetails{},
+				Progress: jobspb.RestoreProgress{},
+			}, registry.MakeJobID(), txn)
+			return errors.New("boom")
+		}))
 		if err := job.Started(ctx); !testutils.IsError(err, "not found in system.jobs table") {
 			t.Fatalf("unexpected error %v", err)
 		}
@@ -1388,12 +1386,13 @@ func TestJobLifecycle(t *testing.T) {
 		createdByType := "internal_test"
 
 		jobID := registry.MakeJobID()
-		job := registry.NewJob(jobs.Record{
+		record := jobs.Record{
 			Details:   jobspb.RestoreDetails{},
 			Progress:  jobspb.RestoreProgress{},
 			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
-		}, jobID)
-		require.NoError(t, job.Created(ctx))
+		}
+		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */)
+		require.NoError(t, err)
 
 		loadedJob, err := registry.LoadJob(ctx, jobID)
 		require.NoError(t, err)
