@@ -250,9 +250,13 @@ func newInvertedJoiner(
 		ij, post, outputColTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{ij.input},
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				// We need to generate metadata before closing the processor
+				// because InternalClose() updates ij.Ctx to the "original"
+				// context.
+				trailingMeta := ij.generateMeta(ij.Ctx)
 				ij.close()
-				return ij.generateMeta(ctx)
+				return trailingMeta
 			},
 		},
 	); err != nil {

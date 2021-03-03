@@ -100,10 +100,6 @@ func (ag *countAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMeta
 	return nil, ag.DrainHelper()
 }
 
-func (ag *countAggregator) ConsumerClosed() {
-	ag.InternalClose()
-}
-
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (ag *countAggregator) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(ag.input)

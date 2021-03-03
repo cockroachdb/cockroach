@@ -282,9 +282,13 @@ func newJoinReader(
 		output,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{jr.input},
-			TrailingMetaCallback: func(ctx context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				// We need to generate metadata before closing the processor
+				// because InternalClose() updates jr.Ctx to the "original"
+				// context.
+				trailingMeta := jr.generateMeta(jr.Ctx)
 				jr.close()
-				return jr.generateMeta(ctx)
+				return trailingMeta
 			},
 		},
 	); err != nil {

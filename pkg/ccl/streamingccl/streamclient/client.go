@@ -10,9 +10,10 @@ package streamclient
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 // Client provides a way for the stream ingestion job to consume a
@@ -28,7 +29,7 @@ type Client interface {
 	//
 	// Canceling the context will stop reading the partition and close the event
 	// channel.
-	ConsumePartition(ctx context.Context, address streamingccl.PartitionAddress, startTime time.Time) (chan streamingccl.Event, chan error, error)
+	ConsumePartition(ctx context.Context, address streamingccl.PartitionAddress, startTime hlc.Timestamp) (chan streamingccl.Event, chan error, error)
 }
 
 // NewStreamClient creates a new stream client based on the stream
@@ -41,13 +42,17 @@ func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 	}
 
 	switch streamURL.Scheme {
-	case TestScheme:
+	case "postgres", "postgresql":
+		// The canonical PostgreSQL URL scheme is "postgresql", however our
+		// own client commands also accept "postgres".
+		return &sinklessReplicationClient{}, nil
+	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
 		if err != nil {
 			return streamClient, err
 		}
 	default:
-		streamClient = &mockClient{}
+		return nil, errors.Newf("stream replication from scheme %q is unsupported", streamURL.Scheme)
 	}
 
 	return streamClient, nil

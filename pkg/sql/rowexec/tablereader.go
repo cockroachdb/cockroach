@@ -169,8 +169,10 @@ func newTableReader(
 	return tr, nil
 }
 
-func (tr *tableReader) generateTrailingMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	trailingMeta := tr.generateMeta(ctx)
+func (tr *tableReader) generateTrailingMeta() []execinfrapb.ProducerMetadata {
+	// We need to generate metadata before closing the processor because
+	// InternalClose() updates tr.Ctx to the "original" context.
+	trailingMeta := tr.generateMeta(tr.Ctx)
 	tr.close()
 	return trailingMeta
 }

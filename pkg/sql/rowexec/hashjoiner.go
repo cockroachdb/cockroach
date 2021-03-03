@@ -122,7 +122,7 @@ func newHashJoiner(
 		output,
 		execinfra.ProcStateOpts{
 			InputsToDrain: []execinfra.RowSource{h.leftSource, h.rightSource},
-			TrailingMetaCallback: func(context.Context) []execinfrapb.ProducerMetadata {
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				h.close()
 				return nil
 			},
