@@ -346,7 +346,9 @@ children:
     value: one row
   children:
   - name: max1row
-    attrs: []
+    attrs:
+    - key: estimated row count
+      value: "1"
     children:
     - name: filter
       attrs:

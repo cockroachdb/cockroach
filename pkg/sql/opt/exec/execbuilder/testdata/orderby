@@ -653,6 +653,7 @@ distribution: local
 vectorized: true
 ·
 • ordinality
+│ estimated row count: 3
 │
 └── • values
       size: 1 column, 3 rows
@@ -664,9 +665,11 @@ distribution: local
 vectorized: true
 ·
 • sort
+│ estimated row count: 3
 │ order: -"ordinality"
 │
 └── • ordinality
+    │ estimated row count: 3
     │
     └── • values
           size: 1 column, 3 rows

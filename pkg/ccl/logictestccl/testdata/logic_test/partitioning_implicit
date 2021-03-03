@@ -656,6 +656,7 @@ vectorized: true
 │           │     spans: FULL SCAN
 │           │
 │           └── • scan buffer
+│                 estimated row count: 1
 │                 label: buffer 1
 │
 └── • constraint-check
@@ -673,6 +674,7 @@ vectorized: true
             │     spans: FULL SCAN
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok

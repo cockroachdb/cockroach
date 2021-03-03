@@ -208,6 +208,7 @@ distribution: full
 vectorized: true
 ·
 • group (scalar)
+│ estimated row count: 1
 │
 └── • norows
 ·
@@ -330,6 +331,7 @@ network usage: <hidden>
             └── • filter
                 │ cluster nodes: <hidden>
                 │ actual row count: 1
+                │ estimated row count: 1
                 │ filter: column2 IS NOT NULL
                 │
                 └── • scan buffer

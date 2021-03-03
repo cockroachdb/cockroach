@@ -115,9 +115,11 @@ vectorized: true
 • root
 │
 ├── • limit
+│   │ estimated row count: 1
 │   │ count: 1
 │   │
 │   └── • scan buffer
+│         estimated row count: 2
 │         label: buffer 1 (a)
 │
 └── • subquery
@@ -129,6 +131,7 @@ vectorized: true
         │ label: buffer 1 (a)
         │
         └── • upsert
+            │ estimated row count: 2
             │ into: t(x)
             │
             └── • values
@@ -238,9 +241,11 @@ vectorized: true
 • root
 │
 ├── • limit
+│   │ estimated row count: 1
 │   │ count: 1
 │   │
 │   └── • scan buffer
+│         estimated row count: 2
 │         label: buffer 1
 │
 └── • subquery
@@ -252,6 +257,7 @@ vectorized: true
         │ label: buffer 1
         │
         └── • upsert
+            │ estimated row count: 2
             │ into: t(x)
             │
             └── • values

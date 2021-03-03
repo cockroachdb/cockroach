@@ -666,8 +666,10 @@ distribution: full
 vectorized: true
 ·
 • group (scalar)
+│ estimated row count: 1
 │
 └── • filter
+    │ estimated row count: 1
     │ filter: column2 > 3
     │
     └── • values
@@ -682,6 +684,7 @@ distribution: full
 vectorized: true
 ·
 • hash join
+│ estimated row count: 2
 │ equality: (column1) = (column1)
 │
 ├── • values

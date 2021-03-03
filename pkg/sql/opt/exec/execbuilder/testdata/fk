@@ -112,6 +112,7 @@ vectorized: true
             │ equality cols are key
             │
             └── • filter
+                │ estimated row count: 1
                 │ filter: column2 IS NOT NULL
                 │
                 └── • scan buffer
@@ -156,6 +157,7 @@ vectorized: true
             │ equality cols are key
             │
             └── • filter
+                │ estimated row count: 1
                 │ filter: (column2 IS NOT NULL) AND (column3 IS NOT NULL)
                 │
                 └── • scan buffer
@@ -204,6 +206,7 @@ vectorized: true
 │           │ equality cols are key
 │           │
 │           └── • filter
+│               │ estimated row count: 1
 │               │ filter: column2 IS NOT NULL
 │               │
 │               └── • scan buffer
@@ -219,6 +222,7 @@ vectorized: true
             │ equality cols are key
             │
             └── • filter
+                │ estimated row count: 1
                 │ filter: (column3 IS NOT NULL) AND (column4 IS NOT NULL)
                 │
                 └── • scan buffer
@@ -1210,6 +1214,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (anti)
+            │ estimated row count: 2
             │ equality: (column2) = (p)
             │ right cols are key
             │
@@ -1237,6 +1242,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ estimated row count: 1
 │           │
 │           └── • scan
 │                 estimated row count: 1 (100% of the table)
@@ -1249,10 +1255,12 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (anti)
+            │ estimated row count: 0
             │ equality: (p_new) = (p)
             │ right cols are key
             │
             ├── • filter
+            │   │ estimated row count: 1
             │   │ filter: p_new IS NOT NULL
             │   │
             │   └── • scan buffer
@@ -1279,6 +1287,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ estimated row count: 1
 │           │
 │           └── • scan
 │                 estimated row count: 1 (100% of the table)
@@ -1291,10 +1300,12 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (semi)
+            │ estimated row count: 0
             │ equality: (p) = (p)
             │ left cols are key
             │
             ├── • except
+            │   │ estimated row count: 1
             │   │
             │   ├── • scan buffer
             │   │     label: buffer 1
@@ -1331,10 +1342,12 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (semi)
+            │ estimated row count: 0
             │ equality: (p) = (p)
             │ left cols are key
             │
             ├── • scan buffer
+            │     estimated row count: 1
             │     label: buffer 1
             │
             └── • scan
@@ -1374,6 +1387,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ estimated row count: 1
 │           │
 │           └── • scan
 │                 estimated row count: 1 (100% of the table)
@@ -1386,11 +1400,13 @@ vectorized: true
     └── • error if rows
         │
         └── • lookup join (anti)
+            │ estimated row count: 0
             │ table: p@primary
             │ equality: (p_new) = (p)
             │ equality cols are key
             │
             └── • filter
+                │ estimated row count: 1
                 │ filter: p_new IS NOT NULL
                 │
                 └── • scan buffer
@@ -1412,6 +1428,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ estimated row count: 1
 │           │
 │           └── • scan
 │                 estimated row count: 1 (100% of the table)
@@ -1424,10 +1441,12 @@ vectorized: true
     └── • error if rows
         │
         └── • lookup join (semi)
+            │ estimated row count: 0
             │ table: c@c_p_idx
             │ equality: (p) = (p)
             │
             └── • except
+                │ estimated row count: 1
                 │
                 ├── • scan buffer
                 │     label: buffer 1
@@ -1459,10 +1478,12 @@ vectorized: true
     └── • error if rows
         │
         └── • lookup join (semi)
+            │ estimated row count: 0
             │ table: c@c_p_idx
             │ equality: (p) = (p)
             │
             └── • scan buffer
+                  estimated row count: 1
                   label: buffer 1
 
 statement ok
@@ -1500,8 +1521,10 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • render
+│           │ estimated row count: 10
 │           │
 │           └── • project set
+│               │ estimated row count: 10
 │               │
 │               └── • emptyrow
 │
@@ -1510,6 +1533,7 @@ vectorized: true
     └── • error if rows
         │
         └── • hash join (anti)
+            │ estimated row count: 0
             │ equality: (?column?) = (p)
             │ right cols are key
             │
