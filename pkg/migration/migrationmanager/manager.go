@@ -310,17 +310,7 @@ SELECT id, status
 	if err != nil {
 		return false, 0, errors.Wrap(err, "failed to marshal version to JSON")
 	}
-	// TODO(yuzefovich): use QueryBuffered method once it is added to
-	// sqlutil.InternalExecutor interface.
-	it, err := m.ie.QueryIterator(ctx, "migration-manager-find-jobs", txn, query, jsonMsg.String())
-	if err != nil {
-		return false, 0, err
-	}
-	var rows []tree.Datums
-	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		rows = append(rows, it.Cur())
-	}
+	rows, err := m.ie.QueryBuffered(ctx, "migration-manager-find-jobs", txn, query, jsonMsg.String())
 	if err != nil {
 		return false, 0, err
 	}

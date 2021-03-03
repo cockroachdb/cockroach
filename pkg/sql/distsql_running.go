@@ -434,7 +434,9 @@ type DistSQLReceiver struct {
 
 	rangeCache *rangecache.RangeCache
 	tracing    *SessionTracing
-	cleanup    func()
+	// cleanup will be called when the DistSQLReceiver is Release()'d back to
+	// its sync.Pool.
+	cleanup func()
 
 	// The transaction in which the flow producing data for this
 	// receiver runs. The DistSQLReceiver updates the transaction in
@@ -572,6 +574,7 @@ func MakeDistSQLReceiver(
 
 // Release releases this DistSQLReceiver back to the pool.
 func (r *DistSQLReceiver) Release() {
+	r.cleanup()
 	*r = DistSQLReceiver{}
 	receiverSyncPool.Put(r)
 }
@@ -782,7 +785,6 @@ func (r *DistSQLReceiver) ProducerDone() {
 		panic("double close")
 	}
 	r.closed = true
-	r.cleanup()
 }
 
 // Types is part of the RowReceiver interface.

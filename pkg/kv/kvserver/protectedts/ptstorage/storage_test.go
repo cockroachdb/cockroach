@@ -704,6 +704,12 @@ func (ie *wrappedInternalExecutor) QueryRowExWithCols(
 	panic("not implemented")
 }
 
+func (ie *wrappedInternalExecutor) QueryBuffered(
+	ctx context.Context, opName string, txn *kv.Txn, stmt string, qargs ...interface{},
+) ([]tree.Datums, error) {
+	panic("not implemented")
+}
+
 func (ie *wrappedInternalExecutor) QueryBufferedEx(
 	ctx context.Context,
 	opName string,

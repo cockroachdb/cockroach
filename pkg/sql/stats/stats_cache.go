@@ -490,7 +490,7 @@ func (sc *TableStatisticsCache) parseStats(
 // type that doesn't exist) and returns the rest (with no error).
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID,
-) (_ []*TableStatistic, retErr error) {
+) ([]*TableStatistic, error) {
 	const getTableStatisticsStmt = `
 SELECT
   "tableID",

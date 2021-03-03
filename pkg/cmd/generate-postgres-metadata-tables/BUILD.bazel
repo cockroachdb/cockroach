@@ -1,9 +1,9 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
-    name = "generate-pg-catalog_lib",
+    name = "generate-postgres-metadata-tables_lib",
     srcs = ["main.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-pg-catalog",
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-postgres-metadata-tables",
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/sql",
@@ -12,7 +12,7 @@ go_library(
 )
 
 go_binary(
-    name = "generate-pg-catalog",
-    embed = [":generate-pg-catalog_lib"],
+    name = "generate-postgres-metadata-tables",
+    embed = [":generate-postgres-metadata-tables_lib"],
     visibility = ["//visibility:public"],
 )
