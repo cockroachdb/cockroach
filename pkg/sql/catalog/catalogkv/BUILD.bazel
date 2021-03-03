@@ -7,7 +7,6 @@ go_library(
         "catalogkv.go",
         "namespace.go",
         "test_utils.go",
-        ":gen-descriptorkind-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv",
     visibility = ["//visibility:public"],

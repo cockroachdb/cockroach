@@ -633,9 +633,9 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
       "owner_proto": "root",
       "users": [
         { "privileges": 2, "user_proto": "admin" },
-        { "privileges": 2, "user_proto": "root" },
         { "privileges": 2, "user_proto": "newuser1" },
-        { "privileges": 2, "user_proto": "newuser2" }
+        { "privileges": 2, "user_proto": "newuser2" },
+        { "privileges": 2, "user_proto": "root" }
       ],
       "version": 1
     },
