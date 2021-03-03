@@ -242,6 +242,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 	}
 	mutDesc, err := makeViewTableDesc(
 		ctx,
+		st,
 		create.Name.Table(),
 		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
 		0, /* parentID */
@@ -253,6 +254,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		nil, /* semaCtx */
 		nil, /* evalCtx */
 		tree.PersistencePermanent,
+		nil, /* sc */
 	)
 	return mutDesc.TableDescriptor, err
 }
