@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -563,6 +564,13 @@ func (r *Replica) AdminMerge(
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
 
+		// If we aren't certain that all possible nodes in the cluster support a
+		// range merge transaction refreshing its reads while the RHS range is
+		// subsumed, observe the commit timestamp to force a client-side retry.
+		if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.PriorReadSummaries) {
+			_ = txn.CommitTimestamp()
+		}
+
 		// Pipelining might send QueryIntent requests to the RHS after the RHS has
 		// noticed the merge and started blocking all traffic. This causes the merge
 		// transaction to deadlock. Just turn pipelining off; the structure of the
@@ -700,18 +708,6 @@ func (r *Replica) AdminMerge(
 		if err := txn.Run(ctx, b); err != nil {
 			return err
 		}
-
-		// Refresh the transaction so that the transaction won't try to refresh
-		// its reads on the RHS after it is frozen.
-		if err := txn.ManualRefresh(ctx); err != nil {
-			return err
-		}
-
-		// Freeze the commit timestamp of the transaction to prevent future pushes
-		// due to high-priority reads from other transactions. Any attempt to
-		// refresh reads on the RHS would result in a stalled merge because the
-		// RHS will be frozen after the Subsume is sent.
-		_ = txn.CommitTimestamp()
 
 		// Intents have been placed, so the merge is now in its critical phase. Get
 		// a consistent view of the data from the right-hand range. If the merge
