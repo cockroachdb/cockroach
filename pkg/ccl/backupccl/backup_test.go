@@ -1649,7 +1649,6 @@ func createAndWaitForJob(
 		DescriptorIDs: descriptorIDs,
 		StartedMicros: now,
 		Details:       jobspb.WrapPayloadDetails(details),
-		Lease:         &jobspb.Lease{NodeID: 1},
 	})
 	if err != nil {
 		t.Fatal(err)
