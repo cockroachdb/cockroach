@@ -205,6 +205,9 @@ func MakeIndexDescriptor(
 		if n.PartitionByIndex.ContainsPartitions() {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 		}
+		if tableDesc.IsLocalityRegionalByRow() {
+			return nil, hashShardedIndexesOnRegionalByRowError()
+		}
 		if n.Interleave != nil {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 		}

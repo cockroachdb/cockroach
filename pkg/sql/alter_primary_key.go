@@ -63,6 +63,9 @@ func (p *planner) AlterPrimaryKey(
 		if alterPKNode.Interleave != nil {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 		}
+		if tableDesc.IsLocalityRegionalByRow() {
+			return pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables")
+		}
 	}
 
 	// Ensure that other schema changes on this table are not currently

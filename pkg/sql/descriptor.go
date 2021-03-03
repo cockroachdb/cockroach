@@ -74,8 +74,19 @@ func (p *planner) createDatabase(
 		shouldCreatePublicSchema = false
 	}
 
-	if exists, _, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
+	if exists, databaseID, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
 		if database.IfNotExists {
+			// Check if the database is in a dropping state
+			desc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, databaseID, catalogkv.Immutable,
+				catalogkv.DatabaseDescriptorKind, true)
+			if err != nil {
+				return nil, false, err
+			}
+			if desc.Dropped() {
+				return nil, false, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"database %q is being dropped, try again later",
+					dbName)
+			}
 			// Noop.
 			return nil, false, nil
 		}

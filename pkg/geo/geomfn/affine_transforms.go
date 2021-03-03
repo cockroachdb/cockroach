@@ -297,6 +297,36 @@ func RotateX(g geo.Geometry, rotRadians float64) (geo.Geometry, error) {
 	)
 }
 
+// RotateY returns a modified Geometry whose coordinates are rotated about
+// the Y axis by rotRadians
+func RotateY(g geo.Geometry, rotRadians float64) (geo.Geometry, error) {
+	cos, sin := math.Cos(rotRadians), math.Sin(rotRadians)
+	return Affine(
+		g,
+		AffineMatrix{
+			{cos, 0, sin, 0},
+			{0, 1, 0, 0},
+			{-sin, 0, cos, 0},
+			{0, 0, 0, 1},
+		},
+	)
+}
+
+// RotateZ returns a modified Geometry whose coordinates are rotated about
+// the Z axis by rotRadians
+func RotateZ(g geo.Geometry, rotRadians float64) (geo.Geometry, error) {
+	cos, sin := math.Cos(rotRadians), math.Sin(rotRadians)
+	return Affine(
+		g,
+		AffineMatrix{
+			{cos, -sin, 0, 0},
+			{sin, cos, 0, 0},
+			{0, 0, 1, 0},
+			{0, 0, 0, 1},
+		},
+	)
+}
+
 // TransScale returns a modified Geometry whose coordinates are
 // translate by deltaX and deltaY and scale by xFactor and yFactor
 func TransScale(g geo.Geometry, deltaX, deltaY, xFactor, yFactor float64) (geo.Geometry, error) {

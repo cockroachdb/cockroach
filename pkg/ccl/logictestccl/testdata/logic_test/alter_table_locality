@@ -2616,3 +2616,14 @@ TABLE rbt_table_gc_ttl  ALTER TABLE rbt_table_gc_ttl CONFIGURE ZONE USING
                         constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                         voter_constraints = '[+region=ca-central-1]',
                         lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SET experimental_enable_hash_sharded_indexes = true
+
+statement ok
+CREATE TABLE hash_sharded_idx_table (
+  pk INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8
+)
+
+statement error cannot convert a table to REGIONAL BY ROW if table table contains hash sharded indexes
+ALTER TABLE hash_sharded_idx_table SET LOCALITY REGIONAL BY ROW
