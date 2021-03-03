@@ -594,7 +594,10 @@ type rpcConn struct {
 	producer *Sender
 	nodeID   roachpb.NodeID
 	stream   ctpb.SideTransport_PushUpdatesClient
-	closed   int32 // atomic
+	// cancelStreamCtx cleans up the resources (goroutine) associated with stream.
+	// It needs to be called whenever stream is discarded.
+	cancelStreamCtx context.CancelFunc
+	closed          int32 // atomic
 }
 
 func newRPCConn(dialer *nodedialer.Dialer, producer *Sender, nodeID roachpb.NodeID) conn {
@@ -605,6 +608,18 @@ func newRPCConn(dialer *nodedialer.Dialer, producer *Sender, nodeID roachpb.Node
 	}
 	r.AddLogTag("ctstream", nodeID)
 	return r
+}
+
+// cleanupStream releases the resources associated with r.stream and marks the conn
+// as needing a new stream.
+func (r *rpcConn) cleanupStream() {
+	if r.stream == nil {
+		return
+	}
+	_ /* err */ = r.stream.CloseSend()
+	r.stream = nil
+	r.cancelStreamCtx()
+	r.cancelStreamCtx = nil
 }
 
 // close makes the connection stop sending messages. The run() goroutine will
@@ -620,10 +635,15 @@ func (r *rpcConn) sendMsg(ctx context.Context, msg *ctpb.Update) error {
 		if err != nil {
 			return err
 		}
-		r.stream, err = ctpb.NewSideTransportClient(conn).PushUpdates(ctx)
+		streamCtx, cancel := context.WithCancel(ctx)
+		stream, err := ctpb.NewSideTransportClient(conn).PushUpdates(streamCtx)
 		if err != nil {
+			cancel()
 			return err
 		}
+		r.stream = stream
+		// This will need to be called when we're done with the stream.
+		r.cancelStreamCtx = cancel
 	}
 	return r.stream.Send(msg)
 }
@@ -634,13 +654,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 		func(ctx context.Context) {
 			ctx = r.AnnotateCtx(ctx)
 
-			defer func() {
-				if r.stream != nil {
-					_ /* err */ = r.stream.CloseSend()
-					r.stream = nil
-				}
-			}()
-
+			defer r.cleanupStream()
 			everyN := log.Every(10 * time.Second)
 
 			var lastSent ctpb.SeqNum
@@ -690,7 +704,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 					// the circuit breaker if the remote node is still unreachable, we
 					// should have a blocking version of Dial() that we just leave hanging
 					// and get a notification when it succeeds.
-					r.stream = nil
+					r.cleanupStream()
 				}
 			}
 		})
