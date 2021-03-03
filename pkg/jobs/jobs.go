@@ -416,9 +416,6 @@ func (j *Job) unpaused(ctx context.Context, txn *kv.Txn) error {
 		} else {
 			ju.UpdateStatus(StatusReverting)
 		}
-		// NB: A nil lease indicates the job is not resumable, whereas an empty
-		// lease is always considered expired.
-		md.Payload.Lease = &jobspb.Lease{}
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
@@ -855,7 +852,7 @@ func (sj *StartableJob) Start(ctx context.Context) (err error) {
 			"StartableJob %d cannot be started more than once", sj.ID())
 	}
 
-	if sj.registry.startUsingSQLLivenessAdoption(ctx) && sj.sessionID == "" {
+	if sj.sessionID == "" {
 		return errors.AssertionFailedf(
 			"StartableJob %d cannot be started without sqlliveness session", sj.ID())
 	}

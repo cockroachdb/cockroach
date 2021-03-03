@@ -19,8 +19,6 @@ import (
 	"context"
 	"encoding/hex"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -82,18 +80,6 @@ type Reader interface {
 	IsAlive(context.Context, SessionID) (alive bool, err error)
 }
 
-// IsActive returns whether the sqlliveness subsystem's migration to has been
-// performed.
-func IsActive(ctx context.Context, settings *cluster.Settings) bool {
-	return settings.Version.IsActive(
-		ctx,
-		clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-	)
-}
-
 // NotStartedError can be returned from calls to the sqlliveness subsystem
-// prior to its being started. The sqlliveness subsystem is started after the
-// sqlmigrations it relies on have completed.
-//
-// TODO(ajwerner): Remove this in 21.1 and make such calls assertion failures.
+// prior to its being started.
 var NotStartedError = errors.Errorf("sqlliveness subsystem has not yet been started")
