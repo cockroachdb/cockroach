@@ -53,7 +53,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 		found := false
 		for _, overload := range overloads {
 			// Find the overload that matches funcExpr.
-			if funcExpr.ResolvedOverload().Types.Match(overload.Types.Types()) {
+			if len(funcExpr.Exprs) == overload.Types.Length() {
 				found = true
 				argTypes, ok := overload.Types.(tree.ArgTypes)
 				if !ok {
@@ -78,6 +78,21 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 							return &SeqIdentifier{
 								SeqID: id,
 							}, nil
+						case *tree.AnnotateTypeExpr:
+							switch n := a.Expr.(type) {
+							case *tree.StrVal:
+								seqName := n.RawString()
+								return &SeqIdentifier{
+									SeqName: seqName,
+								}, nil
+							case *tree.NumVal:
+								id, err := n.AsInt64()
+								if err == nil {
+									return &SeqIdentifier{
+										SeqID: id,
+									}, nil
+								}
+							}
 						}
 					}
 				}
@@ -97,7 +112,7 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 // a call to sequence function in the given expression or nil if no sequence
 // identifiers are found. The identifier is wrapped in a SeqIdentifier.
 // e.g. nextval('foo') => "foo"; nextval(123::regclass) => 123; <some other expression> => nil
-func GetUsedSequences(defaultExpr tree.TypedExpr) ([]SeqIdentifier, error) {
+func GetUsedSequences(defaultExpr tree.Expr) ([]SeqIdentifier, error) {
 	var seqIdentifiers []SeqIdentifier
 	_, err := tree.SimpleVisit(
 		defaultExpr,
@@ -125,7 +140,7 @@ func GetUsedSequences(defaultExpr tree.TypedExpr) ([]SeqIdentifier, error) {
 // any sequence names in the expression by their IDs instead.
 // e.g. nextval('foo') => nextval(123::regclass)
 func ReplaceSequenceNamesWithIDs(
-	defaultExpr tree.TypedExpr, nameToID map[string]int64,
+	defaultExpr tree.Expr, nameToID map[string]int64,
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		switch t := expr.(type) {
