@@ -39,15 +39,7 @@ func registerAcceptance(r *testRegistry) {
 		{name: "build-analyze", fn: runBuildAnalyze},
 		{name: "cli/node-status", fn: runCLINodeStatus},
 		{name: "cluster-init", fn: runClusterInit},
-		{name: "decommission-self",
-			fn: runDecommissionSelf,
-			// Decommissioning self was observed to hang, though not in this test
-			// when run locally. More investigation is needed; there is a small
-			// chance that the original observation was in error. However, it
-			// seems likely that the problem exists even if it is rarely reproduced,
-			// so this test is skipped.
-			skip: "https://github.com/cockroachdb/cockroach/issues/56718",
-		},
+		{name: "decommission-self", fn: runDecommissionSelf},
 		{name: "event-log", fn: runEventLog},
 		{name: "gossip/peerings", fn: runGossipPeerings},
 		{name: "gossip/restart", fn: runGossipRestart},

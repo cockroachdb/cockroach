@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",

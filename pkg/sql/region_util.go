@@ -537,7 +537,7 @@ func ApplyZoneConfigForMultiRegionTable(
 	if err != nil {
 		return err
 	}
-	var zoneConfig zonepb.ZoneConfig
+	zoneConfig := *zonepb.NewZoneConfig()
 	if zoneRaw != nil {
 		zoneConfig = *zoneRaw
 	}
