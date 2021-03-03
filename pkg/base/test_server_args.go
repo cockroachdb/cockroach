@@ -211,7 +211,7 @@ const (
 	ReplicationAuto TestClusterReplicationMode = iota
 	// ReplicationManual means that the split, merge and replication queues of all
 	// servers are stopped, and the test must manually control splitting, merging
-	// and  replication through the TestServer.
+	// and replication through the TestServer.
 	// Note that the server starts with a number of system ranges,
 	// all with a single replica on node 1.
 	ReplicationManual

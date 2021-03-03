@@ -281,6 +281,9 @@ type Replica struct {
 		// requests should be held until the completion of the merge is signaled by
 		// the closing of the channel.
 		mergeComplete chan struct{}
+		// mergeTxnID contains the ID of the in-progress merge transaction, if a
+		// merge is currently in progress. Otherwise, the ID is empty.
+		mergeTxnID uuid.UUID
 		// freezeStart indicates the subsumption time of this range when it is the
 		// right-hand range in an ongoing merge. This range will allow read-only
 		// traffic below this timestamp, while blocking everything else, until the
@@ -1366,10 +1369,6 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 		return nil
 	}
 
-	if ba.IsSingleSubsumeRequest() {
-		return nil
-	}
-
 	// The replica is being merged into its left-hand neighbor. This request
 	// cannot proceed until the merge completes, signaled by the closing of the
 	// channel.
@@ -1381,11 +1380,15 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 	// important that this check occur after we have verified that this replica
 	// is the leaseholder. Only the leaseholder will have its merge complete
 	// channel set.
+
+	// However, we do permit exactly two forms of requests when a range is in
+	// the process of being merged into its left-hand neighbor.
 	//
-	// Note that Subsume commands are exempt from waiting on the mergeComplete
-	// channel. This is necessary to avoid deadlock. While normally a Subsume
-	// request will trigger the installation of a mergeComplete channel after it
-	// is executed, it may sometimes execute after the mergeComplete channel has
+	// The first request type that we allow on the RHS of a merge after it has
+	// entered its critical phase is a Subsume request. This sounds backwards,
+	// but it is necessary to avoid deadlock. While normally a Subsume request
+	// will trigger the installation of a mergeComplete channel after it is
+	// executed, it may sometimes execute after the mergeComplete channel has
 	// been installed. Consider the case where the RHS replica acquires a new
 	// lease after the merge transaction deletes its local range descriptor but
 	// before the Subsume command is sent. The lease acquisition request will
@@ -1407,14 +1410,55 @@ func (r *Replica) shouldWaitForPendingMergeRLocked(
 	// irrelevant. Subsume is only sent from within a merge transaction, and
 	// merge transactions read the RHS descriptor at the beginning of the
 	// transaction to verify that it has not already been merged away.
+	if ba.IsSingleSubsumeRequest() {
+		return nil
+	}
+	// The second request type that we allow on the RHS of a merge after it has
+	// entered its critical phase is a Refresh request, but only one issued by
+	// the active range merge transaction itself, targeting the RHS's local
+	// range descriptor. This is necessary to allow the merge transaction to
+	// have its write timestamp be bumped and still commit without retrying. In
+	// such cases, the transaction must refresh its reads, including its
+	// original read on the RHS's local range descriptor. If we were to block
+	// this refresh on the frozen RHS range, the merge would deadlock.
 	//
-	// We can't wait for the merge to complete here, though. The replica might
-	// need to respond to a Subsume request in order for the merge to complete,
-	// and blocking here would force that Subsume request to sit in hold its
-	// latches forever, deadlocking the merge. Instead, we release the latches
-	// we acquired above and return a MergeInProgressError. The store will catch
-	// that error and resubmit the request after mergeCompleteCh closes. See
-	// #27442 for the full context.
+	// On the surface, it seems unsafe to permit Refresh requests on an already
+	// subsumed RHS range, because the Refresh's effect on the timestamp cache
+	// will never make it to the LHS leaseholder. This risks the future joint
+	// range serving a write that invalidates the Refresh. However, in this
+	// specific situation, we can be sure that such a serializability violation
+	// will not occur because the Range merge also writes to (deletes) this key.
+	// This means that if the Range merge transaction commits, its intent on the
+	// key will be resolved to the timestamp of the refresh and no future write
+	// will ever be able to violate the refresh. Conversely, if the Range merge
+	// transaction does not commit, then the merge will fail and the update to
+	// the RHS's timestamp cache will not be lost (not that this particularly
+	// matters in cases of aborted transactions).
+	//
+	// The same line of reasoning as the one above has motivated us to explore
+	// removing keys from a transaction's refresh spans when they are written to
+	// by the transaction, as the intents written by the transaction act as a
+	// form of pessimistic lock that obviate the need for the optimistic
+	// refresh. Such an improvement would eliminate the need for this special
+	// case, but until we generalize the mechanism to prune refresh spans based
+	// on intent spans, we're forced to live with this.
+	if ba.Txn != nil && ba.Txn.ID == r.mu.mergeTxnID {
+		if ba.IsSingleRefreshRequest() {
+			desc := r.descRLocked()
+			descKey := keys.RangeDescriptorKey(desc.StartKey)
+			if ba.Requests[0].GetRefresh().Key.Equal(descKey) {
+				return nil
+			}
+		}
+	}
+
+	// Otherwise, the request must wait. We can't wait for the merge to complete
+	// here, though. The replica might need to respond to a Subsume request in
+	// order for the merge to complete, and blocking here would force that
+	// Subsume request to sit in hold its latches forever, deadlocking the
+	// merge. Instead, we release the latches we acquired above and return a
+	// MergeInProgressError. The store will catch that error and resubmit the
+	// request after mergeCompleteCh closes. See #27442 for the full context.
 	return &roachpb.MergeInProgressError{}
 }
 
@@ -1534,6 +1578,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 	r.mu.mergeComplete = mergeCompleteCh
+	r.mu.mergeTxnID = intent.Txn.ID
 	// The RHS of a merge is not permitted to quiesce while a mergeComplete
 	// channel is installed. (If the RHS is quiescent when the merge commits, any
 	// orphaned followers would fail to queue themselves for GC.) Unquiesce the
@@ -1650,6 +1695,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		// notice that the replica has been destroyed and return an appropriate
 		// error. If the merge aborted, the requests will be handled normally.
 		r.mu.mergeComplete = nil
+		r.mu.mergeTxnID = uuid.UUID{}
 		close(mergeCompleteCh)
 		r.mu.Unlock()
 		r.raftMu.Unlock()
