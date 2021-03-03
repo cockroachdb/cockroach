@@ -4675,6 +4675,56 @@ The matrix transformation will be applied as follows for each coordinate:
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_rotatey": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"angle_radians", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				rotRadians := float64(tree.MustBeDFloat(args[1]))
+
+				ret, err := geomfn.RotateY(g.Geometry, rotRadians)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry whose coordinates are rotated about the y axis by a rotation angle.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+	"st_rotatez": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"g", types.Geometry},
+				{"angle_radians", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				rotRadians := float64(tree.MustBeDFloat(args[1]))
+
+				ret, err := geomfn.RotateZ(g.Geometry, rotRadians)
+				if err != nil {
+					return nil, err
+				}
+
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Returns a modified Geometry whose coordinates are rotated about the z axis by a rotation angle.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_addpoint": makeBuiltin(
 		defProps(),
 		tree.Overload{

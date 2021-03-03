@@ -694,3 +694,169 @@ func TestRotateX(t *testing.T) {
 		})
 	}
 }
+
+func TestRotateY(t *testing.T) {
+	testCases := []struct {
+		desc       string
+		input      geom.T
+		rotRadians float64
+		expected   geom.T
+	}{
+		{
+			desc:       "rotate a 2D point where angle is Pi/4",
+			input:      geom.NewPointFlat(geom.XY, []float64{10, 10}),
+			rotRadians: math.Pi / 4,
+			expected:   geom.NewPointFlat(geom.XY, []float64{7.071067811865476, 10}),
+		},
+		{
+			desc:       "rotate a 3D point where angle is Pi",
+			input:      geom.NewPointFlat(geom.XYZ, []float64{10, 10, 10}),
+			rotRadians: math.Pi,
+			expected:   geom.NewPointFlat(geom.XYZ, []float64{-10, 10, -10}),
+		},
+		{
+			desc:       "rotate a 3D point where angle is Pi/4",
+			input:      geom.NewPointFlat(geom.XYZ, []float64{10, 10, 10}),
+			rotRadians: math.Pi / 4,
+			expected:   geom.NewPointFlat(geom.XYZ, []float64{14.142135623730951, 10, 8.881784197001252e-16}),
+		},
+		{
+			desc:       "rotate a 2D line string where angle is Pi/3",
+			input:      geom.NewLineStringFlat(geom.XY, []float64{10, 15, 20, 25}),
+			rotRadians: math.Pi / 3,
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{5, 15, 10, 25}),
+		},
+		{
+			desc:       "rotate a 2D line string where angle is Pi/5",
+			input:      geom.NewLineStringFlat(geom.XY, []float64{10, 15, 20, 25, 30, 35}),
+			rotRadians: math.Pi / 5,
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{8.090169943749475, 15, 16.18033988749895, 25, 24.270509831248425, 35}),
+		},
+		{
+			desc:       "rotate a line polygon where angle is 0.5 radians",
+			input:      geom.NewPolygonFlat(geom.XY, []float64{1, 1, 5, 5, 1, 10, 1, 1}, []int{8}),
+			rotRadians: 0.5,
+			expected:   geom.NewPolygonFlat(geom.XY, []float64{0.877582561890373, 1, 4.387912809451864, 5, 0.877582561890373, 10, 0.877582561890373, 1}, []int{8}),
+		},
+		{
+			desc:       "rotate multiple 2D points where angle is Pi/5",
+			input:      geom.NewMultiPointFlat(geom.XY, []float64{10, 10, 20, 20, 30, 30}),
+			rotRadians: math.Pi / 5,
+			expected:   geom.NewMultiPointFlat(geom.XY, []float64{8.090169943749475, 10, 16.18033988749895, 20, 24.270509831248425, 30}),
+		},
+		{
+			desc:       "rotate multiple line strings where angle is Pi/4",
+			input:      geom.NewMultiLineStringFlat(geom.XY, []float64{10, 15, 20, 25, 30, 35, 40, 45}, []int{4, 8}),
+			rotRadians: math.Pi / 4,
+			expected:   geom.NewMultiLineStringFlat(geom.XY, []float64{7.071067811865476, 15, 14.142135623730951, 25, 21.213203435596427, 35, 28.284271247461902, 45}, []int{4, 8}),
+		},
+		{
+			desc:       "rotate multiple polygon strings where angle is Pi",
+			input:      geom.NewMultiPolygonFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3, 1, 1, 4, 4, 5, 5, 6, 6, 4, 4}, [][]int{{8}, {16}}),
+			rotRadians: math.Pi,
+			expected:   geom.NewMultiPolygonFlat(geom.XY, []float64{-1, 1, -2, 2, -3, 3, -1, 1, -4, 4, -5, 5, -6, 6, -4, 4}, [][]int{{8}, {16}}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
+			require.NoError(t, err)
+
+			actual, err := RotateY(geometry, tc.rotRadians)
+			require.NoError(t, err)
+
+			// Compare FlatCoords and assert they are within epsilon.
+			// This is because they exact matches may encounter rounding issues.
+			actualGeomT, err := actual.AsGeomT()
+			require.NoError(t, err)
+			require.Equal(t, tc.expected.SRID(), actualGeomT.SRID())
+			require.Equal(t, tc.expected.Layout(), actualGeomT.Layout())
+			require.IsType(t, tc.expected, actualGeomT)
+			require.InEpsilonSlice(t, tc.expected.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
+		})
+	}
+}
+
+func TestRotateZ(t *testing.T) {
+	testCases := []struct {
+		desc       string
+		input      geom.T
+		rotRadians float64
+		expected   geom.T
+	}{
+		{
+			desc:       "rotate a 2D point where angle is Pi/4",
+			input:      geom.NewPointFlat(geom.XY, []float64{10, 10}),
+			rotRadians: math.Pi / 4,
+			expected:   geom.NewPointFlat(geom.XY, []float64{8.881784197001252e-16, 14.142135623730951}),
+		},
+		{
+			desc:       "rotate a 3D point where angle is Pi",
+			input:      geom.NewPointFlat(geom.XYZ, []float64{10, 10, 10}),
+			rotRadians: math.Pi,
+			expected:   geom.NewPointFlat(geom.XYZ, []float64{-10, -10, 10}),
+		},
+		{
+			desc:       "rotate a 3D point where angle is Pi/4",
+			input:      geom.NewPointFlat(geom.XYZ, []float64{10, 10, 10}),
+			rotRadians: math.Pi / 4,
+			expected:   geom.NewPointFlat(geom.XYZ, []float64{8.881784197001252e-16, 14.142135623730951, 10}),
+		},
+		{
+			desc:       "rotate a 2D line string where angle is Pi/3",
+			input:      geom.NewLineStringFlat(geom.XY, []float64{10, 15, 20, 25}),
+			rotRadians: math.Pi / 3,
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{-7.990381056766577, 16.16025403784439, -11.650635094610964, 29.820508075688775}),
+		},
+		{
+			desc:       "rotate a 2D line string where angle is Pi/5",
+			input:      geom.NewLineStringFlat(geom.XY, []float64{10, 15, 20, 25, 30, 35}),
+			rotRadians: math.Pi / 5,
+			expected:   geom.NewLineStringFlat(geom.XY, []float64{-0.726608840637622, 18.013107438548943, 1.48570858018712, 31.98112990522315, 3.698026001011865, 45.949152371897355}),
+		},
+		{
+			desc:       "rotate a line polygon where angle is 0.5 radians",
+			input:      geom.NewPolygonFlat(geom.XY, []float64{1, 1, 5, 5, 1, 10, 1, 1}, []int{8}),
+			rotRadians: 0.5,
+			expected:   geom.NewPolygonFlat(geom.XY, []float64{0.39815702328617, 1.357008100494576, 1.990785116430849, 6.785040502472879, -3.916672824151657, 9.255251157507931, 0.39815702328617, 1.357008100494576}, []int{8}),
+		},
+		{
+			desc:       "rotate multiple 2D points where angle is Pi/5",
+			input:      geom.NewMultiPointFlat(geom.XY, []float64{10, 10, 20, 20, 30, 30}),
+			rotRadians: math.Pi / 5,
+			expected:   geom.NewMultiPointFlat(geom.XY, []float64{2.212317420824743, 13.968022466674206, 4.424634841649485, 27.936044933348413, 6.636952262474232, 41.90406740002262}),
+		},
+		{
+			desc:       "rotate multiple line strings where angle is Pi/4",
+			input:      geom.NewMultiLineStringFlat(geom.XY, []float64{10, 15, 20, 25, 30, 35, 40, 45}, []int{4, 8}),
+			rotRadians: math.Pi / 4,
+			expected:   geom.NewMultiLineStringFlat(geom.XY, []float64{-3.535533905932736, 17.67766952966369, -3.535533905932734, 31.81980515339464, -3.535533905932734, 45.96194077712559, -3.535533905932734, 60.10407640085654}, []int{4, 8}),
+		},
+		{
+			desc:       "rotate multiple polygon strings where angle is Pi",
+			input:      geom.NewMultiPolygonFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3, 1, 1, 4, 4, 5, 5, 6, 6, 4, 4}, [][]int{{8}, {16}}),
+			rotRadians: math.Pi,
+			expected:   geom.NewMultiPolygonFlat(geom.XY, []float64{-1, -1, -2, -2, -3, -3, -1, -1, -4, -4, -5, -5, -6, -6, -4, -4}, [][]int{{8}, {16}}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
+			require.NoError(t, err)
+
+			actual, err := RotateZ(geometry, tc.rotRadians)
+			require.NoError(t, err)
+
+			// Compare FlatCoords and assert they are within epsilon.
+			// This is because they exact matches may encounter rounding issues.
+			actualGeomT, err := actual.AsGeomT()
+			require.NoError(t, err)
+			require.Equal(t, tc.expected.SRID(), actualGeomT.SRID())
+			require.Equal(t, tc.expected.Layout(), actualGeomT.Layout())
+			require.IsType(t, tc.expected, actualGeomT)
+			require.InEpsilonSlice(t, tc.expected.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
+		})
+	}
+}
