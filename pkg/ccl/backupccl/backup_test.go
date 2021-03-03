@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -5632,6 +5633,45 @@ func TestBackupHandlesDroppedTypeStatsCollection(t *testing.T) {
 
 	// Ensure an incremental backup completes successfully.
 	sqlDB.Exec(t, `BACKUP foo TO $1`, dest)
+}
+
+func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const dest = "userfile:///basefoo"
+	const numAccounts = 1
+	_, tc, sqlDB, _, cleanupFn := BackupRestoreTestSetup(t, singleNode, numAccounts,
+		InitManualReplication)
+	defer cleanupFn()
+
+	var tableID int
+	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'bank'`).Scan(&tableID)
+	fmt.Println(tableID)
+	sqlDB.Exec(t, `BACKUP data.bank TO $1`, dest)
+
+	// Overwrite the stats file with some invalid data.
+	ctx := context.Background()
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest,
+		security.RootUserName())
+	require.NoError(t, err)
+	statsTable := StatsTable{
+		Statistics: []*stats.TableStatisticProto{{TableID: descpb.ID(tableID + 1), Name: "notbank"}},
+	}
+	require.NoError(t, writeTableStatistics(ctx, store, backupStatisticsFileName,
+		nil /* encryption */, &statsTable))
+
+	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+	sqlDB.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM "%s" WITH skip_missing_foreign_keys, into_db = "%s"`,
+		dest, "data 2"))
+
+	// Delete the stats file to ensure a restore can succeed even if statistics do
+	// not exist.
+	require.NoError(t, store.Delete(ctx, backupStatisticsFileName))
+	sqlDB.Exec(t, `CREATE DATABASE "data 3"`)
+	sqlDB.Exec(t, fmt.Sprintf(`RESTORE data.bank FROM "%s" WITH skip_missing_foreign_keys, into_db = "%s"`,
+		dest, "data 3"))
 }
 
 // Ensure that statistics are restored from correct backup.
