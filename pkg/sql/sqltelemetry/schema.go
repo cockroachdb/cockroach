@@ -12,6 +12,7 @@ package sqltelemetry
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 )
@@ -146,3 +147,24 @@ var CreateUnloggedTableCounter = telemetry.GetCounterOnce("sql.schema.create_unl
 // SchemaRefreshMaterializedView is to be incremented every time a materialized
 // view is refreshed.
 var SchemaRefreshMaterializedView = telemetry.GetCounterOnce("sql.schema.refresh_materialized_view")
+
+// SchemaJobSuccessCounter gets the successful job completion counter
+// for a given job type.
+func SchemaJobSuccessCounter(jobName string) telemetry.Counter {
+	jobName = strings.ToLower(strings.Replace(jobName, " ", "_", -1))
+	return telemetry.GetCounter(fmt.Sprintf("sql.schema.job.%s.successful", jobName))
+}
+
+// SchemaJobFailedCounter gets the failed job completion counter
+// for a given job type.
+func SchemaJobFailedCounter(jobName string) telemetry.Counter {
+	jobName = strings.ToLower(strings.Replace(jobName, " ", "_", -1))
+	return telemetry.GetCounter(fmt.Sprintf("sql.schema.job.%s.failed", jobName))
+}
+
+// SchemaJobCanceledCounter gets the canceled job completion counter
+// for a given job type.
+func SchemaJobCanceledCounter(jobName string) telemetry.Counter {
+	jobName = strings.ToLower(strings.Replace(jobName, " ", "_", -1))
+	return telemetry.GetCounter(fmt.Sprintf("sql.schema.job.%s.canceled", jobName))
+}
