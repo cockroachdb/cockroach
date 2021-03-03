@@ -368,15 +368,6 @@ func (t Timestamp) UnsafeToClockTimestamp() ClockTimestamp {
 	return ClockTimestamp(t)
 }
 
-// MustToClockTimestamp casts a Timestamp to a ClockTimestamp. Panics if the
-// timestamp is synthetic. See TryToClockTimestamp if you don't want to panic.
-func (t Timestamp) MustToClockTimestamp() ClockTimestamp {
-	if t.Synthetic {
-		panic(fmt.Sprintf("can't convert synthetic timestamp to ClockTimestamp: %s", t))
-	}
-	return ClockTimestamp(t)
-}
-
 // ToTimestamp upcasts a ClockTimestamp into a Timestamp.
 func (t ClockTimestamp) ToTimestamp() Timestamp {
 	if t.Synthetic {
