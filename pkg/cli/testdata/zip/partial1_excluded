@@ -21,6 +21,7 @@ retrieving SQL data for system.jobs... writing: debug/system.jobs.txt
 retrieving SQL data for system.descriptor... writing: debug/system.descriptor.txt
 retrieving SQL data for system.namespace... writing: debug/system.namespace.txt
 retrieving SQL data for system.namespace2... writing: debug/system.namespace2.txt
+retrieving SQL data for system.scheduled_jobs... writing: debug/system.scheduled_jobs.txt
 retrieving SQL data for crdb_internal.kv_node_status... writing: debug/crdb_internal.kv_node_status.txt
 retrieving SQL data for crdb_internal.kv_store_status... writing: debug/crdb_internal.kv_store_status.txt
 retrieving SQL data for crdb_internal.schema_changes... writing: debug/crdb_internal.schema_changes.txt
