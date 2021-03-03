@@ -419,7 +419,7 @@ var statsTemplate = template.Must(template.New("runtime stats").Funcs(template.F
 	`{{iBytes .MS.HeapAlloc}}/{{iBytes .GoTotal}} Go alloc/total{{.StaleMsg}} ` +
 	`(heap fragmentation: {{sub .MS.HeapInuse .MS.HeapAlloc}}, heap reserved: {{sub .MS.HeapIdle .MS.HeapReleased}}, heap released: {{iBytes .MS.HeapReleased}}), ` +
 	`{{iBytes .CS.CGoAllocatedBytes}}/{{iBytes .CS.CGoTotalBytes}} CGO alloc/total ({{oneDecimal .CGORate}} CGO/sec), ` +
-	`{{oneDecimalPercent .URate}}/{{oneDecimalPercent .SRate}} %%(u/s)time, {{oneDecimalPercent .GCPauseRatio}} %%gc ({{.GCCount}}x), ` +
+	`{{oneDecimalPercent .URate}}/{{oneDecimalPercent .SRate}} %(u/s)time, {{oneDecimalPercent .GCPauseRatio}} %gc ({{.GCCount}}x), ` +
 	`{{iBytes .DeltaNet.BytesRecv}}/{{iBytes .DeltaNet.BytesSent}} (r/w)net`))
 
 // SampleEnvironment queries the runtime system for various interesting metrics,
