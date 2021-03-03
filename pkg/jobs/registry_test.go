@@ -169,7 +169,6 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 
 		payload, err := protoutil.Marshal(&jobspb.Payload{
 			Description: name,
-			Lease:       &jobspb.Lease{NodeID: 1, Epoch: 1},
 			// register a mutation on the table so that jobs that reference
 			// the table are not considered orphaned
 			DescriptorIDs: []descpb.ID{
