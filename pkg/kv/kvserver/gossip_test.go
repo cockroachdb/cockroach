@@ -145,9 +145,6 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Skipping as part of test-infra-team flaky test cleanup.
-	skip.WithIssue(t, 50024)
-
 	// As of Nov 2018 it takes 3.6s.
 	skip.UnderShort(t)
 	ctx := context.Background()
