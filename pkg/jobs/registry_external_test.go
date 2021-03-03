@@ -57,16 +57,15 @@ func TestRoundtripJob(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	jobID := registry.MakeJobID()
-	storedJob := registry.NewJob(jobs.Record{
+	record := jobs.Record{
 		Description:   "beep boop",
 		Username:      security.MakeSQLUsernameFromPreNormalizedString("robot"),
 		DescriptorIDs: descpb.IDs{42},
 		Details:       jobspb.RestoreDetails{},
 		Progress:      jobspb.RestoreProgress{},
-	}, jobID)
-	if err := storedJob.Created(ctx); err != nil {
-		t.Fatal(err)
 	}
+	storedJob, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */)
+	require.NoError(t, err)
 	retrievedJob, err := registry.LoadJob(ctx, jobID)
 	if err != nil {
 		t.Fatal(err)
