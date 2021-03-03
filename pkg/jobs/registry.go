@@ -388,8 +388,8 @@ func (r *Registry) Run(
 	return nil
 }
 
-// NewJob creates a new Job.
-func (r *Registry) NewJob(record Record, jobID jobspb.JobID) *Job {
+// newJob creates a new Job.
+func (r *Registry) newJob(record Record, jobID jobspb.JobID) *Job {
 	job := &Job{
 		id:        jobID,
 		registry:  r,
@@ -416,7 +416,7 @@ func (r *Registry) NewJob(record Record, jobID jobspb.JobID) *Job {
 func (r *Registry) CreateJobWithTxn(
 	ctx context.Context, record Record, jobID jobspb.JobID, txn *kv.Txn,
 ) (*Job, error) {
-	j := r.NewJob(record, jobID)
+	j := r.newJob(record, jobID)
 
 	s, err := r.sqlInstance.Session(ctx)
 	if errors.Is(err, sqlliveness.NotStartedError) {
@@ -470,7 +470,7 @@ const invalidNodeID = 0
 func (r *Registry) CreateAdoptableJobWithTxn(
 	ctx context.Context, record Record, jobID jobspb.JobID, txn *kv.Txn,
 ) (*Job, error) {
-	j := r.NewJob(record, jobID)
+	j := r.newJob(record, jobID)
 
 	// We create a job record with an invalid lease to force the registry (on some node
 	// in the cluster) to adopt this job at a later time.
