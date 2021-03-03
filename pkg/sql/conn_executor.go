@@ -1463,12 +1463,16 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		return err // err could be io.EOF
 	}
 
+	// Ensure that every statement has a tracing span set up.
 	ctx, sp := tracing.EnsureChildSpan(
 		ctx, ex.server.cfg.AmbientCtx.Tracer,
 		// We print the type of command, not the String() which includes long
 		// statements.
 		cmd.command())
 	defer sp.Finish()
+	// We expect that the span is not used directly, so we'll overwrite the
+	// local variable.
+	sp = nil
 
 	if log.ExpensiveLogEnabled(ctx, 2) || ex.eventLog != nil {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
