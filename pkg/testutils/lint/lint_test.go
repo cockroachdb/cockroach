@@ -433,7 +433,7 @@ func TestLint(t *testing.T) {
 					":!nightly",
 					":!testutils/lint",
 					":!util/envutil/env.go",
-					":!testutils/bazel.go",
+					":!testutils/data_path.go",
 					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
 					":!util/grpcutil", // GRPC_GO_* variables

@@ -12,6 +12,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 #
 # gazelle:prefix github.com/cockroachdb/cockroach
 # gazelle:build_file_name BUILD.bazel
+# gazelle:build_tags bazel
 
 # Enable protobuf generation.
 #

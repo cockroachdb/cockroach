@@ -151,6 +151,8 @@ github.com/aws/aws-sdk-go v1.36.33/go.mod h1:hcU610XS61/+aQV88ixoOzUoG7v3b31pl2z
 github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e h1:190ugM9MsyFauTkR/UqcHG/mn5nmFe6SvHJqEHIrtrA=
 github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e/go.mod h1:IOXAcuKIFq/mDyuQ4wyJuJ79XLMsmLM+5RdQ+vWrL7o=
 github.com/aymerick/raymond v2.0.3-0.20180322193309-b565731e1464+incompatible/go.mod h1:osfaiScAUVup+UC9Nfq76eWqDhXlp+4UYaA8uhTBO6g=
+github.com/bazelbuild/rules_go v0.26.0 h1:2F449QezDZcVW6Jt+kSs8Htd/YI3EXMcvd0aNfVNCI4=
+github.com/bazelbuild/rules_go v0.26.0/go.mod h1:MC23Dc/wkXEyk3Wpq6lCqz0ZAYOZDw2DR5y3N1q2i7M=
 github.com/benesch/cgosymbolizer v0.0.0-20180702220239-70e1ee2b39d3 h1:Llg88pHOiUbcFOFhr009G8fOBQL6gaVDnxUUeWZuLog=
 github.com/benesch/cgosymbolizer v0.0.0-20180702220239-70e1ee2b39d3/go.mod h1:eMD2XUcPsHYbakFEocKrWZp47G0MRJYoC60qFblGjpA=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
