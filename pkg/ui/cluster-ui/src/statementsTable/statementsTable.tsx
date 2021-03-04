@@ -24,7 +24,6 @@ import {
 } from "./statementsTableContent";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-
 import styles from "./statementsTable.module.scss";
 const cx = classNames.bind(styles);
 const longToInt = (d: number | Long) => Number(FixLong(d));
@@ -109,6 +108,7 @@ export interface AggregateStatistics {
   // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
   implicitTxn: boolean;
+  fullScan: boolean;
   stats: StatementStatistics;
   drawer?: boolean;
   firstCellBordered?: boolean;

@@ -23,7 +23,6 @@ import {
 import { AggregateStatistics } from "../statementsTable";
 
 type OwnProps = StatementsPageOuterProps & RouteComponentProps;
-
 export const ConnectedStatementsPage = withRouter(
   connect<StatementsPageStateProps, StatementsPageDispatchProps, OwnProps>(
     (state: AppState, props: StatementsPageProps) => ({
