@@ -739,6 +739,9 @@ func FrechetDistanceDensify(a, b geo.Geometry, densifyFrac float64) (*float64, e
 	if a.SRID() != b.SRID() {
 		return nil, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
+	if err := verifyDensifyFrac(densifyFrac); err != nil {
+		return nil, err
+	}
 	distance, err := geos.FrechetDistanceDensify(a.EWKB(), b.EWKB(), densifyFrac)
 	if err != nil {
 		return nil, err
@@ -769,9 +772,26 @@ func HausdorffDistanceDensify(a, b geo.Geometry, densifyFrac float64) (*float64,
 	if a.SRID() != b.SRID() {
 		return nil, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
+	if err := verifyDensifyFrac(densifyFrac); err != nil {
+		return nil, err
+	}
+
 	distance, err := geos.HausdorffDistanceDensify(a.EWKB(), b.EWKB(), densifyFrac)
 	if err != nil {
 		return nil, err
 	}
 	return &distance, nil
+}
+
+func verifyDensifyFrac(f float64) error {
+	if f < 0 || f > 1 {
+		return errors.Newf("fraction must be in range [0, 1], got %f", f)
+	}
+	// Very small densifyFrac potentially causes a SIGFPE or generate a large
+	// amount of memory. Guard against this.
+	const fracTooSmall = 1e-6
+	if f > 0 && f < fracTooSmall {
+		return errors.Newf("fraction %f is too small, must be at least %f", f, fracTooSmall)
+	}
+	return nil
 }
