@@ -110,8 +110,10 @@ func (o *ordinalityProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Output: o.Out.Stats(),
 	}
+	return stats
 }

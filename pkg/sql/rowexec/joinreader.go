@@ -742,7 +742,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 
 	// TODO(asubiotto): Add memory and disk usage to EXPLAIN ANALYZE.
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(jr.GetBytesRead())),
@@ -752,6 +753,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: jr.Out.Stats(),
 	}
+	return stats
 }
 
 // GetBytesRead is part of the execinfra.KVReader interface.

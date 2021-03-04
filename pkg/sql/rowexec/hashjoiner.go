@@ -563,7 +563,8 @@ func (h *hashJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{lis, ris},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(h.MemMonitor.MaximumBytes())),
@@ -571,6 +572,7 @@ func (h *hashJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: h.Out.Stats(),
 	}
+	return stats
 }
 
 // Some types of joins need to mark rows that matched.

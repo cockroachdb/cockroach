@@ -130,7 +130,8 @@ func (s *sorterBase) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(s.MemMonitor.MaximumBytes())),
@@ -138,6 +139,7 @@ func (s *sorterBase) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: s.Out.Stats(),
 	}
+	return stats
 }
 
 func newSorter(

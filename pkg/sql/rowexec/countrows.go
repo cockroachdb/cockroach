@@ -106,8 +106,10 @@ func (ag *countAggregator) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Output: ag.Out.Stats(),
 	}
+	return stats
 }

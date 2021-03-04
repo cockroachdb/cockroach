@@ -837,7 +837,8 @@ func (w *windower) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(w.MemMonitor.MaximumBytes())),
@@ -845,6 +846,7 @@ func (w *windower) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: w.Out.Stats(),
 	}
+	return stats
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

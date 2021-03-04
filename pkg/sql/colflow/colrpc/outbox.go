@@ -65,8 +65,8 @@ type Outbox struct {
 	// getStats, when non-nil, returns all of the execution statistics of the
 	// operators that are in the same tree as this Outbox. The stats will be
 	// added into the span as Structured payload and returned to the gateway as
-	// execinfrapb.ProducerMetadata.
-	getStats func() []*execinfrapb.ComponentStats
+	// execinfrapb.ProducerMetadata. getStats also returns a cleanup function.
+	getStats func() ([]*execinfrapb.ComponentStats, func())
 
 	// A copy of Run's caller ctx, with no StreamID tag.
 	// Used to pass a clean context to the input.Next.
@@ -75,14 +75,15 @@ type Outbox struct {
 
 // NewOutbox creates a new Outbox.
 // - getStats, when non-nil, returns all of the execution statistics of the
-//   operators that are in the same tree as this Outbox.
+//   operators that are in the same tree as this Outbox as well as a cleanup
+//   function.
 func NewOutbox(
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
-	getStats func() []*execinfrapb.ComponentStats,
+	getStats func() ([]*execinfrapb.ComponentStats, func()),
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -294,7 +295,11 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 		)
 	}
 	if o.span != nil && o.getStats != nil {
-		for _, s := range o.getStats() {
+		stats, cleanup := o.getStats()
+		// We will get the recording from the trace below, at which point it is
+		// safe to perform the cleanup.
+		defer cleanup()
+		for _, s := range stats {
 			o.span.RecordStructured(s)
 		}
 	}

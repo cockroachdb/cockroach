@@ -12,6 +12,7 @@ package execinfrapb
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -330,18 +331,20 @@ func ExtractStatsFromSpans(
 	statsMap := make(map[ComponentID]*ComponentStats)
 	// componentStats is only used to check whether a structured payload item is
 	// of ComponentStats type.
-	var componentStats ComponentStats
+	componentStats := NewComponentStats()
+	defer componentStats.Release()
 	for i := range spans {
 		span := &spans[i]
 		span.Structured(func(item *types.Any) {
-			if !types.Is(item, &componentStats) {
+			if !types.Is(item, componentStats) {
 				return
 			}
-			var stats ComponentStats
-			if err := protoutil.Unmarshal(item.Value, &stats); err != nil {
+			stats := NewComponentStats()
+			if err := protoutil.Unmarshal(item.Value, stats); err != nil {
 				return
 			}
 			if stats.Component == (ComponentID{}) {
+				stats.Release()
 				return
 			}
 			if makeDeterministic {
@@ -349,15 +352,34 @@ func ExtractStatsFromSpans(
 			}
 			existing := statsMap[stats.Component]
 			if existing == nil {
-				statsMap[stats.Component] = &stats
+				statsMap[stats.Component] = stats
 			} else {
 				// In the vectorized flow we can have multiple statistics
 				// entries for one component. Merge the stats together.
 				// TODO(radu): figure out a way to emit the statistics correctly
 				// in the first place.
-				statsMap[stats.Component] = existing.Union(&stats)
+				statsMap[stats.Component] = existing.Union(stats)
+				stats.Release()
 			}
 		})
 	}
 	return statsMap
+}
+
+var componentStatsPool = sync.Pool{
+	New: func() interface{} {
+		return &ComponentStats{}
+	},
+}
+
+// NewComponentStats returns a new ComponentStats object. It should be
+// Release()'d once no longer needed.
+func NewComponentStats() *ComponentStats {
+	return componentStatsPool.Get().(*ComponentStats)
+}
+
+// Release puts s back into its pool.
+func (s *ComponentStats) Release() {
+	*s = ComponentStats{}
+	componentStatsPool.Put(s)
 }

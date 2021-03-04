@@ -774,7 +774,8 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(ij.GetBytesRead())),
@@ -788,6 +789,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: ij.Out.Stats(),
 	}
+	return stats
 }
 
 // GetBytesRead is part of the execinfra.KVReader interface.

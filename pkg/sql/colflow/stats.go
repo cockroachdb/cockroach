@@ -147,7 +147,8 @@ type vectorizedStatsCollectorImpl struct {
 func (vsc *vectorizedStatsCollectorImpl) getStats() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := vsc.batchInfoCollector.finish()
 
-	s := &execinfrapb.ComponentStats{Component: vsc.componentID}
+	s := execinfrapb.NewComponentStats()
+	s.Component = vsc.componentID
 
 	for _, memMon := range vsc.memMonitors {
 		s.Exec.MaxAllocatedMem.Add(memMon.MaximumBytes())
@@ -219,7 +220,8 @@ type networkVectorizedStatsCollectorImpl struct {
 func (nvsc *networkVectorizedStatsCollectorImpl) getStats() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := nvsc.batchInfoCollector.finish()
 
-	s := &execinfrapb.ComponentStats{Component: nvsc.componentID}
+	s := execinfrapb.NewComponentStats()
+	s.Component = nvsc.componentID
 
 	s.NetRx.Latency.Set(nvsc.latency)
 	s.NetRx.WaitTime.Set(time)

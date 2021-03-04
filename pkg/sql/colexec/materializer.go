@@ -75,7 +75,9 @@ type drainHelper struct {
 	sources      execinfrapb.MetadataSources
 	ctx          context.Context
 	bufferedMeta []execinfrapb.ProducerMetadata
-	getStats     func() []*execinfrapb.ComponentStats
+	getStats     func() ([]*execinfrapb.ComponentStats, func())
+	// cleanup, if set, will be called in close().
+	cleanup func()
 }
 
 var _ execinfra.RowSource = &drainHelper{}
@@ -88,7 +90,7 @@ var drainHelperPool = sync.Pool{
 }
 
 func newDrainHelper(
-	sources execinfrapb.MetadataSources, getStats func() []*execinfrapb.ComponentStats,
+	sources execinfrapb.MetadataSources, getStats func() ([]*execinfrapb.ComponentStats, func()),
 ) *drainHelper {
 	d := drainHelperPool.Get().(*drainHelper)
 	d.sources = sources
@@ -134,7 +136,12 @@ func (d *drainHelper) ConsumerDone() {
 		// precisely to the embedded ProcessorBase) which is necessary in order
 		// to not collect same trace data twice.
 		if sp := tracing.SpanFromContext(d.ctx); sp != nil {
-			for _, s := range d.getStats() {
+			var stats []*execinfrapb.ComponentStats
+			// We cannot perform the cleanup here because it is safe to do so
+			// only after the trace has been collected, so we capture the
+			// function and will call it in close().
+			stats, d.cleanup = d.getStats()
+			for _, s := range stats {
 				sp.RecordStructured(s)
 			}
 		}
@@ -144,6 +151,12 @@ func (d *drainHelper) ConsumerDone() {
 
 // ConsumerClosed implements the RowSource interface.
 func (d *drainHelper) ConsumerClosed() {}
+
+func (d *drainHelper) close() {
+	if d.cleanup != nil {
+		d.cleanup()
+	}
+}
 
 // Release implements the execinfra.Releasable interface.
 func (d *drainHelper) Release() {
@@ -188,7 +201,7 @@ func NewMaterializer(
 	output execinfra.RowReceiver,
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
-	getStats func() []*execinfrapb.ComponentStats,
+	getStats func() ([]*execinfrapb.ComponentStats, func()),
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := materializerPool.Get().(*Materializer)
@@ -321,6 +334,7 @@ func (m *Materializer) close() {
 		if m.cancelFlow != nil {
 			m.cancelFlow()()
 		}
+		m.drainHelper.close()
 		m.closers.CloseAndLogOnErr(m.Ctx, "materializer")
 	}
 }

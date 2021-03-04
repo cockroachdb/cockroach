@@ -705,6 +705,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 			if stats := pb.ExecStatsForTrace(); stats != nil {
 				stats.Component = pb.FlowCtx.ProcessorComponentID(pb.processorID)
 				pb.span.RecordStructured(stats)
+				defer stats.Release()
 			}
 		}
 		if trace := pb.span.GetRecording(); trace != nil {

@@ -1009,10 +1009,12 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		kvStats.TuplesRead.MaybeAdd(fis.NumTuples)
 		kvStats.KVTime.MaybeAdd(fis.WaitTime)
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		KV:     kvStats,
 		Output: z.Out.Stats(),
 	}
+	return stats
 }
 
 // GetBytesRead is part of the execinfra.KVReader interface.

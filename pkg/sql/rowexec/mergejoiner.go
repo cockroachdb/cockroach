@@ -280,13 +280,15 @@ func (m *mergeJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{lis, ris},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem: optional.MakeUint(uint64(m.MemMonitor.MaximumBytes())),
 		},
 		Output: m.Out.Stats(),
 	}
+	return stats
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

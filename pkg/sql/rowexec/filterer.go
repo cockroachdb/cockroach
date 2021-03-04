@@ -112,10 +112,12 @@ func (f *filtererProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Output: f.Out.Stats(),
 	}
+	return stats
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

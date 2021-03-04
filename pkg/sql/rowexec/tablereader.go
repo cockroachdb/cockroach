@@ -280,7 +280,8 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	return &execinfrapb.ComponentStats{
+	stats := execinfrapb.NewComponentStats()
+	*stats = execinfrapb.ComponentStats{
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(tr.GetBytesRead())),
 			TuplesRead:     is.NumTuples,
@@ -289,6 +290,7 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: tr.Out.Stats(),
 	}
+	return stats
 }
 
 // GetBytesRead is part of the execinfra.KVReader interface.
