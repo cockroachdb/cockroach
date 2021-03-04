@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -48,23 +49,22 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		type tbDesc = descpb.TableDescriptor
 		type typDesc = descpb.TypeDescriptor
 		ts1 := hlc.Timestamp{WallTime: 1}
-		mkTable := func(descriptor tbDesc) catalog.TableDescriptor {
-			desc := tabledesc.NewImmutable(descriptor)
-			desc.TableDesc().ModificationTime = ts1
-			return desc
+		mkTable := func(descriptor tbDesc) catalog.Descriptor {
+			descProto := tabledesc.NewBuilder(&descriptor).BuildImmutable().DescriptorProto()
+			return catalogkv.NewBuilderWithMVCCTimestamp(descProto, ts1).BuildImmutable()
 		}
-		mkDB := func(id descpb.ID, name string) *dbdesc.Immutable {
+		mkDB := func(id descpb.ID, name string) catalog.Descriptor {
 			return &dbdesc.NewInitial(id, name, security.AdminRoleName()).Immutable
 		}
-		mkTyp := func(desc typDesc) *typedesc.Immutable {
+		mkTyp := func(desc typDesc) catalog.Descriptor {
 			// Set a default parent schema for the type descriptors.
 			if desc.ParentSchemaID == descpb.InvalidID {
 				desc.ParentSchemaID = keys.PublicSchemaID
 			}
-			return typedesc.NewImmutable(desc)
+			return typedesc.NewBuilder(&desc).BuildImmutable()
 		}
-		mkSchema := func(desc scDesc) *schemadesc.Immutable {
-			return schemadesc.NewImmutable(desc)
+		mkSchema := func(desc scDesc) catalog.Descriptor {
+			return schemadesc.NewBuilder(&desc).BuildImmutable()
 		}
 		toOid := typedesc.TypeIDToOID
 		typeExpr := "'hello'::@100015 = 'hello'::@100015"

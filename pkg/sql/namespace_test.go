@@ -154,18 +154,18 @@ func TestNamespaceTableSemantics(t *testing.T) {
 	// Creating a table should fail now, because an entry was explicitly added to
 	// the old system.namespace_deprecated table.
 	_, err = sqlDB.Exec(`CREATE TABLE test.public.rel(a int)`)
-	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
+	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("test.public.rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 	// Same applies to a table which doesn't explicitly specify the public schema,
 	// as that is the default.
 	_, err = sqlDB.Exec(`CREATE TABLE test.rel(a int)`)
-	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
+	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("test.public.rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 	// Can not create a sequence with the same name either.
 	_, err = sqlDB.Exec(`CREATE SEQUENCE test.rel`)
-	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
+	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("test.public.rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
@@ -174,7 +174,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = sqlDB.Exec(`ALTER TABLE rel2 RENAME TO rel`)
-	if testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
+	if testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("test.public.rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
@@ -183,7 +183,7 @@ func TestNamespaceTableSemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = sqlDB.Exec(`ALTER SEQUENCE rel2 RENAME TO rel`)
-	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("rel").Error()) {
+	if !testutils.IsError(err, sqlerrors.NewRelationAlreadyExistsError("defaultdb.public.rel").Error()) {
 		t.Fatalf("unexpected error %v", err)
 	}
 

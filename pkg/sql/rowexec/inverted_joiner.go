@@ -189,7 +189,7 @@ func newInvertedJoiner(
 		return nil, errors.AssertionFailedf("unexpected inverted join type %s", spec.Type)
 	}
 	ij := &invertedJoiner{
-		desc:                 tabledesc.NewImmutable(spec.Table),
+		desc:                 tabledesc.NewBuilder(&spec.Table).BuildImmutableTable(),
 		input:                input,
 		inputTypes:           input.OutputTypes(),
 		prefixEqualityCols:   spec.PrefixEqualityColumns,

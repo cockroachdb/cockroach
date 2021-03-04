@@ -81,8 +81,7 @@ func TestExecutorDescriptorMutationOps(t *testing.T) {
 	var table *tabledesc.Mutable
 	makeTable := func(f func(mutable *tabledesc.Mutable)) func() catalog.TableDescriptor {
 		return func() catalog.TableDescriptor {
-			cpy := tabledesc.NewExistingMutable(
-				*table.ImmutableCopy().(catalog.TableDescriptor).TableDesc())
+			cpy := tabledesc.NewBuilder(table.TableDesc()).BuildExistingMutableTable()
 			if f != nil {
 				f(cpy)
 			}

@@ -835,7 +835,7 @@ func loadSQLDescsFromBackupsAtTime(
 	unwrapDescriptors := func(raw []descpb.Descriptor) []catalog.Descriptor {
 		ret := make([]catalog.Descriptor, 0, len(raw))
 		for i := range raw {
-			ret = append(ret, catalogkv.UnwrapDescriptorRaw(context.TODO(), &raw[i]))
+			ret = append(ret, catalogkv.NewBuilder(&raw[i]).BuildExistingMutable())
 		}
 		return ret
 	}
@@ -869,7 +869,7 @@ func loadSQLDescsFromBackupsAtTime(
 	for _, raw := range byID {
 		// A revision may have been captured before it was in a DB that is
 		// backed up -- if the DB is missing, filter the object.
-		desc := catalogkv.UnwrapDescriptorRaw(context.TODO(), raw)
+		desc := catalogkv.NewBuilder(raw).BuildExistingMutable()
 		var isObject bool
 		switch desc.(type) {
 		case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:

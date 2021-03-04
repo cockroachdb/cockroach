@@ -44,6 +44,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemadesc",

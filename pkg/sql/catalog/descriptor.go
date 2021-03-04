@@ -27,6 +27,55 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// DescriptorType is a symbol representing the (sub)type of a descriptor.
+type DescriptorType string
+
+const (
+	// Any represents any descriptor.
+	Any DescriptorType = "any"
+
+	// Database is for database descriptors.
+	Database = "database"
+
+	// Table is for table descriptors.
+	Table = "relation"
+
+	// Type is for type descriptors.
+	Type = "type"
+
+	// Schema is for schema descriptors.
+	Schema = "schema"
+)
+
+// DescriptorBuilder interfaces are used to build catalog.Descriptor
+// objects.
+type DescriptorBuilder interface {
+
+	// DescriptorType returns a symbol identifying the type of the descriptor
+	// built by this builder.
+	DescriptorType() DescriptorType
+
+	// RunPostDeserializationChanges attempts to perform post-deserialization
+	// changes to the descriptor being built.
+	// These changes are always done on a best-effort basis, meaning that all
+	// arguments other than ctx are optional. As of writing this, the only other
+	// argument is a DescGetter and a nil value will cause table foreign-key
+	// representation upgrades to be skipped.
+	RunPostDeserializationChanges(ctx context.Context, dg DescGetter) error
+
+	// BuildImmutable returns an immutable Descriptor.
+	BuildImmutable() Descriptor
+
+	// BuildExistingMutable returns a MutableDescriptor with the cluster version
+	// set to the original value of the descriptor used to initialize the builder.
+	// This is for descriptors that already exist.
+	BuildExistingMutable() MutableDescriptor
+
+	// BuildCreatedMutable returns a MutableDescriptor with a nil cluster version.
+	// This is for a descriptor that is created in the same transaction.
+	BuildCreatedMutable() MutableDescriptor
+}
+
 // IndexOpts configures the behavior of catalog.ForEachIndex and
 // catalog.FindIndex.
 type IndexOpts struct {
@@ -61,7 +110,7 @@ type Descriptor interface {
 	GetDrainingNames() []descpb.NameInfo
 
 	GetPrivileges() *descpb.PrivilegeDescriptor
-	TypeName() string
+	DescriptorType() DescriptorType
 	GetAuditMode() descpb.TableDescriptor_AuditMode
 
 	Public() bool
@@ -525,9 +574,9 @@ func FilterDescriptorState(desc Descriptor, flags tree.CommonLookupFlags) error 
 	case desc.Dropped() && !flags.IncludeDropped:
 		return NewInactiveDescriptorError(ErrDescriptorDropped)
 	case desc.Offline() && !flags.IncludeOffline:
-		err := errors.Errorf("%s %q is offline", desc.TypeName(), desc.GetName())
+		err := errors.Errorf("%s %q is offline", desc.DescriptorType(), desc.GetName())
 		if desc.GetOfflineReason() != "" {
-			err = errors.Errorf("%s %q is offline: %s", desc.TypeName(), desc.GetName(), desc.GetOfflineReason())
+			err = errors.Errorf("%s %q is offline: %s", desc.DescriptorType(), desc.GetName(), desc.GetOfflineReason())
 		}
 		return NewInactiveDescriptorError(err)
 	case desc.Adding():

@@ -332,7 +332,7 @@ func (tc *Collection) getDescriptorFromStore(
 		}
 	}
 	// Always pick up a mutable copy so it can be cached.
-	desc, err = catalogkv.GetAnyDescriptorByID(ctx, txn, codec, descID, catalogkv.Mutable)
+	desc, err = catalogkv.GetMutableDescriptorByID(ctx, txn, codec, descID)
 	if err != nil {
 		return false, nil, err
 	} else if desc == nil && isSystemDescriptor {
@@ -397,8 +397,7 @@ func (tc *Collection) getDatabaseByName(
 		// that callers of this method will check the privileges on the descriptor
 		// (like any other database) and return an error.
 		if mutable {
-			return true, dbdesc.NewExistingMutable(
-				*systemschema.MakeSystemDatabaseDesc().DatabaseDesc()), nil
+			return true, dbdesc.NewBuilder(systemschema.MakeSystemDatabaseDesc().DatabaseDesc()).BuildExistingMutableDatabase(), nil
 		}
 		return true, systemschema.MakeSystemDatabaseDesc(), nil
 	}
@@ -991,17 +990,16 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 		// Always pick up a mutable copy so it can be cached.
 		// TODO (lucy): If the descriptor doesn't exist, should we generate our
 		// own error here instead of using the one from catalogkv?
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id,
-			catalogkv.Mutable, catalogkv.AnyDescriptorKind, true /* required */)
+		desc, err := catalogkv.MustGetMutableDescriptorByID(ctx, txn, tc.codec(), id)
 		if err != nil {
 			return nil, err
 		}
-		ud, err := tc.addUncommittedDescriptor(desc.(catalog.MutableDescriptor))
+		ud, err := tc.addUncommittedDescriptor(desc)
 		if err != nil {
 			return nil, err
 		}
 		if !mutable {
-			desc = ud.immutable
+			return ud.immutable, nil
 		}
 		return desc, nil
 	}
@@ -1273,7 +1271,10 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, getType); err != nil {
 			return nil, err
 		}
-		return tabledesc.NewImmutableWithIsUncommittedVersion(*descBase, t.IsUncommittedVersion()), nil
+		if t.IsUncommittedVersion() {
+			return tabledesc.NewBuilderForUncommittedVersion(descBase).BuildImmutableTable(), nil
+		}
+		return tabledesc.NewBuilder(descBase).BuildImmutableTable(), nil
 	default:
 		return desc, nil
 	}

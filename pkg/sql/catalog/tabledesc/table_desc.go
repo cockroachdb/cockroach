@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -107,11 +106,10 @@ func (desc *wrapper) IsTemporary() bool {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	// TODO (lucy): Should the immutable descriptor constructors always make a
-	// copy, so we don't have to do it here?
-	imm := NewImmutable(*protoutil.Clone(desc.TableDesc()).(*descpb.TableDescriptor))
-	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
-	return imm
+	if desc.IsUncommittedVersion() {
+		return NewBuilderForUncommittedVersion(desc.TableDesc()).BuildImmutable()
+	}
+	return NewBuilder(desc.TableDesc()).BuildImmutable()
 }
 
 // IsUncommittedVersion implements the Descriptor interface.

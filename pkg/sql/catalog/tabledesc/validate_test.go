@@ -1050,8 +1050,8 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			desc := NewImmutable(d.desc)
-			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.TypeName(), desc.GetName(), desc.GetID(), d.err)
+			desc := NewBuilder(&d.desc).BuildImmutableTable()
+			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
 			if err := catalog.ValidateSelf(desc); err == nil {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, d.desc)
 			} else if expectedErr != err.Error() {
@@ -1476,13 +1476,13 @@ func TestValidateCrossTableReferences(t *testing.T) {
 
 	for i, test := range tests {
 		descs := catalog.MapDescGetter{}
-		descs[1] = dbdesc.NewImmutable(descpb.DatabaseDescriptor{ID: 1})
+		descs[1] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable()
 		for _, otherDesc := range test.otherDescs {
 			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
-			descs[otherDesc.ID] = NewImmutable(otherDesc)
+			descs[otherDesc.ID] = NewBuilder(&otherDesc).BuildImmutable()
 		}
-		desc := NewImmutable(test.desc)
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.TypeName(), desc.GetName(), desc.GetID(), test.err)
+		desc := NewBuilder(&test.desc).BuildImmutable()
+		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 		const validateCrossReferencesOnly = catalog.ValidationLevelSelfAndCrossReferences &^ (catalog.ValidationLevelSelfAndCrossReferences >> 1)
 		if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
 			if test.err != "" {
@@ -1694,7 +1694,7 @@ func TestValidatePartitioning(t *testing.T) {
 	}
 	for i, test := range tests {
 		t.Run(test.err, func(t *testing.T) {
-			desc := NewImmutable(test.desc)
+			desc := NewBuilder(&test.desc).BuildImmutableTable()
 			err := ValidatePartitioning(desc)
 			if !testutils.IsError(err, test.err) {
 				t.Errorf(`%d: got "%v" expected "%v"`, i, err, test.err)
