@@ -136,18 +136,22 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		ticker := time.NewTicker(withJitter(readInterval.Get(&p.settings.SV), rand.Int63n))
-		defer ticker.Stop()
+		d := func() time.Duration {
+			return withJitter(readInterval.Get(&p.settings.SV), rand.Int63n)
+		}
+		t := timeutil.NewTimer()
+		t.Reset(d())
+		defer t.Stop()
 
 		for {
 			select {
-			case <-ticker.C:
+			case <-t.C:
+				t.Read = true
+				// Jitter added to de-synchronize different nodes' probe loops.
+				t.Reset(d())
 			case <-stopper.ShouldQuiesce():
 				return
 			}
-
-			// Jitter added to de-synchronize different nodes' probe loops.
-			ticker.Reset(withJitter(readInterval.Get(&p.settings.SV), rand.Int63n))
 
 			p.probe(ctx, p.db)
 		}

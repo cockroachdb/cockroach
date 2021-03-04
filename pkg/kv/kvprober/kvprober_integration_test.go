@@ -221,6 +221,9 @@ func initTestProber(
 
 	// Given small test cluster, this better exercises the planning logic.
 	kvprober.NumStepsToPlanAtOnce.Override(&s.ClusterSettings().SV, 10)
+	// Want these tests to run as fast as possible; see planner_test.go for a
+	// unit test of the rate limiting.
+	p.SetPlanningRateLimit(0)
 
 	return s, sqlDB, p, func() {
 		s.Stopper().Stop(context.Background())
