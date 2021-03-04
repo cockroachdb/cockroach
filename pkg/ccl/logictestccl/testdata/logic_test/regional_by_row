@@ -1796,6 +1796,51 @@ DATABASE add_regions_in_txn  ALTER DATABASE add_regions_in_txn CONFIGURE ZONE US
                              lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
+CREATE TABLE regional_by_row_unique_in_column (
+  a INT PRIMARY KEY,
+  b INT UNIQUE,
+  c INT,
+  FAMILY (a, b, c)
+) LOCALITY REGIONAL BY ROW
+
+query TT
+SHOW CREATE TABLE regional_by_row_unique_in_column
+----
+regional_by_row_unique_in_column  CREATE TABLE public.regional_by_row_unique_in_column (
+                                  a INT8 NOT NULL,
+                                  b INT8 NULL,
+                                  c INT8 NULL,
+                                  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                                  CONSTRAINT "primary" PRIMARY KEY (a ASC),
+                                  UNIQUE INDEX regional_by_row_unique_in_column_b_key (b ASC),
+                                  FAMILY fam_0_a_b_c_crdb_region (a, b, c, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE regional_by_row_fk (
+  d INT PRIMARY KEY,
+  e INT UNIQUE REFERENCES regional_by_row_unique_in_column(a),
+  f INT UNIQUE REFERENCES regional_by_row_unique_in_column(b),
+  FAMILY (d, e, f)
+) LOCALITY REGIONAL BY ROW
+
+query TT
+SHOW CREATE TABLE regional_by_row_fk
+----
+regional_by_row_fk          CREATE TABLE public.regional_by_row_fk (
+                            d INT8 NOT NULL,
+                            e INT8 NULL,
+                            f INT8 NULL,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            CONSTRAINT "primary" PRIMARY KEY (d ASC),
+                            CONSTRAINT fk_e_ref_regional_by_row_unique_in_column FOREIGN KEY (e) REFERENCES public.regional_by_row_unique_in_column(a),
+                            CONSTRAINT fk_f_ref_regional_by_row_unique_in_column FOREIGN KEY (f) REFERENCES public.regional_by_row_unique_in_column(b),
+                            UNIQUE INDEX regional_by_row_fk_e_key (e ASC),
+                            UNIQUE INDEX regional_by_row_fk_f_key (f ASC),
+                            FAMILY fam_0_d_e_f_crdb_region (d, e, f, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
 CREATE DATABASE drop_regions PRIMARY REGION "ca-central-1" REGIONS "us-east-1", "ap-southeast-2";
 USE drop_regions;
 CREATE TABLE regional_by_row (
