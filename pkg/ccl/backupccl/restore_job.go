@@ -2075,15 +2075,7 @@ func getRestoringPrivileges(
 	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
-) (*descpb.PrivilegeDescriptor, error) {
-	// Don't update the privileges of descriptors if we're doing a cluster
-	// restore.
-	if descCoverage == tree.AllDescriptors {
-		return nil, nil
-	}
-
-	var updatedPrivileges *descpb.PrivilegeDescriptor
-
+) (updatedPrivileges *descpb.PrivilegeDescriptor, err error) {
 	switch desc := desc.(type) {
 	case catalog.TableDescriptor, catalog.SchemaDescriptor:
 		if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
@@ -2091,14 +2083,13 @@ func getRestoringPrivileges(
 			// table and schema should be that of the parent DB.
 			//
 			// Leave the privileges of the temp system tables as the default too.
-			if descCoverage != tree.AllDescriptors || wrote.GetName() == restoreTempSystemDB {
+			if descCoverage == tree.RequestedDescriptors || wrote.GetName() == restoreTempSystemDB {
 				updatedPrivileges = wrote.GetPrivileges()
 			}
-		} else {
+		} else if descCoverage == tree.RequestedDescriptors {
 			parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, desc.GetParentID())
 			if err != nil {
-				return nil, errors.Wrapf(err,
-					"failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
+				return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 			}
 
 			// Default is to copy privs from restoring parent db, like CREATE {TABLE,
@@ -2108,10 +2099,12 @@ func getRestoringPrivileges(
 			updatedPrivileges = sql.CreateInheritedPrivilegesFromDBDesc(parentDB, user)
 		}
 	case catalog.TypeDescriptor, catalog.DatabaseDescriptor:
-		// If the restore is not a cluster restore we cannot know that the users on
-		// the restoring cluster match the ones that were on the cluster that was
-		// backed up. So we wipe the privileges on the type/database.
-		updatedPrivileges = descpb.NewDefaultPrivilegeDescriptor(user)
+		if descCoverage == tree.RequestedDescriptors {
+			// If the restore is not a cluster restore we cannot know that the users on
+			// the restoring cluster match the ones that were on the cluster that was
+			// backed up. So we wipe the privileges on the type/database.
+			updatedPrivileges = descpb.NewDefaultPrivilegeDescriptor(user)
+		}
 	}
 	return updatedPrivileges, nil
 }

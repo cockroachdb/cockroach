@@ -272,13 +272,15 @@ func MaybeFixPrivileges(id ID, ptr **PrivilegeDescriptor) bool {
 // set of allowed privileges is looked up and applied.
 func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) error {
 	allowedPrivileges := DefaultSuperuserPrivileges
+	maybeSystem := ""
 
 	if IsReservedID(id) {
 		var ok bool
+		maybeSystem = "system "
 		allowedPrivileges, ok = SystemAllowedPrivileges[id]
 		if !ok {
-			return fmt.Errorf("no allowed privileges found for system %s with ID=%d",
-				objectType, id)
+			return fmt.Errorf("no allowed privileges defined for %s%s with ID=%d",
+				maybeSystem, objectType, id)
 		}
 	}
 
@@ -294,8 +296,8 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 
 	if p.Version >= OwnerVersion {
 		if p.Owner().Undefined() {
-			return errors.AssertionFailedf("found no owner for system %s with ID=%d",
-				objectType, id)
+			return errors.AssertionFailedf("found no owner for %s%s with ID=%d",
+				maybeSystem, objectType, id)
 		}
 	}
 
@@ -310,8 +312,8 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 		}
 
 		if remaining := u.Privileges &^ allowedPrivilegesBits; remaining != 0 {
-			return fmt.Errorf("user %s must not have %s privileges on system %s with ID=%d",
-				u.User(), privilege.ListFromBitField(remaining, privilege.Any), objectType, id)
+			return fmt.Errorf("user %s must not have %s privileges on %s%s with ID=%d",
+				u.User(), privilege.ListFromBitField(remaining, privilege.Any), maybeSystem, objectType, id)
 		}
 		// Get all the privilege bits set on the descriptor even if they're not valid.
 		privs := privilege.ListFromBitField(u.Privileges, privilege.Any)
@@ -331,16 +333,20 @@ func (p PrivilegeDescriptor) validateRequiredSuperuser(
 	user security.SQLUsername,
 	objectType privilege.ObjectType,
 ) error {
+	maybeSystem := ""
+	if IsReservedID(id) {
+		maybeSystem = "system "
+	}
 	superPriv, ok := p.findUser(user)
 	if !ok {
-		return fmt.Errorf("user %s does not have privileges over system %s with ID=%d",
-			user, objectType, id)
+		return fmt.Errorf("user %s does not have privileges over %s%s with ID=%d",
+			user, maybeSystem, objectType, id)
 	}
 
 	// The super users must match the allowed privilege set exactly.
 	if superPriv.Privileges != allowedPrivileges.ToBitField() {
-		return fmt.Errorf("user %s must have exactly %s privileges on system %s with ID=%d",
-			user, allowedPrivileges, objectType, id)
+		return fmt.Errorf("user %s must have exactly %s privileges on %s%s with ID=%d",
+			user, allowedPrivileges, maybeSystem, objectType, id)
 	}
 
 	return nil

@@ -683,7 +683,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			"user testuser must not have SELECT privileges on system type with ID=50",
+			"user testuser must not have SELECT privileges on type with ID=50",
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,
