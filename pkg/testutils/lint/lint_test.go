@@ -421,6 +421,7 @@ func TestLint(t *testing.T) {
 				re: `\bos\.(Getenv|LookupEnv)\(`,
 				excludes: []string{
 					":!acceptance",
+					":!build/bazel",
 					":!ccl/acceptanceccl/backup_test.go",
 					":!ccl/backupccl/backup_cloud_test.go",
 					// KMS requires AWS credentials from environment variables.
@@ -433,7 +434,7 @@ func TestLint(t *testing.T) {
 					":!nightly",
 					":!testutils/lint",
 					":!util/envutil/env.go",
-					":!testutils/bazel.go",
+					":!testutils/data_path.go",
 					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
 					":!util/grpcutil", // GRPC_GO_* variables
