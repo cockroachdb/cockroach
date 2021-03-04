@@ -45,8 +45,10 @@ import (
 // 3. A range with replicas on nodes other than the one being addressed.
 // We expect existing replicas to be nuked away and to end up with an
 // empty slate.
-// 4. A range that has not lost quorum (error expected).
-// 5. A meta range (error expected).
+// 4. A range with a leaseholder replica on a node other than the one
+// being addressed. We expect it to be nuked.
+// 5. A range that has not lost quorum (error expected).
+// 6. A meta range (error expected).
 func TestResetQuorum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -175,22 +177,13 @@ func TestResetQuorum(t *testing.T) {
 		checkUnavailable(srv, k)
 
 		// Get the store on the designated survivor n1.
-		var store *kvserver.Store
-		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
-			store = inner
-			return nil
-		}))
-		if store == nil {
-			t.Fatal("no store found on n1")
-		}
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+		require.NoError(t, err)
 
 		// Call ResetQuorum to reset quorum on the unhealthy range.
-		_, err := srv.Node().(*server.Node).ResetQuorum(
-			ctx,
-			&roachpb.ResetQuorumRequest{
-				RangeID: int32(id),
-			},
-		)
+		_, err = srv.Node().(*server.Node).ResetQuorum(ctx, &roachpb.ResetQuorumRequest{
+			RangeID: int32(id),
+		})
 		require.NoError(t, err)
 
 		verifyResult(t, srv, k, store, id)
@@ -209,25 +202,82 @@ func TestResetQuorum(t *testing.T) {
 		checkUnavailable(srv, k)
 
 		// Get the store on the designated survivor n4.
-		var store *kvserver.Store
-		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
-			store = inner
-			return nil
-		}))
-		if store == nil {
-			t.Fatal("no store found on n4")
-		}
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+		require.NoError(t, err)
 
 		// Call ResetQuorum to reset quorum on the unhealthy range.
-		_, err := srv.Node().(*server.Node).ResetQuorum(
-			ctx,
-			&roachpb.ResetQuorumRequest{
-				RangeID: int32(id),
-			},
-		)
+		_, err = srv.Node().(*server.Node).ResetQuorum(ctx, &roachpb.ResetQuorumRequest{
+			RangeID: int32(id),
+		})
 		require.NoError(t, err)
 
 		verifyResult(t, srv, k, store, id)
+	})
+
+	t.Run("with-replicas-elsewhere", func(t *testing.T) {
+		tc, k, id := setup(t)
+		defer tc.Stopper().Stop(ctx)
+		n1, n2, n3, n4 := 0, 1, 2, 3
+		srv := tc.Server(n1)
+		tc.StopServer(n2)
+		tc.StopServer(n3)
+		// Wait for n2 and n3 liveness to expire.
+		time.Sleep(livenessDuration)
+
+		checkUnavailable(srv, k)
+
+		// Get the store on the designated survivor n1.
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+		require.NoError(t, err)
+
+		// Call ResetQuorum to reset quorum on the unhealthy range.
+		_, err = srv.Node().(*server.Node).ResetQuorum(ctx, &roachpb.ResetQuorumRequest{
+			RangeID: int32(id),
+		})
+		require.NoError(t, err)
+
+		verifyResult(t, srv, k, store, id)
+
+		// Check that the old replica gets GCed.
+		oldSrv := tc.Server(n4)
+		oldStore, err := oldSrv.GetStores().(*kvserver.Stores).GetStore(oldSrv.GetFirstStoreID())
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			return oldStore.GetReplicaIfExists(id) == nil
+		}, 10*time.Second, 200*time.Millisecond, "old replica not GCed")
+	})
+
+	t.Run("with-leaseholder-elsewhere", func(t *testing.T) {
+		tc, k, id := setup(t)
+		defer tc.Stopper().Stop(ctx)
+		n1, n2, n3, n4 := 0, 1, 2, 3
+		srv := tc.Server(n1)
+		tc.StopServer(n3)
+		tc.StopServer(n4)
+		// Wait for n3 and n4 liveness to expire.
+		time.Sleep(livenessDuration)
+
+		checkUnavailable(srv, k)
+
+		// Get the store on the designated survivor n1.
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+		require.NoError(t, err)
+
+		// Call ResetQuorum to reset quorum on the unhealthy range.
+		_, err = srv.Node().(*server.Node).ResetQuorum(ctx, &roachpb.ResetQuorumRequest{
+			RangeID: int32(id),
+		})
+		require.NoError(t, err)
+
+		verifyResult(t, srv, k, store, id)
+
+		// Check that the old leaseholder replica gets GCed.
+		oldSrv := tc.Server(n2)
+		oldStore, err := oldSrv.GetStores().(*kvserver.Stores).GetStore(oldSrv.GetFirstStoreID())
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			return oldStore.GetReplicaIfExists(id) == nil
+		}, 10*time.Second, 200*time.Millisecond, "old replica not GCed")
 	})
 
 	t.Run("without-quorum-loss", func(t *testing.T) {
@@ -236,12 +286,9 @@ func TestResetQuorum(t *testing.T) {
 		srv := tc.Server(0)
 
 		// Call ResetQuorum to attempt to reset quorum on a healthy range.
-		_, err := srv.Node().(*server.Node).ResetQuorum(
-			ctx,
-			&roachpb.ResetQuorumRequest{
-				RangeID: int32(id),
-			},
-		)
+		_, err := srv.Node().(*server.Node).ResetQuorum(ctx, &roachpb.ResetQuorumRequest{
+			RangeID: int32(id),
+		})
 		testutils.IsError(err, "targeted range to recover has not lost quorum.")
 	})
 
@@ -251,12 +298,9 @@ func TestResetQuorum(t *testing.T) {
 		srv := tc.Server(0)
 
 		// Call ResetQuorum to attempt to reset quorum on a meta range.
-		_, err := srv.Node().(*server.Node).ResetQuorum(
-			ctx,
-			&roachpb.ResetQuorumRequest{
-				RangeID: int32(keys.MetaRangesID),
-			},
-		)
+		_, err := srv.Node().(*server.Node).ResetQuorum(ctx, &roachpb.ResetQuorumRequest{
+			RangeID: int32(keys.MetaRangesID),
+		})
 		testutils.IsError(err, "targeted range to recover is a meta1 or meta2 range.")
 	})
 }

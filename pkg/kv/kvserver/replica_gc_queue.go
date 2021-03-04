@@ -152,12 +152,8 @@ func (rgcq *replicaGCQueue) shouldQueue(
 	// 10 days before removing the node. Finally we consider replicas which are
 	// VOTER_INCOMING as suspect because no replica should stay in that state for
 	// too long and being conservative here doesn't seem worthwhile.
-	isSuspect := replDesc.GetType() != roachpb.VOTER_FULL
-	if raftStatus := repl.RaftStatus(); raftStatus != nil {
-		isSuspect = isSuspect ||
-			(raftStatus.SoftState.RaftState == raft.StateCandidate ||
-				raftStatus.SoftState.RaftState == raft.StatePreCandidate)
-	} else {
+	var isSuspect bool
+	if raftStatus := repl.RaftStatus(); raftStatus == nil {
 		// If a replica doesn't have an active raft group, we should check
 		// whether or not it is active. If not, we should process the replica
 		// because it has probably already been removed from its raft group but
@@ -167,6 +163,24 @@ func (rgcq *replicaGCQueue) shouldQueue(
 		if repl.store.cfg.NodeLiveness != nil {
 			if liveness, ok := repl.store.cfg.NodeLiveness.Self(); ok && !liveness.Membership.Active() {
 				return true, replicaGCPriorityDefault
+			}
+		}
+	} else if replDesc.GetType() != roachpb.VOTER_FULL {
+		isSuspect = true
+	} else {
+		switch raftStatus.SoftState.RaftState {
+		case raft.StateCandidate, raft.StatePreCandidate:
+			isSuspect = true
+		case raft.StateLeader:
+			// If the replica is the leader, we check whether it has a quorum.
+			// Otherwise, it's possible that e.g. Node.ResetQuorum will be used
+			// to recover the range elsewhere, and we should relinquish our
+			// lease and GC the range.
+			if repl.store.cfg.NodeLiveness != nil {
+				livenessMap := repl.store.cfg.NodeLiveness.GetIsLiveMap()
+				isSuspect = !repl.Desc().Replicas().CanMakeProgress(func(d roachpb.ReplicaDescriptor) bool {
+					return livenessMap[d.NodeID].IsLive
+				})
 			}
 		}
 	}
