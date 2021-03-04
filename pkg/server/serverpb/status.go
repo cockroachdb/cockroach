@@ -49,6 +49,7 @@ func MakeOptionalNodesStatusServer(s NodesStatusServer) OptionalNodesStatusServe
 // by the SQL subsystem but is unavailable to tenants.
 type NodesStatusServer interface {
 	Nodes(context.Context, *NodesRequest) (*NodesResponse, error)
+	GenerateJoinToken(context.Context) (string, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is
