@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -62,10 +63,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"go.etcd.io/etcd/raft/v3"
@@ -2541,4 +2544,40 @@ func (s *statusServer) JobStatus(
 	*res.Progress = j.Progress()
 
 	return &serverpb.JobStatusResponse{Job: res}, nil
+}
+
+// GenerateJoinToken generates a new ephemeral join token. For use by the sql
+// subsystem directly. The response is a base64 marshalled form of the join token
+// that can be shared to new nodes that want to join this cluster.
+func (s *statusServer) GenerateJoinToken(ctx context.Context) (string, error) {
+	if !sql.FeatureTLSAutoJoinEnabled.Get(&s.st.SV) {
+		return "", errors.New("join token generation disabled")
+	}
+
+	var jt JoinToken
+	jt.TokenID = uuid.MakeV4()
+	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	jt.SharedSecret = randutil.RandBytes(r, joinTokenSecretLen)
+
+	certLocator := security.MakeCertsLocator(s.cfg.SSLCertsDir)
+	if ok, err := certLocator.HasNodeCert(); err != nil || !ok {
+		return "", errors.New("cannot generate join token on node without CA cert")
+	}
+
+	// TODO(bilal): This is definitely wrong.
+	f, err := os.Open(certLocator.CACertPath())
+	if err != nil {
+		return "", errors.Wrap(err, "could not open CA cert")
+	}
+	defer f.Close()
+	caCert, err := ioutil.ReadAll(f)
+	if err != nil {
+		return "", errors.Wrap(err, "error when reading from CA cert")
+	}
+	jt.Sign(caCert)
+	token, err := jt.MarshalText()
+	if err != nil {
+		return "", errors.Wrap(err, "error when generating join token")
+	}
+	return string(token), nil
 }
