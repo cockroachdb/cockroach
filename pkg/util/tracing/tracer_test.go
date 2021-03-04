@@ -429,6 +429,18 @@ func TestShadowTracerNilTracer(t *testing.T) {
 	})
 }
 
+func TestTracer_RegistryMaxSize(t *testing.T) {
+	tr := NewTracer()
+	for i := 0; i < maxSpanRegistrySize+10; i++ {
+		_ = tr.StartSpan("foo", WithForceRealSpan()) // intentionally not closed
+		exp := i + 1
+		if exp > maxSpanRegistrySize {
+			exp = maxSpanRegistrySize
+		}
+		require.Len(t, tr.activeSpans.m, exp)
+	}
+}
+
 // TestActiveSpanVisitorErrors confirms that the visitor of the Tracer's
 // activeSpans registry gracefully exits upon receiving a sentinel error from
 // `iterutil.StopIteration()`.
