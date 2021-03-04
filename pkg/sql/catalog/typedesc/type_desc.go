@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -41,7 +40,7 @@ var _ catalog.MutableDescriptor = (*Mutable)(nil)
 // type. It is intended to be used as an intermediate for name resolution, and
 // should not be serialized and stored on disk.
 func MakeSimpleAlias(typ *types.T, parentSchemaID descpb.ID) *Immutable {
-	return NewImmutable(descpb.TypeDescriptor{
+	return NewBuilder(&descpb.TypeDescriptor{
 		// TODO(#sql-features): this should be attached to the current database.
 		// We don't have a way of doing this yet (and virtual tables use some
 		// fake magic).
@@ -52,7 +51,7 @@ func MakeSimpleAlias(typ *types.T, parentSchemaID descpb.ID) *Immutable {
 		ID:    descpb.InvalidID,
 		Kind:  descpb.TypeDescriptor_ALIAS,
 		Alias: typ,
-	})
+	}).BuildImmutableType()
 }
 
 // NameResolutionResult implements the NameResolutionResult interface.
@@ -94,67 +93,18 @@ type Immutable struct {
 	isUncommittedVersion bool
 }
 
-// NewCreatedMutable returns a Mutable from the given type descriptor with the
-// cluster version being the zero type. This is for a type that is created in
-// the same transaction.
-func NewCreatedMutable(desc descpb.TypeDescriptor) *Mutable {
-	return &Mutable{
-		Immutable: makeImmutable(desc),
-	}
-}
-
-// NewExistingMutable returns a Mutable from the given type descriptor with the
-// cluster version also set to the descriptor. This is for types that already
-// exist.
-func NewExistingMutable(desc descpb.TypeDescriptor) *Mutable {
-	return &Mutable{
-		Immutable:      makeImmutable(*protoutil.Clone(&desc).(*descpb.TypeDescriptor)),
-		ClusterVersion: NewImmutable(desc),
-	}
-}
-
 // UpdateCachedFieldsOnModifiedMutable refreshes the Immutable field by
 // reconstructing it. This means that the fields used to fill enumMetadata
 // (readOnly, logicalReps, physicalReps) are reconstructed to reflect the
 // modified Mutable's state. This allows us to hydrate tables correctly even
 // when preceded by a type descriptor modification in the same transaction.
 func UpdateCachedFieldsOnModifiedMutable(desc catalog.TypeDescriptor) (*Mutable, error) {
-	imm := makeImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
-	imm.isUncommittedVersion = desc.IsUncommittedVersion()
-
 	mutable, ok := desc.(*Mutable)
 	if !ok {
 		return nil, errors.AssertionFailedf("type descriptor was not mutable")
 	}
-	mutable.Immutable = imm
+	mutable.Immutable = *mutable.ImmutableCopy().(*Immutable)
 	return mutable, nil
-}
-
-// NewImmutable returns an Immutable from the given TypeDescriptor.
-func NewImmutable(desc descpb.TypeDescriptor) *Immutable {
-	m := makeImmutable(desc)
-	return &m
-}
-
-func makeImmutable(desc descpb.TypeDescriptor) Immutable {
-	immutDesc := Immutable{TypeDescriptor: desc}
-
-	// Initialize metadata specific to the TypeDescriptor kind.
-	switch immutDesc.Kind {
-	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		immutDesc.logicalReps = make([]string, len(desc.EnumMembers))
-		immutDesc.physicalReps = make([][]byte, len(desc.EnumMembers))
-		immutDesc.readOnlyMembers = make([]bool, len(desc.EnumMembers))
-		for i := range desc.EnumMembers {
-			member := &desc.EnumMembers[i]
-			immutDesc.logicalReps[i] = member.LogicalRepresentation
-			immutDesc.physicalReps[i] = member.PhysicalRepresentation
-			immutDesc.readOnlyMembers[i] =
-				member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY
-		}
-	}
-
-	return immutDesc
 }
 
 // TypeIDToOID converts a type descriptor ID into a type OID.
@@ -253,9 +203,9 @@ func (desc *Immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
 	return descpb.TableDescriptor_DISABLED
 }
 
-// TypeName implements the DescriptorProto interface.
-func (desc *Immutable) TypeName() string {
-	return "type"
+// DescriptorType implements the catalog.Descriptor interface.
+func (desc *Immutable) DescriptorType() catalog.DescriptorType {
+	return catalog.Type
 }
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
@@ -294,9 +244,7 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	// TODO (lucy): Should the immutable descriptor constructors always make a
-	// copy, so we don't have to do it here?
-	imm := NewImmutable(*protoutil.Clone(desc.TypeDesc()).(*descpb.TypeDescriptor))
+	imm := NewBuilder(desc.TypeDesc()).BuildImmutableType()
 	imm.isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
 }

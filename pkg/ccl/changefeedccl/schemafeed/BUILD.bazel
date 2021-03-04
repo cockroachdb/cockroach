@@ -19,7 +19,6 @@ go_library(
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/lease",
-        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/storage",
         "//pkg/util/encoding",

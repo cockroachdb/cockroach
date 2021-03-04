@@ -51,7 +51,7 @@ func TestAllocateIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	desc := NewCreatedMutable(descpb.TableDescriptor{
+	desc := NewBuilder(&descpb.TableDescriptor{
 		ParentID: keys.MinUserDescID,
 		ID:       keys.MinUserDescID + 1,
 		Name:     "foo",
@@ -72,12 +72,12 @@ func TestAllocateIDs(t *testing.T) {
 		},
 		Privileges:    descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		FormatVersion: descpb.FamilyFormatVersion,
-	})
+	}).BuildCreatedMutableTable()
 	if err := desc.AllocateIDs(ctx); err != nil {
 		t.Fatal(err)
 	}
 
-	expected := NewCreatedMutable(descpb.TableDescriptor{
+	expected := NewBuilder(&descpb.TableDescriptor{
 		ParentID: keys.MinUserDescID,
 		ID:       keys.MinUserDescID + 1,
 		Version:  1,
@@ -117,7 +117,7 @@ func TestAllocateIDs(t *testing.T) {
 		NextIndexID:    5,
 		NextMutationID: 1,
 		FormatVersion:  descpb.FamilyFormatVersion,
-	})
+	}).BuildCreatedMutableTable()
 	if !reflect.DeepEqual(expected, desc) {
 		a, _ := json.MarshalIndent(expected, "", "  ")
 		b, _ := json.MarshalIndent(desc, "", "  ")
@@ -184,7 +184,7 @@ func TestFitColumnToFamily(t *testing.T) {
 			}
 			desc.Families = append(desc.Families, family)
 		}
-		return NewCreatedMutable(desc)
+		return NewBuilder(&desc).BuildCreatedMutableTable()
 	}
 
 	emptyFamily := []*types.T{}
@@ -283,7 +283,9 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 		},
 	}
 	for i, test := range tests {
-		desc, err := NewFilledInImmutable(context.Background(), nil, &test.desc)
+		b := NewBuilder(&test.desc)
+		err := b.RunPostDeserializationChanges(context.Background(), nil)
+		desc := b.BuildImmutableTable()
 		require.NoError(t, err)
 		changes, err := GetPostDeserializationChanges(desc)
 		require.NoError(t, err)
@@ -300,7 +302,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 func TestUnvalidateConstraints(t *testing.T) {
 	ctx := context.Background()
 
-	desc := NewCreatedMutable(descpb.TableDescriptor{
+	desc := NewBuilder(&descpb.TableDescriptor{
 		Name:     "test",
 		ParentID: descpb.ID(1),
 		Columns: []descpb.ColumnDescriptor{
@@ -317,7 +319,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 				Validity:          descpb.ConstraintValidity_Validated,
 			},
 		},
-	})
+	}).BuildCreatedMutableTable()
 	if err := desc.AllocateIDs(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +482,7 @@ func TestDefaultExprNil(t *testing.T) {
 		}
 		// Test and verify that the default expressions of the column descriptors
 		// are all nil.
-		// nolint:descriptormarshal
+		//nolint:descriptormarshal
 		for _, col := range desc.GetTable().Columns {
 			if col.DefaultExpr != nil {
 				t.Errorf("expected Column Default Expression to be 'nil', got %s instead.", *col.DefaultExpr)

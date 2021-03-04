@@ -34,21 +34,21 @@ func TestSafeMessage(t *testing.T) {
 		exp  string
 	}{
 		{
-			desc: NewImmutable(descpb.DatabaseDescriptor{
+			desc: NewBuilder(&descpb.DatabaseDescriptor{
 				ID:            12,
 				Version:       1,
 				State:         descpb.DescriptorState_OFFLINE,
 				OfflineReason: "foo",
-			}),
+			}).BuildImmutableDatabase(),
 			exp: "dbdesc.Immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", State: OFFLINE, OfflineReason: \"foo\"}",
 		},
 		{
-			desc: NewCreatedMutable(descpb.DatabaseDescriptor{
+			desc: NewBuilder(&descpb.DatabaseDescriptor{
 				ID:            42,
 				Version:       2,
 				State:         descpb.DescriptorState_OFFLINE,
 				OfflineReason: "bar",
-			}),
+			}).BuildCreatedMutableDatabase(),
 			exp: "dbdesc.Mutable: {ID: 42, Version: 2, IsUncommitted: true, ModificationTime: \"0,0\", State: OFFLINE, OfflineReason: \"bar\"}",
 		},
 	} {
@@ -89,18 +89,18 @@ func TestValidateDatabaseDesc(t *testing.T) {
 
 	testData := []struct {
 		err  string
-		desc *Immutable
+		desc descpb.DatabaseDescriptor
 	}{
 		{`invalid database ID 0`,
-			NewImmutable(descpb.DatabaseDescriptor{
+			descpb.DatabaseDescriptor{
 				Name:       "db",
 				ID:         0,
 				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
-			}),
+			},
 		},
 		{
 			`region "us-east-1" seen twice on db 200`,
-			NewImmutable(descpb.DatabaseDescriptor{
+			descpb.DatabaseDescriptor{
 				Name: "multi-region-db",
 				ID:   200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
@@ -111,11 +111,11 @@ func TestValidateDatabaseDesc(t *testing.T) {
 					PrimaryRegion: "us-east-1",
 				},
 				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
-			}),
+			},
 		},
 		{
 			`primary region unset on a multi-region db 200`,
-			NewImmutable(descpb.DatabaseDescriptor{
+			descpb.DatabaseDescriptor{
 				Name: "multi-region-db",
 				ID:   200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
@@ -124,11 +124,11 @@ func TestValidateDatabaseDesc(t *testing.T) {
 					},
 				},
 				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
-			}),
+			},
 		},
 		{
 			`primary region not found in list of regions on db 200`,
-			NewImmutable(descpb.DatabaseDescriptor{
+			descpb.DatabaseDescriptor{
 				Name: "multi-region-db",
 				ID:   200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
@@ -138,13 +138,14 @@ func TestValidateDatabaseDesc(t *testing.T) {
 					PrimaryRegion: "us-east-2",
 				},
 				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
-			}),
+			},
 		},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			expectedErr := fmt.Sprintf("%s %q (%d): %s", d.desc.TypeName(), d.desc.GetName(), d.desc.GetID(), d.err)
-			if err := catalog.ValidateSelf(d.desc); err == nil {
+			desc := NewBuilder(&d.desc).BuildImmutable()
+			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
+			if err := catalog.ValidateSelf(desc); err == nil {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, d.desc)
 			} else if expectedErr != err.Error() {
 				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, expectedErr, err)
@@ -299,15 +300,15 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 		privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
 		descs := catalog.MapDescGetter{}
 		test.desc.Privileges = privilege
-		desc := NewImmutable(test.desc)
+		desc := NewBuilder(&test.desc).BuildImmutable()
 		descs[test.desc.ID] = desc
 		test.multiRegionEnum.Privileges = privilege
-		descs[test.multiRegionEnum.ID] = typedesc.NewImmutable(test.multiRegionEnum)
+		descs[test.multiRegionEnum.ID] = typedesc.NewBuilder(&test.multiRegionEnum).BuildImmutable()
 		for _, schemaDesc := range test.schemaDescs {
 			schemaDesc.Privileges = privilege
-			descs[schemaDesc.ID] = schemadesc.NewImmutable(schemaDesc)
+			descs[schemaDesc.ID] = schemadesc.NewBuilder(&schemaDesc).BuildImmutable()
 		}
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.TypeName(), desc.GetName(), desc.GetID(), test.err)
+		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 		const validateCrossReferencesOnly = catalog.ValidationLevelSelfAndCrossReferences &^ (catalog.ValidationLevelSelfAndCrossReferences >> 1)
 		if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
 			if test.err != "" {

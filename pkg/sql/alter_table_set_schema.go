@@ -80,7 +80,7 @@ func (p *planner) AlterTableSetSchema(
 	for _, dependent := range tableDesc.DependedOnBy {
 		if !dependent.ByID {
 			return nil, p.dependentViewError(
-				ctx, tableDesc.TypeName(), tableDesc.Name,
+				ctx, string(tableDesc.DescriptorType()), tableDesc.Name,
 				tableDesc.ParentID, dependent.ID, "set schema on",
 			)
 		}

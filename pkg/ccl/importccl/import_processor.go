@@ -172,7 +172,7 @@ func makeInputConverter(
 	var singleTableTargetCols tree.NameList
 	if len(spec.Tables) == 1 {
 		for _, table := range spec.Tables {
-			singleTable = tabledesc.NewImmutable(*table.Desc)
+			singleTable = tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
 				singleTableTargetCols[i] = tree.Name(colName)

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -621,10 +620,9 @@ func (tf *SchemaFeed) fetchDescriptorVersions(
 					return err
 				}
 
-				if tableDesc := descpb.TableFromDescriptor(&desc, k.Timestamp); tableDesc != nil {
-					descs = append(descs, tabledesc.NewImmutable(*tableDesc))
-				} else if typeDesc := descpb.TypeFromDescriptor(&desc, k.Timestamp); typeDesc != nil {
-					descs = append(descs, typedesc.NewImmutable(*typeDesc))
+				b := catalogkv.NewBuilderWithMVCCTimestamp(&desc, k.Timestamp)
+				if b != nil && (b.DescriptorType() == catalog.Table || b.DescriptorType() == catalog.Type) {
+					descs = append(descs, b.BuildImmutable())
 				}
 			}
 		}(); err != nil {

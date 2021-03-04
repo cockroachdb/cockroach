@@ -88,7 +88,7 @@ SELECT id, descriptor, crdb_internal_mvcc_timestamp FROM system.descriptor WHERE
 			return false, 0, errors.Wrapf(err,
 				"failed to unmarshal descriptor with ID %d", id)
 		}
-		t := descpb.TableFromDescriptor(&desc, ts)
+		t, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, ts)
 		if t != nil && !t.Dropped() && tableNeedsFKUpgrade(t) {
 			return false, id, nil
 		}

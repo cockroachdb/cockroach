@@ -86,7 +86,7 @@ func (p *planner) ReparentDatabase(
 		return nil, err
 	}
 	if exists {
-		return nil, pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", db.Name)
+		return nil, sqlerrors.NewSchemaAlreadyExistsError(db.Name)
 	}
 
 	// Ensure the database has a valid schema name.
@@ -114,25 +114,25 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	schema := schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
+	schema := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   n.newParent.ID,
 		Name:       n.db.Name,
 		ID:         id,
 		Privileges: protoutil.Clone(n.db.Privileges).(*descpb.PrivilegeDescriptor),
 		Version:    1,
-	})
+	}).BuildCreatedMutable()
 	// Add the new schema to the parent database's name map.
 	if n.newParent.Schemas == nil {
 		n.newParent.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 	}
 	n.newParent.Schemas[n.db.Name] = descpb.DatabaseDescriptor_SchemaInfo{
-		ID:      schema.ID,
+		ID:      schema.GetID(),
 		Dropped: false,
 	}
 
 	if err := p.createDescriptorWithID(
 		ctx,
-		catalogkeys.NewSchemaKey(n.newParent.ID, schema.Name).Key(p.ExecCfg().Codec),
+		catalogkeys.NewSchemaKey(n.newParent.ID, schema.GetName()).Key(p.ExecCfg().Codec),
 		id,
 		schema,
 		params.ExecCfg().Settings,
@@ -213,7 +213,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 				Name:           tbl.Name,
 			})
 			tbl.ParentID = n.newParent.ID
-			tbl.UnexposedParentSchemaID = schema.ID
+			tbl.UnexposedParentSchemaID = schema.GetID()
 			objKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings, tbl.ParentID, tbl.GetParentSchemaID(), tbl.Name).Key(codec)
 			b.CPut(objKey, tbl.ID, nil /* expected */)
 			if err := p.writeSchemaChange(ctx, tbl, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {
@@ -253,7 +253,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 				Name:           typ.Name,
 			})
 			typ.ParentID = n.newParent.ID
-			typ.ParentSchemaID = schema.ID
+			typ.ParentSchemaID = schema.GetID()
 			objKey := catalogkv.MakeObjectNameKey(ctx, p.ExecCfg().Settings, typ.ParentID, typ.ParentSchemaID, typ.Name).Key(codec)
 			b.CPut(objKey, typ.ID, nil /* expected */)
 			if err := p.writeTypeSchemaChange(ctx, typ, tree.AsStringWithFQNames(n.n, params.Ann())); err != nil {

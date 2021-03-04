@@ -103,7 +103,7 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 		// the dance of adding back a parent database in order to drop the table.
 		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
 			if _, err := tx.Exec(
-				"SELECT crdb_internal.unsafe_delete_descriptor($1);",
+				"SELECT crdb_internal.unsafe_delete_descriptor($1, true);",
 				descID); err != nil {
 				return err
 			}
@@ -633,9 +633,9 @@ SELECT crdb_internal.unsafe_upsert_descriptor(59, crdb_internal.json_to_pb('cock
       "owner_proto": "root",
       "users": [
         { "privileges": 2, "user_proto": "admin" },
-        { "privileges": 2, "user_proto": "root" },
         { "privileges": 2, "user_proto": "newuser1" },
-        { "privileges": 2, "user_proto": "newuser2" }
+        { "privileges": 2, "user_proto": "newuser2" },
+        { "privileges": 2, "user_proto": "root" }
       ],
       "version": 1
     },

@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -266,16 +265,14 @@ func backupShowerDefault(
 				schemaIDToName := make(map[descpb.ID]string)
 				schemaIDToName[keys.PublicSchemaID] = sessiondata.PublicSchemaName
 				for i := range manifest.Descriptors {
-					descriptor := &manifest.Descriptors[i]
-					if descriptor.GetDatabase() != nil {
-						id := descpb.GetDescriptorID(descriptor)
-						if _, ok := dbIDToName[id]; !ok {
-							dbIDToName[id] = descpb.GetDescriptorName(descriptor)
+					_, db, _, schema := descpb.FromDescriptor(&manifest.Descriptors[i])
+					if db != nil {
+						if _, ok := dbIDToName[db.ID]; !ok {
+							dbIDToName[db.ID] = db.Name
 						}
-					} else if descriptor.GetSchema() != nil {
-						id := descpb.GetDescriptorID(descriptor)
-						if _, ok := schemaIDToName[id]; !ok {
-							schemaIDToName[id] = descpb.GetDescriptorName(descriptor)
+					} else if schema != nil {
+						if _, ok := schemaIDToName[schema.ID]; !ok {
+							schemaIDToName[schema.ID] = schema.Name
 						}
 					}
 				}
@@ -317,7 +314,7 @@ func backupShowerDefault(
 					dataSizeDatum := tree.DNull
 					rowCountDatum := tree.DNull
 
-					desc := catalogkv.UnwrapDescriptorRaw(ctx, descriptor)
+					desc := catalogkv.NewBuilder(descriptor).BuildExistingMutable()
 
 					descriptorName := desc.GetName()
 					switch desc := desc.(type) {
@@ -343,7 +340,7 @@ func backupShowerDefault(
 							IgnoreComments: true,
 						}
 						createStmt, err := p.ShowCreate(ctx, dbName, manifest.Descriptors,
-							tabledesc.NewImmutable(*desc.TableDesc()), displayOptions)
+							tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable(), displayOptions)
 						if err != nil {
 							// We expect that we might get an error here due to X-DB
 							// references, which were possible on 20.2 betas and rcs.
@@ -411,21 +408,24 @@ func nullIfEmpty(s string) tree.Datum {
 func showPrivileges(descriptor *descpb.Descriptor) string {
 	var privStringBuilder strings.Builder
 
-	var privDesc *descpb.PrivilegeDescriptor
-	var objectType privilege.ObjectType
-	if db := descriptor.GetDatabase(); db != nil {
-		privDesc = db.GetPrivileges()
-		objectType = privilege.Database
-	} else if typ := descriptor.GetType(); typ != nil {
-		privDesc = typ.GetPrivileges()
-		objectType = privilege.Type
-	} else if table := descpb.TableFromDescriptor(descriptor, hlc.Timestamp{}); table != nil {
-		privDesc = table.GetPrivileges()
-		objectType = privilege.Table
-	} else if schema := descriptor.GetSchema(); schema != nil {
-		privDesc = schema.GetPrivileges()
-		objectType = privilege.Schema
+	b := catalogkv.NewBuilder(descriptor)
+	if b == nil {
+		return ""
 	}
+	var objectType privilege.ObjectType
+	switch b.DescriptorType() {
+	case catalog.Database:
+		objectType = privilege.Database
+	case catalog.Table:
+		objectType = privilege.Table
+	case catalog.Type:
+		objectType = privilege.Type
+	case catalog.Schema:
+		objectType = privilege.Schema
+	default:
+		return ""
+	}
+	privDesc := b.BuildImmutable().GetPrivileges()
 	if privDesc == nil {
 		return ""
 	}

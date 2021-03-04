@@ -1061,7 +1061,7 @@ func TestPGPreparedExec(t *testing.T) {
 			"CREATE TABLE d.public.t (i INT, s STRING, d INT)",
 			[]preparedExecTest{
 				baseTest,
-				baseTest.Error(`pq: relation "t" already exists`),
+				baseTest.Error(`pq: relation "d.public.t" already exists`),
 			},
 		},
 		{

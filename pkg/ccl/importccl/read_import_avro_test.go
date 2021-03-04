@@ -199,7 +199,7 @@ func newTestHelper(ctx context.Context, t *testing.T, gens ...avroGen) *testHelp
 
 	return &testHelper{
 		schemaJSON: string(schemaJSON),
-		schemaTable: descForTable(ctx, t, createStmt, 10, 20, NoFKs).
+		schemaTable: descForTable(ctx, t, createStmt, 100, 200, NoFKs).
 			ImmutableCopy().(catalog.TableDescriptor),
 		codec:    codec,
 		gens:     gens,

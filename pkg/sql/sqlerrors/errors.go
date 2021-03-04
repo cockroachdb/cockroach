@@ -132,6 +132,11 @@ func NewDatabaseAlreadyExistsError(name string) error {
 	return pgerror.Newf(pgcode.DuplicateDatabase, "database %q already exists", name)
 }
 
+// NewSchemaAlreadyExistsError creates an error for a preexisting schema.
+func NewSchemaAlreadyExistsError(name string) error {
+	return pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", name)
+}
+
 // WrapErrorWhileConstructingObjectAlreadyExistsErr is used to wrap an error
 // when an error occurs while trying to get the colliding object for an
 // ObjectAlreadyExistsErr.
@@ -150,8 +155,7 @@ func MakeObjectAlreadyExistsError(collidingObject *descpb.Descriptor, name strin
 	case *descpb.Descriptor_Database:
 		return NewDatabaseAlreadyExistsError(name)
 	case *descpb.Descriptor_Schema:
-		// TODO(ajwerner): Add a case for an existing schema object.
-		return errors.AssertionFailedf("schema exists with name %v", name)
+		return NewSchemaAlreadyExistsError(name)
 	default:
 		return errors.AssertionFailedf("unknown type %T exists with name %v", collidingObject.Union, name)
 	}

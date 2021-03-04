@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // prepareSetSchema verifies that a table/type can be set to the desired
@@ -30,8 +30,12 @@ func (p *planner) prepareSetSchema(
 	ctx context.Context, desc catalog.MutableDescriptor, schema string,
 ) (descpb.ID, error) {
 
+	var objectName tree.ObjectName
 	switch t := desc.(type) {
-	case *tabledesc.Mutable, *typedesc.Mutable:
+	case *tabledesc.Mutable:
+		objectName = tree.NewUnqualifiedTableName(tree.Name(desc.GetName()))
+	case *typedesc.Mutable:
+		objectName = tree.NewUnqualifiedTypeName(tree.Name(desc.GetName()))
 	default:
 		return 0, pgerror.Newf(
 			pgcode.InvalidParameterValue,
@@ -74,15 +78,9 @@ func (p *planner) prepareSetSchema(
 		return desiredSchemaID, nil
 	}
 
-	exists, id, err := catalogkv.LookupObjectID(
-		ctx, p.txn, p.ExecCfg().Codec, databaseID, desiredSchemaID, desc.GetName(),
-	)
-	if err == nil && exists {
-		collidingDesc, err := catalogkv.GetAnyDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return 0, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return 0, sqlerrors.MakeObjectAlreadyExistsError(collidingDesc.DescriptorProto(), desc.GetName())
+	err = catalogkv.CheckObjectCollision(ctx, p.txn, p.ExecCfg().Codec, databaseID, desiredSchemaID, objectName)
+	if err != nil {
+		return descpb.InvalidID, err
 	}
 
 	return desiredSchemaID, nil

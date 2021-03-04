@@ -60,7 +60,7 @@ func newBulkRowWriterProcessor(
 		flowCtx:        flowCtx,
 		processorID:    processorID,
 		batchIdxAtomic: 0,
-		tableDesc:      tabledesc.NewImmutable(spec.Table),
+		tableDesc:      tabledesc.NewBuilder(&spec.Table).BuildImmutableTable(),
 		spec:           spec,
 		input:          input,
 		output:         output,

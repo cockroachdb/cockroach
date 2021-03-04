@@ -66,7 +66,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		require.NotNil(t, mut)
 		// We want to create some descriptors and then ensure that writing them to a
 		// batch works as expected.
-		newTable := tabledesc.NewCreatedMutable(descpb.TableDescriptor{
+		newTable := tabledesc.NewBuilder(&descpb.TableDescriptor{
 			ID:                      142,
 			Name:                    "table2",
 			Version:                 1,
@@ -97,7 +97,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 			NextIndexID:    2,
 			NextMutationID: 1,
 			FormatVersion:  descpb.FamilyFormatVersion,
-		})
+		}).BuildCreatedMutableTable()
 		b := txn.NewBatch()
 
 		// Ensure that there are no errors and that the version is incremented.

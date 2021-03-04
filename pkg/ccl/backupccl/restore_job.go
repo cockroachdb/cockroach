@@ -444,16 +444,7 @@ func WriteDescriptors(
 			}
 			return err
 		}
-
-		bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, codec)
-		descs := make([]catalog.Descriptor, 0, len(databases)+len(tables))
-		for _, table := range tables {
-			descs = append(descs, table)
-		}
-		for _, db := range databases {
-			descs = append(descs, db)
-		}
-		return catalog.ValidateSelfAndCrossReferences(ctx, bdg, descs...)
+		return nil
 	}()
 	return errors.Wrapf(err, "restoring table desc and namespace entries")
 }
@@ -882,9 +873,9 @@ func spansForAllRestoreTableIndexes(
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		// TODO(pbardea): Consider and test the interaction between revision_history
 		// backups and OFFLINE tables.
-		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
+		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
-			tbl := tabledesc.NewImmutable(*rawTbl)
+			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			for _, idx := range tbl.NonDropIndexes() {
 				key := tableAndIndex{tableID: tbl.GetID(), indexID: idx.GetID()}
 				if !added[key] {
@@ -949,7 +940,7 @@ func createImportingDescriptors(
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case catalog.TableDescriptor:
-			mut := tabledesc.NewCreatedMutable(*desc.TableDesc())
+			mut := tabledesc.NewBuilder(desc.TableDesc()).BuildCreatedMutableTable()
 			if shouldPreRestore(mut) {
 				preRestoreTables = append(preRestoreTables, mut)
 			} else {
@@ -960,15 +951,15 @@ func createImportingDescriptors(
 			oldTableIDs = append(oldTableIDs, mut.GetID())
 		case catalog.DatabaseDescriptor:
 			if _, ok := details.DescriptorRewrites[desc.GetID()]; ok {
-				mut := dbdesc.NewCreatedMutable(*desc.DatabaseDesc())
+				mut := dbdesc.NewBuilder(desc.DatabaseDesc()).BuildCreatedMutableDatabase()
 				databases = append(databases, mut)
 				mutableDatabases = append(mutableDatabases, mut)
 			}
 		case catalog.SchemaDescriptor:
-			mut := schemadesc.NewCreatedMutable(*desc.SchemaDesc())
+			mut := schemadesc.NewBuilder(desc.SchemaDesc()).BuildCreatedMutableSchema()
 			schemas = append(schemas, mut)
 		case catalog.TypeDescriptor:
-			mut := typedesc.NewCreatedMutable(*desc.TypeDesc())
+			mut := typedesc.NewBuilder(desc.TypeDesc()).BuildCreatedMutableType()
 			types = append(types, mut)
 		}
 	}
@@ -1946,9 +1937,9 @@ func (r *restoreResumer) dropDescriptors(
 
 	// Delete any schema descriptors that this restore created. Also collect the
 	// descriptors so we can update their parent databases later.
-	dbsWithDeletedSchemas := make(map[descpb.ID][]*descpb.SchemaDescriptor)
+	dbsWithDeletedSchemas := make(map[descpb.ID][]catalog.SchemaDescriptor)
 	for _, schemaDesc := range details.SchemaDescs {
-		sc := schemadesc.NewMutableExisting(*schemaDesc)
+		sc := schemadesc.NewBuilder(schemaDesc).BuildImmutableSchema()
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
 		isSchemaEmpty, err := isSchemaEmpty(ctx, txn, sc.GetID(), allDescs, ignoredChildDescIDs)
 		if err != nil {
@@ -1963,19 +1954,19 @@ func (r *restoreResumer) dropDescriptors(
 			ctx,
 			b,
 			codec,
-			sc.ParentID,
+			sc.GetParentID(),
 			keys.RootNamespaceID,
-			sc.Name,
+			sc.GetName(),
 			false, /* kvTrace */
 		)
-		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.ID))
-		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc.SchemaDesc())
+		b.Del(catalogkeys.MakeDescMetadataKey(codec, sc.GetID()))
+		dbsWithDeletedSchemas[sc.GetParentID()] = append(dbsWithDeletedSchemas[sc.GetParentID()], sc)
 	}
 
 	// Delete the database descriptors.
 	deletedDBs := make(map[descpb.ID]struct{})
 	for _, dbDesc := range details.DatabaseDescs {
-		db := dbdesc.NewExistingMutable(*dbDesc)
+		db := dbdesc.NewBuilder(dbDesc).BuildExistingMutable()
 		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
 		isDBEmpty, err := isDatabaseEmpty(ctx, txn, db.GetID(), allDescs, ignoredChildDescIDs)
 		if err != nil {
@@ -2043,7 +2034,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 	existingTypes := make(map[descpb.ID]*typedesc.Mutable)
 	for i := range details.TypeDescs {
 		typ := details.TypeDescs[i]
-		restoredTypes[typ.ID] = typedesc.NewImmutable(*typ)
+		restoredTypes[typ.ID] = typedesc.NewBuilder(typ).BuildImmutableType()
 	}
 	for _, tbl := range restoredTables {
 		lookup := func(id descpb.ID) (catalog.TypeDescriptor, error) {
@@ -2114,15 +2105,7 @@ func getRestoringPrivileges(
 	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
-) (*descpb.PrivilegeDescriptor, error) {
-	// Don't update the privileges of descriptors if we're doing a cluster
-	// restore.
-	if descCoverage == tree.AllDescriptors {
-		return nil, nil
-	}
-
-	var updatedPrivileges *descpb.PrivilegeDescriptor
-
+) (updatedPrivileges *descpb.PrivilegeDescriptor, err error) {
 	switch desc := desc.(type) {
 	case catalog.TableDescriptor, catalog.SchemaDescriptor:
 		if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
@@ -2130,14 +2113,13 @@ func getRestoringPrivileges(
 			// table and schema should be that of the parent DB.
 			//
 			// Leave the privileges of the temp system tables as the default too.
-			if descCoverage != tree.AllDescriptors || wrote.GetName() == restoreTempSystemDB {
+			if descCoverage == tree.RequestedDescriptors || wrote.GetName() == restoreTempSystemDB {
 				updatedPrivileges = wrote.GetPrivileges()
 			}
-		} else {
+		} else if descCoverage == tree.RequestedDescriptors {
 			parentDB, err := catalogkv.MustGetDatabaseDescByID(ctx, txn, codec, desc.GetParentID())
 			if err != nil {
-				return nil, errors.Wrapf(err,
-					"failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
+				return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 			}
 
 			// Default is to copy privs from restoring parent db, like CREATE {TABLE,
@@ -2147,10 +2129,12 @@ func getRestoringPrivileges(
 			updatedPrivileges = sql.CreateInheritedPrivilegesFromDBDesc(parentDB, user)
 		}
 	case catalog.TypeDescriptor, catalog.DatabaseDescriptor:
-		// If the restore is not a cluster restore we cannot know that the users on
-		// the restoring cluster match the ones that were on the cluster that was
-		// backed up. So we wipe the privileges on the type/database.
-		updatedPrivileges = descpb.NewDefaultPrivilegeDescriptor(user)
+		if descCoverage == tree.RequestedDescriptors {
+			// If the restore is not a cluster restore we cannot know that the users on
+			// the restoring cluster match the ones that were on the cluster that was
+			// backed up. So we wipe the privileges on the type/database.
+			updatedPrivileges = descpb.NewDefaultPrivilegeDescriptor(user)
+		}
 	}
 	return updatedPrivileges, nil
 }

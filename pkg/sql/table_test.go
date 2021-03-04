@@ -417,14 +417,9 @@ CREATE TABLE test.tt (x test.t);
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
 	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 		var typeDesc catalog.TypeDescriptor
-		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, id,
-				catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
-			if err != nil {
-				return err
-			}
-			typeDesc = desc.(catalog.TypeDescriptor)
-			return nil
+		if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			typeDesc, err = catalogkv.MustGetTypeDescByID(ctx, txn, keys.SystemSQLCodec, id)
+			return err
 		}); err != nil {
 			return tree.TypeName{}, nil, err
 		}

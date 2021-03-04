@@ -5,9 +5,9 @@ go_library(
     name = "catalogkv",
     srcs = [
         "catalogkv.go",
+        "desc_getter.go",
         "namespace.go",
         "test_utils.go",
-        ":gen-descriptorkind-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv",
     visibility = ["//visibility:public"],
@@ -41,6 +41,9 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":catalogkv"],
     deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/testutils",

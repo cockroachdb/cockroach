@@ -249,7 +249,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		}
 	}
 
-	tableDesc := tabledesc.NewImmutable(details.Table)
+	tableDesc := tabledesc.NewBuilder(&details.Table).BuildImmutableTable()
 	return dsp.createStatsPlan(planCtx, tableDesc, reqStats, job)
 }
 

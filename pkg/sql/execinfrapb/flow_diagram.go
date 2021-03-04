@@ -147,7 +147,7 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 	details := []string{indexDetail(&tr.Table, tr.IndexIdx)}
 
 	if len(tr.Spans) > 0 {
-		tbl := tabledesc.NewImmutable(tr.Table)
+		tbl := tabledesc.NewBuilder(&tr.Table).BuildImmutableTable()
 		// only show the first span
 		idx := tbl.ActiveIndexes()[int(tr.IndexIdx)]
 		valDirs := catalogkeys.IndexKeyValDirs(idx.IndexDesc())

@@ -50,7 +50,7 @@ SHOW TABLES FROM foo
 public  bar  table  root  0  NULL
 
 # SET statement succeeds, CREATE TABLE fails.
-statement error pgcode 42P07 relation \"bar\" already exists
+statement error pgcode 42P07 relation \"foo.public.bar\" already exists
 SET database = foo; CREATE TABLE bar (k INT PRIMARY KEY)
 
 query T colnames

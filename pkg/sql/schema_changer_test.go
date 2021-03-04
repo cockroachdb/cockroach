@@ -458,7 +458,8 @@ func TestRollbackOfAddingTable(t *testing.T) {
 	require.NoError(t, row.Scan(&descBytes))
 	var desc descpb.Descriptor
 	require.NoError(t, protoutil.Unmarshal(descBytes, &desc))
-	viewDesc := desc.GetTable() //nolint:descriptormarshal
+	//nolint:descriptormarshal
+	viewDesc := desc.GetTable()
 	require.Equal(t, "v", viewDesc.GetName(), "read a different descriptor than expected")
 	require.Equal(t, descpb.DescriptorState_DROP, viewDesc.GetState())
 

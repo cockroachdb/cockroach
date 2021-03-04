@@ -204,14 +204,9 @@ func (TypeSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 
 func (t *typeSchemaChanger) getTypeDescFromStore(ctx context.Context) (*typedesc.Immutable, error) {
 	var typeDesc *typedesc.Immutable
-	if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, t.execCfg.Codec, t.typeID,
-			catalogkv.Immutable, catalogkv.TypeDescriptorKind, true /* required */)
-		if err != nil {
-			return err
-		}
-		typeDesc = desc.(*typedesc.Immutable)
-		return nil
+	if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		typeDesc, err = catalogkv.MustGetTypeDescByID(ctx, txn, t.execCfg.Codec, t.typeID)
+		return err
 	}); err != nil {
 		return nil, err
 	}

@@ -51,7 +51,7 @@ func (p asyncProducerMock) Close() error {
 }
 
 func topic(name string) tableDescriptorTopic {
-	return tableDescriptorTopic{tabledesc.NewImmutable(descpb.TableDescriptor{Name: name})}
+	return tableDescriptorTopic{tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()}
 }
 
 func TestKafkaSink(t *testing.T) {
@@ -186,7 +186,7 @@ func TestSQLSink(t *testing.T) {
 	topic := func(name string) tableDescriptorTopic {
 		id, _ := strconv.ParseUint(name, 36, 64)
 		return tableDescriptorTopic{
-			tabledesc.NewImmutable(descpb.TableDescriptor{Name: name, ID: descpb.ID(id)})}
+			tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()}
 	}
 
 	ctx := context.Background()
