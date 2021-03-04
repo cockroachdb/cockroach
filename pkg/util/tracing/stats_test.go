@@ -12,11 +12,12 @@ import (
 )
 
 func BenchmarkSpanStats(b *testing.B) {
-	tr := tracing.NewTracer()
 	for _, autoCollection := range []bool{false, true} {
 		for _, withStats := range []int{0, 1, 10} {
 			b.Run(fmt.Sprintf("autoCollection=%t,stats=%d", autoCollection, withStats), func(b *testing.B) {
+				tr := tracing.NewTracer()
 				var cs execinfrapb.ComponentStats // intentionally reused to simulate pooling
+				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					root := tr.StartSpan("root", tracing.WithForceRealSpan())
 					var sp *tracing.Span
@@ -74,6 +75,7 @@ func BenchmarkSpanStats(b *testing.B) {
 					}
 					root.Finish()
 				}
+				b.ReportMetric(float64(tr.Metrics().SpanCreated.Count())/float64(b.N), "spans/op")
 			})
 		}
 	}

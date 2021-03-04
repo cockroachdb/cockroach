@@ -25,6 +25,7 @@ import (
 	kv2 "github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -144,6 +145,7 @@ func (kv *kvNative) done() {
 
 // kvSQL is a SQL-based implementation of the KV interface.
 type kvSQL struct {
+	tr     *tracing.Tracer
 	db     *gosql.DB
 	buf    bytes.Buffer
 	doneFn func()
@@ -158,6 +160,7 @@ func newKVSQL(b *testing.B) kvInterface {
 
 	kv := &kvSQL{}
 	kv.db = db
+	kv.tr = s.Tracer().(*tracing.Tracer)
 	kv.doneFn = func() {
 		s.Stopper().Stop(context.Background())
 	}
@@ -313,6 +316,7 @@ func BenchmarkKV(b *testing.B) {
 								if err := kv.prep(rows, i != 0 /* Insert */ && i != 2 /* Delete */, sampleRate); err != nil {
 									b.Fatal(err)
 								}
+								numSpansBefore := kv.(*kvSQL).tr.Metrics().SpanCreated.Count()
 								b.ResetTimer()
 								for i := 0; i < b.N; i++ {
 									if err := opFn(kv, rows, i); err != nil {
@@ -320,6 +324,8 @@ func BenchmarkKV(b *testing.B) {
 									}
 								}
 								b.StopTimer()
+								numSpansAfter := kv.(*kvSQL).tr.Metrics().SpanCreated.Count()
+								b.ReportMetric(float64(numSpansAfter-numSpansBefore)/float64(b.N), "spans/op")
 							})
 						}
 					}

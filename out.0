@@ -1,105 +1,20 @@
 goos: linux
 goarch: amd64
 pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    275162 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    263898 ns/op	         7.00 spans/op
 PASS
 goos: linux
 goarch: amd64
 pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    257851 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    252606 ns/op	         7.00 spans/op
 PASS
 goos: linux
 goarch: amd64
 pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    268140 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    281119 ns/op	         7.00 spans/op
 PASS
 goos: linux
 goarch: amd64
 pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    291407 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    267401 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    271449 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    282641 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    274043 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    268867 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    276695 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    259984 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    268276 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    274318 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    244558 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    278330 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    247415 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    257935 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    277072 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    262434 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    261101 ns/op
-PASS
-goos: linux
-goarch: amd64
-pkg: github.com/cockroachdb/cockroach/pkg/sql/tests
-BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    264167 ns/op
+BenchmarkKV/Scan/SQL/rows=1/sample_rate=X-16         	    5000	    245658 ns/op	         7.00 spans/op
 PASS
