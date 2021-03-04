@@ -1,6 +1,7 @@
 import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
+import _ from "lodash";
 
 import { makeStatementsColumns } from "../statementsTable";
 import {
@@ -190,7 +191,11 @@ export class TransactionDetails extends React.Component<
                           <Text type="body-strong">Max scratch disk usage</Text>
                           <Text>
                             {formatNumberForDisplay(
-                              transactionStats.exec_stats.max_disk_usage.mean,
+                              _.get(
+                                transactionStats,
+                                "exec_stats.max_disk_usage.mean",
+                                0,
+                              ),
                               Bytes,
                             )}
                           </Text>

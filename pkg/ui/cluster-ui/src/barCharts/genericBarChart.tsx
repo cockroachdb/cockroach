@@ -3,7 +3,7 @@ import classNames from "classnames/bind";
 import { scaleLinear } from "d3-scale";
 import { format as d3Format } from "d3-format";
 
-import { stdDevLong } from "src/util/appStats";
+import { stdDevLong } from "src/util";
 import { Tooltip } from "src/tooltip";
 import { NumericStat } from "../util";
 import { clamp, longToInt, normalizeClosedDomain } from "./utils";
