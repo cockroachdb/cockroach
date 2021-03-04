@@ -823,7 +823,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if oldPartitioning.NumImplicitColumns > 0 {
 				return unimplemented.NewWithIssue(
 					58731,
-					"cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning",
+					"cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning",
 				)
 			}
 			newPrimaryIndex, err := CreatePartitioning(

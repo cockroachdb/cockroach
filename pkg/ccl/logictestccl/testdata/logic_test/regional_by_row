@@ -483,6 +483,11 @@ ALTER TABLE regional_by_row_table PARTITION BY LIST (pk) (
   PARTITION "one" VALUES IN (1)
 )
 
+statement error cannot change the partitioning of an index if the table has PARTITION ALL BY defined
+ALTER INDEX regional_by_row_table@regional_by_row_table_a_idx PARTITION BY LIST (pk2) (
+  PARTITION one VALUES IN (1)
+)
+
 statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
 CREATE INDEX bad_idx ON regional_by_row_table(a) USING HASH WITH BUCKET_COUNT = 8
 
