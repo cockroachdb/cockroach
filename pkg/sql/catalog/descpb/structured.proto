@@ -1005,6 +1005,12 @@ message TableDescriptor {
   // with the mutations list.
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
 
+  // The job associated with a schema change job run in the new schema changer
+  // (in sql/schemachanger), if one exists. Only one such job can exist at a
+  // time.
+  optional int64 new_schema_change_job_id = 46 [(gogoproto.nullable) = false,
+                                               (gogoproto.customname) = "NewSchemaChangeJobID"];
+
   message SequenceOpts {
     option (gogoproto.equal) = true;
     // How much to increment the sequence by when nextval() is called.
