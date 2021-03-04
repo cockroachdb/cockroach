@@ -13,30 +13,12 @@ package execstats
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
-
-type processorStats struct {
-	// TODO(radu): this field redundant with stats.Component.SQLInstanceID.
-	nodeID roachpb.NodeID
-	stats  *execinfrapb.ComponentStats
-}
-
-type streamStats struct {
-	// TODO(radu): this field redundant with stats.Component.SQLInstanceID.
-	originNodeID      roachpb.NodeID
-	destinationNodeID roachpb.NodeID
-	stats             *execinfrapb.ComponentStats
-}
-
-type flowStats struct {
-	stats []*execinfrapb.ComponentStats
-}
 
 // FlowsMetadata contains metadata extracted from flows that comprise a single
 // physical plan. This information is stored in sql.flowInfo and is analyzed by
@@ -45,30 +27,12 @@ type FlowsMetadata struct {
 	// flowID is the FlowID of the flows belonging to the physical plan. Note that
 	// the same FlowID is used across multiple flows in the same query.
 	flowID execinfrapb.FlowID
-	// processorStats maps a processor ID to stats associated with this
-	// processor extracted from a trace as well as some metadata. Note that it
-	// is possible for the processorStats to have nil stats, which indicates
-	// that no stats were found for the given processor in the trace.
-	processorStats map[execinfrapb.ProcessorID]*processorStats
-	// streamStats maps a stream ID to stats associated with this stream
-	// extracted from a trace as well as some metadata. Note that it is possible
-	// for the streamStats to have nil stats, which indicates that no stats were
-	// found for the given stream in the trace.
-	streamStats map[execinfrapb.StreamID]*streamStats
-	// flowStats maps a node ID to flow level stats extracted from a trace. Note
-	// that the key is not a FlowID because the same FlowID is used across
-	// nodes.
-	flowStats map[base.SQLInstanceID]*flowStats
 }
 
 // NewFlowsMetadata creates a FlowsMetadata for the given physical plan
 // information.
 func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMetadata {
-	a := &FlowsMetadata{
-		processorStats: make(map[execinfrapb.ProcessorID]*processorStats),
-		streamStats:    make(map[execinfrapb.StreamID]*streamStats),
-		flowStats:      make(map[base.SQLInstanceID]*flowStats),
-	}
+	a := &FlowsMetadata{}
 
 	// Annotate the maps with physical plan information.
 	for nodeID, flow := range flows {
@@ -80,18 +44,6 @@ func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMeta
 					"expected the same FlowID to be used for all flows. UUID of first flow: %v, UUID of flow on node %s: %v",
 					a.flowID, nodeID, flow.FlowID),
 			)
-		}
-		a.flowStats[base.SQLInstanceID(nodeID)] = &flowStats{}
-		for _, proc := range flow.Processors {
-			a.processorStats[execinfrapb.ProcessorID(proc.ProcessorID)] = &processorStats{nodeID: nodeID}
-			for _, output := range proc.Output {
-				for _, stream := range output.Streams {
-					a.streamStats[stream.StreamID] = &streamStats{
-						originNodeID:      nodeID,
-						destinationNodeID: stream.TargetNodeID,
-					}
-				}
-			}
 		}
 	}
 
@@ -141,13 +93,15 @@ func NewTraceAnalyzer(flowsMetadata *FlowsMetadata) *TraceAnalyzer {
 	return &TraceAnalyzer{FlowsMetadata: flowsMetadata}
 }
 
-// AddTrace adds the stats from the given trace to the TraceAnalyzer.
-//
-// If makeDeterministic is set, statistics that can vary from run to run are set
-// to fixed values; see ComponentStats.MakeDeterministic.
-func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterministic bool) error {
-	m := execinfrapb.ExtractStatsFromSpans(trace, makeDeterministic)
-	// Annotate the maps with stats extracted from the trace.
+// ProcessStats calculates node level and query level stats for the trace and
+// stores them in TraceAnalyzer. If errors occur while calculating stats,
+// ProcessStats returns the combined errors to the caller but continues
+// calculating other stats.
+func (a *TraceAnalyzer) ProcessStats(trace []tracingpb.RecordedSpan, makeDeterministic bool) error {
+	var errs error
+
+	m, cleanup := execinfrapb.ExtractStatsFromSpans(trace, makeDeterministic)
+	defer cleanup()
 	for component, componentStats := range m {
 		if !component.FlowID.Equal(a.flowID) {
 			// This component belongs to a flow we do not care about. Note that we use
@@ -157,111 +111,56 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 		}
 		switch component.Type {
 		case execinfrapb.ComponentID_PROCESSOR:
-			id := component.ID
-			processorStats := a.processorStats[execinfrapb.ProcessorID(id)]
-			if processorStats == nil {
-				return errors.Errorf("trace has span for processor %d but the processor does not exist in the physical plan", id)
-			}
-			processorStats.stats = componentStats
+			a.queryLevelStats.KVBytesRead += int64(componentStats.KV.BytesRead.Value())
+			a.queryLevelStats.KVRowsRead += int64(componentStats.KV.TuplesRead.Value())
+			a.queryLevelStats.KVTime += componentStats.KV.KVTime.Value()
+			a.queryLevelStats.ContentionTime += componentStats.KV.ContentionTime.Value()
 
 		case execinfrapb.ComponentID_STREAM:
-			id := component.ID
-			streamStats := a.streamStats[execinfrapb.StreamID(id)]
-			if streamStats == nil {
-				return errors.Errorf("trace has span for stream %d but the stream does not exist in the physical plan", id)
+			// Set networkBytesSentGroupedByNode.
+			bytes, err := getNetworkBytesFromComponentStats(componentStats)
+			if err != nil {
+				errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating network bytes sent"))
+			} else {
+				a.queryLevelStats.NetworkBytesSent += bytes
 			}
-			streamStats.stats = componentStats
 
-		case execinfrapb.ComponentID_FLOW:
-			flowStats := a.flowStats[component.SQLInstanceID]
-			if flowStats == nil {
-				return errors.Errorf(
-					"trace has span for flow %s on node %s but the flow does not exist in the physical plan",
-					component.FlowID,
-					component.SQLInstanceID,
-				)
-			}
-			flowStats.stats = append(flowStats.stats, componentStats)
-		}
-	}
-
-	return nil
-}
-
-// ProcessStats calculates node level and query level stats for the trace and
-// stores them in TraceAnalyzer. If errors occur while calculating stats,
-// ProcessStats returns the combined errors to the caller but continues
-// calculating other stats.
-func (a *TraceAnalyzer) ProcessStats() error {
-	var errs error
-
-	// Process processorStats.
-	for _, stats := range a.processorStats {
-		if stats.stats == nil {
-			continue
-		}
-		a.queryLevelStats.KVBytesRead += int64(stats.stats.KV.BytesRead.Value())
-		a.queryLevelStats.KVRowsRead += int64(stats.stats.KV.TuplesRead.Value())
-		a.queryLevelStats.KVTime += stats.stats.KV.KVTime.Value()
-		a.queryLevelStats.ContentionTime += stats.stats.KV.ContentionTime.Value()
-	}
-
-	// Process streamStats.
-	for _, stats := range a.streamStats {
-		if stats.stats == nil {
-			continue
-		}
-		// Set networkBytesSentGroupedByNode.
-		bytes, err := getNetworkBytesFromComponentStats(stats.stats)
-		if err != nil {
-			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating network bytes sent"))
-		} else {
-			a.queryLevelStats.NetworkBytesSent += bytes
-		}
-
-		// The row execution flow attaches flow stats to a stream stat with the
-		// last outbox, so we need to check stream stats for max memory and disk
-		// usage.
-		// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that
-		// are associated with streams, since it's a flow level stat. However,
-		// due to the row exec engine infrastructure, it is too complicated to
-		// attach this to a flow level span. If the row exec engine gets
-		// removed, getting maxMemUsage from streamStats should be removed as
-		// well.
-		if stats.stats.FlowStats.MaxMemUsage.HasValue() {
-			memUsage := int64(stats.stats.FlowStats.MaxMemUsage.Value())
-			if memUsage > a.queryLevelStats.MaxMemUsage {
-				a.queryLevelStats.MaxMemUsage = memUsage
-			}
-		}
-		if stats.stats.FlowStats.MaxDiskUsage.HasValue() {
-			if diskUsage := int64(stats.stats.FlowStats.MaxDiskUsage.Value()); diskUsage > a.queryLevelStats.MaxDiskUsage {
-				a.queryLevelStats.MaxDiskUsage = diskUsage
-			}
-		}
-
-		numMessages, err := getNumNetworkMessagesFromComponentsStats(stats.stats)
-		if err != nil {
-			errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating number of network messages"))
-		} else {
-			a.queryLevelStats.NetworkMessages += numMessages
-		}
-	}
-
-	// Process flowStats.
-	for _, stats := range a.flowStats {
-		if stats.stats == nil {
-			continue
-		}
-
-		for _, v := range stats.stats {
-			if v.FlowStats.MaxMemUsage.HasValue() {
-				if memUsage := int64(v.FlowStats.MaxMemUsage.Value()); memUsage > a.queryLevelStats.MaxMemUsage {
+			// The row execution flow attaches flow stats to a stream stat with the
+			// last outbox, so we need to check stream stats for max memory and disk
+			// usage.
+			// TODO(cathymw): maxMemUsage shouldn't be attached to span stats that
+			// are associated with streams, since it's a flow level stat. However,
+			// due to the row exec engine infrastructure, it is too complicated to
+			// attach this to a flow level span. If the row exec engine gets
+			// removed, getting maxMemUsage from streamStats should be removed as
+			// well.
+			if componentStats.FlowStats.MaxMemUsage.HasValue() {
+				memUsage := int64(componentStats.FlowStats.MaxMemUsage.Value())
+				if memUsage > a.queryLevelStats.MaxMemUsage {
 					a.queryLevelStats.MaxMemUsage = memUsage
 				}
 			}
-			if v.FlowStats.MaxDiskUsage.HasValue() {
-				if diskUsage := int64(v.FlowStats.MaxDiskUsage.Value()); diskUsage > a.queryLevelStats.MaxDiskUsage {
+			if componentStats.FlowStats.MaxDiskUsage.HasValue() {
+				if diskUsage := int64(componentStats.FlowStats.MaxDiskUsage.Value()); diskUsage > a.queryLevelStats.MaxDiskUsage {
+					a.queryLevelStats.MaxDiskUsage = diskUsage
+				}
+			}
+
+			numMessages, err := getNumNetworkMessagesFromComponentsStats(componentStats)
+			if err != nil {
+				errs = errors.CombineErrors(errs, errors.Wrap(err, "error calculating number of network messages"))
+			} else {
+				a.queryLevelStats.NetworkMessages += numMessages
+			}
+
+		case execinfrapb.ComponentID_FLOW:
+			if componentStats.FlowStats.MaxMemUsage.HasValue() {
+				if memUsage := int64(componentStats.FlowStats.MaxMemUsage.Value()); memUsage > a.queryLevelStats.MaxMemUsage {
+					a.queryLevelStats.MaxMemUsage = memUsage
+				}
+			}
+			if componentStats.FlowStats.MaxDiskUsage.HasValue() {
+				if diskUsage := int64(componentStats.FlowStats.MaxDiskUsage.Value()); diskUsage > a.queryLevelStats.MaxDiskUsage {
 					a.queryLevelStats.MaxDiskUsage = diskUsage
 				}
 
@@ -329,12 +228,7 @@ func GetQueryLevelStats(
 	var errs error
 	for _, metadata := range flowsMetadata {
 		analyzer := NewTraceAnalyzer(metadata)
-		if err := analyzer.AddTrace(trace, deterministicExplainAnalyze); err != nil {
-			errs = errors.CombineErrors(errs, errors.Wrap(err, "error analyzing trace statistics"))
-			continue
-		}
-
-		if err := analyzer.ProcessStats(); err != nil {
+		if err := analyzer.ProcessStats(trace, deterministicExplainAnalyze); err != nil {
 			errs = errors.CombineErrors(errs, err)
 			continue
 		}

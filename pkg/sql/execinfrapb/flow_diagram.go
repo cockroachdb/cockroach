@@ -597,7 +597,8 @@ func (d diagramData) ToURL() (string, url.URL, error) {
 
 // AddSpans implements the FlowDiagram interface.
 func (d *diagramData) AddSpans(spans []tracingpb.RecordedSpan) {
-	statsMap := ExtractStatsFromSpans(spans, d.flags.MakeDeterministic)
+	statsMap, cleanup := ExtractStatsFromSpans(spans, d.flags.MakeDeterministic)
+	defer cleanup()
 	for i := range d.Processors {
 		p := &d.Processors[i]
 		nodeID := d.nodeIDs[p.NodeIdx]

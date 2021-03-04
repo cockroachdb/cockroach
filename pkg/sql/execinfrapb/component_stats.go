@@ -323,12 +323,19 @@ func (s *ComponentStats) MakeDeterministic() {
 	}
 }
 
+var statsMapPool = sync.Pool{
+	New: func() interface{} {
+		return make(map[ComponentID]*ComponentStats)
+	},
+}
+
 // ExtractStatsFromSpans extracts all ComponentStats from a set of tracing
-// spans.
+// spans. It also returns a non-nil cleanup function that should be called once
+// the caller is done with the map and all of the objects stored in it.
 func ExtractStatsFromSpans(
 	spans []tracingpb.RecordedSpan, makeDeterministic bool,
-) map[ComponentID]*ComponentStats {
-	statsMap := make(map[ComponentID]*ComponentStats)
+) (map[ComponentID]*ComponentStats, func()) {
+	statsMap := statsMapPool.Get().(map[ComponentID]*ComponentStats)
 	// componentStats is only used to check whether a structured payload item is
 	// of ComponentStats type.
 	componentStats := NewComponentStats()
@@ -363,7 +370,13 @@ func ExtractStatsFromSpans(
 			}
 		})
 	}
-	return statsMap
+	return statsMap, func() {
+		for c, s := range statsMap {
+			s.Release()
+			delete(statsMap, c)
+		}
+		statsMapPool.Put(statsMap)
+	}
 }
 
 var componentStatsPool = sync.Pool{

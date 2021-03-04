@@ -472,7 +472,8 @@ func (m execNodeTraceMetadata) associateNodeWithComponents(
 func (m execNodeTraceMetadata) annotateExplain(
 	plan *explain.Plan, flowInfos []flowInfo, spans []tracingpb.RecordedSpan, makeDeterministic bool,
 ) {
-	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
+	statsMap, cleanup := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
+	defer cleanup()
 
 	var walk func(n *explain.Node)
 	walk = func(n *explain.Node) {
