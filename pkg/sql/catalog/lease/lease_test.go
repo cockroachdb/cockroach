@@ -1929,9 +1929,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	// Not sure whether run in the past and so sees clock uncertainty push.
-	// Must be a DDL as a regular DML would use the lease and not get pushed.
 	if _, err := tx1.Exec(`
-ALTER TABLE t.kv RENAME COLUMN v TO vv;
+INSERT INTO t.kv VALUES ('c', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
