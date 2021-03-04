@@ -49,7 +49,7 @@ func (m *Split) Reset()         { *m = Split{} }
 func (m *Split) String() string { return proto.CompactTextString(m) }
 func (*Split) ProtoMessage()    {}
 func (*Split) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{0}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{0}
 }
 func (m *Split) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -84,7 +84,7 @@ func (m *Merge) Reset()         { *m = Merge{} }
 func (m *Merge) String() string { return proto.CompactTextString(m) }
 func (*Merge) ProtoMessage()    {}
 func (*Merge) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{1}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{1}
 }
 func (m *Merge) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -118,7 +118,7 @@ type ChangeReplicas struct {
 func (m *ChangeReplicas) Reset()      { *m = ChangeReplicas{} }
 func (*ChangeReplicas) ProtoMessage() {}
 func (*ChangeReplicas) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{2}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{2}
 }
 func (m *ChangeReplicas) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -170,7 +170,7 @@ func (m *ComputeChecksum) Reset()         { *m = ComputeChecksum{} }
 func (m *ComputeChecksum) String() string { return proto.CompactTextString(m) }
 func (*ComputeChecksum) ProtoMessage()    {}
 func (*ComputeChecksum) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{3}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{3}
 }
 func (m *ComputeChecksum) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -207,7 +207,7 @@ func (m *Compaction) Reset()         { *m = Compaction{} }
 func (m *Compaction) String() string { return proto.CompactTextString(m) }
 func (*Compaction) ProtoMessage()    {}
 func (*Compaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{4}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{4}
 }
 func (m *Compaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -244,7 +244,7 @@ func (m *SuggestedCompaction) Reset()         { *m = SuggestedCompaction{} }
 func (m *SuggestedCompaction) String() string { return proto.CompactTextString(m) }
 func (*SuggestedCompaction) ProtoMessage()    {}
 func (*SuggestedCompaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{5}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{5}
 }
 func (m *SuggestedCompaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -333,7 +333,7 @@ func (m *ReplicatedEvalResult) Reset()         { *m = ReplicatedEvalResult{} }
 func (m *ReplicatedEvalResult) String() string { return proto.CompactTextString(m) }
 func (*ReplicatedEvalResult) ProtoMessage()    {}
 func (*ReplicatedEvalResult) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{6}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{6}
 }
 func (m *ReplicatedEvalResult) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -377,7 +377,7 @@ func (m *ReplicatedEvalResult_AddSSTable) Reset()         { *m = ReplicatedEvalR
 func (m *ReplicatedEvalResult_AddSSTable) String() string { return proto.CompactTextString(m) }
 func (*ReplicatedEvalResult_AddSSTable) ProtoMessage()    {}
 func (*ReplicatedEvalResult_AddSSTable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{6, 0}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{6, 0}
 }
 func (m *ReplicatedEvalResult_AddSSTable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -414,7 +414,7 @@ func (m *WriteBatch) Reset()         { *m = WriteBatch{} }
 func (m *WriteBatch) String() string { return proto.CompactTextString(m) }
 func (*WriteBatch) ProtoMessage()    {}
 func (*WriteBatch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{7}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{7}
 }
 func (m *WriteBatch) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -451,7 +451,7 @@ func (m *LogicalOpLog) Reset()         { *m = LogicalOpLog{} }
 func (m *LogicalOpLog) String() string { return proto.CompactTextString(m) }
 func (*LogicalOpLog) ProtoMessage()    {}
 func (*LogicalOpLog) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{8}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{8}
 }
 func (m *LogicalOpLog) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -548,9 +548,8 @@ type RaftCommand struct {
 	// used after this command is applied.
 	//
 	// The field can be zero, which is to be interpreted as no closed timestamp
-	// update. Some commands (lease requests) implicitly carry a closed timestamp
-	// in a command-specific way. If the value is not zero, the value is greater
-	// or equal to that of the previous commands (and all before it).
+	// update. If the value is not zero, the value is greater or equal to that of
+	// the previous commands (and all before it).
 	//
 	// This field is set through ClosedTimestampFooter hackery. Unlike in the
 	// ClosedTimestampFooter, the field is nullable here so that it does not get
@@ -580,7 +579,7 @@ func (m *RaftCommand) Reset()         { *m = RaftCommand{} }
 func (m *RaftCommand) String() string { return proto.CompactTextString(m) }
 func (*RaftCommand) ProtoMessage()    {}
 func (*RaftCommand) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{9}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{9}
 }
 func (m *RaftCommand) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -619,7 +618,7 @@ func (m *MaxLeaseFooter) Reset()         { *m = MaxLeaseFooter{} }
 func (m *MaxLeaseFooter) String() string { return proto.CompactTextString(m) }
 func (*MaxLeaseFooter) ProtoMessage()    {}
 func (*MaxLeaseFooter) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{10}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{10}
 }
 func (m *MaxLeaseFooter) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -658,7 +657,7 @@ func (m *ClosedTimestampFooter) Reset()         { *m = ClosedTimestampFooter{} }
 func (m *ClosedTimestampFooter) String() string { return proto.CompactTextString(m) }
 func (*ClosedTimestampFooter) ProtoMessage()    {}
 func (*ClosedTimestampFooter) Descriptor() ([]byte, []int) {
-	return fileDescriptor_proposer_kv_fd16d3d3c1c124dd, []int{11}
+	return fileDescriptor_proposer_kv_e58bd46cb431a0a7, []int{11}
 }
 func (m *ClosedTimestampFooter) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3786,10 +3785,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("kv/kvserver/kvserverpb/proposer_kv.proto", fileDescriptor_proposer_kv_fd16d3d3c1c124dd)
+	proto.RegisterFile("kv/kvserver/kvserverpb/proposer_kv.proto", fileDescriptor_proposer_kv_e58bd46cb431a0a7)
 }
 
-var fileDescriptor_proposer_kv_fd16d3d3c1c124dd = []byte{
+var fileDescriptor_proposer_kv_e58bd46cb431a0a7 = []byte{
 	// 1510 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x57, 0x5f, 0x6f, 0x13, 0xc7,
 	0x16, 0x8f, 0x63, 0x3b, 0x59, 0x8f, 0x13, 0x7b, 0x33, 0x04, 0xd8, 0x9b, 0x7b, 0xaf, 0x1d, 0xb9,
