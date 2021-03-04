@@ -31,6 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1214,6 +1217,7 @@ func TestImportUserDefinedTypes(t *testing.T) {
 		intoCols    string
 		verifyQuery string
 		expected    [][]string
+		errString   string
 	}{
 		// Test CSV imports.
 		{
@@ -1251,6 +1255,14 @@ func TestImportUserDefinedTypes(t *testing.T) {
 			verifyQuery: "SELECT * FROM t ORDER BY a",
 			expected:    [][]string{{"hello", "hello"}, {"hi", "hi"}},
 		},
+		// Test table with default value
+		{
+			create:    "a greeting, b greeting default 'hi'",
+			intoCols:  "a, b",
+			typ:       "PGCOPY",
+			contents:  "hello\nhi\thi\n",
+			errString: "type OID 100052 does not exist",
+		},
 	}
 
 	// Test IMPORT INTO.
@@ -1263,11 +1275,18 @@ func TestImportUserDefinedTypes(t *testing.T) {
 		require.Equal(t, len(test.contents), n)
 		// Run the import statement.
 		sqlDB.Exec(t, fmt.Sprintf("CREATE TABLE t (%s)", test.create))
-		sqlDB.Exec(t,
-			fmt.Sprintf("IMPORT INTO t (%s) %s DATA ($1)", test.intoCols, test.typ),
-			fmt.Sprintf("nodelocal://0/%s", filepath.Base(f.Name())))
-		// Ensure that the table data is as we expect.
-		sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
+
+		importStmt := fmt.Sprintf("IMPORT INTO t (%s) %s DATA ($1)", test.intoCols, test.typ)
+		importArgs := fmt.Sprintf("nodelocal://0/%s", filepath.Base(f.Name()))
+
+		if test.errString == "" {
+			sqlDB.Exec(t, importStmt, importArgs)
+			// Ensure that the table data is as we expect.
+			sqlDB.CheckQueryResults(t, test.verifyQuery, test.expected)
+		} else {
+			sqlDB.ExpectErr(t, test.errString, importStmt, importArgs)
+		}
+
 		// Clean up after the test.
 		sqlDB.Exec(t, "DROP TABLE t")
 	}
@@ -6453,6 +6472,117 @@ func TestImportAvro(t *testing.T) {
 		sqlDB.QueryRow(t, `SELECT count(*) FROM myschema.simple`).Scan(&numRows)
 		require.True(t, numRows > 0)
 	})
+}
+
+func TestImportMultiRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	baseDir := filepath.Join("testdata", "avro")
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 1 /* numServers */, base.TestingKnobs{}, &baseDir,
+	)
+	defer cleanup()
+
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	require.NoError(t, err)
+
+	// Create the databases
+	_, err = sqlDB.Exec(`CREATE DATABASE foo`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`CREATE DATABASE multi_region PRIMARY REGION "us-east1"`)
+	require.NoError(t, err)
+
+	simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
+
+	// Table schemas for USING
+	tableSchemaMR := fmt.Sprintf("nodelocal://0/%s", "simple-schema-multi-region.sql")
+	tableSchemaMRRegionalByRow := fmt.Sprintf("nodelocal://0/%s",
+		"simple-schema-multi-region-regional-by-row.sql")
+
+	tests := []struct {
+		name      string
+		db        string
+		table     string
+		sql       string
+		create    string
+		args      []interface{}
+		errString string
+	}{
+		{
+			name:      "import-create-using-multi-region-to-non-multi-region-database",
+			db:        "foo",
+			table:     "simple",
+			sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
+			args:      []interface{}{tableSchemaMR, simpleOcf},
+			errString: "cannot write descriptor for multi-region table",
+		},
+		{
+			name:  "import-create-using-multi-region-regional-by-table-to-multi-region-database",
+			db:    "multi_region",
+			table: "simple",
+			sql:   "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
+			args:  []interface{}{tableSchemaMR, simpleOcf},
+		},
+		{
+			name:      "import-create-using-multi-region-regional-by-row-to-multi-region-database",
+			db:        "multi_region",
+			table:     "simple",
+			sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
+			args:      []interface{}{tableSchemaMRRegionalByRow, simpleOcf},
+			errString: "IMPORT to REGIONAL BY ROW table not supported",
+		},
+		{
+			name:      "import-into-multi-region-regional-by-row-to-multi-region-database",
+			db:        "multi_region",
+			table:     "mr_regional_by_row",
+			create:    "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+			sql:       "IMPORT INTO mr_regional_by_row AVRO DATA ($1)",
+			args:      []interface{}{simpleOcf},
+			errString: "IMPORT into REGIONAL BY ROW table not supported",
+		},
+		{
+			name:   "import-into-using-multi-region-global-to-multi-region-database",
+			db:     "multi_region",
+			table:  "mr_global",
+			create: "CREATE TABLE mr_global (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY GLOBAL",
+			sql:    "IMPORT INTO mr_global AVRO DATA ($1)",
+			args:   []interface{}{simpleOcf},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err = sqlDB.Exec(fmt.Sprintf(`SET DATABASE = %q`, test.db))
+			require.NoError(t, err)
+
+			_, err = sqlDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
+			require.NoError(t, err)
+
+			if test.create != "" {
+				_, err = sqlDB.Exec(test.create)
+				require.NoError(t, err)
+			}
+
+			_, err = sqlDB.ExecContext(context.Background(), test.sql, test.args...)
+			if test.errString != "" {
+				testutils.IsError(err, test.errString)
+			} else {
+				require.NoError(t, err)
+				res := sqlDB.QueryRow(fmt.Sprintf("SELECT count(*) FROM %q", test.table))
+				require.NoError(t, res.Err())
+
+				var numRows int
+				err = res.Scan(&numRows)
+				require.NoError(t, err)
+
+				if numRows == 0 {
+					t.Error("expected some rows after import")
+				}
+			}
+		})
+	}
 }
 
 // TestImportClientDisconnect ensures that an import job can complete even if
