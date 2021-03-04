@@ -164,7 +164,7 @@ func MakeSimpleTableDescriptor(
 		parentID,
 		parentSchemaID,
 		tableID,
-		descpb.InvalidID,
+		nil, /* regionConfig */
 		hlc.Timestamp{WallTime: walltime},
 		descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		affected,
@@ -172,6 +172,11 @@ func MakeSimpleTableDescriptor(
 		&evalCtx,
 		&sessiondata.SessionData{}, /* sessionData */
 		tree.PersistencePermanent,
+		// We need to bypass the LOCALITY on non multi-region check here because
+		// we cannot access the database region config at import level.
+		// There is code that only allows REGIONAL BY TABLE tables to be imported,
+		// which will safely execute even if the locality check is bypassed.
+		sql.NewTableDescOptionBypassLocalityOnNonMultiRegionDatabaseCheck(),
 	)
 	if err != nil {
 		return nil, err

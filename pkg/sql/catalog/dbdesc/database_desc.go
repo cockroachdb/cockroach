@@ -211,6 +211,11 @@ func (desc *Immutable) IsMultiRegion() bool {
 	return desc.RegionConfig != nil
 }
 
+// GetRegionConfig returns the region config for the given database.
+func (desc *Immutable) GetRegionConfig() *descpb.DatabaseDescriptor_RegionConfig {
+	return desc.RegionConfig
+}
+
 // RegionNames returns the multi-region regions that have been added to a
 // database.
 func (desc *Immutable) RegionNames() (descpb.RegionNames, error) {
