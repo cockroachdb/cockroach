@@ -51,7 +51,7 @@ func TestNumBatches(t *testing.T) {
 			break
 		}
 	}
-	s := vsc.(*vectorizedStatsCollectorImpl).finish()
+	s := vsc.(*vectorizedStatsCollectorImpl).getStats()
 	require.Equal(t, nBatches, int(s.Output.NumBatches.Value()))
 }
 
@@ -77,7 +77,7 @@ func TestNumTuples(t *testing.T) {
 				break
 			}
 		}
-		s := vsc.(*vectorizedStatsCollectorImpl).finish()
+		s := vsc.(*vectorizedStatsCollectorImpl).getStats()
 		require.Equal(t, nBatches*batchSize, int(s.Output.NumTuples.Value()))
 	}
 }
@@ -149,7 +149,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			batchCount++
 			tupleCount += b.Length()
 		}
-		s := mjStatsCollector.(*vectorizedStatsCollectorImpl).finish()
+		s := mjStatsCollector.(*vectorizedStatsCollectorImpl).getStats()
 
 		require.Equal(t, nBatches*coldata.BatchSize(), int(s.Output.NumTuples.Value()))
 		// Two inputs are advancing the time source for a total of 2 * nBatches

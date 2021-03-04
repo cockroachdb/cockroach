@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/marusama/semaphore"
@@ -359,13 +358,16 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 }
 
 // finishVectorizedStatsCollectors finishes the given stats collectors and
-// outputs their stats to the trace contained in the ctx's span.
+// returns all of their stats.
 func finishVectorizedStatsCollectors(
-	ctx context.Context, vectorizedStatsCollectors []vectorizedStatsCollector,
-) {
+	vectorizedStatsCollectors []vectorizedStatsCollector,
+) []*execinfrapb.ComponentStats {
+	// TODO(yuzefovich): consider pooling ComponentStats objects.
+	result := make([]*execinfrapb.ComponentStats, 0, len(vectorizedStatsCollectors))
 	for _, vsc := range vectorizedStatsCollectors {
-		vsc.outputStats(ctx)
+		result = append(result, vsc.getStats())
 	}
+	return result
 }
 
 type runFn func(context.Context, context.CancelFunc)
@@ -407,6 +409,7 @@ type remoteComponentCreator interface {
 		typs []*types.T,
 		metadataSources []execinfrapb.MetadataSource,
 		toClose []colexecop.Closer,
+		getStats func() []*execinfrapb.ComponentStats,
 	) (*colrpc.Outbox, error)
 	newInbox(ctx context.Context, allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
@@ -419,8 +422,9 @@ func (vectorizedRemoteComponentCreator) newOutbox(
 	typs []*types.T,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
+	getStats func() []*execinfrapb.ComponentStats,
 ) (*colrpc.Outbox, error) {
-	return colrpc.NewOutbox(allocator, input, typs, metadataSources, toClose)
+	return colrpc.NewOutbox(allocator, input, typs, metadataSources, toClose, getStats)
 }
 
 func (vectorizedRemoteComponentCreator) newInbox(
@@ -637,10 +641,11 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	metadataSourcesQueue []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
 	factory coldata.ColumnFactory,
+	getStats func() []*execinfrapb.ComponentStats,
 ) (execinfra.OpNode, error) {
 	outbox, err := s.remoteComponentCreator.newOutbox(
 		colmem.NewAllocator(ctx, s.newStreamingMemAccount(flowCtx), factory),
-		op, outputTyps, metadataSourcesQueue, toClose,
+		op, outputTyps, metadataSourcesQueue, toClose, getStats,
 	)
 	if err != nil {
 		return nil, err
@@ -736,7 +741,8 @@ func (s *vectorizedFlowCreator) setupRouter(
 			// Note that here we pass in nil 'toClose' slice because hash
 			// router is responsible for closing all of the idempotent closers.
 			if _, err := s.setupRemoteOutputStream(
-				ctx, flowCtx, op, outputTyps, stream, []execinfrapb.MetadataSource{op}, nil /* toClose */, factory,
+				ctx, flowCtx, op, outputTyps, stream, []execinfrapb.MetadataSource{op},
+				nil /* toClose */, factory, nil, /* getStats */
 			); err != nil {
 				return err
 			}
@@ -944,39 +950,31 @@ func (s *vectorizedFlowCreator) setupOutput(
 		}
 	case execinfrapb.StreamEndpointSpec_REMOTE:
 		// Set up an Outbox.
+		var getStats func() []*execinfrapb.ComponentStats
 		if s.recordingStats {
 			// If recording stats, we add a metadata source that will generate all
 			// stats data as metadata for the stats collectors created so far.
 			vscs := append([]vectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
 			s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
-			metadataSourcesQueue = append(
-				metadataSourcesQueue,
-				execinfrapb.CallbackMetadataSource{
-					DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
-						// Start a separate recording so that GetRecording will return
-						// the recordings for only the child spans containing stats.
-						ctx, span := tracing.ChildSpanRemote(ctx, "")
-						if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode {
-							// At the last outbox, we can accurately retrieve stats for the
-							// whole flow from parent monitors. These stats are added to a
-							// flow-level span.
-							span.RecordStructured(&execinfrapb.ComponentStats{
-								Component: execinfrapb.FlowComponentID(base.SQLInstanceID(outputStream.OriginNodeID), flowCtx.ID),
-								FlowStats: execinfrapb.FlowStats{
-									MaxMemUsage:  optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
-									MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
-								},
-							})
-						}
-						finishVectorizedStatsCollectors(ctx, vscs)
-						span.Finish()
-						return []execinfrapb.ProducerMetadata{{TraceData: span.GetRecording()}}
-					},
-				},
-			)
+			getStats = func() []*execinfrapb.ComponentStats {
+				result := finishVectorizedStatsCollectors(vscs)
+				if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode {
+					// At the last outbox, we can accurately retrieve stats for
+					// the whole flow from parent monitors. These stats are
+					// added to a flow-level span.
+					result = append(result, &execinfrapb.ComponentStats{
+						Component: execinfrapb.FlowComponentID(base.SQLInstanceID(outputStream.OriginNodeID), flowCtx.ID),
+						FlowStats: execinfrapb.FlowStats{
+							MaxMemUsage:  optional.MakeUint(uint64(flowCtx.EvalCtx.Mon.MaximumBytes())),
+							MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
+						},
+					})
+				}
+				return result
+			}
 		}
 		outbox, err := s.setupRemoteOutputStream(
-			ctx, flowCtx, op, opOutputTypes, outputStream, metadataSourcesQueue, toClose, factory,
+			ctx, flowCtx, op, opOutputTypes, outputStream, metadataSourcesQueue, toClose, factory, getStats,
 		)
 		if err != nil {
 			return err
@@ -986,17 +984,13 @@ func (s *vectorizedFlowCreator) setupOutput(
 		s.leaves = append(s.leaves, outbox)
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 		// Make the materializer, which will write to the given receiver.
-		var outputStatsToTrace func() *execinfrapb.ComponentStats
+		var getStats func() []*execinfrapb.ComponentStats
 		if s.recordingStats {
 			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
 			// appended to.
 			vscq := append([]vectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
-			outputStatsToTrace = func() *execinfrapb.ComponentStats {
-				// TODO(radu): this is a sketchy way to use this infrastructure. We
-				// aren't actually returning any stats, but we are creating and closing
-				// child spans with stats.
-				finishVectorizedStatsCollectors(ctx, vscq)
-				return nil
+			getStats = func() []*execinfrapb.ComponentStats {
+				return finishVectorizedStatsCollectors(vscq)
 			}
 		}
 		proc, err := colexec.NewMaterializer(
@@ -1007,7 +1001,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 			s.syncFlowConsumer,
 			metadataSourcesQueue,
 			toClose,
-			outputStatsToTrace,
+			getStats,
 			s.getCancelFlowFn,
 		)
 		if err != nil {
