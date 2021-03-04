@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
@@ -19,6 +20,7 @@ go_library(
         "//pkg/sql/schemachanger/scexec/descriptorutils",
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scop",
+        "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/sem/tree",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

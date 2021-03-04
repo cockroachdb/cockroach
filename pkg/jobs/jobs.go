@@ -62,7 +62,7 @@ type CreatedByInfo struct {
 // Record bundles together the user-managed fields in jobspb.Payload.
 type Record struct {
 	Description   string
-	Statement     string
+	Statements    []string
 	Username      security.SQLUsername
 	DescriptorIDs descpb.IDs
 	Details       jobspb.Details

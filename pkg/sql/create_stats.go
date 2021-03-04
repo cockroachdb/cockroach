@@ -276,7 +276,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	}
 	return &jobs.Record{
 		Description: description,
-		Statement:   statement,
+		Statements:  []string{statement},
 		Username:    n.p.User(),
 		Details: jobspb.CreateStatsDetails{
 			Name:            string(n.Name),
