@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,23 +47,27 @@ func TestCreateRandomSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	toStr := func(c tree.Statement) string {
+		return tree.AsStringWithFlags(c, tree.FmtParsable)
+	}
+
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	for i := 0; i < 100; i++ {
-		tab := rowenc.RandCreateTable(rng, "table", i)
+		createTable := rowenc.RandCreateTable(rng, "table", i)
 		setDb(t, db, "test")
-		_, err := db.Exec(tab.String())
+		_, err := db.Exec(toStr(createTable))
 		if err != nil {
-			t.Fatal(tab, err)
+			t.Fatal(createTable, err)
 		}
 
 		var tabName, tabStmt, secondTabStmt string
 		if err := db.QueryRow(fmt.Sprintf("SHOW CREATE TABLE %s",
-			tab.Table.String())).Scan(&tabName, &tabStmt); err != nil {
+			createTable.Table.String())).Scan(&tabName, &tabStmt); err != nil {
 			t.Fatal(err)
 		}
 
-		if tabName != tab.Table.String() {
-			t.Fatalf("found table name %s, expected %s", tabName, tab.Table.String())
+		if tabName != createTable.Table.String() {
+			t.Fatalf("found table name %s, expected %s", tabName, createTable.Table.String())
 		}
 
 		// Reparse the show create table statement that's stored in the database.
@@ -75,7 +80,7 @@ func TestCreateRandomSchema(t *testing.T) {
 		// Now run the SHOW CREATE TABLE statement we found on a new db and verify
 		// that both tables are the same.
 
-		_, err = db.Exec(parsed.AST.String())
+		_, err = db.Exec(tree.AsStringWithFlags(parsed.AST, tree.FmtParsable))
 		if err != nil {
 			t.Fatal(parsed.AST, err)
 		}
@@ -85,21 +90,21 @@ func TestCreateRandomSchema(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if tabName != tab.Table.String() {
-			t.Fatalf("found table name %s, expected %s", tabName, tab.Table.String())
+		if tabName != createTable.Table.String() {
+			t.Fatalf("found table name %s, expected %s", tabName, createTable.Table.String())
 		}
 		// Reparse the show create table statement that's stored in the database.
 		secondParsed, err := parser.ParseOne(secondTabStmt)
 		if err != nil {
 			t.Fatalf("error parsing show create table: %s", err)
 		}
-		if parsed.AST.String() != secondParsed.AST.String() {
+		if toStr(parsed.AST) != toStr(secondParsed.AST) {
 			t.Fatalf("for input statement\n%s\nfound first output\n%q\nbut second output\n%q",
-				tab.String(), parsed.AST.String(), secondParsed.AST.String())
+				toStr(createTable), toStr(parsed.AST), toStr(secondParsed.AST))
 		}
 		if tabStmt != secondTabStmt {
 			t.Fatalf("for input statement\n%s\nfound first output\n%q\nbut second output\n%q",
-				tab.String(), tabStmt, secondTabStmt)
+				toStr(createTable), tabStmt, secondTabStmt)
 		}
 	}
 }
