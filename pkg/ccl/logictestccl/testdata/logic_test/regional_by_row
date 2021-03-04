@@ -488,6 +488,11 @@ ALTER INDEX regional_by_row_table@regional_by_row_table_a_idx PARTITION BY LIST 
   PARTITION one VALUES IN (1)
 )
 
+statement error cannot define PARTITION BY on a new index for a multi-region table
+CREATE INDEX bad_idx ON regional_by_row_table(a) PARTITION BY LIST (a) (
+  PARTITION one VALUES IN (1)
+)
+
 statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
 CREATE INDEX bad_idx ON regional_by_row_table(a) USING HASH WITH BUCKET_COUNT = 8
 

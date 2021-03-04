@@ -389,6 +389,11 @@ ALTER TABLE regional_primary_region_table PARTITION BY LIST (id) (
   PARTITION "one" VALUES IN (1)
 )
 
+statement error cannot define PARTITION BY on a new index for a multi-region table
+CREATE INDEX bad_idx ON regional_primary_region_table(a) PARTITION BY LIST (a) (
+  PARTITION one VALUES IN (1)
+)
+
 statement ok
 CREATE TABLE regional_implicit_primary_region_table (a int) LOCALITY REGIONAL BY TABLE
 
@@ -474,6 +479,11 @@ TABLE global_table  ALTER TABLE global_table CONFIGURE ZONE USING
 statement error cannot set PARTITION BY on a multi-region table
 ALTER TABLE global_table PARTITION BY LIST (id) (
   PARTITION "one" VALUES IN (1)
+)
+
+statement error cannot define PARTITION BY on a new index for a multi-region table
+CREATE INDEX bad_idx ON global_table(a) PARTITION BY LIST (a) (
+  PARTITION one VALUES IN (1)
 )
 
 query TTTTIT colnames
