@@ -1,5 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/testutils/lint/passes:__subpackages__"],
+)
+
 go_library(
     name = "forbiddenmethod",
     srcs = [
@@ -20,10 +26,14 @@ go_test(
     name = "forbiddenmethod_test",
     size = "small",
     srcs = ["descriptormarshal_test.go"],
-    data = glob(["testdata/**"]),
-    tags = ["broken_in_bazel"],
+    data = [
+        ":testdata",
+        "@go_sdk//:files",
+    ],
     deps = [
         ":forbiddenmethod",
+        "//pkg/build/bazel",
+        "//pkg/testutils",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],

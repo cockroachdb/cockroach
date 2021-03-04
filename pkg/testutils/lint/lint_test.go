@@ -421,6 +421,7 @@ func TestLint(t *testing.T) {
 				re: `\bos\.(Getenv|LookupEnv)\(`,
 				excludes: []string{
 					":!acceptance",
+					":!build/bazel",
 					":!ccl/acceptanceccl/backup_test.go",
 					":!ccl/backupccl/backup_cloud_test.go",
 					// KMS requires AWS credentials from environment variables.
@@ -433,7 +434,7 @@ func TestLint(t *testing.T) {
 					":!nightly",
 					":!testutils/lint",
 					":!util/envutil/env.go",
-					":!testutils/bazel.go",
+					":!testutils/data_path.go",
 					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
 					":!util/grpcutil", // GRPC_GO_* variables
@@ -1627,6 +1628,9 @@ func TestLint(t *testing.T) {
 				filter,
 				// Skip .pb.go and .pb.gw.go generated files.
 				stream.GrepNot(`pkg/.*\.pb(\.gw|)\.go:`),
+				// This file is a conditionally-compiled stub implementation that
+				// will produce fake "func is unused" errors.
+				stream.GrepNot(`pkg/build/bazel/non_bazel.go`),
 				// Skip generated file.
 				stream.GrepNot(`pkg/ui/distoss/bindata.go`),
 				stream.GrepNot(`pkg/ui/distccl/bindata.go`),

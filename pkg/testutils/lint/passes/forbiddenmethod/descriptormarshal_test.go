@@ -13,14 +13,23 @@ package forbiddenmethod_test
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
+func init() {
+	if bazel.BuiltWithBazel() {
+		bazel.SetGoEnv()
+	}
+}
+
 func Test(t *testing.T) {
 	skip.UnderStress(t)
-	testdata := analysistest.TestData()
+	testdata := testutils.TestDataPath(t)
+	analysistest.TestData = func() string { return testdata }
 	analysistest.Run(t, testdata, forbiddenmethod.DescriptorMarshalAnalyzer, "descmarshaltest")
 	analysistest.Run(t, testdata, forbiddenmethod.GRPCClientConnCloseAnalyzer, "grpcconnclosetest")
 	analysistest.Run(t, testdata, forbiddenmethod.GRPCStatusWithDetailsAnalyzer, "grpcstatuswithdetailstest")

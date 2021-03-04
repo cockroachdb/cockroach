@@ -22,10 +22,13 @@ go_test(
     name = "fmtsafe_test",
     size = "small",
     srcs = ["fmtsafe_test.go"],
-    data = glob(["testdata/**"]),
-    tags = ["broken_in_bazel"],
+    data = glob(["testdata/**"]) + [
+        "@go_sdk//:files",
+    ],
     deps = [
         ":fmtsafe",
+        "//pkg/build/bazel",
+        "//pkg/testutils",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],

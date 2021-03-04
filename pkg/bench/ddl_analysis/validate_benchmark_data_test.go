@@ -207,7 +207,7 @@ func resultsToExpectations(results []benchmarkResult) benchmarkExpectations {
 }
 
 func writeExpectationsFile(t *testing.T, expectations benchmarkExpectations) {
-	f, err := os.Create(testutils.TestDataPath("testdata", expectationsFilename))
+	f, err := os.Create(testutils.TestDataPath(t, expectationsFilename))
 	require.NoError(t, err)
 	defer func() { require.NoError(t, f.Close()) }()
 	w := csv.NewWriter(f)
@@ -225,7 +225,7 @@ func writeExpectationsFile(t *testing.T, expectations benchmarkExpectations) {
 }
 
 func readExpectationsFile(t *testing.T) benchmarkExpectations {
-	f, err := os.Open(testutils.TestDataPath("testdata", expectationsFilename))
+	f, err := os.Open(testutils.TestDataPath(t, expectationsFilename))
 	require.NoError(t, err)
 	defer func() { _ = f.Close() }()
 
