@@ -2460,6 +2460,49 @@ func TestOutstandingLeasesMetric(t *testing.T) {
 	}
 }
 
+// TestHistoricalAcquireDroppedDescriptor ensures that a historical transaction
+// can read an old descriptor.
+func TestHistoricalAcquireDroppedDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const typeName = "foo"
+	seenDrop := make(chan error)
+	recvSeenDrop := seenDrop
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLLeaseManager: &lease.ManagerTestingKnobs{
+					TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
+						name := descpb.GetDescriptorName(descriptor)
+						if name != typeName || seenDrop == nil {
+							return
+						}
+						state := descpb.GetDescriptorState(descriptor)
+						if state == descpb.DescriptorState_DROP {
+							close(seenDrop)
+							seenDrop = nil
+						}
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, "CREATE TYPE "+typeName+" AS ENUM ('a')")
+	var now string
+	tdb.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&now)
+	tdb.CheckQueryResults(t, `WITH a AS (SELECT 'a'::`+typeName+`) SELECT * FROM a`, [][]string{{"a"}})
+	tdb.CheckQueryResults(t, `WITH a AS (SELECT 'a'::`+typeName+`) SELECT * FROM a AS OF SYSTEM TIME `+now, [][]string{{"a"}})
+	tdb.Exec(t, "DROP TYPE foo")
+	// Make sure that the leases on the old version get dropped.
+	<-recvSeenDrop
+	// This should still work.
+	tdb.CheckQueryResults(t, `WITH a AS (SELECT 'a'::`+typeName+`) SELECT * FROM a AS OF SYSTEM TIME `+now, [][]string{{"a"}})
+}
+
 // Test that attempts to use a descriptor at a timestamp that precedes when
 // a descriptor is dropped but follows the notification that that descriptor
 // was dropped will successfully acquire the lease.

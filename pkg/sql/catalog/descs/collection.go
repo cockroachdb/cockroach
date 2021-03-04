@@ -728,7 +728,8 @@ func (tc *Collection) getUserDefinedSchemaByName(
 		// before the schema change has returned results.
 		desc, err := tc.getDescriptorByID(ctx, txn, schemaInfo.ID, flags, mutable)
 		if err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+				errors.Is(err, catalog.ErrDescriptorDropped) {
 				return false, nil, nil
 			}
 			return false, nil, err
@@ -986,6 +987,24 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 	flags tree.CommonLookupFlags,
 	mutable, setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
+	readFromStore := func() (catalog.Descriptor, error) {
+		// Always pick up a mutable copy so it can be cached.
+		// TODO (lucy): If the descriptor doesn't exist, should we generate our
+		// own error here instead of using the one from catalogkv?
+		desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id,
+			catalogkv.Mutable, catalogkv.AnyDescriptorKind, true /* required */)
+		if err != nil {
+			return nil, err
+		}
+		ud, err := tc.addUncommittedDescriptor(desc.(catalog.MutableDescriptor))
+		if err != nil {
+			return nil, err
+		}
+		if !mutable {
+			desc = ud.immutable
+		}
+		return desc, nil
+	}
 	getDescriptorByID := func() (catalog.Descriptor, error) {
 		if found, sd := tc.getSyntheticDescriptorByID(id); found {
 			if mutable {
@@ -1002,26 +1021,14 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 		}
 
 		if flags.AvoidCached || mutable || lease.TestingTableLeasesAreDisabled() {
-			// Always pick up a mutable copy so it can be cached.
-			// TODO (lucy): If the descriptor doesn't exist, should we generate our
-			// own error here instead of using the one from catalogkv?
-			desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id,
-				catalogkv.Mutable, catalogkv.AnyDescriptorKind, true /* required */)
-			if err != nil {
-				return nil, err
-			}
-			ud, err := tc.addUncommittedDescriptor(desc.(catalog.MutableDescriptor))
-			if err != nil {
-				return nil, err
-			}
-			if !mutable {
-				desc = ud.immutable
-			}
-			return desc, nil
+			return readFromStore()
 		}
 
 		desc, err := tc.getLeasedDescriptorByID(ctx, txn, id, setTxnDeadline)
 		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) || catalog.HasInactiveDescriptorError(err) {
+				return readFromStore()
+			}
 			return nil, err
 		}
 		return desc, nil
