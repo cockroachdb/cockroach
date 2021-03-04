@@ -41,8 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -189,7 +190,11 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 		if err := protoutil.Unmarshal(bytes, &desc); err != nil {
 			return err
 		}
-		table := tabledesc.NewImmutable(*descpb.TableFromDescriptor(&desc, hlc.Timestamp{}))
+		b := catalogkv.NewBuilder(&desc)
+		if b == nil || b.DescriptorType() != catalog.Table {
+			return errors.Newf("expected a table descriptor")
+		}
+		table := b.BuildImmutable().(catalog.TableDescriptor)
 
 		fn := func(kv storage.MVCCKeyValue) (string, error) {
 			var v roachpb.Value

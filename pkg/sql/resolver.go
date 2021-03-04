@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -722,7 +723,7 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	optIdx := idx.(*optIndex)
-	return tabledesc.NewExistingMutable(*optIdx.tab.desc.TableDesc()), optIdx.desc, nil
+	return tabledesc.NewBuilder(optIdx.tab.desc.TableDesc()).BuildExistingMutableTable(), optIdx.desc, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented
@@ -829,17 +830,7 @@ func newInternalLookupCtxFromDescriptors(
 ) (*internalLookupCtx, error) {
 	descriptors := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
-		desc := &rawDescs[i]
-		switch t := desc.Union.(type) {
-		case *descpb.Descriptor_Database:
-			descriptors[i] = dbdesc.NewImmutable(*t.Database)
-		case *descpb.Descriptor_Table:
-			descriptors[i] = tabledesc.NewImmutable(*t.Table)
-		case *descpb.Descriptor_Type:
-			descriptors[i] = typedesc.NewImmutable(*t.Type)
-		case *descpb.Descriptor_Schema:
-			descriptors[i] = schemadesc.NewImmutable(*t.Schema)
-		}
+		descriptors[i] = catalogkv.NewBuilder(&rawDescs[i]).BuildImmutable()
 	}
 	lCtx := newInternalLookupCtx(ctx, descriptors, prefix, nil /* fallback */)
 	if err := descs.HydrateGivenDescriptors(ctx, descriptors); err != nil {

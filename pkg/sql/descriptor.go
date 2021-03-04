@@ -77,8 +77,7 @@ func (p *planner) createDatabase(
 	if exists, databaseID, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			desc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, databaseID, catalogkv.Immutable,
-				catalogkv.DatabaseDescriptorKind, true)
+			desc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, databaseID)
 			if err != nil {
 				return nil, false, err
 			}
