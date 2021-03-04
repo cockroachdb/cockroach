@@ -95,6 +95,16 @@ CREATE TABLE regional_by_row_table (
 LOCALITY REGIONAL BY ROW
 
 statement ok
+CREATE TABLE parent_table (pk INT PRIMARY KEY)
+
+statement error interleaved tables are not compatible with REGIONAL BY ROW tables
+CREATE TABLE regional_by_row_table (
+  pk INT NOT NULL PRIMARY KEY
+)
+INTERLEAVE IN PARENT parent_table(pk)
+LOCALITY REGIONAL BY ROW
+
+statement ok
 CREATE TABLE regional_by_row_table_explicit_crdb_region_column (
   pk int PRIMARY KEY,
   a int,
@@ -432,6 +442,7 @@ query TTTTIT colnames
 SHOW TABLES
 ----
 schema_name  table_name                                         type   owner  estimated_row_count  locality
+public       parent_table                                       table  root   0                    REGIONAL BY TABLE IN PRIMARY REGION
 public       regional_by_row_table                              table  root   0                    REGIONAL BY ROW
 public       regional_by_row_table_explicit_crdb_region_column  table  root   0                    REGIONAL BY ROW
 
@@ -464,6 +475,9 @@ CREATE INDEX bad_idx ON regional_by_row_table(a) USING HASH WITH BUCKET_COUNT = 
 
 statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
 ALTER TABLE regional_by_row_table ALTER PRIMARY KEY USING COLUMNS(pk2) USING HASH WITH BUCKET_COUNT = 8
+
+statement error interleaved tables are not compatible with REGIONAL BY ROW tables
+CREATE INDEX bad_idx ON regional_by_row_table(pk) INTERLEAVE IN PARENT parent_table(pk)
 
 # Insert some rows into the regional_by_row_table.
 query TI
@@ -597,7 +611,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/69/1/"@"/1{-/#}, /Table/69/1/"\x80"/1{-/#}, /Table/69/1/"\xc0"/1{-/#}
+Scan /Table/71/1/"@"/1{-/#}, /Table/71/1/"\x80"/1{-/#}, /Table/71/1/"\xc0"/1{-/#}
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -636,7 +650,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/69/1/"@"/1{-/#}
+Scan /Table/71/1/"@"/1{-/#}
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -651,8 +665,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/69/1/"@"/10{-/#}
-Scan /Table/69/1/"\x80"/10{-/#}, /Table/69/1/"\xc0"/10{-/#}
+Scan /Table/71/1/"@"/10{-/#}
+Scan /Table/71/1/"\x80"/10{-/#}, /Table/71/1/"\xc0"/10{-/#}
 fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
 output row: [10 10 11 12 NULL]
 
