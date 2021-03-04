@@ -397,6 +397,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 		)
 	}
 
+	if n.n.Interleave != nil && n.n.PartitionBy != nil {
+		return pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot be partitioned")
+	}
+
 	indexDesc, err := MakeIndexDescriptor(params, n.n, n.tableDesc)
 	if err != nil {
 		return err
