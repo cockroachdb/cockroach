@@ -18,7 +18,7 @@ import {
 } from "./utils";
 import { forIn } from "lodash";
 import Long from "long";
-import { getSearchParams } from "src/util";
+import { aggregateStatementStats, getSearchParams } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
 import { PageConfig, PageConfigItem } from "../pageConfig";
@@ -290,9 +290,10 @@ export class TransactionsPage extends React.Component<
     const transactionDetails =
       statementIds && getStatementsById(statementIds, statements);
 
+    console.log(JSON.stringify(transactionDetails));
     return (
       <TransactionDetails
-        statements={transactionDetails}
+        statements={aggregateStatementStats(transactionDetails)}
         transactionStats={this.state.transactionStats}
         lastReset={this.lastReset()}
         handleDetails={this.handleDetails}
