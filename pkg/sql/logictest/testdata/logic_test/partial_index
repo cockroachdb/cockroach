@@ -1749,3 +1749,49 @@ CREATE TABLE t58390 (
 
 statement ok
 ALTER TABLE t58390 ALTER PRIMARY KEY USING COLUMNS (b, a)
+
+# Regression tests for #61414. Upsert execution should not error if partial
+# index PUT and DEL columns are not the last columns in the input of the
+# mutation.
+
+statement ok
+create table t61414_a (
+  k INT PRIMARY KEY
+)
+
+statement ok
+create table t61414_b (
+  k INT PRIMARY KEY,
+  a STRING,
+  b INT REFERENCES t61414_a(k),
+  UNIQUE INDEX (a, b),
+  INDEX (a) WHERE a = 'x'
+)
+
+statement ok
+INSERT INTO t61414_a VALUES (2)
+
+statement ok
+INSERT INTO t61414_b (k, a, b)
+VALUES (1, 'a', 2)
+ON CONFLICT (a, b) DO UPDATE SET a = excluded.a
+WHERE t61414_b.a = 'x'
+RETURNING k
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE t61414_c (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  INDEX (b) WHERE b > 0,
+  UNIQUE WITHOUT INDEX (b) WHERE b > 0,
+  FAMILY (k, a, c)
+)
+
+statement ok
+UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)

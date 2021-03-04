@@ -130,8 +130,9 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// written to when they are partial indexes and the row does not satisfy the
 	// predicate. This set is passed as a parameter to tableInserter.row below.
 	var pm row.PartialIndexUpdateHelper
-	if len(r.ti.tableDesc().PartialIndexes()) > 0 {
-		partialIndexPutVals := rowVals[len(r.insertCols)+r.checkOrds.Len():]
+	if n := len(r.ti.tableDesc().PartialIndexes()); n > 0 {
+		offset := len(r.insertCols) + r.checkOrds.Len()
+		partialIndexPutVals := rowVals[offset : offset+n]
 
 		err := pm.Init(partialIndexPutVals, tree.Datums{}, r.ti.tableDesc())
 		if err != nil {
