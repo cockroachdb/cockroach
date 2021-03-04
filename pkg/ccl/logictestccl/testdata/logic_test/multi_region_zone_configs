@@ -1,0 +1,241 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+query TTTT
+SHOW REGIONS
+----
+ap-southeast-2  {ap-az1,ap-az2,ap-az3}  {}  {}
+ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}
+us-east-1       {us-az1,us-az2,us-az3}  {}  {}
+
+statement ok
+CREATE DATABASE "mr-zone-configs" primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
+
+statement ok
+use "mr-zone-configs"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING gc.ttlseconds = 5
+
+statement ok
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING range_min_bytes = 1000, range_max_bytes = 100000
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 5,
+                            num_replicas = 5,
+                            num_voters = 3,
+                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                            voter_constraints = '[+region=ca-central-1]',
+                            lease_preferences = '[[+region=ca-central-1]]'
+
+statement error attempting to modify protected field "num_voters" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_voters = 5
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 5,
+                            num_replicas = 5,
+                            num_voters = 3,
+                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                            voter_constraints = '[+region=ca-central-1]',
+                            lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_voters = 5 FORCE
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 5,
+                            num_replicas = 5,
+                            num_voters = 5,
+                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                            voter_constraints = '[+region=ca-central-1]',
+                            lease_preferences = '[[+region=ca-central-1]]'
+
+# Ensure all fields are blocked
+statement error attempting to modify protected field "global_reads" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING global_reads = true
+
+statement error attempting to modify protected field "num_replicas" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7
+
+statement error attempting to modify protected field "constraints" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING constraints = '{+region=ap-southeast-2: 1}'
+
+statement error attempting to modify protected field "voter_constraints" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING voter_constraints = '[+region=ap-southeast-2]'
+
+statement error attempting to modify protected field "lease_preferences" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING lease_preferences = '[[+region=ap-southeast-2]]'
+
+# With above modified zone config, try and drop a region to get warning again
+statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "num_voters"
+ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2" FORCE
+
+statement ok
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING global_reads = true force
+
+statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "global_reads"
+ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2" force
+
+# Zone config is unmodified now. We don't need force.
+statement ok
+ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2" force
+
+statement ok
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7 force
+
+statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "num_replicas"
+ALTER DATABASE "mr-zone-configs" SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" SET PRIMARY REGION "us-east-1" FORCE
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 90000,
+                            num_replicas = 5,
+                            num_voters = 3,
+                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                            voter_constraints = '[+region=us-east-1]',
+                            lease_preferences = '[[+region=us-east-1]]'
+
+# Alter with one protected field and one unprotected field.
+statement error attempting to modify protected field "num_replicas" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 100000
+
+statement ok
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 100000 force
+
+statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "num_replicas"
+ALTER DATABASE "mr-zone-configs" SURVIVE REGION FAILURE
+
+statement ok
+ALTER DATABASE "mr-zone-configs" SURVIVE REGION FAILURE FORCE
+
+statement error attempting to modify protected field "constraints" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING constraints = '{+region=us-east-1: 3}'
+
+statement ok
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING constraints = '{+region=us-east-1: 3}' FORCE
+
+statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "constraints"
+ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2" FORCE
+
+statement error attempting to modify protected field "voter_constraints" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING voter_constraints = '[+region=ap-southeast-2]'
+
+statement ok
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING voter_constraints = '[+region=ap-southeast-2]' FORCE
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 90000,
+                            num_replicas = 5,
+                            num_voters = 5,
+                            constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1}',
+                            voter_constraints = '[+region=ap-southeast-2]',
+                            lease_preferences = '[[+region=us-east-1]]'
+
+statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "voter_constraints"
+ALTER DATABASE "mr-zone-configs" DROP REGION "ca-central-1"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" DROP REGION "ca-central-1" FORCE
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 90000,
+                            num_replicas = 5,
+                            num_voters = 5,
+                            constraints = '{+region=us-east-1: 1}',
+                            voter_constraints = '{+region=us-east-1: 2}',
+                            lease_preferences = '[[+region=us-east-1]]'
+
+statement error attempting to modify protected field "lease_preferences" of a multi-region database zone configuration
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING lease_preferences = '[[+region=ap-southeast-2]]'
+
+statement ok
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING lease_preferences = '[[+region=ap-southeast-2]]' FORCE
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 90000,
+                            num_replicas = 5,
+                            num_voters = 5,
+                            constraints = '{+region=us-east-1: 1}',
+                            voter_constraints = '{+region=us-east-1: 2}',
+                            lease_preferences = '[[+region=ap-southeast-2]]'
+
+statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "lease_preferences"
+ALTER DATABASE "mr-zone-configs" DROP REGION "us-east-1"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" DROP REGION "us-east-1" FORCE
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 90000,
+                            num_replicas = 5,
+                            num_voters = 5,
+                            constraints = '{+region=us-east-1: 1}',
+                            voter_constraints = '{+region=us-east-1: 2}',
+                            lease_preferences = '[[+region=ap-southeast-2]]'
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name    owner  primary_region  regions  survival_goal
+defaultdb        root   NULL            {}       NULL
+mr-zone-configs  root   NULL            {}       NULL
+postgres         root   NULL            {}       NULL
+system           node   NULL            {}       NULL
+test             root   NULL            {}       NULL
+
+# FIXME: Write some more testcases here which test constraints which are longer to ensure
+# that slice checking is working (e.g. a constraints list which is much longer than what
+# the MR zone config would generate).
