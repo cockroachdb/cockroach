@@ -2364,9 +2364,9 @@ CREATE TABLE d.t1 (x d.farewell);
 RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
   AS OF SYSTEM TIME %s
 `, ts1))
-			sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`,
+			sqlDB.ExpectErr(t, `pq: type "farewell" already exists`,
 				`CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
-			sqlDB.ExpectErr(t, `pq: type "d.public.unused" already exists`,
+			sqlDB.ExpectErr(t, `pq: type "unused" already exists`,
 				`CREATE TYPE d.unused AS ENUM ('some_enum')`)
 			sqlDB.Exec(t, `SELECT 'bye'::d.farewell; SELECT 'cya'::d.public.farewell;`)
 			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
@@ -2395,7 +2395,7 @@ RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
 		RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
 		 AS OF SYSTEM TIME %s
 		`, ts3))
-			sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`,
+			sqlDB.ExpectErr(t, `pq: type "farewell" already exists`,
 				`CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
 			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
 				`SELECT 'bye'::d.farewell;`)
@@ -2426,7 +2426,7 @@ RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
 		RESTORE DATABASE d FROM 'nodelocal://0/rev-history-backup'
 		 AS OF SYSTEM TIME %s
 		`, ts5))
-			sqlDB.ExpectErr(t, `pq: type "d.public.farewell" already exists`,
+			sqlDB.ExpectErr(t, `pq: type "farewell" already exists`,
 				`CREATE TYPE d.farewell AS ENUM ('bye', 'cya')`)
 			sqlDB.ExpectErr(t, `pq: invalid input value for enum farewell`,
 				`SELECT 'bye'::d.farewell;`)
@@ -5962,7 +5962,7 @@ func getMockTableDesc(
 		PrimaryIndex: pkIndex,
 		Indexes:      indexes,
 	}
-	return tabledesc.NewImmutable(mockTableDescriptor)
+	return tabledesc.NewBuilder(&mockTableDescriptor).BuildImmutableTable()
 }
 
 // Unit tests for the getLogicallyMergedTableSpans() method.

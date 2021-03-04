@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -207,8 +206,7 @@ func (p *planner) dropEnumValue(
 }
 
 func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {
-	// See if there is a name collision with the new name.
-	exists, id, err := catalogkv.LookupObjectID(
+	err := catalogkv.CheckObjectCollision(
 		ctx,
 		p.txn,
 		p.ExecCfg().Codec,
@@ -216,14 +214,7 @@ func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName stri
 		n.desc.ParentSchemaID,
 		newName,
 	)
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newName)
-	} else if err != nil {
+	if err != nil {
 		return err
 	}
 

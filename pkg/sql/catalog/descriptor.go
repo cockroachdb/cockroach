@@ -27,6 +27,51 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+// DescriptorType is a symbol representing the (sub)type of a descriptor.
+type DescriptorType string
+
+const (
+	// Any represents any descriptor.
+	Any DescriptorType = "any"
+
+	// Database is for database descriptors.
+	Database = "database"
+
+	// Table is for table descriptors.
+	Table = "relation"
+
+	// Type is for type descriptors.
+	Type = "type"
+
+	// Schema is for schema descriptors.
+	Schema = "schema"
+)
+
+// DescriptorBuilder interfaces are used to build catalog.Descriptor
+// objects.
+type DescriptorBuilder interface {
+
+	// TypeName returns a symbol identifying the type of the descriptor
+	// built by this builder.
+	TypeName() DescriptorType
+
+	// RunPostDeserializationChanges attempts to perform post-deserialization
+	// changes to the descriptor being built.
+	RunPostDeserializationChanges(ctx context.Context, dg DescGetter) error
+
+	// BuildImmutable returns an immutable Descriptor.
+	BuildImmutable() Descriptor
+
+	// BuildExistingMutable returns a MutableDescriptor with the cluster version
+	// set to the original value of the descriptor used to initialize the builder.
+	// This is for descriptors that already exist.
+	BuildExistingMutable() MutableDescriptor
+
+	// BuildCreatedMutable returns a MutableDescriptor with a nil cluster version.
+	// This is for a descriptor that is created in the same transaction.
+	BuildCreatedMutable() MutableDescriptor
+}
+
 // IndexOpts configures the behavior of catalog.ForEachIndex and
 // catalog.FindIndex.
 type IndexOpts struct {
@@ -61,7 +106,7 @@ type Descriptor interface {
 	GetDrainingNames() []descpb.NameInfo
 
 	GetPrivileges() *descpb.PrivilegeDescriptor
-	TypeName() string
+	TypeName() DescriptorType
 	GetAuditMode() descpb.TableDescriptor_AuditMode
 
 	Public() bool

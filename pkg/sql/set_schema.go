@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 // prepareSetSchema verifies that a table/type can be set to the desired
@@ -74,15 +73,9 @@ func (p *planner) prepareSetSchema(
 		return desiredSchemaID, nil
 	}
 
-	exists, id, err := catalogkv.LookupObjectID(
-		ctx, p.txn, p.ExecCfg().Codec, databaseID, desiredSchemaID, desc.GetName(),
-	)
-	if err == nil && exists {
-		collidingDesc, err := catalogkv.GetAnyDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return 0, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return 0, sqlerrors.MakeObjectAlreadyExistsError(collidingDesc.DescriptorProto(), desc.GetName())
+	err = catalogkv.CheckObjectCollision(ctx, p.txn, p.ExecCfg().Codec, databaseID, desiredSchemaID, desc.GetName())
+	if err != nil {
+		return descpb.InvalidID, err
 	}
 
 	return desiredSchemaID, nil

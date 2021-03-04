@@ -113,13 +113,13 @@ func CreateUserDefinedSchemaDescriptor(
 	}
 
 	// Create the SchemaDescriptor.
-	desc := schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
+	desc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   db.ID,
 		Name:       schemaName,
 		ID:         id,
 		Privileges: privs,
 		Version:    1,
-	})
+	}).BuildCreatedMutableSchema()
 
 	return desc, privs, nil
 }

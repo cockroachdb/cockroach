@@ -802,7 +802,11 @@ func TruncateInterleavedIndexes(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return RemoveIndexZoneConfigs(ctx, txn, execCfg, table.GetParentID(), indexes)
+			freshTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, table.GetID())
+			if err != nil {
+				return err
+			}
+			return RemoveIndexZoneConfigs(ctx, txn, execCfg, freshTableDesc, indexes)
 		}); err != nil {
 			return err
 		}
@@ -878,7 +882,11 @@ func (sc *SchemaChanger) truncateIndexes(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return RemoveIndexZoneConfigs(ctx, txn, sc.execCfg, sc.descID, dropped)
+			table, err := catalogkv.MustGetTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
+			if err != nil {
+				return err
+			}
+			return RemoveIndexZoneConfigs(ctx, txn, sc.execCfg, table, dropped)
 		}); err != nil {
 			return err
 		}
@@ -1346,13 +1354,11 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 	ctx context.Context, status jobs.RunningStatus,
 ) (*tabledesc.Mutable, error) {
 	var tableDesc *tabledesc.Mutable
-	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, sc.execCfg.Codec, sc.descID, catalogkv.Mutable,
-			catalogkv.TableDescriptorKind, true /* required */)
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		tableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		if err != nil {
 			return err
 		}
-		tableDesc = desc.(*tabledesc.Mutable)
 
 		// Update running status of job.
 		updateJobRunningProgress := false
@@ -1862,7 +1868,7 @@ func runSchemaChangesInTxn(
 	// mutations that need to be processed.
 	for i := 0; i < len(tableDesc.Mutations); i++ {
 		m := tableDesc.Mutations[i]
-		immutDesc := tabledesc.NewImmutable(*tableDesc.TableDesc())
+		immutDesc := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildImmutableTable()
 		switch m.Direction {
 		case descpb.DescriptorMutation_ADD:
 			switch m.Descriptor_.(type) {
@@ -2331,5 +2337,5 @@ func indexTruncateInTxn(
 		}
 	}
 	// Remove index zone configs.
-	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc.GetID(), []descpb.IndexDescriptor{*idx})
+	return RemoveIndexZoneConfigs(ctx, txn, execCfg, tableDesc, []descpb.IndexDescriptor{*idx})
 }

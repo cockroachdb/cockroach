@@ -200,7 +200,7 @@ func NewColBatchScan(
 	// indicates that we're probably doing this wrong. Instead we should be
 	// just setting the ID and Version in the spec or something like that and
 	// retrieving the hydrated immutable from cache.
-	table := tabledesc.NewImmutable(spec.Table)
+	table := tabledesc.NewBuilder(&spec.Table).BuildImmutableTable()
 	virtualColumn := tabledesc.FindVirtualColumn(table, spec.VirtualColumn)
 	cols := table.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {

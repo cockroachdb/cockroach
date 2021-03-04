@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -949,21 +948,14 @@ func RemoveIndexZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
-	tableID descpb.ID,
+	tableDesc catalog.TableDescriptor,
 	indexDescs []descpb.IndexDescriptor,
 ) error {
 	if !execCfg.Codec.ForSystemTenant() {
 		// Tenants are agnostic to zone configs.
 		return nil
 	}
-	desc, err := catalogkv.GetDescriptorByID(ctx, txn, execCfg.Codec, tableID,
-		catalogkv.Mutable, catalogkv.TableDescriptorKind, true)
-	if err != nil {
-		return err
-	}
-	tableDesc := desc.(catalog.TableDescriptor)
-
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
+	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -977,7 +969,7 @@ func RemoveIndexZoneConfigs(
 	}
 
 	// Ignore CCL required error to allow schema change to progress.
-	_, err = writeZoneConfig(ctx, txn, tableID, tableDesc, zone, execCfg, false /* hasNewSubzones */)
+	_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, false /* hasNewSubzones */)
 	if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 		return err
 	}

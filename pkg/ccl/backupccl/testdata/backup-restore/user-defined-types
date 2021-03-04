@@ -71,22 +71,22 @@ INSERT INTO d2.t2 VALUES (ARRAY['cya']);
 exec-sql
 CREATE TYPE d.greeting AS ENUM ('hello', 'hiya')
 ----
-pq: type "d.public.greeting" already exists
+pq: type "greeting" already exists
 
 exec-sql
 CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')
 ----
-pq: type "d.public._greeting" already exists
+pq: type "_greeting" already exists
 
 exec-sql
 CREATE TYPE d2.farewell AS ENUM ('go', 'away')
 ----
-pq: type "d2.public.farewell" already exists
+pq: type "farewell" already exists
 
 exec-sql
 CREATE TYPE d2._farewell AS ENUM ('go', 'away')
 ----
-pq: type "d2.public._farewell" already exists
+pq: type "_farewell" already exists
 
 # We shouldn't be able to drop the types since there are tables that
 # depend on them. These tests ensure that the back references from types
@@ -175,22 +175,22 @@ CREATE TABLE d.t3 (x d.greeting, y d.farewell)
 exec-sql
 CREATE TYPE d.greeting AS ENUM ('hello', 'hiya')
 ----
-pq: type "d.public.greeting" already exists
+pq: type "greeting" already exists
 
 exec-sql
 CREATE TYPE d._greeting AS ENUM ('hello', 'hiya')
 ----
-pq: type "d.public._greeting" already exists
+pq: type "_greeting" already exists
 
 exec-sql
 CREATE TYPE d.farewell AS ENUM ('go', 'away')
 ----
-pq: type "d.public.farewell" already exists
+pq: type "farewell" already exists
 
 exec-sql
 CREATE TYPE d._farewell AS ENUM ('go', 'away')
 ----
-pq: type "d.public._farewell" already exists
+pq: type "_farewell" already exists
 
 # We shouldn't be able to drop the types since there are tables that
 # depend on them. These tests ensure that the back references from types

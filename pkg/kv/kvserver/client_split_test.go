@@ -1401,7 +1401,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			// We don't care about the value, just the key.
 			id := descpb.ID(i)
 			key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
-			desc := tabledesc.NewImmutable(descpb.TableDescriptor{ID: id})
+			desc := tabledesc.NewBuilder(&descpb.TableDescriptor{ID: id}).BuildImmutable()
 			if err := txn.Put(ctx, key, desc.DescriptorProto()); err != nil {
 				return err
 			}
@@ -1470,7 +1470,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		// the descriptor we add. We don't care about the value, just the key.
 		id := descpb.ID(userTableMax)
 		k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
-		desc := tabledesc.NewImmutable(descpb.TableDescriptor{ID: id})
+		desc := tabledesc.NewBuilder(&descpb.TableDescriptor{ID: id}).BuildImmutable()
 		return txn.Put(ctx, k, desc.DescriptorProto())
 	}); err != nil {
 		t.Fatal(err)
