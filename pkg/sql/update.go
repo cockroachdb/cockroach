@@ -297,8 +297,8 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// from.
 	var pm row.PartialIndexUpdateHelper
 	if n := len(u.run.tu.tableDesc().PartialIndexes()); n > 0 {
-		partialIndexValOffset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
-		partialIndexVals := sourceVals[partialIndexValOffset:]
+		offset := len(u.run.tu.ru.FetchCols) + len(u.run.tu.ru.UpdateCols) + u.run.checkOrds.Len() + u.run.numPassthrough
+		partialIndexVals := sourceVals[offset:]
 		partialIndexPutVals := partialIndexVals[:n]
 		partialIndexDelVals := partialIndexVals[n : n*2]
 
