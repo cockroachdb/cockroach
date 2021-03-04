@@ -1689,6 +1689,16 @@ func NewTableDesc(
 	allowImplicitPartitioning := (sessionData != nil && sessionData.ImplicitColumnPartitioningEnabled) ||
 		(locality != nil && locality.LocalityLevel == tree.LocalityLevelRow)
 
+	// We defer index creation of implicit indexes in column definitions
+	// until after all columns have been initialized, in case there is
+	// an implicit index that will depend on a column that has not yet
+	// been initialized.
+	type implicitColumnDefIdx struct {
+		idx *descpb.IndexDescriptor
+		def *tree.ColumnTableDef
+	}
+	var implicitColumnDefIdxs []implicitColumnDefIdx
+
 	for i, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			// NewTableDesc is called sometimes with a nil SemaCtx (for example
@@ -1780,29 +1790,7 @@ func NewTableDesc(
 
 			if idx != nil {
 				idx.Version = indexEncodingVersion
-
-				// If it a non-primary index that is implicitly created, ensure partitioning
-				// for PARTITION ALL BY.
-				if desc.PartitionAllBy && !d.PrimaryKey.IsPrimaryKey {
-					var err error
-					*idx, err = CreatePartitioning(
-						ctx,
-						st,
-						evalCtx,
-						&desc,
-						*idx,
-						partitionAllBy,
-						nil, /* allowedNewColumnNames */
-						allowImplicitPartitioning,
-					)
-					if err != nil {
-						return nil, err
-					}
-				}
-
-				if err := desc.AddIndex(*idx, d.PrimaryKey.IsPrimaryKey); err != nil {
-					return nil, err
-				}
+				implicitColumnDefIdxs = append(implicitColumnDefIdxs, implicitColumnDefIdx{idx: idx, def: d})
 			}
 
 			if d.HasColumnFamily() {
@@ -1814,6 +1802,31 @@ func NewTableDesc(
 					return nil, err
 				}
 			}
+		}
+	}
+
+	for _, implicitColumnDefIdx := range implicitColumnDefIdxs {
+		// If it is a non-primary index that is implicitly created, ensure
+		// partitioning for PARTITION ALL BY.
+		if desc.PartitionAllBy && !implicitColumnDefIdx.def.PrimaryKey.IsPrimaryKey {
+			var err error
+			*implicitColumnDefIdx.idx, err = CreatePartitioning(
+				ctx,
+				st,
+				evalCtx,
+				&desc,
+				*implicitColumnDefIdx.idx,
+				partitionAllBy,
+				nil, /* allowedNewColumnNames */
+				allowImplicitPartitioning,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if err := desc.AddIndex(*implicitColumnDefIdx.idx, implicitColumnDefIdx.def.PrimaryKey.IsPrimaryKey); err != nil {
+			return nil, err
 		}
 	}
 
