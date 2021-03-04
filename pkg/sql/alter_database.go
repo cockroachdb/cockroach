@@ -564,6 +564,10 @@ func addDefaultLocalityConfigToAllTables(
 				return err
 			}
 
+			if err := checkCanConvertTableToMultiRegion(mutDesc); err != nil {
+				return err
+			}
+
 			if err := p.alterTableDescLocalityToRegionalByTable(
 				ctx, tree.PrimaryRegionNotSpecifiedName, mutDesc, regionEnumID,
 			); err != nil {
@@ -578,6 +582,30 @@ func addDefaultLocalityConfigToAllTables(
 		return err
 	}
 	return p.Txn().Run(ctx, b)
+}
+
+// checkCanConvertTableToMultiRegion checks whether a given table can be converted
+// to a multi-region table.
+func checkCanConvertTableToMultiRegion(desc catalog.TableDescriptor) error {
+	if desc.GetPrimaryIndex().GetPartitioning().NumColumns > 0 {
+		return pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			"cannot convert table %s to a multi-region table as it has PARTITION BY defined",
+			desc.GetName(),
+		)
+	}
+	for _, idx := range desc.NonDropIndexes() {
+		if idx.GetPartitioning().NumColumns > 0 {
+			return pgerror.Newf(
+				pgcode.ObjectNotInPrerequisiteState,
+				"cannot convert table %s to a multi-region table as it has index/constraint %s with PARTITION BY defined",
+				desc.GetName(),
+				idx.GetName(),
+			)
+		}
+	}
+	// TODO(#57668): check zone configurations are not set here
+	return nil
 }
 
 // setInitialPrimaryRegion sets the primary region in cases where the database
