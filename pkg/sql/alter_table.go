@@ -810,6 +810,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if t.All {
 				return unimplemented.NewWithIssue(58736, "PARTITION ALL BY not yet implemented")
 			}
+			if n.tableDesc.GetLocalityConfig() != nil {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot set PARTITION BY on a multi-region table",
+				)
+			}
 			if n.tableDesc.IsPartitionAllBy() {
 				return unimplemented.NewWithIssue(58736, "changing partition of table with PARTITION ALL BY not yet implemented")
 			}

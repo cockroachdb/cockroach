@@ -384,6 +384,11 @@ DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZON
                                voter_constraints = '{+region=ca-central-1: 2}',
                                lease_preferences = '[[+region=ca-central-1]]'
 
+statement error cannot set PARTITION BY on a multi-region table
+ALTER TABLE regional_primary_region_table PARTITION BY LIST (id) (
+  PARTITION "one" VALUES IN (1)
+)
+
 statement ok
 CREATE TABLE regional_implicit_primary_region_table (a int) LOCALITY REGIONAL BY TABLE
 
@@ -465,6 +470,11 @@ TABLE global_table  ALTER TABLE global_table CONFIGURE ZONE USING
                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                     voter_constraints = '{+region=ca-central-1: 2}',
                     lease_preferences = '[[+region=ca-central-1]]'
+
+statement error cannot set PARTITION BY on a multi-region table
+ALTER TABLE global_table PARTITION BY LIST (id) (
+  PARTITION "one" VALUES IN (1)
+)
 
 query TTTTIT colnames
 SHOW TABLES

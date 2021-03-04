@@ -477,6 +477,12 @@ CREATE TABLE public.regional_by_row_table (
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING "gc.ttlseconds" = 10
 
 # Prohibit certain actions on a REGIONAL BY ROW table.
+
+statement error cannot set PARTITION BY on a multi-region table
+ALTER TABLE regional_by_row_table PARTITION BY LIST (pk) (
+  PARTITION "one" VALUES IN (1)
+)
+
 statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
 CREATE INDEX bad_idx ON regional_by_row_table(a) USING HASH WITH BUCKET_COUNT = 8
 
