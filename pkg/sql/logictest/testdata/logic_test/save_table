@@ -27,7 +27,7 @@ SELECT * FROM t
 4  four
 5  five
 
-query error create save table: relation "save_table_test_scan_1" already exists
+query error create save table: relation "savetables.public.save_table_test_scan_1" already exists
 SELECT * FROM u
 
 statement ok

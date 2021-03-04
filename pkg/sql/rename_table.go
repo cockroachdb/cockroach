@@ -85,7 +85,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	for _, dependent := range tableDesc.DependedOnBy {
 		if !dependent.ByID {
 			return nil, p.dependentViewError(
-				ctx, tableDesc.TypeName(), oldTn.String(),
+				ctx, string(tableDesc.DescriptorType()), oldTn.String(),
 				tableDesc.ParentID, dependent.ID, "rename",
 			)
 		}
@@ -196,18 +196,15 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
-	exists, id, err := catalogkv.LookupObjectID(
-		params.ctx, params.p.txn, p.ExecCfg().Codec, targetDbDesc.GetID(), targetSchemaDesc.ID, newTn.Table(),
+	err := catalogkv.CheckObjectCollision(
+		params.ctx,
+		params.p.txn,
+		p.ExecCfg().Codec,
+		targetDbDesc.GetID(),
+		targetSchemaDesc.ID,
+		newTn,
 	)
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(
-			params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
-	} else if err != nil {
+	if err != nil {
 		return err
 	}
 
@@ -234,17 +231,6 @@ func (n *renameTableNode) startExec(params runParams) error {
 	if err := p.writeSchemaChange(
 		ctx, tableDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
-		return err
-	}
-
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), newTn.Table())
-	} else if err != nil {
 		return err
 	}
 

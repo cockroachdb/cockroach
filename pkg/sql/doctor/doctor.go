@@ -57,15 +57,17 @@ type namespaceReverseMap map[int64][]descpb.NameInfo
 // JobsTable represents data read from `system.jobs`.
 type JobsTable []jobs.JobMetadata
 
-func newDescGetter(ctx context.Context, rows []DescriptorTableRow) (catalog.MapDescGetter, error) {
+func newDescGetter(rows []DescriptorTableRow) (catalog.MapDescGetter, error) {
 	pg := catalog.MapDescGetter{}
 	for _, r := range rows {
 		var d descpb.Descriptor
 		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
 			return nil, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
 		}
-		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &d, r.ModTime)
-		pg[descpb.ID(r.ID)] = catalogkv.UnwrapDescriptorRaw(ctx, &d)
+		b := catalogkv.NewBuilderWithMVCCTimestamp(&d, r.ModTime)
+		if b != nil {
+			pg[descpb.ID(r.ID)] = b.BuildImmutable()
+		}
 	}
 	return pg, nil
 }
@@ -119,7 +121,7 @@ func ExamineDescriptors(
 	fmt.Fprintf(
 		stdout, "Examining %d descriptors and %d namespace entries...\n",
 		len(descTable), len(namespaceTable))
-	descGetter, err := newDescGetter(ctx, descTable)
+	descGetter, err := newDescGetter(descTable)
 	if err != nil {
 		return false, err
 	}
@@ -263,7 +265,7 @@ func ExamineJobs(
 	stdout io.Writer,
 ) (ok bool, err error) {
 	fmt.Fprintf(stdout, "Examining %d running jobs...\n", len(jobsTable))
-	descGetter, err := newDescGetter(ctx, descTable)
+	descGetter, err := newDescGetter(descTable)
 	if err != nil {
 		return false, err
 	}
@@ -307,7 +309,7 @@ func reportMsg(desc catalog.Descriptor, format string, args ...interface{}) stri
 	msg := fmt.Sprintf(format, args...)
 	// Add descriptor-identifying prefix if it isn't there already.
 	// The prefix has the same format as the validation error wrapper.
-	msgPrefix := fmt.Sprintf("%s %q (%d): ", desc.TypeName(), desc.GetName(), desc.GetID())
+	msgPrefix := fmt.Sprintf("%s %q (%d): ", desc.DescriptorType(), desc.GetName(), desc.GetID())
 	if msg[:len(msgPrefix)] == msgPrefix {
 		msgPrefix = ""
 	}

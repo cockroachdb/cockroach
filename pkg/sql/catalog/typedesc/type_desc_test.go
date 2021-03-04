@@ -331,8 +331,8 @@ func TestTypeDescIsCompatibleWith(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		a := typedesc.NewImmutable(test.a)
-		b := typedesc.NewImmutable(test.b)
+		a := typedesc.NewBuilder(&test.a).BuildImmutableType()
+		b := typedesc.NewBuilder(&test.b).BuildImmutableType()
 		err := a.IsCompatibleWith(b)
 		if test.err == "" {
 			require.NoError(t, err)
@@ -349,20 +349,20 @@ func TestValidateTypeDesc(t *testing.T) {
 	ctx := context.Background()
 
 	descs := catalog.MapDescGetter{}
-	descs[100] = dbdesc.NewImmutable(descpb.DatabaseDescriptor{
+	descs[100] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name: "db",
 		ID:   100,
-	})
-	descs[101] = schemadesc.NewImmutable(descpb.SchemaDescriptor{
+	}).BuildImmutable()
+	descs[101] = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ID:       101,
 		ParentID: 100,
 		Name:     "schema",
-	})
-	descs[102] = typedesc.NewImmutable(descpb.TypeDescriptor{
+	}).BuildImmutable()
+	descs[102] = typedesc.NewBuilder(&descpb.TypeDescriptor{
 		ID:   102,
 		Name: "type",
-	})
-	descs[200] = dbdesc.NewImmutable(descpb.DatabaseDescriptor{
+	}).BuildImmutable()
+	descs[200] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name: "multi-region-db",
 		ID:   200,
 		RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
@@ -371,7 +371,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 			PrimaryRegion: "us-east-1",
 		},
-	})
+	}).BuildImmutable()
 
 	defaultPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
 	invalidPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
@@ -683,7 +683,7 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			"user testuser must not have SELECT privileges on system type with ID=50",
+			"user testuser must not have SELECT privileges on type with ID=50",
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,
@@ -803,8 +803,8 @@ func TestValidateTypeDesc(t *testing.T) {
 	}
 
 	for i, test := range testData {
-		desc := typedesc.NewImmutable(test.desc)
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.TypeName(), desc.GetName(), desc.GetID(), test.err)
+		desc := typedesc.NewBuilder(&test.desc).BuildImmutable()
+		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 		if err := catalog.ValidateSelfAndCrossReferences(ctx, descs, desc); err == nil {
 			t.Errorf("#%d expected err: %s but found nil: %v", i, expectedErr, test.desc)
 		} else if expectedErr != err.Error() {

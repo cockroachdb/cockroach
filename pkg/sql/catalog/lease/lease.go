@@ -214,8 +214,7 @@ func (s storage) acquire(
 		// to ValidateSelf() instead of Validate(), to avoid the cross-table
 		// checks. Does this actually matter? We already potentially do cross-table
 		// checks when populating pre-19.2 foreign keys.
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, s.codec, id, catalogkv.Immutable,
-			catalogkv.AnyDescriptorKind, true /* required */)
+		desc, err := catalogkv.MustGetDescriptorByID(ctx, txn, s.codec, id)
 		if err != nil {
 			return err
 		}
@@ -327,8 +326,7 @@ func (m *Manager) WaitForOneVersion(
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		var desc catalog.Descriptor
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			desc, err = catalogkv.GetDescriptorByID(ctx, txn, m.Codec(), id, catalogkv.Immutable,
-				catalogkv.AnyDescriptorKind, true /* required */)
+			desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, m.Codec(), id)
 			return err
 		}); err != nil {
 			return 0, err
@@ -415,8 +413,7 @@ func (s storage) getForExpiration(
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		prevTimestamp := expiration.Prev()
 		txn.SetFixedTimestamp(ctx, prevTimestamp)
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, s.codec, id, catalogkv.Immutable,
-			catalogkv.AnyDescriptorKind, true /* required */)
+		desc, err := catalogkv.MustGetDescriptorByID(ctx, txn, s.codec, id)
 		if err != nil {
 			return err
 		}
@@ -1844,7 +1841,7 @@ func (m *Manager) watchForRangefeedUpdates(
 		if descriptor.Union == nil {
 			return
 		}
-		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, ev.Value.Timestamp)
+		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(&descriptor, ev.Value.Timestamp)
 		id, version, name, _ := descpb.GetDescriptorMetadata(&descriptor)
 		if log.V(2) {
 			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
@@ -1886,7 +1883,7 @@ func (m *Manager) handleUpdatedSystemCfg(
 		if descriptor.Union == nil {
 			return
 		}
-		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &descriptor, kv.Value.Timestamp)
+		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(&descriptor, kv.Value.Timestamp)
 		id, version, name, _ := descpb.GetDescriptorMetadata(&descriptor)
 		if log.V(2) {
 			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",

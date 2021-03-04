@@ -350,9 +350,9 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 	defer delete(SystemAllowedPrivileges, id)
 
 	rootWrongPrivilegesErr := "user root must have exactly SELECT, GRANT " +
-		"privileges on system table with ID=.*"
+		"privileges on (system )?table with ID=.*"
 	adminWrongPrivilegesErr := "user admin must have exactly SELECT, GRANT " +
-		"privileges on system table with ID=.*"
+		"privileges on (system )?table with ID=.*"
 
 	{
 		// Valid: root user has one of the allowable privilege sets.

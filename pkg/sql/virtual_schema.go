@@ -334,7 +334,7 @@ func (v *virtualSchemaEntry) GetObjectByName(
 		if def, ok := v.defs[name]; ok {
 			if flags.RequireMutable {
 				return &mutableVirtualDefEntry{
-					desc: tabledesc.NewExistingMutable(*def.desc.TableDesc()),
+					desc: tabledesc.NewBuilder(def.desc.TableDesc()).BuildExistingMutableTable(),
 				}, nil
 			}
 			return def, nil
@@ -652,7 +652,7 @@ func NewVirtualSchemaHolder(
 					return nil, errors.NewAssertionErrorWithWrappedErrf(err, "programmer error")
 				}
 			}
-			td := tabledesc.NewImmutable(tableDesc)
+			td := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
 			if err := catalog.ValidateSelf(td); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
@@ -694,12 +694,12 @@ var publicSelectPrivileges = descpb.NewPrivilegeDescriptor(
 )
 
 func initVirtualDatabaseDesc(id descpb.ID, name string) *dbdesc.Immutable {
-	return dbdesc.NewImmutable(descpb.DatabaseDescriptor{
+	return dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,
 		Version:    1,
 		Privileges: publicSelectPrivileges,
-	})
+	}).BuildImmutableDatabase()
 }
 
 // getEntries is part of the VirtualTabler interface.
