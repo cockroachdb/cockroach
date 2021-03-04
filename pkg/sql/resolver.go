@@ -937,6 +937,18 @@ func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (*schemadesc.Immutable, 
 	return sc, nil
 }
 
+// getSchemaNameByID returns the schema name given an ID for a schema.
+func (l *internalLookupCtx) getSchemaNameByID(id descpb.ID) (string, error) {
+	if id == keys.PublicSchemaID {
+		return tree.PublicSchema, nil
+	}
+	schema, err := l.getSchemaByID(id)
+	if err != nil {
+		return "", err
+	}
+	return schema.GetName(), nil
+}
+
 func (l *internalLookupCtx) getDatabaseName(table catalog.TableDescriptor) string {
 	parentName := l.dbNames[table.GetParentID()]
 	if parentName == "" {

@@ -453,6 +453,7 @@ CREATE TABLE interleave_parent (x INT PRIMARY KEY);
 statement notice NOTICE: interleaved tables and interleaved indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
 CREATE TABLE interleave_create_notice (x INT, y INT, s STRING, PRIMARY KEY (x, y)) INTERLEAVE IN PARENT interleave_parent(x);
 
+
 statement notice NOTICE: interleaved tables and interleaved indexes are deprecated in 20.2 and will be removed in 21.2\nHINT: .*52009.*
 CREATE INDEX interleave_index ON interleave_create_notice (x, s) INTERLEAVE IN PARENT interleave_parent(x);
 
@@ -473,3 +474,45 @@ CREATE INDEX willfail ON interleave_create_notice (x, s) INTERLEAVE IN PARENT in
 
 statement error interleaved tables and interleaved indexes are disabled
 ALTER TABLE interleave_pk_notice ALTER PRIMARY KEY USING COLUMNS (x) INTERLEAVE IN PARENT interleave_parent(x);
+
+statement ok
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true
+
+# Interleaved index as non-primary one check
+statement ok
+CREATE TABLE parent(x int, y int);
+
+statement ok
+CREATE TABLE child(x int, y int, z int );
+
+statement ok
+CREATE INDEX NIINDX ON PARENT(x,y);
+
+statement ok
+CREATE INDEX NIINDX2 ON CHILD(z);
+
+statement ok
+CREATE INDEX NIINDX3 ON CHILD(z);
+
+statement ok
+CREATE INDEX IINDX ON CHILD(rowid,x,y,z) INTERLEAVE IN PARENT PARENT(rowid);
+
+
+
+query TTTTT
+select * from "".crdb_internal.interleaved;
+----
+test   public  p1_1                      p1_id                    primary
+test   public  all_interleaves           primary                  primary
+test   public  all_interleaves           all_interleaves_c_d_idx  primary
+test   public  all_interleaves           all_interleaves_d_c_key  primary
+test   public  orders                    primary                  primary
+other  public  interdb                   primary                  primary
+test   public  c20067                    primary                  primary
+test   public  documents                 primary                  primary
+test   public  big_interleave_parent     primary                  primary
+test   public  big_interleave_child      primary                  primary
+test   public  interleave_create_notice  primary                  primary
+test   public  interleave_create_notice  interleave_index         primary
+test   public  interleave_pk_notice      primary                  primary
+test   public  child                     iindx                    primary
