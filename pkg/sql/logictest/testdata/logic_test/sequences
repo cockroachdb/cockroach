@@ -1386,6 +1386,19 @@ CREATE SEQUENCE db2.seq2 OWNED BY db1.t.a
 statement error invalid OWNED BY option
 ALTER SEQUENCE db2.seq2 OWNED BY doesntexist
 
+statement ok
+SET DATABASE = db2;
+
+# Validate that cross DB sequences are detected by internal tables
+query TTT
+select * from crdb_internal.cross_db_references;
+----
+db2.public.seq   db1.public.t  sequences owning table
+db2.public.seq2  db1.public.t  sequences owning table
+
+statement ok
+SET DATABASE = test
+
 # Test that passing a descriptor other than a sequence
 # returns an appropriate error.
 subtest invalid_ids

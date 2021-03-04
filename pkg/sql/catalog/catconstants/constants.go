@@ -79,6 +79,9 @@ const (
 	CrdbInternalZonesTableID
 	CrdbInternalInvalidDescriptorsTableID
 	CrdbInternalClusterDatabasePrivilegesTableID
+	CrdbInternalInterleavedTables
+	CrdbInternalInterleavedIndexes
+	CrdbInternalCrossDbRefrences
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

@@ -473,3 +473,34 @@ CREATE INDEX willfail ON interleave_create_notice (x, s) INTERLEAVE IN PARENT in
 
 statement error interleaved tables and interleaved indexes are disabled
 ALTER TABLE interleave_pk_notice ALTER PRIMARY KEY USING COLUMNS (x) INTERLEAVE IN PARENT interleave_parent(x);
+
+# Sanity test for interleaved indexes and tables related internal tables.
+query TTT
+select * from crdb_internal.interleaved_tables;
+----
+public  all_interleaves           p1_1
+public  orders                    customers
+public  interdb                   foo
+public  c20067                    p20067
+public  documents                 users
+public  big_interleave_parent     big_interleave_grandparent
+public  big_interleave_child      big_interleave_parent
+public  interleave_create_notice  interleave_parent
+public  interleave_pk_notice      interleave_parent
+
+query TTT
+select * from crdb_internal.interleaved_indexes;
+----
+p1_1                      p1_id                    primary
+all_interleaves           primary                  primary
+all_interleaves           all_interleaves_c_d_idx  primary
+all_interleaves           all_interleaves_d_c_key  primary
+orders                    primary                  primary
+interdb                   primary                  primary
+c20067                    primary                  primary
+documents                 primary                  primary
+big_interleave_parent     primary                  primary
+big_interleave_child      primary                  primary
+interleave_create_notice  primary                  primary
+interleave_create_notice  interleave_index         primary
+interleave_pk_notice      primary                  primary

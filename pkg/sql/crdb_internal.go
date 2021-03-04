@@ -131,6 +131,9 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalZonesTableID:                     crdbInternalZonesTable,
 		catconstants.CrdbInternalInvalidDescriptorsTableID:        crdbInternalInvalidDescriptorsTable,
 		catconstants.CrdbInternalClusterDatabasePrivilegesTableID: crdbInternalClusterDatabasePrivilegesTable,
+		catconstants.CrdbInternalInterleavedTables:                crdbInternalInterleavedTables,
+		catconstants.CrdbInternalInterleavedIndexes:               crdbInternalInterleavedIndexes,
+		catconstants.CrdbInternalCrossDbRefrences:                 crdbInternalCrossDbReferences,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -4020,6 +4023,193 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 							tree.NewDString(priv), // privilege_type
 						); err != nil {
 							return err
+						}
+					}
+				}
+				return nil
+			})
+	},
+}
+
+var crdbInternalInterleavedTables = virtualSchemaTable{
+	comment: `virtual table with interleaved table information`,
+	schema: `
+CREATE TABLE crdb_internal.interleaved_tables (
+	schema_name   STRING NOT NULL,
+	table_name    STRING NOT NULL,
+	parent_table  STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
+			func(db *dbdesc.Immutable, schemaName string, table catalog.TableDescriptor) error {
+				if table.IsInterleaved() {
+					index := table.GetPrimaryIndex()
+					if index.NumInterleaveAncestors() > 0 {
+						ancestor := index.GetInterleaveAncestor(index.NumInterleaveAncestors() - 1)
+						parentID := ancestor.TableID
+						parentTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, parentID,
+							tree.ObjectLookupFlags{
+								CommonLookupFlags: tree.CommonLookupFlags{
+									Required: true,
+								},
+							})
+						if err != nil {
+							return err
+						}
+						if err := addRow(tree.NewDString(schemaName),
+							tree.NewDString(table.GetName()),
+							tree.NewDString(parentTable.GetName())); err != nil {
+							return err
+						}
+					}
+				}
+				return nil
+			})
+	},
+}
+
+var crdbInternalInterleavedIndexes = virtualSchemaTable{
+	comment: `virtual table with interleaved index information`,
+	schema: `
+CREATE TABLE crdb_internal.interleaved_indexes (
+	table_name    STRING NOT NULL,
+	index_name    STRING NOT NULL,
+	parent_index  STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
+			func(db *dbdesc.Immutable, schemaName string, table catalog.TableDescriptor) error {
+				if table.IsInterleaved() {
+					indexes := table.NonDropIndexes()
+					for _, index := range indexes {
+						if index.NumInterleaveAncestors() > 0 {
+							ancestor := index.GetInterleaveAncestor(index.NumInterleaveAncestors() - 1)
+							parentTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, ancestor.TableID,
+								tree.ObjectLookupFlags{
+									CommonLookupFlags: tree.CommonLookupFlags{
+										Required: true,
+									},
+								})
+							if err != nil {
+								return err
+							}
+							parentIndex, err := parentTable.FindIndexWithID(ancestor.IndexID)
+							if err != nil {
+								return err
+							}
+
+							if err := addRow(tree.NewDString(table.GetName()),
+								tree.NewDString(index.GetName()),
+								tree.NewDString(parentIndex.GetName())); err != nil {
+								return err
+							}
+						}
+					}
+				}
+				return nil
+			})
+	},
+}
+
+var crdbInternalCrossDbReferences = virtualSchemaTable{
+	comment: `virtual table with cross db references`,
+	schema: `
+CREATE TABLE crdb_internal.cross_db_references (
+	object_name                           STRING NOT NULL,
+	referenced_object_name                STRING NOT NULL,
+	cross_database_reference_description  STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
+			func(db *dbdesc.Immutable, schemaName string, table catalog.TableDescriptor) error {
+				// For tables detect if foreign key references point at a different
+				// database.
+				if table.IsTable() {
+					return table.ForeachOutboundFK(
+						func(fk *descpb.ForeignKeyConstraint) error {
+							referencedTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, fk.ReferencedTableID,
+								tree.ObjectLookupFlags{
+									CommonLookupFlags: tree.CommonLookupFlags{
+										Required: true,
+									},
+								})
+							if err != nil {
+								return err
+							}
+							if referencedTable.GetParentID() != table.GetParentID() {
+								resolvedObjectName, err := p.getQualifiedTableName(ctx, table)
+								if err != nil {
+									return err
+								}
+								resolvedRefObjectName, err := p.getQualifiedTableName(ctx, referencedTable)
+								if err != nil {
+									return err
+								}
+								if err := addRow(tree.NewDString(resolvedObjectName.FQString()),
+									tree.NewDString(resolvedRefObjectName.FQString()),
+									tree.NewDString("table foreign key reference")); err != nil {
+									return err
+								}
+							}
+							return nil
+						})
+				} else if table.IsView() {
+					// For views check if we depend on tables in a different database.
+					dependsOn := table.GetDependsOn()
+					for _, dependency := range dependsOn {
+						dependentTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, dependency,
+							tree.ObjectLookupFlags{
+								CommonLookupFlags: tree.CommonLookupFlags{
+									Required: true,
+								},
+							})
+						if err != nil {
+							return err
+						}
+						if dependentTable.GetParentID() != table.GetParentID() {
+							resolvedObjectName, err := p.getQualifiedTableName(ctx, table)
+							if err != nil {
+								return err
+							}
+							resolvedRefObjectName, err := p.getQualifiedTableName(ctx, dependentTable)
+							if err != nil {
+								return err
+							}
+							if err := addRow(tree.NewDString(resolvedObjectName.FQString()),
+								tree.NewDString(resolvedRefObjectName.FQString()),
+								tree.NewDString("view references table")); err != nil {
+								return err
+							}
+						}
+					}
+				} else if table.IsSequence() {
+					// For sequences check if the sequence is owned by
+					// a different database.
+					sequenceOpts := table.GetSequenceOpts()
+					if sequenceOpts.SequenceOwner.OwnerTableID != descpb.InvalidID {
+						ownerTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, sequenceOpts.SequenceOwner.OwnerTableID,
+							tree.ObjectLookupFlags{
+								CommonLookupFlags: tree.CommonLookupFlags{
+									Required: true,
+								},
+							})
+						if err != nil {
+							return err
+						}
+						if ownerTable.GetParentID() != table.GetParentID() {
+							resolvedObjectName, err := p.getQualifiedTableName(ctx, table)
+							if err != nil {
+								return err
+							}
+							resolvedRefObjectName, err := p.getQualifiedTableName(ctx, ownerTable)
+							if err != nil {
+								return err
+							}
+							if err := addRow(tree.NewDString(resolvedObjectName.FQString()),
+								tree.NewDString(resolvedRefObjectName.FQString()),
+								tree.NewDString("sequences owning table")); err != nil {
+								return err
+							}
 						}
 					}
 				}

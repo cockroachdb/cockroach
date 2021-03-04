@@ -230,6 +230,15 @@ CREATE TABLE crdb_internal.create_type_statements (
    enum_members STRING[] NULL,
    INDEX create_type_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_name, create_statement, enum_members)
 )  {}  {}
+CREATE TABLE crdb_internal.cross_db_references (
+object_name STRING NOT NULL,
+referenced_object_name STRING NOT NULL,
+cross_database_reference_description STRING NOT NULL
+)  CREATE TABLE crdb_internal.cross_db_references (
+object_name STRING NOT NULL,
+referenced_object_name STRING NOT NULL,
+cross_database_reference_description STRING NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.databases (
    id INT8 NOT NULL,
    name STRING NOT NULL,
@@ -363,6 +372,24 @@ CREATE TABLE crdb_internal.index_columns (
    column_name STRING NULL,
    column_direction STRING NULL,
    implicit BOOL NULL
+)  {}  {}
+CREATE TABLE crdb_internal.interleaved_indexes (
+table_name STRING NOT NULL,
+index_name STRING NOT NULL,
+parent_index STRING NOT NULL
+)  CREATE TABLE crdb_internal.interleaved_indexes (
+table_name STRING NOT NULL,
+index_name STRING NOT NULL,
+parent_index STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.interleaved_tables (
+schema_name STRING NOT NULL,
+table_name STRING NOT NULL,
+parent_table STRING NOT NULL
+)  CREATE TABLE crdb_internal.interleaved_tables (
+schema_name STRING NOT NULL,
+table_name STRING NOT NULL,
+parent_table STRING NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.invalid_objects (
    id INT8 NULL,
