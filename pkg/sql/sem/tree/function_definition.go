@@ -10,7 +10,10 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/lib/pq/oid"
+)
 
 // FunctionDefinition implements a reference to the (possibly several)
 // overloads for a built-in function.
@@ -158,6 +161,11 @@ func NewFunctionDefinition(
 // FunDefs holds pre-allocated FunctionDefinition instances
 // for every builtin function. Initialized by builtins.init().
 var FunDefs map[string]*FunctionDefinition
+
+// OidToBuiltinName contains a map from the hashed OID of all builtin functions
+// to their name. We populate this from the pg_catalog.go file in the sql
+// package because of dependency issues: we can't use oidHasher from this file.
+var OidToBuiltinName map[oid.Oid]string
 
 // Format implements the NodeFormatter interface.
 func (fd *FunctionDefinition) Format(ctx *FmtCtx) {

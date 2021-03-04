@@ -4158,6 +4158,24 @@ https://www.postgresql.org/docs/9.6/catalog-pg-aggregate.html`,
 	},
 }
 
+// Populate the oid-to-builtin-function map. We have to do this operation here,
+// rather than in the SQL builtins package, because the oidHasher can't live
+// there.
+func init() {
+	h := makeOidHasher()
+	tree.OidToBuiltinName = make(map[oid.Oid]string, len(tree.FunDefs))
+	for name, def := range tree.FunDefs {
+		for _, o := range def.Definition {
+			if overload, ok := o.(*tree.Overload); ok {
+				builtinOid := h.BuiltinOid(name, overload)
+				id := oid.Oid(builtinOid.DInt)
+				tree.OidToBuiltinName[id] = name
+				overload.Oid = id
+			}
+		}
+	}
+}
+
 // oidHasher provides a consistent hashing mechanism for object identifiers in
 // pg_catalog tables, allowing for reliable joins across tables.
 //
