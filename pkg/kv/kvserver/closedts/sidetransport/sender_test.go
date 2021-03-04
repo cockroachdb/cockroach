@@ -12,17 +12,21 @@ package sidetransport
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 // mockReplica is a mock implementation of the Replica interface.
@@ -62,11 +66,10 @@ type mockConn struct {
 func (c *mockConn) run(context.Context, *stop.Stopper) { c.running = true }
 func (c *mockConn) close()                             { c.closed = true }
 
-func newMockSender() (*Sender, *stop.Stopper) {
+func newMockSender(connFactory connFactory) (*Sender, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	st := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	connFactory := &mockConnFactory{}
 	s := newSenderWithConnFactory(stopper, st, clock, connFactory)
 	s.nodeID = 1 // usually set in (*Sender).Run
 	return s, stopper
@@ -103,7 +106,8 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 func TestSenderBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	s, stopper := newMockSender()
+	connFactory := &mockConnFactory{}
+	s, stopper := newMockSender(connFactory)
 	defer stopper.Stop(ctx)
 
 	// No leaseholders.
@@ -207,3 +211,170 @@ func TestSenderSameRangeDifferentStores(t *testing.T) {
 }
 
 // TODO(andrei): add test for updatesBuf.
+
+// mockReceiver is a SideTransportServer.
+type mockReceiver struct {
+	stop chan struct{}
+	mu   struct {
+		syncutil.Mutex
+		called bool
+	}
+}
+
+var _ ctpb.SideTransportServer = &mockReceiver{}
+
+// PushUpdates is the streaming RPC handler.
+func (s *mockReceiver) PushUpdates(stream ctpb.SideTransport_PushUpdatesServer) error {
+	s.mu.Lock()
+	s.mu.called = true
+	s.mu.Unlock()
+	// Block the RPC until close() is called.
+	<-s.stop
+	return nil
+}
+
+func newMockReceiver() *mockReceiver {
+	return &mockReceiver{
+		stop: make(chan struct{}),
+	}
+}
+
+func (s *mockReceiver) getCalled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.called
+}
+
+// mockSideTransportGRPCServer wraps a mockReceiver in a gRPC server listening
+// on a network interface.
+type mockSideTransportGRPCServer struct {
+	lis      net.Listener
+	srv      *grpc.Server
+	receiver *mockReceiver
+	stopper  *stop.Stopper
+}
+
+func (s *mockSideTransportGRPCServer) close() {
+	s.receiver.close()
+	s.srv.Stop()
+	_ /* err */ = s.lis.Close()
+	s.stopper.Stop(context.Background())
+}
+
+func (s *mockSideTransportGRPCServer) addr() net.Addr {
+	return s.lis.Addr()
+}
+
+func newMockSideTransportGRPCServer() (*mockSideTransportGRPCServer, error) {
+	lis, err := net.Listen("tcp", "localhost:")
+	if err != nil {
+		return nil, err
+	}
+
+	stopper := stop.NewStopper()
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	grpcServer := rpc.NewServer(rpc.NewInsecureTestingContext(clock, stopper))
+
+	receiver := newMockReceiver()
+	ctpb.RegisterSideTransportServer(grpcServer, receiver)
+	go func() {
+		_ /* err */ = grpcServer.Serve(lis)
+	}()
+	return &mockSideTransportGRPCServer{
+		lis:      lis,
+		srv:      grpcServer,
+		receiver: receiver,
+		stopper:  stopper,
+	}, nil
+}
+
+func (s *mockReceiver) close() {
+	close(s.stop)
+}
+
+type mockDialer struct {
+	serverAddr string
+	mu         struct {
+		syncutil.Mutex
+		conns []*grpc.ClientConn
+	}
+}
+
+var _ nodeDialer = &mockDialer{}
+
+func (m *mockDialer) Dial(
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
+) (_ *grpc.ClientConn, _ error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, err := grpc.Dial(m.serverAddr, grpc.WithInsecure())
+	if err == nil {
+		m.mu.conns = append(m.mu.conns, c)
+	}
+	return c, err
+}
+
+func (m *mockDialer) Close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, c := range m.mu.conns {
+		_ /* err */ = c.Close() // nolint:grpcconnclose
+	}
+}
+
+// Test that the stopper quiescence interrupts a stream.Send.
+func TestRPCConnUnblocksOnStopper(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	srv, err := newMockSideTransportGRPCServer()
+	require.NoError(t, err)
+	defer srv.close()
+	dialer := &mockDialer{serverAddr: srv.addr().String()}
+	defer dialer.Close()
+
+	ch := make(chan struct{})
+	s, stopper := newMockSender(newRPCConnFactory(dialer,
+		connTestingKnobs{beforeSend: func(_ roachpb.NodeID, msg *ctpb.Update) {
+			// Try to send an update to ch, if anyone is still listening.
+			ch <- struct{}{}
+		}}))
+	defer stopper.Stop(ctx)
+
+	// Add a leaseholder that can close, in order to establish a connection to n2.
+	r1 := newMockReplica(15, 1, 2)
+	s.RegisterLeaseholder(ctx, r1, 1)
+	s.publish(ctx)
+	require.Len(t, s.conns, 1)
+
+	// Now get the rpcConn to keep sending messages by calling s.publish()
+	// repeatedly. We'll detect when the rpcConn is blocked (because the Receiver
+	// is not reading any of the messages).
+	senderBlocked := make(chan struct{})
+	go func() {
+		// Publish enough messages to fill up the network buffers and cause the
+		// stream.Send() to block.
+		for {
+			select {
+			case <-ch:
+				// As soon as the conn send a message, publish another update to cause
+				// the conn to send another message.
+				s.publish(ctx)
+			case <-time.After(100 * time.Millisecond):
+				// The conn hasn't sent anything in a while. It must be blocked on Send.
+				close(senderBlocked)
+				return
+			}
+		}
+	}()
+
+	// Wait for the sender to appear blocked.
+	<-senderBlocked
+
+	// Stop the stopper. If this doesn't timeout, then the rpcConn's task must
+	// have been unblocked.
+	stopper.Stop(ctx)
+
+	require.True(t, srv.receiver.getCalled())
+}
