@@ -285,9 +285,8 @@ message RaftCommand {
   // used after this command is applied.
   //
   // The field can be zero, which is to be interpreted as no closed timestamp
-  // update. Some commands (lease requests) implicitly carry a closed timestamp
-  // in a command-specific way. If the value is not zero, the value is greater
-  // or equal to that of the previous commands (and all before it).
+  // update. If the value is not zero, the value is greater or equal to that of
+  // the previous commands (and all before it).
   //
   // This field is set through ClosedTimestampFooter hackery. Unlike in the
   // ClosedTimestampFooter, the field is nullable here so that it does not get
