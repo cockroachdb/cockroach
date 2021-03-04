@@ -288,6 +288,7 @@ crdb_internal       cluster_settings
 crdb_internal       cluster_transactions
 crdb_internal       create_statements
 crdb_internal       create_type_statements
+crdb_internal       cross_db_references
 crdb_internal       databases
 crdb_internal       feature_usage
 crdb_internal       forward_dependencies
@@ -296,6 +297,7 @@ crdb_internal       gossip_liveness
 crdb_internal       gossip_network
 crdb_internal       gossip_nodes
 crdb_internal       index_columns
+crdb_internal       interleaved
 crdb_internal       invalid_objects
 crdb_internal       jobs
 crdb_internal       kv_node_status
@@ -481,6 +483,7 @@ cluster_settings
 cluster_transactions
 create_statements
 create_type_statements
+cross_db_references
 databases
 feature_usage
 forward_dependencies
@@ -489,6 +492,7 @@ gossip_liveness
 gossip_network
 gossip_nodes
 index_columns
+interleaved
 invalid_objects
 jobs
 kv_node_status
@@ -693,6 +697,7 @@ system         crdb_internal       cluster_settings                       SYSTEM
 system         crdb_internal       cluster_transactions                   SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                      SYSTEM VIEW  NO                  1
 system         crdb_internal       create_type_statements                 SYSTEM VIEW  NO                  1
+system         crdb_internal       cross_db_references                    SYSTEM VIEW  NO                  1
 system         crdb_internal       databases                              SYSTEM VIEW  NO                  1
 system         crdb_internal       feature_usage                          SYSTEM VIEW  NO                  1
 system         crdb_internal       forward_dependencies                   SYSTEM VIEW  NO                  1
@@ -701,6 +706,7 @@ system         crdb_internal       gossip_liveness                        SYSTEM
 system         crdb_internal       gossip_network                         SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_nodes                           SYSTEM VIEW  NO                  1
 system         crdb_internal       index_columns                          SYSTEM VIEW  NO                  1
+system         crdb_internal       interleaved                            SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
 system         crdb_internal       jobs                                   SYSTEM VIEW  NO                  1
 system         crdb_internal       kv_node_status                         SYSTEM VIEW  NO                  1
@@ -1987,6 +1993,7 @@ NULL     public   system         crdb_internal       cluster_settings           
 NULL     public   system         crdb_internal       cluster_transactions                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_type_statements                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       cross_db_references                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       databases                              SELECT          NULL          YES
 NULL     public   system         crdb_internal       feature_usage                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       forward_dependencies                   SELECT          NULL          YES
@@ -1995,6 +2002,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NULL          YES
+NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES
@@ -2415,6 +2423,7 @@ NULL     public   system         crdb_internal       cluster_settings           
 NULL     public   system         crdb_internal       cluster_transactions                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_type_statements                 SELECT          NULL          YES
+NULL     public   system         crdb_internal       cross_db_references                    SELECT          NULL          YES
 NULL     public   system         crdb_internal       databases                              SELECT          NULL          YES
 NULL     public   system         crdb_internal       feature_usage                          SELECT          NULL          YES
 NULL     public   system         crdb_internal       forward_dependencies                   SELECT          NULL          YES
@@ -2423,6 +2432,7 @@ NULL     public   system         crdb_internal       gossip_liveness            
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NULL          YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NULL          YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NULL          YES
+NULL     public   system         crdb_internal       interleaved                            SELECT          NULL          YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       jobs                                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       kv_node_status                         SELECT          NULL          YES

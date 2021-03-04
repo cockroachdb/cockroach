@@ -132,6 +132,8 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalZonesTableID:                     crdbInternalZonesTable,
 		catconstants.CrdbInternalInvalidDescriptorsTableID:        crdbInternalInvalidDescriptorsTable,
 		catconstants.CrdbInternalClusterDatabasePrivilegesTableID: crdbInternalClusterDatabasePrivilegesTable,
+		catconstants.CrdbInternalInterleaved:                      crdbInternalInterleaved,
+		catconstants.CrdbInternalCrossDbRefrences:                 crdbInternalCrossDbReferences,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -4017,6 +4019,207 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 							tree.NewDString(priv), // privilege_type
 						); err != nil {
 							return err
+						}
+					}
+				}
+				return nil
+			})
+	},
+}
+
+var crdbInternalInterleaved = virtualSchemaTable{
+	comment: `virtual table with interleaved table information`,
+	schema: `
+CREATE TABLE crdb_internal.interleaved (
+	database_name
+		STRING NOT NULL,
+	schema_name
+		STRING NOT NULL,
+	table_name
+		STRING NOT NULL,
+	index_name
+		STRING NOT NULL,
+	parent_index
+		STRING NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
+			func(db *dbdesc.Immutable, schemaName string, table catalog.TableDescriptor, lookupFn tableLookupFn) error {
+				if !table.IsInterleaved() {
+					return nil
+				}
+				indexes := table.NonDropIndexes()
+				for _, index := range indexes {
+					if index.NumInterleaveAncestors() == 0 {
+						continue
+					}
+
+					ancestor := index.GetInterleaveAncestor(index.NumInterleaveAncestors() - 1)
+					parentTable, err := lookupFn.getTableByID(ancestor.TableID)
+					if err != nil {
+						return err
+					}
+					parentIndex, err := parentTable.FindIndexWithID(ancestor.IndexID)
+					if err != nil {
+						return err
+					}
+					parentSchemaName, err := lookupFn.getSchemaNameByID(parentTable.GetParentSchemaID())
+					if err != nil {
+						return err
+					}
+					database, err := lookupFn.getDatabaseByID(parentTable.GetParentID())
+					if err != nil {
+						return err
+					}
+
+					if err := addRow(tree.NewDString(database.GetName()),
+						tree.NewDString(parentSchemaName),
+						tree.NewDString(table.GetName()),
+						tree.NewDString(index.GetName()),
+						tree.NewDString(parentIndex.GetName())); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+	},
+}
+
+var crdbInternalCrossDbReferences = virtualSchemaTable{
+	comment: `virtual table with cross db references`,
+	schema: `
+CREATE TABLE crdb_internal.cross_db_references (
+	object_database
+		STRING NOT NULL,
+	object_schema
+		STRING NOT NULL,
+	object_name
+		STRING NOT NULL,
+	referenced_object_database
+		STRING NOT NULL,
+	referenced_object_schema
+		STRING NOT NULL,
+	referenced_object_name
+		STRING NOT NULL,
+	cross_database_reference_description
+		STRING NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
+			func(db *dbdesc.Immutable, schemaName string, table catalog.TableDescriptor, lookupFn tableLookupFn) error {
+				// For tables detect if foreign key references point at a different
+				// database. Additionally, check if any of the columns have sequence
+				// references to a different database.
+				if table.IsTable() {
+					objectDatabaseName := lookupFn.getDatabaseName(table)
+					err := table.ForeachOutboundFK(
+						func(fk *descpb.ForeignKeyConstraint) error {
+							referencedTable, err := lookupFn.getTableByID(fk.ReferencedTableID)
+							if err != nil {
+								return err
+							}
+							if referencedTable.GetParentID() != table.GetParentID() {
+								refSchemaName, err := lookupFn.getSchemaNameByID(referencedTable.GetParentSchemaID())
+								if err != nil {
+									return err
+								}
+								refDatabaseName := lookupFn.getDatabaseName(referencedTable)
+
+								if err := addRow(tree.NewDString(objectDatabaseName),
+									tree.NewDString(schemaName),
+									tree.NewDString(table.GetName()),
+									tree.NewDString(refDatabaseName),
+									tree.NewDString(refSchemaName),
+									tree.NewDString(referencedTable.GetName()),
+									tree.NewDString("table foreign key reference")); err != nil {
+									return err
+								}
+							}
+							return nil
+						})
+					if err != nil {
+						return err
+					}
+
+					// Check for sequence dependencies
+					for _, col := range table.PublicColumns() {
+						for i := 0; i < col.NumUsesSequences(); i++ {
+							sequenceID := col.GetUsesSequenceID(i)
+							seqDesc, err := lookupFn.getTableByID(sequenceID)
+							if err != nil {
+								return err
+							}
+							if seqDesc.GetParentID() != table.GetParentID() {
+								seqSchemaName, err := lookupFn.getSchemaNameByID(seqDesc.GetParentSchemaID())
+								if err != nil {
+									return err
+								}
+								refDatabaseName := lookupFn.getDatabaseName(seqDesc)
+								if err := addRow(tree.NewDString(objectDatabaseName),
+									tree.NewDString(schemaName),
+									tree.NewDString(table.GetName()),
+									tree.NewDString(refDatabaseName),
+									tree.NewDString(seqSchemaName),
+									tree.NewDString(seqDesc.GetName()),
+									tree.NewDString("table column refers to sequence")); err != nil {
+									return err
+								}
+							}
+						}
+					}
+				} else if table.IsView() {
+					// For views check if we depend on tables in a different database.
+					dependsOn := table.GetDependsOn()
+					for _, dependency := range dependsOn {
+						dependentTable, err := lookupFn.getTableByID(dependency)
+						if err != nil {
+							return err
+						}
+						if dependentTable.GetParentID() != table.GetParentID() {
+							objectDatabaseName := lookupFn.getDatabaseName(table)
+							refSchemaName, err := lookupFn.getSchemaNameByID(dependentTable.GetParentSchemaID())
+							if err != nil {
+								return err
+							}
+							refDatabaseName := lookupFn.getDatabaseName(dependentTable)
+
+							if err := addRow(tree.NewDString(objectDatabaseName),
+								tree.NewDString(schemaName),
+								tree.NewDString(table.GetName()),
+								tree.NewDString(refDatabaseName),
+								tree.NewDString(refSchemaName),
+								tree.NewDString(dependentTable.GetName()),
+								tree.NewDString("view references table")); err != nil {
+								return err
+							}
+						}
+					}
+				} else if table.IsSequence() {
+					// For sequences check if the sequence is owned by
+					// a different database.
+					sequenceOpts := table.GetSequenceOpts()
+					if sequenceOpts.SequenceOwner.OwnerTableID != descpb.InvalidID {
+						ownerTable, err := lookupFn.getTableByID(sequenceOpts.SequenceOwner.OwnerTableID)
+						if err != nil {
+							return err
+						}
+						if ownerTable.GetParentID() != table.GetParentID() {
+							objectDatabaseName := lookupFn.getDatabaseName(table)
+							refSchemaName, err := lookupFn.getSchemaNameByID(ownerTable.GetParentSchemaID())
+							if err != nil {
+								return err
+							}
+							refDatabaseName := lookupFn.getDatabaseName(ownerTable)
+
+							if err := addRow(tree.NewDString(objectDatabaseName),
+								tree.NewDString(schemaName),
+								tree.NewDString(table.GetName()),
+								tree.NewDString(refDatabaseName),
+								tree.NewDString(refSchemaName),
+								tree.NewDString(ownerTable.GetName()),
+								tree.NewDString("sequences owning table")); err != nil {
+								return err
+							}
 						}
 					}
 				}
