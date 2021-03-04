@@ -230,6 +230,40 @@ func TestResetQuorum(t *testing.T) {
 		verifyResult(t, srv, k, store, id)
 	})
 
+	t.Run("with-replicas-elsewhere", func(t *testing.T) {
+		tc, k, id := setup(t)
+		defer tc.Stopper().Stop(ctx)
+		n1, n2, n3 := 0, 1, 2
+		srv := tc.Server(n1)
+		tc.StopServer(n2)
+		tc.StopServer(n3)
+		// Wait for n2 and n3 liveness to expire.
+		time.Sleep(livenessDuration)
+
+		checkUnavailable(srv, k)
+
+		// Get the store on the designated survivor n1.
+		var store *kvserver.Store
+		require.NoError(t, srv.GetStores().(*kvserver.Stores).VisitStores(func(inner *kvserver.Store) error {
+			store = inner
+			return nil
+		}))
+		if store == nil {
+			t.Fatal("no store found on n1")
+		}
+
+		// Call ResetQuorum to reset quorum on the unhealthy range.
+		_, err := srv.Node().(*server.Node).ResetQuorum(
+			ctx,
+			&roachpb.ResetQuorumRequest{
+				RangeID: int32(id),
+			},
+		)
+		require.NoError(t, err)
+
+		verifyResult(t, srv, k, store, id)
+	})
+
 	t.Run("without-quorum-loss", func(t *testing.T) {
 		tc, _, id := setup(t)
 		defer tc.Stopper().Stop(ctx)
