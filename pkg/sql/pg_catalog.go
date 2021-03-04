@@ -1747,7 +1747,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						if err != nil {
 							return err
 						}
-						if err := collationOids.Append(typColl(col.GetType(), h)); err != nil {
+						if err = collationOids.Append(typColl(col.GetType(), h)); err != nil {
 							return err
 						}
 						// Currently, nulls always appear first if the order is ascending,
@@ -1758,10 +1758,17 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						} else {
 							thisIndOption = indoptionDesc
 						}
-						if err := indoption.Append(tree.NewDInt(thisIndOption)); err != nil {
+						if err = indoption.Append(tree.NewDInt(thisIndOption)); err != nil {
 							return err
 						}
 					}
+					// indnkeyatts is the number of attributes without INCLUDED columns.
+					indnkeyatts := len(colIDs)
+					for _, storedColumnID := range index.IndexDesc().StoreColumnIDs {
+						colIDs = append(colIDs, storedColumnID)
+					}
+					// indnatts is the number of attributes with INCLUDED columns.
+					indnatts := len(colIDs)
 					indkey, err := colIDArrayToVector(colIDs)
 					if err != nil {
 						return err
@@ -1777,7 +1784,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					return addRow(
 						h.IndexOid(table.GetID(), index.GetID()),     // indexrelid
 						tableOid,                                     // indrelid
-						tree.NewDInt(tree.DInt(index.NumColumns())),  // indnatts
+						tree.NewDInt(tree.DInt(indnatts)),            // indnatts
 						tree.MakeDBool(tree.DBool(index.IsUnique())), // indisunique
 						tree.MakeDBool(tree.DBool(index.Primary())),  // indisprimary
 						tree.DBoolFalse,                              // indisexclusion
@@ -1794,8 +1801,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 						indoptionIntVector,                           // indoption
 						tree.DNull,                                   // indexprs
 						tree.DNull,                                   // indpred
-						// These columns were automatically created by pg_catalog_test's missing column generator.
-						tree.DNull, // indnkeyatts
+						tree.NewDInt(tree.DInt(indnkeyatts)),         // indnkeyatts
 					)
 				})
 			})
