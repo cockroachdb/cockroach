@@ -528,6 +528,10 @@ func (r *avroDataRecord) RowFromBinary(buf []byte) (rowenc.EncDatumRow, error) {
 }
 
 func (r *avroDataRecord) nativeFromRow(row rowenc.EncDatumRow) (interface{}, error) {
+	if len(row) < len(r.Fields) {
+		return nil, errors.Errorf(
+			`expected row with at least %d columns got %d`, len(r.Fields), len(row))
+	}
 	avroDatums := make(map[string]interface{}, len(row))
 	for fieldIdx, field := range r.Fields {
 		d := row[r.colIdxByFieldIdx[fieldIdx]]
