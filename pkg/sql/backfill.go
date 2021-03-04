@@ -1269,8 +1269,7 @@ func (sc *SchemaChanger) distBackfill(
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 				fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-				// TODO: This job update should possibly use the txn (#60690).
-				if err := sc.job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(fractionCompleted)); err != nil {
+				if err := sc.job.FractionProgressed(ctx, txn, jobs.FractionUpdater(fractionCompleted)); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
 				}
 			}
