@@ -68,7 +68,11 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	// read-only state.
 	<-dropRegionStarted
 
-	_, err = sqlDB.Exec(`ALTER DATABASE db PRIMARY REGION "us-east2"`)
+	// Adding a FORCE to this second statement until we get a fix for #60620. When
+	// that fix is ready, we can construct the view of the zone config as it was at
+	// the beginning of the transaction, and the checks for FORCE should work again,
+	// and we won't require the explicit force here.
+	_, err = sqlDB.Exec(`ALTER DATABASE db PRIMARY REGION "us-east2" FORCE`)
 
 	if err == nil {
 		t.Fatalf("expected error, found nil")
@@ -219,9 +223,13 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 			"drop-region",
 			`ALTER DATABASE db DROP REGION "us-east2"`,
 		},
+		// Adding a FORCE to this second statement until we get a fix for #60620. When
+		// that fix is ready, we can construct the view of the zone config as it was at
+		// the beginning of the transaction, and the checks for FORCE should work again,
+		// and we won't require the explicit force here.
 		{
 			"add-drop-region-in-txn",
-			`BEGIN; ALTER DATABASE db DROP REGION "us-east2"; ALTER DATABASE db ADD REGION "us-east3"; COMMIT`,
+			`BEGIN; ALTER DATABASE db DROP REGION "us-east2"; ALTER DATABASE db ADD REGION "us-east3" FORCE; COMMIT`,
 		},
 	}
 
