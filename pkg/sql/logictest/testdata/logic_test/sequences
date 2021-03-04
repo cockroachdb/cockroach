@@ -1794,3 +1794,10 @@ DROP SEQUENCE s1
 
 statement ok
 DROP TABLE s2
+
+# Validate that cross DB sequences are detected by internal tables
+query TTTTTTT
+select * from "".crdb_internal.cross_db_references;
+----
+db2  public  seq   db1  public  t  sequences owning table
+db2  public  seq2  db1  public  t  sequences owning table
