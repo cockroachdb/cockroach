@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -36,6 +38,7 @@ type Executor struct {
 	codec           keys.SQLCodec
 	indexBackfiller IndexBackfiller
 	jobTracker      JobProgressTracker
+	testingKnobs    *NewSchemaChangerTestingKnobs
 }
 
 // NewExecutor creates a new Executor.
@@ -45,6 +48,7 @@ func NewExecutor(
 	codec keys.SQLCodec,
 	backfiller IndexBackfiller,
 	tracker JobProgressTracker,
+	testingKnobs *NewSchemaChangerTestingKnobs,
 ) *Executor {
 	return &Executor{
 		txn:             txn,
@@ -52,11 +56,41 @@ func NewExecutor(
 		codec:           codec,
 		indexBackfiller: backfiller,
 		jobTracker:      tracker,
+		testingKnobs:    testingKnobs,
 	}
 }
 
+// NewSchemaChangerTestingKnobs are testing knobs for the executor.
+type NewSchemaChangerTestingKnobs struct {
+	// BeforeStage is called before ops passed to the executor are executed.
+	// Errors returned are injected into the executor.
+	BeforeStage func(ops scop.Ops, m TestingKnobMetadata) error
+	// BeforeWaitingForConcurrentSchemaChanges is called at the start of waiting
+	// for concurrent schema changes to finish.
+	BeforeWaitingForConcurrentSchemaChanges func(stmts []string)
+}
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (*NewSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
+
+// TestingKnobMetadata holds additional information about the execution of the
+// schema change that is used by the testing knobs.
+type TestingKnobMetadata struct {
+	Statements []string
+	Phase      scplan.Phase
+}
+
 // ExecuteOps executes the provided ops. The ops must all be of the same type.
-func (ex *Executor) ExecuteOps(ctx context.Context, toExecute scop.Ops) error {
+func (ex *Executor) ExecuteOps(
+	ctx context.Context, toExecute scop.Ops, m TestingKnobMetadata,
+) error {
+	log.Infof(ctx, "executing %d ops of type %s", len(toExecute.Slice()), toExecute.Type().String())
+
+	if ex.testingKnobs != nil && ex.testingKnobs.BeforeStage != nil {
+		if err := ex.testingKnobs.BeforeStage(toExecute, m); err != nil {
+			return err
+		}
+	}
 	switch typ := toExecute.Type(); typ {
 	case scop.MutationType:
 		return ex.executeDescriptorMutationOps(ctx, toExecute.Slice())
@@ -198,4 +232,34 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, ops []scop
 		return errors.Wrap(err, "writing descriptors")
 	}
 	return nil
+}
+
+// UpdateDescriptorJobIDs updates the job ID for the schema change on the
+// specified set of table descriptors.
+func UpdateDescriptorJobIDs(
+	ctx context.Context,
+	txn *kv.Txn,
+	descriptors *descs.Collection,
+	descIDs []descpb.ID,
+	expectedID jobspb.JobID,
+	newID jobspb.JobID,
+) error {
+	b := txn.NewBatch()
+	for _, id := range descIDs {
+		// Currently all "locking" schema changes are on tables. This will probably
+		// need to be expanded at least to types.
+		table, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			return err
+		}
+		if oldID := jobspb.JobID(table.NewSchemaChangeJobID); oldID != expectedID {
+			return errors.AssertionFailedf(
+				"unexpected schema change job ID %d on table %d, expected %d", oldID, table.GetID(), expectedID)
+		}
+		table.NewSchemaChangeJobID = int64(newID)
+		if err := descriptors.WriteDescToBatch(ctx, true /* kvTrace */, table, b); err != nil {
+			return err
+		}
+	}
+	return txn.Run(ctx, b)
 }
