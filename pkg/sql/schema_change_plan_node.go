@@ -12,13 +12,21 @@ package sql
 
 import (
 	"context"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 // SchemaChange provides the planNode for the new schema changer.
@@ -29,17 +37,69 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		(mode == sessiondata.UseNewSchemaChangerOn && !p.extendedEvalCtx.TxnImplicit) {
 		return nil, false, nil
 	}
+	scs := p.extendedEvalCtx.SchemaChangerState
+	scs.stmts = append(scs.stmts, p.stmt.SQL)
 	b := scbuild.NewBuilder(p, p.SemaCtx(), p.EvalContext())
-	updated, err := b.Build(ctx, p.extendedEvalCtx.SchemaChangerState.nodes, stmt)
+	updated, err := b.Build(ctx, scs.nodes, stmt)
 	if scbuild.HasNotImplemented(err) && mode == sessiondata.UseNewSchemaChangerOn {
 		return nil, false, nil
 	}
 	if err != nil {
+		// If we need to wait for a concurrent schema change to finish, release our
+		// leases, and then return the error to wait and retry.
+		if cscErr := (*scbuild.ConcurrentSchemaChangeError)(nil); errors.As(err, &cscErr) {
+			p.Descriptors().ReleaseLeases(ctx)
+		}
 		return nil, false, err
 	}
 	return &schemaChangePlanNode{
 		plannedState: updated,
 	}, true, nil
+}
+
+// WaitForDescriptorSchemaChanges polls the specified descriptor (in separate
+// transactions) until all its ongoing schema changes have completed.
+func (p *planner) WaitForDescriptorSchemaChanges(
+	ctx context.Context, descID descpb.ID, scs SchemaChangerState,
+) error {
+
+	if knobs := p.ExecCfg().NewSchemaChangerTestingKnobs; knobs != nil &&
+		knobs.BeforeWaitingForConcurrentSchemaChanges != nil {
+		knobs.BeforeWaitingForConcurrentSchemaChanges(scs.stmts)
+	}
+
+	everySecond := log.Every(time.Second)
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+		now := p.ExecCfg().Clock.Now()
+		if everySecond.ShouldLog() {
+			log.Infof(ctx, "schema change waiting for concurrent schema changes on descriptor %d", descID)
+		}
+		blocked := false
+		if err := descs.Txn(
+			ctx, p.ExecCfg().Settings, p.LeaseMgr(), p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
+			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+				txn.SetFixedTimestamp(ctx, now)
+				table, err := descriptors.GetImmutableTableByID(ctx, txn, descID,
+					tree.ObjectLookupFlags{
+						CommonLookupFlags: tree.CommonLookupFlags{
+							Required:    true,
+							AvoidCached: true,
+						},
+					})
+				if err != nil {
+					return err
+				}
+				blocked = scbuild.HasConcurrentSchemaChanges(table)
+				return nil
+			}); err != nil {
+			return err
+		}
+		if !blocked {
+			break
+		}
+	}
+	log.Infof(ctx, "done waiting for concurrent schema changes on descriptor %d", descID)
+	return nil
 }
 
 // schemaChangePlanNode is the planNode utilized by the new schema changer to
@@ -54,15 +114,16 @@ type schemaChangePlanNode struct {
 }
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
-	executor := scexec.NewExecutor(params.p.txn, params.p.Descriptors(), params.p.EvalContext().Codec,
-		nil /* backfiller */, nil /* jobTracker */)
+	p := params.p
+	scs := p.extendedEvalCtx.SchemaChangerState
+	executor := scexec.NewExecutor(p.txn, p.Descriptors(), p.EvalContext().Codec,
+		nil /* backfiller */, nil /* jobTracker */, p.ExecCfg().NewSchemaChangerTestingKnobs)
 	after, err := runNewSchemaChanger(
-		params.ctx, scplan.StatementPhase, s.plannedState, executor,
+		params.ctx, scplan.StatementPhase, s.plannedState, executor, scs.stmts,
 	)
 	if err != nil {
 		return err
 	}
-	scs := params.p.extendedEvalCtx.SchemaChangerState
 	scs.nodes = after
 	return nil
 }

@@ -393,7 +393,7 @@ func (r *Registry) NewJob(record Record, jobID jobspb.JobID) *Job {
 	}
 	job.mu.payload = jobspb.Payload{
 		Description:   record.Description,
-		Statement:     record.Statement,
+		Statement:     record.Statements,
 		UsernameProto: record.Username.EncodeProto(),
 		DescriptorIDs: record.DescriptorIDs,
 		Details:       jobspb.WrapPayloadDetails(record.Details),

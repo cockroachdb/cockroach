@@ -492,7 +492,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 			jobID := jr.MakeJobID()
 			j, err = jr.CreateAdoptableJobWithTxn(ctx, jobs.Record{
 				Description:   "testing",
-				Statement:     "testing",
+				Statements:    []string{"testing"},
 				Username:      security.RootUserName(),
 				DescriptorIDs: []descpb.ID{tableID},
 				Details: jobspb.SchemaChangeDetails{
