@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v2"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -106,14 +107,22 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 	switch d := d.(type) {
 	case *DString:
 		s := string(*d)
+		// Parse synthetic flag.
+		syn := false
+		if strings.HasSuffix(s, "?") && evalCtx.Settings.Version.IsActive(context.Background(), clusterversion.PriorReadSummaries) {
+			s = s[:len(s)-1]
+			syn = true
+		}
 		// Attempt to parse as timestamp.
 		if dt, _, err := ParseDTimestamp(evalCtx, s, time.Nanosecond); err == nil {
 			ts.WallTime = dt.Time.UnixNano()
+			ts.Synthetic = syn
 			break
 		}
 		// Attempt to parse as a decimal.
 		if dec, _, err := apd.NewFromString(s); err == nil {
 			ts, convErr = DecimalToHLC(dec)
+			ts.Synthetic = syn
 			break
 		}
 		// Attempt to parse as an interval.
@@ -122,6 +131,7 @@ func DatumToHLC(evalCtx *EvalContext, stmtTimestamp time.Time, d Datum) (hlc.Tim
 				convErr = errors.Errorf("interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
 			}
 			ts.WallTime = duration.Add(stmtTimestamp, iv.Duration).UnixNano()
+			ts.Synthetic = syn
 			break
 		}
 		convErr = errors.Errorf("value is neither timestamp, decimal, nor interval")
