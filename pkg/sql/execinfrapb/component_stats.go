@@ -328,42 +328,36 @@ func ExtractStatsFromSpans(
 	spans []tracingpb.RecordedSpan, makeDeterministic bool,
 ) map[ComponentID]*ComponentStats {
 	statsMap := make(map[ComponentID]*ComponentStats)
+	// componentStats is only used to check whether a structured payload item is
+	// of ComponentStats type.
+	var componentStats ComponentStats
 	for i := range spans {
 		span := &spans[i]
-		var stats ComponentStats
-
-		found := false
-		// TODO(radu): there's nothing stopping us from having multiple
-		// ComponentStats in a single Span once we are in the 21.2 cycle.
 		span.Structured(func(item *types.Any) {
-			if found {
+			if !types.Is(item, &componentStats) {
 				return
 			}
-			if !types.Is(item, &stats) {
-				return
-			}
+			var stats ComponentStats
 			if err := protoutil.Unmarshal(item.Value, &stats); err != nil {
 				return
 			}
-			found = true
+			if stats.Component == (ComponentID{}) {
+				return
+			}
+			if makeDeterministic {
+				stats.MakeDeterministic()
+			}
+			existing := statsMap[stats.Component]
+			if existing == nil {
+				statsMap[stats.Component] = &stats
+			} else {
+				// In the vectorized flow we can have multiple statistics
+				// entries for one component. Merge the stats together.
+				// TODO(radu): figure out a way to emit the statistics correctly
+				// in the first place.
+				statsMap[stats.Component] = existing.Union(&stats)
+			}
 		})
-
-		if stats.Component == (ComponentID{}) {
-			continue
-		}
-		if makeDeterministic {
-			stats.MakeDeterministic()
-		}
-		existing := statsMap[stats.Component]
-		if existing == nil {
-			statsMap[stats.Component] = &stats
-		} else {
-			// In the vectorized flow we can have multiple statistics entries for one
-			// component. Merge the stats together.
-			// TODO(radu): figure out a way to emit the statistics correctly in the
-			// first place.
-			statsMap[stats.Component] = existing.Union(&stats)
-		}
 	}
 	return statsMap
 }

@@ -70,7 +70,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		nil, /* output */
 		nil, /* metadataSourcesQueue */
 		nil, /* toClose */
-		nil, /* execStatsForTrace */
+		nil, /* getStats */
 		nil, /* cancelFlow */
 	)
 	if err != nil {
@@ -154,7 +154,7 @@ func BenchmarkMaterializer(b *testing.B) {
 							nil, /* output */
 							nil, /* metadataSourcesQueue */
 							nil, /* toClose */
-							nil, /* execStatsForTrace */
+							nil, /* getStats */
 							nil, /* cancelFlow */
 						)
 						if err != nil {
@@ -209,7 +209,7 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 		nil, /* output */
 		[]execinfrapb.MetadataSource{metadataSource},
 		nil, /* toClose */
-		nil, /* execStatsForTrace */
+		nil, /* getStats */
 		nil, /* cancelFlow */
 	)
 	require.NoError(t, err)
@@ -258,7 +258,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
 			nil, /* toClose */
-			nil, /* execStatsForTrace */
+			nil, /* getStats */
 			nil, /* cancelFlow */
 		)
 		if err != nil {
