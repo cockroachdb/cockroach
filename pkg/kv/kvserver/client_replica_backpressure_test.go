@@ -273,7 +273,10 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		require.Len(t, repl.Desc().Replicas().Descriptors(), 1)
 		// We really need to make sure that the split queue has hit this range,
 		// otherwise we'll fail to backpressure.
-		go func() { _ = s.ForceSplitScanAndProcess() }()
+		_ = tc.Stopper().RunAsyncTask(ctx, "force-split", func(context.Context) {
+			_ = s.ForceSplitScanAndProcess()
+		})
+
 		waitForBlocked(repl.RangeID)
 
 		// Observe backpressure now that the range is just over the limit.
@@ -287,11 +290,11 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		ctxWithCancel, cancel := context.WithCancel(ctx)
 		defer cancel()
 		upsertErrCh := make(chan error)
-		go func() {
+		_ = tc.Stopper().RunAsyncTask(ctx, "upsert", func(ctx context.Context) {
 			_, err := c.ExecEx(ctxWithCancel, "UPSERT INTO foo VALUES ($1, $2)",
 				nil /* options */, rRand.Intn(numRows), randutil.RandBytes(rRand, rowSize))
 			upsertErrCh <- err
-		}()
+		})
 
 		select {
 		case <-time.After(10 * time.Millisecond):
