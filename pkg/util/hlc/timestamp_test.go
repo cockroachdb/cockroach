@@ -222,6 +222,9 @@ func TestAsOfSystemTime(t *testing.T) {
 		{makeTS(145, 0), "145.0000000000"},
 		{makeTS(145, 123), "145.0000000123"},
 		{makeTS(145, 1123456789), "145.1123456789"},
+		{makeSynTS(145, 0), "145.0000000000?"},
+		{makeSynTS(145, 123), "145.0000000123?"},
+		{makeSynTS(145, 1123456789), "145.1123456789?"},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.exp, c.ts.AsOfSystemTime())
