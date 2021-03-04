@@ -32,6 +32,7 @@ go_test(
         "kvprober_integration_test.go",
         "kvprober_test.go",
         "main_test.go",
+        "planner_test.go",
     ],
     embed = [":kvprober"],
     deps = [
@@ -52,6 +53,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

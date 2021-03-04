@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -53,8 +54,25 @@ type meta2Planner struct {
 	// cursor points to a key in meta2 at which scanning should resume when new
 	// plans are needed.
 	cursor roachpb.Key
-	// meta2Planner makes plans of size NumPrefetchedPlan as per below.
+	// meta2Planner makes plans of size numStepsToPlanAtOnce as per below.
 	plan []Step
+	// lastPlanTime records the last time the meta2Planner made a plan of size
+	// numStepsToPlanAtOnce; this is recorded in order to implement a rate limit.
+	//
+	// Note that crashes clear this field, so the rate limit is not enforced in
+	// case of a crash loop.
+	lastPlanTime time.Time
+
+	// Swappable for testing.
+	now          func() time.Time
+	getRateLimit func(settings *cluster.Settings) time.Duration
+	getNMeta2KVs func(
+		ctx context.Context,
+		db dbScan,
+		n int64,
+		cursor roachpb.Key,
+		timeout time.Duration) ([]kv.KeyValue, roachpb.Key, error)
+	meta2KVsToPlan func(kvs []kv.KeyValue) ([]Step, error)
 }
 
 func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
@@ -62,6 +80,14 @@ func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
 		db:       db,
 		settings: settings,
 		cursor:   keys.Meta2Prefix,
+		// At kvprober start time, this field is set to the unix epoch, implying
+		// that planning will be allowed on the first call to next no matter what.
+		// After that, the field will be set correctly.
+		lastPlanTime:   timeutil.Unix(0, 0),
+		now:            timeutil.Now,
+		getRateLimit:   getRateLimitImpl,
+		getNMeta2KVs:   getNMeta2KVsImpl,
+		meta2KVsToPlan: meta2KVsToPlanImpl,
 	}
 }
 
@@ -87,7 +113,7 @@ func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
 // Note that though we scan meta2 here, we also randomize the order of
 // ranges in the plan. This is avoid all nodes probing the same ranges at
 // the same time. Jitter is also added to the sleep between probe time
-// to de-synchronize different nodes' probe loops.
+// to de-synchronize different nodes' .probe loops.
 //
 // What about resource usage?
 //
@@ -104,22 +130,31 @@ func newMeta2Planner(db *kv.DB, settings *cluster.Settings) *meta2Planner {
 //   kv.prober.planner.n_probes_at_a_time cluster setting.
 //
 // CPU:
-// - Again scales with the the kv.prober.planner.n_probes_at_a_time cluster
+// - Again scales with the kv.prober.planner.n_probes_at_a_time cluster
 //   setting. Note the proto unmarshalling. We also shuffle a slice of size
 //   kv.prober.planner.n_probes_at_a_time. If the setting is set to a high
 //   number, we pay a higher CPU cost less often; if it's set to a low number,
 //   we pay a smaller CPU cost more often.
 func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 	if len(p.plan) == 0 {
+		// Protect CRDB from planning executing too often, due to either issues
+		// with CRDB (meta2 unavailability) or bugs in kvprober.
+		timeSinceLastPlan := p.now().Sub(p.lastPlanTime) // Since(p.lastPlanTime)
+		if limit := p.getRateLimit(p.settings); timeSinceLastPlan < limit {
+			return Step{}, errors.Newf("planner rate limit hit: "+
+				"timSinceLastPlan=%v, limit=%v", timeSinceLastPlan, limit)
+		}
+		p.lastPlanTime = p.now()
+
 		timeout := scanMeta2Timeout.Get(&p.settings.SV)
-		kvs, cursor, err := getNMeta2KVs(
+		kvs, cursor, err := p.getNMeta2KVs(
 			ctx, p.db, numStepsToPlanAtOnce.Get(&p.settings.SV), p.cursor, timeout)
 		if err != nil {
 			return Step{}, errors.Wrapf(err, "failed to get meta2 rows")
 		}
 		p.cursor = cursor
 
-		plan, err := meta2KVsToPlan(kvs)
+		plan, err := p.meta2KVsToPlan(kvs)
 		if err != nil {
 			return Step{}, errors.Wrapf(err, "failed to make plan from meta2 rows")
 		}
@@ -138,11 +173,28 @@ func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 	return step, nil
 }
 
+// Consider the following configuration:
+//
+// 1. Read probes are sent every 1s.
+// 2. Planning is done 60 steps (ranges) at a time.
+//
+// In the happy path, planning is done once a minute.
+//
+// The rate limit calculation below implies that planning can be done max once
+// evey 30 seconds (since 60s / 2 -> 30s).
+func getRateLimitImpl(settings *cluster.Settings) time.Duration {
+	sv := &settings.SV
+	const happyPathIntervalToRateLimitIntervalRatio = 2
+	return time.Duration(
+		readInterval.Get(sv).Nanoseconds()*
+			numStepsToPlanAtOnce.Get(sv)/happyPathIntervalToRateLimitIntervalRatio) * time.Nanosecond
+}
+
 type dbScan interface {
 	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]kv.KeyValue, error)
 }
 
-func getNMeta2KVs(
+func getNMeta2KVsImpl(
 	ctx context.Context, db dbScan, n int64, cursor roachpb.Key, timeout time.Duration,
 ) ([]kv.KeyValue, roachpb.Key, error) {
 	var kvs []kv.KeyValue
@@ -175,7 +227,7 @@ func getNMeta2KVs(
 	return kvs, cursor, nil
 }
 
-func meta2KVsToPlan(kvs []kv.KeyValue) ([]Step, error) {
+func meta2KVsToPlanImpl(kvs []kv.KeyValue) ([]Step, error) {
 	plans := make([]Step, len(kvs))
 
 	var rangeDesc roachpb.RangeDescriptor
