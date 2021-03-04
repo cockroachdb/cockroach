@@ -1195,6 +1195,10 @@ func addInterleave(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
+	if desc.IsLocalityRegionalByRow() {
+		return interleaveOnRegionalByRowError()
+	}
+
 	parentTable, err := resolver.ResolveExistingTableObject(
 		ctx, vt, &interleave.Parent, tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc),
 	)
@@ -1569,6 +1573,11 @@ func NewTableDesc(
 				pgcode.FeatureNotSupported,
 				"REGIONAL BY ROW on a TABLE containing PARTITION BY is not supported",
 			)
+		}
+
+		// Check no interleaving is on the table.
+		if n.Interleave != nil {
+			return nil, interleaveOnRegionalByRowError()
 		}
 
 		// Check PARTITION BY is not set on anything partitionable, and also check
@@ -2797,6 +2806,10 @@ func regionalByRowDefaultColDef(oid oid.Oid, defaultExpr tree.Expr) *tree.Column
 
 func hashShardedIndexesOnRegionalByRowError() error {
 	return pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables")
+}
+
+func interleaveOnRegionalByRowError() error {
+	return pgerror.New(pgcode.FeatureNotSupported, "interleaved tables are not compatible with REGIONAL BY ROW tables")
 }
 
 func checkClusterSupportsPartitionByAll(evalCtx *tree.EvalContext) error {
