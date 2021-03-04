@@ -1,0 +1,136 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package geomfn
+
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/stretchr/testify/require"
+	"github.com/twpayne/go-geom"
+)
+
+// TODO test that SRID remains
+func TestAddMeasureToLineString(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		input    geom.T
+		start    float64
+		end      float64
+		expected geom.T
+	}{
+		{
+			desc:     "add measure to 2D linestring",
+			input:    geom.NewLineStringFlat(geom.XY, []float64{0, 0, 1, 1, 2, 2}),
+			start:    0,
+			end:      1,
+			expected: geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 0, 1, 1, 0.5, 2, 2, 1}),
+		},
+		{
+			desc:     "add measure to 2D linestring with start larger than end",
+			input:    geom.NewLineStringFlat(geom.XY, []float64{0, 0, 1, 1, 2, 2}),
+			start:    3,
+			end:      1,
+			expected: geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 3, 1, 1, 2, 2, 2, 1}),
+		},
+		{
+			desc:     "add measure to zero length 2D linestring",
+			input:    geom.NewLineStringFlat(geom.XY, []float64{0, 0, 0, 0, 0, 0}),
+			start:    0,
+			end:      1,
+			expected: geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 0, 0, 0, 0.5, 0, 0, 1}),
+		},
+		{
+			desc:     "add measure to 2D linestring with zero length segment",
+			input:    geom.NewLineStringFlat(geom.XY, []float64{0, 0, 1, 1, 1, 1, 1, 1, 2, 2}),
+			start:    0,
+			end:      10,
+			expected: geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 0, 1, 1, 5, 1, 1, 5, 1, 1, 5, 2, 2, 10}),
+		},
+		// TODO(ayang): add this test in when #61506 is merged
+		//{
+		//	desc:     "add measure to 2D+M linestring",
+		//	input:    geom.NewLineStringFlat(geom.XYM, []float64{0, 0, -25, 1, 1, -50, 2, 2, 0}),
+		//	start:    1,
+		//	end:      2,
+		//	expected: geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 1, 1, 1, 1.5, 2, 2, 2}),
+		//},
+		{
+			desc:     "add measure to 2D+M linestring with same start and end",
+			input:    geom.NewLineStringFlat(geom.XYM, []float64{0, 0, -25, 1, 1, -50, 2, 2, 0}),
+			start:    100,
+			end:      100,
+			expected: geom.NewLineStringFlat(geom.XYM, []float64{0, 0, 100, 1, 1, 100, 2, 2, 100}),
+		},
+		{
+			desc:     "add measure to 3D linestring",
+			input:    geom.NewLineStringFlat(geom.XYZ, []float64{0, 0, -25, 1, 1, -50, 2, 2, 0}),
+			start:    5,
+			end:      7,
+			expected: geom.NewLineStringFlat(geom.XYZM, []float64{0, 0, -25, 5, 1, 1, -50, 6, 2, 2, 0, 7}),
+		},
+		// TODO(ayang): add this test in when #61506 is merged
+		//{
+		//	desc:     "add measure to 4D linestring",
+		//	input:    geom.NewLineStringFlat(geom.XYZM, []float64{0, 0, -25, -25, 1, 1, -50, -50, 2, 2, 0, 0}),
+		//	start:    5,
+		//	end:      7,
+		//	expected: geom.NewLineStringFlat(geom.XYZM, []float64{0, 0, -25, 5, 1, 1, -50, 6, 2, 2, 0, 7}),
+		//},
+		{
+			desc:     "add measure to empty 2D linestring",
+			input:    geom.NewLineString(geom.XY),
+			start:    0,
+			end:      1,
+			expected: geom.NewLineString(geom.XYM),
+		},
+		{
+			desc:     "add measure to empty 2D+M linestring",
+			input:    geom.NewLineString(geom.XYM),
+			start:    0,
+			end:      1,
+			expected: geom.NewLineString(geom.XYM),
+		},
+		{
+			desc:     "add measure to empty 3D linestring",
+			input:    geom.NewLineString(geom.XYZ),
+			start:    0,
+			end:      1,
+			expected: geom.NewLineString(geom.XYZM),
+		},
+		{
+			desc:     "add measure to empty 4D linestring",
+			input:    geom.NewLineString(geom.XYZM),
+			start:    0,
+			end:      1,
+			expected: geom.NewLineString(geom.XYZM),
+		},
+		//{
+		//	desc: "add measure to 2D multilinestring with empty",
+		//},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			geometry, err := geo.MakeGeometryFromGeomT(tc.input)
+			require.NoError(t, err)
+
+			got, err := AddMeasureToLineString(geometry, tc.start, tc.end)
+			require.NoError(t, err)
+
+			want, err := geo.MakeGeometryFromGeomT(tc.expected)
+			require.NoError(t, err)
+
+			require.Equal(t, want, got)
+			require.EqualValues(t, tc.input.SRID(), got.SRID())
+		})
+	}
+}
