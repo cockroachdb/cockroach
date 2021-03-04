@@ -158,9 +158,9 @@ func (d *deleteNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// satisfy the predicate and therefore do not exist in the partial index.
 	// This set is passed as a argument to tableDeleter.row below.
 	var pm row.PartialIndexUpdateHelper
-	partialIndexOrds := d.run.td.tableDesc().PartialIndexOrds()
-	if !partialIndexOrds.Empty() {
-		partialIndexDelVals := sourceVals[d.run.partialIndexDelValsOffset:]
+	if n := d.run.td.tableDesc().PartialIndexOrds().Len(); n > 0 {
+		offset := d.run.partialIndexDelValsOffset
+		partialIndexDelVals := sourceVals[offset : offset+n]
 
 		err := pm.Init(tree.Datums{}, partialIndexDelVals, d.run.td.tableDesc())
 		if err != nil {

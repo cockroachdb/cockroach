@@ -146,15 +146,14 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 
 	// Create a set of partial index IDs to not add or remove entries from.
 	var pm row.PartialIndexUpdateHelper
-	partialIndexOrds := n.run.tw.tableDesc().PartialIndexOrds()
-	if !partialIndexOrds.Empty() {
-		partialIndexValOffset := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols) + n.run.checkOrds.Len()
+	if numPartialIndexes := n.run.tw.tableDesc().PartialIndexOrds().Len(); numPartialIndexes > 0 {
+		offset := len(n.run.insertCols) + len(n.run.tw.fetchCols) + len(n.run.tw.updateCols) + n.run.checkOrds.Len()
 		if n.run.tw.canaryOrdinal != -1 {
-			partialIndexValOffset++
+			offset++
 		}
-		partialIndexVals := rowVals[partialIndexValOffset:]
-		partialIndexPutVals := partialIndexVals[:len(partialIndexVals)/2]
-		partialIndexDelVals := partialIndexVals[len(partialIndexVals)/2:]
+		partialIndexVals := rowVals[offset:]
+		partialIndexPutVals := partialIndexVals[:numPartialIndexes]
+		partialIndexDelVals := partialIndexVals[numPartialIndexes : numPartialIndexes*2]
 
 		err := pm.Init(partialIndexPutVals, partialIndexDelVals, n.run.tw.tableDesc())
 		if err != nil {
@@ -163,7 +162,7 @@ func (n *upsertNode) processSourceRow(params runParams, rowVals tree.Datums) err
 
 		// Truncate rowVals so that it no longer includes partial index predicate
 		// values.
-		rowVals = rowVals[:partialIndexValOffset]
+		rowVals = rowVals[:offset]
 	}
 
 	// Verify the CHECK constraints by inspecting boolean columns from the input that
