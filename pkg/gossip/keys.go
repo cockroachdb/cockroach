@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -91,6 +92,11 @@ const (
 	// stmtDiagnosticsRequestRegistry listens for notifications and responds by
 	// polling for new requests.
 	KeyGossipStatementDiagnosticsRequest = "stmt-diag-req"
+
+	// KeyJoinTokenPrefix is the prefix for keys that indicate a join token, as
+	// part of the node join TLS handshake process. The key for a join token
+	// is overwritten once it's used.
+	KeyJoinTokenPrefix = "join-token"
 )
 
 // MakeKey creates a canonical key under which to gossip a piece of
@@ -210,4 +216,10 @@ func removePrefixFromKey(key, prefix string) (string, error) {
 		return "", errors.Errorf("%q does not have expected prefix %q%s", key, prefix, separator)
 	}
 	return trimmedKey, nil
+}
+
+// MakeJoinTokenKey returns the gossip key for a join token, based on the join
+// token's ID (a UUID).
+func MakeJoinTokenKey(id uuid.UUID) string {
+	return MakeKey(KeyJoinTokenPrefix, id.String())
 }

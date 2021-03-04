@@ -17,7 +17,9 @@ import (
 	"encoding/base64"
 	"hash/crc32"
 	"io/ioutil"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -26,6 +28,9 @@ import (
 const (
 	// Length of the join token shared secret.
 	joinTokenSecretLen = 16
+
+	// Default TTL for join tokens.
+	joinTokenDefaultTTL = 10 * time.Minute
 )
 
 // JoinToken is a container for a TokenID and associated SharedSecret for use
@@ -104,4 +109,18 @@ func (j *JoinToken) MarshalText() ([]byte, error) {
 		return nil, err
 	}
 	return b.Bytes(), nil
+}
+
+// Checks the join token in the gossip store matches the marshalled form of
+// the passed-in join token.
+func (j *JoinToken) isValid(g *gossip.Gossip) (bool, error) {
+	token, err := g.GetInfo(gossip.MakeJoinTokenKey(j.TokenID))
+	if err != nil {
+		return false, err
+	}
+	token2, err := j.MarshalText()
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(token, token2), nil
 }
