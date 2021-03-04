@@ -131,6 +131,17 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
 	}
 
+	if n.Database != "" {
+		if err := p.CheckZoneConfigChangePermittedForMultiRegionDatabase(
+			ctx,
+			n.Database,
+			n.Options,
+			n.Force,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	var yamlConfig tree.TypedExpr
 
 	if n.YAMLConfig != nil {
