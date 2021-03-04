@@ -30,7 +30,8 @@ var grpcClientConnCloseOptions = Options{
 	Package:  "google.golang.org/grpc",
 	Type:     "ClientConn",
 	Method:   "Close",
-	Hint:     "must elide the call to Close() if the ClientConn is from an *rpc.Context",
+	Hint: "must elide the call to Close() if the ClientConn is from an *rpc.Context. " +
+		"Do `grpcConn.Close() // nolint:grpcconnclose` when the conn does not come from an rpc.Context.",
 }
 
 // DescriptorMarshalAnalyzer checks for correct unmarshaling of descpb
