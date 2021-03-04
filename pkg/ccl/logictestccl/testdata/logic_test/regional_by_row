@@ -531,10 +531,6 @@ statement ok
 DELETE FROM regional_by_row_table WHERE pk = 5;
 CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a) WHERE b > 0
 
-statement ok
-DELETE FROM regional_by_row_table WHERe pk = 6;
-DROP INDEX uniq_idx
-
 query TI
 INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
 ('ca-central-1', 7, 7, 8, 9)
@@ -569,6 +565,7 @@ ORDER BY pk
 ----
 ap-southeast-2  1   1   2   3
 ap-southeast-2  4   4   5   6
+ca-central-1    6   6   5   -5
 ca-central-1    7   7   8   9
 ca-central-1    10  10  11  12
 us-east-1       20  20  21  22
@@ -580,6 +577,7 @@ SELECT * FROM regional_by_row_table ORDER BY pk
 pk  pk2  a   b   j
 1   1    2   3   {"a": "b"}
 4   4    5   6   {"c": "d"}
+6   6    5   -5  NULL
 7   7    8   9   NULL
 10  10   11  12  NULL
 20  20   21  22  NULL
@@ -717,7 +715,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • values
-│             size: 7 columns, 1 row
+│             size: 8 columns, 1 row
 │
 ├── • constraint-check
 │   │
@@ -725,7 +723,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@primary
-│           │ equality: (lookup_join_const_col_@22, column1) = (crdb_region,pk)
+│           │ equality: (lookup_join_const_col_@23, column1) = (crdb_region,pk)
 │           │ equality cols are key
 │           │ pred: column15 != crdb_region
 │           │
@@ -744,7 +742,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@37, column4) = (crdb_region,b)
+│           │ equality: (lookup_join_const_col_@38, column4) = (crdb_region,b)
 │           │ equality cols are key
 │           │ pred: (column1 != pk) OR (column15 != crdb_region)
 │           │
@@ -757,13 +755,35 @@ vectorized: true
 │               └── • scan buffer
 │                     label: buffer 1
 │
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@uniq_idx (partial index)
+│           │ equality: (lookup_join_const_col_@53, column3) = (crdb_region,a)
+│           │ pred: (column1 != pk) OR (column15 != crdb_region)
+│           │
+│           └── • cross join
+│               │ estimated row count: 3
+│               │
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • filter
+│                   │ estimated row count: 1
+│                   │ filter: column4 > 0
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
+│
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@52, column3, column4) = (crdb_region,a,b)
+            │ equality: (lookup_join_const_col_@68, column3, column4) = (crdb_region,a,b)
             │ equality cols are key
             │ pred: (column1 != pk) OR (column15 != crdb_region)
             │
@@ -822,7 +842,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@33, column5) = (crdb_region,b)
+│           │ equality: (lookup_join_const_col_@35, column5) = (crdb_region,b)
 │           │ equality cols are key
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
@@ -834,13 +854,33 @@ vectorized: true
 │               └── • scan buffer
 │                     label: buffer 1
 │
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@uniq_idx (partial index)
+│           │ equality: (lookup_join_const_col_@50, column4) = (crdb_region,a)
+│           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+│           │
+│           └── • cross join
+│               │
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • filter
+│                   │ filter: column5 > 0
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
+│
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@48, column4, column5) = (crdb_region,a,b)
+            │ equality: (lookup_join_const_col_@65, column4, column5) = (crdb_region,a,b)
             │ equality cols are key
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │
@@ -888,7 +928,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: regional_by_row_table@regional_by_row_table_b_key
-│           │ equality: (lookup_join_const_col_@33, column5) = (crdb_region,b)
+│           │ equality: (lookup_join_const_col_@35, column5) = (crdb_region,b)
 │           │ equality cols are key
 │           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
 │           │
@@ -900,13 +940,33 @@ vectorized: true
 │               └── • scan buffer
 │                     label: buffer 1
 │
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: regional_by_row_table@uniq_idx (partial index)
+│           │ equality: (lookup_join_const_col_@50, column4) = (crdb_region,a)
+│           │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
+│           │
+│           └── • cross join
+│               │
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • filter
+│                   │ filter: column5 > 0
+│                   │
+│                   └── • scan buffer
+│                         label: buffer 1
+│
 └── • constraint-check
     │
     └── • error if rows
         │
         └── • lookup join (semi)
             │ table: regional_by_row_table@new_idx
-            │ equality: (lookup_join_const_col_@48, column4, column5) = (crdb_region,a,b)
+            │ equality: (lookup_join_const_col_@65, column4, column5) = (crdb_region,a,b)
             │ equality cols are key
             │ pred: (upsert_pk != pk) OR (column1 != crdb_region)
             │
@@ -938,6 +998,7 @@ ORDER BY pk
 crdb_region     pk  pk2  a   b
 ap-southeast-2  1   1    2   3
 ap-southeast-2  4   4    5   6
+ca-central-1    6   6    5   -5
 ca-central-1    7   7    8   9
 ca-central-1    10  10   11  12
 us-east-1       20  20   21  22
@@ -958,6 +1019,7 @@ CREATE TABLE public.regional_by_row_table (
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
   INVERTED INDEX regional_by_row_table_j_idx (j),
+  UNIQUE INDEX uniq_idx (a ASC) WHERE b > 0:::INT8,
   INDEX new_idx (a ASC, b ASC),
   UNIQUE INDEX unique_b_a (b ASC, a ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
@@ -981,6 +1043,8 @@ regional_by_row_table_b_key  b            false
 regional_by_row_table_b_key  crdb_region  true
 regional_by_row_table_j_idx  crdb_region  true
 regional_by_row_table_j_idx  j            false
+uniq_idx                     a            false
+uniq_idx                     crdb_region  true
 unique_b_a                   a            false
 unique_b_a                   b            false
 unique_b_a                   crdb_region  true
@@ -1017,6 +1081,7 @@ CREATE TABLE public.regional_by_row_table (
   INDEX regional_by_row_table_a_idx (a ASC),
   UNIQUE INDEX regional_by_row_table_b_key (b ASC),
   INVERTED INDEX regional_by_row_table_j_idx (j),
+  UNIQUE INDEX uniq_idx (a ASC) WHERE b > 0:::INT8,
   INDEX new_idx (a ASC, b ASC),
   UNIQUE INDEX unique_b_a (b ASC, a ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
