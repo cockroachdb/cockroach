@@ -168,7 +168,11 @@ func ParseTimestamp(str string) (_ Timestamp, err error) {
 
 // AsOfSystemTime returns a string to be used in an AS OF SYSTEM TIME query.
 func (t Timestamp) AsOfSystemTime() string {
-	return fmt.Sprintf("%d.%010d", t.WallTime, t.Logical)
+	syn := ""
+	if t.Synthetic {
+		syn = "?"
+	}
+	return fmt.Sprintf("%d.%010d%s", t.WallTime, t.Logical, syn)
 }
 
 // IsEmpty retruns true if t is an empty Timestamp.
