@@ -410,9 +410,24 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 		}}))
 	defer stopper.Stop(ctx)
 
-	// Add a leaseholder that can close, in order to establish a connection to n2.
-	r1 := newMockReplica(15, 1, 2)
-	s.RegisterLeaseholder(ctx, r1, 1)
+	// Add leaseholders that can close, in order to establish a connection to n2.
+	// We add many of them, and we'll increment their LAIs periodically such that
+	// all messages need to explicitly mention all of them, in order to get large
+	// messages. This speeds up the test, since the large messages make the sender
+	// block quicker.
+	const numReplicas = 10000
+	replicas := make([]*mockReplica, numReplicas)
+	for i := 0; i < numReplicas; i++ {
+		replicas[i] = newMockReplica(roachpb.RangeID(i+1), 1, 2)
+		s.RegisterLeaseholder(ctx, replicas[i], 1 /* leaseSeq */)
+	}
+
+	incrementLAIs := func() {
+		for _, r := range replicas {
+			r.lai++
+		}
+	}
+
 	s.publish(ctx)
 	require.Len(t, s.conns, 1)
 
@@ -428,6 +443,7 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 			case <-ch:
 				// As soon as the conn send a message, publish another update to cause
 				// the conn to send another message.
+				incrementLAIs()
 				s.publish(ctx)
 			case <-time.After(100 * time.Millisecond):
 				// The conn hasn't sent anything in a while. It must be blocked on Send.
