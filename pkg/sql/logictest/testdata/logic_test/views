@@ -902,3 +902,12 @@ DROP TYPE v4
 
 statement ok
 DROP TABLE t
+
+# Validate that cross DB views are detected by internal tables
+query TTTTTTT
+select * from "".crdb_internal.cross_db_references;
+----
+db1  public  sys   system  public  descriptor  view references table
+db1  public  sys2  system  public  descriptor  view references table
+db2  public  v1    db1     public  ab          view references table
+db2  public  v2    db1     public  ab          view references table
