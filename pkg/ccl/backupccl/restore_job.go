@@ -433,16 +433,7 @@ func WriteDescriptors(
 			}
 			return err
 		}
-
-		bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, codec)
-		descs := make([]catalog.Descriptor, 0, len(databases)+len(tables))
-		for _, table := range tables {
-			descs = append(descs, table)
-		}
-		for _, db := range databases {
-			descs = append(descs, db)
-		}
-		return catalog.ValidateSelfAndCrossReferences(ctx, bdg, descs...)
+		return nil
 	}()
 	return errors.Wrapf(err, "restoring table desc and namespace entries")
 }
