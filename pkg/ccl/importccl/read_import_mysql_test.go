@@ -44,7 +44,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	files := getMysqldumpTestdata(t)
 
 	ctx := context.Background()
-	table := descForTable(ctx, t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20, NoFKs)
+	table := descForTable(ctx, t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 100, 200, NoFKs)
 	tables := map[string]*execinfrapb.ReadImportDataSpec_ImportTable{"simple": {Desc: table.TableDesc()}}
 	opts := roachpb.MysqldumpOptions{}
 
