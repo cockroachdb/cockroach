@@ -263,7 +263,7 @@ func (s *Sender) UnregisterLeaseholder(
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
-	log.VEventf(ctx, 2, "side-transport publishing a new message")
+	log.VEventf(ctx, 4, "side-transport generating a new message")
 
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
