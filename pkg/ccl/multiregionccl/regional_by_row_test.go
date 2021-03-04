@@ -504,7 +504,7 @@ func TestRepartitionFailureRollback(t *testing.T) {
 		},
 	}
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, knobs,
+		t, 3 /* numServers */, knobs, nil, /* baseDir */
 	)
 	defer cleanup()
 

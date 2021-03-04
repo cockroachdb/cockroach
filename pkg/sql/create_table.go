@@ -406,6 +406,10 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	if err := validateDescriptor(params.ctx, params.p, desc); err != nil {
+		return err
+	}
+
 	if desc.LocalityConfig != nil {
 		_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
 			params.ctx,
@@ -444,10 +448,6 @@ func (n *createTableNode) startExec(params runParams) error {
 				return errors.Wrap(err, "error adding backreference to multi-region enum")
 			}
 		}
-	}
-
-	if err := validateDescriptor(params.ctx, params.p, desc); err != nil {
-		return err
 	}
 
 	// Log Create Table event. This is an auditable log event and is
@@ -2334,11 +2334,6 @@ func NewTableDesc(
 			desc.SetTableLocalityRegionalByRow(n.Locality.RegionalByRowColumn)
 		} else {
 			return nil, errors.Newf("unknown locality level: %v", n.Locality.LocalityLevel)
-		}
-
-		bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, evalCtx.Codec)
-		if err := catalog.ValidateSelfAndCrossReferences(ctx, bdg, &desc); err != nil {
-			return nil, err
 		}
 	}
 
