@@ -1794,3 +1794,20 @@ DROP SEQUENCE s1
 
 statement ok
 DROP TABLE s2
+
+# Validate that cross DB sequences are detected by internal tables
+statement ok
+CREATE DATABASE db3;
+
+statement ok
+CREATE SEQUENCE db3.s;
+
+statement ok
+CREATE TABLE tDb3Ref (i INT PRIMARY KEY DEFAULT (nextval('db3.s')));
+
+query TTTTTTT
+SELECT * FROM "".crdb_internal.cross_db_references;
+----
+db2  public  seq   db1  public  t  sequences owning table
+db2  public  seq2  db1  public  t  sequences owning table
+test  public  tdb3ref  db3  public  s  table column refers to sequence
