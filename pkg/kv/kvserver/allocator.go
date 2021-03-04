@@ -123,18 +123,16 @@ const (
 )
 
 var allocatorActionNames = map[AllocatorAction]string{
-	AllocatorNoop:                        "noop",
-	AllocatorRemoveVoter:                 "remove voter",
-	AllocatorRemoveNonVoter:              "remove non-voter",
-	AllocatorAddVoter:                    "add voter",
-	AllocatorAddNonVoter:                 "add non-voter",
-	AllocatorReplaceDeadVoter:            "replace dead voter",
-	AllocatorRemoveDeadVoter:             "remove dead voter",
-	AllocatorReplaceDecommissioningVoter: "replace decommissioning voter",
-	AllocatorRemoveDecommissioningVoter:  "remove decommissioning voter",
-	AllocatorRemoveLearner:               "remove learner",
-	// TODO(aayush): Rationalize whether or not rebalancing of non-voters needs to
-	// be dictated by a distinct allocator action.
+	AllocatorNoop:                            "noop",
+	AllocatorRemoveVoter:                     "remove voter",
+	AllocatorRemoveNonVoter:                  "remove non-voter",
+	AllocatorAddVoter:                        "add voter",
+	AllocatorAddNonVoter:                     "add non-voter",
+	AllocatorReplaceDeadVoter:                "replace dead voter",
+	AllocatorRemoveDeadVoter:                 "remove dead voter",
+	AllocatorReplaceDecommissioningVoter:     "replace decommissioning voter",
+	AllocatorRemoveDecommissioningVoter:      "remove decommissioning voter",
+	AllocatorRemoveLearner:                   "remove learner",
 	AllocatorConsiderRebalance:               "consider rebalance",
 	AllocatorRangeUnavailable:                "range unavailable",
 	AllocatorFinalizeAtomicReplicationChange: "finalize conf change",
@@ -155,9 +153,9 @@ const (
 func (t targetReplicaType) String() string {
 	switch typ := t; typ {
 	case voterTarget:
-		return "voters"
+		return "voter"
 	case nonVoterTarget:
-		return "non-voters"
+		return "non-voter"
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType %d", typ))
 	}
@@ -559,6 +557,10 @@ func (a *Allocator) computeAction(
 	}
 
 	// Non-voting replica removal.
+
+	// TODO(aayush): Handle removal/replacement of decommissioning/dead non-voting
+	// replicas.
+
 	if haveNonVoters > neededNonVoters {
 		// Like above, the range is over-replicated but should remove a non-voter.
 		priority := removeExtraNonVoterPriority
@@ -569,6 +571,41 @@ func (a *Allocator) computeAction(
 
 	// Nothing needs to be done, but we may want to rebalance.
 	return AllocatorConsiderRebalance, 0
+}
+
+// getReplicasForDiversityCalc returns the set of replica descriptors that
+// should be used for computing the diversity scores for a target when
+// allocating/removing/rebalancing a replica of `targetType`.
+func getReplicasForDiversityCalc(
+	targetType targetReplicaType, existingVoters, allExistingReplicas []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
+	switch t := targetType; t {
+	case voterTarget:
+		// When computing the "diversity score" for a given store for a voting
+		// replica allocation/rebalance/removal, we consider the localities of only
+		// the stores that contain a voting replica for the range.
+		//
+		// Note that if we were to consider all stores that have any kind of replica
+		// for the range, voting replica allocation would be disincentivized to pick
+		// stores that (partially or fully) share locality hierarchies with stores
+		// that contain a non-voting replica. This is undesirable because this could
+		// inadvertently reduce the fault-tolerance of the range in cases like the
+		// following:
+		//
+		// Consider 3 regions (A, B, C), each with 2 AZs. Suppose that regions A and
+		// B have a voting replica each, whereas region C has a non-voting replica.
+		// In cases like these, we would want region C to be picked over regions A
+		// and B for allocating a new third voting replica since that improves our
+		// fault tolerance to the greatest degree.
+		// In the counterfactual (i.e. if we were to compute diversity scores based
+		// off of all `existingReplicas`), regions A, B, and C would all be equally
+		// likely to get a new voting replica.
+		return existingVoters
+	case nonVoterTarget:
+		return allExistingReplicas
+	default:
+		panic(fmt.Sprintf("unsupported targetReplicaType: %v", t))
+	}
 }
 
 type decisionDetails struct {
@@ -650,52 +687,31 @@ func (a *Allocator) allocateTargetFromList(
 		existingVoters, zone.GetNumVoters(), zone.VoterConstraints)
 
 	var constraintsChecker constraintsCheckFn
-	var replicaSetForDiversityCalc []roachpb.ReplicaDescriptor
 	switch t := targetType; t {
 	case voterTarget:
 		constraintsChecker = voterConstraintsCheckerForAllocation(
 			analyzedOverallConstraints,
 			analyzedVoterConstraints,
 		)
-		// When computing the "diversity score" for a given store for a voting
-		// replica allocation, we consider the localities of only the stores that
-		// contain a voting replica for the range.
-		//
-		// Note that if we were to consider all stores that have any kind of replica
-		// for the range, voting replica allocation would be disincentivized to pick
-		// stores that (partially or fully) share locality hierarchies with stores
-		// that contain a non-voting replica. This is undesirable because this could
-		// inadvertently reduce the fault-tolerance of the range in cases like the
-		// following:
-		//
-		// Consider 3 regions (A, B, C), each with 2 AZs. Suppose that regions A and
-		// B have a voting replica each, whereas region C has a non-voting replica.
-		// In cases like these, we would want region C to be picked over regions A
-		// and B for allocating a new third voting replica since that improves our
-		// fault tolerance to the greatest degree.
-		// In the counterfactual (i.e. if we were to compute diversity scores based
-		// off of all `existingReplicas`), regions A, B, and C would all be equally
-		// likely to get a new voting replica.
-		replicaSetForDiversityCalc = existingVoters
 	case nonVoterTarget:
 		constraintsChecker = nonVoterConstraintsCheckerForAllocation(analyzedOverallConstraints)
-		replicaSetForDiversityCalc = existingReplicas
 	default:
 		log.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
 	}
 
+	// We'll consider the targets that have a non-voter as feasible
+	// relocation/up-replication targets for existing/new voting replicas, since
+	// we always want voter constraint conformance to take precedence over
+	// non-voters. For instance, in cases where we can only satisfy constraints
+	// for either 1 voter or 1 non-voter, we want the voter to be able to displace
+	// the non-voter.
+	existingReplicaSet := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
 	candidates := rankedCandidateListForAllocation(
 		ctx,
 		candidateStores,
 		constraintsChecker,
-		// TODO(aayush): We currently rule out all the stores that have any replica
-		// for the given range. However, we want to get to a place where we'll
-		// consider the targets that have a non-voter as feasible
-		// relocation/up-replication targets for existing/new voting replicas, since
-		// it is cheaper to promote a non-voter than it is to add a new voter via
-		// the LEARNER->VOTER_FULL path.
-		existingReplicas,
-		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
+		existingReplicaSet,
+		a.storePool.getLocalitiesByStore(existingReplicaSet),
 		a.storePool.isNodeReadyForRoutineReplicaTransfer,
 		options)
 
@@ -713,26 +729,45 @@ func (a *Allocator) allocateTargetFromList(
 	return nil, ""
 }
 
-// TODO(aayush): Generalize this to work for non-voting replicas as well.
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	targetStore roachpb.StoreID,
 	zone *zonepb.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
+	existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo RangeUsageInfo,
+	targetType targetReplicaType,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	// Update statistics first
 	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
 	// but as of October 2017 calls to the Allocator are mostly serialized by the ReplicateQueue
 	// (with the main exceptions being Scatter and the status server's allocator debug endpoint).
 	// Try to make this interfere less with other callers.
-	a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_VOTER)
-	defer func() {
-		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.REMOVE_VOTER)
-	}()
-	log.VEventf(ctx, 3, "simulating which replica would be removed after adding s%d", targetStore)
-	return a.RemoveVoter(ctx, zone, candidates, existingVoters, nil)
+	switch t := targetType; t {
+	case voterTarget:
+		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_VOTER)
+		defer a.storePool.updateLocalStoreAfterRebalance(
+			targetStore,
+			rangeUsageInfo,
+			roachpb.REMOVE_VOTER,
+		)
+		log.VEventf(ctx, 3, "simulating which voter would be removed after adding s%d",
+			targetStore)
+		return a.RemoveVoter(ctx, zone, candidates, existingVoters, existingNonVoters)
+	case nonVoterTarget:
+		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
+		defer a.storePool.updateLocalStoreAfterRebalance(
+			targetStore,
+			rangeUsageInfo,
+			roachpb.REMOVE_NON_VOTER,
+		)
+		log.VEventf(ctx, 3, "simulating which non-voter would be removed after adding s%d",
+			targetStore)
+		return a.RemoveNonVoter(ctx, zone, candidates, existingVoters, existingNonVoters)
+	default:
+		panic(fmt.Sprintf("unknown targetReplicaType: %s", t))
+	}
 }
 
 func (a Allocator) removeTarget(
@@ -762,7 +797,6 @@ func (a Allocator) removeTarget(
 	options := a.scorerOptions()
 
 	var constraintsChecker constraintsCheckFn
-	var replicaSetForDiversityCalc []roachpb.ReplicaDescriptor
 	switch t := targetType; t {
 	case voterTarget:
 		// Voting replicas have to abide by both the overall `constraints` (which
@@ -772,16 +806,13 @@ func (a Allocator) removeTarget(
 			analyzedOverallConstraints,
 			analyzedVoterConstraints,
 		)
-		// See comment inside `allocateTargetFromList` for why we compute diversity
-		// scores relative to only the stores of voting replicas.
-		replicaSetForDiversityCalc = existingVoters
 	case nonVoterTarget:
 		constraintsChecker = nonVoterConstraintsCheckerForRemoval(analyzedOverallConstraints)
-		replicaSetForDiversityCalc = existingReplicas
 	default:
 		log.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
 	}
 
+	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
 	rankedCandidates := rankedCandidateListForRemoval(
 		candidateStoreList,
 		constraintsChecker,
@@ -850,54 +881,67 @@ func (a Allocator) RemoveNonVoter(
 	)
 }
 
-// RebalanceTarget returns a suitable store for a rebalance target with
-// required attributes. Rebalance targets are selected via the same mechanism
-// as AllocateVoter(), except the chosen target must follow some additional
-// criteria. Namely, if chosen, it must further the goal of balancing the
-// cluster.
-//
-// The supplied parameters are the required attributes for the range and
-// information about the range being considered for rebalancing.
-//
-// The existing replicas modulo any store with dead replicas are candidates for
-// rebalancing. Note that rebalancing is accomplished by first adding a new
-// replica to the range, then removing the most undesirable replica.
-//
-// Simply ignoring a rebalance opportunity in the event that the target chosen
-// by AllocateVoter() doesn't fit balancing criteria is perfectly fine, as
-// other stores in the cluster will also be doing their probabilistic best to
-// rebalance. This helps prevent a stampeding herd targeting an abnormally
-// under-utilized store.
-//
-// The return values are, in order:
-//
-// 1. The target on which to add a new replica,
-// 2. An existing replica to remove,
-// 3. a JSON string for use in the range log, and
-// 4. a boolean indicationg whether 1-3 were populated (i.e. whether a rebalance
-//    opportunity was found).
-func (a Allocator) RebalanceTarget(
+func (a Allocator) rebalanceTarget(
 	ctx context.Context,
 	zone *zonepb.ZoneConfig,
 	raftStatus *raft.Status,
-	existingReplicas []roachpb.ReplicaDescriptor,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	rangeUsageInfo RangeUsageInfo,
 	filter storeFilter,
+	targetType targetReplicaType,
 ) (add roachpb.ReplicationTarget, remove roachpb.ReplicationTarget, details string, ok bool) {
 	sl, _, _ := a.storePool.getStoreList(filter)
+	existingReplicas := append(existingVoters, existingNonVoters...)
 
 	zero := roachpb.ReplicationTarget{}
-	analyzedConstraints := constraint.AnalyzeConstraints(
+	analyzedOverallConstraints := constraint.AnalyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, existingReplicas, *zone.NumReplicas, zone.Constraints)
+	analyzedVoterConstraints := constraint.AnalyzeConstraints(
+		ctx, a.storePool.getStoreDescriptor, existingVoters, zone.GetNumVoters(), zone.VoterConstraints)
+	var removalConstraintsChecker constraintsCheckFn
+	var rebalanceConstraintsChecker rebalanceConstraintsCheckFn
+	var replicaSetToRebalance, replicasWithExcludedStores []roachpb.ReplicaDescriptor
+	var otherReplicaSet []roachpb.ReplicaDescriptor
+
+	switch t := targetType; t {
+	case voterTarget:
+		removalConstraintsChecker = voterConstraintsCheckerForRemoval(
+			analyzedOverallConstraints,
+			analyzedVoterConstraints,
+		)
+		rebalanceConstraintsChecker = voterConstraintsCheckerForRebalance(
+			analyzedOverallConstraints,
+			analyzedVoterConstraints,
+		)
+		replicaSetToRebalance = existingVoters
+		otherReplicaSet = existingNonVoters
+	case nonVoterTarget:
+		removalConstraintsChecker = nonVoterConstraintsCheckerForRemoval(analyzedOverallConstraints)
+		rebalanceConstraintsChecker = nonVoterConstraintsCheckerForRebalance(analyzedOverallConstraints)
+		replicaSetToRebalance = existingNonVoters
+		// When rebalancing non-voting replicas, we don't consider stores that
+		// already have voting replicas as possible candidates. Voting replicas are
+		// supposed to be rebalanced before non-voting replicas, and they do
+		// consider the non-voters' stores as possible candidates.
+		replicasWithExcludedStores = existingVoters
+		otherReplicaSet = existingVoters
+	default:
+		log.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
+	}
+
 	options := a.scorerOptions()
-	results := rebalanceCandidates(
+	replicaSetForDiversityCalc := getReplicasForDiversityCalc(targetType, existingVoters, existingReplicas)
+	results := rankedCandidateListForRebalancing(
 		ctx,
 		sl,
-		analyzedConstraints,
-		existingReplicas,
-		a.storePool.getLocalitiesByStore(existingReplicas),
+		removalConstraintsChecker,
+		rebalanceConstraintsChecker,
+		replicaSetToRebalance,
+		replicasWithExcludedStores,
+		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
 		a.storePool.isNodeReadyForRoutineReplicaTransfer,
 		options,
+		targetType,
 	)
 
 	if len(results) == 0 {
@@ -924,21 +968,21 @@ func (a Allocator) RebalanceTarget(
 			ReplicaID: maxReplicaID(existingReplicas) + 1,
 		}
 		// Deep-copy the Replicas slice since we'll mutate it below.
-		existingPlusOneNew := append([]roachpb.ReplicaDescriptor(nil), existingReplicas...)
+		existingPlusOneNew := append([]roachpb.ReplicaDescriptor(nil), replicaSetToRebalance...)
 		existingPlusOneNew = append(existingPlusOneNew, newReplica)
 		replicaCandidates := existingPlusOneNew
 		// If we can, filter replicas as we would if we were actually removing one.
 		// If we can't (e.g. because we're the leaseholder but not the raft leader),
 		// it's better to simulate the removal with the info that we do have than to
 		// assume that the rebalance is ok (#20241).
-		if raftStatus != nil && raftStatus.Progress != nil {
+		if targetType == voterTarget && raftStatus != nil && raftStatus.Progress != nil {
 			replicaCandidates = simulateFilterUnremovableReplicas(
 				ctx, raftStatus, replicaCandidates, newReplica.ReplicaID)
 		}
 		if len(replicaCandidates) == 0 {
 			// No existing replicas are suitable to remove.
-			log.VEventf(ctx, 2, "not rebalancing to s%d because there are no existing "+
-				"replicas that can be removed", target.store.StoreID)
+			log.VEventf(ctx, 2, "not rebalancing %s to s%d because there are no existing "+
+				"replicas that can be removed", targetType, target.store.StoreID)
 			return zero, zero, "", false
 		}
 
@@ -950,10 +994,12 @@ func (a Allocator) RebalanceTarget(
 			zone,
 			replicaCandidates,
 			existingPlusOneNew,
+			otherReplicaSet,
 			rangeUsageInfo,
+			targetType,
 		)
 		if err != nil {
-			log.Warningf(ctx, "simulating RemoveVoter failed: %+v", err)
+			log.Warningf(ctx, "simulating removal of %s failed: %+v", targetType, err)
 			return zero, zero, "", false
 		}
 		if target.store.StoreID != removeReplica.StoreID {
@@ -986,6 +1032,83 @@ func (a Allocator) RebalanceTarget(
 		StoreID: removeReplica.StoreID,
 	}
 	return addTarget, removeTarget, string(detailsBytes), true
+}
+
+// RebalanceVoter returns a suitable store for a rebalance target with required
+// attributes. Rebalance targets are selected via the same mechanism as
+// AllocateVoter(), except the chosen target must follow some additional
+// criteria. Namely, if chosen, it must further the goal of balancing the
+// cluster.
+//
+// The supplied parameters are the required attributes for the range and
+// information about the range being considered for rebalancing.
+//
+// The existing voting replicas modulo any store with dead replicas are
+// candidates for rebalancing.
+//
+// Simply ignoring a rebalance opportunity in the event that the target chosen
+// by rankedCandidateListForRebalancing() doesn't fit balancing criteria is
+// perfectly fine, as other stores in the cluster will also be doing their
+// probabilistic best to rebalance. This helps prevent a stampeding herd
+// targeting an abnormally under-utilized store.
+//
+// The return values are, in order:
+//
+// 1. The target on which to add a new replica,
+// 2. An existing replica to remove,
+// 3. a JSON string for use in the range log, and
+// 4. a boolean indicationg whether 1-3 were populated (i.e. whether a rebalance
+//    opportunity was found).
+func (a Allocator) RebalanceVoter(
+	ctx context.Context,
+	zone *zonepb.ZoneConfig,
+	raftStatus *raft.Status,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	rangeUsageInfo RangeUsageInfo,
+	filter storeFilter,
+) (add roachpb.ReplicationTarget, remove roachpb.ReplicationTarget, details string, ok bool) {
+	return a.rebalanceTarget(
+		ctx,
+		zone,
+		raftStatus,
+		existingVoters,
+		existingNonVoters,
+		rangeUsageInfo,
+		filter,
+		voterTarget,
+	)
+}
+
+// RebalanceNonVoter returns a suitable pair of rebalance candidates for a
+// non-voting replica. This behaves very similarly to `RebalanceVoter` as
+// explained above. The key differences are the following:
+//
+// 1. Non-voting replicas only adhere to the overall `constraints` and not the
+// `voter_constraints`.
+// 2. We do not consider stores that have voters as valid candidates for
+// rebalancing.
+// 3. Diversity score calculation for non-voters is relative to all existing
+// replicas. This is in contrast to how we compute the diversity scores for
+// voting replicas, which are computed relative to just the set of voting
+// replicas.
+func (a Allocator) RebalanceNonVoter(
+	ctx context.Context,
+	zone *zonepb.ZoneConfig,
+	raftStatus *raft.Status,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	rangeUsageInfo RangeUsageInfo,
+	filter storeFilter,
+) (add roachpb.ReplicationTarget, remove roachpb.ReplicationTarget, details string, ok bool) {
+	return a.rebalanceTarget(
+		ctx,
+		zone,
+		raftStatus,
+		existingVoters,
+		existingNonVoters,
+		rangeUsageInfo,
+		filter,
+		nonVoterTarget,
+	)
 }
 
 func (a *Allocator) scorerOptions() scorerOptions {

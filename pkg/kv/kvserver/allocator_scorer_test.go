@@ -315,9 +315,9 @@ func TestBetterThan(t *testing.T) {
 }
 
 // TestBestRebalanceTarget constructs a hypothetical output of
-// rebalanceCandidates and verifies that bestRebalanceTarget properly returns
-// the candidates in the ideal order of preference and omits any that aren't
-// desirable.
+// rankedCandidateListForRebalancing and verifies that bestRebalanceTarget
+// properly returns the candidates in the ideal order of preference and omits
+// any that aren't desirable.
 func TestBestRebalanceTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1209,18 +1209,36 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			}
 		}
 
-		targets := rebalanceCandidates(
+		removalConstraintsChecker := voterConstraintsCheckerForRemoval(
+			constraint.EmptyAnalyzedConstraints,
+			constraint.EmptyAnalyzedConstraints,
+		)
+		rebalanceConstraintsChecker := voterConstraintsCheckerForRebalance(
+			constraint.EmptyAnalyzedConstraints,
+			constraint.EmptyAnalyzedConstraints,
+		)
+		targets := rankedCandidateListForRebalancing(
 			context.Background(),
 			filteredSL,
-			constraint.AnalyzedConstraints{},
+			removalConstraintsChecker,
+			rebalanceConstraintsChecker,
 			replicas,
+			nil,
 			existingStoreLocalities,
-			func(context.Context, roachpb.NodeID) bool { return true }, /* isNodeValidForRoutineReplicaTransfer */
-			options)
+			func(context.Context, roachpb.NodeID) bool { return true },
+			options,
+			voterTarget,
+		)
 		actual := len(targets) > 0
 		if actual != tc.expected {
-			t.Errorf("%d: shouldRebalance on s%d with replicas on %v got %t, expected %t",
-				i, tc.s.StoreID, tc.existingNodeIDs, actual, tc.expected)
+			t.Errorf(
+				"%d: shouldRebalanceBasedOnRangeCount on s%d with replicas on %v got %t, expected %t",
+				i,
+				tc.s.StoreID,
+				tc.existingNodeIDs,
+				actual,
+				tc.expected,
+			)
 		}
 	}
 }
