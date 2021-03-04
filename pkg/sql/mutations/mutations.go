@@ -313,6 +313,8 @@ func statisticsMutator(
 	return stmts, changed
 }
 
+// foreignKeyMutator is a MultiStatementMutation implementation which adds
+// foreign key references between existing columns.
 func foreignKeyMutator(
 	rng *rand.Rand, stmts []tree.Statement,
 ) (mutated []tree.Statement, changed bool) {
@@ -369,6 +371,10 @@ func foreignKeyMutator(
 		// Choose a random column subset.
 		var fkCols []*tree.ColumnTableDef
 		for _, c := range cols[table.Table] {
+			if c.Computed.Computed {
+				// We don't support FK references from computed columns (#46672).
+				continue
+			}
 			if usedCols[table.Table][c.Name] {
 				continue
 			}
@@ -429,6 +435,10 @@ func foreignKeyMutator(
 				fkCol := fkCols[len(usingCols)]
 				found := false
 				for refI, refCol := range availCols {
+					if refCol.Computed.Virtual {
+						// We don't support FK references to virtual columns (#51296).
+						continue
+					}
 					fkColType := tree.MustBeStaticallyKnownType(fkCol.Type)
 					refColType := tree.MustBeStaticallyKnownType(refCol.Type)
 					if fkColType.Equivalent(refColType) && colinfo.ColumnTypeIsIndexable(refColType) {
