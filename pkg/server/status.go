@@ -2559,5 +2559,9 @@ func (s *statusServer) GenerateJoinToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "error when marshaling join token")
 	}
+	if err := s.gossip.AddInfo(
+		gossip.MakeJoinTokenKey(jt.tokenID), token, joinTokenDefaultTTL); err != nil {
+		return "", errors.Wrap(err, "error when gossiping join token")
+	}
 	return string(token), nil
 }

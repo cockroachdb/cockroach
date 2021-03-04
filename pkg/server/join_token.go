@@ -18,6 +18,7 @@ import (
 	"hash/crc32"
 	"io/ioutil"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -30,6 +31,9 @@ import (
 const (
 	// Length of the join token shared secret.
 	joinTokenSecretLen = 16
+
+	// Default TTL for join tokens.
+	joinTokenDefaultTTL = 10 * time.Minute
 )
 
 // joinToken is a container for a tokenID and associated sharedSecret for use
@@ -71,8 +75,7 @@ func (j *joinToken) sign(caCert []byte) {
 func (j *joinToken) verifySignature(caCert []byte) bool {
 	signer := hmac.New(sha256.New, j.sharedSecret)
 	_, _ = signer.Write(caCert)
-	// TODO(aaron-crl): Avoid timing attacks here.
-	return bytes.Equal(signer.Sum(nil), j.fingerprint)
+	return hmac.Equal(signer.Sum(nil), j.fingerprint)
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
