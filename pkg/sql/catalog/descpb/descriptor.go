@@ -220,6 +220,9 @@ func FromDescriptor(
 	typ *TypeDescriptor,
 	schema *SchemaDescriptor,
 ) {
+	if desc == nil {
+		return nil, nil, nil, nil
+	}
 	//nolint:descriptormarshal
 	table = desc.GetTable()
 	database = desc.GetDatabase()
