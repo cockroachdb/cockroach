@@ -1355,6 +1355,10 @@ CREATE TABLE greeting_table (x greeting NOT NULL, y INT, INDEX (x, y))
 statement ok
 PREPARE enum_query AS SELECT x, y FROM greeting_table WHERE y = 2
 
+# Create prepared statement to drop type.
+statement ok
+PREPARE enum_drop AS DROP TYPE greeting
+
 # Now alter the enum to have a new value.
 statement ok
 ALTER TYPE greeting ADD VALUE 'howdy'
@@ -1368,3 +1372,11 @@ query TI
 EXECUTE enum_query
 ----
 howdy 2
+
+# drop table
+statement ok
+DROP TABLE greeting_table
+
+# drop the type using prepared statement.
+statement ok
+EXECUTE enum_drop

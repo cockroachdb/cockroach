@@ -61,7 +61,7 @@ func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) 
 		*tree.CreateSequence,
 		*tree.CreateStats,
 		*tree.Deallocate, *tree.Discard, *tree.DropDatabase, *tree.DropIndex,
-		*tree.DropTable, *tree.DropView, *tree.DropSequence,
+		*tree.DropTable, *tree.DropView, *tree.DropSequence, *tree.DropType,
 		*tree.Execute,
 		*tree.Grant, *tree.GrantRole,
 		*tree.Prepare,

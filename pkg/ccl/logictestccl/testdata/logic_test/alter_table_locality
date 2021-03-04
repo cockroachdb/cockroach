@@ -2627,3 +2627,13 @@ CREATE TABLE hash_sharded_idx_table (
 
 statement error cannot convert a table to REGIONAL BY ROW if table table contains hash sharded indexes
 ALTER TABLE hash_sharded_idx_table SET LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE parent_table (pk INT PRIMARY KEY);
+CREATE TABLE cannot_interleave_regional_by_row (
+  pk INT NOT NULL PRIMARY KEY
+)
+INTERLEAVE IN PARENT parent_table(pk)
+
+statement error interleaved tables are not compatible with REGIONAL BY ROW tables
+ALTER TABLE cannot_interleave_regional_by_row SET LOCALITY REGIONAL BY ROW
