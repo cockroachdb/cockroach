@@ -4,7 +4,7 @@ go_library(
     name = "testutils",
     srcs = [
         "base.go",
-        "bazel.go",
+        "data_path.go",
         "dir.go",
         "error.go",
         "files.go",
@@ -20,6 +20,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/sql/pgwire/pgerror",
@@ -30,6 +31,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
