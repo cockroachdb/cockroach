@@ -415,3 +415,129 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 	close(continueNotification)
 	require.NoError(t, g.Wait())
 }
+
+func TestSchemaChangeError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+	ctx := context.Background()
+
+	t.Run("real error in backfill", func(t *testing.T) {
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		tdb.Exec(t, `SET experimental_use_new_schema_changer = 'on'`)
+		tdb.Exec(t, `CREATE DATABASE db`)
+		tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+		// Create a division by zero error.
+		tdb.Exec(t, `INSERT INTO db.t VALUES (0)`)
+
+		tdb.ExpectErr(t,
+			"pq: failed to construct index entries during backfill: division by zero",
+			`ALTER TABLE db.t ADD COLUMN b INT AS (1//a) STORED`)
+
+		// Check the error to ensure that OnFailOrCancel didn't itself fail. This
+		// would be nicer with a different terminal state for jobs where
+		// OnFailOrCancel failed (see #59542).
+		var status, jobError string
+		tdb.QueryRow(t,
+			`SELECT status, error FROM crdb_internal.jobs WHERE job_type = $1`,
+			jobspb.TypeNewSchemaChange.String(),
+		).Scan(&status, &jobError)
+		require.Equal(t, string(jobs.StatusFailed), status)
+		require.Equal(t,
+			"failed to construct index entries during backfill: division by zero", jobError)
+
+		// Check that further schema changes are possible.
+		tdb.Exec(t, `ALTER TABLE db.t ADD COLUMN b INT`)
+	})
+
+	t.Run("injected error in last revertible state", func(t *testing.T) {
+		// Avoid injecting the error twice across two schema changes.
+		var injectError sync.Once
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
+				BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+					if m.Reverting || ops.Type() != scop.MutationType {
+						return nil
+					}
+					for _, op := range ops.Slice() {
+						if _, ok := op.(scop.MakeDroppedIndexDeleteOnly); ok {
+							var err error
+							injectError.Do(func() {
+								err = errors.Errorf("injected error")
+							})
+							return err
+						}
+					}
+					return nil
+				},
+			},
+		}
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		tdb.Exec(t, `SET experimental_use_new_schema_changer = 'on'`)
+		tdb.Exec(t, `CREATE DATABASE db`)
+		tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+
+		tdb.ExpectErr(t, "injected error", `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1`)
+
+		// Check the error to ensure that OnFailOrCancel didn't itself fail. This
+		// would be nicer with a different terminal state for jobs where
+		// OnFailOrCancel failed (see #59542).
+		var status, jobError string
+		tdb.QueryRow(t,
+			`SELECT status, error FROM crdb_internal.jobs WHERE job_type = $1`,
+			jobspb.TypeNewSchemaChange.String(),
+		).Scan(&status, &jobError)
+		require.Equal(t, string(jobs.StatusFailed), status)
+		require.Equal(t, "injected error", jobError)
+
+		// Check that further schema changes are possible.
+		tdb.Exec(t, `ALTER TABLE db.t ADD COLUMN b INT`)
+	})
+
+	t.Run("injected error in non-revertible state", func(t *testing.T) {
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			SQLNewSchemaChanger: &scexec.NewSchemaChangerTestingKnobs{
+				BeforeStage: func(ops scop.Ops, m scexec.TestingKnobMetadata) error {
+					if m.Reverting || ops.Type() != scop.MutationType {
+						return nil
+					}
+					for _, op := range ops.Slice() {
+						if _, ok := op.(scop.MakeIndexAbsent); ok {
+							return errors.Errorf("injected error")
+						}
+					}
+					return nil
+				},
+			},
+		}
+		s, sqlDB, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+		tdb.Exec(t, `SET experimental_use_new_schema_changer = 'on'`)
+		tdb.Exec(t, `CREATE DATABASE db`)
+		tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
+
+		tdb.ExpectErr(t, "injected error", `ALTER TABLE db.t ADD COLUMN b INT DEFAULT 1`)
+
+		// Check the error to ensure that OnFailOrCancel failed.
+		var status, jobError string
+		tdb.QueryRow(t,
+			`SELECT status, error FROM crdb_internal.jobs WHERE job_type = $1`,
+			jobspb.TypeNewSchemaChange.String(),
+		).Scan(&status, &jobError)
+		require.Equal(t, string(jobs.StatusFailed), status)
+		require.Regexp(t, "cannot be reverted", jobError)
+
+		// Check that there is still a mutation left on the descriptor.
+		table := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "db", "public", "t")
+		require.Len(t, table.GetMutations(), 1)
+	})
+}

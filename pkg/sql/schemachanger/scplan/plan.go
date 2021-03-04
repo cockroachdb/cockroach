@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -73,6 +74,10 @@ type Plan struct {
 type Stage struct {
 	Before, After []*scpb.Node
 	Ops           scop.Ops
+	// NonRevertible, for a stage of mutation ops, indicates that the After state
+	// of the nodes is not revertible. That is, on successful execution of the
+	// ops, the schema change can no longer be reverted.
+	NonRevertible bool
 }
 
 // MakePlan generates a Plan for a particular phase of a schema change, given
@@ -179,9 +184,10 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
 			}
 		}
 		return Stage{
-			Before: cur,
-			After:  next,
-			Ops:    scop.MakeOps(ops...),
+			Before:        cur,
+			After:         next,
+			Ops:           scop.MakeOps(ops...),
+			NonRevertible: isNonRevertible(next),
 		}, true
 	}
 
@@ -230,4 +236,38 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
 		cur = s.After
 	}
 	return stages
+}
+
+func isNonRevertible(nodes []*scpb.Node) bool {
+	// For now, this only applies to columns and indexes.
+	for _, n := range nodes {
+		if n.Target.Direction == scpb.Target_DROP &&
+			(n.State == scpb.State_DELETE_ONLY || n.State == scpb.State_ABSENT) {
+			return true
+		}
+	}
+	return false
+}
+
+// ReverseTargetDirections returns a copy of the targets with the directions
+// reversed.
+func ReverseTargetDirections(targets []*scpb.Target) []*scpb.Target {
+	reversedTargets := make([]*scpb.Target, 0, len(targets))
+	for _, target := range targets {
+		reversed := protoutil.Clone(target).(*scpb.Target)
+		reversed.Direction = reverseDirection(reversed.Direction)
+		reversedTargets = append(reversedTargets, reversed)
+	}
+	return reversedTargets
+}
+
+func reverseDirection(direction scpb.Target_Direction) scpb.Target_Direction {
+	switch direction {
+	case scpb.Target_ADD:
+		return scpb.Target_DROP
+	case scpb.Target_DROP:
+		return scpb.Target_ADD
+	default:
+		return scpb.Target_UNKNOWN
+	}
 }

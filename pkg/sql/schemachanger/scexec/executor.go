@@ -78,6 +78,7 @@ func (*NewSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 type TestingKnobMetadata struct {
 	Statements []string
 	Phase      scplan.Phase
+	Reverting  bool
 }
 
 // ExecuteOps executes the provided ops. The ops must all be of the same type.
