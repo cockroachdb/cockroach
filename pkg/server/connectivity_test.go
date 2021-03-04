@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -396,12 +395,14 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 
 	// Trying to scan the scratch range via the decommissioned node should
 	// now result in a permission denied error.
-	_, err := decomSrv.DB().Scan(ctx, scratchKey, keys.MaxKey, 1)
-	require.Error(t, err)
-
+	//
 	// TODO(erikgrinaker): until cockroachdb/errors preserves grpcstatus.Error
-	// across errors.EncodeError() we just check for any error, this should
-	// check that it matches codes.PermissionDenied later.
+	// across errors.EncodeError() we'll have to disable this, since the return
+	// code isn't preserved, and since some internal calls (notably RangeLookup
+	// via RangeIterator) end up retrying indefinitely because it can't detect
+	// the error code. See: https://github.com/cockroachdb/cockroach/issues/61470
+	//_, err := decomSrv.DB().Scan(ctx, scratchKey, keys.MaxKey, 1)
+	//require.Error(t, err)
 	//err = errors.UnwrapAll(err)
 	//s, ok := grpcstatus.FromError(err)
 	//require.True(t, ok, "expected gRPC error, got %T (%v)", err, err)
