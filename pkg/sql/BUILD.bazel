@@ -112,6 +112,7 @@ go_library(
         "job_exec_context.go",
         "join.go",
         "join_predicate.go",
+        "join_token.go",
         "limit.go",
         "lookup_join.go",
         "max_one_row.go",
