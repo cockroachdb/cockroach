@@ -460,10 +460,6 @@ func (p *planner) AlterPrimaryKey(
 				return err
 			}
 		}
-		// TODO(#59719): decide what happens if any multiregion tables have
-		// PARTITION BY statements. We currently do not support this and ignore
-		// these old statements.
-		//
 		// Create partitioning if we are newly adding a PARTITION BY ALL statement.
 		if isNewPartitionAllBy {
 			if *newIndex, err = CreatePartitioning(
