@@ -389,6 +389,18 @@ func (n *CreateChangefeed) StatementTag() string {
 func (*CreateChangefeed) cclOnlyStatement() {}
 
 // StatementType implements the Statement interface.
+func (*ShowLogs) StatementType() StatementType {
+	return Rows
+}
+
+// StatementTag implements the Statement interface.
+func (*ShowLogs) StatementTag() string {
+	return "SHOW LOGS"
+}
+
+func (*ShowLogs) cclOnlyStatement() {}
+
+// StatementType implements the Statement interface.
 func (*CreateDatabase) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1231,3 +1243,4 @@ func (n *Truncate) String() string                       { return AsString(n) }
 func (n *UnionClause) String() string                    { return AsString(n) }
 func (n *Update) String() string                         { return AsString(n) }
 func (n *ValuesClause) String() string                   { return AsString(n) }
+func (n *ShowLogs) String() string                       { return AsString(n) }

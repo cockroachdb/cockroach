@@ -216,6 +216,7 @@ show_stmt ::=
 	| show_partitions_stmt
 	| show_jobs_stmt
 	| show_locality_stmt
+	| show_logs_stmt
 	| show_schedules_stmt
 	| show_statements_stmt
 	| show_ranges_stmt
@@ -658,6 +659,10 @@ show_jobs_stmt ::=
 show_locality_stmt ::=
 	'SHOW' 'LOCALITY'
 
+show_logs_stmt ::=
+	'SHOW' 'ALL' 'LOGS' opt_node_id_list opt_with_options
+	| 'SHOW' 'LOGS' opt_node_id_list 'MATCHING' sconst_or_placeholder opt_with_options
+
 show_schedules_stmt ::=
 	'SHOW' 'SCHEDULES' opt_schedule_executor_type
 	| 'SHOW' schedule_state 'SCHEDULES' opt_schedule_executor_type
@@ -929,10 +934,12 @@ unreserved_keyword ::=
 	| 'LOCAL'
 	| 'LOCKED'
 	| 'LOGIN'
+	| 'LOGS'
 	| 'LOCALITY'
 	| 'LOOKUP'
 	| 'LOW'
 	| 'MATCH'
+	| 'MATCHING'
 	| 'MATERIALIZED'
 	| 'MAXVALUE'
 	| 'MERGE'
@@ -966,6 +973,7 @@ unreserved_keyword ::=
 	| 'NOCREATEROLE'
 	| 'NOCONTROLCHANGEFEED'
 	| 'NOCONTROLJOB'
+	| 'NODES'
 	| 'NOLOGIN'
 	| 'NOMODIFYCLUSTERSETTING'
 	| 'NOVIEWACTIVITY'
@@ -1538,6 +1546,9 @@ for_grantee_clause ::=
 	'FOR' name_list
 	| 
 
+opt_node_id_list ::=
+	'FROM' 'NODES' node_id_list
+
 opt_schedule_executor_type ::=
 	'FOR' 'BACKUP'
 
@@ -2057,6 +2068,9 @@ targets_roles ::=
 	| 'TYPE' type_name_list
 	| targets
 
+node_id_list ::=
+	( iconst32 ) ( ( ',' iconst32 ) )*
+
 partition ::=
 	'PARTITION' partition_name
 
@@ -2459,6 +2473,9 @@ for_locking_item ::=
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*
 
+iconst32 ::=
+	'ICONST'
+
 opt_ordinality ::=
 	'WITH' 'ORDINALITY'
 	| 
@@ -2514,9 +2531,6 @@ type_func_name_no_crdb_extra_keyword ::=
 
 general_type_name ::=
 	type_function_name_no_crdb_extra
-
-iconst32 ::=
-	'ICONST'
 
 complex_type_name ::=
 	general_type_name '.' unrestricted_name

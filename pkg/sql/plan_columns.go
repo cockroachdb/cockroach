@@ -109,6 +109,8 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.getColumns(mut, colinfo.AlterTableScatterColumns)
 	case *showFingerprintsNode:
 		return n.getColumns(mut, colinfo.ShowFingerprintsColumns)
+	case *showLogsNode:
+		return n.getColumns(mut, colinfo.ShowLogsColumns)
 	case *splitNode:
 		return n.getColumns(mut, colinfo.AlterTableSplitColumns)
 	case *unsplitNode:

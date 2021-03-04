@@ -1,0 +1,37 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto3";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "execinfrapb";
+
+import "gogoproto/gogo.proto";
+
+// LogSpySpec is a processor spec for "spying" on logs across the cluster.
+message LogSpySpec {
+  string pattern = 1;
+  string vmodule = 2 [(gogoproto.customname) = "VModule"];
+}
+
+// LogEntryBatch represents a batch of serialized messages.
+message LogEntryBatch {
+  repeated bytes entries = 1;
+  bool truncated = 2;
+  int32 node_id = 3 [(gogoproto.customname) = "NodeID",
+                    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+}
+

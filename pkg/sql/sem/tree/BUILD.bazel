@@ -74,6 +74,7 @@ go_library(
         "select.go",
         "set.go",
         "show.go",
+        "show_logs.go",
         "split.go",
         "stmt.go",
         "stream_ingestion.go",

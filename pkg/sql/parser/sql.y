@@ -586,6 +586,12 @@ func (u *sqlSymUnion) objectNamePrefix() tree.ObjectNamePrefix {
 func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
     return u.val.(tree.ObjectNamePrefixList)
 }
+func (u *sqlSymUnion) nodeIDList() []roachpb.NodeID {
+  if l, ok :=  u.val.([]roachpb.NodeID); ok {
+    return l
+  }
+  return nil
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -657,15 +663,15 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
-%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOOKUP LOW LSHIFT
+%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGIN LOGS LOOKUP LOW LSHIFT
 
-%token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH
+%token <str> MATCH MATCHING MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MONTH
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
 %token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED NOCONTROLJOB
-%token <str> NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING NO_INDEX_JOIN
+%token <str> NOCREATEDB NOCREATELOGIN NOCREATEROLE NODES NOLOGIN NOMODIFYCLUSTERSETTING NO_INDEX_JOIN
 %token <str> NONE NORMAL NOT NOTHING NOTNULL NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
@@ -925,6 +931,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
+%type <tree.Statement> show_logs_stmt
 
 %type <str> statements_or_queries
 
@@ -1229,6 +1236,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <*tree.FullBackupClause> opt_full_backup_clause
 %type <tree.ScheduleState> schedule_state
 %type <tree.ScheduledJobExecutorType> opt_schedule_executor_type
+%type <[]roachpb.NodeID> node_id_list opt_node_id_list
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -4490,7 +4498,7 @@ zone_value:
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
-// SHOW LOCALITY, SHOW ZONE CONFIGURATION
+// SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW LOGS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -4507,6 +4515,7 @@ show_stmt:
 | show_partitions_stmt      // EXTEND WITH HELP: SHOW PARTITIONS
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
 | show_locality_stmt
+| show_logs_stmt            // EXTEND WITH HELP: SHOW LOGS
 | show_schedules_stmt       // EXTEND WITH HELP: SHOW SCHEDULES
 | show_statements_stmt      // EXTEND WITH HELP: SHOW STATEMENTS
 | show_ranges_stmt          // EXTEND WITH HELP: SHOW RANGES
@@ -5412,6 +5421,60 @@ opt_on_targets_roles:
 | /* EMPTY */
   {
     $$.val = (*tree.TargetList)(nil)
+  }
+
+// %Help: SHOW LOGS - display logs across cluster.
+// %Category: Priv
+// %Text:
+// SHOW ALL LOGS [FROM NODES nodeID,...] [WITH k=v, ...]
+// SHOW LOGS [FROM NODES nodeID,...] [MATCHING <pattern>] [WITH k=v, ...]
+//
+// Retrieves and displays logs, possibly restricted by optional MATCHING regex.
+// By default, the logs from all the nodes in the clustere are retrieved.  This
+// can be changed by specifying "FROM NODES" clause.
+//
+// The following options are supported:
+//   * vmodule=<string>: Set vmodule to the specified value.
+//     This statement will restore vmodule to the previous value.
+//   * duration=<string>: Capture logs for the specified duration period (5s, 60s, etc).
+//
+//
+show_logs_stmt:
+  SHOW ALL LOGS opt_node_id_list opt_with_options
+  {
+    $$.val = &tree.ShowLogs{
+      Nodes: $4.nodeIDList(),
+      With: $5.kvOptions(),
+    }
+  }
+| SHOW LOGS opt_node_id_list MATCHING sconst_or_placeholder opt_with_options
+  {
+    $$.val = &tree.ShowLogs{
+      Nodes: $3.nodeIDList(),
+      Pattern: $5.expr(),
+      With: $6.kvOptions(),
+    }
+  }
+| SHOW LOGS error // SHOW HELP: SHOW LOGS
+
+opt_node_id_list:
+  /* EMPTY */
+  {
+    $$.val = nil
+  }
+| FROM NODES node_id_list
+  {
+    $$.val = $3.nodeIDList()
+  }
+
+node_id_list:
+  iconst32
+  {
+    $$.val = []roachpb.NodeID{roachpb.NodeID($1.int32())}
+  }
+| node_id_list ',' iconst32
+  {
+    $$.val = append($1.nodeIDList(), roachpb.NodeID($3.int32()))
   }
 
 // targets is a non-terminal for a list of privilege targets, either a
@@ -12520,10 +12583,12 @@ unreserved_keyword:
 | LOCAL
 | LOCKED
 | LOGIN
+| LOGS
 | LOCALITY
 | LOOKUP
 | LOW
 | MATCH
+| MATCHING
 | MATERIALIZED
 | MAXVALUE
 | MERGE
@@ -12557,6 +12622,7 @@ unreserved_keyword:
 | NOCREATEROLE
 | NOCONTROLCHANGEFEED
 | NOCONTROLJOB
+| NODES
 | NOLOGIN
 | NOMODIFYCLUSTERSETTING
 | NOVIEWACTIVITY
