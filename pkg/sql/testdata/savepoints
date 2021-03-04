@@ -690,7 +690,7 @@ ROLLBACK TO SAVEPOINT cockroach_restart
 2: RELEASE SAVEPOINT cockroach_restart -- 0 rows
 -- Open        -> CommitWait  XXX  (none)
 3: ROLLBACK TO SAVEPOINT cockroach_restart -- pq: current transaction is committed, commands ignored until end of transaction block
--- CommitWait  -> CommitWait  XXX  (none)
+-- CommitWait  -> NoTxn       ##.  (none)
 
 # Test that cockroach_restart doesn't nest in the same way that regular
 # savepoints do. We allow the savepoint cockroach_restart to be redeclared after
@@ -742,7 +742,7 @@ SELECT 2
 3: RELEASE SAVEPOINT cockroach_restart -- 0 rows
 -- Open        -> CommitWait  XXXX  (none)
 4: SELECT 2 -- pq: current transaction is committed, commands ignored until end of transaction block
--- CommitWait  -> CommitWait  XXXX  (none)
+-- CommitWait  -> NoTxn       ###.  (none)
 
 # In contrast, it's OK to continue work after a RELEASE of a
 # non-restart savepoint.

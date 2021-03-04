@@ -881,8 +881,9 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	if _, err := tx.Exec("INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"); !testutils.IsError(err, "current transaction is committed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Rollback should respond with a COMMIT command tag.
-	if err := tx.Rollback(); !testutils.IsError(err, "unexpected command tag COMMIT") {
+	// Rollback should respond with unexpected transaction status IDLE since a
+	// non-retriable error in CommitWait finishes the transaction.
+	if err := tx.Rollback(); !testutils.IsError(err, "unexpected transaction status idle") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

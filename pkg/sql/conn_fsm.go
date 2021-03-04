@@ -413,15 +413,10 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 			},
 		},
 		eventNonRetriableErr{IsCommit: fsm.Any}: {
-			// This event doesn't change state, but it returns a skipBatch code.
-			//
-			// Note that we don't expect any errors from error on COMMIT in this
-			// state.
 			Description: "any other statement",
-			Next:        stateCommitWait{},
+			Next:        stateNoTxn{},
 			Action: func(args fsm.Args) error {
-				args.Extended.(*txnState).setAdvanceInfo(skipBatch, noRewind, noEvent)
-				return nil
+				return args.Extended.(*txnState).finishTxn(txnRollback)
 			},
 		},
 	},

@@ -636,11 +636,12 @@ func TestTransitions(t *testing.T) {
 			},
 			ev:        eventNonRetriableErr{IsCommit: fsm.False},
 			evPayload: eventNonRetriableErrPayload{err: fmt.Errorf("test non-retriable err")},
-			expState:  stateCommitWait{},
+			expState:  stateNoTxn{},
 			expAdv: expAdvance{
-				expCode: skipBatch,
+				expCode: advanceOne,
+				expEv:   txnRollback,
 			},
-			expTxn: &expKVTxn{},
+			expTxn: nil,
 		},
 	}
 
