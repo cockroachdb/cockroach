@@ -40,10 +40,10 @@ func TestProbe(t *testing.T) {
 
 		p.probe(ctx, m)
 
-		require.Zero(t, p.Metrics.ProbePlanAttempts.Count())
-		require.Zero(t, p.Metrics.ReadProbeAttempts.Count())
-		require.Zero(t, p.Metrics.ProbePlanFailures.Count())
-		require.Zero(t, p.Metrics.ReadProbeFailures.Count())
+		require.Zero(t, p.Metrics().ProbePlanAttempts.Count())
+		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 	})
 
 	t.Run("happy path", func(t *testing.T) {
@@ -53,10 +53,10 @@ func TestProbe(t *testing.T) {
 
 		p.probe(ctx, m)
 
-		require.Equal(t, int64(1), p.Metrics.ProbePlanAttempts.Count())
-		require.Equal(t, int64(1), p.Metrics.ReadProbeAttempts.Count())
-		require.Zero(t, p.Metrics.ProbePlanFailures.Count())
-		require.Zero(t, p.Metrics.ReadProbeFailures.Count())
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 	})
 
 	t.Run("planning fails", func(t *testing.T) {
@@ -70,10 +70,10 @@ func TestProbe(t *testing.T) {
 
 		p.probe(ctx, m)
 
-		require.Equal(t, int64(1), p.Metrics.ProbePlanAttempts.Count())
-		require.Zero(t, p.Metrics.ReadProbeAttempts.Count())
-		require.Equal(t, int64(1), p.Metrics.ProbePlanFailures.Count())
-		require.Zero(t, p.Metrics.ReadProbeFailures.Count())
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
 	})
 
 	t.Run("get fails", func(t *testing.T) {
@@ -86,10 +86,10 @@ func TestProbe(t *testing.T) {
 
 		p.probe(ctx, m)
 
-		require.Equal(t, int64(1), p.Metrics.ProbePlanAttempts.Count())
-		require.Equal(t, int64(1), p.Metrics.ReadProbeAttempts.Count())
-		require.Zero(t, p.Metrics.ProbePlanFailures.Count())
-		require.Equal(t, int64(1), p.Metrics.ReadProbeFailures.Count())
+		require.Equal(t, int64(1), p.Metrics().ProbePlanAttempts.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
+		require.Equal(t, int64(1), p.Metrics().ReadProbeFailures.Count())
 	})
 }
 
