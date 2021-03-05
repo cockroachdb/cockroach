@@ -8,13 +8,13 @@ statement ok
 CREATE SEQUENCE test_seq
 
 statement ok
-CREATE SEQUENCE test_seq2
+CREATE DATABASE diff_db
+
+statement ok
+CREATE SEQUENCE diff_db.test_seq
 
 let $test_seq_id
 SELECT 'test_seq'::regclass::int
-
-let $test_seq2_id
-SELECT 'test_seq2'::regclass::int
 
 statement ok
 CREATE TABLE foo (i SERIAL PRIMARY KEY)
@@ -29,19 +29,19 @@ statement ok
 ALTER TABLE foo ADD COLUMN l INT NOT NULL
 
 statement ok
-ALTER TABLE FOO ALTER COLUMN l SET DEFAULT currval('test_seq2')
+ALTER TABLE FOO ALTER COLUMN l SET DEFAULT currval('diff_db.test_seq')
 
 statement ok
-SELECT nextval('test_seq2')
+SELECT nextval('diff_db.test_seq')
 
 query TT
 SHOW CREATE TABLE foo
 ----
 foo  CREATE TABLE public.foo (
-     i INT8 NOT NULL DEFAULT nextval('test.public.foo_i_seq':::STRING::REGCLASS),
-     j INT8 NOT NULL DEFAULT nextval('test.public.test_seq':::STRING::REGCLASS),
-     k INT8 NOT NULL DEFAULT nextval('test.public.foo_k_seq':::STRING::REGCLASS),
-     l INT8 NOT NULL DEFAULT currval('test.public.test_seq2':::STRING::REGCLASS),
+     i INT8 NOT NULL DEFAULT nextval('public.foo_i_seq':::STRING::REGCLASS),
+     j INT8 NOT NULL DEFAULT nextval('public.test_seq':::STRING::REGCLASS),
+     k INT8 NOT NULL DEFAULT nextval('public.foo_k_seq':::STRING::REGCLASS),
+     l INT8 NOT NULL DEFAULT currval('diff_db.public.test_seq':::STRING::REGCLASS),
      CONSTRAINT "primary" PRIMARY KEY (i ASC),
      FAMILY "primary" (i, j, k, l)
 )
@@ -130,9 +130,9 @@ query TT
 SHOW CREATE TABLE bar
 ----
 bar  CREATE TABLE public.bar (
-     i INT8 NOT NULL DEFAULT nextval('test.public.new_bar_i_seq':::STRING::REGCLASS),
-     j INT8 NOT NULL DEFAULT currval('test.public.new_s1':::STRING::REGCLASS),
-     k INT8 NOT NULL DEFAULT nextval('test.public.new_s2':::STRING::REGCLASS),
+     i INT8 NOT NULL DEFAULT nextval('public.new_bar_i_seq':::STRING::REGCLASS),
+     j INT8 NOT NULL DEFAULT currval('public.new_s1':::STRING::REGCLASS),
+     k INT8 NOT NULL DEFAULT nextval('public.new_s2':::STRING::REGCLASS),
      CONSTRAINT "primary" PRIMARY KEY (i ASC),
      FAMILY fam_0_i_j_k (i, j, k)
 )
@@ -251,9 +251,9 @@ query TT
 SHOW CREATE TABLE tb
 ----
 tb  CREATE TABLE public.tb (
-    i INT8 NOT NULL DEFAULT nextval('test.test_schema.tb_i_seq':::STRING::REGCLASS),
-    j INT8 NOT NULL DEFAULT nextval('test.test_schema.sc_s1':::STRING::REGCLASS),
-    k INT8 NOT NULL DEFAULT currval('test.test_schema.sc_s2':::STRING::REGCLASS),
+    i INT8 NOT NULL DEFAULT nextval('test_schema.tb_i_seq':::STRING::REGCLASS),
+    j INT8 NOT NULL DEFAULT nextval('test_schema.sc_s1':::STRING::REGCLASS),
+    k INT8 NOT NULL DEFAULT currval('test_schema.sc_s2':::STRING::REGCLASS),
     CONSTRAINT "primary" PRIMARY KEY (i ASC),
     FAMILY fam_0_i_j_k (i, j, k)
 )
@@ -306,9 +306,9 @@ query TT
 SHOW CREATE TABLE new_test_schema.foo
 ----
 new_test_schema.foo  CREATE TABLE new_test_schema.foo (
-                     i INT8 NOT NULL DEFAULT nextval('test.new_test_schema.foo_i_seq':::STRING::REGCLASS),
-                     j INT8 NOT NULL DEFAULT nextval('test.new_test_schema.s3':::STRING::REGCLASS),
-                     k INT8 NOT NULL DEFAULT currval('test.new_test_schema.s4':::STRING::REGCLASS),
+                     i INT8 NOT NULL DEFAULT nextval('new_test_schema.foo_i_seq':::STRING::REGCLASS),
+                     j INT8 NOT NULL DEFAULT nextval('new_test_schema.s3':::STRING::REGCLASS),
+                     k INT8 NOT NULL DEFAULT currval('new_test_schema.s4':::STRING::REGCLASS),
                      CONSTRAINT "primary" PRIMARY KEY (i ASC),
                      FAMILY fam_0_i_j_k (i, j, k)
 )
