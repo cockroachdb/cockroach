@@ -130,18 +130,18 @@ func TestTimestampPrev(t *testing.T) {
 	}
 }
 
-func TestTimestampFloorPrev(t *testing.T) {
+func TestTimestampFloorPrevWallPrev(t *testing.T) {
 	testCases := []struct {
-		ts, expPrev Timestamp
+		ts, expPrev, expWallPrev Timestamp
 	}{
-		{makeTS(2, 0), makeTS(1, 0)},
-		{makeTS(1, 2), makeTS(1, 1)},
-		{makeTS(1, 1), makeTS(1, 0)},
-		{makeTS(1, 0), makeTS(0, 0)},
-		{makeSynTS(2, 0), makeSynTS(1, 0)},
-		{makeSynTS(1, 2), makeSynTS(1, 1)},
-		{makeSynTS(1, 1), makeSynTS(1, 0)},
-		{makeSynTS(1, 0), makeSynTS(0, 0)},
+		{makeTS(2, 0), makeTS(1, 0), makeTS(1, 0)},
+		{makeTS(1, 2), makeTS(1, 1), makeTS(0, 0)},
+		{makeTS(1, 1), makeTS(1, 0), makeTS(0, 0)},
+		{makeTS(1, 0), makeTS(0, 0), makeTS(0, 0)},
+		{makeSynTS(2, 0), makeSynTS(1, 0), makeSynTS(1, 0)},
+		{makeSynTS(1, 2), makeSynTS(1, 1), makeSynTS(0, 0)},
+		{makeSynTS(1, 1), makeSynTS(1, 0), makeSynTS(0, 0)},
+		{makeSynTS(1, 0), makeSynTS(0, 0), makeSynTS(0, 0)},
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expPrev, c.ts.FloorPrev())
