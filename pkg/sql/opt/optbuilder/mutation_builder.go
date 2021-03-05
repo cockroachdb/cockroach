@@ -265,10 +265,9 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		noRowLocking,
 		inScope,
 	)
-	mb.outScope = mb.fetchScope
 
 	// Set list of columns that will be fetched by the input expression.
-	mb.setFetchColIDs(mb.outScope.cols)
+	mb.setFetchColIDs(mb.fetchScope.cols)
 
 	// If there is a FROM clause present, we must join all the tables
 	// together with the table being updated.
@@ -277,18 +276,25 @@ func (mb *mutationBuilder) buildInputForUpdate(
 		fromScope := mb.b.buildFromTables(from, noRowLocking, inScope)
 
 		// Check that the same table name is not used multiple times.
-		mb.b.validateJoinTableNames(mb.outScope, fromScope)
+		mb.b.validateJoinTableNames(mb.fetchScope, fromScope)
 
 		// The FROM table columns can be accessed by the RETURNING clause of the
 		// query and so we have to make them accessible.
 		mb.extraAccessibleCols = fromScope.cols
 
 		// Add the columns in the FROM scope.
+		// We create a new scope so that fetchScope is not modified. It will be
+		// used later to build partial index predicate expressions, and we do
+		// not want ambiguities with column names in the FROM clause.
+		mb.outScope = mb.fetchScope.replace()
+		mb.outScope.appendColumnsFromScope(mb.fetchScope)
 		mb.outScope.appendColumnsFromScope(fromScope)
 
-		left := mb.outScope.expr.(memo.RelExpr)
+		left := mb.fetchScope.expr.(memo.RelExpr)
 		right := fromScope.expr.(memo.RelExpr)
 		mb.outScope.expr = mb.b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+	} else {
+		mb.outScope = mb.fetchScope
 	}
 
 	// WHERE
