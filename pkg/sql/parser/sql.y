@@ -2431,7 +2431,7 @@ backup_options:
 // %Category: CCL
 // %Text:
 // CREATE SCHEDULE [<description>]
-// FOR BACKUP [<targets>] TO <location...>
+// FOR BACKUP [<targets>] INTO <location...>
 // [WITH <backup_option>[=<value>] [, ...]]
 // RECURRING [crontab|NEVER] [FULL BACKUP <crontab|ALWAYS>]
 // [WITH EXPERIMENTAL SCHEDULE OPTIONS <schedule_option>[= <value>] [, ...] ]
@@ -7803,7 +7803,7 @@ resume_jobs_stmt:
 // RESUME SCHEDULES <selectclause>
 //  selectclause: select statement returning schedule IDs to resume.
 //
-// RESUME SCHEDULES <jobid>
+// RESUME SCHEDULE <scheduleID>
 //
 // %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, RESUME JOBS
 resume_schedules_stmt:
@@ -7832,7 +7832,7 @@ resume_schedules_stmt:
 // DROP SCHEDULES <selectclause>
 //  selectclause: select statement returning schedule IDs to resume.
 //
-// DROP SCHEDULE <scheduleid>
+// DROP SCHEDULE <scheduleID>
 //
 // %SeeAlso: PAUSE SCHEDULES, SHOW JOBS, CANCEL JOBS
 drop_schedule_stmt:
