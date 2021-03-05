@@ -225,7 +225,7 @@ func constructVirtualScan(
 	indexDesc := index.(*optVirtualIndex).desc
 	columns, constructor := virtual.getPlanInfo(
 		table.(*optVirtualTable).desc,
-		indexDesc, params.IndexConstraint)
+		indexDesc, params.IndexConstraint, p.execCfg.DistSQLPlanner.stopper)
 
 	n, err := delayedNodeCallback(&delayedNode{
 		name:            fmt.Sprintf("%s@%s", table.Name(), index.Name()),
