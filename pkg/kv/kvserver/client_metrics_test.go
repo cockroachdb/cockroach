@@ -352,6 +352,8 @@ func TestStoreMaxBehindNanosOnlyTracksEpochBasedLeases(t *testing.T) {
 		closedTimestampDuration.String())
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.close_fraction = $1",
 		closedTimestampFraction)
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = $1",
+		closedTimestampDuration.String())
 
 	// Let's get to a point where we know that we have an expiration based lease
 	// with a start time more than some time ago and then we have a max closed

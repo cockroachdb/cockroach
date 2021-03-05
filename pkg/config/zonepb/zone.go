@@ -597,6 +597,114 @@ func (z *ZoneConfig) CopyFromZone(other ZoneConfig, fieldList []tree.Name) {
 	}
 }
 
+// DiffWithZone diffs all specified fields of the supplied ZoneConfig, with the
+// receiver ZoneConfig. Returns true if all are equal, and false if there is a
+// difference (along with a string which represents the first difference found).
+func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool, string, error) {
+	for _, fieldName := range fieldList {
+		switch fieldName {
+		case "num_replicas":
+			if other.NumReplicas == nil && z.NumReplicas == nil {
+				continue
+			}
+			if z.NumReplicas == nil || other.NumReplicas == nil ||
+				*z.NumReplicas != *other.NumReplicas {
+				return false, "num_replicas", nil
+			}
+		case "num_voters":
+			if other.NumVoters == nil && z.NumVoters == nil {
+				continue
+			}
+			if z.NumVoters == nil || other.NumVoters == nil ||
+				*z.NumVoters != *other.NumVoters {
+				return false, "num_voters", nil
+			}
+		case "range_min_bytes":
+			if other.RangeMinBytes == nil && z.RangeMinBytes == nil {
+				continue
+			}
+			if z.RangeMinBytes == nil || other.RangeMinBytes == nil ||
+				*z.RangeMinBytes != *other.RangeMinBytes {
+				return false, "range_min_bytes", nil
+			}
+		case "range_max_bytes":
+			if other.RangeMaxBytes == nil && z.RangeMaxBytes == nil {
+				continue
+			}
+			if z.RangeMaxBytes == nil || other.RangeMaxBytes == nil ||
+				*z.RangeMaxBytes != *other.RangeMaxBytes {
+				return false, "range_max_bytes", nil
+			}
+		case "global_reads":
+			if other.GlobalReads == nil && z.GlobalReads == nil {
+				continue
+			}
+			if z.GlobalReads == nil || other.GlobalReads == nil ||
+				*z.GlobalReads != *other.GlobalReads {
+				return false, "global_reads", nil
+			}
+		case "gc.ttlseconds":
+			if other.GC == nil && z.GC == nil {
+				continue
+			}
+			if z.GC == nil || other.GC == nil || *z.GC != *other.GC {
+				return false, "gc.ttlseconds", nil
+			}
+		case "constraints":
+			if other.Constraints == nil && z.Constraints == nil {
+				continue
+			}
+			if z.Constraints == nil || other.Constraints == nil {
+				return false, "constraints", nil
+			}
+			for i, c := range z.Constraints {
+				for j, constraint := range c.Constraints {
+					if len(other.Constraints) <= i ||
+						len(other.Constraints[i].Constraints) <= j ||
+						constraint != other.Constraints[i].Constraints[j] {
+						return false, "constraints", nil
+					}
+				}
+			}
+		case "voter_constraints":
+			if other.VoterConstraints == nil && z.VoterConstraints == nil {
+				continue
+			}
+			if z.VoterConstraints == nil || other.VoterConstraints == nil {
+				return false, "voter_constraints", nil
+			}
+			for i, c := range z.VoterConstraints {
+				for j, constraint := range c.Constraints {
+					if len(other.VoterConstraints) <= i ||
+						len(other.VoterConstraints[i].Constraints) <= j ||
+						constraint != other.VoterConstraints[i].Constraints[j] {
+						return false, "voter_constraints", nil
+					}
+				}
+			}
+		case "lease_preferences":
+			if other.LeasePreferences == nil && z.LeasePreferences == nil {
+				continue
+			}
+			if z.LeasePreferences == nil || other.LeasePreferences == nil {
+				return false, "voter_constraints", nil
+			}
+			for i, c := range z.LeasePreferences {
+				for j, constraint := range c.Constraints {
+					if len(other.LeasePreferences) <= i ||
+						len(other.LeasePreferences[i].Constraints) <= j ||
+						constraint != other.LeasePreferences[i].Constraints[j] {
+						return false, "lease_preferences", nil
+					}
+				}
+			}
+		default:
+			return false, "", errors.AssertionFailedf("unknown zone configuration field %q", fieldName)
+		}
+	}
+	return true, "", nil
+}
+
 // StoreSatisfiesConstraint checks whether a store satisfies the given constraint.
 // If the constraint is of the PROHIBITED type, satisfying it means the store
 // not matching the constraint's spec.

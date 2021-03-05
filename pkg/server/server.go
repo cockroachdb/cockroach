@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -482,6 +483,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sTS := ts.MakeServer(cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig, stopper)
 
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
+	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
+	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 
 	// The InternalExecutor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
@@ -537,6 +540,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		RangeDescriptorCache:    distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:     tsDB,
 		ClosedTimestampSender:   ctSender,
+		ClosedTimestampReceiver: ctReceiver,
 
 		// Initialize the closed timestamp subsystem. Note that it won't
 		// be ready until it is .Start()ed, but the grpc server can be
@@ -585,12 +589,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	node := NewNode(
 		storeCfg, recorder, registry, stopper,
-		txnMetrics, nil /* execCfg */, &rpcContext.ClusterID)
+		txnMetrics, stores, nil /* execCfg */, &rpcContext.ClusterID)
 	lateBoundNode = node
 	roachpb.RegisterInternalServer(grpcServer.Server, node)
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
 	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpcServer.Server)
+	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor)
 

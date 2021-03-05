@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -781,4 +782,95 @@ func (p *planner) CurrentDatabaseRegionConfig() (tree.DatabaseRegionConfig, erro
 		return nil, err
 	}
 	return dbDesc.GetRegionConfig(), nil
+}
+
+// CheckZoneConfigChangePermittedForMultiRegionDatabase checks if a zone config
+// change is permitted for a multi-region database. The change is permitted iff
+// it is not modifying a protested multi-region field of the zone configs (as
+// defined by zonepb.MultiRegionZoneConfigFields).
+func (p *planner) CheckZoneConfigChangePermittedForMultiRegionDatabase(
+	ctx context.Context, dbName tree.Name, options tree.KVOptions, force bool,
+) error {
+	// If the user has specified the FORCE option, the world is their oyster.
+	if force {
+		return nil
+	}
+
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+		ctx,
+		p.txn,
+		string(dbName),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return err
+	}
+
+	if dbDesc.RegionConfig != nil {
+		// This is clearly an n^2 operation, but since there are only a single
+		// digit number of zone config keys, it's likely faster to do it this way
+		// than incur the memory allocation of creating a map.
+		for _, opt := range options {
+			for _, cfg := range zonepb.MultiRegionZoneConfigFields {
+				if opt.Key == cfg {
+					// User is trying to update a zone config value that's protected for
+					// multi-region databases. Return the constructed error.
+					err := errors.Newf("attempting to modify protected field %q of a multi-region database zone configuration",
+						string(opt.Key),
+					)
+					return errors.WithHint(err, "to override this error, specify the FORCE option")
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser validates that
+// the zone configuration was not modified by the user. The function is intended
+// to be called in cases where a multi-region operation will overwrite the
+// database zone configuration and we wish to warn the user about that before
+// it occurs (and require the FORCE option to proceed).
+func validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+	ctx context.Context,
+	dbID descpb.ID,
+	dbName string,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	force bool,
+	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+) error {
+	// If the user is forcing, our work here is done.
+	if force {
+		return nil
+	}
+
+	expectedZoneConfig, err := zoneConfigForMultiRegionDatabase(regionConfig)
+	if err != nil {
+		return err
+	}
+
+	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, codec, dbID)
+	if err != nil {
+		return err
+	}
+
+	same, field, err := currentZoneConfig.DiffWithZone(*expectedZoneConfig, zonepb.MultiRegionZoneConfigFields)
+	if err != nil {
+		return err
+	}
+	if !same {
+		err := errors.Newf(
+			"attempting to update zone configuration for database %q which contains modified field %q ",
+			dbName,
+			field,
+		)
+		err = errors.WithDetail(err, "the attempted operation will overwrite "+
+			"a user modified field")
+		return errors.WithHint(err, "to override this error and proceed with "+
+			"the overwrite, specify \"FORCE\" at the end of the statement")
+	}
+
+	return nil
 }

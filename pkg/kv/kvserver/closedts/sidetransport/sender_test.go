@@ -12,10 +12,12 @@ package sidetransport
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -33,20 +37,43 @@ import (
 type mockReplica struct {
 	storeID roachpb.StoreID
 	rangeID roachpb.RangeID
-	desc    roachpb.RangeDescriptor
+	mu      struct {
+		syncutil.Mutex
+		desc roachpb.RangeDescriptor
+	}
 
 	canBump bool
 	lai     ctpb.LAI
 	policy  roachpb.RangeClosedTimestampPolicy
 }
 
-func (m *mockReplica) StoreID() roachpb.StoreID       { return m.storeID }
-func (m *mockReplica) GetRangeID() roachpb.RangeID    { return m.rangeID }
-func (m *mockReplica) Desc() *roachpb.RangeDescriptor { return &m.desc }
+var _ Replica = &mockReplica{}
+
+func (m *mockReplica) StoreID() roachpb.StoreID    { return m.storeID }
+func (m *mockReplica) GetRangeID() roachpb.RangeID { return m.rangeID }
+func (m *mockReplica) Desc() *roachpb.RangeDescriptor {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return &m.mu.desc
+}
 func (m *mockReplica) BumpSideTransportClosed(
 	_ context.Context, _ hlc.ClockTimestamp, _ [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
 ) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy) {
 	return m.canBump, m.lai, m.policy
+}
+
+func (m *mockReplica) removeReplica(nid roachpb.NodeID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	replicas := m.mu.desc.Replicas()
+	for _, rd := range replicas.Descriptors() {
+		if rd.NodeID == nid {
+			replicas.RemoveReplica(rd.NodeID, rd.StoreID)
+			m.mu.desc.SetReplicas(replicas)
+			return
+		}
+	}
+	panic(fmt.Sprintf("replica not found for n%d", nid))
 }
 
 // mockConnFactory is a mock implementation of the connFactory interface.
@@ -81,21 +108,27 @@ func newMockReplica(id roachpb.RangeID, nodes ...roachpb.NodeID) *mockReplica {
 	for _, nodeID := range nodes {
 		desc.AddReplica(nodeID, roachpb.StoreID(nodeID), roachpb.VOTER_FULL)
 	}
-	return &mockReplica{
+	r := &mockReplica{
 		storeID: 1,
 		rangeID: id,
-		desc:    desc,
 		canBump: true,
 		lai:     5,
 		policy:  roachpb.LAG_BY_CLUSTER_SETTING,
 	}
+	r.mu.desc = desc
+	return r
 }
 
 func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdate {
-	maxClockOffset := s.clock.MaxOffset()
-	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
 	targetForPolicy := func(pol roachpb.RangeClosedTimestampPolicy) hlc.Timestamp {
-		return closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, pol)
+		return closedts.TargetForPolicy(
+			now,
+			s.clock.MaxOffset(),
+			closedts.TargetDuration.Get(&s.st.SV),
+			closedts.LeadForGlobalReadsOverride.Get(&s.st.SV),
+			closedts.SideTransportCloseInterval.Get(&s.st.SV),
+			pol,
+		)
 	}
 	return []ctpb.Update_GroupUpdate{
 		{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(roachpb.LAG_BY_CLUSTER_SETTING)},
@@ -105,6 +138,7 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 
 func TestSenderBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	connFactory := &mockConnFactory{}
 	s, stopper := newMockSender(connFactory)
@@ -245,62 +279,93 @@ func (s *mockReceiver) getCalled() bool {
 	return s.mu.called
 }
 
-// mockSideTransportGRPCServer wraps a mockReceiver in a gRPC server listening
-// on a network interface.
-type mockSideTransportGRPCServer struct {
+// sideTransportGRPCServer wraps a Receiver (a real one of a mock) in a gRPC
+// server listening on a network interface.
+type sideTransportGRPCServer struct {
 	lis      net.Listener
 	srv      *grpc.Server
-	receiver *mockReceiver
-	stopper  *stop.Stopper
+	receiver ctpb.SideTransportServer
 }
 
-func (s *mockSideTransportGRPCServer) close() {
-	s.receiver.close()
+func (s *sideTransportGRPCServer) Close() {
 	s.srv.Stop()
 	_ /* err */ = s.lis.Close()
-	s.stopper.Stop(context.Background())
 }
 
-func (s *mockSideTransportGRPCServer) addr() net.Addr {
+func (s *sideTransportGRPCServer) addr() net.Addr {
 	return s.lis.Addr()
 }
 
-func newMockSideTransportGRPCServer() (*mockSideTransportGRPCServer, error) {
+func newMockSideTransportGRPCServer(stopper *stop.Stopper) (*sideTransportGRPCServer, error) {
+	receiver := newMockReceiver()
+	stopper.AddCloser(receiver)
+	server, err := newMockSideTransportGRPCServerWithOpts(stopper, receiver)
+	if err != nil {
+		return nil, err
+	}
+	return server, nil
+}
+
+func newMockSideTransportGRPCServerWithOpts(
+	stopper *stop.Stopper, receiver ctpb.SideTransportServer,
+) (*sideTransportGRPCServer, error) {
 	lis, err := net.Listen("tcp", "localhost:")
 	if err != nil {
 		return nil, err
 	}
 
-	stopper := stop.NewStopper()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	grpcServer := rpc.NewServer(rpc.NewInsecureTestingContext(clock, stopper))
-
-	receiver := newMockReceiver()
 	ctpb.RegisterSideTransportServer(grpcServer, receiver)
 	go func() {
 		_ /* err */ = grpcServer.Serve(lis)
 	}()
-	return &mockSideTransportGRPCServer{
+	server := &sideTransportGRPCServer{
 		lis:      lis,
 		srv:      grpcServer,
 		receiver: receiver,
-		stopper:  stopper,
-	}, nil
+	}
+	stopper.AddCloser(server)
+	return server, nil
 }
 
-func (s *mockReceiver) close() {
+func (s *sideTransportGRPCServer) mockReceiver() *mockReceiver {
+	return s.receiver.(*mockReceiver)
+}
+
+func (s *mockReceiver) Close() {
 	close(s.stop)
 }
 
 type mockDialer struct {
-	serverAddr string
-	mu         struct {
+	mu struct {
 		syncutil.Mutex
+		addrs map[roachpb.NodeID]string
 		conns []*grpc.ClientConn
 	}
 }
 
 var _ nodeDialer = &mockDialer{}
+
+type nodeAddr struct {
+	nid  roachpb.NodeID
+	addr string
+}
+
+func newMockDialer(addrs ...nodeAddr) *mockDialer {
+	d := &mockDialer{}
+	d.mu.addrs = make(map[roachpb.NodeID]string)
+	for _, addr := range addrs {
+		d.mu.addrs[addr.nid] = addr.addr
+	}
+	return d
+}
+
+func (m *mockDialer) addOrUpdateNode(nid roachpb.NodeID, addr string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.addrs[nid] = addr
+}
 
 func (m *mockDialer) Dial(
 	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
@@ -308,7 +373,12 @@ func (m *mockDialer) Dial(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	c, err := grpc.Dial(m.serverAddr, grpc.WithInsecure())
+	addr, ok := m.mu.addrs[nodeID]
+	if !ok {
+		return nil, errors.Errorf("node not configured in mockDialer: n%d", nodeID)
+	}
+
+	c, err := grpc.Dial(addr, grpc.WithInsecure())
 	if err == nil {
 		m.mu.conns = append(m.mu.conns, c)
 	}
@@ -326,12 +396,17 @@ func (m *mockDialer) Close() {
 // Test that the stopper quiescence interrupts a stream.Send.
 func TestRPCConnUnblocksOnStopper(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv, err := newMockSideTransportGRPCServer()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	srv, err := newMockSideTransportGRPCServer(stopper)
 	require.NoError(t, err)
-	defer srv.close()
-	dialer := &mockDialer{serverAddr: srv.addr().String()}
+	dialer := newMockDialer(nodeAddr{
+		nid:  2,
+		addr: srv.addr().String(),
+	})
 	defer dialer.Close()
 
 	ch := make(chan struct{})
@@ -342,9 +417,24 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 		}}))
 	defer stopper.Stop(ctx)
 
-	// Add a leaseholder that can close, in order to establish a connection to n2.
-	r1 := newMockReplica(15, 1, 2)
-	s.RegisterLeaseholder(ctx, r1, 1)
+	// Add leaseholders that can close, in order to establish a connection to n2.
+	// We add many of them, and we'll increment their LAIs periodically such that
+	// all messages need to explicitly mention all of them, in order to get large
+	// messages. This speeds up the test, since the large messages make the sender
+	// block quicker.
+	const numReplicas = 10000
+	replicas := make([]*mockReplica, numReplicas)
+	for i := 0; i < numReplicas; i++ {
+		replicas[i] = newMockReplica(roachpb.RangeID(i+1), 1, 2)
+		s.RegisterLeaseholder(ctx, replicas[i], 1 /* leaseSeq */)
+	}
+
+	incrementLAIs := func() {
+		for _, r := range replicas {
+			r.lai++
+		}
+	}
+
 	s.publish(ctx)
 	require.Len(t, s.conns, 1)
 
@@ -360,6 +450,7 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 			case <-ch:
 				// As soon as the conn send a message, publish another update to cause
 				// the conn to send another message.
+				incrementLAIs()
 				s.publish(ctx)
 			case <-time.After(100 * time.Millisecond):
 				// The conn hasn't sent anything in a while. It must be blocked on Send.
@@ -376,5 +467,72 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 	// have been unblocked.
 	stopper.Stop(ctx)
 
-	require.True(t, srv.receiver.getCalled())
+	require.True(t, srv.mockReceiver().getCalled())
+}
+
+// Test a Sender and Receiver talking gRPC to each other.
+func TestSenderReceiverIntegration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// We're going to create Receivers, corresponding to 3 nodes. Node 1 will also
+	// be the Sender, so we won't expect a connection to it (the Sender doesn't
+	// connect to itself).
+	const numNodes = 3
+	receivers := make([]*Receiver, numNodes)
+	dialer := newMockDialer(nodeAddr{})
+	defer dialer.Close()
+	incomingStreamOnN2FromN1Terminated := make(chan error)
+	for i := 0; i < numNodes; i++ {
+		receiverStop := stop.NewStopper()
+		defer func(i int) {
+			receiverStop.Stop(ctx)
+		}(i)
+		nid := &base.NodeIDContainer{}
+		nid.Set(ctx, roachpb.NodeID(i+1))
+		stores := &mockStores{}
+		knobs := receiverTestingKnobs{
+			roachpb.NodeID(1): {
+				onFirstMsg: make(chan struct{}),
+				onMsg:      make(chan *ctpb.Update),
+			},
+		}
+		incomingFromN1Knobs := knobs[1]
+		switch nid.Get() {
+		case 1:
+			// n1 doesn't expect any streams, since the only active sender will be on
+			// n1 and it's not supposed to connect to the local receiver.
+			incomingFromN1Knobs.onRecvErr = func(_ roachpb.NodeID, _ error) {
+				t.Errorf("unexpected receive error on node n%d", nid)
+			}
+		case 2:
+			// n2 gets a special handler.
+			incomingFromN1Knobs.onRecvErr = func(_ roachpb.NodeID, err error) {
+				incomingStreamOnN2FromN1Terminated <- err
+			}
+		}
+		knobs[1] = incomingFromN1Knobs
+		receivers[i] = NewReceiver(nid, receiverStop, stores, knobs)
+		srv, err := newMockSideTransportGRPCServerWithOpts(receiverStop, receivers[i])
+		dialer.addOrUpdateNode(nid.Get(), srv.addr().String())
+		require.NoError(t, err)
+	}
+
+	s, senderStopper := newMockSender(newRPCConnFactory(dialer, connTestingKnobs{}))
+	defer senderStopper.Stop(ctx)
+	s.Run(ctx, roachpb.NodeID(1))
+
+	// Add a replica with replicas on n2 and n3.
+	r1 := newMockReplica(15, 1, 2, 3)
+	s.RegisterLeaseholder(ctx, r1, 1 /* leaseSeq */)
+	// Check that connections to n2,3 are established.
+	<-receivers[1].testingKnobs[1].onFirstMsg
+	<-receivers[2].testingKnobs[1].onFirstMsg
+	// Remove one of the replicas and check that the connection to the respective
+	// Receiver drops (since there's no other ranges with replicas on n2).
+	r1.removeReplica(roachpb.NodeID(2))
+	<-incomingStreamOnN2FromN1Terminated
+	// Check that the other Receiver is still receiving updates.
+	<-receivers[2].testingKnobs[1].onMsg
 }

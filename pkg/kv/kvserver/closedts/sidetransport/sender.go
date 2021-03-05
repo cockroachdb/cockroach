@@ -62,16 +62,7 @@ type Sender struct {
 
 	trackedMu struct {
 		syncutil.Mutex
-		// lastSeqNum is the sequence number of the last message published.
-		lastSeqNum ctpb.SeqNum
-		// lastClosed is the closed timestamp published for each policy in the
-		// last message.
-		lastClosed [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
-		// tracked maintains the information that was communicated to connections in
-		// the last sent message (implicitly or explicitly). A range enters this
-		// structure as soon as it's included in a message, and exits it when it's
-		// removed through Update.Removed.
-		tracked map[roachpb.RangeID]trackedRange
+		streamState
 	}
 
 	leaseholdersMu struct {
@@ -88,6 +79,22 @@ type Sender struct {
 	// for ranges with local leases and removed when the respective node no
 	// longer has any replicas with local leases.
 	conns map[roachpb.NodeID]conn
+}
+
+// streamState encapsulates the state that's tracked by a stream. Both the
+// Sender and the Receiver use this struct and, for a given stream, both ends
+// are supposed to correspond (modulo message delays), in wonderful symmetry.
+type streamState struct {
+	// lastSeqNum is the sequence number of the last message published.
+	lastSeqNum ctpb.SeqNum
+	// lastClosed is the closed timestamp published for each policy in the
+	// last message.
+	lastClosed [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
+	// tracked maintains the information that was communicated to connections in
+	// the last sent message (implicitly or explicitly). A range enters this
+	// structure as soon as it's included in a message, and exits it when it's
+	// removed through Update.Removed.
+	tracked map[roachpb.RangeID]trackedRange
 }
 
 type connTestingKnobs struct {
@@ -166,6 +173,7 @@ func newSenderWithConnFactory(
 // This is not know at construction time.
 func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 	s.nodeID = nodeID
+	waitForUpgrade := !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport)
 
 	confCh := make(chan struct{}, 1)
 	confChanged := func() {
@@ -197,8 +205,11 @@ func (s *Sender) Run(ctx context.Context, nodeID roachpb.NodeID) {
 				select {
 				case <-timer.C:
 					timer.Read = true
-					if !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+					if waitForUpgrade && !s.st.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
 						continue
+					} else if waitForUpgrade {
+						waitForUpgrade = false
+						log.Infof(ctx, "closed-timestamps v2 mechanism enabled by cluster version upgrade")
 					}
 					s.publish(ctx)
 				case <-confCh:
@@ -252,6 +263,7 @@ func (s *Sender) UnregisterLeaseholder(
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
+	log.VEventf(ctx, 4, "side-transport generating a new message")
 
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
@@ -271,9 +283,18 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	now := s.clock.NowAsClockTimestamp()
 	maxClockOffset := s.clock.MaxOffset()
 	lagTargetDuration := closedts.TargetDuration.Get(&s.st.SV)
+	leadTargetOverride := closedts.LeadForGlobalReadsOverride.Get(&s.st.SV)
+	sideTransportCloseInterval := closedts.SideTransportCloseInterval.Get(&s.st.SV)
 	for i := range s.trackedMu.lastClosed {
 		pol := roachpb.RangeClosedTimestampPolicy(i)
-		target := closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, pol)
+		target := closedts.TargetForPolicy(
+			now,
+			maxClockOffset,
+			lagTargetDuration,
+			leadTargetOverride,
+			sideTransportCloseInterval,
+			pol,
+		)
 		s.trackedMu.lastClosed[pol] = target
 		msg.ClosedTimestamps[pol] = ctpb.Update_GroupUpdate{
 			Policy:          pol,
@@ -383,6 +404,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	})
 
 	// Publish the new message to all connections.
+	log.VEventf(ctx, 4, "side-transport publishing message with closed timestamps: %v (%v)", msg.ClosedTimestamps, msg)
 	s.buf.Push(ctx, msg)
 
 	// Return the publication time, for tests.
@@ -608,7 +630,8 @@ type rpcConn struct {
 	nodeID       roachpb.NodeID
 	testingKnobs connTestingKnobs
 
-	stream ctpb.SideTransport_PushUpdatesClient
+	stream   ctpb.SideTransport_PushUpdatesClient
+	lastSent ctpb.SeqNum
 	// cancelStreamCtx cleans up the resources (goroutine) associated with stream.
 	// It needs to be called whenever stream is discarded.
 	cancelStreamCtx context.CancelFunc
@@ -638,6 +661,11 @@ func (r *rpcConn) cleanupStream() {
 	r.stream = nil
 	r.cancelStreamCtx()
 	r.cancelStreamCtx = nil
+	// If we've been disconnected, reset the message sequence. If we ever
+	// reconnect, we'll ask the buffer for message 1, which was a snapshot.
+	// Generally, the buffer is not going to have that message any more and so
+	// we'll generate a new snapshot.
+	r.lastSent = 0
 }
 
 // close makes the connection stop sending messages. The run() goroutine will
@@ -684,7 +712,6 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 			// On sending errors, we sleep a bit as to not spin on a tripped
 			// circuit-breaker in the Dialer.
 			const sleepOnErr = time.Second
-			var lastSent ctpb.SeqNum
 			for {
 				if ctx.Err() != nil {
 					return
@@ -698,19 +725,8 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				}
 
 				var msg *ctpb.Update
-
-				// If we've been disconnected, reset the message sequence. We'll ask the
-				// buffer for the very first message ever, which was a snapshot.
-				// Generally, the buffer is not going to have that message any more and
-				// so we'll generate a snapshot below. Except soon after startup when
-				// streams are initially established, when the initial message should
-				// still be in the buffer.
-				if r.stream == nil {
-					lastSent = 0
-				}
-
 				var ok bool
-				msg, ok = r.producer.buf.GetBySeq(ctx, lastSent+1)
+				msg, ok = r.producer.buf.GetBySeq(ctx, r.lastSent+1)
 				// We can be signaled to stop in two ways: the buffer can be closed (in
 				// which case all connections must exit), or this connection was closed
 				// via close(). In either case, we quit.
@@ -723,20 +739,21 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				}
 
 				if msg == nil {
-					// The sequence number we've requested is no longer in the buffer.
-					// We need to generate a snapshot in order to re-initialize the
-					// stream.
+					// The sequence number we've requested is no longer in the buffer. We
+					// need to generate a snapshot in order to re-initialize the stream.
+					// The snapshot will give us the sequence number to use for future
+					// incrementals.
 					msg = r.producer.GetSnapshot()
 				}
+				r.lastSent = msg.SeqNum
 
-				lastSent = msg.SeqNum
 				if fn := r.testingKnobs.beforeSend; fn != nil {
 					fn(r.nodeID, msg)
 				}
 				if err := r.stream.Send(msg); err != nil {
 					if err != io.EOF && everyN.ShouldLog() {
 						log.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
-							lastSent, r.nodeID, err)
+							r.lastSent, r.nodeID, err)
 					}
 					// Keep track of the fact that we need a new connection.
 					//

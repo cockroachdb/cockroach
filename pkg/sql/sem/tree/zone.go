@@ -21,6 +21,8 @@ type ZoneSpecifier struct {
 
 	// Partition is only respected when Table is set.
 	Partition Name
+
+	Force bool
 }
 
 // TelemetryName returns a name fitting for telemetry purposes.
@@ -141,5 +143,8 @@ func (node *SetZoneConfig) Format(ctx *FmtCtx) {
 				ctx.WriteString(` = COPY FROM PARENT`)
 			}
 		}
+	}
+	if node.Force {
+		ctx.WriteString(" FORCE")
 	}
 }
