@@ -274,6 +274,15 @@ func (t Timestamp) FloorPrev() Timestamp {
 	panic("cannot take the previous value to a zero timestamp")
 }
 
+// WallPrev subtracts 1 from the WallTime and resets Logical.
+func (t Timestamp) WallPrev() Timestamp {
+	return Timestamp{
+		WallTime:  t.WallTime - 1,
+		Logical:   0,
+		Synthetic: t.Synthetic,
+	}
+}
+
 // Forward replaces the receiver with the argument, if that moves it forwards in
 // time. Returns true if the timestamp was adjusted to a larger time and false
 // otherwise.
