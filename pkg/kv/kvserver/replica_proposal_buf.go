@@ -737,13 +737,20 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 		// another node might carry a lower closed timestamp (i.e. the lease start
 		// time).
 		//
+		// We also don't want to close right up to the lease expiration because, if
+		// we did that, writes could not be processed under the current lease any
+		// more. Handling that is a bit tricky, particularly when the close time is
+		// in the future. To avoid having to deal with it, we leave one nanosecond
+		// (i.e. infinite logical time) in the lease. Until a new lease is acquired,
+		// all writes will be pushed into this last nanosecond of the lease.
+		//
 		// HACK(andrei): We declare the lease expiration to be synthetic by fiat,
 		// because it frequently is synthetic even though currently it's not marked
 		// as such. See the TODO in Timestamp.Add() about the work remaining to
 		// properly mark these timestamps as synthetic. We need to make sure it's
 		// synthetic here so that the results of Backwards() can be synthetic.
 		leaseExpiration := p.leaseStatus.Expiration().WithSynthetic(true)
-		closedTSTarget.Backward(leaseExpiration)
+		closedTSTarget.Backward(leaseExpiration.WallPrev())
 	}
 
 	// We're about to close closedTSTarget. The propBuf needs to remember that in

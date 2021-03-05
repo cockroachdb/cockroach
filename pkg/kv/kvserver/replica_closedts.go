@@ -103,6 +103,13 @@ func (r *Replica) BumpSideTransportClosed(
 	if !st.IsValid() || !st.OwnedBy(r.StoreID()) {
 		return false, 0, 0
 	}
+	// We can't close timestamps within the same nanosecond as the lease
+	// expiration. To see why, check the comments on the similar logic in
+	// propBuf.assignClosedTimestampToProposalLocked.
+	upperBound := st.Expiration().FloorPrev()
+	if upperBound.Less(target) {
+		return false, 0, 0
+	}
 
 	// If the range is merging into its left-hand neighbor, we can't close
 	// timestamps any more because the joint-range would not be aware of reads
