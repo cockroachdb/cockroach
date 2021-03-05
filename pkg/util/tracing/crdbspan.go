@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
 	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 )
 
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
@@ -48,7 +47,12 @@ type crdbSpan struct {
 	// tag's key to a user.
 	logTags *logtags.Buffer
 
-	mu crdbSpanMu
+	mu      crdbSpanMu
+	testing *testingKnob
+}
+
+type testingKnob struct {
+	clock timeutil.TimeSource
 }
 
 type crdbSpanMu struct {
@@ -56,13 +60,20 @@ type crdbSpanMu struct {
 	// duration is initialized to -1 and set on Finish().
 	duration time.Duration
 
-	// recording maintains state once StartRecording() is called.
 	recording struct {
 		// recordingType is the recording type of the ongoing recording, if any.
 		// Its 'load' method may be called without holding the surrounding mutex,
 		// but its 'swap' method requires the mutex.
 		recordingType atomicRecordingType
-		recordedLogs  []opentracing.LogRecord
+
+		logs       sizeLimitedBuffer // of *tracingpb.LogRecords
+		structured sizeLimitedBuffer // of Structured events
+
+		// dropped is true if the span has capped out it's memory limits for
+		// logs and structured events, and has had to drop some. It's used to
+		// annotate recordings with the _dropped tag, when applicable.
+		dropped bool
+
 		// children contains the list of child spans started after this Span
 		// started recording.
 		children []*crdbSpan
@@ -79,10 +90,25 @@ type crdbSpanMu struct {
 	// those that were set before recording started)?
 	tags opentracing.Tags
 
-	structured ring.Buffer // of Structured events
-
 	// The Span's associated baggage.
 	baggage map[string]string
+}
+
+func newSizeLimitedBuffer(limit int64) sizeLimitedBuffer {
+	return sizeLimitedBuffer{
+		limit: limit,
+	}
+}
+
+type sizeLimitedBuffer struct {
+	ring.Buffer
+	size  int64 // in bytes
+	limit int64 // in bytes
+}
+
+func (b *sizeLimitedBuffer) Reset() {
+	b.Buffer.Reset()
+	b.size = 0
 }
 
 func (s *crdbSpan) recordingType() RecordingType {
@@ -122,7 +148,10 @@ func (s *crdbSpan) resetRecording() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.mu.recording.recordedLogs = nil
+	s.mu.recording.logs.Reset()
+	s.mu.recording.structured.Reset()
+	s.mu.recording.dropped = false
+
 	s.mu.recording.children = nil
 	s.mu.recording.remoteSpans = nil
 }
@@ -209,26 +238,54 @@ func (s *crdbSpan) record(msg string) {
 		return
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.mu.recording.recordedLogs) < maxLogsPerSpan {
-		s.mu.recording.recordedLogs = append(s.mu.recording.recordedLogs, opentracing.LogRecord{
-			Timestamp: time.Now(),
-			Fields: []otlog.Field{
-				otlog.String(tracingpb.LogMessageField, msg),
-			},
-		})
+	var now time.Time
+	if s.testing != nil {
+		now = s.testing.clock.Now()
+	} else {
+		now = time.Now()
 	}
+	logRecord := &tracingpb.LogRecord{
+		Time: now,
+		Fields: []tracingpb.LogRecord_Field{
+			{Key: tracingpb.LogMessageField, Value: msg},
+		},
+	}
+
+	s.recordInternal(logRecord, &s.mu.recording.logs)
 }
 
 func (s *crdbSpan) recordStructured(item Structured) {
+	s.recordInternal(item, &s.mu.recording.structured)
+}
+
+// sizable is a subset for protoutil.Message, for payloads (log records and
+// structured events) that can be recorded.
+type sizable interface {
+	Size() int
+}
+
+func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.mu.structured.Len() == maxStructuredEventsPerSpan {
-		s.mu.structured.RemoveLast()
+	size := int64(payload.Size())
+	if size > buffer.limit {
+		// The incoming payload alone blows past the memory limit. Let's just
+		// drop it.
+		s.mu.recording.dropped = true
+		return
 	}
-	s.mu.structured.AddFirst(item)
+
+	buffer.size += size
+	if buffer.size > buffer.limit {
+		s.mu.recording.dropped = true
+	}
+	for buffer.size > buffer.limit {
+		first := buffer.GetFirst().(sizable)
+		buffer.RemoveFirst()
+		buffer.size -= int64(first.Size())
+	}
+	buffer.AddLast(payload)
 }
 
 func (s *crdbSpan) setBaggageItemAndTag(restrictedKey, value string) {
@@ -294,12 +351,15 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		if s.mu.recording.recordingType.load() == RecordingVerbose {
 			addTag("_verbose", "1")
 		}
+		if s.mu.recording.dropped {
+			addTag("_dropped", "1")
+		}
 	}
 
-	if numEvents := s.mu.structured.Len(); numEvents != 0 {
+	if numEvents := s.mu.recording.structured.Len(); numEvents != 0 {
 		rs.InternalStructured = make([]*types.Any, 0, numEvents)
 		for i := 0; i < numEvents; i++ {
-			event := s.mu.structured.Get(i).(Structured)
+			event := s.mu.recording.structured.Get(i).(Structured)
 			item, err := types.MarshalAny(event)
 			if err != nil {
 				// An error here is an error from Marshal; these
@@ -330,15 +390,11 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		}
 	}
 
-	rs.Logs = make([]tracingpb.LogRecord, len(s.mu.recording.recordedLogs))
-	for i, r := range s.mu.recording.recordedLogs {
-		rs.Logs[i].Time = r.Timestamp
-		rs.Logs[i].Fields = make([]tracingpb.LogRecord_Field, len(r.Fields))
-		for j, f := range r.Fields {
-			rs.Logs[i].Fields[j] = tracingpb.LogRecord_Field{
-				Key:   f.Key(),
-				Value: fmt.Sprint(f.Value()),
-			}
+	if numLogs := s.mu.recording.logs.Len(); numLogs != 0 {
+		rs.Logs = make([]tracingpb.LogRecord, numLogs)
+		for i := 0; i < numLogs; i++ {
+			lr := s.mu.recording.logs.Get(i).(*tracingpb.LogRecord)
+			rs.Logs[i] = *lr
 		}
 	}
 

@@ -67,6 +67,7 @@ go_test(
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",
         "//pkg/util/stop",
+        "//pkg/util/timeutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",

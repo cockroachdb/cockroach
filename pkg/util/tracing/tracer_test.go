@@ -351,7 +351,7 @@ func TestShadowTracer(t *testing.T) {
 					Port:      65535,
 					Plaintext: true,
 				},
-				MaxLogsPerSpan: maxLogsPerSpan,
+				MaxLogsPerSpan: maxLogsPerSpanExternal,
 				UseGRPC:        true,
 			}),
 		},
