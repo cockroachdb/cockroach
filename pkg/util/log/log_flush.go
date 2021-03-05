@@ -69,6 +69,7 @@ const syncWarnDuration = 10 * time.Second
 // Syncs ensure that the OS commits the data to disk. Syncs are less
 // frequent because they can incur more significant I/O costs.
 func flushDaemon() {
+	return // HACK
 	syncCounter := 1
 
 	// This doesn't need to be Stop()'d as the loop never escapes.

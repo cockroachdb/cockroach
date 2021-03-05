@@ -13,7 +13,6 @@ package tracing
 import (
 	"context"
 	"io"
-	"runtime"
 	"strings"
 	"sync/atomic"
 
@@ -366,9 +365,9 @@ func newTracingClientStream(
 	// In such cases, there's nothing that triggers the span to finish. We,
 	// therefore, set a finalizer so that the span and the context goroutine will
 	// at least be cleaned up when the garbage collector is run.
-	runtime.SetFinalizer(otcs, func(otcs *tracingClientStream) {
-		otcs.finishFunc(nil)
-	})
+	// runtime.SetFinalizer(otcs, func(otcs *tracingClientStream) {
+	// 	otcs.finishFunc(nil)
+	// })
 	return otcs
 }
 

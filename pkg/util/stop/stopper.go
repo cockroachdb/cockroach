@@ -92,7 +92,7 @@ func PrintLeakedStoppers(t testing.TB) {
 	trackedStoppers.Lock()
 	defer trackedStoppers.Unlock()
 	for _, tracked := range trackedStoppers.stoppers {
-		t.Errorf("leaked stopper, created at:\n%s", tracked.createdAt)
+		t.Fatalf("leaked stopper, created at:\n%s", tracked.createdAt)
 	}
 }
 
