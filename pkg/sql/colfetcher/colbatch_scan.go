@@ -275,6 +275,12 @@ func NewColBatchScan(
 	s := colBatchScanPool.Get().(*ColBatchScan)
 	spans := s.spans[:0]
 	specSpans := spec.Spans
+	// We need to check that, if this scan is for a single row, and this scan
+	// contains more than one span (due to multiple column families), and at least
+	// one of the spans besides the last one contains more than 1 column family.
+	// If this condition is true, we need to tell the cfetcher to not end its
+	// row state machine when it sees a key for the final column family, because
+	// we might get more keys from earlier column families due to resume spans.
 	for i := range specSpans {
 		//gcassert:bce
 		spans = append(spans, specSpans[i].Span)

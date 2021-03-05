@@ -28,7 +28,7 @@ func FKCheckSpan(
 	}
 	// If it is safe to split this lookup into multiple families, generate a point lookup for
 	// family 0. Because we are just checking for existence, we only need family 0.
-	if s.CanSplitSpanIntoSeparateFamilies(1 /* numNeededFamilies */, numCols, containsNull) {
+	if s.CanSplitSpanIntoFamilySpans(1 /* numNeededFamilies */, numCols, containsNull) {
 		return s.SpanToPointSpan(span, 0), nil
 	}
 	return span, nil

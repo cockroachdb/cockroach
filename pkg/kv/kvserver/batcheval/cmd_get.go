@@ -32,14 +32,22 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	val, intent, err := storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
-		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
-		Txn:                   h.Txn,
-		FailOnMoreRecent:      args.KeyLocking != lock.None,
-		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
-	})
-	if err != nil {
-		return result.Result{}, err
+	var val *roachpb.Value
+	var intent *roachpb.Intent
+	var err error
+	if h.MaxSpanRequestKeys < 0 || h.TargetBytes < 0 {
+		reply.ResumeSpan = &roachpb.Span{Key: args.Key}
+		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+	} else {
+		val, intent, err = storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
+			Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
+			Txn:                   h.Txn,
+			FailOnMoreRecent:      args.KeyLocking != lock.None,
+			LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
+		})
+		if err != nil {
+			return result.Result{}, err
+		}
 	}
 	var intents []roachpb.Intent
 	if intent != nil {
