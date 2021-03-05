@@ -10,7 +10,9 @@
 
 package sql
 
-import "github.com/cockroachdb/cockroach/pkg/settings"
+import (
+	"github.com/cockroachdb/cockroach/pkg/settings"
+)
 
 // FeatureTLSAutoJoinEnabled is used to enable and disable the TLS auto-join
 // feature.
@@ -19,6 +21,3 @@ var FeatureTLSAutoJoinEnabled = settings.RegisterBoolSetting(
 	"set to true to enable tls auto join through join tokens, false to disable; default is false",
 	false,
 )
-
-// TODO(bilal): Implement a CREATE JOIN TOKEN statement, gated by
-// FeatureTLSAutoJoinEnabled.
