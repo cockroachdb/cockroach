@@ -96,9 +96,9 @@ func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) err
 	assignNeRe := makeFunctionRegex("_ASSIGN_NE", 6)
 	s = assignNeRe.ReplaceAllString(s, makeTemplateFunctionCall("Global.Right.Assign", 6))
 
-	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 7)
+	checkColBody := makeFunctionRegex("_CHECK_COL_BODY", 6)
 	s = checkColBody.ReplaceAllString(s,
-		`{{template "checkColBody" buildDict "Global" .Global "ProbeHasNulls" $1 "BuildHasNulls" $2 "AllowNullEquality" $3 "SelectDistinct" $4 "UseProbeSel" $5 "ProbingAgainstItself" $6 "DeletingProbeMode" $7}}`,
+		`{{template "checkColBody" buildDict "Global" .Global "ProbeHasNulls" $1 "BuildHasNulls" $2 "SelectDistinct" $3 "UseProbeSel" $4 "ProbingAgainstItself" $5 "DeletingProbeMode" $6}}`,
 	)
 
 	checkColWithNulls := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 3)
