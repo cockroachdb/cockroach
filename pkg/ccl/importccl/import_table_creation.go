@@ -164,7 +164,8 @@ func MakeSimpleTableDescriptor(
 		parentID,
 		parentSchemaID,
 		tableID,
-		nil, /* regionConfig */
+		descpb.InvalidID, /* regionEnumID */
+		nil,              /* regionConfig */
 		hlc.Timestamp{WallTime: walltime},
 		descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName()),
 		affected,
@@ -217,10 +218,9 @@ func (so *importSequenceOperators) GetSerialSequenceNameFromColumn(
 }
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
-func (so *importSequenceOperators) CurrentDatabaseRegionConfig() (
-	tree.DatabaseRegionConfig,
-	error,
-) {
+func (so *importSequenceOperators) CurrentDatabaseRegionConfig(
+	_ context.Context,
+) (tree.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
