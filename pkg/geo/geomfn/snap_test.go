@@ -59,7 +59,13 @@ func TestSnap(t *testing.T) {
 			input:     geom.NewMultiPolygonFlat(geom.XY, []float64{1, 1, 2, 2, 3, 3, 1, 1, 4, 4, 5, 5, 6, 6, 4, 4}, [][]int{{8}, {16}}),
 			target:    geom.NewLineStringFlat(geom.XY, []float64{5, 107, 54, 84, 101, 100}),
 			tolerance: 200,
-			expected:  geom.NewMultiPolygonFlat(geom.XY, []float64{1, 1, 2, 2, 5, 107, 54, 84, 101, 100, 1, 1, 4, 4, 5, 5, 5, 107, 54, 84, 101, 100, 4, 4}, [][]int{{8}, {16}}),
+			expected: geom.NewMultiPolygonFlat(
+				geom.XY,
+				[]float64{
+					1, 1, 2, 2, 5, 107, 54, 84, 101, 100, 1, 1, 4, 4, 5, 5, 5, 107, 54, 84, 101, 100, 4, 4,
+				},
+				[][]int{{12}, {24}},
+			),
 		},
 	}
 
@@ -73,15 +79,7 @@ func TestSnap(t *testing.T) {
 			actual, err := Snap(input, target, tc.tolerance)
 			require.NoError(t, err)
 
-			// Compare FlatCoords and assert they are within epsilon.
-			// This is because they exact matches may encounter rounding issues.
-			actualGeomT, err := actual.AsGeomT()
-
-			require.NoError(t, err)
-			require.Equal(t, tc.expected.SRID(), actualGeomT.SRID())
-			require.Equal(t, tc.expected.Layout(), actualGeomT.Layout())
-			require.IsType(t, tc.expected, actualGeomT)
-			require.InEpsilonSlice(t, tc.expected.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
+			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }

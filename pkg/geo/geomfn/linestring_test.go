@@ -571,15 +571,7 @@ func TestLineSubstring(t *testing.T) {
 				require.Equal(t, tt.wantErrString, err.Error())
 				return
 			}
-
-			// match the shape
-			gWantGeom, err := geo.MakeGeometryFromGeomT(tt.wantGeomT)
-			require.NoError(t, err)
-			require.Equal(t, gWantGeom.ShapeType().String(), got.ShapeType().String())
-
-			geomT, err := got.AsGeomT()
-			require.NoError(t, err)
-			require.InEpsilonSlice(t, tt.wantGeomT.FlatCoords(), geomT.FlatCoords(), 0.0001)
+			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tt.wantGeomT), got, 1e-4)
 		})
 	}
 }
