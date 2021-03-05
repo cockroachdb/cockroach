@@ -64,6 +64,20 @@ type storedLease struct {
 	expiration tree.DTimestamp
 }
 
+var _ redact.SafeFormatter = (*storedLease)(nil)
+
+func (s *storedLease) SafeFormat(sp redact.SafePrinter, verb rune) {
+	sp.Printf("%d@%d:%s", s.id, s.version, s.expirationAsHLC())
+}
+
+func (s *storedLease) String() string {
+	return fmt.Sprintf("%d@%d:%s", s.id, s.version, s.expirationAsHLC())
+}
+
+func (s *storedLease) expirationAsHLC() hlc.Timestamp {
+	return hlc.Timestamp{WallTime: s.expiration.Time.UnixNano()}
+}
+
 // descriptorVersionState holds the state for a descriptor version. This
 // includes the lease information for a descriptor version.
 // TODO(vivek): A node only needs to manage lease information on what it

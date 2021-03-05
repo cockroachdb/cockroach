@@ -27,12 +27,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTableSet(t *testing.T) {
@@ -1023,4 +1026,16 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStoredLeaseFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	v := &storedLease{
+		id:         42,
+		version:    2,
+		expiration: *tree.MustMakeDTimestamp(timeutil.Unix(1, 0), time.Microsecond),
+	}
+	const exp = "42@2:1.000000000,0"
+	require.Equal(t, exp, v.String())
+	require.Equal(t, exp, errors.Redact(errors.Errorf("%s", v)))
 }
