@@ -375,25 +375,33 @@ func NeededColumnFamilyIDs(
 	return neededFamilyIDs
 }
 
-// SplitSpanIntoSeparateFamilies splits a span representing a single row point
+// SplitRowKeyIntoFamilySpans splits a key representing a single row point
 // lookup into separate disjoint spans that request only the particular column
 // families from neededFamilies instead of requesting all the families. It is up
 // to the client to ensure the requested span represents a single row lookup and
-// that the span splitting is appropriate (see CanSplitSpanIntoSeparateFamilies).
+// that the span splitting is appropriate (see CanSplitSpanIntoFamilySpans).
+//
+// The returned spans might or might not have EndKeys set. If they are for a
+// single key, they will not have EndKeys set.
+//
+// Note that this function will still return a family-specific span even if the
+// input span is for a table that has just a single column family, so that the
+// caller can have a precise key to send via a GetRequest if desired.
 //
 // The function accepts a slice of spans to append to.
-func SplitSpanIntoSeparateFamilies(
-	appendTo roachpb.Spans, span roachpb.Span, neededFamilies []descpb.FamilyID,
+func SplitRowKeyIntoFamilySpans(
+	appendTo roachpb.Spans, key roachpb.Key, neededFamilies []descpb.FamilyID,
 ) roachpb.Spans {
-	span.Key = span.Key[:len(span.Key):len(span.Key)] // avoid mutation and aliasing
+	key = key[:len(key):len(key)] // avoid mutation and aliasing
 	for i, familyID := range neededFamilies {
 		var famSpan roachpb.Span
-		famSpan.Key = keys.MakeFamilyKey(span.Key, uint32(familyID))
-		famSpan.EndKey = famSpan.Key.PrefixEnd()
+		famSpan.Key = keys.MakeFamilyKey(key, uint32(familyID))
+		// Don't set the EndKey yet, because a column family on its own can be
+		// fetched using a GetRequest.
 		if i > 0 && familyID == neededFamilies[i-1]+1 {
 			// This column family is adjacent to the previous one. We can merge
 			// the two spans into one.
-			appendTo[len(appendTo)-1].EndKey = famSpan.EndKey
+			appendTo[len(appendTo)-1].EndKey = famSpan.Key.PrefixEnd()
 		} else {
 			appendTo = append(appendTo, famSpan)
 		}

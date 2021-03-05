@@ -1104,7 +1104,7 @@ func TestNonRetryableError(t *testing.T) {
 	hitError := false
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args kvserverbase.FilterArgs) *roachpb.Error {
-			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
+			if req, ok := args.Req.(*roachpb.GetRequest); ok {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					hitError = true
 					return roachpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
@@ -1167,7 +1167,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var clockUpdate, restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args kvserverbase.FilterArgs) *roachpb.Error {
-			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
+			if req, ok := args.Req.(*roachpb.GetRequest); ok {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					if atomic.LoadInt32(&clockUpdate) == 0 {
 						atomic.AddInt32(&clockUpdate, 1)
@@ -1252,7 +1252,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 				return nil
 			}
 
-			if req, ok := args.Req.(*roachpb.ScanRequest); ok {
+			if req, ok := args.Req.(*roachpb.GetRequest); ok {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					atomic.AddInt32(&restartDone, 1)
 					// Return ReadWithinUncertaintyIntervalError.
