@@ -58,6 +58,7 @@ go_library(
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/schemaexpr",
         "//pkg/sql/catalog/systemschema",

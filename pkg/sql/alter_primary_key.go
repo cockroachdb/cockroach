@@ -299,17 +299,14 @@ func (p *planner) AlterPrimaryKey(
 			if as := to.RegionalByRow.As; as != nil {
 				colName = tree.Name(*as)
 			}
-			_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-				ctx,
-				p.txn,
-				tableDesc.GetParentID(),
-				tree.DatabaseLookupFlags{Required: true},
+			regionConfig, err := SynthesizeRegionConfig(
+				ctx, p.txn, tableDesc.GetParentID(), p.Descriptors(),
 			)
 			if err != nil {
 				return err
 			}
 			partitionAllBy = partitionByForRegionalByRow(
-				*dbDesc.DatabaseDesc().RegionConfig,
+				regionConfig,
 				colName,
 			)
 			if alterPrimaryKeyLocalitySwap.newColumnName != nil {

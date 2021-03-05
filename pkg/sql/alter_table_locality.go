@@ -475,15 +475,13 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	)
 
 	toRegionalByRow := newLocality.LocalityLevel == tree.LocalityLevelRow
-	if err := validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
+	if err := params.p.validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		params.ctx,
-		params.extendedEvalCtx.Txn,
-		params.ExecCfg(),
-		*n.dbDesc.RegionConfig,
+		n.dbDesc,
 		n.tableDesc,
 		toRegionalByRow,
-		params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
-		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes); err != nil {
+		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+	); err != nil {
 		return err
 	}
 
@@ -592,12 +590,16 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 		return err
 	}
 
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.ID, params.p.Descriptors())
+	if err != nil {
+		return err
+	}
 	// Update the zone configuration.
 	if err := ApplyZoneConfigForMultiRegionTable(
 		params.ctx,
 		params.p.txn,
 		params.p.ExecCfg(),
-		*dbDesc.RegionConfig,
+		regionConfig,
 		n.tableDesc,
 		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	); err != nil {

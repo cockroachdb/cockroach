@@ -13,6 +13,7 @@ go_library(
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/multiregion",
         "//pkg/sql/privilege",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
