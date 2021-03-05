@@ -32,7 +32,7 @@ const (
 	joinTokenSecretLen = 16
 )
 
-// joinToken is a container for a tokenID and associated sharedSecret for use
+// joinToken is a container for a TokenID and associated SharedSecret for use
 // in certificate-free add/join operations.
 type joinToken struct {
 	tokenID      uuid.UUID
@@ -73,6 +73,18 @@ func (j *joinToken) verifySignature(caCert []byte) bool {
 	_, _ = signer.Write(caCert)
 	// TODO(aaron-crl): Avoid timing attacks here.
 	return bytes.Equal(signer.Sum(nil), j.fingerprint)
+}
+
+// IsCATrustedByJoinToken will return true if the fingerprint matches provided
+// bundle, false if the signature fails to match, and error if the token fails
+// to parse.
+func IsCATrustedByJoinToken(caCert []byte, rawJoinToken string) (bool, error) {
+	j := joinToken{}
+	err := j.UnmarshalText([]byte(rawJoinToken))
+	if err != nil {
+		return false, errors.Wrap(err, "failed to unpack joinToken")
+	}
+	return j.verifySignature(caCert), nil
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
