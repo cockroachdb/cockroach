@@ -17,7 +17,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -187,7 +187,7 @@ func changefeedPlanHook(
 		}
 
 		// This grabs table descriptors once to get their ids.
-		targetDescs, _, err := backupbase.ResolveTargetsToDescriptors(
+		targetDescs, _, err := backupresolver.ResolveTargetsToDescriptors(
 			ctx, p, statementTime, &changefeedStmt.Targets)
 		if err != nil {
 			err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")

@@ -7,7 +7,7 @@ ALL_TESTS = [
     "//pkg/bench/ddl_analysis:ddl_analysis_test",
     "//pkg/bench:bench_test",
     "//pkg/blobs:blobs_test",
-    "//pkg/ccl/backupccl/backupbase:backupbase_test",
+    "//pkg/ccl/backupccl/backupresolver:backupresolver_test",
     "//pkg/ccl/backupccl:backupccl_test",
     "//pkg/ccl/baseccl:baseccl_test",
     "//pkg/ccl/changefeedccl/cdctest:cdctest_test",
