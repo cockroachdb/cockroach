@@ -217,6 +217,7 @@ func _CHECK_COL_FUNCTION_TEMPLATE(_PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_
 	case _LEFT_CANONICAL_TYPE_FAMILY:
 		switch probeVec.Type().Width() {
 		// {{range .LeftWidths}}
+		// {{$leftWidth := .Width}}
 		case _LEFT_TYPE_WIDTH:
 			switch buildVec.CanonicalTypeFamily() {
 			// {{range .RightFamilies}}
@@ -232,6 +233,14 @@ func _CHECK_COL_FUNCTION_TEMPLATE(_PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_
 			case _RIGHT_CANONICAL_TYPE_FAMILY:
 				switch buildVec.Type().Width() {
 				// {{range .RightWidths}}
+				// {{$rightWidth := .Width}}
+				// {{if or (not $probingAgainstItself) (eq $leftWidth $rightWidth)}}
+				// {{/*
+				//     In a special case of probing against itself, we know that
+				//     the vectors have the same width (because probeVec and
+				//     buildVec are the same object), so we don't generate code
+				//     if the width are different.
+				// */}}
 				case _RIGHT_TYPE_WIDTH:
 					probeKeys := probeVec._ProbeType()
 					buildKeys := buildVec._BuildType()
@@ -240,6 +249,7 @@ func _CHECK_COL_FUNCTION_TEMPLATE(_PROBING_AGAINST_ITSELF bool, _DELETING_PROBE_
 					} else {
 						_CHECK_COL_WITH_NULLS(false, _PROBING_AGAINST_ITSELF, _DELETING_PROBE_MODE)
 					}
+					// {{end}}
 					// {{end}}
 				}
 				// {{end}}
