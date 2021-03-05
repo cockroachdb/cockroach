@@ -15,4 +15,3 @@ BACKUP db1.t TO 'nodelocal://1/backup_2';
 BACKUP DATABASE db1 TO 'nodelocal://1/backup_2';
 ----
 pq: previous backup does not contain the complete database "db1"
-
