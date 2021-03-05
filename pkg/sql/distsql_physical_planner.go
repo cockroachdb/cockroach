@@ -907,7 +907,21 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
 	it := planCtx.spanIter
-	for _, span := range spans {
+	for i := range spans {
+
+		span := spans[i]
+		if len(span.EndKey) == 0 {
+			// If we see a span to partition that has no end key, it means that we're
+			// going to do a point lookup on the start key of this span.
+			//
+			// The code below us doesn't really tolerate spans without an EndKey, so
+			// we manufacture a single-key span for this case.
+			span = roachpb.Span{
+				Key:    span.Key,
+				EndKey: span.Key.Next(),
+			}
+		}
+
 		// rSpan is the span we are currently partitioning.
 		rSpan, err := keys.SpanAddr(span)
 		if err != nil {

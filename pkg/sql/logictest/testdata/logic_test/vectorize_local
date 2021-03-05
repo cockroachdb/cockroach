@@ -199,12 +199,10 @@ SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
 # Note that table ID here is hardcoded, so if a new table is created before
 # tpar, this query will need an adjustment.
 query T
-SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
-    ('querying next range at /Table/56/1/0',
-     'querying next range at /Table/56/1/10')
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE 'querying next range at %'
 ----
-querying next range at /Table/56/1/0
-querying next range at /Table/56/1/10
+querying next range at /Table/56/1/0/0
+querying next range at /Table/56/1/10/0
 
 # Regression test for #46123 (rowexec.TableReader not implementing
 # execinfra.OpNode interface).

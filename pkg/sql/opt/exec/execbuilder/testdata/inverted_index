@@ -46,7 +46,7 @@ InitPut /Table/53/2/Arr/7/1/0 -> /BYTES/
 query T kvtrace
 DELETE FROM d WHERE a=1
 ----
-Scan /Table/53/1/1{-/#}
+Scan /Table/53/1/1/0
 Del /Table/53/2/Arr/0/1/0
 Del /Table/53/2/Arr/7/1/0
 Del /Table/53/1/1/0
@@ -77,7 +77,7 @@ CPut /Table/53/1/4/0 -> /TUPLE/
 query T kvtrace
 UPDATE d SET b='[1]' WHERE a=4
 ----
-Scan /Table/53/1/4{-/#}
+Scan /Table/53/1/4/0
 Put /Table/53/1/4/0 -> /TUPLE/
 InitPut /Table/53/2/Arr/1/4/0 -> /BYTES/
 
@@ -85,7 +85,7 @@ InitPut /Table/53/2/Arr/1/4/0 -> /BYTES/
 query T kvtrace
 UPDATE d SET b=NULL WHERE a=4
 ----
-Scan /Table/53/1/4{-/#}
+Scan /Table/53/1/4/0
 Put /Table/53/1/4/0 -> /TUPLE/
 Del /Table/53/2/Arr/1/4/0
 
@@ -93,7 +93,7 @@ Del /Table/53/2/Arr/1/4/0
 query T kvtrace
 DELETE FROM d WHERE a=4
 ----
-Scan /Table/53/1/4{-/#}
+Scan /Table/53/1/4/0
 Del /Table/53/1/4/0
 
 # Tests for array inverted indexes.
@@ -160,7 +160,7 @@ CPut /Table/55/1/2/0 -> /TUPLE/
 query T kvtrace
 UPDATE f SET b = ARRAY[0,15,7,10] WHERE a = 0
 ----
-Scan /Table/55/1/0{-/#}
+Scan /Table/55/1/0/0
 Put /Table/55/1/0/0 -> /TUPLE/
 Del /Table/55/2/1/0/0
 InitPut /Table/55/2/15/0/0 -> /BYTES/
