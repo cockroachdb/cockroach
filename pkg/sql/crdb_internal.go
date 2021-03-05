@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -296,7 +297,7 @@ CREATE TABLE crdb_internal.tables (
   parent_schema_id         INT NOT NULL,
   locality                 TEXT
 )`,
-	generator: func(ctx context.Context, p *planner, dbDesc *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, dbDesc *dbdesc.Immutable, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 14)
 		worker := func(pusher rowPusher) error {
 			descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
@@ -406,8 +407,8 @@ CREATE TABLE crdb_internal.tables (
 			}
 			return nil
 		}
-		next, cleanup := setupGenerator(ctx, worker)
-		return next, cleanup, nil
+		next, cleanup, err := setupGenerator(ctx, worker, stopper)
+		return next, cleanup, err
 	},
 }
 
@@ -616,7 +617,7 @@ CREATE TABLE crdb_internal.jobs (
 	coordinator_id     		INT
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
-	generator: func(ctx context.Context, p *planner, _ *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		currentUser := p.SessionData().User()
 		isAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
@@ -2152,7 +2153,7 @@ CREATE TABLE crdb_internal.table_columns (
   hidden           BOOL NOT NULL
 )
 `,
-	generator: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		row := make(tree.Datums, 8)
 		worker := func(pusher rowPusher) error {
 			return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
@@ -2188,8 +2189,8 @@ CREATE TABLE crdb_internal.table_columns (
 				},
 			)
 		}
-		next, cleanup := setupGenerator(ctx, worker)
-		return next, cleanup, nil
+		next, cleanup, err := setupGenerator(ctx, worker, stopper)
+		return next, cleanup, err
 	},
 }
 
@@ -2209,7 +2210,7 @@ CREATE TABLE crdb_internal.table_indexes (
   is_inverted      BOOL NOT NULL
 )
 `,
-	generator: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		primary := tree.NewDString("primary")
 		secondary := tree.NewDString("secondary")
 		row := make(tree.Datums, 7)
@@ -2242,8 +2243,8 @@ CREATE TABLE crdb_internal.table_indexes (
 				},
 			)
 		}
-		next, cleanup := setupGenerator(ctx, worker)
-		return next, cleanup, nil
+		next, cleanup, err := setupGenerator(ctx, worker, stopper)
+		return next, cleanup, err
 	},
 }
 
@@ -2670,7 +2671,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 	split_enforced_until TIMESTAMP
 )
 `,
-	generator: func(ctx context.Context, p *planner, _ *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, nil, err
 		}
@@ -3613,7 +3614,7 @@ CREATE TABLE crdb_internal.partitions (
 	subzone_id INT -- references a subzone id in the crdb_internal.zones table
 )
 	`,
-	generator: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable) (virtualTableGenerator, cleanupFunc, error) {
+	generator: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		dbName := ""
 		if dbContext != nil {
 			dbName = dbContext.GetName()
@@ -3629,8 +3630,8 @@ CREATE TABLE crdb_internal.partitions (
 					})
 				})
 		}
-		next, cleanup := setupGenerator(ctx, worker)
-		return next, cleanup, nil
+		next, cleanup, err := setupGenerator(ctx, worker, stopper)
+		return next, cleanup, err
 	},
 }
 

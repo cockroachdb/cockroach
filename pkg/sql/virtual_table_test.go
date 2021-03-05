@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -25,8 +26,10 @@ import (
 func TestVirtualTableGenerators(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	stopper := stop.NewStopper()
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
 	t.Run("test cleanup", func(t *testing.T) {
-		ctx := context.Background()
 		worker := func(pusher rowPusher) error {
 			if err := pusher.pushRow(tree.NewDInt(1)); err != nil {
 				return err
@@ -36,8 +39,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 			}
 			return nil
 		}
-
-		next, cleanup := setupGenerator(ctx, worker)
+		next, cleanup, _ := setupGenerator(ctx, worker, stopper)
 		d, err := next()
 		if err != nil {
 			t.Fatal(err)
@@ -50,7 +52,6 @@ func TestVirtualTableGenerators(t *testing.T) {
 
 	t.Run("test worker error", func(t *testing.T) {
 		// Test that if the worker returns an error we catch it.
-		ctx := context.Background()
 		worker := func(pusher rowPusher) error {
 			if err := pusher.pushRow(tree.NewDInt(1)); err != nil {
 				return err
@@ -60,7 +61,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 			}
 			return errors.New("dummy error")
 		}
-		next, cleanup := setupGenerator(ctx, worker)
+		next, cleanup, _ := setupGenerator(ctx, worker, stopper)
 		_, err := next()
 		require.NoError(t, err)
 		_, err = next()
@@ -71,19 +72,18 @@ func TestVirtualTableGenerators(t *testing.T) {
 	})
 
 	t.Run("test no next", func(t *testing.T) {
-		ctx := context.Background()
 		// Test we don't leak anything if we call cleanup before next.
 		worker := func(pusher rowPusher) error {
 			return nil
 		}
-		_, cleanup := setupGenerator(ctx, worker)
+		_, cleanup, _ := setupGenerator(ctx, worker, stopper)
 		cleanup()
 	})
 
 	t.Run("test context cancellation", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		// Test cancellation before asking for any rows.
-		worker := func(pusher rowPusher) error {
+		worker, stopper := func(pusher rowPusher) error {
 			if err := pusher.pushRow(tree.NewDInt(1)); err != nil {
 				return err
 			}
@@ -91,8 +91,8 @@ func TestVirtualTableGenerators(t *testing.T) {
 				return err
 			}
 			return nil
-		}
-		next, cleanup := setupGenerator(ctx, worker)
+		}, stop.NewStopper()
+		next, cleanup, _ := setupGenerator(ctx, worker, stopper)
 		cancel()
 		_, err := next()
 		// There is a small chance that we race and don't return
@@ -105,7 +105,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 
 		// Test cancellation after asking for a row.
 		ctx, cancel = context.WithCancel(context.Background())
-		next, cleanup = setupGenerator(ctx, worker)
+		next, cleanup, _ = setupGenerator(ctx, worker, stopper)
 		row, err := next()
 		require.NoError(t, err)
 		require.Equal(t, tree.Datums{tree.NewDInt(1)}, row)
@@ -116,20 +116,23 @@ func TestVirtualTableGenerators(t *testing.T) {
 
 		// Test cancellation after asking for all the rows.
 		ctx, cancel = context.WithCancel(context.Background())
-		next, cleanup = setupGenerator(ctx, worker)
+		next, cleanup, _ = setupGenerator(ctx, worker, stopper)
 		_, err = next()
 		require.NoError(t, err)
 		_, err = next()
 		require.NoError(t, err)
 		cancel()
 		cleanup()
+		stopper.Stop(ctx)
 	})
 }
 
 func BenchmarkVirtualTableGenerators(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
+	stopper := stop.NewStopper()
 	ctx := context.Background()
+	defer stopper.Stop(ctx)
 	worker := func(pusher rowPusher) error {
 		for {
 			if err := pusher.pushRow(tree.NewDInt(tree.DInt(1))); err != nil {
@@ -138,7 +141,7 @@ func BenchmarkVirtualTableGenerators(b *testing.B) {
 		}
 	}
 	b.Run("bench read", func(b *testing.B) {
-		next, cleanup := setupGenerator(ctx, worker)
+		next, cleanup, _ := setupGenerator(ctx, worker, stopper)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			_, err := next()
