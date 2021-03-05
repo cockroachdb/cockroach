@@ -546,21 +546,25 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 // that the table is a REGIONAL BY TABLE table homed in the primary region of
 // the database.
 func addDefaultLocalityConfigToAllTables(
-	ctx context.Context, p *planner, desc *dbdesc.Immutable, regionEnumID descpb.ID,
+	ctx context.Context, p *planner, dbDesc *dbdesc.Immutable, regionEnumID descpb.ID,
 ) error {
-	if !desc.IsMultiRegion() {
+	if !dbDesc.IsMultiRegion() {
 		return errors.AssertionFailedf(
 			"cannot add locality config to tables in non multi-region database with ID %d",
-			desc.GetID(),
+			dbDesc.GetID(),
 		)
 	}
 	b := p.Txn().NewBatch()
-	if err := forEachTableDesc(ctx, p, desc, hideVirtual,
+	if err := forEachTableDesc(ctx, p, dbDesc, hideVirtual,
 		func(immutable *dbdesc.Immutable, _ string, desc catalog.TableDescriptor) error {
 			mutDesc, err := p.Descriptors().GetMutableTableByID(
 				ctx, p.txn, desc.GetID(), tree.ObjectLookupFlags{},
 			)
 			if err != nil {
+				return err
+			}
+
+			if err := checkCanConvertTableToMultiRegion(dbDesc, mutDesc); err != nil {
 				return err
 			}
 
@@ -578,6 +582,40 @@ func addDefaultLocalityConfigToAllTables(
 		return err
 	}
 	return p.Txn().Run(ctx, b)
+}
+
+// checkCanConvertTableToMultiRegion checks whether a given table can be converted
+// to a multi-region table.
+func checkCanConvertTableToMultiRegion(
+	dbDesc catalog.DatabaseDescriptor, tableDesc catalog.TableDescriptor,
+) error {
+	if tableDesc.GetPrimaryIndex().GetPartitioning().NumColumns > 0 {
+		return errors.WithDetailf(
+			pgerror.Newf(
+				pgcode.ObjectNotInPrerequisiteState,
+				"cannot convert database %s to a multi-region database",
+				dbDesc.GetName(),
+			),
+			"cannot convert table %s to a multi-region table as it is partitioned",
+			tableDesc.GetName(),
+		)
+	}
+	for _, idx := range tableDesc.NonDropIndexes() {
+		if idx.GetPartitioning().NumColumns > 0 {
+			return errors.WithDetailf(
+				pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot convert database %s to a multi-region database",
+					dbDesc.GetName(),
+				),
+				"cannot convert table %s to a multi-region table as it has index/constraint %s with partitioning",
+				tableDesc.GetName(),
+				idx.GetName(),
+			)
+		}
+	}
+	// TODO(#57668): check zone configurations are not set here
+	return nil
 }
 
 // setInitialPrimaryRegion sets the primary region in cases where the database

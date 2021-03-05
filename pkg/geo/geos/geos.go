@@ -1073,3 +1073,20 @@ func MinimumRotatedRectangle(ewkb geopb.EWKB) (geopb.EWKB, error) {
 	}
 	return cStringToSafeGoBytes(cEWKB), nil
 }
+
+// Snap returns the input EWKB with the vertices snapped to the target
+// EWKB. Tolerance is used to control where snapping is performed.
+// If no snapping occurs then the input geometry is returned unchanged.
+func Snap(input, target geopb.EWKB, tolerance float64) (geopb.EWKB, error) {
+	g, err := ensureInitInternal()
+	if err != nil {
+		return nil, err
+	}
+	var cEWKB C.CR_GEOS_String
+	if err := statusToError(
+		C.CR_GEOS_Snap(g, goToCSlice(input), goToCSlice(target), C.double(tolerance), &cEWKB),
+	); err != nil {
+		return nil, err
+	}
+	return cStringToSafeGoBytes(cEWKB), nil
+}
