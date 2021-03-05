@@ -443,13 +443,15 @@ func newMergeJoinBase(
 	var err error
 	base.left.distincterInput = &colexecop.FeedOperator{}
 	base.left.distincter, base.left.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
-		base.left.distincterInput, lEqCols, leftTypes)
+		base.left.distincterInput, lEqCols, leftTypes, false, /* nullsAreDistinct */
+	)
 	if err != nil {
 		return base, err
 	}
 	base.right.distincterInput = &colexecop.FeedOperator{}
 	base.right.distincter, base.right.distinctOutput, err = colexecbase.OrderedDistinctColsToOperators(
-		base.right.distincterInput, rEqCols, rightTypes)
+		base.right.distincterInput, rEqCols, rightTypes, false, /* nullsAreDistinct */
+	)
 	if err != nil {
 		return base, err
 	}

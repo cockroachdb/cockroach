@@ -93,8 +93,8 @@ func TestExternalDistinct(t *testing.T) {
 					sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 					semsToCheck = append(semsToCheck, sem)
 					distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
-						ctx, flowCtx, input, tc.typs, tc.distinctCols, outputOrdering,
-						queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
+						ctx, flowCtx, input, tc.typs, tc.distinctCols, tc.nullsAreDistinct,
+						outputOrdering, queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
 					)
 					require.Equal(t, numExpectedClosers, len(closers))
 					accounts = append(accounts, newAccounts...)
@@ -205,8 +205,8 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			semsToCheck = append(semsToCheck, sem)
 			var outputOrdering execinfrapb.Ordering
 			distinct, newAccounts, newMonitors, closers, err := createExternalDistinct(
-				ctx, flowCtx, input, typs, distinctCols, outputOrdering, queueCfg,
-				sem, func() { numSpills++ }, numForcedRepartitions,
+				ctx, flowCtx, input, typs, distinctCols, false, /* nullsAreDistinct */
+				outputOrdering, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
 			)
 			require.NoError(t, err)
 			// Check that the external distinct and the disk-backed sort
@@ -322,7 +322,8 @@ func BenchmarkExternalDistinct(b *testing.B) {
 					}
 					op, accs, mons, _, err := createExternalDistinct(
 						ctx, flowCtx, []colexecop.Operator{input}, typs,
-						distinctCols, outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
+						distinctCols, false, /* nullsAreDistinct */
+						outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
 						nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
 					)
 					memAccounts = append(memAccounts, accs...)
@@ -355,6 +356,7 @@ func createExternalDistinct(
 	sources []colexecop.Operator,
 	typs []*types.T,
 	distinctCols []uint32,
+	nullsAreDistinct bool,
 	outputOrdering execinfrapb.Ordering,
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	testingSemaphore semaphore.Semaphore,
@@ -362,8 +364,9 @@ func createExternalDistinct(
 	numForcedRepartitions int,
 ) (colexecop.Operator, []*mon.BoundAccount, []*mon.BytesMonitor, []colexecop.Closer, error) {
 	distinctSpec := &execinfrapb.DistinctSpec{
-		DistinctColumns: distinctCols,
-		OutputOrdering:  outputOrdering,
+		DistinctColumns:  distinctCols,
+		NullsAreDistinct: nullsAreDistinct,
+		OutputOrdering:   outputOrdering,
 	}
 	spec := &execinfrapb.ProcessorSpec{
 		Input: []execinfrapb.InputSyncSpec{{ColumnTypes: typs}},

@@ -239,12 +239,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.Distinct != nil:
-		if spec.Core.Distinct.NullsAreDistinct {
-			return errors.Newf("distinct with unique nulls not supported")
-		}
-		if spec.Core.Distinct.ErrorOnDup != "" {
-			return errors.Newf("distinct with error on duplicates not supported")
-		}
 		return nil
 
 	case spec.Core.Ordinality != nil:
@@ -978,7 +972,10 @@ func NewColOperator(
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			if len(core.Distinct.OrderedColumns) == len(core.Distinct.DistinctColumns) {
-				result.Root, err = colexecbase.NewOrderedDistinct(inputs[0].Root, core.Distinct.OrderedColumns, result.ColumnTypes)
+				result.Root, err = colexecbase.NewOrderedDistinct(
+					inputs[0].Root, core.Distinct.OrderedColumns, result.ColumnTypes,
+					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
+				)
 			} else {
 				// We have separate unit tests that instantiate in-memory
 				// distinct operators, so we don't need to look at
@@ -994,6 +991,7 @@ func NewColOperator(
 				allocator := colmem.NewAllocator(ctx, distinctMemAccount, factory)
 				inMemoryUnorderedDistinct := colexec.NewUnorderedDistinct(
 					allocator, inputs[0].Root, core.Distinct.DistinctColumns, result.ColumnTypes,
+					core.Distinct.NullsAreDistinct, core.Distinct.ErrorOnDup,
 				)
 				edOpName := "external-distinct"
 				diskAccount := result.createDiskAccount(ctx, flowCtx, edOpName, spec.ProcessorID)

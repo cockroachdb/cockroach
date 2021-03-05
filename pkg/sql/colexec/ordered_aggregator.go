@@ -149,7 +149,9 @@ func NewOrderedAggregator(
 			return nil, errors.AssertionFailedf("filtering ordered aggregation is not supported")
 		}
 	}
-	op, groupCol, err := colexecbase.OrderedDistinctColsToOperators(args.Input, args.Spec.GroupCols, args.InputTypes)
+	op, groupCol, err := colexecbase.OrderedDistinctColsToOperators(
+		args.Input, args.Spec.GroupCols, args.InputTypes, false, /* nullsAreDistinct */
+	)
 	if err != nil {
 		return nil, err
 	}
