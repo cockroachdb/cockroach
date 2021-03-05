@@ -1,0 +1,51 @@
+# Test full cluster backup/restore here.
+
+new-server name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE tab (
+  k int primary key,
+  a int,
+  b int,
+  v int AS (a+b) VIRTUAL,
+  INDEX (v),
+  UNIQUE (a,b) WHERE (v > 0)
+);
+INSERT INTO tab VALUES (1,1,1), (2,2,2), (3,3,3)
+----
+
+exec-sql
+BACKUP TO 'nodelocal://0/test/'
+----
+
+# Start a new cluster with the same IO dir.
+new-server name=s2 share-io-dir=s1
+----
+
+exec-sql server=s2
+RESTORE FROM 'nodelocal://0/test/'
+----
+
+query-sql
+SELECT * FROM d.tab ORDER BY k
+----
+1 1 1 2
+2 2 2 4
+3 3 3 6
+
+query-sql
+SHOW CREATE TABLE d.tab
+----
+d.public.tab CREATE TABLE public.tab (
+	k INT8 NOT NULL,
+	a INT8 NULL,
+	b INT8 NULL,
+	v INT8 NULL AS (a + b) VIRTUAL,
+	CONSTRAINT "primary" PRIMARY KEY (k ASC),
+	INDEX tab_v_idx (v ASC),
+	UNIQUE INDEX tab_a_b_key (a ASC, b ASC) WHERE v > 0:::INT8,
+	FAMILY "primary" (k, a, b)
+)
