@@ -3825,6 +3825,20 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.create_join_token": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// TODO(bilal): Implement this.
+				return nil, nil
+			},
+			Info:       "Creates a join token for use when adding a new node to a secure cluster.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.destroy_tenant": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     categoryMultiTenancy,
