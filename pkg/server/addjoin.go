@@ -11,6 +11,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 
@@ -19,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
+
+const dummyJoinTokenID = "c72fbec2-2bc2-4491-8b21-a847dc3b7746"
+const dummyJoinTokenSharedSecret = "sEcr3t!"
 
 // ErrInvalidAddJoinToken is an error to signal server rejected Add/Join token as invalid.
 var ErrInvalidAddJoinToken = errors.New("invalid add/join token received")
@@ -47,26 +51,53 @@ func (s *adminServer) RequestCA(
 	return res, nil
 }
 
-// RequestCertBundle makes it possible for a node to request its TLS certs from another node.
+// GenerateJoinToken creates a joinToken that includes the fingerprint of
+// caCert signed with a randomly generated sharedSecret.
+// TODO(aaron-crl): Implement this.
+func GenerateJoinToken(caCert []byte) ([]byte, error) {
+	var j joinToken
+	var err error
+	j.tokenID, err = uuid.FromString(dummyJoinTokenID)
+	if err != nil {
+		return nil, err
+	}
+	j.sharedSecret = []byte(dummyJoinTokenSharedSecret)
+	j.sign(caCert)
+	return j.MarshalText()
+}
+
+// TODO(aarcon-crl): Implement this.
+func (j joinToken) consumeJoinToken() error {
+	dummyUUID, _ := uuid.FromString(dummyJoinTokenID)
+	if j.tokenID != dummyUUID {
+		return ErrInvalidAddJoinToken
+	}
+	if bytes.Equal(j.sharedSecret, []byte(dummyJoinTokenSharedSecret)) {
+		return ErrInvalidAddJoinToken
+	}
+	return nil
+}
+
+// RequestCertBundle makes it possible for a node to request its TLS certs from
+// another node. It will validate and attempt to consume a token with the uuid
+// and shared secret provided.
 func (s *adminServer) RequestCertBundle(
 	ctx context.Context, req *serverpb.BundleRequest,
 ) (*serverpb.BundleResponse, error) {
-	// Validate Add/Join token sharedSecret.
 	var err error
-	jt := joinToken{}
-	jt.tokenID, err = uuid.FromString(req.TokenID)
+	var clientToken joinToken
+	clientToken.sharedSecret = []byte(req.SharedSecret)
+	clientToken.tokenID, err = uuid.FromString(req.TokenID)
 	if err != nil {
-		return nil, ErrInvalidAddJoinToken
-	}
-	isValidToken, err := jt.isValid(s.server.gossip)
-	if err != nil {
-		return nil, errors.Wrap(
-			err, "failed to validate token")
-	}
-	if !isValidToken {
 		return nil, ErrInvalidAddJoinToken
 	}
 
+	// Attempt to consume clientToken, error if unsuccessful.
+	if err := clientToken.consumeJoinToken(); err != nil {
+		return nil, err
+	}
+
+	// Collect certs to send to client.
 	certBundle, err := collectLocalCABundle(s.server.cfg.SSLCertsDir)
 	if err != nil {
 		// TODO(aaron-crl): Log the reason for the error on the server.

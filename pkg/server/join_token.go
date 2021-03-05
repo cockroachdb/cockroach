@@ -20,7 +20,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -148,18 +147,4 @@ func (j *joinToken) MarshalText() ([]byte, error) {
 		return nil, err
 	}
 	return b.Bytes(), nil
-}
-
-// Checks the join token in the gossip store matches the marshaled form of
-// the passed-in join token.
-func (j *joinToken) isValid(g *gossip.Gossip) (bool, error) {
-	token, err := g.GetInfo(gossip.MakeJoinTokenKey(j.tokenID))
-	if err != nil {
-		return false, err
-	}
-	token2, err := j.MarshalText()
-	if err != nil {
-		return false, err
-	}
-	return bytes.Equal(token, token2), nil
 }
