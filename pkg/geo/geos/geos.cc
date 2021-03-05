@@ -174,6 +174,8 @@ typedef char (*CR_GEOS_EqualsExact_r)(CR_GEOS_Handle, CR_GEOS_Geometry,
 
 typedef CR_GEOS_Geometry (*CR_GEOS_MinimumRotatedRectangle_r)(CR_GEOS_Handle, CR_GEOS_Geometry);
 
+typedef CR_GEOS_Geometry (*CR_GEOS_Snap_r)(CR_GEOS_Handle, CR_GEOS_Geometry, CR_GEOS_Geometry, double);
+
 std::string ToString(CR_GEOS_Slice slice) { return std::string(slice.data, slice.len); }
 
 }  // namespace
@@ -283,6 +285,8 @@ struct CR_GEOS {
 
   CR_GEOS_Node_r GEOSNode_r;
 
+  CR_GEOS_Snap_r GEOSSnap_r;
+
   CR_GEOS(dlhandle geoscHandle, dlhandle geosHandle)
       : geoscHandle(geoscHandle), geosHandle(geosHandle) {}
 
@@ -385,6 +389,7 @@ struct CR_GEOS {
     INIT(GEOSWKBWriter_write_r);
     INIT(GEOSClipByRect_r);
     INIT(GEOSNode_r);
+    INIT(GEOSSnap_r);
     return nullptr;
 
 #undef INIT
@@ -1520,6 +1525,30 @@ CR_GEOS_Status CR_GEOS_MinimumRotatedRectangle(CR_GEOS* lib, CR_GEOS_Slice g, CR
     lib->GEOSGeom_destroy_r(handle, gGeom);
   }
 
+  lib->GEOS_finish_r(handle);
+  return toGEOSString(error.data(), error.length());
+}
+
+CR_GEOS_Status CR_GEOS_Snap(CR_GEOS* lib, CR_GEOS_Slice input, CR_GEOS_Slice target, double tolerance, CR_GEOS_String* snappedEWKB) {
+  std::string error;
+  auto handle = initHandleWithErrorBuffer(lib, &error);
+  auto gGeomInput = CR_GEOS_GeometryFromSlice(lib, handle, input);
+  auto gGeomTarget = CR_GEOS_GeometryFromSlice(lib, handle, target);
+  *snappedEWKB = {.data = NULL, .len = 0};
+  if (gGeomInput != nullptr && gGeomTarget != nullptr) {
+    auto r = lib->GEOSSnap_r(handle, gGeomInput, gGeomTarget, tolerance);
+    if (r != NULL) {
+      auto srid = lib->GEOSGetSRID_r(handle, r);
+      CR_GEOS_writeGeomToEWKB(lib, handle, r, snappedEWKB, srid);
+      lib->GEOSGeom_destroy_r(handle, r);
+    }
+  }
+  if (gGeomInput != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, gGeomInput);
+  }
+  if (gGeomTarget != nullptr) {
+    lib->GEOSGeom_destroy_r(handle, gGeomTarget);
+  }
   lib->GEOS_finish_r(handle);
   return toGEOSString(error.data(), error.length());
 }
