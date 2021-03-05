@@ -287,6 +287,19 @@ POINT ZM (1 2 3 4)
 GEOMETRYCOLLECTION ZM (POINT ZM EMPTY, LINESTRING ZM (1 2 7 17, 3 4 7 17))
 
 query T
+SELECT st_astext(st_addmeasure(geom, 0, 10)) FROM
+( VALUES
+  ('LINESTRING(0 0, 1 1, 2 2)'::geometry),
+  ('MULTILINESTRING((0 0, 1 1, 2 2), EMPTY)'::geometry)
+) AS t(geom)
+----
+LINESTRING M (0 0 0, 1 1 5, 2 2 10)
+MULTILINESTRING M ((0 0 0, 1 1 5, 2 2 10), EMPTY)
+
+statement error input geometry must be LINESTRING or MULTILINESTRING
+SELECT st_astext(st_addmeasure('POINT(0 0)'::geometry, 0, 1))
+
+query T
 SELECT ST_AsEWKT(ST_RotateX(ST_GeomFromEWKT('LINESTRING(1 2 3, 1 1 1)'), pi()/2));
 ----
 LINESTRING Z (1 -3 2, 1 -1 1)

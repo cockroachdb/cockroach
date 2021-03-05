@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "geomfn",
     srcs = [
+        "add_measure.go",
         "affine_transforms.go",
         "angle.go",
         "azimuth.go",
@@ -59,6 +60,7 @@ go_test(
     name = "geomfn_test",
     size = "small",
     srcs = [
+        "add_measure_test.go",
         "affine_transforms_test.go",
         "angle_test.go",
         "azimuth_test.go",
