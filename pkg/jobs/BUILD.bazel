@@ -30,6 +30,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/security",
+        "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",

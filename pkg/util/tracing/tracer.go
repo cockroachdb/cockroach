@@ -41,17 +41,18 @@ import (
 const verboseTracingBaggageKey = "sb"
 
 const (
-	// maxLogsPerSpan limits the number of logs in a Span; use a comfortable
-	// limit.
-	maxLogsPerSpan = 1000
-	// maxStructuredEventsPerSpan limits the number of structured events in a
-	// span; use a comfortable limit.
-	maxStructuredEventsPerSpan = 50
+	// maxRecordedBytesPerSpan limits the size of logs and structured in a span;
+	// use a comfortable limit.
+	maxLogBytesPerSpan        = 256 * (1 << 10) // 256 KiB
+	maxStructuredBytesPerSpan = 10 * (1 << 10)  // 10 KiB
 	// maxChildrenPerSpan limits the number of (direct) child spans in a Span.
 	maxChildrenPerSpan = 1000
 	// maxSpanRegistrySize limits the number of local root spans tracked in
 	// a Tracer's registry.
 	maxSpanRegistrySize = 5000
+	// maxLogsPerSpanExternal limits the number of logs in a Span for external
+	// tracers (net/trace, lightstep); use a comfortable limit.
+	maxLogsPerSpanExternal = 1000
 )
 
 // These constants are used to form keys to represent tracing context
@@ -146,6 +147,8 @@ type Tracer struct {
 	TracingVerbosityIndependentSemanticsIsActive func() bool
 
 	includeAsyncSpansInRecordings bool // see TestingIncludeAsyncSpansInRecordings
+
+	testing *testingKnob
 }
 
 // NewTracer creates a Tracer. It initially tries to run with minimal overhead
@@ -321,7 +324,7 @@ func (t *Tracer) startSpanGeneric(
 	var netTr trace.Trace
 	if t.useNetTrace() {
 		netTr = trace.New("tracing", opName)
-		netTr.SetMaxEvents(maxLogsPerSpan)
+		netTr.SetMaxEvents(maxLogsPerSpanExternal)
 
 		// If LogTags are given, pass them as tags to the shadow span.
 		// Regular tags are populated later, via the top-level Span.
@@ -367,8 +370,10 @@ func (t *Tracer) startSpanGeneric(
 		mu: crdbSpanMu{
 			duration: -1, // unfinished
 		},
+		testing: t.testing,
 	}
-	helper.crdbSpan.mu.structured.Reserve(maxStructuredEventsPerSpan)
+	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)
+	helper.crdbSpan.mu.recording.structured = newSizeLimitedBuffer(maxStructuredBytesPerSpan)
 	helper.span.i = spanInner{
 		tracer: t,
 		crdb:   &helper.crdbSpan,

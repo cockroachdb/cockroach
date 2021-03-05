@@ -130,3 +130,14 @@ user testuser
 # testuser should no longer have the ability to control jobs.
 statement error pq: user testuser does not have CONTROLJOB privilege
 PAUSE JOB (SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC')
+
+user root
+
+# Validate that the schema_change_successful metric
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name in ('job.schema_change.successful') AND
+usage_count > 0
+ORDER BY feature_name DESC
+----
+job.schema_change.successful
