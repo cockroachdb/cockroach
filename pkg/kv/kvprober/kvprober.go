@@ -39,10 +39,9 @@ type Prober struct {
 	settings   *cluster.Settings
 	// planner is an interface for selecting a range to probe.
 	planner planner
-
-	// Metrics wraps up the set of prometheus metrics that the prober sets. The
+	// metrics wraps up the set of prometheus metrics that the prober sets; the
 	// goal of the prober IS to populate these metrics.
-	Metrics Metrics
+	metrics Metrics
 }
 
 // Opts provides knobs to control kvprober.Prober.
@@ -113,7 +112,7 @@ func NewProber(opts Opts) *Prober {
 		settings:   opts.Settings,
 
 		planner: newMeta2Planner(opts.DB, opts.Settings),
-		Metrics: Metrics{
+		metrics: Metrics{
 			ReadProbeAttempts: metric.NewCounter(metaReadProbeAttempts),
 			ReadProbeFailures: metric.NewCounter(metaReadProbeFailures),
 			ReadProbeLatency:  metric.NewLatency(metaReadProbeLatency, opts.HistogramWindowInterval),
@@ -121,6 +120,11 @@ func NewProber(opts Opts) *Prober {
 			ProbePlanFailures: metric.NewCounter(metaProbePlanFailures),
 		},
 	}
+}
+
+// Metrics returns a struct which contains the kvprober metrics.
+func (p *Prober) Metrics() Metrics {
+	return p.metrics
 }
 
 // Start causes kvprober to start probing KV. Start returns immediately. Start
@@ -170,12 +174,12 @@ func (p *Prober) probe(ctx context.Context, db dbGet) {
 		return
 	}
 
-	p.Metrics.ProbePlanAttempts.Inc(1)
+	p.metrics.ProbePlanAttempts.Inc(1)
 
 	step, err := p.planner.next(ctx)
 	if err != nil {
 		log.Health.Errorf(ctx, "can't make a plan: %v", err)
-		p.Metrics.ProbePlanFailures.Inc(1)
+		p.metrics.ProbePlanFailures.Inc(1)
 		return
 	}
 
@@ -186,7 +190,7 @@ func (p *Prober) probe(ctx context.Context, db dbGet) {
 	// ProbePlanFailures. This would probably be a ticket alerting as
 	// the impact is more low visibility into possible failures than a high
 	// impact production issue.
-	p.Metrics.ReadProbeAttempts.Inc(1)
+	p.metrics.ReadProbeAttempts.Inc(1)
 
 	start := timeutil.Now()
 
@@ -204,7 +208,7 @@ func (p *Prober) probe(ctx context.Context, db dbGet) {
 	if err != nil {
 		// TODO(josh): Write structured events with log.Structured.
 		log.Health.Errorf(ctx, "kv.Get(%s), r=%v failed with: %v", step.StartKey, step.RangeID, err)
-		p.Metrics.ReadProbeFailures.Inc(1)
+		p.metrics.ReadProbeFailures.Inc(1)
 		return
 	}
 
@@ -212,7 +216,7 @@ func (p *Prober) probe(ctx context.Context, db dbGet) {
 	log.Health.Infof(ctx, "kv.Get(%s), r=%v returned success in %v", step.StartKey, step.RangeID, d)
 
 	// Latency of failures is not recorded. They are counted as failures tho.
-	p.Metrics.ReadProbeLatency.RecordValue(d.Nanoseconds())
+	p.metrics.ReadProbeLatency.RecordValue(d.Nanoseconds())
 }
 
 // Returns a random duration pulled from the uniform distribution given below:

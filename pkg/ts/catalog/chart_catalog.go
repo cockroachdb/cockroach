@@ -576,6 +576,26 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{KVTransactionLayer, "Prober"}}, Charts: []chartDescription{
+			{
+				Title: "Availability",
+				Metrics: []string{
+					"kv.prober.planning_attempts",
+					"kv.prober.planning_failures",
+					"kv.prober.read.attempts",
+					"kv.prober.read.failures",
+				},
+				AxisLabel: "Probes",
+			},
+			{
+				Title: "Latency",
+				Metrics: []string{
+					"kv.prober.read.latency",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{
 			{KVTransactionLayer, "Clocks"},
 			{Process, "Clocks"},
