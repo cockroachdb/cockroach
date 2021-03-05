@@ -416,12 +416,19 @@ func performMultiRegionFinalization(
 	if err != nil {
 		return nil, err
 	}
+	regionNames, err := typeDesc.RegionNames()
+	if err != nil {
+		return nil, err
+	}
+	regionConfig := NewRegionConfig(
+		regionNames, dbDesc.RegionConfig.PrimaryRegion, dbDesc.RegionConfig.SurvivalGoal,
+	)
 	// Once the region promotion/demotion is complete, we update the
 	// zone configuration on the database.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		ctx,
 		dbDesc.ID,
-		*dbDesc.RegionConfig,
+		regionConfig,
 		txn,
 		execCfg,
 	); err != nil {
@@ -554,11 +561,15 @@ func repartitionRegionalByRowTables(
 		}
 
 		// Update the zone configurations now that the partition's been added.
+		regionConfig, err := CreateRegionConfig(ctx, txn, dbDesc, descsCol)
+		if err != nil {
+			return nil, err
+		}
 		if err := ApplyZoneConfigForMultiRegionTable(
 			ctx,
 			txn,
 			localPlanner.ExecCfg(),
-			*dbDesc.RegionConfig,
+			regionConfig,
 			tableDesc,
 			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 		); err != nil {

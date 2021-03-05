@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -34,6 +35,55 @@ const minNumRegionsForSurviveRegionGoal = 3
 // LiveClusterRegions is a set representing regions that are live in
 // a given cluster.
 type LiveClusterRegions map[descpb.RegionName]struct{}
+
+// RegionConfig includes all information required to build zone configirations.
+// TODO(arul): commment this better :S
+type RegionConfig struct {
+	survivalGoal  descpb.SurvivalGoal
+	regions       descpb.RegionNames
+	primaryRegion descpb.RegionName
+}
+
+func NewRegionConfig(
+	regions descpb.RegionNames, primaryRegion descpb.RegionName, survivalGoal descpb.SurvivalGoal,
+) *RegionConfig {
+	return &RegionConfig{
+		regions:       regions,
+		primaryRegion: primaryRegion,
+		survivalGoal:  survivalGoal,
+	}
+}
+
+func CreateRegionConfig(
+	ctx context.Context, txn *kv.Txn, dbDesc *dbdesc.Immutable, descsCol *descs.Collection,
+) (*RegionConfig, error) {
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return nil, err
+	}
+
+	regionEnum, err := descsCol.GetImmutableTypeByID(
+		ctx,
+		txn,
+		regionEnumID,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidCached: true,
+			},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	regionNames, err := regionEnum.RegionNames()
+	if err != nil {
+		return nil, err
+	}
+
+	return NewRegionConfig(
+		regionNames, dbDesc.RegionConfig.PrimaryRegion, dbDesc.RegionConfig.SurvivalGoal,
+	), nil
+}
 
 func (s *LiveClusterRegions) isActive(region descpb.RegionName) bool {
 	_, ok := (*s)[region]
@@ -122,20 +172,18 @@ func makeRequiredConstraintForRegion(r descpb.RegionName) zonepb.Constraint {
 //
 // See synthesizeVoterConstraints() for explanation on why `voter_constraints`
 // are set the way they are.
-func zoneConfigForMultiRegionDatabase(
-	regionConfig descpb.DatabaseDescriptor_RegionConfig,
-) (*zonepb.ZoneConfig, error) {
+func zoneConfigForMultiRegionDatabase(regionConfig *RegionConfig) (*zonepb.ZoneConfig, error) {
 	numVoters, numReplicas := getNumVotersAndNumReplicas(regionConfig)
-	constraints := make([]zonepb.ConstraintsConjunction, len(regionConfig.Regions))
-	for i, region := range regionConfig.Regions {
+	constraints := make([]zonepb.ConstraintsConjunction, len(regionConfig.regions))
+	for i, region := range regionConfig.regions {
 		// Constrain at least 1 (voting or non-voting) replica per region.
 		constraints[i] = zonepb.ConstraintsConjunction{
 			NumReplicas: 1,
-			Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region.Name)},
+			Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
 		}
 	}
 
-	voterConstraints, err := synthesizeVoterConstraints(regionConfig.PrimaryRegion, regionConfig)
+	voterConstraints, err := synthesizeVoterConstraints(regionConfig.primaryRegion, regionConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +192,7 @@ func zoneConfigForMultiRegionDatabase(
 		NumReplicas: &numReplicas,
 		NumVoters:   &numVoters,
 		LeasePreferences: []zonepb.LeasePreference{
-			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(regionConfig.PrimaryRegion)}},
+			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(regionConfig.primaryRegion)}},
 		},
 		VoterConstraints: voterConstraints,
 		Constraints:      constraints,
@@ -159,12 +207,11 @@ func zoneConfigForMultiRegionDatabase(
 // the attributes `num_replicas` and `constraints` will be inherited from the
 // database level zone config.
 func zoneConfigForMultiRegionPartition(
-	partitionRegion descpb.DatabaseDescriptor_RegionConfig_Region,
-	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	partitionRegion descpb.RegionName, regionConfig *RegionConfig,
 ) (zonepb.ZoneConfig, error) {
 	numVoters, _ := getNumVotersAndNumReplicas(regionConfig)
 	zc := zonepb.NewZoneConfig()
-	voterConstraints, err := synthesizeVoterConstraints(partitionRegion.Name, regionConfig)
+	voterConstraints, err := synthesizeVoterConstraints(partitionRegion, regionConfig)
 	if err != nil {
 		return zonepb.ZoneConfig{}, err
 	}
@@ -175,7 +222,7 @@ func zoneConfigForMultiRegionPartition(
 
 	zc.InheritedLeasePreferences = false
 	zc.LeasePreferences = []zonepb.LeasePreference{
-		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(partitionRegion.Name)}},
+		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(partitionRegion)}},
 	}
 	return *zc, err
 }
@@ -189,9 +236,7 @@ func maxFailuresBeforeUnavailability(numVoters int32) int32 {
 
 // getNumVotersAndNumReplicas computes the number of voters and the total number
 // of replicas needed for a given region config.
-func getNumVotersAndNumReplicas(
-	regionConfig descpb.DatabaseDescriptor_RegionConfig,
-) (numVoters, numReplicas int32) {
+func getNumVotersAndNumReplicas(regionConfig *RegionConfig) (numVoters, numReplicas int32) {
 	const numVotersForZoneSurvival = 3
 	// Under region survivability, we use 5 voting replicas to allow for a
 	// theoretical (2-2-1) voting replica configuration, where the primary region
@@ -208,8 +253,8 @@ func getNumVotersAndNumReplicas(
 	// may or may not be placed geographically close to the leaseholder replica.
 	const numVotersForRegionSurvival = 5
 
-	numRegions := int32(len(regionConfig.Regions))
-	switch regionConfig.SurvivalGoal {
+	numRegions := int32(len(regionConfig.regions))
+	switch regionConfig.survivalGoal {
 	// NB: See mega-comment inside `synthesizeVoterConstraints()` for why these
 	// are set the way they are.
 	case descpb.SurvivalGoal_ZONE_FAILURE:
@@ -243,10 +288,10 @@ func getNumVotersAndNumReplicas(
 // Under region survivability, we will constrain exactly <quorum - 1> voting
 // replicas in the primary/home region.
 func synthesizeVoterConstraints(
-	region descpb.RegionName, regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	region descpb.RegionName, regionConfig *RegionConfig,
 ) ([]zonepb.ConstraintsConjunction, error) {
 	numVoters, _ := getNumVotersAndNumReplicas(regionConfig)
-	switch regionConfig.SurvivalGoal {
+	switch regionConfig.survivalGoal {
 	case descpb.SurvivalGoal_ZONE_FAILURE:
 		return []zonepb.ConstraintsConjunction{
 			{
@@ -326,7 +371,7 @@ func synthesizeVoterConstraints(
 			},
 		}, nil
 	default:
-		return nil, errors.AssertionFailedf("unknown survival goal: %v", regionConfig.SurvivalGoal)
+		return nil, errors.AssertionFailedf("unknown survival goal: %v", regionConfig.survivalGoal)
 	}
 }
 
@@ -345,8 +390,7 @@ func synthesizeVoterConstraints(
 // `zonepb.MultiRegionZoneConfigFields`) will be overwritten by the calling function
 // into an existing ZoneConfig.
 func zoneConfigForMultiRegionTable(
-	localityConfig descpb.TableDescriptor_LocalityConfig,
-	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	localityConfig descpb.TableDescriptor_LocalityConfig, regionConfig *RegionConfig,
 ) (*zonepb.ZoneConfig, error) {
 	// We only care about NumVoters here at the table level. NumReplicas is set at
 	// the database level, not at the table/partition level.
@@ -421,7 +465,7 @@ func applyZoneConfigForMultiRegion(
 // applyZoneConfigForMultiRegionTable.
 type applyZoneConfigForMultiRegionTableOption func(
 	zoneConfig zonepb.ZoneConfig,
-	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	regionConfig *RegionConfig,
 	table catalog.TableDescriptor,
 ) (hasNewSubzones bool, newZoneConfig zonepb.ZoneConfig, err error)
 
@@ -432,18 +476,18 @@ func applyZoneConfigForMultiRegionTableOptionNewIndexes(
 ) applyZoneConfigForMultiRegionTableOption {
 	return func(
 		zoneConfig zonepb.ZoneConfig,
-		regionConfig descpb.DatabaseDescriptor_RegionConfig,
+		regionConfig *RegionConfig,
 		table catalog.TableDescriptor,
 	) (hasNewSubzones bool, newZoneConfig zonepb.ZoneConfig, err error) {
 		for _, indexID := range indexIDs {
-			for _, region := range regionConfig.Regions {
+			for _, region := range regionConfig.regions {
 				zc, err := zoneConfigForMultiRegionPartition(region, regionConfig)
 				if err != nil {
 					return false, zoneConfig, err
 				}
 				zoneConfig.SetSubzone(zonepb.Subzone{
 					IndexID:       uint32(indexID),
-					PartitionName: string(region.Name),
+					PartitionName: string(region),
 					Config:        zc,
 				})
 			}
@@ -470,7 +514,7 @@ func applyZoneConfigForMultiRegionTableOptionTableNewConfig(
 ) applyZoneConfigForMultiRegionTableOption {
 	return func(
 		zc zonepb.ZoneConfig,
-		regionConfig descpb.DatabaseDescriptor_RegionConfig,
+		regionConfig *RegionConfig,
 		table catalog.TableDescriptor,
 	) (bool, zonepb.ZoneConfig, error) {
 		localityZoneConfig, err := zoneConfigForMultiRegionTable(
@@ -490,7 +534,7 @@ func applyZoneConfigForMultiRegionTableOptionTableNewConfig(
 // configuration fields.
 var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 	zc zonepb.ZoneConfig,
-	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	regionConfig *RegionConfig,
 	table catalog.TableDescriptor,
 ) (bool, zonepb.ZoneConfig, error) {
 	localityConfig := *table.GetLocalityConfig()
@@ -505,7 +549,7 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 
 	hasNewSubzones := table.IsLocalityRegionalByRow()
 	if hasNewSubzones {
-		for _, region := range regionConfig.Regions {
+		for _, region := range regionConfig.regions {
 			subzoneConfig, err := zoneConfigForMultiRegionPartition(region, regionConfig)
 			if err != nil {
 				return false, zc, err
@@ -513,7 +557,7 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 			for _, idx := range table.NonDropIndexes() {
 				zc.SetSubzone(zonepb.Subzone{
 					IndexID:       uint32(idx.GetID()),
-					PartitionName: string(region.Name),
+					PartitionName: string(region),
 					Config:        subzoneConfig,
 				})
 			}
@@ -528,7 +572,7 @@ func ApplyZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
-	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	regionConfig *RegionConfig,
 	table catalog.TableDescriptor,
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) error {
@@ -613,7 +657,7 @@ func ApplyZoneConfigForMultiRegionTable(
 func ApplyZoneConfigFromDatabaseRegionConfig(
 	ctx context.Context,
 	dbID descpb.ID,
-	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	regionConfig *RegionConfig,
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 ) error {
@@ -636,6 +680,8 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 // for a table with a LocalityConfig configured.
 // NOTE: this function uses cached table and schema descriptors. As a result, it may
 // not be safe to run within a schema change.
+// TODO(arul): This looks like a remnant of when we could have tables inside an
+// MR database without a locality config. Investigate if this can be cleaned up.
 func (p *planner) forEachTableWithLocalityConfigInDatabase(
 	ctx context.Context,
 	desc *dbdesc.Mutable,
@@ -700,11 +746,15 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 		ctx,
 		desc,
 		func(ctx context.Context, schema string, tbName tree.TableName, tbDesc *tabledesc.Mutable) error {
+			regionConfig, err := CreateRegionConfig(ctx, p.txn, &desc.Immutable, p.Descriptors())
+			if err != nil {
+				return err
+			}
 			return ApplyZoneConfigForMultiRegionTable(
 				ctx,
 				p.txn,
 				p.ExecCfg(),
-				*desc.RegionConfig,
+				regionConfig,
 				tbDesc,
 				ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 			)
@@ -712,9 +762,15 @@ func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdes
 	)
 }
 
-// initializeMultiRegionDatabase initializes a multi-region database by creating
-// the multi-region enum and the database-level zone configuration.
-func (p *planner) initializeMultiRegionDatabase(ctx context.Context, desc *dbdesc.Mutable) error {
+// maybeInitializeMultiRegionDatabase initializes a multi-region database by if
+// there is a region config on the database descriptor and serves as a
+// pass-through otherwise.
+// Initializing a multi-region database involves creating the multi-region enum
+// seeded with the given regionNames and applying the database-level zone
+// configurations.
+func (p *planner) maybeInitializeMultiRegionDatabase(
+	ctx context.Context, desc *dbdesc.Mutable, regionNames descpb.RegionNames,
+) error {
 	// If the database is not a multi-region database, there's no work to be done.
 	if !desc.IsMultiRegion() {
 		return nil
@@ -722,8 +778,8 @@ func (p *planner) initializeMultiRegionDatabase(ctx context.Context, desc *dbdes
 
 	// Create the multi-region enum.
 	regionLabels := make(tree.EnumValueList, 0, len(desc.RegionConfig.Regions))
-	for _, region := range desc.RegionConfig.Regions {
-		regionLabels = append(regionLabels, tree.EnumValue(region.Name))
+	for _, regionName := range regionNames {
+		regionLabels = append(regionLabels, tree.EnumValue(regionName))
 	}
 
 	if err := p.createEnumWithID(
@@ -737,11 +793,14 @@ func (p *planner) initializeMultiRegionDatabase(ctx context.Context, desc *dbdes
 		return err
 	}
 
+	regionConfig := NewRegionConfig(
+		regionNames, desc.RegionConfig.PrimaryRegion, desc.RegionConfig.SurvivalGoal,
+	)
 	// Create the database-level zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		ctx,
 		desc.ID,
-		*desc.RegionConfig,
+		regionConfig,
 		p.txn,
 		p.execCfg); err != nil {
 		return err

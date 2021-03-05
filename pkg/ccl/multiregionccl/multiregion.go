@@ -36,9 +36,9 @@ func createRegionConfig(
 	survivalGoal tree.SurvivalGoal,
 	primaryRegion tree.Name,
 	regions []tree.Name,
-) (descpb.DatabaseDescriptor_RegionConfig, error) {
+) (descpb.DatabaseDescriptor_RegionConfig, descpb.RegionNames, error) {
 	if err := checkClusterSupportsMultiRegion(evalCtx); err != nil {
-		return descpb.DatabaseDescriptor_RegionConfig{}, err
+		return descpb.DatabaseDescriptor_RegionConfig{}, nil, err
 	}
 
 	if err := utilccl.CheckEnterpriseEnabled(
@@ -47,25 +47,25 @@ func createRegionConfig(
 		execCfg.Organization(),
 		"multi-region features",
 	); err != nil {
-		return descpb.DatabaseDescriptor_RegionConfig{}, err
+		return descpb.DatabaseDescriptor_RegionConfig{}, nil, err
 	}
 
 	var regionConfig descpb.DatabaseDescriptor_RegionConfig
 	var err error
 	regionConfig.SurvivalGoal, err = sql.TranslateSurvivalGoal(survivalGoal)
 	if err != nil {
-		return descpb.DatabaseDescriptor_RegionConfig{}, err
+		return descpb.DatabaseDescriptor_RegionConfig{}, nil, err
 	}
 
 	regionConfig.PrimaryRegion = descpb.RegionName(primaryRegion)
 	if regionConfig.PrimaryRegion != descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
 		if err := sql.CheckLiveClusterRegion(liveRegions, regionConfig.PrimaryRegion); err != nil {
-			return descpb.DatabaseDescriptor_RegionConfig{}, err
+			return descpb.DatabaseDescriptor_RegionConfig{}, nil, err
 		}
 	}
 	if len(regions) > 0 {
 		if regionConfig.PrimaryRegion == descpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
-			return descpb.DatabaseDescriptor_RegionConfig{}, pgerror.Newf(
+			return descpb.DatabaseDescriptor_RegionConfig{}, nil, pgerror.Newf(
 				pgcode.InvalidDatabaseDefinition,
 				"PRIMARY REGION must be specified if REGIONS are specified",
 			)
@@ -75,11 +75,11 @@ func createRegionConfig(
 		for _, r := range regions {
 			region := descpb.RegionName(r)
 			if err := sql.CheckLiveClusterRegion(liveRegions, region); err != nil {
-				return descpb.DatabaseDescriptor_RegionConfig{}, err
+				return descpb.DatabaseDescriptor_RegionConfig{}, nil, err
 			}
 
 			if _, ok := seenRegions[region]; ok {
-				return descpb.DatabaseDescriptor_RegionConfig{}, pgerror.Newf(
+				return descpb.DatabaseDescriptor_RegionConfig{}, nil, pgerror.Newf(
 					pgcode.InvalidName,
 					"region %q defined multiple times",
 					region,
@@ -115,10 +115,15 @@ func createRegionConfig(
 	// well.
 	id, err := catalogkv.GenerateUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
 	if err != nil {
-		return descpb.DatabaseDescriptor_RegionConfig{}, err
+		return descpb.DatabaseDescriptor_RegionConfig{}, nil, err
 	}
 	regionConfig.RegionEnumID = id
-	return regionConfig, nil
+	// TODO(arul): clean this up.
+	var regionNames descpb.RegionNames
+	for region := range regionConfig.Regions {
+		regionNames = append(regionNames, descpb.RegionName(region))
+	}
+	return regionConfig, regionNames, nil
 }
 
 func checkClusterSupportsMultiRegion(evalCtx *tree.EvalContext) error {

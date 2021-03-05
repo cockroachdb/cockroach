@@ -109,7 +109,7 @@ func (p *planner) createDatabase(
 		)
 	}
 
-	regionConfig, err := p.createRegionConfig(
+	regionConfig, regionNames, err := p.createRegionConfig(
 		ctx,
 		database.SurvivalGoal,
 		database.PrimaryRegion,
@@ -131,8 +131,9 @@ func (p *planner) createDatabase(
 	}
 
 	// Initialize the multi-region database by creating the multi-region enum and
-	// database-level zone configuration.
-	if err := p.initializeMultiRegionDatabase(ctx, desc); err != nil {
+	// database-level zone configuration if there is a region config on the
+	// descriptor.
+	if err := p.maybeInitializeMultiRegionDatabase(ctx, desc, regionNames); err != nil {
 		return nil, true, err
 	}
 
@@ -328,26 +329,30 @@ var CreateRegionConfigCCL = func(
 	survivalGoal tree.SurvivalGoal,
 	primaryRegion tree.Name,
 	regions []tree.Name,
-) (descpb.DatabaseDescriptor_RegionConfig, error) {
-	return descpb.DatabaseDescriptor_RegionConfig{}, sqlerrors.NewCCLRequiredError(
+) (descpb.DatabaseDescriptor_RegionConfig, descpb.RegionNames, error) {
+	return descpb.DatabaseDescriptor_RegionConfig{}, nil, sqlerrors.NewCCLRequiredError(
 		errors.New("creating multi-region databases requires a CCL binary"),
 	)
 }
 
 // createRegionConfig creates a new region config from the given parameters.
+// TODO(arul): The fact that this thing is taking a bunch of regions and returning
+// regions is very confusing. Fix it.
+// TODO(arul): Fold this into the RegionConfig struct in region_util.go
+// and replace the usages of database region config with that thing.
 func (p *planner) createRegionConfig(
 	ctx context.Context, survivalGoal tree.SurvivalGoal, primaryRegion tree.Name, regions []tree.Name,
-) (*descpb.DatabaseDescriptor_RegionConfig, error) {
+) (*descpb.DatabaseDescriptor_RegionConfig, descpb.RegionNames, error) {
 	if primaryRegion == "" && len(regions) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	liveRegions, err := p.getLiveClusterRegions(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	regionConfig, err := CreateRegionConfigCCL(
+	regionConfig, regionNames, err := CreateRegionConfigCCL(
 		ctx,
 		p.EvalContext(),
 		p.ExecCfg(),
@@ -357,11 +362,11 @@ func (p *planner) createRegionConfig(
 		regions,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := validateDatabaseRegionConfig(regionConfig); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &regionConfig, nil
+	return &regionConfig, regionNames, nil
 }

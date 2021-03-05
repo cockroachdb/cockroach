@@ -572,12 +572,16 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 		return err
 	}
 
+	regionConfig, err := CreateRegionConfig(params.ctx, params.p.txn, dbDesc, params.p.Descriptors())
+	if err != nil {
+		return err
+	}
 	// Update the zone configuration.
 	if err := ApplyZoneConfigForMultiRegionTable(
 		params.ctx,
 		params.p.txn,
 		params.p.ExecCfg(),
-		*dbDesc.RegionConfig,
+		regionConfig,
 		n.tableDesc,
 		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	); err != nil {

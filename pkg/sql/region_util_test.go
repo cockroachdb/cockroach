@@ -25,17 +25,17 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 
 	testCases := []struct {
 		desc         string
-		regionConfig descpb.DatabaseDescriptor_RegionConfig
+		regionConfig RegionConfig
 		expected     *zonepb.ZoneConfig
 	}{
 		{
 			desc: "one region, zone survival",
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_a"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_a",
 				},
-				PrimaryRegion: "region_a",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_a",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
@@ -66,13 +66,13 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		},
 		{
 			desc: "two regions, zone survival",
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_a"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_a",
 				},
-				PrimaryRegion: "region_a",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_a",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(4),
@@ -109,14 +109,14 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		},
 		{
 			desc: "three regions, zone survival",
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
@@ -159,14 +159,14 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		},
 		{
 			desc: "three regions, region survival",
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
@@ -209,15 +209,15 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		},
 		{
 			desc: "four regions, zone survival",
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(6),
@@ -266,15 +266,15 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 		},
 		{
 			desc: "four regions, region survival",
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: &zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
@@ -326,7 +326,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			res, err := zoneConfigForMultiRegionDatabase(tc.regionConfig)
+			res, err := zoneConfigForMultiRegionDatabase(&tc.regionConfig)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, res)
 		})
@@ -343,7 +343,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 	testCases := []struct {
 		desc           string
 		localityConfig descpb.TableDescriptor_LocalityConfig
-		regionConfig   descpb.DatabaseDescriptor_RegionConfig
+		regionConfig   RegionConfig
 		expected       zonepb.ZoneConfig
 	}{
 		{
@@ -353,15 +353,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 					Global: &descpb.TableDescriptor_LocalityConfig_Global{},
 				},
 			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
 				GlobalReads:               proto.Bool(true),
@@ -377,15 +377,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 					Global: &descpb.TableDescriptor_LocalityConfig_Global{},
 				},
 			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
 				GlobalReads:               proto.Bool(true),
@@ -401,15 +401,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 					RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
 				},
 			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -420,15 +420,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 					RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
 				},
 			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -441,15 +441,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 					},
 				},
 			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -462,15 +462,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 					},
 				},
 			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: *(zonepb.NewZoneConfig()),
 		},
@@ -483,15 +483,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 					},
 				},
 			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_a"},
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
 				NumReplicas: nil, // Set at the database level.
@@ -522,15 +522,15 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 					},
 				},
 			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
 				NumReplicas: nil, // Set at the database level.
@@ -556,7 +556,7 @@ func TestZoneConfigForMultiRegionTable(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			zc, err := zoneConfigForMultiRegionTable(tc.localityConfig, tc.regionConfig)
+			zc, err := zoneConfigForMultiRegionTable(tc.localityConfig, &tc.regionConfig)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, *zc)
 		})
@@ -568,24 +568,22 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 
 	testCases := []struct {
 		desc         string
-		region       descpb.DatabaseDescriptor_RegionConfig_Region
-		regionConfig descpb.DatabaseDescriptor_RegionConfig
+		region       descpb.RegionName
+		regionConfig RegionConfig
 		expected     zonepb.ZoneConfig
 	}{
 		{
-			desc: "4-region table with zone survivability",
-			region: descpb.DatabaseDescriptor_RegionConfig_Region{
-				Name: "region_a",
-			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			desc:   "4-region table with zone survivability",
+			region: "region_a",
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_ZONE_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
 				NumReplicas:          nil, // Set at the database level.
@@ -608,19 +606,17 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 			},
 		},
 		{
-			desc: "4-region table with region survivability",
-			region: descpb.DatabaseDescriptor_RegionConfig_Region{
-				Name: "region_a",
-			},
-			regionConfig: descpb.DatabaseDescriptor_RegionConfig{
-				Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-					{Name: "region_b"},
-					{Name: "region_c"},
-					{Name: "region_a"},
-					{Name: "region_d"},
+			desc:   "4-region table with region survivability",
+			region: "region_a",
+			regionConfig: RegionConfig{
+				regions: descpb.RegionNames{
+					"region_b",
+					"region_c",
+					"region_a",
+					"region_d",
 				},
-				PrimaryRegion: "region_b",
-				SurvivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
+				primaryRegion: "region_b",
+				survivalGoal:  descpb.SurvivalGoal_REGION_FAILURE,
 			},
 			expected: zonepb.ZoneConfig{
 				NumReplicas:          nil, // Set at the database level.
@@ -646,7 +642,7 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			zc, err := zoneConfigForMultiRegionPartition(tc.region, tc.regionConfig)
+			zc, err := zoneConfigForMultiRegionPartition(tc.region, &tc.regionConfig)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, zc)
 		})

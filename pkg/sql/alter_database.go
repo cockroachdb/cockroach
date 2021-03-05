@@ -527,11 +527,18 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		return err
 	}
 
+	regionNames, err := typeDesc.RegionNames()
+	if err != nil {
+		return err
+	}
+
+	regionConfig := NewRegionConfig(regionNames, n.desc.RegionConfig.PrimaryRegion, n.desc.RegionConfig.SurvivalGoal)
+
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
 		n.desc.ID,
-		*n.desc.RegionConfig,
+		regionConfig,
 		params.p.txn,
 		params.p.execCfg,
 	); err != nil {
@@ -585,7 +592,7 @@ func addDefaultLocalityConfigToAllTables(
 func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParams) error {
 	telemetry.Inc(sqltelemetry.SetInitialPrimaryRegionCounter)
 	// Create the region config structure to be added to the database descriptor.
-	regionConfig, err := params.p.createRegionConfig(
+	regionConfig, regionNames, err := params.p.createRegionConfig(
 		params.ctx,
 		tree.SurvivalGoalDefault,
 		n.n.PrimaryRegion,
@@ -618,7 +625,7 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 
 	// Initialize that multi-region database by creating the multi-region enum
 	// and the database-level zone configuration.
-	return params.p.initializeMultiRegionDatabase(params.ctx, n.desc)
+	return params.p.maybeInitializeMultiRegionDatabase(params.ctx, n.desc, regionNames)
 }
 
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
@@ -757,11 +764,15 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		return err
 	}
 
+	regionConfig, err := CreateRegionConfig(params.ctx, params.p.txn, &n.desc.Immutable, params.p.Descriptors())
+	if err != nil {
+		return nil
+	}
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
 		n.desc.ID,
-		*n.desc.RegionConfig,
+		regionConfig,
 		params.p.txn,
 		params.p.execCfg,
 	); err != nil {

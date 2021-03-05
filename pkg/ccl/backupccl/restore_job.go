@@ -1079,7 +1079,7 @@ func createImportingDescriptors(
 				// as the system tables are restored.
 				mrEnumsFound := make(map[descpb.ID]descpb.ID)
 				for _, t := range typesByID {
-					typeDesc := t.TypeDesc()
+					typeDesc := typedesc.NewImmutable(*t.TypeDesc())
 					if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
 						// Check to see if we've found more than one multi-region enum on any
 						// given database.
@@ -1104,10 +1104,17 @@ func createImportingDescriptors(
 							// configuration.
 							if details.DescriptorCoverage != tree.AllDescriptors {
 								log.Infof(ctx, "restoring zone configuration for database %d", desc.ID)
+								regionNames, err := typeDesc.RegionNames()
+								if err != nil {
+									return err
+								}
+								regionConfig := sql.NewRegionConfig(
+									regionNames, desc.RegionConfig.PrimaryRegion, desc.RegionConfig.SurvivalGoal,
+								)
 								if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
 									ctx,
 									desc.GetID(),
-									*desc.RegionConfig,
+									regionConfig,
 									txn,
 									p.ExecCfg(),
 								); err != nil {
@@ -1234,11 +1241,15 @@ func createImportingDescriptors(
 								return err
 							}
 
+							regionConfig, err := sql.CreateRegionConfig(ctx, txn, desc, descsCol)
+							if err != nil {
+								return err
+							}
 							if err := sql.ApplyZoneConfigForMultiRegionTable(
 								ctx,
 								txn,
 								p.ExecCfg(),
-								*desc.RegionConfig,
+								regionConfig,
 								mutTable,
 								sql.ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 							); err != nil {
