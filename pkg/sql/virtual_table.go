@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,8 +68,8 @@ type virtualTableGeneratorResponse struct {
 // * cleanup: Performs all cleanup. This function must be called exactly once
 //   to ensure that resources are cleaned up.
 func setupGenerator(
-	ctx context.Context, worker func(pusher rowPusher) error,
-) (next virtualTableGenerator, cleanup cleanupFunc) {
+	ctx context.Context, worker func(pusher rowPusher) error, stopper *stop.Stopper,
+) (next virtualTableGenerator, cleanup cleanupFunc, setupError error) {
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
 	var wg sync.WaitGroup
@@ -82,14 +83,12 @@ func setupGenerator(
 	// computation through comm, and the generator places rows to consume
 	// back into comm.
 	comm := make(chan virtualTableGeneratorResponse)
-
 	addRow := func(datums ...tree.Datum) error {
 		select {
 		case <-ctx.Done():
 			return cancelchecker.QueryCanceledError
 		case comm <- virtualTableGeneratorResponse{datums: datums}:
 		}
-
 		// Block until the next call to cleanup() or next(). This allows us to
 		// avoid issues with concurrent transaction usage if the worker is using
 		// a transaction. Otherwise, worker could proceed running operations after
@@ -107,7 +106,7 @@ func setupGenerator(
 	}
 
 	wg.Add(1)
-	go func() {
+	if setupError = stopper.RunAsyncTask(ctx, "sql.rowPusher: send rows", func(ctx context.Context) {
 		defer wg.Done()
 		// We wait until a call to next before starting the worker. This prevents
 		// concurrent transaction usage during the startup phase. We also have to
@@ -125,14 +124,19 @@ func setupGenerator(
 		if errors.Is(err, cancelchecker.QueryCanceledError) {
 			return
 		}
-
 		// Notify that we are done sending rows.
 		select {
 		case <-ctx.Done():
 			return
 		case comm <- virtualTableGeneratorResponse{err: err}:
 		}
-	}()
+	}); setupError != nil {
+		// The presence of an error means the goroutine never started,
+		// thus wg.Done() is never called, which can result in
+		// cleanup() being blocked indefinitely on wg.Wait(). We call
+		// wg.Done() manually here to account for this case.
+		wg.Done()
+	}
 
 	next = func() (tree.Datums, error) {
 		// Notify the worker to begin computing a row.
@@ -141,7 +145,6 @@ func setupGenerator(
 		case <-ctx.Done():
 			return nil, cancelchecker.QueryCanceledError
 		}
-
 		// Wait for the row to be sent.
 		select {
 		case <-ctx.Done():
@@ -150,7 +153,7 @@ func setupGenerator(
 			return resp.datums, resp.err
 		}
 	}
-	return next, cleanup
+	return next, cleanup, setupError
 }
 
 // virtualTableNode is a planNode that constructs its rows by repeatedly
