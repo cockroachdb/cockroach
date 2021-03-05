@@ -98,9 +98,11 @@ func (r *Replica) BumpSideTransportClosed(
 	policy := r.closedTimestampPolicyRLocked()
 	target := targetByPolicy[policy]
 
-	// We can't close timestamps outside our lease.
-	st := r.leaseStatusForRequestRLocked(ctx, now, target)
-	if !st.IsValid() || !st.OwnedBy(r.StoreID()) {
+	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
+	if !st.OwnedBy(r.StoreID()) {
+		return false, 0, 0
+	}
+	if st.ClosedTimestampUpperBound().Less(target) {
 		return false, 0, 0
 	}
 
