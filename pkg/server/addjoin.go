@@ -27,19 +27,6 @@ var ErrInvalidAddJoinToken = errors.New("invalid add/join token received")
 // to provide the CertBundle to the client.
 var ErrAddJoinTokenConsumed = errors.New("add/join token consumed but then another error occurred")
 
-// JoinToken is a container for a TokenID and associated SharedSecret for use
-// in certificate-free add/join operations.
-type JoinToken struct {
-	TokenID      uuid.UUID
-	SharedSecret []byte
-	FingerPrint  []byte
-}
-
-func isValidJoinToken(ctx context.Context, jt JoinToken) bool {
-	// TODO(aaron-crl): Replace this stub with correct call.
-	return true
-}
-
 // RequestCA makes it possible for a node to request the node-to-node CA certificate.
 func (s *adminServer) RequestCA(
 	ctx context.Context, req *serverpb.CaRequest,
@@ -66,12 +53,17 @@ func (s *adminServer) RequestCertBundle(
 ) (*serverpb.BundleResponse, error) {
 	// Validate Add/Join token sharedSecret.
 	var err error
-	jt := JoinToken{}
-	jt.TokenID, err = uuid.FromString(req.TokenID)
+	jt := joinToken{}
+	jt.tokenID, err = uuid.FromString(req.TokenID)
 	if err != nil {
 		return nil, ErrInvalidAddJoinToken
 	}
-	if !isValidJoinToken(ctx, jt) {
+	isValidToken, err := jt.isValid(s.server.gossip)
+	if err != nil {
+		return nil, errors.Wrap(
+			err, "failed to validate token")
+	}
+	if !isValidToken {
 		return nil, ErrInvalidAddJoinToken
 	}
 

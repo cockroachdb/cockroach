@@ -74,6 +74,18 @@ func (j *JoinToken) VerifySignature(caCert []byte) bool {
 	return bytes.Equal(signer.Sum(nil), j.fingerprint)
 }
 
+// IsCATrustedByJoinToken will return true if the fingerprint matches provided
+// bundle, false if the signature fails to match, and error if the token fails
+// to parse.
+func IsCATrustedByJoinToken(caCert []byte, rawJoinToken string) (bool, error) {
+	j := joinToken{}
+	err := j.UnmarshalText([]byte(rawJoinToken))
+	if err != nil {
+		return false, errors.Wrap(err, "failed to unpack joinToken")
+	}
+	return j.verifySignature(caCert), nil
+}
+
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
 //
 // The format of the text (after base64-decoding) is:
