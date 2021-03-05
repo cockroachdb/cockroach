@@ -844,9 +844,34 @@ TABLE t_global  ALTER TABLE t_global CONFIGURE ZONE USING
                 lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
-CREATE DATABASE no_initial_region
+CREATE DATABASE no_initial_region;
+USE no_initial_region
 
 statement ok
+CREATE TABLE table_with_partition_by (
+  id INT PRIMARY KEY
+) PARTITION BY LIST (id) (
+  PARTITION "one" VALUES IN (1)
+)
+
+statement error cannot convert database no_initial_region to a multi-region database\nDETAIL: cannot convert table table_with_partition_by to a multi-region table as it is partitioned
+ALTER DATABASE no_initial_region SET PRIMARY REGION "us-east-1"
+
+statement ok
+DROP TABLE table_with_partition_by;
+CREATE TABLE idx_with_partition_by (
+  id INT PRIMARY KEY,
+  a INT,
+  INDEX(a) PARTITION BY LIST (a) (
+    PARTITION "one" VALUES IN (1)
+  )
+)
+
+statement error cannot convert database no_initial_region to a multi-region database\nDETAIL: cannot convert table idx_with_partition_by to a multi-region table as it has index/constraint idx_with_partition_by_a_idx with partitioning
+ALTER DATABASE no_initial_region SET PRIMARY REGION "us-east-1"
+
+statement ok
+DROP TABLE idx_with_partition_by;
 CREATE TABLE no_initial_region.t(k INT)
 
 statement ok
