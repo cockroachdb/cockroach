@@ -22,11 +22,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
+
+var numSteps int
+
+func init() {
+	numSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 50)
+}
 
 func TestKVNemesisSingleNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -45,7 +52,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	config.NumNodes, config.NumReplicas = 1, 1
 	rng, _ := randutil.NewPseudoRand()
 	ct := sqlClosedTimestampTargetInterval{sqlDBs: []*gosql.DB{sqlDB}}
-	failures, err := RunNemesis(ctx, rng, ct, config, db)
+	failures, err := RunNemesis(ctx, rng, ct, config, numSteps, db)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {
@@ -78,7 +85,7 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	config.NumNodes, config.NumReplicas = numNodes, 3
 	rng, _ := randutil.NewPseudoRand()
 	ct := sqlClosedTimestampTargetInterval{sqlDBs: sqlDBs}
-	failures, err := RunNemesis(ctx, rng, ct, config, dbs...)
+	failures, err := RunNemesis(ctx, rng, ct, config, numSteps, dbs...)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {
