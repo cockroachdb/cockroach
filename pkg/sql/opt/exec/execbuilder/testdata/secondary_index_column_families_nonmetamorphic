@@ -253,7 +253,7 @@ SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
 query T kvtrace(Scan,prefix=/Table/55/2/)
 SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
 ----
-Scan /Table/55/2/2.01/3.001/{0-1}, /Table/55/2/2.01/3.001/2/{1-2}
+Scan /Table/55/2/2.01/3.001/0, /Table/55/2/2.01/3.001/2/1
 
 query T
 EXPLAIN SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
@@ -287,7 +287,7 @@ SELECT y FROM t@i WHERE y = 2
 query T kvtrace(Scan,prefix=/Table/56/2/)
 SELECT y FROM t@i WHERE y = 2
 ----
-Scan /Table/56/2/2/{0-1}
+Scan /Table/56/2/2/0
 
 # Ensure that when backfilling an index we only insert the needed k/vs.
 statement ok
