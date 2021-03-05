@@ -79,13 +79,16 @@ func (r *Replica) EmitMLAI() {
 // This is called by the closed timestamp side-transport. The desired closed timestamp
 // is passed as a map from range policy to timestamp; this function looks up the entry
 // for this range.
+//
+// The RangeDescriptor is returned in both the true and false cases.
 func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
 	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
-) (ok bool, _ ctpb.LAI, _ roachpb.RangeClosedTimestampPolicy) {
+) (ok bool, _ ctpb.LAI, _ roachpb.RangeClosedTimestampPolicy, _ *roachpb.RangeDescriptor) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	desc := r.descRLocked()
 
 	// This method can be called even after a Replica is destroyed and removed
 	// from the Store's replicas map, because unlinkReplicaByRangeIDLocked does
@@ -93,7 +96,7 @@ func (r *Replica) BumpSideTransportClosed(
 	// local copy of its leaseholder map. To avoid issues resulting from this,
 	// we first check if the replica is destroyed.
 	if _, err := r.isDestroyedRLocked(); err != nil {
-		return false, 0, 0
+		return false, 0, 0, desc
 	}
 
 	lai := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
@@ -104,17 +107,17 @@ func (r *Replica) BumpSideTransportClosed(
 	// matter.
 	valid := st.IsValid() || st.State == kvserverpb.LeaseState_UNUSABLE
 	if !valid || !st.OwnedBy(r.StoreID()) {
-		return false, 0, 0
+		return false, 0, 0, desc
 	}
 	if st.ClosedTimestampUpperBound().Less(target) {
-		return false, 0, 0
+		return false, 0, 0, desc
 	}
 
 	// If the range is merging into its left-hand neighbor, we can't close
 	// timestamps any more because the joint-range would not be aware of reads
 	// performed based on this advanced closed timestamp.
 	if r.mergeInProgressRLocked() {
-		return false, 0, 0
+		return false, 0, 0, desc
 	}
 
 	// If there are pending Raft proposals in-flight or committed entries that
@@ -130,20 +133,20 @@ func (r *Replica) BumpSideTransportClosed(
 	// proposals and their timestamps are still tracked in proposal buffer's
 	// tracker, and they'll be considered below.
 	if len(r.mu.proposals) > 0 || r.mu.applyingEntries {
-		return false, 0, 0
+		return false, 0, 0, desc
 	}
 
 	// MaybeForwardClosedLocked checks that there are no evaluating requests
 	// writing under target.
 	if !r.mu.proposalBuf.MaybeForwardClosedLocked(ctx, target) {
-		return false, 0, 0
+		return false, 0, 0, desc
 	}
 
 	// Update the replica directly since there's no side-transport connection to
 	// the local node.
 	r.mu.sideTransportClosedTimestamp = target
 	r.mu.sideTransportCloseTimestampLAI = lai
-	return true, lai, policy
+	return true, lai, policy, desc
 }
 
 // closedTimestampTargetRLocked computes the timestamp we'd like to close for
