@@ -53,8 +53,8 @@ func TestProberDoesReads(t *testing.T) {
 
 		time.Sleep(100 * time.Millisecond)
 
-		require.Zero(t, p.Metrics.ProbePlanAttempts.Count())
-		require.Zero(t, p.Metrics.ReadProbeAttempts.Count())
+		require.Zero(t, p.Metrics().ProbePlanAttempts.Count())
+		require.Zero(t, p.Metrics().ReadProbeAttempts.Count())
 	})
 
 	t.Run("happy path", func(t *testing.T) {
@@ -67,13 +67,13 @@ func TestProberDoesReads(t *testing.T) {
 		require.NoError(t, p.Start(ctx, s.Stopper()))
 
 		testutils.SucceedsSoon(t, func() error {
-			if p.Metrics.ReadProbeAttempts.Count() < int64(50) {
-				return errors.Newf("probe count too low: %v", p.Metrics.ReadProbeAttempts.Count())
+			if p.Metrics().ReadProbeAttempts.Count() < int64(50) {
+				return errors.Newf("probe count too low: %v", p.Metrics().ReadProbeAttempts.Count())
 			}
 			return nil
 		})
-		require.Zero(t, p.Metrics.ReadProbeFailures.Count())
-		require.Zero(t, p.Metrics.ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ReadProbeFailures.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
 	})
 
 	t.Run("a single range is unavailable", func(t *testing.T) {
@@ -101,12 +101,12 @@ func TestProberDoesReads(t *testing.T) {
 		// TODO(josh): Once structured logging is in, can check that failures
 		// involved only the time-series range.
 		testutils.SucceedsSoon(t, func() error {
-			if p.Metrics.ReadProbeFailures.Count() < int64(2) {
-				return errors.Newf("error count too low: %v", p.Metrics.ReadProbeFailures.Count())
+			if p.Metrics().ReadProbeFailures.Count() < int64(2) {
+				return errors.Newf("error count too low: %v", p.Metrics().ReadProbeFailures.Count())
 			}
 			return nil
 		})
-		require.Zero(t, p.Metrics.ProbePlanFailures.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
 	})
 
 	t.Run("all ranges are unavailable for Gets", func(t *testing.T) {
@@ -148,9 +148,9 @@ func TestProberDoesReads(t *testing.T) {
 		}
 
 		// Expect all probes to fail but planning to succeed.
-		require.Equal(t, int64(10), p.Metrics.ReadProbeAttempts.Count())
-		require.Equal(t, int64(10), p.Metrics.ReadProbeFailures.Count())
-		require.Zero(t, p.Metrics.ProbePlanFailures.Count())
+		require.Equal(t, int64(10), p.Metrics().ReadProbeAttempts.Count())
+		require.Equal(t, int64(10), p.Metrics().ReadProbeFailures.Count())
+		require.Zero(t, p.Metrics().ProbePlanFailures.Count())
 	})
 }
 

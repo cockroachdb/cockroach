@@ -652,6 +652,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 	})
+	registry.AddMetricStruct(kvProber.Metrics())
 
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
