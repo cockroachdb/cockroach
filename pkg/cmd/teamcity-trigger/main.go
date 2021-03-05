@@ -81,11 +81,16 @@ func runTC(queueBuild func(string, map[string]string)) {
 		// halve these values.
 		parallelism := 4
 
-		// Conditionally override stressflags.
+		opts := map[string]string{
+			"env.PKG": importPath,
+		}
+
+		// Conditionally override settings.
 		switch importPath {
 		case baseImportPath + "kv/kvnemesis":
 			// Disable -maxruns for kvnemesis. Run for the full 1h.
 			maxRuns = 0
+			opts["env.COCKROACH_KVNEMESIS_STEPS"] = "10000"
 		case baseImportPath + "sql/logictest":
 			// Stress logic tests with reduced parallelism (to avoid overloading the
 			// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
@@ -93,10 +98,6 @@ func runTC(queueBuild func(string, map[string]string)) {
 			// Increase logic test timeout.
 			testTimeout = 2 * time.Hour
 			maxTime = 3 * time.Hour
-		}
-
-		opts := map[string]string{
-			"env.PKG": importPath,
 		}
 
 		opts["env.TESTTIMEOUT"] = testTimeout.String()
