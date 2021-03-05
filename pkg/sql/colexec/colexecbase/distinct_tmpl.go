@@ -67,7 +67,7 @@ const _TYPE_WIDTH = 0
 // {{define "distinctOpConstructor"}}
 
 func newSingleDistinct(
-	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T,
+	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T, nullsAreDistinct bool,
 ) (colexecop.Operator, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
@@ -76,9 +76,10 @@ func newSingleDistinct(
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
 			return &distinct_TYPEOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 			// {{end}}
 		}
@@ -109,14 +110,14 @@ type partitioner interface {
 }
 
 // newPartitioner returns a new partitioner on type t.
-func newPartitioner(t *types.T) (partitioner, error) {
+func newPartitioner(t *types.T, nullsAreDistinct bool) (partitioner, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	// {{range .}}
 	case _CANONICAL_TYPE_FAMILY:
 		switch t.Width() {
 		// {{range .WidthOverloads}}
 		case _TYPE_WIDTH:
-			return partitioner_TYPE{}, nil
+			return partitioner_TYPE{nullsAreDistinct: nullsAreDistinct}, nil
 			// {{end}}
 		}
 		// {{end}}
@@ -150,6 +151,8 @@ type distinct_TYPEOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinct_TYPEOp{}
@@ -198,7 +201,7 @@ func (p *distinct_TYPEOp) Next() coldata.Batch {
 		sel = sel[:n]
 		if nulls != nil {
 			for _, idx := range sel {
-				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
+				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct)
 			}
 		} else {
 			for _, idx := range sel {
@@ -213,7 +216,7 @@ func (p *distinct_TYPEOp) Next() coldata.Batch {
 		// TODO(yuzefovich): add BCE assertions for these.
 		if nulls != nil {
 			for idx := 0; idx < n; idx++ {
-				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
+				lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct)
 			}
 		} else {
 			for idx := 0; idx < n; idx++ {
@@ -240,7 +243,9 @@ func (p *distinct_TYPEOp) Next() coldata.Batch {
 // operation over it. It writes the same format to outputCol that sorted
 // distinct does: true for every row that differs from the previous row in the
 // input column.
-type partitioner_TYPE struct{}
+type partitioner_TYPE struct {
+	nullsAreDistinct bool
+}
 
 func (p partitioner_TYPE) partitionWithOrder(
 	colVec coldata.Vec, order []int, outputCol []bool, n int,
@@ -261,7 +266,7 @@ func (p partitioner_TYPE) partitionWithOrder(
 	if nulls != nil {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
 			checkIdx := order[outputIdx]
-			lastVal, lastValNull = checkDistinctWithNulls(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol)
+			lastVal, lastValNull = checkDistinctWithNulls(checkIdx, outputIdx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct)
 		}
 	} else {
 		for outputIdx := 0; outputIdx < n; outputIdx++ {
@@ -288,7 +293,7 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n int)
 	outputCol[0] = true
 	if nulls != nil {
 		for idx := 0; idx < n; idx++ {
-			lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol)
+			lastVal, lastValNull = checkDistinctWithNulls(idx, idx, lastVal, nulls, lastValNull, col, outputCol, p.nullsAreDistinct)
 		}
 	} else {
 		for idx := 0; idx < n; idx++ {
@@ -326,11 +331,14 @@ func checkDistinctWithNulls(
 	lastValNull bool,
 	col []_GOTYPE,
 	outputCol []bool,
+	nullsAreDistinct bool,
 ) (lastVal _GOTYPE, lastValNull bool) {
 	null := nulls.NullAt(checkIdx)
 	if null {
-		if !lastValNull {
-			// The current value is null while the previous was not.
+		if !lastValNull || nullsAreDistinct {
+			// The current value is null, and either the previous one is not
+			// (meaning they are definitely distinct) or we treat nulls as
+			// distinct values.
 			outputCol[outputIdx] = true
 		}
 	} else {

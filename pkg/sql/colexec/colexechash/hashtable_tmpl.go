@@ -151,7 +151,23 @@ func _CHECK_COL_BODY(
 				}
 			}
 			if probeIsNull {
+				// {{if or (.SelectDistinct) (.ProbingAgainstItself)}}
+				// {{/*
+				//     We know that nulls are distinct (because
+				//     allowNullEquality case is handled above) and our probing
+				//     tuple has a NULL value in the current column, so the
+				//     probing tuple is distinct from the build table. Both
+				//     parts of the template condition above are only 'true' if
+				//     the hash table is used for the unordered distinct
+				//     operator, and in that scenario we want to mark the
+				//     current probing tuple as distinct but also set its
+				//     GroupID such that it (the probing tuple) matches itself.
+				// */}}
+				ht.ProbeScratch.distinct[toCheck] = true
+				ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
+				// {{else}}
 				ht.ProbeScratch.GroupID[toCheck] = 0
+				// {{end}}
 			} else if buildIsNull {
 				ht.ProbeScratch.differs[toCheck] = true
 			} else {
@@ -378,13 +394,19 @@ func (ht *HashTable) checkColForDistinctTuples(
 // {{end}}
 
 // {{/*
-func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool) { // */}}
+func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DISTINCT bool) { // */}}
 	// {{define "checkBody" -}}
 	toCheckSlice := ht.ProbeScratch.ToCheck
 	_ = toCheckSlice[nToCheck-1]
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
+		// {{if .SelectDistinct}}
+		if ht.ProbeScratch.distinct[toCheck] {
+			ht.ProbeScratch.HeadID[toCheck] = ht.ProbeScratch.GroupID[toCheck]
+			continue
+		}
+		// {{end}}
 		if !ht.ProbeScratch.differs[toCheck] {
 			// If the current key matches with the probe key, we want to update HeadID
 			// with the current key if it has not been set yet.
@@ -466,15 +488,15 @@ func (ht *HashTable) Check(probeVecs []coldata.Vec, nToCheck uint64, probeSel []
 	switch ht.probeMode {
 	case HashTableDefaultProbeMode:
 		if ht.Same != nil {
-			_CHECK_BODY(true, false)
+			_CHECK_BODY(true, false, false)
 		} else {
-			_CHECK_BODY(false, false)
+			_CHECK_BODY(false, false, false)
 		}
 	case HashTableDeletingProbeMode:
 		if ht.Same != nil {
-			_CHECK_BODY(true, true)
+			_CHECK_BODY(true, true, false)
 		} else {
-			_CHECK_BODY(false, true)
+			_CHECK_BODY(false, true, false)
 		}
 	default:
 		colexecerror.InternalError(errors.AssertionFailedf("unsupported hash table probe mode"))
@@ -493,7 +515,7 @@ func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 		ht.checkColAgainstItself(vecs[i], nToCheck, sel)
 	}
 	nDiffers := uint64(0)
-	_CHECK_BODY(false, false)
+	_CHECK_BODY(false, false, true)
 	return nDiffers
 }
 

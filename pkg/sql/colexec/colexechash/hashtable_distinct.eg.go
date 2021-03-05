@@ -83,7 +83,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -143,7 +144,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -205,7 +207,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -264,7 +267,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -327,7 +331,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -385,7 +390,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -445,7 +451,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -502,7 +509,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -582,7 +590,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -634,7 +643,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -688,7 +698,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -739,7 +750,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -794,7 +806,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -844,7 +857,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -896,7 +910,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -945,7 +960,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1017,7 +1033,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1069,7 +1086,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1123,7 +1141,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1174,7 +1193,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1229,7 +1249,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1279,7 +1300,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1331,7 +1353,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1380,7 +1403,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1450,7 +1474,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1513,7 +1538,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1578,7 +1604,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1640,7 +1667,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1706,7 +1734,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1767,7 +1796,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1830,7 +1860,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1890,7 +1921,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -1968,7 +2000,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2031,7 +2064,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2096,7 +2130,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2158,7 +2193,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2224,7 +2260,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2285,7 +2322,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2348,7 +2386,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2408,7 +2447,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2488,7 +2528,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2551,7 +2592,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2616,7 +2658,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2678,7 +2721,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2744,7 +2788,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2805,7 +2850,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2868,7 +2914,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -2928,7 +2975,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3011,7 +3059,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3082,7 +3131,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3155,7 +3205,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3225,7 +3276,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3299,7 +3351,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3368,7 +3421,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3439,7 +3493,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3507,7 +3562,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3598,7 +3654,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3657,7 +3714,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3718,7 +3776,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3776,7 +3835,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3838,7 +3898,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3895,7 +3956,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -3954,7 +4016,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4010,7 +4073,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4089,7 +4153,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4141,7 +4206,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4195,7 +4261,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4246,7 +4313,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4301,7 +4369,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4351,7 +4420,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4403,7 +4473,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4452,7 +4523,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4524,7 +4596,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4582,7 +4655,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4642,7 +4716,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4699,7 +4774,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4760,7 +4836,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4816,7 +4893,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4874,7 +4952,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -4929,7 +5008,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5007,7 +5087,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5061,7 +5142,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5117,7 +5199,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5170,7 +5253,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5227,7 +5311,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5279,7 +5364,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5333,7 +5419,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5384,7 +5471,8 @@ func (ht *HashTable) checkColAgainstItself(vec coldata.Vec, nToCheck uint64, sel
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5463,7 +5551,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5524,7 +5613,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5587,7 +5677,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5647,7 +5738,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5714,7 +5806,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5775,7 +5868,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5838,7 +5932,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5898,7 +5993,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -5980,7 +6076,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6033,7 +6130,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6088,7 +6186,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6140,7 +6239,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6199,7 +6299,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6252,7 +6353,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6307,7 +6409,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6359,7 +6462,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6439,7 +6543,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6492,7 +6597,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6547,7 +6653,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6599,7 +6706,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6658,7 +6766,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6711,7 +6820,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6766,7 +6876,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6818,7 +6929,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6890,7 +7002,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -6954,7 +7067,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7020,7 +7134,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7083,7 +7198,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7153,7 +7269,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7217,7 +7334,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7283,7 +7401,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7346,7 +7465,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7432,7 +7552,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7496,7 +7617,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7562,7 +7684,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7625,7 +7748,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7695,7 +7819,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7759,7 +7884,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7825,7 +7951,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7888,7 +8015,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -7976,7 +8104,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8040,7 +8169,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8106,7 +8236,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8169,7 +8300,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8239,7 +8371,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8303,7 +8436,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8369,7 +8503,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8432,7 +8567,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8526,7 +8662,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8598,7 +8735,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8672,7 +8810,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8743,7 +8882,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8821,7 +8961,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8893,7 +9034,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -8967,7 +9109,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9038,7 +9181,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9134,7 +9278,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9194,7 +9339,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9256,7 +9402,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9315,7 +9462,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9381,7 +9529,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9441,7 +9590,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9503,7 +9653,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9562,7 +9713,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9643,7 +9795,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9696,7 +9849,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9751,7 +9905,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9803,7 +9958,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9862,7 +10018,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9915,7 +10072,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -9970,7 +10128,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10022,7 +10181,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10096,7 +10256,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10155,7 +10316,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10216,7 +10378,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10274,7 +10437,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10339,7 +10503,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10398,7 +10563,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10459,7 +10625,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10517,7 +10684,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10597,7 +10765,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10652,7 +10821,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10709,7 +10879,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10763,7 +10934,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10824,7 +10996,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10879,7 +11052,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10936,7 +11110,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -10990,7 +11165,8 @@ func (ht *HashTable) checkColForDistinctTuples(
 											}
 										}
 										if probeIsNull {
-											ht.ProbeScratch.GroupID[toCheck] = 0
+											ht.ProbeScratch.distinct[toCheck] = true
+											ht.ProbeScratch.GroupID[toCheck] = toCheck + 1
 										} else if buildIsNull {
 											ht.ProbeScratch.differs[toCheck] = true
 										} else {
@@ -11035,6 +11211,10 @@ func (ht *HashTable) CheckProbeForDistinct(vecs []coldata.Vec, nToCheck uint64, 
 	for toCheckPos := uint64(0); toCheckPos < nToCheck && nDiffers < nToCheck; toCheckPos++ {
 		//gcassert:bce
 		toCheck := toCheckSlice[toCheckPos]
+		if ht.ProbeScratch.distinct[toCheck] {
+			ht.ProbeScratch.HeadID[toCheck] = ht.ProbeScratch.GroupID[toCheck]
+			continue
+		}
 		if !ht.ProbeScratch.differs[toCheck] {
 			// If the current key matches with the probe key, we want to update HeadID
 			// with the current key if it has not been set yet.

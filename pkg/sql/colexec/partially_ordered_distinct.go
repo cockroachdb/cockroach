@@ -31,13 +31,15 @@ func newPartiallyOrderedDistinct(
 	distinctCols []uint32,
 	orderedCols []uint32,
 	typs []*types.T,
+	nullsAreDistinct bool,
+	errorOnDup string,
 ) (colexecop.Operator, error) {
 	if len(orderedCols) == 0 || len(orderedCols) == len(distinctCols) {
 		return nil, errors.AssertionFailedf(
 			"partially ordered distinct wrongfully planned: numDistinctCols=%d "+
 				"numOrderedCols=%d", len(distinctCols), len(orderedCols))
 	}
-	chunker, err := newChunker(allocator, input, typs, orderedCols)
+	chunker, err := newChunker(allocator, input, typs, orderedCols, nullsAreDistinct)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +61,7 @@ func newPartiallyOrderedDistinct(
 			distinctUnorderedCols = append(distinctUnorderedCols, distinctCol)
 		}
 	}
-	distinct := NewUnorderedDistinct(allocator, chunkerOperator, distinctUnorderedCols, typs)
+	distinct := NewUnorderedDistinct(allocator, chunkerOperator, distinctUnorderedCols, typs, nullsAreDistinct, errorOnDup)
 	return &partiallyOrderedDistinct{
 		input:    chunkerOperator,
 		distinct: distinct.(colexecop.ResettableOperator),

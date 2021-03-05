@@ -30,7 +30,7 @@ import (
 )
 
 func newSingleDistinct(
-	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T,
+	input colexecop.Operator, distinctColIdx int, outputCol []bool, t *types.T, nullsAreDistinct bool,
 ) (colexecop.Operator, error) {
 	switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
 	case types.BoolFamily:
@@ -38,9 +38,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctBoolOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.BytesFamily:
@@ -48,9 +49,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctBytesOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.DecimalFamily:
@@ -58,31 +60,35 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctDecimalOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.IntFamily:
 		switch t.Width() {
 		case 16:
 			return &distinctInt16Op{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		case 32:
 			return &distinctInt32Op{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		case -1:
 		default:
 			return &distinctInt64Op{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.FloatFamily:
@@ -90,9 +96,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctFloat64Op{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.TimestampTZFamily:
@@ -100,9 +107,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctTimestampOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.IntervalFamily:
@@ -110,9 +118,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctIntervalOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case types.JsonFamily:
@@ -120,9 +129,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctJSONOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	case typeconv.DatumVecCanonicalTypeFamily:
@@ -130,9 +140,10 @@ func newSingleDistinct(
 		case -1:
 		default:
 			return &distinctDatumOp{
-				OneInputHelper: colexecop.MakeOneInputHelper(input),
-				distinctColIdx: distinctColIdx,
-				outputCol:      outputCol,
+				OneInputHelper:   colexecop.MakeOneInputHelper(input),
+				distinctColIdx:   distinctColIdx,
+				outputCol:        outputCol,
+				nullsAreDistinct: nullsAreDistinct,
 			}, nil
 		}
 	}
@@ -161,6 +172,8 @@ type distinctBoolOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctBoolOp{}
@@ -216,13 +229,16 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -310,13 +326,16 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -423,6 +442,8 @@ type distinctBytesOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctBytesOp{}
@@ -478,13 +499,16 @@ func (p *distinctBytesOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -556,13 +580,16 @@ func (p *distinctBytesOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -653,6 +680,8 @@ type distinctDecimalOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctDecimalOp{}
@@ -708,13 +737,16 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -786,13 +818,16 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -883,6 +918,8 @@ type distinctInt16Op struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctInt16Op{}
@@ -938,13 +975,16 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -1038,13 +1078,16 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -1157,6 +1200,8 @@ type distinctInt32Op struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctInt32Op{}
@@ -1212,13 +1257,16 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -1312,13 +1360,16 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -1431,6 +1482,8 @@ type distinctInt64Op struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctInt64Op{}
@@ -1486,13 +1539,16 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -1586,13 +1642,16 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -1705,6 +1764,8 @@ type distinctFloat64Op struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctFloat64Op{}
@@ -1760,13 +1821,16 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -1876,13 +1940,16 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -2011,6 +2078,8 @@ type distinctTimestampOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctTimestampOp{}
@@ -2066,13 +2135,16 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -2158,13 +2230,16 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -2269,6 +2344,8 @@ type distinctIntervalOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctIntervalOp{}
@@ -2324,13 +2401,16 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -2402,13 +2482,16 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -2499,6 +2582,8 @@ type distinctJSONOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctJSONOp{}
@@ -2554,13 +2639,16 @@ func (p *distinctJSONOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -2644,13 +2732,16 @@ func (p *distinctJSONOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -2764,6 +2855,8 @@ type distinctDatumOp struct {
 	foundFirstRow bool
 
 	lastValNull bool
+
+	nullsAreDistinct bool
 }
 
 var _ colexecop.ResettableOperator = &distinctDatumOp{}
@@ -2819,13 +2912,16 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
@@ -2901,13 +2997,16 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 					)
 					{
 						var (
-							checkIdx  int = idx
-							outputIdx int = idx
+							checkIdx         int  = idx
+							outputIdx        int  = idx
+							nullsAreDistinct bool = p.nullsAreDistinct
 						)
 						null := nulls.NullAt(checkIdx)
 						if null {
-							if !lastValNull {
-								// The current value is null while the previous was not.
+							if !lastValNull || nullsAreDistinct {
+								// The current value is null, and either the previous one is not
+								// (meaning they are definitely distinct) or we treat nulls as
+								// distinct values.
 								outputCol[outputIdx] = true
 							}
 						} else {
