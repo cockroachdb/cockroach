@@ -1271,6 +1271,8 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td></tr>
 <tr><td><a name="postgis_wagyu_version"></a><code>postgis_wagyu_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
 </span></td></tr>
+<tr><td><a name="st_addmeasure"></a><code>st_addmeasure(geometry: geometry, start: <a href="float.html">float</a>, end: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a copy of a LineString or MultiLineString with measure coordinates linearly interpolated between the specified start and end values. Any existing M coordinates will be overwritten.</p>
+</span></td></tr>
 <tr><td><a name="st_addpoint"></a><code>st_addpoint(line_string: geometry, point: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Adds a Point to the end of a LineString.</p>
 </span></td></tr>
 <tr><td><a name="st_addpoint"></a><code>st_addpoint(line_string: geometry, point: geometry, index: <a href="int.html">int</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Adds a Point to a LineString at the given 0-based index (-1 to append).</p>
@@ -2705,6 +2707,8 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>, scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>This function is used internally to round decimal values during mutations.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>[], scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a>[]</code></td><td><span class="funcdesc"><p>This function is used internally to round decimal array values during mutations.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.set_trace_verbose"></a><code>crdb_internal.set_trace_verbose(trace_id: <a href="int.html">int</a>, verbosity: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if root span was found and verbosity was set, false otherwise.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.set_vmodule"></a><code>crdb_internal.set_vmodule(vmodule_string: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Set the equivalent of the <code>--vmodule</code> flag on the gateway node processing this request; it affords control over the logging verbosity of different files. Example syntax: <code>crdb_internal.set_vmodule('recordio=2,file=1,gfs*=3')</code>. Reset with: <code>crdb_internal.set_vmodule('')</code>. Raising the verbosity can severely affect performance.</p>
 </span></td></tr>

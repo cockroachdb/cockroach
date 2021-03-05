@@ -2885,6 +2885,28 @@ The requested number of points must be not larger than 65336.`,
 			tree.VolatilityImmutable,
 		),
 	),
+	"st_addmeasure": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"geometry", types.Geometry}, {"start", types.Float}, {"end", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				start := tree.MustBeDFloat(args[1])
+				end := tree.MustBeDFloat(args[2])
+
+				ret, err := geomfn.AddMeasure(g.Geometry, float64(start), float64(end))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{info: "Returns a copy of a LineString or MultiLineString with measure coordinates " +
+				"linearly interpolated between the specified start and end values. " +
+				"Any existing M coordinates will be overwritten."}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_lineinterpolatepoint": makeBuiltin(
 		defProps(),
 		lineInterpolatePointForRepeatOverload(

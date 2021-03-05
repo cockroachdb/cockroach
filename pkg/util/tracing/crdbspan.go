@@ -127,7 +127,7 @@ func (s *crdbSpan) enableRecording(parent *crdbSpan, recType RecordingType) {
 	if parent != nil {
 		parent.addChild(s)
 	}
-	if recType == RecordingOff {
+	if recType == RecordingOff || s.recordingType() == recType {
 		return
 	}
 
@@ -157,6 +157,9 @@ func (s *crdbSpan) resetRecording() {
 }
 
 func (s *crdbSpan) disableRecording() {
+	if s.recordingType() == RecordingOff {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	oldRecType := s.mu.recording.recordingType.swap(RecordingOff)
@@ -408,6 +411,24 @@ func (s *crdbSpan) addChild(child *crdbSpan) {
 		s.mu.recording.children = append(s.mu.recording.children, child)
 	}
 	s.mu.Unlock()
+}
+
+// setVerboseRecursively sets the verbosity of the crdbSpan appropriately and
+// recurses on its list of children.
+func (s *crdbSpan) setVerboseRecursively(to bool) {
+	if to {
+		s.enableRecording(nil /* parent */, RecordingVerbose)
+	} else {
+		s.disableRecording()
+	}
+
+	s.mu.Lock()
+	children := s.mu.recording.children
+	s.mu.Unlock()
+
+	for _, child := range children {
+		child.setVerboseRecursively(to)
+	}
 }
 
 var sortPool = sync.Pool{

@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -3633,6 +3634,65 @@ may increase either contention or retry errors, or both.`,
 			},
 			Info: "Returns the current trace ID or an error if no trace is open.",
 			// NB: possibly this is or could be made stable, but it's not worth it.
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	// Toggles all spans of the requested trace to verbose or non-verbose.
+	"crdb_internal.set_trace_verbose": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"trace_id", types.Int},
+				{"verbosity", types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				// The user must be an admin to use this builtin.
+				isAdmin, err := ctx.SessionAccessor.HasAdminRole(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				if !isAdmin {
+					if err := checkPrivilegedUser(ctx); err != nil {
+						return nil, err
+					}
+				}
+
+				traceID := uint64(*(args[0].(*tree.DInt)))
+				verbosity := bool(*(args[1].(*tree.DBool)))
+
+				const query = `SELECT span_id
+  	 									FROM crdb_internal.node_inflight_trace_spans
+ 		 									WHERE trace_id = $1
+											AND parent_span_id = 0`
+
+				ie := ctx.InternalExecutor.(sqlutil.InternalExecutor)
+				row, err := ie.QueryRowEx(
+					ctx.Ctx(),
+					"crdb_internal.set_trace_verbose",
+					ctx.Txn,
+					sessiondata.NoSessionDataOverride,
+					query,
+					traceID,
+				)
+				if err != nil {
+					return nil, err
+				}
+				if row == nil {
+					return tree.DBoolFalse, nil
+				}
+				rootSpanID := uint64(*row[0].(*tree.DInt))
+
+				rootSpan, found := ctx.Settings.Tracer.GetActiveSpanFromID(rootSpanID)
+				if !found {
+					return tree.DBoolFalse, nil
+				}
+
+				rootSpan.SetVerboseRecursively(verbosity)
+				return tree.DBoolTrue, nil
+			},
+			Info:       "Returns true if root span was found and verbosity was set, false otherwise.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

@@ -2960,3 +2960,16 @@ SELECT * FROM crdb_internal.payloads_for_trace(0)
 WHERE false
 ----
 span_id payload_type  payload_jsonb
+
+# switch users -- this one has no permissions so expect errors
+user testuser
+
+query error insufficient privilege
+SELECT * FROM crdb_internal.set_trace_verbose(0, false)
+
+user root
+
+query B
+SELECT * FROM crdb_internal.set_trace_verbose(0, false)
+WHERE false
+----
