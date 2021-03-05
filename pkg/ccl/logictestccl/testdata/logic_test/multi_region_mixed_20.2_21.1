@@ -18,7 +18,7 @@ ALTER DATABASE d PRIMARY REGION "us-east1"
 statement error  database must have associated regions before a survival goal can be set\nHINT: you must first add a primary region to the database using ALTER DATABASE d PRIMARY REGION <region_name>
 ALTER DATABASE d SURVIVE ZONE FAILURE
 
-statement error database test is not multi-region enabled, but table t has locality REGIONAL BY TABLE IN PRIMARY REGION set
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
 CREATE TABLE t () LOCALITY REGIONAL BY TABLE
 
 statement ok

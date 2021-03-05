@@ -16,6 +16,12 @@ ap-southeast-2  {ap-az1,ap-az2,ap-az3}
 ca-central-1    {ca-az1,ca-az2,ca-az3}
 us-east-1       {us-az1,us-az2,us-az3}
 
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
+CREATE TABLE regional_by_table_table (pk int) LOCALITY REGIONAL BY TABLE
+
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
+CREATE TABLE global_table (pk int) LOCALITY GLOBAL
+
 statement ok
 CREATE DATABASE region_test_db PRIMARY REGION "ap-southeast-2" SURVIVE ZONE FAILURE
 
@@ -84,10 +90,10 @@ USE multi_region_test_db
 query IITI colnames
 SELECT * FROM system.namespace WHERE name='crdb_internal_region'
 ----
-parentID  parentSchemaID  name                   id
-53        29              crdb_internal_region  54
-56        29              crdb_internal_region  57
-59        29              crdb_internal_region  60
+parentID  parentSchemaID  name                  id
+55        29              crdb_internal_region  56
+58        29              crdb_internal_region  59
+61        29              crdb_internal_region  62
 
 query TTTT colnames
 SHOW ENUMS FROM region_test_db.public
@@ -276,6 +282,82 @@ CREATE DATABASE invalid_region_db PRIMARY REGION "region_no_exists"
 statement error region "ap-southeast-2" defined multiple times
 CREATE DATABASE duplicate_region_name_db PRIMARY REGION "ap-southeast-2" REGIONS "ap-southeast-2", "ap-southeast-2"
 
+statement error multi-region tables containing PARTITION BY are not supported
+CREATE TABLE partition_by_table_in_mr_database (
+  id INT PRIMARY KEY
+)
+PARTITION BY LIST (id) (
+  PARTITION "one" VALUES IN (1)
+)
+
+statement error multi-region tables containing PARTITION BY are not supported
+CREATE TABLE partition_by_table_in_mr_database (
+  id INT PRIMARY KEY
+)
+PARTITION BY LIST (id) (
+  PARTITION "one" VALUES IN (1)
+)
+LOCALITY GLOBAL
+
+statement error multi-region tables containing PARTITION BY are not supported
+CREATE TABLE partition_by_table_in_mr_database (
+  id INT PRIMARY KEY
+)
+PARTITION BY LIST (id) (
+  PARTITION "one" VALUES IN (1)
+)
+LOCALITY REGIONAL BY TABLE
+
+statement error multi-region tables with an INDEX containing PARTITION BY are not supported
+CREATE TABLE partition_by_table_in_mr_database (
+  id INT PRIMARY KEY,
+  INDEX idx(id) PARTITION BY LIST (id) (
+    PARTITION "one" VALUES IN (1)
+  )
+)
+
+statement error multi-region tables with an INDEX containing PARTITION BY are not supported
+CREATE TABLE partition_by_table_in_mr_database (
+  id INT PRIMARY KEY,
+  INDEX idx(id) PARTITION BY LIST (id) (
+    PARTITION "one" VALUES IN (1)
+  )
+) LOCALITY GLOBAL
+
+statement error multi-region tables with an INDEX containing PARTITION BY are not supported
+CREATE TABLE partition_by_table_in_mr_database (
+  id INT PRIMARY KEY,
+  INDEX idx(id) PARTITION BY LIST (id) (
+    PARTITION "one" VALUES IN (1)
+  )
+) LOCALITY REGIONAL BY TABLE
+
+statement error multi-region tables with an UNIQUE constraint containing PARTITION BY are not supported
+CREATE TABLE partition_by_table_in_mr_database (
+  id INT PRIMARY KEY,
+  UNIQUE INDEX idx(id) PARTITION BY LIST (id) (
+    PARTITION "one" VALUES IN (1)
+  )
+)
+
+statement error multi-region tables with an UNIQUE constraint containing PARTITION BY are not supported
+CREATE TABLE partition_by_table_in_mr_database (
+  id INT PRIMARY KEY,
+  UNIQUE INDEX idx(id) PARTITION BY LIST (id) (
+    PARTITION "one" VALUES IN (1)
+  )
+)
+LOCALITY GLOBAL
+
+statement error multi-region tables with an UNIQUE constraint containing PARTITION BY are not supported
+CREATE TABLE partition_by_table_in_mr_database (
+  id INT PRIMARY KEY,
+  UNIQUE INDEX idx(id) PARTITION BY LIST (id) (
+    PARTITION "one" VALUES IN (1)
+  )
+)
+LOCALITY REGIONAL BY TABLE
+
 statement ok
 CREATE TABLE regional_primary_region_table (a int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
@@ -301,6 +383,16 @@ DATABASE multi_region_test_db  ALTER DATABASE multi_region_test_db CONFIGURE ZON
                                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                voter_constraints = '{+region=ca-central-1: 2}',
                                lease_preferences = '[[+region=ca-central-1]]'
+
+statement error cannot set PARTITION BY on a table in a multi-region enabled database
+ALTER TABLE regional_primary_region_table PARTITION BY LIST (id) (
+  PARTITION "one" VALUES IN (1)
+)
+
+statement error cannot define PARTITION BY on a new INDEX in a multi-region database
+CREATE INDEX bad_idx ON regional_primary_region_table(a) PARTITION BY LIST (a) (
+  PARTITION one VALUES IN (1)
+)
 
 statement ok
 CREATE TABLE regional_implicit_primary_region_table (a int) LOCALITY REGIONAL BY TABLE
@@ -384,6 +476,16 @@ TABLE global_table  ALTER TABLE global_table CONFIGURE ZONE USING
                     voter_constraints = '{+region=ca-central-1: 2}',
                     lease_preferences = '[[+region=ca-central-1]]'
 
+statement error cannot set PARTITION BY on a table in a multi-region enabled database
+ALTER TABLE global_table PARTITION BY LIST (id) (
+  PARTITION "one" VALUES IN (1)
+)
+
+statement error cannot define PARTITION BY on a new INDEX in a multi-region database
+CREATE INDEX bad_idx ON global_table(a) PARTITION BY LIST (a) (
+  PARTITION one VALUES IN (1)
+)
+
 query TTTTIT colnames
 SHOW TABLES
 ----
@@ -399,7 +501,7 @@ CREATE DATABASE new_db
 statement ok
 USE new_db
 
-statement error database new_db is not multi-region enabled, but table cannot_create_table_no_multiregion has locality GLOBAL set
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
 CREATE TABLE cannot_create_table_no_multiregion (a int) LOCALITY GLOBAL
 
 # Test adding a primary region to the system database.

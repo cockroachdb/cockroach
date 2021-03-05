@@ -73,19 +73,9 @@ func TestCentroid(t *testing.T) {
 			require.NoError(t, err)
 			ret, err := Centroid(g)
 			require.NoError(t, err)
-
-			retAsGeomT, err := ret.AsGeomT()
-			require.NoError(t, err)
-
 			expected, err := geo.ParseGeometry(tc.expected)
 			require.NoError(t, err)
-			expectedAsGeomT, err := expected.AsGeomT()
-			require.NoError(t, err)
-
-			// Ensure points are close in terms of precision.
-			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).X(), retAsGeomT.(*geom.Point).X(), 2e-10)
-			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).Y(), retAsGeomT.(*geom.Point).Y(), 2e-10)
-			require.Equal(t, expected.SRID(), ret.SRID())
+			requireGeometryWithinEpsilon(t, expected, ret, 2e-10)
 		})
 	}
 }
@@ -293,19 +283,9 @@ func TestPointOnSurface(t *testing.T) {
 			require.NoError(t, err)
 			ret, err := PointOnSurface(g)
 			require.NoError(t, err)
-
-			retAsGeomT, err := ret.AsGeomT()
-			require.NoError(t, err)
-
 			expected, err := geo.ParseGeometry(tc.expected)
 			require.NoError(t, err)
-			expectedAsGeomT, err := expected.AsGeomT()
-			require.NoError(t, err)
-
-			// Ensure points are close in terms of precision.
-			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).X(), retAsGeomT.(*geom.Point).X(), 2e-10)
-			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).Y(), retAsGeomT.(*geom.Point).Y(), 2e-10)
-			require.Equal(t, expected.SRID(), ret.SRID())
+			requireGeometryWithinEpsilon(t, expected, ret, 2e-10)
 		})
 	}
 }

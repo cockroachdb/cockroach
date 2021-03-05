@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/stretchr/testify/require"
-	"github.com/twpayne/go-geom"
 )
 
 var distanceTestCases = []struct {
@@ -979,18 +978,12 @@ func TestClosestPoint(t *testing.T) {
 			gB, err := geo.ParseGeometry(tc.geomB)
 			require.NoError(t, err)
 
-			ret, err := ClosestPoint(gA, gB)
-			require.NoError(t, err)
-			retAsGeomT, err := ret.AsGeomT()
-			require.NoError(t, err)
-
 			expected, err := geo.ParseGeometry(tc.expected)
 			require.NoError(t, err)
-			expectedAsGeomT, err := expected.AsGeomT()
+			ret, err := ClosestPoint(gA, gB)
 			require.NoError(t, err)
 
-			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).X(), retAsGeomT.(*geom.Point).X(), 2e-10)
-			require.InEpsilon(t, expectedAsGeomT.(*geom.Point).Y(), retAsGeomT.(*geom.Point).Y(), 2e-10)
+			requireGeometryWithinEpsilon(t, expected, ret, 2e-10)
 		})
 	}
 

@@ -453,6 +453,13 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 	indexDesc.Version = encodingVersion
 
+	if n.n.PartitionByIndex != nil && n.tableDesc.GetLocalityConfig() != nil {
+		return pgerror.New(
+			pgcode.FeatureNotSupported,
+			"cannot define PARTITION BY on a new INDEX in a multi-region database",
+		)
+	}
+
 	*indexDesc, err = params.p.configureIndexDescForNewIndexPartitioning(
 		params.ctx,
 		n.tableDesc,

@@ -293,21 +293,35 @@ CREATE TABLE fk_including_implicit_columns_against_t (
   CONSTRAINT a_pk FOREIGN KEY(ref_t_a, ref_t_pk) REFERENCES t(a, pk)
 )
 
-statement error cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning
+statement error cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning
 ALTER TABLE t PARTITION BY LIST(d) (
   PARTITION pk_implicit VALUES IN (1)
 )
 
-statement error cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
 ALTER INDEX t@t_b_idx PARTITION BY LIST(d) (
   PARTITION pk_implicit VALUES IN (1)
 )
 
-statement error cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
 ALTER INDEX t@t_b_idx PARTITION BY NOTHING
 
-statement error cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning
+statement error cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning
 ALTER TABLE t PARTITION BY NOTHING
+
+statement ok
+CREATE TABLE t_implicit_idx (
+  id INT PRIMARY KEY,
+  a INT,
+  INDEX t_a_idx (a) PARTITION BY LIST (id) (
+    PARTITION "one" VALUES IN (1)
+  )
+)
+
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
+ALTER INDEX t_implicit_idx@t_a_idx PARTITION BY LIST (a) (
+    PARTITION "one" VALUES IN (1)
+)
 
 query TTTTTT colnames
 SELECT
@@ -360,12 +374,12 @@ t          t_b_idx      CREATE INDEX t_b_idx ON test.public.t USING btree (b ASC
 t          t_c_key      CREATE UNIQUE INDEX t_c_key ON test.public.t USING btree (c ASC)
 t          t_j_idx      CREATE INDEX t_j_idx ON test.public.t USING gin (j ASC)
 
-statement error cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
 ALTER INDEX new_idx PARTITION BY LIST (a) (
   PARTITION d_implicit VALUES IN (1)
 )
 
-statement error cannot ALTER TABLE PARTITION BY on table which already has implicit column partitioning
+statement error cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning
 ALTER TABLE t PARTITION BY LIST (a) (
   PARTITION pk_implicit VALUES IN (1)
 )
@@ -429,6 +443,11 @@ CREATE TABLE public.t (
 statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
 CREATE INDEX created_idx ON t(c) PARTITION BY LIST (d) (
   PARTITION one VALUES IN ((1))
+)
+
+statement error cannot change the partitioning of an index if the table has PARTITION ALL BY defined
+ALTER INDEX t@t_a_idx PARTITION BY LIST (a) (
+  PARTITION one VALUES IN (1)
 )
 
 query T noticetrace
