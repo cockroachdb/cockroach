@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -110,13 +111,19 @@ func (ddb *databaseDescriptorBuilder) BuildCreatedMutableDatabase() *Mutable {
 // NewInitialOption is an optional argument for NewInitial.
 type NewInitialOption func(*descpb.DatabaseDescriptor)
 
-// NewInitialOptionDatabaseRegionConfig is an option allowing an optional
-// regional configuration to be set on the database descriptor.
-func NewInitialOptionDatabaseRegionConfig(
-	regionConfig *descpb.DatabaseDescriptor_RegionConfig,
-) NewInitialOption {
+// MaybeWithDatabaseRegionConfig is an option allowing an optional regional
+// configuration to be set on the database descriptor.
+func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewInitialOption {
 	return func(desc *descpb.DatabaseDescriptor) {
-		desc.RegionConfig = regionConfig
+		// Not a multi-region database. Not much to do here.
+		if regionConfig == nil {
+			return
+		}
+		desc.RegionConfig = &descpb.DatabaseDescriptor_RegionConfig{
+			SurvivalGoal:  regionConfig.SurvivalGoal(),
+			PrimaryRegion: regionConfig.PrimaryRegion(),
+			RegionEnumID:  regionConfig.RegionEnumID(),
+		}
 	}
 }
 
