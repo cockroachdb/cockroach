@@ -389,11 +389,12 @@ func SplitSpanIntoSeparateFamilies(
 	for i, familyID := range neededFamilies {
 		var famSpan roachpb.Span
 		famSpan.Key = keys.MakeFamilyKey(span.Key, uint32(familyID))
-		famSpan.EndKey = famSpan.Key.PrefixEnd()
+		// Don't set the EndKey yet, because a column family on its own can be
+		// fetched using a GetRequest.
 		if i > 0 && familyID == neededFamilies[i-1]+1 {
 			// This column family is adjacent to the previous one. We can merge
 			// the two spans into one.
-			appendTo[len(appendTo)-1].EndKey = famSpan.EndKey
+			appendTo[len(appendTo)-1].EndKey = famSpan.Key.PrefixEnd()
 		} else {
 			appendTo = append(appendTo, famSpan)
 		}

@@ -182,29 +182,58 @@ func (s *Builder) CanSplitSpanIntoSeparateFamilies(
 	numNeededFamilies, prefixLen int, containsNull bool,
 ) bool {
 	// We can only split a span into separate family specific point lookups if:
-	// * We have a unique index.
-	// * The index we are generating spans for actually has multiple families:
-	//   - In the case of the primary index, that means the table itself has
-	//     multiple families.
-	//   - In the case of a secondary index, the table must have multiple families
-	//     and the index must store some columns.
-	// * If we have a secondary index, then containsNull must be false
-	//   and it cannot be an inverted index.
-	// * We have all of the lookup columns of the index.
-	// * We don't need all of the families.
+
 	// * The table is not a special system table. (System tables claim to have
 	//   column families, but actually do not, since they're written to with
 	//   raw KV puts in a "legacy" way.)
-	isSystemTable := s.table.GetID() > 0 && s.table.GetID() < keys.MaxReservedDescID
-	return !isSystemTable && s.index.Unique && len(s.table.GetFamilies()) > 1 &&
-		(s.index.ID == s.table.GetPrimaryIndexID() ||
-			// Secondary index specific checks.
-			(s.index.Version >= descpb.SecondaryIndexFamilyFormatVersion &&
-				!containsNull &&
-				len(s.index.StoreColumnIDs) > 0 &&
-				s.index.Type == descpb.IndexDescriptor_FORWARD)) &&
-		prefixLen == len(s.index.ColumnIDs) &&
-		numNeededFamilies < len(s.table.GetFamilies())
+	if s.table.GetID() > 0 && s.table.GetID() < keys.MaxReservedDescID {
+		return false
+	}
+
+	// * The index is unique.
+	if !s.index.Unique {
+		return false
+	}
+
+	// * The index is fully constrained.
+	if prefixLen != len(s.index.ColumnIDs) {
+		return false
+	}
+
+	// * The index either has just 1 family (so we'll make a GetRequest) or we
+	//   need fewer than every column family in the table (otherwise we'd just
+	//   make a big ScanRequest).
+	numFamilies := len(s.table.GetFamilies())
+	if numFamilies > 1 && numNeededFamilies == numFamilies {
+		return false
+	}
+
+	// If we're looking at a secondary index...
+	if s.index.ID != s.table.GetPrimaryIndexID() {
+		// * The index constraint must not contain null, since that would cause the
+		//   index key to not be completely knowable.
+		if containsNull {
+			return false
+		}
+		// * The index cannot be inverted.
+		if s.index.Type != descpb.IndexDescriptor_FORWARD {
+			return false
+		}
+
+		// * The index must store some columns.
+		if len(s.index.StoreColumnIDs) == 0 {
+			return false
+		}
+
+		// * The index is a new enough version.
+		if s.index.Version < descpb.SecondaryIndexFamilyFormatVersion {
+			return false
+		}
+	}
+
+	// We've passed all the conditions, and should be able to safely split this
+	// span into multiple column-family-specific spans.
+	return true
 }
 
 // Functions for optimizer related span generation are below.
@@ -272,9 +301,12 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	span.EndKey = append(span.EndKey, s.interstices[cs.EndKey().Length()]...)
 
 	// Optimization: for single row lookups on a table with multiple column
-	// families, only scan the relevant column families. This is disabled for
-	// deletions to ensure that the entire row is deleted.
-	if !forDelete && needed.Len() > 0 && span.Key.Equal(span.EndKey) {
+	// families, only scan the relevant column families, and use GetRequests
+	// instead of ScanRequests when doing the column family fetchers. This is
+	// disabled for deletions on tables with multiple column families to ensure
+	// that the entire row (all of its column families) is deleted.
+
+	if needed.Len() > 0 && span.Key.Equal(span.EndKey) && !forDelete {
 		neededFamilyIDs := rowenc.NeededColumnFamilyIDs(needed, s.table, s.index)
 		if s.CanSplitSpanIntoSeparateFamilies(len(neededFamilyIDs), cs.StartKey().Length(), containsNull) {
 			return rowenc.SplitSpanIntoSeparateFamilies(appendTo, span, neededFamilyIDs), nil
