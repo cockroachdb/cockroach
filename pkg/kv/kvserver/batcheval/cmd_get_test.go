@@ -91,4 +91,6 @@ func TestGetResumeSpan(t *testing.T) {
 	assert.Nil(t, resp.ResumeSpan)
 	assert.NotNil(t, resp.Value)
 	assert.Equal(t, resp.Value.RawBytes, value.RawBytes)
+	assert.Equal(t, 1, int(resp.NumKeys))
+	assert.Equal(t, len(resp.Value.RawBytes), int(resp.NumBytes))
 }

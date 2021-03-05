@@ -76,7 +76,7 @@ query T kvtrace(Scan)
 SELECT family_split_2.x, family_split_2.z FROM family_split_1 INNER LOOKUP JOIN family_split_2 ON family_split_1.x = family_split_2.x; SET tracing = off
 ----
 Scan /Table/55/{1-2}
-Scan /Table/56/1/1/{0-1}, /Table/56/1/1/2/{1-2}
+Scan /Table/56/1/1/0, /Table/56/1/1/2/1
 
 statement ok
 CREATE TABLE family_index_join (x INT PRIMARY KEY, y INT, z INT, w INT, INDEX (y), FAMILY f1 (x), FAMILY f2 (y), FAMILY f3 (z), FAMILY f4(w))
@@ -88,7 +88,7 @@ query T kvtrace(Scan)
 SELECT y,w FROM family_index_join@family_index_join_y_idx WHERE y = 2
 ----
 Scan /Table/57/2/{2-3}
-Scan /Table/57/1/1/{0-1/2}, /Table/57/1/1/3/{1-2}
+Scan /Table/57/1/1/{0-1/2}, /Table/57/1/1/3/1
 
 # Test generating tighter spans on interleaved tables.
 statement ok
@@ -107,4 +107,4 @@ query T kvtrace(Scan)
 SELECT family_interleave_1.x, family_interleave_1.z FROM family_interleave_2 INNER LOOKUP JOIN family_interleave_1 ON family_interleave_1.x = family_interleave_2.x
 ----
 Scan /Table/58/{1-2}
-Scan /Table/58/1/1/{0-1}, /Table/58/1/1/2/{1-2}
+Scan /Table/58/1/1/0, /Table/58/1/1/2/1
