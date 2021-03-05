@@ -912,6 +912,7 @@ unreserved_keyword ::=
 	| 'JOB'
 	| 'JOBS'
 	| 'JSON'
+	| 'JOINTOKEN'
 	| 'KEY'
 	| 'KEYS'
 	| 'KMS'

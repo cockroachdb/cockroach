@@ -273,3 +273,8 @@ var ExportColumns = ResultColumns{
 	{Name: "rows", Typ: types.Int},
 	{Name: "bytes", Typ: types.Int},
 }
+
+// CreateJoinTokenColumns are the result columns of a CREATE JOINTOKEN statement.
+var CreateJoinTokenColumns = ResultColumns{
+	{Name: "jointoken", Typ: types.String},
+}
