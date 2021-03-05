@@ -15,7 +15,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -903,7 +902,7 @@ func shouldPreRestore(table *tabledesc.Mutable) bool {
 	if table.GetParentID() != keys.SystemDatabaseID {
 		return false
 	}
-	tablesToPreRestore := backupbase.GetSystemTablesToRestoreBeforeData()
+	tablesToPreRestore := getSystemTablesToRestoreBeforeData()
 	_, ok := tablesToPreRestore[table.GetName()]
 	return ok
 }
@@ -2168,15 +2167,15 @@ func (r *restoreResumer) restoreSystemTables(
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
-			config, ok := backupbase.SystemTableBackupConfiguration[systemTableName]
+			config, ok := systemTableBackupConfiguration[systemTableName]
 			if !ok {
 				log.Warningf(ctx, "no configuration specified for table %s... skipping restoration",
 					systemTableName)
 			}
 
-			restoreFunc := backupbase.DefaultSystemTableRestoreFunc
-			if config.CustomRestoreFunc != nil {
-				restoreFunc = config.CustomRestoreFunc
+			restoreFunc := defaultSystemTableRestoreFunc
+			if config.customRestoreFunc != nil {
+				restoreFunc = config.customRestoreFunc
 				log.Eventf(ctx, "using custom restore function for table %s", systemTableName)
 			}
 

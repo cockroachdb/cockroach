@@ -1,12 +1,9 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "backupbase",
-    srcs = [
-        "system_schema.go",
-        "targets.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase",
+    name = "backupresolver",
+    srcs = ["targets.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
@@ -14,29 +11,23 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkv",
-        "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/systemschema",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",
         "//pkg/util/hlc",
-        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
-    name = "backupbase_test",
-    size = "small",
+    name = "backupresolver_test",
     srcs = [
         "main_test.go",
-        "system_schema_test.go",
         "targets_test.go",
     ],
-    embed = [":backupbase"],
+    embed = [":backupresolver"],
     deps = [
-        "//pkg/base",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
         "//pkg/keys",
@@ -56,7 +47,6 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

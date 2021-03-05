@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -808,13 +808,30 @@ func backupPlanHook(
 			mvccFilter = MVCCFilter_All
 		}
 
-		targetDescs, completeDBs, err := backupbase.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
-		if err != nil {
-			return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
-		}
+		var targetDescs []catalog.Descriptor
+		var completeDBs []descpb.ID
 
-		if backupStmt.Coverage() == tree.AllDescriptors && len(targetDescs) == 0 {
-			return errors.New("no descriptors available to backup at selected time")
+		switch backupStmt.Coverage() {
+		case tree.RequestedDescriptors:
+			var err error
+			targetDescs, completeDBs, err = backupresolver.ResolveTargetsToDescriptors(ctx, p, endTime, backupStmt.Targets)
+			if err != nil {
+				return errors.Wrap(err, "failed to resolve targets specified in the BACKUP stmt")
+			}
+		case tree.AllDescriptors:
+			allDescs, err := backupresolver.LoadAllDescs(ctx, p.ExecCfg().Codec, p.ExecCfg().DB, endTime)
+			if err != nil {
+				return err
+			}
+			targetDescs, completeDBs, err = fullClusterTargetsBackup(allDescs)
+			if err != nil {
+				return err
+			}
+			if len(targetDescs) == 0 {
+				return errors.New("no descriptors available to backup at selected time")
+			}
+		default:
+			return errors.AssertionFailedf("unexpected descriptor coverage %v", backupStmt.Coverage())
 		}
 
 		// Check BACKUP privileges.
