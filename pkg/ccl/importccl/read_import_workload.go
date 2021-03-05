@@ -157,7 +157,7 @@ func (w *workloadReader) readFiles(
 			}
 		}
 		if t.Name == `` {
-			return errors.Wrapf(err, `unknown table %s for generator %s`, conf.Table, meta.Name)
+			return errors.Errorf(`unknown table %s for generator %s`, conf.Table, meta.Name)
 		}
 
 		wc := NewWorkloadKVConverter(

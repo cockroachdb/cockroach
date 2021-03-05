@@ -1034,7 +1034,7 @@ func backupPlanHook(
 				return errors.Wrap(err, "invalid previous backups")
 			}
 			if coveredTime != startTime {
-				return errors.Wrapf(err, "expected previous backups to cover until time %v, got %v", startTime, coveredTime)
+				return errors.Errorf("expected previous backups to cover until time %v, got %v", startTime, coveredTime)
 			}
 		}
 

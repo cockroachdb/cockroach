@@ -233,7 +233,7 @@ func bootstrapCluster(
 		if i == 0 {
 			bootstrapVersion = cv
 		} else if bootstrapVersion != cv {
-			return nil, errors.Wrapf(err, "found cluster versions %s and %s", bootstrapVersion, cv)
+			return nil, errors.Errorf("found cluster versions %s and %s", bootstrapVersion, cv)
 		}
 
 		sIdent := roachpb.StoreIdent{
