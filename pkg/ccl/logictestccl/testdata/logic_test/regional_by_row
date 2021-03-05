@@ -3,24 +3,42 @@
 statement ok
 CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
 
-statement error cannot set LOCALITY on a database that is not multi-region enabled
+statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
 CREATE TABLE regional_by_row_table (pk int) LOCALITY REGIONAL BY ROW
 
 statement ok
 USE multi_region_test_db
 
-statement error REGIONAL BY ROW on a TABLE containing PARTITION BY is not supported
+statement error multi-region tables containing PARTITION BY are not supported
 CREATE TABLE regional_by_row_table (
   pk int
 )
 PARTITION BY LIST (pk) (PARTITION one VALUES IN ((1)))
 LOCALITY REGIONAL BY ROW
 
-statement error REGIONAL BY ROW on a TABLE containing PARTITION BY is not supported
+statement error multi-region tables containing PARTITION BY are not supported
 CREATE TABLE regional_by_row_table (
   pk int
 )
 PARTITION BY NOTHING
+LOCALITY REGIONAL BY ROW
+
+statement error multi-region tables with an INDEX containing PARTITION BY are not supported
+CREATE TABLE regional_by_row_table (
+  pk int,
+  INDEX idx(id) PARTITION BY LIST (id) (
+    PARTITION "pk" VALUES IN (1)
+  )
+)
+LOCALITY REGIONAL BY ROW
+
+statement error multi-region tables with an UNIQUE constraint containing PARTITION BY are not supported
+CREATE TABLE regional_by_row_table (
+  pk int,
+  UNIQUE INDEX idx(id) PARTITION BY LIST (id) (
+    PARTITION "pk" VALUES IN (1)
+  )
+)
 LOCALITY REGIONAL BY ROW
 
 statement ok
@@ -45,7 +63,7 @@ CREATE TABLE regional_by_row_table (
   INDEX(a) USING HASH WITH BUCKET_COUNT = 8
 ) LOCALITY REGIONAL BY ROW
 
-statement error REGIONAL BY ROW on a table with an INDEX containing PARTITION BY is not supported
+statement error multi-region tables with an INDEX containing PARTITION BY are not supported
 CREATE TABLE regional_by_row_table (
   pk int,
   a int,
@@ -53,7 +71,7 @@ CREATE TABLE regional_by_row_table (
 )
 LOCALITY REGIONAL BY ROW
 
-statement error REGIONAL BY ROW on a table with an INDEX containing PARTITION BY is not supported
+statement error multi-region tables with an INDEX containing PARTITION BY are not supported
 CREATE TABLE regional_by_row_table (
   pk int,
   a int,
@@ -61,7 +79,7 @@ CREATE TABLE regional_by_row_table (
 )
 LOCALITY REGIONAL BY ROW
 
-statement error REGIONAL BY ROW on a table with an INDEX containing PARTITION BY is not supported
+statement error multi-region tables with an INDEX containing PARTITION BY are not supported
 CREATE TABLE regional_by_row_table (
   pk int,
   a int,
@@ -70,7 +88,7 @@ CREATE TABLE regional_by_row_table (
 )
 LOCALITY REGIONAL BY ROW
 
-statement error REGIONAL BY ROW on a table with an UNIQUE constraint containing PARTITION BY is not supported
+statement error multi-region tables with an UNIQUE constraint containing PARTITION BY are not supported
 CREATE TABLE regional_by_row_table (
   pk int,
   a int,
@@ -78,7 +96,7 @@ CREATE TABLE regional_by_row_table (
 )
 LOCALITY REGIONAL BY ROW
 
-statement error REGIONAL BY ROW on a table with an UNIQUE constraint containing PARTITION BY is not supported
+statement error multi-region tables with an UNIQUE constraint containing PARTITION BY are not supported
 CREATE TABLE regional_by_row_table (
   pk int,
   a int,
@@ -470,6 +488,22 @@ CREATE TABLE public.regional_by_row_table (
 ALTER PARTITION "us-east-1" OF INDEX multi_region_test_db.public.regional_by_row_table@regional_by_row_table_a_idx CONFIGURE ZONE USING "gc.ttlseconds" = 10
 
 # Prohibit certain actions on a REGIONAL BY ROW table.
+
+statement error cannot set PARTITION BY on a table in a multi-region enabled database
+ALTER TABLE regional_by_row_table PARTITION BY LIST (pk) (
+  PARTITION "one" VALUES IN (1)
+)
+
+statement error cannot change the partitioning of an index if the table is part of a multi-region database
+ALTER INDEX regional_by_row_table@regional_by_row_table_a_idx PARTITION BY LIST (pk2) (
+  PARTITION one VALUES IN (1)
+)
+
+statement error cannot define PARTITION BY on a new INDEX in a multi-region database
+CREATE INDEX bad_idx ON regional_by_row_table(a) PARTITION BY LIST (a) (
+  PARTITION one VALUES IN (1)
+)
+
 statement error hash sharded indexes are not compatible with REGIONAL BY ROW tables
 CREATE INDEX bad_idx ON regional_by_row_table(a) USING HASH WITH BUCKET_COUNT = 8
 
@@ -609,7 +643,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/71/1/"@"/1{-/#}, /Table/71/1/"\x80"/1{-/#}, /Table/71/1/"\xc0"/1{-/#}
+Scan /Table/73/1/"@"/1{-/#}, /Table/73/1/"\x80"/1{-/#}, /Table/73/1/"\xc0"/1{-/#}
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -648,7 +682,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/71/1/"@"/1{-/#}
+Scan /Table/73/1/"@"/1{-/#}
 fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
@@ -663,8 +697,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  OR message LIKE 'Scan%'
  ORDER BY ordinality ASC
 ----
-Scan /Table/71/1/"@"/10{-/#}
-Scan /Table/71/1/"\x80"/10{-/#}, /Table/71/1/"\xc0"/10{-/#}
+Scan /Table/73/1/"@"/10{-/#}
+Scan /Table/73/1/"\x80"/10{-/#}, /Table/73/1/"\xc0"/10{-/#}
 fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
 output row: [10 10 11 12 NULL]
 

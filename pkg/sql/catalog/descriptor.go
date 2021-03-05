@@ -100,6 +100,7 @@ type DatabaseDescriptor interface {
 	tree.SchemaMeta
 	DatabaseDesc() *descpb.DatabaseDescriptor
 
+	GetRegionConfig() *descpb.DatabaseDescriptor_RegionConfig
 	RegionNames() (descpb.RegionNames, error)
 	IsMultiRegion() bool
 	PrimaryRegionName() (descpb.RegionName, error)

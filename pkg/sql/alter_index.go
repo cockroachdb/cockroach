@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -72,10 +74,22 @@ func (n *alterIndexNode) startExec(params runParams) error {
 		switch t := cmd.(type) {
 		case *tree.AlterIndexPartitionBy:
 			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "partition_by"))
-			if n.tableDesc.GetPrimaryIndex().GetPartitioning().NumImplicitColumns > 0 {
+			if n.tableDesc.GetLocalityConfig() != nil {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot change the partitioning of an index if the table is part of a multi-region database",
+				)
+			}
+			if n.tableDesc.PartitionAllBy {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot change the partitioning of an index if the table has PARTITION ALL BY defined",
+				)
+			}
+			if n.indexDesc.Partitioning.NumImplicitColumns > 0 {
 				return unimplemented.New(
 					"ALTER INDEX PARTITION BY",
-					"cannot ALTER INDEX PARTITION BY on index which already has implicit column partitioning",
+					"cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning",
 				)
 			}
 			allowImplicitPartitioning := params.p.EvalContext().SessionData.ImplicitColumnPartitioningEnabled ||

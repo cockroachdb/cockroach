@@ -423,14 +423,7 @@ func TestRotate(t *testing.T) {
 			actual, err := Rotate(geometry, tc.rotRadians)
 			require.NoError(t, err)
 
-			// Compare FlatCoords and assert they are within epsilon.
-			// This is because they exact matches may encounter rounding issues.
-			actualGeomT, err := actual.AsGeomT()
-			require.NoError(t, err)
-			require.Equal(t, tc.expected.SRID(), actualGeomT.SRID())
-			require.Equal(t, tc.expected.Layout(), actualGeomT.Layout())
-			require.IsType(t, tc.expected, actualGeomT)
-			require.InEpsilonSlice(t, tc.expected.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
+			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }
@@ -530,15 +523,8 @@ func TestRotateWithPointOrigin(t *testing.T) {
 				require.EqualError(t, err, tt.wantErrStr)
 			} else {
 				require.NoError(t, err)
+				requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tt.wantGeom), got, 1e-5)
 			}
-			// Compare FlatCoords and assert they are within epsilon.
-			// This is because they exact matches may encounter rounding issues.
-			actualGeomT, err := got.AsGeomT()
-			require.NoError(t, err)
-			require.Equal(t, tt.wantGeom.SRID(), actualGeomT.SRID())
-			require.Equal(t, tt.wantGeom.Layout(), actualGeomT.Layout())
-			require.IsType(t, tt.wantGeom, actualGeomT)
-			require.InEpsilonSlice(t, tt.wantGeom.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
 		})
 	}
 }
@@ -683,14 +669,7 @@ func TestRotateX(t *testing.T) {
 			actual, err := RotateX(geometry, tc.rotRadians)
 			require.NoError(t, err)
 
-			// Compare FlatCoords and assert they are within epsilon.
-			// This is because they exact matches may encounter rounding issues.
-			actualGeomT, err := actual.AsGeomT()
-			require.NoError(t, err)
-			require.Equal(t, tc.expected.SRID(), actualGeomT.SRID())
-			require.Equal(t, tc.expected.Layout(), actualGeomT.Layout())
-			require.IsType(t, tc.expected, actualGeomT)
-			require.InEpsilonSlice(t, tc.expected.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
+			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }
@@ -765,15 +744,7 @@ func TestRotateY(t *testing.T) {
 
 			actual, err := RotateY(geometry, tc.rotRadians)
 			require.NoError(t, err)
-
-			// Compare FlatCoords and assert they are within epsilon.
-			// This is because they exact matches may encounter rounding issues.
-			actualGeomT, err := actual.AsGeomT()
-			require.NoError(t, err)
-			require.Equal(t, tc.expected.SRID(), actualGeomT.SRID())
-			require.Equal(t, tc.expected.Layout(), actualGeomT.Layout())
-			require.IsType(t, tc.expected, actualGeomT)
-			require.InEpsilonSlice(t, tc.expected.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
+			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }
@@ -848,15 +819,7 @@ func TestRotateZ(t *testing.T) {
 
 			actual, err := RotateZ(geometry, tc.rotRadians)
 			require.NoError(t, err)
-
-			// Compare FlatCoords and assert they are within epsilon.
-			// This is because they exact matches may encounter rounding issues.
-			actualGeomT, err := actual.AsGeomT()
-			require.NoError(t, err)
-			require.Equal(t, tc.expected.SRID(), actualGeomT.SRID())
-			require.Equal(t, tc.expected.Layout(), actualGeomT.Layout())
-			require.IsType(t, tc.expected, actualGeomT)
-			require.InEpsilonSlice(t, tc.expected.FlatCoords(), actualGeomT.FlatCoords(), 0.00001)
+			requireGeometryWithinEpsilon(t, requireGeometryFromGeomT(t, tc.expected), actual, 1e-5)
 		})
 	}
 }
