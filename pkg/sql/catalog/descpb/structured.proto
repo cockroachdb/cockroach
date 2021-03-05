@@ -1219,13 +1219,7 @@ message DatabaseDescriptor {
   message RegionConfig {
     option (gogoproto.equal) = true;
 
-    message Region {
-      option (gogoproto.equal) = true;
-
-      optional string name = 1 [(gogoproto.casttype)="RegionName",(gogoproto.nullable)=false];
-    }
-
-    repeated Region regions = 1 [(gogoproto.nullable)=false];
+    reserved 1;
     optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
     optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="RegionName"];
 

@@ -366,9 +366,6 @@ func TestValidateTypeDesc(t *testing.T) {
 		Name: "multi-region-db",
 		ID:   200,
 		RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-			Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-				{Name: "us-east-1"},
-			},
 			PrimaryRegion: "us-east-1",
 		},
 	}).BuildImmutable()
@@ -695,52 +692,6 @@ func TestValidateTypeDesc(t *testing.T) {
 			},
 		},
 		{
-			"unexpected number of regions on db desc: 1 expected 2",
-			descpb.TypeDescriptor{
-				Name:           "t",
-				ID:             typeDescID,
-				ParentID:       200,
-				ParentSchemaID: keys.PublicSchemaID,
-				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
-				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
-					PrimaryRegion: "us-east-1",
-				},
-				EnumMembers: []descpb.TypeDescriptor_EnumMember{
-					{
-						LogicalRepresentation:  "us-east-1",
-						PhysicalRepresentation: []byte{1},
-					},
-					{
-						LogicalRepresentation:  "us-east-2",
-						PhysicalRepresentation: []byte{2},
-					},
-				},
-				ArrayTypeID: 102,
-				Privileges:  defaultPrivileges,
-			},
-		},
-		{
-			`did not find "us-east-2" region on database descriptor`,
-			descpb.TypeDescriptor{
-				Name:           "t",
-				ID:             typeDescID,
-				ParentID:       200,
-				ParentSchemaID: keys.PublicSchemaID,
-				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
-				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
-					PrimaryRegion: "us-east-1",
-				},
-				EnumMembers: []descpb.TypeDescriptor_EnumMember{
-					{
-						LogicalRepresentation:  "us-east-2",
-						PhysicalRepresentation: []byte{2},
-					},
-				},
-				ArrayTypeID: 102,
-				Privileges:  defaultPrivileges,
-			},
-		},
-		{
 			`found region config on ENUM type desc`,
 			descpb.TypeDescriptor{
 				Name:           "t",
@@ -781,6 +732,27 @@ func TestValidateTypeDesc(t *testing.T) {
 		},
 		{
 			`unexpected primary region on db desc: "us-east-1" expected "us-east-2"`,
+			descpb.TypeDescriptor{
+				Name:           "t",
+				ID:             typeDescID,
+				ParentID:       200,
+				ParentSchemaID: keys.PublicSchemaID,
+				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
+				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
+					PrimaryRegion: "us-east-2",
+				},
+				EnumMembers: []descpb.TypeDescriptor_EnumMember{
+					{
+						LogicalRepresentation:  "us-east-2",
+						PhysicalRepresentation: []byte{2},
+					},
+				},
+				ArrayTypeID: 102,
+				Privileges:  defaultPrivileges,
+			},
+		},
+		{
+			`primary region "us-east-2" not found in list of enum members`,
 			descpb.TypeDescriptor{
 				Name:           "t",
 				ID:             typeDescID,

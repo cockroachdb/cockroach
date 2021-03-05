@@ -5003,21 +5003,21 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		tree.FunctionProperties{Category: categoryMultiRegion},
 		stringOverload1(
 			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
-				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig()
+				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig(evalCtx.Context)
 				if err != nil {
 					return nil, err
 				}
-				if regionConfig.IsValidRegionNameString(s) {
-					return tree.NewDString(s), nil
-				}
-				primaryRegion := regionConfig.PrimaryRegionString()
-				if primaryRegion == "" {
+				if regionConfig == nil {
 					return nil, pgerror.Newf(
 						pgcode.InvalidDatabaseDefinition,
 						"current database %s is not multi-region enabled",
 						evalCtx.SessionData.Database,
 					)
 				}
+				if regionConfig.IsValidRegionNameString(s) {
+					return tree.NewDString(s), nil
+				}
+				primaryRegion := regionConfig.PrimaryRegionString()
 				return tree.NewDString(primaryRegion), nil
 			},
 			types.String,
