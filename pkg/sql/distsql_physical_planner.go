@@ -682,12 +682,16 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
 ) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
 	return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
-		diagramFlags := execinfrapb.DiagramFlags{
-			MakeDeterministic: planner.execCfg.TestingKnobs.DeterministicExplainAnalyze,
-		}
-		diagram, err := p.flowSpecsToDiagram(ctx, flows, diagramFlags)
-		if err != nil {
-			return err
+		var diagram execinfrapb.FlowDiagram
+		if planner.instrumentation.shouldSaveDiagrams() {
+			diagramFlags := execinfrapb.DiagramFlags{
+				MakeDeterministic: planner.execCfg.TestingKnobs.DeterministicExplainAnalyze,
+			}
+			var err error
+			diagram, err = p.flowSpecsToDiagram(ctx, flows, diagramFlags)
+			if err != nil {
+				return err
+			}
 		}
 		planner.curPlan.distSQLFlowInfos = append(
 			planner.curPlan.distSQLFlowInfos, flowInfo{typ: typ, diagram: diagram, flowsMetadata: execstats.NewFlowsMetadata(flows)},
