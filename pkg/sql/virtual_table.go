@@ -106,7 +106,7 @@ func setupGenerator(
 	}
 
 	wg.Add(1)
-	setupError = stopper.RunAsyncTask(ctx, "sql.rowPusher: send rows", func(ctx context.Context) {
+	if setupError = stopper.RunAsyncTask(ctx, "sql.rowPusher: send rows", func(ctx context.Context) {
 		defer wg.Done()
 		// We wait until a call to next before starting the worker. This prevents
 		// concurrent transaction usage during the startup phase. We also have to
@@ -130,7 +130,13 @@ func setupGenerator(
 			return
 		case comm <- virtualTableGeneratorResponse{err: err}:
 		}
-	})
+	}); setupError != nil {
+		// The presence of an error means the goroutine never started,
+		// thus wg.Done() is never called, which can result in
+		// cleanup() being blocked indefinitely on wg.Wait(). We call
+		// wg.Done() manually here to account for this case.
+		wg.Done()
+	}
 
 	next = func() (tree.Datums, error) {
 		// Notify the worker to begin computing a row.
