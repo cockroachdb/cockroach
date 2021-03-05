@@ -72,6 +72,9 @@ var histogramsMaxLatency = runFlags.Duration(
 	"Expected maximum latency of running a query")
 
 func init() {
+
+	_ = sharedFlags.MarkHidden("pprofport")
+
 	AddSubCmd(func(userFacing bool) *cobra.Command {
 		var initCmd = SetCmdDefaults(&cobra.Command{
 			Use:   `init`,
