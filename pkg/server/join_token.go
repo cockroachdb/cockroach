@@ -37,7 +37,7 @@ const (
 	joinTokenDefaultTTL = 10 * time.Minute
 )
 
-// joinToken is a container for a tokenID and associated sharedSecret for use
+// joinToken is a container for a TokenID and associated SharedSecret for use
 // in certificate-free add/join operations.
 type joinToken struct {
 	tokenID      uuid.UUID
@@ -77,6 +77,18 @@ func (j *joinToken) verifySignature(caCert []byte) bool {
 	signer := hmac.New(sha256.New, j.sharedSecret)
 	_, _ = signer.Write(caCert)
 	return hmac.Equal(signer.Sum(nil), j.fingerprint)
+}
+
+// IsCATrustedByJoinToken will return true if the fingerprint matches provided
+// bundle, false if the signature fails to match, and error if the token fails
+// to parse.
+func IsCATrustedByJoinToken(caCert []byte, rawJoinToken string) (bool, error) {
+	j := joinToken{}
+	err := j.UnmarshalText([]byte(rawJoinToken))
+	if err != nil {
+		return false, errors.Wrap(err, "failed to unpack joinToken")
+	}
+	return j.verifySignature(caCert), nil
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
@@ -138,7 +150,7 @@ func (j *joinToken) MarshalText() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// Checks the join token in the gossip store matches the marshalled form of
+// Checks the join token in the gossip store matches the marshaled form of
 // the passed-in join token.
 func (j *joinToken) isValid(g *gossip.Gossip) (bool, error) {
 	token, err := g.GetInfo(gossip.MakeJoinTokenKey(j.tokenID))
