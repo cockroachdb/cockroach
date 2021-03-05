@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -649,8 +650,9 @@ type StoreConfig struct {
 	RPCContext              *rpc.Context
 	RangeDescriptorCache    *rangecache.RangeCache
 
-	ClosedTimestamp       *container.Container
-	ClosedTimestampSender *sidetransport.Sender
+	ClosedTimestamp         *container.Container
+	ClosedTimestampSender   *sidetransport.Sender
+	ClosedTimestampReceiver *sidetransport.Receiver
 
 	// SQLExecutor is used by the store to execute SQL statements.
 	SQLExecutor sqlutil.InternalExecutor
@@ -1574,6 +1576,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	// Connect rangefeeds to closed timestamp updates.
 	s.startClosedTimestampRangefeedSubscriber(ctx)
+	s.startRangefeedUpdater(ctx)
 
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
@@ -1775,6 +1778,10 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 	_ = s.stopper.RunAsyncTask(ctx, "ct-subscriber", func(ctx context.Context) {
 		var replIDs []roachpb.RangeID
 		for {
+			if s.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+				// The startRangefeedUpdater goroutine takes over.
+				return
+			}
 			select {
 			case <-ch:
 				// Drain all notifications from the channel.
@@ -1810,6 +1817,75 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 			case <-s.stopper.ShouldQuiesce():
 				return
 			}
+		}
+	})
+}
+
+// startRangefeedUpdater periodically informs all the replicas with rangefeeds
+// about closed timestamp updates.
+func (s *Store) startRangefeedUpdater(ctx context.Context) {
+	const name = "closedts-rangefeed-updater"
+	_ /* err */ = s.stopper.RunAsyncTask(ctx, name, func(ctx context.Context) {
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		var replIDs []roachpb.RangeID
+		st := s.cfg.Settings
+
+		confCh := make(chan struct{}, 1)
+		confChanged := func() {
+			select {
+			case confCh <- struct{}{}:
+			default:
+			}
+		}
+		closedts.SideTransportCloseInterval.SetOnChange(&st.SV, confChanged)
+		RangeFeedRefreshInterval.SetOnChange(&st.SV, confChanged)
+
+		getInterval := func() time.Duration {
+			refresh := RangeFeedRefreshInterval.Get(&st.SV)
+			if refresh != 0 {
+				return refresh
+			}
+			return closedts.SideTransportCloseInterval.Get(&st.SV)
+		}
+
+		for {
+			interval := getInterval()
+			if interval > 0 {
+				timer.Reset(interval)
+			} else {
+				// Disable the side-transport.
+				timer.Stop()
+				timer = timeutil.NewTimer()
+			}
+			select {
+			case <-timer.C:
+				timer.Read = true
+				if !s.cfg.Settings.Version.IsActive(ctx, clusterversion.ClosedTimestampsRaftTransport) {
+					continue
+				}
+				s.rangefeedReplicas.Lock()
+				replIDs = replIDs[:0]
+				for replID := range s.rangefeedReplicas.m {
+					replIDs = append(replIDs, replID)
+				}
+				s.rangefeedReplicas.Unlock()
+				// Notify each replica with an active rangefeed to check for an updated
+				// closed timestamp.
+				for _, replID := range replIDs {
+					r := s.GetReplicaIfExists(replID)
+					if r == nil {
+						continue
+					}
+					r.handleClosedTimestampUpdate(ctx)
+				}
+			case <-confCh:
+				// Loop around to use the updated timer.
+				continue
+			case <-s.stopper.ShouldQuiesce():
+				return
+			}
+
 		}
 	})
 }

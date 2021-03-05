@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // EmitMLAI registers the replica's last assigned max lease index with the
@@ -144,9 +145,45 @@ func (r *Replica) BumpSideTransportClosed(
 // this range. Note that we might not be able to ultimately close this timestamp
 // if there are requests in flight.
 func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
-	now := r.Clock().NowAsClockTimestamp()
-	maxClockOffset := r.Clock().MaxOffset()
-	lagTargetDuration := closedts.TargetDuration.Get(&r.ClusterSettings().SV)
-	policy := r.closedTimestampPolicyRLocked()
-	return closedts.TargetForPolicy(now, maxClockOffset, lagTargetDuration, policy)
+	return closedts.TargetForPolicy(
+		r.Clock().NowAsClockTimestamp(),
+		r.Clock().MaxOffset(),
+		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
+		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
+		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
+		r.closedTimestampPolicyRLocked(),
+	)
+}
+
+// ForwardSideTransportClosedTimestamp forwards
+// r.mu.sideTransportClosedTimestamp. It is called by the closed timestamp
+// side-transport receiver.
+func (r *Replica) ForwardSideTransportClosedTimestamp(
+	ctx context.Context, closedTS hlc.Timestamp, lai ctpb.LAI,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.mu.sideTransportClosedTimestamp.Forward(closedTS) {
+		if r.mu.sideTransportCloseTimestampLAI > lai {
+			log.Fatalf(ctx, "received side-transport notification with higher closed timestamp "+
+				"but lower LAI: r%d current LAI: %d received LAI: %d",
+				r.RangeID, r.mu.sideTransportCloseTimestampLAI, lai)
+		}
+		r.mu.sideTransportCloseTimestampLAI = lai
+	}
+}
+
+// getSideTransportClosedTimestamp returns the replica's information about the
+// timestamp that was closed by the side-transport. Note that this not include
+// r.mu.state.RaftClosedTimestamp. Also note that this might not be the highest
+// closed timestamp communicated by the side-transport - the
+// ClosedTimestampReceiver should be checked too if an up-to-date value is
+// required.
+//
+// It's the responsibility of the caller to check the returned LAI against the
+// replica's applied LAI. If the returned LAI hasn't applied, the closed
+// timestamp cannot be used.
+func (r *Replica) getSideTransportClosedTimestampRLocked() (closedTS hlc.Timestamp, lai ctpb.LAI) {
+	return r.mu.sideTransportClosedTimestamp, r.mu.sideTransportCloseTimestampLAI
 }

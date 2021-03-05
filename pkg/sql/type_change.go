@@ -412,7 +412,10 @@ func performMultiRegionFinalization(
 	descsCol *descs.Collection,
 ) ([]descpb.ID, error) {
 	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
+		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{
+			AvoidCached: true,
+			Required:    true,
+		})
 	if err != nil {
 		return nil, err
 	}

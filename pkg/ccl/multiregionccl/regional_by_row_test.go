@@ -365,6 +365,15 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							// TTL into the system with AddImmediateGCZoneConfig.
 							defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
+							// Drop the closed timestamp target lead for GLOBAL tables.
+							// The test passes with it configured to its default, but it
+							// is very slow due to #61444 (2.5s vs. 35s).
+							// TODO(nvanbenschoten): We can remove this when that issue
+							// is addressed.
+							if _, err := sqlDB.Exec(`SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_override = '5ms'`); err != nil {
+								t.Fatal(err)
+							}
+
 							if _, err := sqlDB.Exec(fmt.Sprintf(`
 CREATE DATABASE t PRIMARY REGION "ajstorm-1";
 USE t;
@@ -516,19 +525,27 @@ CREATE TABLE db.t(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
 		t.Error(err)
 	}
 
+	// Adding a FORCE to this second statement until we get a fix for #60620. When
+	// that fix is ready, we can construct the view of the zone config as it was at
+	// the beginning of the transaction, and the checks for FORCE should work again,
+	// and we won't require the explicit force here.
 	_, err = sqlDB.Exec(`BEGIN;
 ALTER DATABASE db ADD REGION "us-east3";
-ALTER DATABASE db DROP REGION "us-east2";
+ALTER DATABASE db DROP REGION "us-east2" FORCE;
 COMMIT;`)
 	require.Error(t, err, "boom")
 
 	// The cleanup job should kick in and revert the changes that happened to the
 	// type descriptor in the user txn. We should eventually be able to add
 	// "us-east3" and remove "us-east2".
+	// Adding a FORCE to this second statement until we get a fix for #60620. When
+	// that fix is ready, we can construct the view of the zone config as it was at
+	// the beginning of the transaction, and the checks for FORCE should work again,
+	// and we won't require the explicit force here.
 	testutils.SucceedsSoon(t, func() error {
 		_, err = sqlDB.Exec(`BEGIN;
 	ALTER DATABASE db ADD REGION "us-east3";
-	ALTER DATABASE db DROP REGION "us-east2";
+	ALTER DATABASE db DROP REGION "us-east2" FORCE;
 	COMMIT;`)
 		return err
 	})

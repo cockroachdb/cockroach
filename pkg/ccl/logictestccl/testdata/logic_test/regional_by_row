@@ -1805,10 +1805,14 @@ CREATE TABLE regional_by_row_as (
   FAMILY (cr, pk, i)
 ) LOCALITY REGIONAL BY ROW AS "cr";
 
+# Adding a FORCE to this second statement until we get a fix for #60620. When
+# that fix is ready, we can construct the view of the zone config as it was at
+# the beginning of the transaction, and the checks for FORCE should work again,
+# and we won't require the explicit force here.
 statement ok
 BEGIN;
 ALTER DATABASE add_regions_in_txn ADD REGION "us-east-1";
-ALTER DATABASE add_regions_in_txn ADD REGION "ap-southeast-2";
+ALTER DATABASE add_regions_in_txn ADD REGION "ap-southeast-2" FORCE;
 COMMIT;
 
 
@@ -2058,11 +2062,15 @@ regional_by_row_as                CREATE TABLE public.regional_by_row_as (
 ) LOCALITY REGIONAL BY ROW AS cr
 
 
+# Adding a FORCE to this second statement until we get a fix for #60620. When
+# that fix is ready, we can construct the view of the zone config as it was at
+# the beginning of the transaction, and the checks for FORCE should work again,
+# and we won't require the explicit force here.
 # Add and remove a region in the same txn.
 statement ok
 BEGIN;
 ALTER DATABASE drop_regions ADD REGION "us-east-1";
-ALTER DATABASE drop_regions DROP REGION "ap-southeast-2";
+ALTER DATABASE drop_regions DROP REGION "ap-southeast-2" FORCE;
 COMMIT;
 
 query TTT
