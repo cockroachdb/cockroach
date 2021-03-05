@@ -121,7 +121,6 @@ type Replica interface {
 	// Accessors.
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
-	Desc() *roachpb.RangeDescriptor
 
 	// BumpSideTransportClosed advances the range's closed timestamp if it can.
 	// If the closed timestamp is advanced, the function synchronizes with
@@ -139,7 +138,7 @@ type Replica interface {
 		ctx context.Context,
 		now hlc.ClockTimestamp,
 		targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
-	) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy)
+	) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy, *roachpb.RangeDescriptor)
 }
 
 // NewSender creates a Sender. Run must be called on it afterwards to get it to
@@ -332,17 +331,8 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 		lhRangeID := lh.GetRangeID()
 		lastMsg, tracked := s.trackedMu.tracked[lhRangeID]
 
-		// Make sure that we're communicating with all of the range's followers.
-		// Note that we're including this range's followers before deciding below if
-		// this message will include this range. This is because we don't want
-		// dynamic conditions about the activity of this range to dictate the
-		// opening and closing of connections to the other nodes.
-		for _, repl := range lh.Desc().Replicas().VoterFullAndNonVoterDescriptors() {
-			nodesWithFollowers.Add(int(repl.NodeID))
-		}
-
 		// Check whether the desired timestamp can be closed on this range.
-		canClose, lai, policy := lh.BumpSideTransportClosed(ctx, now, s.trackedMu.lastClosed)
+		canClose, lai, policy, desc := lh.BumpSideTransportClosed(ctx, now, s.trackedMu.lastClosed)
 		if !canClose {
 			// We can't close the desired timestamp. If this range was tracked, we
 			// need to un-track it.
@@ -351,6 +341,10 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 				delete(s.trackedMu.tracked, lhRangeID)
 			}
 			continue
+		}
+		// Ensure that we're communicating with all of the range's followers.
+		for _, repl := range desc.Replicas().VoterFullAndNonVoterDescriptors() {
+			nodesWithFollowers.Add(int(repl.NodeID))
 		}
 
 		// Check whether the range needs to be explicitly updated through the

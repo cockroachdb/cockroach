@@ -82,7 +82,7 @@ func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
 	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
-) (ok bool, _ ctpb.LAI, _ roachpb.RangeClosedTimestampPolicy) {
+) (ok bool, _ ctpb.LAI, _ roachpb.RangeClosedTimestampPolicy, _ *roachpb.RangeDescriptor) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -92,7 +92,7 @@ func (r *Replica) BumpSideTransportClosed(
 	// local copy of its leaseholder map. To avoid issues resulting from this,
 	// we first check if the replica is destroyed.
 	if _, err := r.isDestroyedRLocked(); err != nil {
-		return false, 0, 0
+		return false, 0, 0, nil
 	}
 
 	lai := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
@@ -102,14 +102,13 @@ func (r *Replica) BumpSideTransportClosed(
 	// We can't close timestamps outside our lease.
 	st := r.leaseStatusForRequestRLocked(ctx, now, target)
 	if !st.IsValid() || !st.OwnedBy(r.StoreID()) {
-		return false, 0, 0
+		return false, 0, 0, nil
 	}
 
-	// If the range is merging into its left-hand neighbor, we can't close
 	// timestamps any more because the joint-range would not be aware of reads
 	// performed based on this advanced closed timestamp.
 	if r.mergeInProgressRLocked() {
-		return false, 0, 0
+		return false, 0, 0, nil
 	}
 
 	// If there are pending Raft proposals in-flight or committed entries that
@@ -125,20 +124,20 @@ func (r *Replica) BumpSideTransportClosed(
 	// proposals and their timestamps are still tracked in proposal buffer's
 	// tracker, and they'll be considered below.
 	if len(r.mu.proposals) > 0 || r.mu.applyingEntries {
-		return false, 0, 0
+		return false, 0, 0, nil
 	}
 
 	// MaybeForwardClosedLocked checks that there are no evaluating requests
 	// writing under target.
 	if !r.mu.proposalBuf.MaybeForwardClosedLocked(ctx, target) {
-		return false, 0, 0
+		return false, 0, 0, nil
 	}
 
 	// Update the replica directly since there's no side-transport connection to
 	// the local node.
 	r.mu.sideTransportClosedTimestamp = target
 	r.mu.sideTransportCloseTimestampLAI = lai
-	return true, lai, policy
+	return true, lai, policy, r.descRLocked()
 }
 
 // closedTimestampTargetRLocked computes the timestamp we'd like to close for
