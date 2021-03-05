@@ -20,6 +20,65 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func registerImportNodeShutdown(r *testRegistry) {
+	getImportRunner := func(ctx context.Context, gatewayNode int) jobStarter {
+		startImport := func(c *cluster) (jobID string, err error) {
+			importStmt := `
+				IMPORT TABLE partsupp
+				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/partcupp.sql'
+				CSV DATA (
+				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.1',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.2',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.3',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.4',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.5',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.6',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.7',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/partsupp.tbl.8'
+				) WITH  delimiter='|', detached
+			`
+			gatewayDB := c.Conn(ctx, gatewayNode)
+			defer gatewayDB.Close()
+
+			err = gatewayDB.QueryRowContext(ctx, importStmt).Scan(&jobID)
+			return
+		}
+
+		return startImport
+	}
+
+	r.Add(testSpec{
+		Name:       "import/nodeShutdown/worker",
+		Owner:      OwnerBulkIO,
+		Cluster:    makeClusterSpec(4),
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			c.Put(ctx, cockroach, "./cockroach")
+			c.Start(ctx, t)
+			gatewayNode := 2
+			nodeToShutdown := 3
+			startImport := getImportRunner(ctx, gatewayNode)
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
+		},
+	})
+	r.Add(testSpec{
+		Name:       "import/nodeShutdown/coordinator",
+		Owner:      OwnerBulkIO,
+		Cluster:    makeClusterSpec(4),
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			c.Put(ctx, cockroach, "./cockroach")
+			c.Start(ctx, t)
+			gatewayNode := 2
+			nodeToShutdown := 2
+			startImport := getImportRunner(ctx, gatewayNode)
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, startImport)
+		},
+	})
+}
+
 func registerImportTPCC(r *testRegistry) {
 	runImportTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int) {
 		// Randomize starting with encryption-at-rest enabled.
