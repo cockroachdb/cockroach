@@ -67,7 +67,10 @@ type sendFunc func(
 type txnKVFetcher struct {
 	// "Constant" fields, provided by the caller.
 	sendFn sendFunc
-	spans  roachpb.Spans
+	// spans is the list of Spans that will be read by this KV Fetcher. If an
+	// individual Span has only a start key, it will be interpreted as a
+	// single-key fetch and may use a GetRequest under the hood.
+	spans roachpb.Spans
 	// If useBatchLimit is true, batches are limited to kvBatchSize. If
 	// firstBatchLimit is also set, the first batch is limited to that value.
 	// Subsequent batches are larger, up to kvBatchSize.
@@ -247,7 +250,12 @@ func makeKVBatchFetcherWithSendFunc(
 	if useBatchLimit {
 		// Verify the spans are ordered if a batch limit is used.
 		for i := 1; i < len(spans); i++ {
-			if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
+			prevKey := spans[i-1].EndKey
+			if prevKey == nil {
+				// This is the case of a GetRequest.
+				prevKey = spans[i-1].Key
+			}
+			if spans[i].Key.Compare(prevKey) < 0 {
 				return txnKVFetcher{}, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
 			}
 		}
@@ -255,11 +263,19 @@ func makeKVBatchFetcherWithSendFunc(
 		// Otherwise, just verify the spans don't contain consecutive overlapping
 		// spans.
 		for i := 1; i < len(spans); i++ {
-			if spans[i].Key.Compare(spans[i-1].EndKey) >= 0 {
+			prevEndKey := spans[i-1].EndKey
+			if prevEndKey == nil {
+				prevEndKey = spans[i-1].Key
+			}
+			curEndKey := spans[i].EndKey
+			if curEndKey == nil {
+				curEndKey = spans[i].Key
+			}
+			if spans[i].Key.Compare(prevEndKey) >= 0 {
 				// Current span's start key is greater than or equal to the last span's
 				// end key - we're good.
 				continue
-			} else if spans[i].EndKey.Compare(spans[i-1].Key) < 0 {
+			} else if curEndKey.Compare(spans[i-1].Key) < 0 {
 				// Current span's end key is less than or equal to the last span's start
 				// key - also good.
 				continue
@@ -323,6 +339,18 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			union roachpb.RequestUnion_ReverseScan
 		}, len(f.spans))
 		for i := range f.spans {
+			if f.spans[i].EndKey == nil {
+				// A span without an EndKey indicates that the caller is requesting a
+				// single key fetch, which can be served using a GetRequest.
+				getRequest := &roachpb.RequestUnion_Get{
+					Get: &roachpb.GetRequest{
+						KeyLocking: keyLocking,
+					},
+				}
+				getRequest.Get.SetSpan(f.spans[i])
+				ba.Requests[i].Value = getRequest
+				continue
+			}
 			scans[i].req.SetSpan(f.spans[i])
 			scans[i].req.ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].req.KeyLocking = keyLocking
@@ -335,6 +363,18 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 			union roachpb.RequestUnion_Scan
 		}, len(f.spans))
 		for i := range f.spans {
+			if f.spans[i].EndKey == nil {
+				// A span without an EndKey indicates that the caller is requesting a
+				// single key fetch, which can be served using a GetRequest.
+				getRequest := &roachpb.RequestUnion_Get{
+					Get: &roachpb.GetRequest{
+						KeyLocking: keyLocking,
+					},
+				}
+				getRequest.Get.SetSpan(f.spans[i])
+				ba.Requests[i].Value = getRequest
+				continue
+			}
 			scans[i].req.SetSpan(f.spans[i])
 			scans[i].req.ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].req.KeyLocking = keyLocking
@@ -453,7 +493,7 @@ func (f *txnKVFetcher) nextBatch(
 		f.remainingBatches = f.remainingBatches[1:]
 		return true, nil, batch, f.origSpan, nil
 	}
-	if len(f.responses) > 0 {
+	for len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses = f.responses[1:]
 		origSpan := f.requestSpans[0]
@@ -472,6 +512,19 @@ func (f *txnKVFetcher) nextBatch(
 				f.remainingBatches = t.BatchResponses[1:]
 			}
 			return true, t.Rows, batchResp, origSpan, nil
+		case *roachpb.GetResponse:
+			// TODO(jordan): do we have to worry about the IntentValue field on this
+			// response?
+			if t.IntentValue != nil {
+				return false, nil, nil, origSpan,
+					errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
+			}
+			if t.Value == nil {
+				// Nothing found in this particular response, let's continue to the next
+				// one.
+				continue
+			}
+			return true, []roachpb.KeyValue{{Key: origSpan.Key, Value: *t.Value}}, nil, origSpan, nil
 		}
 	}
 	if f.fetchEnd {
