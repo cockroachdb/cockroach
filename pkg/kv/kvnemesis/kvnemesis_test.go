@@ -14,6 +14,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -28,12 +30,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func numStepsFromEnv(t *testing.T, defaultSteps int) int {
+	t.Helper()
+	if s := os.Getenv("KVNEMESIS_STEPS"); s != "" {
+		numSteps, err := strconv.Atoi(s)
+		require.NoError(t, err, "invalid KVNEMESIS_STEPS value %q", s)
+		return numSteps
+	}
+	return defaultSteps
+}
+
 func TestKVNemesisSingleNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderRace(t)
 
 	defer log.Scope(t).Close(t)
 
+	numSteps := numStepsFromEnv(t, 50)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
@@ -45,7 +58,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	config.NumNodes, config.NumReplicas = 1, 1
 	rng, _ := randutil.NewPseudoRand()
 	ct := sqlClosedTimestampTargetInterval{sqlDBs: []*gosql.DB{sqlDB}}
-	failures, err := RunNemesis(ctx, rng, ct, config, db)
+	failures, err := RunNemesis(ctx, rng, ct, config, numSteps, db)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {
@@ -61,6 +74,7 @@ func TestKVNemesisMultiNode(t *testing.T) {
 
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	const numNodes = 4
+	numSteps := numStepsFromEnv(t, 50)
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{ReplicationMode: base.ReplicationManual})
 	defer tc.Stopper().Stop(ctx)
@@ -78,7 +92,7 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	config.NumNodes, config.NumReplicas = numNodes, 3
 	rng, _ := randutil.NewPseudoRand()
 	ct := sqlClosedTimestampTargetInterval{sqlDBs: sqlDBs}
-	failures, err := RunNemesis(ctx, rng, ct, config, dbs...)
+	failures, err := RunNemesis(ctx, rng, ct, config, numSteps, dbs...)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {
