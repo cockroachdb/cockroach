@@ -103,10 +103,6 @@ func (r *Replica) executeWriteBatch(
 	defer tok.DoneIfNotMoved(ctx)
 	minTS.Forward(minTS2)
 
-	if !ba.IsSingleSkipLeaseCheckRequest() && st.Expiration().Less(minTS) {
-		log.Fatalf(ctx, "closed timestamp above lease expiration (%s vs %s): %s", minTS, st.Expiration(), ba)
-	}
-
 	// Examine the timestamp cache for preceding commands which require this
 	// command to move its timestamp forward. Or, in the case of a transactional
 	// write, the txn timestamp and possible write-too-old bool.
