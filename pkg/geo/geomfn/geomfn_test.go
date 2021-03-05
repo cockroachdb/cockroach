@@ -14,7 +14,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"github.com/twpayne/go-geom"
 )
 
 var mismatchingSRIDGeometryA = geo.MustParseGeometry("SRID=4004;POINT(1.0 1.0)")
@@ -125,5 +127,51 @@ func TestRemoveConsecutivePointsFromGeomT(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, expectedT, actual)
 		})
+	}
+}
+
+func geometryFromGeomT(t *testing.T, g geom.T) geo.Geometry {
+	ret, err := geo.MakeGeometryFromGeomT(g)
+	require.NoError(t, err)
+	return ret
+}
+
+// geometryInEpsilon  points and ensures that are within the provided epsilon.
+func geometryInEpsilon(t *testing.T, expected, got geo.Geometry, epsilon float64) {
+	expectedT, err := expected.AsGeomT()
+	require.NoError(t, err)
+	gotT, err := got.AsGeomT()
+	require.NoError(t, err)
+	geomTInEpsilon(t, expectedT, gotT, epsilon)
+}
+
+func geomTInEpsilon(t *testing.T, expectedT, gotT geom.T, epsilon float64) {
+	require.Equal(t, expectedT.SRID(), gotT.SRID())
+	require.Equal(t, expectedT.Layout(), gotT.Layout())
+	require.IsType(t, expectedT, gotT)
+	switch lhs := expectedT.(type) {
+	case *geom.Point, *geom.LineString:
+		require.InEpsilonSlice(t, expectedT.FlatCoords(), gotT.FlatCoords(), epsilon)
+	case *geom.MultiPoint, *geom.Polygon, *geom.MultiLineString:
+		require.Equal(t, expectedT.Ends(), gotT.Ends())
+		require.InEpsilonSlice(t, expectedT.FlatCoords(), gotT.FlatCoords(), epsilon)
+	case *geom.MultiPolygon:
+		require.Equal(t, expectedT.Ends(), gotT.Ends())
+		require.Equal(t, expectedT.Endss(), gotT.Endss())
+		require.InEpsilonSlice(t, expectedT.FlatCoords(), gotT.FlatCoords(), epsilon)
+	case *geom.GeometryCollection:
+		rhs, ok := gotT.(*geom.GeometryCollection)
+		require.True(t, ok)
+		require.Len(t, rhs.Geoms(), len(lhs.Geoms()))
+		for i := range lhs.Geoms() {
+			geomTInEpsilon(
+				t,
+				lhs.Geom(i),
+				rhs.Geom(i),
+				epsilon,
+			)
+		}
+	default:
+		panic(errors.AssertionFailedf("unknown geometry type: %T", expectedT))
 	}
 }
