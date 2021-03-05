@@ -5768,3 +5768,17 @@ SRID=4326;POINT (359 90)
 SRID=4326;POINT (-179 -23)
 SRID=4326;LINESTRING (2 2, 5 -60, -160 0)
 SRID=4326;POLYGON ((354 -10, 6 -10, 0 20, 354 -10), (3 2, 359 -1, 1 -5, 3 2))
+
+query T
+SELECT ST_AsText(
+    ST_Snap(poly,line, ST_Distance(poly, line)*1.25)
+) AS polysnapped
+FROM (SELECT
+    ST_GeomFromText('MULTIPOLYGON(
+      (( 26 125, 26 200, 126 200, 126 125, 26 125 ),
+      ( 51 150, 101 150, 76 175, 51 150 )),
+      (( 151 100, 151 200, 176 175, 151 100 )))') As poly,
+    ST_GeomFromText('LINESTRING (5 107, 54 84, 101 100)') As line
+	) tbl(poly, line);
+----
+MULTIPOLYGON (((5 107, 26 200, 126 200, 126 125, 101 100, 54 84, 5 107), (51 150, 101 150, 76 175, 51 150)), ((151 100, 151 200, 176 175, 151 100)))

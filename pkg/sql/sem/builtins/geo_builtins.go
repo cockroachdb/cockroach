@@ -5011,6 +5011,33 @@ The calculations are done on a sphere.`,
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_snap": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"input", types.Geometry},
+				{"target", types.Geometry},
+				{"tolerance", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g1 := tree.MustBeDGeometry(args[0])
+				g2 := tree.MustBeDGeometry(args[1])
+				tolerance := tree.MustBeDFloat(args[2])
+				ret, err := geomfn.Snap(g1.Geometry, g2.Geometry, float64(tolerance))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			Info: infoBuilder{
+				info: `Snaps the vertices and segments of input geometry the target geometry's vertices.
+Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped. 
+If no snapping occurs then the input geometry is returned unchanged.`,
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
 	"st_buffer": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -6404,7 +6431,6 @@ May return a Point or LineString in the case of degenerate inputs.`,
 	"st_quantizecoordinates":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49012}),
 	"st_seteffectivearea":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
 	"st_simplifyvw":            makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
-	"st_snap":                  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49040}),
 	"st_split":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
 	"st_tileenvelope":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
 	"st_wrapx":                 makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
