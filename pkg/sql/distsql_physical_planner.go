@@ -876,7 +876,16 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
 	it := planCtx.spanIter
-	for _, span := range spans {
+	for i := range spans {
+
+		span := spans[i]
+		if len(span.EndKey) == 0 {
+			span = roachpb.Span{
+				Key:    span.Key,
+				EndKey: span.Key.Next(),
+			}
+		}
+
 		// rSpan is the span we are currently partitioning.
 		rSpan, err := keys.SpanAddr(span)
 		if err != nil {

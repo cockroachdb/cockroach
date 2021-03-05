@@ -79,6 +79,13 @@ func (fit *fakeSpanResolverIterator) Seek(
 		prevRange = fit.ranges[len(fit.ranges)-1]
 	}
 
+	/*
+		endKey := span.EndKey
+		if endKey == nil {
+			endKey = span.Key.Next()
+		}
+	*/
+
 	// Scan the range and keep a list of all potential split keys.
 	// TODO(asubiotto): this scan can have undesired side effects. For example,
 	// it can change when contention occurs and swallows tracing payloads, leading
