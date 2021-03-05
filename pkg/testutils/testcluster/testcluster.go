@@ -214,6 +214,10 @@ func NewTestCluster(t testing.TB, nodes int, clusterArgs base.TestClusterArgs) *
 		noLocalities = false
 	}
 
+	// Create a closer that will stop the individual server stoppers when the
+	// cluster stopper is stopped.
+	tc.stopper.AddCloser(stop.CloserFn(func() { tc.stopServers(context.TODO()) }))
+
 	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {
 		var serverArgs base.TestServerArgs
@@ -329,10 +333,6 @@ func (tc *TestCluster) Start(t testing.TB) {
 			t.Fatal(err)
 		}
 	}
-
-	// Create a closer that will stop the individual server stoppers when the
-	// cluster stopper is stopped.
-	tc.stopper.AddCloser(stop.CloserFn(func() { tc.stopServers(context.TODO()) }))
 
 	if tc.clusterArgs.ReplicationMode == base.ReplicationAuto {
 		if err := tc.WaitForFullReplication(); err != nil {

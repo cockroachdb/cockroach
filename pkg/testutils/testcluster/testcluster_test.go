@@ -353,3 +353,12 @@ func TestExpirationBasedLeases(t *testing.T) {
 	replAgain := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(keyAgain))
 	require.Equal(t, repl, replAgain)
 }
+
+func TestNewTestClusterWithoutStart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := NewTestCluster(t, 1, base.TestClusterArgs{})
+	tc.Stopper().Stop(context.Background())
+	// Verify that we're not leaking goroutines, via leaktest. Arguably we should
+	// not be starting any goroutines before calling `tc.Start` (and then wouldn't
+	// have to call `stopper.Stop()`) but that's a different yak to shave.
+}
