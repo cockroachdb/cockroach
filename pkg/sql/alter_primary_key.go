@@ -307,8 +307,14 @@ func (p *planner) AlterPrimaryKey(
 			if err != nil {
 				return err
 			}
+			regionConfig, err := SynthesizeRegionConfig(
+				ctx, p.txn, dbDesc, p.Descriptors(),
+			)
+			if err != nil {
+				return err
+			}
 			partitionAllBy = partitionByForRegionalByRow(
-				*dbDesc.DatabaseDesc().RegionConfig,
+				regionConfig,
 				colName,
 			)
 			if alterPrimaryKeyLocalitySwap.newColumnName != nil {

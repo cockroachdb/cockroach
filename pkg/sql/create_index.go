@@ -593,11 +593,16 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 		if err != nil {
 			return err
 		}
+
+		regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc, p.Descriptors())
+		if err != nil {
+			return err
+		}
 		if err := ApplyZoneConfigForMultiRegionTable(
 			ctx,
 			p.txn,
 			p.ExecCfg(),
-			*dbDesc.RegionConfig,
+			regionConfig,
 			tableDesc,
 			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexDesc.ID),
 		); err != nil {

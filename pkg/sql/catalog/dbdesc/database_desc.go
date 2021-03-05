@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -52,13 +53,21 @@ type Mutable struct {
 // NewInitialOption is an optional argument for NewInitial.
 type NewInitialOption func(*descpb.DatabaseDescriptor)
 
-// NewInitialOptionDatabaseRegionConfig is an option allowing an optional
-// regional configuration to be set on the database descriptor.
-func NewInitialOptionDatabaseRegionConfig(
-	regionConfig *descpb.DatabaseDescriptor_RegionConfig,
+// MaybeWithDatabaseRegionConfig is an option allowing an optional regional
+// configuration to be set on the database descriptor.
+func MaybeWithDatabaseRegionConfig(
+	regionConfig *multiregion.InitializationRegionConfig,
 ) NewInitialOption {
 	return func(desc *descpb.DatabaseDescriptor) {
-		desc.RegionConfig = regionConfig
+		// Not a multi-region database. Not much to do here.
+		if regionConfig == nil {
+			return
+		}
+		desc.RegionConfig = &descpb.DatabaseDescriptor_RegionConfig{
+			SurvivalGoal:  regionConfig.SurvivalGoal(),
+			PrimaryRegion: regionConfig.PrimaryRegion(),
+			RegionEnumID:  regionConfig.RegionEnumID(),
+		}
 	}
 }
 
@@ -211,25 +220,6 @@ func (desc *Immutable) IsMultiRegion() bool {
 	return desc.RegionConfig != nil
 }
 
-// GetRegionConfig returns the region config for the given database.
-func (desc *Immutable) GetRegionConfig() *descpb.DatabaseDescriptor_RegionConfig {
-	return desc.RegionConfig
-}
-
-// RegionNames returns the multi-region regions that have been added to a
-// database.
-func (desc *Immutable) RegionNames() (descpb.RegionNames, error) {
-	if !desc.IsMultiRegion() {
-		return nil, errors.AssertionFailedf(
-			"can not get regions of a non multi-region database")
-	}
-	regions := make(descpb.RegionNames, len(desc.RegionConfig.Regions))
-	for i, region := range desc.RegionConfig.Regions {
-		regions[i] = region.Name
-	}
-	return regions, nil
-}
-
 // MultiRegionEnumID returns the ID of the multi-region enum if the database
 // is a multi-region database, and an error otherwise.
 func (desc *Immutable) MultiRegionEnumID() (descpb.ID, error) {
@@ -295,29 +285,9 @@ func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 
 // validateMultiRegion performs checks specific to multi-region DBs.
 func (desc *Immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulator) {
-
-	// Ensure no regions are duplicated.
-	regions := make(map[descpb.RegionName]struct{})
-	dbRegions, err := desc.RegionNames()
-	if err != nil {
-		vea.Report(err)
-		return
-	}
-
-	for _, region := range dbRegions {
-		if _, seen := regions[region]; seen {
-			vea.Report(errors.AssertionFailedf(
-				"region %q seen twice on db %d", region, desc.GetID()))
-		}
-		regions[region] = struct{}{}
-	}
-
 	if desc.RegionConfig.PrimaryRegion == "" {
 		vea.Report(errors.AssertionFailedf(
 			"primary region unset on a multi-region db %d", desc.GetID()))
-	} else if _, found := regions[desc.RegionConfig.PrimaryRegion]; !found {
-		vea.Report(errors.AssertionFailedf(
-			"primary region not found in list of regions on db %d", desc.GetID()))
 	}
 }
 
@@ -482,4 +452,25 @@ func (desc *Mutable) AddDrainingName(name descpb.NameInfo) {
 // database descriptor.
 func (desc *Mutable) UnsetMultiRegionConfig() {
 	desc.RegionConfig = nil
+}
+
+// SetInitialMultiRegionConfig initializes and sets a RegionConfig on a database
+// descriptor. It returns an error if a RegionConfig already exists.
+func (desc *Mutable) SetInitialMultiRegionConfig(
+	config *multiregion.InitializationRegionConfig,
+) error {
+	// We only should be doing this for the initial multi-region configuration.
+	if desc.RegionConfig != nil {
+		return errors.AssertionFailedf(
+			"expected no region config on database %q with ID %d",
+			desc.GetName(),
+			desc.GetID(),
+		)
+	}
+	desc.RegionConfig = &descpb.DatabaseDescriptor_RegionConfig{
+		SurvivalGoal:  config.SurvivalGoal(),
+		PrimaryRegion: config.PrimaryRegion(),
+		RegionEnumID:  config.RegionEnumID(),
+	}
+	return nil
 }

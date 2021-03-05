@@ -4993,7 +4993,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		tree.FunctionProperties{Category: categoryMultiRegion},
 		stringOverload1(
 			func(evalCtx *tree.EvalContext, s string) (tree.Datum, error) {
-				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig()
+				regionConfig, err := evalCtx.Sequence.CurrentDatabaseRegionConfig(evalCtx.Context)
 				if err != nil {
 					return nil, err
 				}

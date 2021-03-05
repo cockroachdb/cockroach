@@ -255,8 +255,12 @@ CREATE TABLE crdb_internal.databases (
 					}
 					primaryRegion = tree.NewDString(string(db.RegionConfig.PrimaryRegion))
 
-					for _, region := range db.RegionConfig.Regions {
-						if err := regions.Append(tree.NewDString(string(region.Name))); err != nil {
+					regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, db, p.Descriptors())
+					if err != nil {
+						return err
+					}
+					for _, region := range regionConfig.Regions() {
+						if err := regions.Append(tree.NewDString(string(region))); err != nil {
 							return err
 						}
 					}
