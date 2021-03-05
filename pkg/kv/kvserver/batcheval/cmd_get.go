@@ -32,9 +32,6 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	var val *roachpb.Value
-	var intent *roachpb.Intent
-	var err error
 	if h.MaxSpanRequestKeys < 0 || h.TargetBytes < 0 {
 		// Receipt of a GetRequest with negative MaxSpanRequestKeys or TargetBytes
 		// indicates that the request was part of a batch that has already exhausted
@@ -47,18 +44,21 @@ func Get(
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 		return result.Result{}, nil
 	}
+	var val *roachpb.Value
+	var intent *roachpb.Intent
+	var err error
 	val, intent, err = storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
 		Txn:                   h.Txn,
 		FailOnMoreRecent:      args.KeyLocking != lock.None,
 		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
 	})
+	if err != nil {
+		return result.Result{}, err
+	}
 	if val != nil {
 		reply.NumKeys = 1
 		reply.NumBytes = int64(len(val.RawBytes))
-	}
-	if err != nil {
-		return result.Result{}, err
 	}
 	var intents []roachpb.Intent
 	if intent != nil {
