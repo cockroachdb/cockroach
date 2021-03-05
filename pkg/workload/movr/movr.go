@@ -144,6 +144,7 @@ type movr struct {
 	seed                              uint64
 	users, vehicles, rides, histories cityDistributor
 	numPromoCodes                     int
+	numUserPromoCodes                 int
 	ranges                            int
 
 	creationTime time.Time
@@ -171,6 +172,7 @@ var movrMeta = workload.Meta{
 		g.flags.IntVar(&g.histories.numRows, `num-histories`, 1000,
 			`Initial number of ride location histories.`)
 		g.flags.IntVar(&g.numPromoCodes, `num-promo-codes`, 1000, `Initial number of promo codes.`)
+		g.flags.IntVar(&g.numUserPromoCodes, `num-user-promos`, 5, `Initial number of promo codes in use.`)
 		g.flags.IntVar(&g.ranges, `num-ranges`, 9, `Initial number of ranges to break the tables into`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		g.creationTime = time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)
@@ -412,8 +414,8 @@ func (g *movr) Tables() []workload.Table {
 		Name:   `user_promo_codes`,
 		Schema: movrUserPromoCodesSchema,
 		InitialRows: workload.Tuples(
-			0,
-			func(_ int) []interface{} { panic(`unimplemented`) },
+			g.numUserPromoCodes,
+			g.movrUserPromoCodesInitialRow,
 		),
 	}
 	return tables
@@ -565,5 +567,24 @@ func (g *movr) movrPromoCodesInitialRow(rowIdx int) []interface{} {
 		creationTime,   // creation_time
 		expirationTime, // expiration_time
 		rulesJSON,      // rules
+	}
+}
+
+func (g *movr) movrUserPromoCodesInitialRow(rowIdx int) []interface{} {
+	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
+	// Make evenly-spaced UUIDs sorted in the same order as the rows.
+	var id uuid.UUID
+	id.DeterministicV4(uint64(rowIdx), uint64(g.users.numRows))
+	cityIdx := g.users.cityForRow(rowIdx)
+	city := cities[cityIdx]
+	code := strings.ToLower(strings.Join(g.faker.Words(rng, 3), `_`))
+	code = fmt.Sprintf("%d_%s", rowIdx, code)
+	time := g.creationTime.Add(time.Duration(rowIdx) * time.Millisecond)
+	return []interface{}{
+		city.city,                    // city
+		id.String(),                  // user_id
+		code,                         // code
+		time.Format(timestampFormat), // timestamp
+		rng.Intn(20),                 // usage_count
 	}
 }
