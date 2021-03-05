@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 )
@@ -33,12 +32,7 @@ var nodeJoinCmd = &cobra.Command{
 	RunE:  MaybeDecorateGRPCError(runNodeJoin),
 }
 
-func isTrustedCA(caCert []byte, jt server.JoinToken) bool {
-	// TODO(aaron-crl): Replace this stub with HMAC validation.
-	return true
-}
-
-func requestPeerCA(ctx context.Context, peer string, jt server.JoinToken) (*x509.CertPool, error) {
+func requestPeerCA(ctx context.Context, peer string, joinToken string) (*x509.CertPool, error) {
 	var dialOpts []grpc.DialOption
 
 	dialOpts = rpc.GetAddJoinDialOptions(nil)
@@ -58,7 +52,11 @@ func requestPeerCA(ctx context.Context, peer string, jt server.JoinToken) (*x509
 	}
 
 	// Verify that the received bytes match our expected MAC.
-	if !isTrustedCA(resp.CaCert, jt) {
+	isTrustedCA, err := server.IsCATrustedByJoinToken(resp.CaCert, joinToken)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to validate remote CA")
+	}
+	if !isTrustedCA {
 		return nil, errors.New("resp.CaCert failed cryptologic validation")
 	}
 
@@ -77,18 +75,6 @@ func requestPeerCA(ctx context.Context, peer string, jt server.JoinToken) (*x509
 	return certPool, nil
 }
 
-// TODO(aaron-crl): Remove this and parse token from the CLI before merging.
-func fakeJoinToken(tokenID string, secret string) (*server.JoinToken, error) {
-	var err error
-	jt := server.JoinToken{}
-	jt.TokenID, err = uuid.FromString(tokenID)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse join-token")
-	}
-	jt.SharedSecret = []byte("foo")
-	return &jt, nil
-}
-
 // runNodeJoin will attempt to connect to peers from the list provided and
 // request a certificate initialization bundle if it is able to validate a
 // peer.
@@ -99,13 +85,13 @@ func runNodeJoin(cmd *cobra.Command, args []string) error {
 
 	// TODO(aaron-crl) plumb this into the connect or start commands or both.
 	var err error
-	jt, _ := fakeJoinToken("abcdefgh-1234-5678-abcd-1234abcd5678", "foo")
 	peerAddr := args[0]
+	jt := args[1]
 
 	// TODO(aaron-crl): loop over peers here.
 	// For each peer, attempt to validate it's CA, then request a bundle with
 	// the supplied join-token. For now loop this to reduce complexity.
-	certPool, err := requestPeerCA(ctx, peerAddr, *jt)
+	certPool, err := requestPeerCA(ctx, peerAddr, jt)
 	if err != nil {
 		return errors.Wrapf(
 			err, "failed requesting peer CA from %q", peerAddr)
@@ -120,7 +106,7 @@ func runNodeJoin(cmd *cobra.Command, args []string) error {
 	}
 
 	// Use the bundle to initialize the node.
-	err = certBundle.InitializeNodeFromBundle(*baseCfg)
+	err = certBundle.InitializeNodeFromBundle(ctx, *baseCfg)
 	if err != nil {
 		return errors.Wrap(
 			err,
