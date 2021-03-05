@@ -58,8 +58,8 @@ func work(t *testing.T) {
 		args.ServerArgs.Insecure = true
 		args.ReplicationMode = base.ReplicationManual
 		ts := serverutils.NewTestCluster(t, 1, args)
+		ts.Start(t)
 		ts.Stopper().Stop(context.Background())
-		_ = ts
 	}()
 	<-ch
 
