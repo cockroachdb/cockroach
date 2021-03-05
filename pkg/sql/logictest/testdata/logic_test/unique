@@ -329,9 +329,9 @@ statement ok
 INSERT INTO uniq_partial VALUES (7, 7), (7, 8), (7, -7) ON CONFLICT (a) WHERE b > 0 DO NOTHING
 
 # On conflict do nothing with constant input, no conflict columns.
-# Only rows (9, 9) and (9, -9) are inserted.
+# Only one row (9, 9) and (9, -9) are inserted.
 statement ok
-INSERT INTO uniq_partial VALUES (1, 9), (9, 9), (9, 10), (9, -9) ON CONFLICT DO NOTHING
+INSERT INTO uniq_partial VALUES (1, 9), (9, 9), (9, 9), (9, -9) ON CONFLICT DO NOTHING
 
 # On conflict do nothing with non-constant input.
 # The (1, 10) row is not inserted because of a conflict with (1, 1).
