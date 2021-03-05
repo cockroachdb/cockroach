@@ -3015,7 +3015,7 @@ type DatabaseRegionConfig interface {
 type EvalDatabase interface {
 	// CurrentDatabaseRegionConfig returns the RegionConfig of the current
 	// session database.
-	CurrentDatabaseRegionConfig() (DatabaseRegionConfig, error)
+	CurrentDatabaseRegionConfig(ctx context.Context) (DatabaseRegionConfig, error)
 
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.

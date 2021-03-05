@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "multiregion",
+    srcs = ["region_config.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "multiregion_test",
+    srcs = ["region_config_test.go"],
+    deps = [
+        ":multiregion",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)

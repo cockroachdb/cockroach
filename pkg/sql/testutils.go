@@ -51,8 +51,8 @@ func CreateTestTableDescriptor(
 			parentID,
 			keys.PublicSchemaID,
 			id,
-			nil,             /* regionConfig */
-			hlc.Timestamp{}, /* creationTime */
+			nil,              /* regionConfig */
+			hlc.Timestamp{},  /* creationTime */
 			privileges,
 			nil, /* affected */
 			&semaCtx,

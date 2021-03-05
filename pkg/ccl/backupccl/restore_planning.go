@@ -597,7 +597,7 @@ func allocateDescriptorRewrites(
 				// want to modify the table so that it can exist in the multi-region
 				// database.
 				// https://github.com/cockroachdb/cockroach/issues/59804
-				if parentDB.GetRegionConfig() != nil {
+				if parentDB.IsMultiRegion() {
 					return pgerror.Newf(pgcode.FeatureNotSupported,
 						"cannot restore individual table %d into multi-region database %d",
 						table.GetID(),
