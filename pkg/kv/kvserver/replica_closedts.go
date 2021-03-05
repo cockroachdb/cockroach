@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -98,10 +99,14 @@ func (r *Replica) BumpSideTransportClosed(
 	lai := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
 	policy := r.closedTimestampPolicyRLocked()
 	target := targetByPolicy[policy]
-
-	// We can't close timestamps outside our lease.
-	st := r.leaseStatusForRequestRLocked(ctx, now, target)
-	if !st.IsValid() || !st.OwnedBy(r.StoreID()) {
+	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
+	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
+	// matter.
+	valid := st.IsValid() || st.State == kvserverpb.LeaseState_UNUSABLE
+	if !valid || !st.OwnedBy(r.StoreID()) {
+		return false, 0, 0
+	}
+	if st.ClosedTimestampUpperBound().Less(target) {
 		return false, 0, 0
 	}
 
