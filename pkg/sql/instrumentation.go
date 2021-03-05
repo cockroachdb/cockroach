@@ -304,9 +304,16 @@ func (ih *instrumentationHelper) ShouldDiscardRows() bool {
 }
 
 // ShouldSaveFlows is true if we should save the flow specifications (to be able
-// to generate diagrams).
+// to generate diagrams - when shouldSaveDiagrams() returns true - and to get
+// query level stats when sampling statements).
 func (ih *instrumentationHelper) ShouldSaveFlows() bool {
 	return ih.collectBundle || ih.outputMode == explainAnalyzeDistSQLOutput || ih.collectExecStats
+}
+
+// shouldSaveDiagrams returns whether saveFlows() function should also be saving
+// diagrams in flowInfo objects.
+func (ih *instrumentationHelper) shouldSaveDiagrams() bool {
+	return ih.collectBundle || ih.outputMode != unmodifiedOutput
 }
 
 // ShouldUseJobForCreateStats indicates if we should run CREATE STATISTICS as a
