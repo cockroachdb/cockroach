@@ -2217,6 +2217,10 @@ The paths themselves are given in the direction of the first geometry.</p>
 </span></td></tr>
 <tr><td><a name="st_simplifypreservetopology"></a><code>st_simplifypreservetopology(geometry: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Simplifies the given geometry using the Douglas-Peucker algorithm, avoiding the creation of invalid geometries.</p>
 </span></td></tr>
+<tr><td><a name="st_snap"></a><code>st_snap(input: geometry, target: geometry, tolerance: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snaps the vertices and segments of input geometry the target geometry’s vertices.
+Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped.
+If no snapping occurs then the input geometry is returned unchanged.</p>
+</span></td></tr>
 <tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, origin_x: <a href="float.html">float</a>, origin_y: <a href="float.html">float</a>, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y based on an origin of (origin_x, origin_y).</p>
 </span></td></tr>
 <tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of the given size.</p>
