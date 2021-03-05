@@ -650,7 +650,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> INNER INSERT INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED IS ISERROR ISNULL ISOLATION
 
-%token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
+%token <str> JOB JOBS JOIN JOINTOKEN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
 %token <str> KEY KEYS KMS KV
 
@@ -829,6 +829,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> create_table_as_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
+%type <tree.Statement> create_join_token_stmt
 
 %type <tree.Statement> create_stats_stmt
 %type <*tree.CreateStatsOptions> opt_create_stats_options
@@ -3159,6 +3160,7 @@ create_stmt:
 | create_changefeed_stmt
 | create_replication_stream_stmt
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
+| create_join_token_stmt // help text to be added after feature flag removed
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 
@@ -3412,6 +3414,14 @@ create_replication_stream_stmt:
       SinkURI: $6.expr(),
       Options: *$7.replicationOptions(),
     }
+  }
+
+// Create join token statement. Help text to come when feature flag is dropped.
+create_join_token_stmt:
+  CREATE JOINTOKEN
+  {
+    /* SKIP DOC */
+    $$.val = &tree.CreateJoinToken{}
   }
 
 // Optional replication stream options.
@@ -12523,6 +12533,7 @@ unreserved_keyword:
 | JOB
 | JOBS
 | JSON
+| JOINTOKEN
 | KEY
 | KEYS
 | KMS

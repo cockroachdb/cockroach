@@ -149,6 +149,7 @@ var _ planNode = &cancelSessionsNode{}
 var _ planNode = &changePrivilegesNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
+var _ planNode = &createJoinTokenNode{}
 var _ planNode = &createSequenceNode{}
 var _ planNode = &createStatsNode{}
 var _ planNode = &createTableNode{}
