@@ -1456,3 +1456,17 @@ VALUES (1, 'a', 2)
 ON CONFLICT (a, b) DO UPDATE SET a = excluded.a
 WHERE t61414_b.a = 'x'
 RETURNING k
+
+# Regression test for #61284. When building partial index DEL column
+# expressions, there should not be ambiguous column errors if there exists
+# columns in an UPDATE FROM clause that match column names in the partial index
+# predicate.
+
+statement ok
+CREATE TABLE t61284 (
+  a INT,
+  INDEX (a) WHERE a > 0
+)
+
+statement ok
+UPDATE t61284 SET a = v.a FROM (VALUES (1), (2)) AS v(a) WHERE t61284.a = v.a
