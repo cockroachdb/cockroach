@@ -1290,7 +1290,7 @@ func (desc *wrapper) validateTableLocalityConfig(
 		// Table is homed in an explicit (non-primary) region.
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
-			regions, err := regionsEnumDesc.RegionNames()
+			regions, err := regionsEnumDesc.RegionNamesIncludingTransitioning()
 			if err != nil {
 				return err
 			}

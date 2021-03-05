@@ -958,6 +958,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 				tbl,
 				mutation,
 				false, // isDone
+				descsCol,
 			); err != nil {
 				return err
 			}
@@ -1141,6 +1142,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				scTable,
 				mutation,
 				true, // isDone
+				descsCol,
 			); err != nil {
 				return err
 			}
@@ -2420,6 +2422,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 	tableDesc *tabledesc.Mutable,
 	mutation descpb.DescriptorMutation,
 	isDone bool,
+	descsCol *descs.Collection,
 ) error {
 	if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
 		if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
@@ -2485,11 +2488,15 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 				)
 			}
 
+			regionConfig, err := SynthesizeRegionConfig(ctx, txn, dbDesc.ID, descsCol)
+			if err != nil {
+				return err
+			}
 			return ApplyZoneConfigForMultiRegionTable(
 				ctx,
 				txn,
 				sc.execCfg,
-				*dbDesc.RegionConfig,
+				regionConfig,
 				tableDesc,
 				opts...,
 			)
