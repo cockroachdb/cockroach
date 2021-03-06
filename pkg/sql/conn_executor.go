@@ -822,6 +822,16 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 		}
+		switch t := ex.machine.CurState().(type) {
+		case stateNoTxn:
+			// No txn to finish.
+		case stateAborted, stateCommitWait:
+			ex.state.finishSQLTxn()
+		default:
+			if util.CrdbTestBuild {
+				panic(errors.AssertionFailedf("unexpected state in conn executor after ApplyWithPayload %T", t))
+			}
+		}
 	} else if closeType == externalTxnClose {
 		ex.state.finishExternalTxn()
 	}
