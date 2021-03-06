@@ -157,13 +157,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
 	// into a larger discussion about how to drain SQL and rollback open txns.
 	opName := sqlTxnName
-	var traceOpts []tracing.SpanOption
-	if !tranCtx.execTestingKnobs.Pretend59315IsFixed {
-		// The surrounding conditional and this option can be removed once #59315
-		// is addressed.
-		traceOpts = append(traceOpts, tracing.WithBypassRegistry())
-	}
-	txnCtx, sp := createRootOrChildSpan(connCtx, opName, tranCtx.tracer, traceOpts...)
+	txnCtx, sp := createRootOrChildSpan(connCtx, opName, tranCtx.tracer)
 	if txnType == implicitTxn {
 		sp.SetTag("implicit", "true")
 	}
