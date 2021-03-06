@@ -10,9 +10,9 @@
 
 import React from "react";
 import { Modal as AntModal } from "antd";
-import { Button, Text, TextTypes } from "src/components";
+import { Text, TextTypes } from "src/components";
 import "./modal.styl";
-
+import { Button } from "@cockroachlabs/ui-components";
 export interface ModalProps {
   title?: string;
   onOk?: () => void;
@@ -43,10 +43,20 @@ export const Modal: React.FC<ModalProps> = (props) => {
         </div>
       }
       footer={[
-        <Button onClick={onCancel} type="secondary" key="cancelButton">
+        <Button
+          onClick={onCancel}
+          intent="secondary"
+          key="cancelButton"
+          data-testid="Cancel"
+        >
           {cancelText}
         </Button>,
-        <Button onClick={onOk} type="primary" key="okButton">
+        <Button
+          onClick={onOk}
+          intent="primary"
+          key="okButton"
+          data-testid="Activate"
+        >
           {okText}
         </Button>,
       ]}
