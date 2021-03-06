@@ -16,7 +16,6 @@ require (
 	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/Shopify/sarama v1.27.2
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
-	github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6 // indirect
 	github.com/VividCortex/ewma v1.1.1
 	github.com/abourget/teamcity v0.0.0-00010101000000-000000000000
 	github.com/andy-kimball/arenaskl v0.0.0-20200617143215-f701008588b9
@@ -61,7 +60,6 @@ require (
 	github.com/emicklei/dot v0.15.0
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
-	github.com/go-ole/go-ole v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gofrs/uuid v3.3.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2
@@ -103,7 +101,7 @@ require (
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
 	github.com/lib/pq v1.8.0
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
-	github.com/lightstep/lightstep-tracer-go v0.15.6
+	github.com/lightstep/lightstep-tracer-go v0.24.0
 	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/lufia/iostat v1.0.0
 	github.com/lusis/go-slackbot v0.0.0-20180109053408-401027ccfef5 // indirect
