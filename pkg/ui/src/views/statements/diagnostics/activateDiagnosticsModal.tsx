@@ -37,7 +37,7 @@ export interface ActivateDiagnosticsModalRef {
 
 const ActivateDiagnosticsModal = (
   props: ActivateDiagnosticsModalProps,
-  ref: React.RefObject<ActivateDiagnosticsModalRef>,
+  ref: React.RefObject<ActivateDiagnosticsModalRef>
 ) => {
   const { activate } = props;
   const [visible, setVisible] = useState(false);
@@ -91,7 +91,7 @@ interface MapDispatchToProps {
 }
 
 const mapDispatchToProps = (
-  dispatch: Dispatch<Action, AdminUIState>,
+  dispatch: Dispatch<Action, AdminUIState>
 ): MapDispatchToProps => ({
   activate: (statement: string) =>
     dispatch(createStatementDiagnosticsReportAction(statement)),
@@ -105,5 +105,5 @@ export default connect<null, MapDispatchToProps>(
   null,
   mapDispatchToProps,
   null,
-  { forwardRef: true },
+  { forwardRef: true }
 )(forwardRef(ActivateDiagnosticsModal));
