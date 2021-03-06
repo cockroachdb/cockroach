@@ -11,12 +11,16 @@
 package sql_test
 
 import (
+	"bytes"
 	"context"
+	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -199,4 +203,56 @@ func TestStatementReuses(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestPrepareExplain verifies that we can prepare and execute various flavors
+// of EXPLAIN.
+func TestPrepareExplain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(godb)
+	r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
+
+	// Note: the EXPLAIN ANALYZE (DEBUG) variant is tested separately.
+	statements := []string{
+		"EXPLAIN SELECT * FROM abc WHERE c=1",
+		"EXPLAIN (VERBOSE) SELECT * FROM abc WHERE c=1",
+		"EXPLAIN (TYPES) SELECT * FROM abc WHERE c=1",
+		"EXPLAIN ANALYZE SELECT * FROM abc WHERE c=1",
+		"EXPLAIN ANALYZE (VERBOSE) SELECT * FROM abc WHERE c=1",
+		"EXPLAIN (DISTSQL) SELECT * FROM abc WHERE c=1",
+		"EXPLAIN (VEC) SELECT * FROM abc WHERE c=1",
+	}
+
+	for _, sql := range statements {
+		stmt, err := godb.Prepare(sql)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows, err := stmt.Query()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var rowsBuf bytes.Buffer
+		for rows.Next() {
+			var row string
+			if err := rows.Scan(&row); err != nil {
+				t.Fatal(err)
+			}
+			rowsBuf.WriteString(row)
+			rowsBuf.WriteByte('\n')
+		}
+
+		// Verify that the output contains a scan for abc.
+		scanRe := regexp.MustCompile(`scan|ColBatchScan`)
+		if scanRe.FindString(rowsBuf.String()) == "" {
+			t.Fatalf("%s: invalid output: \n%s\n", sql, rowsBuf.String())
+		}
+
+		stmt.Close()
+	}
 }
