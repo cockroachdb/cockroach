@@ -11,7 +11,9 @@
 // licenses/APL.txt.
 const requireOpt = require("./requireOptModule");
 const cypressTypeScriptPreprocessor = require("./cy-ts-preprocessor");
-const { addMatchImageSnapshotPlugin } = requireOpt("cypress-image-snapshot/plugin");
+const { addMatchImageSnapshotPlugin } = requireOpt(
+  "cypress-image-snapshot/plugin"
+);
 
 /**
  * @type {Cypress.PluginConfig}

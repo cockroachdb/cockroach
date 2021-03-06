@@ -8,9 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import "./commands";
-Cypress.on("uncaught:exception", (err, runnable) => {
-  // returning false here prevents Cypress from
-  // failing the test
-  return false;
+describe("Sessions - Visual regression tests", () => {
+  it("renders metrics/overview/cluster view", () => {
+    cy.visit("#/Sessions");
+  });
 });
