@@ -1128,8 +1128,8 @@ def go_deps():
         name = "com_github_go_ole_go_ole",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/go-ole/go-ole",
-        sum = "h1:QNWhweRd9D5Py2rRVboZ2L4SEoW/dyraWJCc8bgS8kE=",
-        version = "v1.2.2",
+        sum = "h1:nNBDSCOigTSiarFpYE9J/KtEA1IOW4CNeqT9TQDqCxI=",
+        version = "v1.2.4",
     )
     go_repository(
         name = "com_github_go_openapi_analysis",
@@ -2205,11 +2205,19 @@ def go_deps():
         version = "v0.0.0-20200720160335-984a6aa1ca46",
     )
     go_repository(
+        name = "com_github_lightstep_lightstep_tracer_common_golang_gogo",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/lightstep/lightstep-tracer-common/golang/gogo",
+        sum = "h1:lrdADj7ifyBpqGJ+cT4vE5ztUoAF87uUf76+epwPViY=",
+        version = "v0.0.0-20200305213919-a88bf8de3718",
+    )
+
+    go_repository(
         name = "com_github_lightstep_lightstep_tracer_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lightstep/lightstep-tracer-go",
-        sum = "h1:D0GGa7afJ7GcQvu5as6ssLEEKYXvRgKI5d5cevtz8r4=",
-        version = "v0.15.6",
+        sum = "h1:qGUbkzHP64NA9r+uIbCvf303IzHPr0M4JlkaDMxXqqk=",
+        version = "v0.24.0",
     )
     go_repository(
         name = "com_github_linkedin_goavro_v2",
@@ -3167,8 +3175,8 @@ def go_deps():
         name = "com_github_stackexchange_wmi",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/StackExchange/wmi",
-        sum = "h1:fLjPD/aNc3UIOA6tDi6QXUemppXK3P9BI7mr2hd6gx8=",
-        version = "v0.0.0-20180116203802-5d049714c4a6",
+        sum = "h1:G0m3OIz70MZUWq3EgK3CesDbo8upS2Vm9/P3FtgI+Jk=",
+        version = "v0.0.0-20190523213315-cbe66965904d",
     )
     go_repository(
         name = "com_github_stretchr_objx",
@@ -3836,8 +3844,8 @@ def go_deps():
         name = "io_opencensus_go",
         build_file_proto_mode = "disable_global",
         importpath = "go.opencensus.io",
-        sum = "h1:C9hSCOW830chIVkdja34wa6Ky+IzWllkUinR+BtRZd4=",
-        version = "v0.22.0",
+        sum = "h1:8sGtKOrtQqkN1bp2AtX+misvLIlOmsEsNd+9NIcPEm8=",
+        version = "v0.22.3",
     )
     go_repository(
         name = "io_rsc_binaryregexp",
