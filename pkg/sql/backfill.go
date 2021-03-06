@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -70,22 +71,19 @@ const (
 	// over many ranges.
 	indexTxnBackfillChunkSize = 100
 
-	// indexBackfillBatchSize is the maximum number of index entries we attempt to
-	// fill in a single index batch before queueing it up for ingestion and
-	// progress reporting in the index backfiller processor.
-	//
-	// TODO(adityamaru): This should live with the index backfiller processor
-	// logic once the column backfiller is reworked. The only reason this variable
-	// is initialized here is to maintain a single testing knob
-	// `BackfillChunkSize` to control both the index and column backfill chunking
-	// behavior, and minimize test complexity. Should this be a cluster setting? I
-	// would hope we can do a dynamic memory based adjustment of this number in
-	// the processor.
-	indexBackfillBatchSize = 5000
-
 	// checkpointInterval is the interval after which a checkpoint of the
 	// schema change is posted.
 	checkpointInterval = 2 * time.Minute
+)
+
+// indexBackfillBatchSize is the maximum number of rows we construct index
+// entries for before we attempt to fill in a single index batch before queueing
+// it up for ingestion and progress reporting in the index backfiller processor.
+var indexBackfillBatchSize = settings.RegisterIntSetting(
+	"bulkio.index_backfill.batch_size",
+	"the number of rows for which we construct index entries in a single batch",
+	50000,
+	settings.NonNegativeInt, /* validateFn */
 )
 
 var _ sort.Interface = columnsByID{}
@@ -949,7 +947,6 @@ func (sc *SchemaChanger) distIndexBackfill(
 	targetSpans []roachpb.Span,
 	addedIndexes []descpb.IndexID,
 	filter backfill.MutationFilter,
-	indexBackfillBatchSize int64,
 ) error {
 	readAsOf := sc.clock.Now()
 
@@ -1025,7 +1022,8 @@ func (sc *SchemaChanger) distIndexBackfill(
 		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), sc.ieFactory)
 		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
 			true /* distribute */)
-		chunkSize := sc.getChunkSize(indexBackfillBatchSize)
+		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
+		chunkSize := sc.getChunkSize(indexBatchSize)
 		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), readAsOf, chunkSize, addedIndexes)
 		if err != nil {
 			return err
@@ -1778,7 +1776,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	}
 
 	if err := sc.distIndexBackfill(
-		ctx, version, addingSpans, addedIndexes, backfill.IndexMutationFilter, indexBackfillBatchSize,
+		ctx, version, addingSpans, addedIndexes, backfill.IndexMutationFilter,
 	); err != nil {
 		return err
 	}
