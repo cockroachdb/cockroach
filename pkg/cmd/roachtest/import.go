@@ -169,15 +169,17 @@ func registerImportTPCH(r *testRegistry) {
 	}
 }
 
-func successfulImportStep(warehouses, nodeID int) versionStep {
-	return func(ctx context.Context, t *test, u *versionUpgradeTest) {
-		u.c.Run(ctx, u.c.Node(nodeID), tpccImportCmd(warehouses))
-	}
-}
-
 func runImportMixedVersion(
 	ctx context.Context, t *test, c *cluster, warehouses int, predecessorVersion string,
 ) {
+	successfulImportStep := func(warehouses, nodeID int) versionStep {
+		// Even though this is a 20.2 test, since it's run in a mixed-version
+		// cluster test so we need to support 20.1 nodes, so include the deprecated
+		// fk indexes.
+		return func(ctx context.Context, t *test, u *versionUpgradeTest) {
+			u.c.Run(ctx, u.c.Node(nodeID), tpccImportCmd(warehouses, "--deprecated-fk-indexes"))
+		}
+	}
 	// An empty string means that the cockroach binary specified by flag
 	// `cockroach` will be used.
 	const mainVersion = ""
