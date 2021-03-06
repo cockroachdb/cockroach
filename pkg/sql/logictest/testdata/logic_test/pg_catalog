@@ -1036,16 +1036,16 @@ crdb_oid    tablename  indexname     indexdef
 query OOIBBB colnames
 SELECT indexrelid, indrelid, indnatts, indisunique, indisprimary, indisexclusion
 FROM pg_catalog.pg_index
-WHERE indnatts = 2
+WHERE indnkeyatts = 2
 ----
 indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion
 450499961   55        2         true         false         false
-969972502   57        2         false        false         false
+969972502   57        3         false        false         false
 
 query OBBBBB colnames
 SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
 FROM pg_catalog.pg_index
-WHERE indnatts = 2
+WHERE indnkeyatts = 2
 ----
 indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 450499961   true          false           true        false         false
@@ -1054,11 +1054,11 @@ indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
 query OOBBTTTTTT colnames
 SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
 FROM pg_catalog.pg_index
-WHERE indnatts = 2
+WHERE indnkeyatts = 2
 ----
 indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs  indpred
 450499961   55        true       false           3 4     0 0           0 0       2 2        NULL      NULL
-969972502   57        true       false           1 2     0 0           0 0       2 1        NULL      NULL
+969972502   57        true       false           1 2 3   0 0           0 0       2 1        NULL      NULL
 
 statement ok
 SET DATABASE = system
@@ -1069,44 +1069,44 @@ FROM pg_catalog.pg_index
 ORDER BY indexrelid
 ----
 indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready  indislive  indisreplident  indkey   indcollation               indclass  indoption  indexprs  indpred  indnkeyatts
-144368028   32        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-404104299   39        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL     NULL
-543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3403232968                 0         2          NULL      NULL     NULL
-543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL     NULL
-803027558   26        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3403232968             0 0 0     2 2 2      NULL      NULL     NULL
-1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 3403232968 3403232968  0 0 0 0   2 2 2 2    NULL      NULL     NULL
-1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                        0 0       2 2        NULL      NULL     NULL
-1322500096  28        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-1489445036  35        2         false        false         false           false         false           true        false         false       true       false           2 1      0 0                        0 0       2 2        NULL      NULL     NULL
-1489445039  35        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-1582236367  3         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL     NULL
-1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4        0                          0         2          NULL      NULL     NULL
-1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL     NULL
-2008917577  37        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-2008917578  37        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL     NULL
-2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL     NULL
-2268653844  40        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 0 0                    0 0 0 0   2 2 2 2    NULL      NULL     NULL
-2361445172  8         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                      0 0 0     2 2 2      NULL      NULL     NULL
-2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3403232968 0               0 0       2 2        NULL      NULL     NULL
-2621181441  15        2         false        false         false           false         false           true        false         false       true       false           6 7      3403232968 0               0 0       2 2        NULL      NULL     NULL
-2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3403232968               0 0       2 2        NULL      NULL     NULL
-3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL     NULL
-3353994584  36        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     NULL
-3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL     NULL
-3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL     NULL
-3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                    0 0 0 0   2 2 2 2    NULL      NULL     NULL
-3752917847  27        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL     NULL
-3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL     NULL
-4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3403232968             0 0 0     2 2 2      NULL      NULL     NULL
-4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       2 2        NULL      NULL     NULL
+144368028   32        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+404104299   39        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+543291288   23        1         false        false         false           false         false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL     1
+543291289   23        1         false        false         false           false         false           true        false         false       true       false           2        3403232968                 0         2          NULL      NULL     1
+543291291   23        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL     2
+803027558   26        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3403232968             0 0 0     2 2 2      NULL      NULL     3
+1062763829  25        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 3403232968 3403232968  0 0 0 0   2 2 2 2    NULL      NULL     4
+1276104432  12        2         true         true          false           true          false           true        false         false       true       false           1 6      0 0                        0 0       2 2        NULL      NULL     2
+1322500096  28        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+1489445036  35        3         false        false         false           false         false           true        false         false       true       false           2 1 3    0 0                        0 0       2 2        NULL      NULL     2
+1489445039  35        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+1582236367  3         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+1628632028  19        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL     1
+1628632029  19        1         false        false         false           false         false           true        false         false       true       false           4        0                          0         2          NULL      NULL     1
+1628632031  19        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+1841972634  6         1         true         true          false           true          false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL     1
+2008917577  37        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+2008917578  37        1         false        false         false           false         false           true        false         false       true       false           5        0                          0         2          NULL      NULL     1
+2101708905  5         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+2148104569  21        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL     2
+2268653844  40        4         true         true          false           true          false           true        false         false       true       false           1 2 3 4  0 0 0 0                    0 0 0 0   2 2 2 2    NULL      NULL     4
+2361445172  8         1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+2407840836  24        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 0                      0 0 0     2 2 2      NULL      NULL     3
+2621181440  15        2         false        false         false           false         false           true        false         false       true       false           2 3      3403232968 0               0 0       2 2        NULL      NULL     2
+2621181441  15        3         false        false         false           false         false           true        false         false       true       false           6 7 2    3403232968 0               0 0       2 2        NULL      NULL     2
+2621181443  15        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+2927313374  2         2         true         true          false           true          false           true        false         false       true       false           1 2      0 3403232968               0 0       2 2        NULL      NULL     2
+3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2      3403232968 3403232968      0 0       2 2        NULL      NULL     2
+3353994584  36        1         true         true          false           true          false           true        false         false       true       false           1        0                          0         2          NULL      NULL     1
+3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL     1
+3493181576  20        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL     2
+3706522183  11        4         true         true          false           true          false           true        false         false       true       false           1 2 4 3  0 0 0 0                    0 0 0 0   2 2 2 2    NULL      NULL     4
+3752917847  27        2         true         true          false           true          false           true        false         false       true       false           1 2      0 0                        0 0       2 2        NULL      NULL     2
+3966258450  14        1         true         true          false           true          false           true        false         false       true       false           1        3403232968                 0         2          NULL      NULL     1
+4012654114  30        3         true         true          false           true          false           true        false         false       true       false           1 2 3    0 0 3403232968             0 0 0     2 2 2      NULL      NULL     3
+4225994721  13        2         true         true          false           true          false           true        false         false       true       false           1 7      0 0                        0 0       2 2        NULL      NULL     2
 
 # From #26504
 query OOI colnames
@@ -3514,3 +3514,59 @@ query TTI
 SELECT database_name, descriptor_name, descriptor_id from test.crdb_internal.create_statements where descriptor_name = 'pg_views'
 ----
 test  pg_views  4294967022
+
+# Verify INCLUDED columns appear in pg_index. See issue #59563
+statement ok
+CREATE TABLE "indexes_table" (
+    "id" integer NOT NULL PRIMARY KEY DEFAULT unique_rowid(),
+    "a" varchar(100) NOT NULL,
+    "b" timestamptz NOT NULL,
+    "c" boolean NOT NULL,
+    "d" TEXT NOT NULL
+);
+CREATE INDEX "indexes_include_idx" ON "indexes_table" ("a") INCLUDE ("c", "d");
+
+query TII colnames
+SELECT pg_index.indkey, pg_index.indnatts, pg_index.indnkeyatts
+FROM pg_class
+JOIN pg_index ON pg_class.oid = pg_index.indexrelid
+WHERE pg_class.relname = 'indexes_include_idx'
+----
+indkey  indnatts  indnkeyatts
+2 4 5   3         1
+
+query TTBBTTTT colnames
+SELECT
+    indexname, array_agg(attname ORDER BY rnum), indisunique, indisprimary,
+    array_agg(ordering ORDER BY rnum), amname, exprdef, s2.attoptions
+FROM (
+    SELECT
+        c2.relname as indexname, idx.*, attr.attname, am.amname,
+        CASE
+            WHEN idx.indexprs IS NOT NULL THEN
+                pg_get_indexdef(idx.indexrelid)
+        END AS exprdef,
+        CASE am.amname
+            WHEN 'prefix' THEN
+                CASE (option & 1)
+                    WHEN 1 THEN 'DESC' ELSE 'ASC'
+                END
+        END as ordering,
+        c2.reloptions as attoptions
+    FROM (
+        SELECT
+            row_number() OVER () as rnum, *,
+            unnest(i.indkey) as key, unnest(i.indoption) as option
+        FROM pg_index i
+    ) idx
+    LEFT JOIN pg_class c ON idx.indrelid = c.oid
+    LEFT JOIN pg_class c2 ON idx.indexrelid = c2.oid
+    LEFT JOIN pg_am am ON c2.relam = am.oid
+    LEFT JOIN pg_attribute attr ON attr.attrelid = c.oid AND attr.attnum = idx.key
+    WHERE c.relname = 'indexes_table'
+) s2
+GROUP BY indexname, indisunique, indisprimary, amname, exprdef, attoptions
+----
+indexname            array_agg  indisunique  indisprimary  array_agg      amname  exprdef  attoptions
+indexes_include_idx  {a,c,d}    false        false         {ASC,ASC,ASC}  prefix  NULL     NULL
+primary              {id}       true         true          {ASC}          prefix  NULL     NULL
