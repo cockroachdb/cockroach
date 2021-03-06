@@ -193,6 +193,7 @@ go_test(
         "timeconv_test.go",
         "type_check_internal_test.go",
         "type_check_test.go",
+        "type_name_test.go",
         "window_funcs_test.go",
     ],
     data = glob(["testdata/**"]),
