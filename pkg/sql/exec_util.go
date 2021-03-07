@@ -231,6 +231,12 @@ var implicitColumnPartitioningEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var dropEnumValueEnabledClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.drop_enum_value.enabled",
+	"default value for enable_drop_enum_value; allows for dropping enum values",
+	false,
+)
+
 var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_hash_sharded_indexes.enabled",
 	"default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default",
@@ -2308,6 +2314,10 @@ func (m *sessionDataMutator) SetTempTablesEnabled(val bool) {
 
 func (m *sessionDataMutator) SetImplicitColumnPartitioningEnabled(val bool) {
 	m.data.ImplicitColumnPartitioningEnabled = val
+}
+
+func (m *sessionDataMutator) SetDropEnumValueEnabled(val bool) {
+	m.data.DropEnumValueEnabled = val
 }
 
 func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
