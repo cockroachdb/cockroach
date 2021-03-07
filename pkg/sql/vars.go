@@ -1142,6 +1142,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`enable_drop_enum_value`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_drop_enum_value`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_drop_enum_value", s)
+			if err != nil {
+				return err
+			}
+			m.SetDropEnumValueEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.DropEnumValueEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(dropEnumValueEnabledClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_enable_hash_sharded_indexes`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_hash_sharded_indexes`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
