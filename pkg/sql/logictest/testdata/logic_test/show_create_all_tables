@@ -8,7 +8,6 @@ query T colnames
 SHOW CREATE ALL TABLES
 ----
 create_statement
-·
 
 statement ok
 CREATE TABLE d.parent (
@@ -47,34 +46,31 @@ SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE TABLE public.parent (
-  x INT8 NULL,
-  y INT8 NULL,
-  z INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
-  UNIQUE INDEX parent_x_key (x ASC),
-  FAMILY f1 (x, y, z, rowid)
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+    UNIQUE INDEX parent_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-  x INT8 NULL,
-  y INT8 NULL,
-  z INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  UNIQUE INDEX full_test_x_key (x ASC),
-  FAMILY f1 (x, y, z, rowid)
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX full_test_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
 );
-CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 CREATE VIEW public.vx ("?column?") AS SELECT 1;
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 ALTER TABLE public.full_test ADD CONSTRAINT fk_x_ref_parent FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
 ALTER TABLE public.full_test VALIDATE CONSTRAINT fk_x_ref_parent;
 ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
-
-
-
 
 # testuser does not have CONNECT on database d and cannot see any tables.
 user testuser
@@ -83,7 +79,6 @@ query T colnames
 SHOW CREATE ALL TABLES
 ----
 create_statement
-·
 
 user root
 
@@ -99,34 +94,31 @@ SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE TABLE public.parent (
-  x INT8 NULL,
-  y INT8 NULL,
-  z INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
-  UNIQUE INDEX parent_x_key (x ASC),
-  FAMILY f1 (x, y, z, rowid)
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX parent_x_y_z_key (x ASC, y ASC, z ASC),
+    UNIQUE INDEX parent_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
 );
 CREATE TABLE public.full_test (
-  x INT8 NULL,
-  y INT8 NULL,
-  z INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  UNIQUE INDEX full_test_x_key (x ASC),
-  FAMILY f1 (x, y, z, rowid)
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    UNIQUE INDEX full_test_x_key (x ASC),
+    FAMILY f1 (x, y, z, rowid)
 );
-CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 CREATE VIEW public.vx ("?column?") AS SELECT 1;
+CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 ALTER TABLE public.full_test ADD CONSTRAINT fk_x_ref_parent FOREIGN KEY (x, y, z) REFERENCES public.parent(x, y, z) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE public.full_test ADD CONSTRAINT test_fk FOREIGN KEY (x) REFERENCES public.parent(x) ON DELETE CASCADE;
 -- Validate foreign key constraints. These can fail if there was unvalidated data during the SHOW CREATE ALL TABLES
 ALTER TABLE public.full_test VALIDATE CONSTRAINT fk_x_ref_parent;
 ALTER TABLE public.full_test VALIDATE CONSTRAINT test_fk;
-
-
-
 
 user root
 
@@ -147,7 +139,6 @@ query T colnames
 SHOW CREATE ALL TABLES
 ----
 create_statement
-·
 
 # Test that a database with foreign keys has the right order.
 statement ok
@@ -170,57 +161,57 @@ CREATE TABLE c (i int REFERENCES d);
 CREATE SEQUENCE s;
 CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT,  FAMILY f1 (id, v));
 
-# Table order should be B, A, E, G, F, D, C, sequence s, s_tbl.
+# Table order should be B, A, G, F, E, D, C, sequence s, s_tbl.
 query T colnames
 SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE TABLE public.b (
-  i INT8 NOT NULL,
-  CONSTRAINT "primary" PRIMARY KEY (i ASC),
-  FAMILY "primary" (i)
+    i INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY "primary" (i)
 );
 CREATE TABLE public.a (
-  i INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  FAMILY "primary" (i, rowid)
-);
-CREATE TABLE public.e (
-  i INT8 NOT NULL,
-  CONSTRAINT "primary" PRIMARY KEY (i ASC),
-  FAMILY "primary" (i)
+    i INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (i, rowid)
 );
 CREATE TABLE public.g (
-  i INT8 NOT NULL,
-  CONSTRAINT "primary" PRIMARY KEY (i ASC),
-  FAMILY "primary" (i)
+    i INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY "primary" (i)
 );
 CREATE TABLE public.f (
-  i INT8 NOT NULL,
-  g INT8 NULL,
-  CONSTRAINT "primary" PRIMARY KEY (i ASC),
-  FAMILY f1 (i, g)
+    i INT8 NOT NULL,
+    g INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY f1 (i, g)
+);
+CREATE TABLE public.e (
+    i INT8 NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY "primary" (i)
 );
 CREATE TABLE public.d (
-  i INT8 NOT NULL,
-  e INT8 NULL,
-  f INT8 NULL,
-  CONSTRAINT "primary" PRIMARY KEY (i ASC),
-  FAMILY f1 (i, e, f)
+    i INT8 NOT NULL,
+    e INT8 NULL,
+    f INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (i ASC),
+    FAMILY f1 (i, e, f)
 );
 CREATE TABLE public.c (
-  i INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  FAMILY "primary" (i, rowid)
+    i INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (i, rowid)
 );
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 CREATE TABLE public.s_tbl (
-  id INT8 NOT NULL DEFAULT nextval('test_fk_order.public.s':::STRING::REGCLASS),
-  v INT8 NULL,
-  CONSTRAINT "primary" PRIMARY KEY (id ASC),
-  FAMILY f1 (id, v)
+    id INT8 NOT NULL DEFAULT nextval('test_fk_order.public.s':::STRING::REGCLASS),
+    v INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    FAMILY f1 (id, v)
 );
 ALTER TABLE public.a ADD CONSTRAINT fk_i_ref_b FOREIGN KEY (i) REFERENCES public.b(i);
 ALTER TABLE public.f ADD CONSTRAINT fk_g_ref_g FOREIGN KEY (g) REFERENCES public.g(i);
@@ -233,9 +224,6 @@ ALTER TABLE public.f VALIDATE CONSTRAINT fk_g_ref_g;
 ALTER TABLE public.d VALIDATE CONSTRAINT fk_e_ref_e;
 ALTER TABLE public.d VALIDATE CONSTRAINT fk_f_ref_f;
 ALTER TABLE public.c VALIDATE CONSTRAINT fk_i_ref_d;
-
-
-
 
 # Test that a cycle between two tables is handled correctly.
 statement ok
@@ -278,9 +266,6 @@ ALTER TABLE public.loop_a ADD CONSTRAINT b_id_delete_constraint FOREIGN KEY (b_i
 ALTER TABLE public.loop_b VALIDATE CONSTRAINT fk_a_id_ref_loop_a;
 ALTER TABLE public.loop_a VALIDATE CONSTRAINT b_id_delete_constraint;
 
-
-
-
 # Test that a primary key with a non-default name works.
 statement ok
 CREATE DATABASE test_primary_key;
@@ -295,12 +280,10 @@ SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE TABLE public.t (
-  i INT8 NOT NULL,
-  CONSTRAINT pk_name PRIMARY KEY (i ASC),
-  FAMILY "primary" (i)
+    i INT8 NOT NULL,
+    CONSTRAINT pk_name PRIMARY KEY (i ASC),
+    FAMILY "primary" (i)
 );
-
-
 
 # Test that computed columns are shown correctly.
 statement ok
@@ -317,14 +300,11 @@ SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NULL AS (a + 1:::INT8) STORED,
-  CONSTRAINT "primary" PRIMARY KEY (a ASC),
-  FAMILY f1 (a, b)
+    a INT8 NOT NULL,
+    b INT8 NULL AS (a + 1:::INT8) STORED,
+    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    FAMILY f1 (a, b)
 );
-
-
-
 
 # Test showing a table with a semicolon in the table, index, and
 # column names properly escapes.
@@ -339,15 +319,12 @@ SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE TABLE public.";" (
-  ";" INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  INDEX ";_;_idx" (";" ASC),
-  FAMILY "primary" (";", rowid)
+    ";" INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    INDEX ";_;_idx" (";" ASC),
+    FAMILY "primary" (";", rowid)
 );
-
-
-
 
 # Ensure quotes in comments are properly escaped, also that the object names
 # are properly escaped in the output of the COMMENT statements.
@@ -372,8 +349,6 @@ COMMENT ON TABLE public."t   t" IS e'has \' quotes';
 COMMENT ON COLUMN public."t   t"."x'" IS e'i \' just \' love \' quotes';
 COMMENT ON INDEX public."t   t"@primary IS e'has \' more \' quotes';
 
-
-
 # Ensure schemas are shown correctly.
 statement ok
 CREATE DATABASE test_schema;
@@ -388,20 +363,17 @@ SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE TABLE sc1.t (
-  x INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  FAMILY "primary" (x, rowid)
+    x INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
 );
 CREATE TABLE sc2.t (
-  x INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
-  FAMILY "primary" (x, rowid)
+    x INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
 );
-
-
-
 
 # Ensure sequences are shown correctly.
 statement ok

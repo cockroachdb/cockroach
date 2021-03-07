@@ -32,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -84,7 +86,7 @@ type aclexplodeGenerator struct{}
 
 func (aclexplodeGenerator) ResolvedType() *types.T                   { return aclexplodeGeneratorType }
 func (aclexplodeGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
-func (aclexplodeGenerator) Close()                                   {}
+func (aclexplodeGenerator) Close(_ context.Context)                  {}
 func (aclexplodeGenerator) Next(_ context.Context) (bool, error)     { return false, nil }
 func (aclexplodeGenerator) Values() (tree.Datums, error)             { return nil, nil }
 
@@ -348,7 +350,6 @@ var generators = map[string]builtinDefinition{
 			tree.VolatilityVolatile,
 		),
 	),
-
 	"crdb_internal.payloads_for_trace": makeBuiltin(
 		tree.FunctionProperties{
 			Class:    tree.GeneratorClass,
@@ -361,6 +362,27 @@ var generators = map[string]builtinDefinition{
 			payloadsForTraceGeneratorType,
 			makePayloadsForTraceGenerator,
 			"Returns the payload(s) of the requested trace.",
+			tree.VolatilityVolatile,
+		),
+	),
+	"crdb_internal.show_create_all_tables": makeBuiltin(
+		tree.FunctionProperties{
+			Class: tree.GeneratorClass,
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{"database_name", types.String},
+			},
+			showCreateAllTablesGeneratorType,
+			makeShowCreateAllTablesGenerator,
+			`Returns rows of CREATE table statements followed by 
+ALTER table statements that add table constraints. The rows are ordered
+by dependencies. All foreign keys are added after the creation of the table
+in the alter statements.
+It is not recommended to perform this operation on a database with many 
+tables.
+The output can be used to recreate a database.'
+`,
 			tree.VolatilityVolatile,
 		),
 	),
@@ -420,7 +442,7 @@ func makeRegexpSplitToTableGeneratorFactory(hasFlags bool) tree.GeneratorFactory
 func (*regexpSplitToTableGenerator) ResolvedType() *types.T { return types.String }
 
 // Close implements the tree.ValueGenerator interface.
-func (*regexpSplitToTableGenerator) Close() {}
+func (*regexpSplitToTableGenerator) Close(_ context.Context) {}
 
 // Start implements the tree.ValueGenerator interface.
 func (g *regexpSplitToTableGenerator) Start(_ context.Context, _ *kv.Txn) error {
@@ -457,7 +479,7 @@ func makeKeywordsGenerator(_ *tree.EvalContext, _ tree.Datums) (tree.ValueGenera
 func (*keywordsValueGenerator) ResolvedType() *types.T { return keywordsValueGeneratorType }
 
 // Close implements the tree.ValueGenerator interface.
-func (*keywordsValueGenerator) Close() {}
+func (*keywordsValueGenerator) Close(_ context.Context) {}
 
 // Start implements the tree.ValueGenerator interface.
 func (k *keywordsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
@@ -609,7 +631,7 @@ func (s *seriesValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (s *seriesValueGenerator) Close() {}
+func (s *seriesValueGenerator) Close(_ context.Context) {}
 
 // Next implements the tree.ValueGenerator interface.
 func (s *seriesValueGenerator) Next(_ context.Context) (bool, error) {
@@ -660,7 +682,7 @@ func (s *multipleArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error 
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (s *multipleArrayValueGenerator) Close() {}
+func (s *multipleArrayValueGenerator) Close(_ context.Context) {}
 
 // Next implements the tree.ValueGenerator interface.
 func (s *multipleArrayValueGenerator) Next(_ context.Context) (bool, error) {
@@ -709,7 +731,7 @@ func (s *arrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (s *arrayValueGenerator) Close() {}
+func (s *arrayValueGenerator) Close(_ context.Context) {}
 
 // Next implements the tree.ValueGenerator interface.
 func (s *arrayValueGenerator) Next(_ context.Context) (bool, error) {
@@ -758,7 +780,7 @@ func (s *expandArrayValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (s *expandArrayValueGenerator) Close() {}
+func (s *expandArrayValueGenerator) Close(_ context.Context) {}
 
 // Next implements the tree.ValueGenerator interface.
 func (s *expandArrayValueGenerator) Next(_ context.Context) (bool, error) {
@@ -831,7 +853,7 @@ func (s *subscriptsValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (s *subscriptsValueGenerator) Close() {}
+func (s *subscriptsValueGenerator) Close(_ context.Context) {}
 
 // Next implements the tree.ValueGenerator interface.
 func (s *subscriptsValueGenerator) Next(_ context.Context) (bool, error) {
@@ -876,7 +898,7 @@ func (s *unaryValueGenerator) Start(_ context.Context, _ *kv.Txn) error {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (s *unaryValueGenerator) Close() {}
+func (s *unaryValueGenerator) Close(_ context.Context) {}
 
 // Next implements the tree.ValueGenerator interface.
 func (s *unaryValueGenerator) Next(_ context.Context) (bool, error) {
@@ -981,7 +1003,7 @@ func (g *jsonArrayGenerator) Start(_ context.Context, _ *kv.Txn) error {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (g *jsonArrayGenerator) Close() {}
+func (g *jsonArrayGenerator) Close(_ context.Context) {}
 
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonArrayGenerator) Next(_ context.Context) (bool, error) {
@@ -1050,7 +1072,7 @@ func (g *jsonObjectKeysGenerator) ResolvedType() *types.T {
 func (g *jsonObjectKeysGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
 
 // Close implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) Close() {}
+func (g *jsonObjectKeysGenerator) Close(_ context.Context) {}
 
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonObjectKeysGenerator) Next(_ context.Context) (bool, error) {
@@ -1146,7 +1168,7 @@ func (g *jsonEachGenerator) Start(_ context.Context, _ *kv.Txn) error {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (g *jsonEachGenerator) Close() {}
+func (g *jsonEachGenerator) Close(_ context.Context) {}
 
 // Next implements the tree.ValueGenerator interface.
 func (g *jsonEachGenerator) Next(_ context.Context) (bool, error) {
@@ -1278,7 +1300,7 @@ func (c *checkConsistencyGenerator) Values() (tree.Datums, error) {
 }
 
 // Close is part of the tree.ValueGenerator interface.
-func (c *checkConsistencyGenerator) Close() {}
+func (c *checkConsistencyGenerator) Close(_ context.Context) {}
 
 // rangeKeyIteratorChunkSize is the number of K/V pairs that the
 // rangeKeyIterator requests at a time. If this changes, make sure
@@ -1400,7 +1422,7 @@ func (rk *rangeKeyIterator) Values() (tree.Datums, error) {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (rk *rangeKeyIterator) Close() {}
+func (rk *rangeKeyIterator) Close(_ context.Context) {}
 
 var payloadsForSpanGeneratorLabels = []string{"payload_type", "payload_jsonb"}
 
@@ -1530,7 +1552,7 @@ func (p *payloadsForSpanGenerator) Values() (tree.Datums, error) {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (p *payloadsForSpanGenerator) Close() {}
+func (p *payloadsForSpanGenerator) Close(_ context.Context) {}
 
 var payloadsForTraceGeneratorLabels = []string{"span_id", "payload_type", "payload_jsonb"}
 
@@ -1607,10 +1629,184 @@ func (p *payloadsForTraceGenerator) Values() (tree.Datums, error) {
 }
 
 // Close implements the tree.ValueGenerator interface.
-func (p *payloadsForTraceGenerator) Close() {
+func (p *payloadsForTraceGenerator) Close(_ context.Context) {
 	err := p.it.Close()
 	if err != nil {
 		// TODO(angelapwen, yuzefovich): The iterator's error should be surfaced here.
 		return
 	}
+}
+
+var showCreateAllTablesGeneratorType = types.String
+
+// Phase is used to determine if CREATE statements or ALTER statements
+// are being generated for showCreateAllTables.
+type Phase int
+
+const (
+	create Phase = iota
+	alterAddFks
+	alterValidateFks
+)
+
+// showCreateAllTablesGenerator supports the execution of
+// crdb_internal.show_create_all_tables(dbName).
+type showCreateAllTablesGenerator struct {
+	ie        sqlutil.InternalExecutor
+	txn       *kv.Txn
+	timestamp string
+	ids       []int64
+	dbName    string
+	acc       mon.BoundAccount
+
+	// The following variables are updated during
+	// calls to Next() and change throughout the lifecycle of
+	// showCreateAllTablesGenerator.
+	curr           tree.Datum
+	idx            int
+	shouldValidate bool
+	alterArr       tree.Datums
+	alterArrIdx    int
+	phase          Phase
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (s *showCreateAllTablesGenerator) ResolvedType() *types.T {
+	return showCreateAllTablesGeneratorType
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (s *showCreateAllTablesGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	// Note: All the table ids are accumulated in ram before the generator
+	// starts generating values.
+	// This is reasonable under the assumption that:
+	// This uses approximately the same amount of memory as required when
+	// generating the vtable crdb_internal.show_create_statements. If generating
+	// and reading from the vtable succeeds which we do to retrieve the ids, then
+	// it is reasonable to use the same amount of memory to hold the ids in
+	// ram during the lifecycle of showCreateAllTablesGenerator.
+	//
+	// We also account for the memory in the BoundAccount memory monitor in
+	// showCreateAllTablesGenerator.
+	ids, err := getTopologicallySortedTableIDs(
+		ctx, s.ie, txn, s.dbName, s.timestamp, &s.acc,
+	)
+	if err != nil {
+		return err
+	}
+
+	s.ids = ids
+
+	s.txn = txn
+	s.idx = -1
+	s.phase = create
+	return nil
+}
+
+func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
+	switch s.phase {
+	case create:
+		s.idx++
+		if s.idx >= len(s.ids) {
+			// Were done generating the create statements, start generating alters.
+			s.phase = alterAddFks
+			s.idx = -1
+			return s.Next(ctx)
+		}
+
+		createStmt, err := getCreateStatement(
+			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName,
+		)
+		if err != nil {
+			return false, err
+		}
+		createStmtStr := string(tree.MustBeDString(createStmt))
+		s.curr = tree.NewDString(createStmtStr + ";")
+	case alterAddFks, alterValidateFks:
+		// We have existing alter statements to generate for the current
+		// table id.
+		s.alterArrIdx++
+		if s.alterArrIdx < len(s.alterArr) {
+			alterStmtStr := string(tree.MustBeDString(s.alterArr[s.alterArrIdx]))
+			s.curr = tree.NewDString(alterStmtStr + ";")
+
+			// At least one FK was added, we must validate the FK.
+			s.shouldValidate = true
+			return true, nil
+		}
+		// We need to generate the alter statements for the next table.
+		s.idx++
+		if s.idx >= len(s.ids) {
+			if s.phase == alterAddFks {
+				// Were done generating the alter fk statements,
+				// start generating alter validate fk statements.
+				s.phase = alterValidateFks
+				s.idx = -1
+
+				if s.shouldValidate {
+					// Add a warning about the possibility of foreign key
+					// validation failing.
+					s.curr = tree.NewDString(foreignKeyValidationWarning)
+					return true, nil
+				}
+				return s.Next(ctx)
+			}
+			// We're done if were on phase alterValidateFks and we
+			// finish going through all the table ids.
+			return false, nil
+		}
+
+		statementType := alterAddFKStatements
+		if s.phase == alterValidateFks {
+			statementType = alterValidateFKStatements
+		}
+		alterStmt, err := getAlterStatements(
+			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName, statementType,
+		)
+		if err != nil {
+			return false, err
+		}
+		if alterStmt == nil {
+			// There can be no ALTER statements for a given id, in this case
+			// we go next.
+			return s.Next(ctx)
+		}
+		s.alterArr = tree.MustBeDArray(alterStmt).Array
+		s.alterArrIdx = -1
+		return s.Next(ctx)
+	}
+
+	return true, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (s *showCreateAllTablesGenerator) Values() (tree.Datums, error) {
+	return tree.Datums{s.curr}, nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (s *showCreateAllTablesGenerator) Close(ctx context.Context) {
+	s.acc.Close(ctx)
+}
+
+// makeShowCreateAllTablesGenerator creates a generator to support the
+// crdb_internal.show_create_all_tables(dbName) builtin.
+// We use the timestamp of when the generator is created as the
+// timestamp to pass to AS OF SYSTEM TIME for looking up the create table
+// and alter table statements.
+func makeShowCreateAllTablesGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	dbName := string(tree.MustBeDString(args[0]))
+	tsI, err := tree.MakeDTimestamp(timeutil.Now(), time.Microsecond)
+	if err != nil {
+		return nil, err
+	}
+	ts := tsI.String()
+	return &showCreateAllTablesGenerator{
+		timestamp: ts,
+		dbName:    dbName,
+		ie:        ctx.InternalExecutor.(sqlutil.InternalExecutor),
+		acc:       ctx.Mon.MakeBoundAccount(),
+	}, nil
 }

@@ -5408,7 +5408,7 @@ func (c *CallbackValueGenerator) Values() (Datums, error) {
 }
 
 // Close is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Close() {}
+func (c *CallbackValueGenerator) Close(_ context.Context) {}
 
 // Sqrt returns the square root of x.
 func Sqrt(x float64) (*DFloat, error) {
