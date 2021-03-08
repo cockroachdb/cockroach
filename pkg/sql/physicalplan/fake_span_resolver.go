@@ -80,6 +80,12 @@ func (fit *fakeSpanResolverIterator) Seek(
 	}
 
 	// Scan the range and keep a list of all potential split keys.
+	// TODO(asubiotto): this scan can have undesired side effects. For example,
+	// it can change when contention occurs and swallows tracing payloads, leading
+	// to unexpected test outcomes as observed in:
+	//
+	// https://github.com/cockroachdb/cockroach/pull/61438
+	// This should use an inconsistent span outside of the txn instead.
 	kvs, err := fit.txn.Scan(ctx, span.Key, span.EndKey, 0)
 	if err != nil {
 		log.Errorf(ctx, "error in fake span resolver scan: %s", err)
