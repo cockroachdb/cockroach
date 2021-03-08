@@ -1574,7 +1574,7 @@ func (c *cluster) FetchDiskUsage(ctx context.Context) error {
 		}
 		if err := execCmd(
 			ctx, c.l, roachprod, "ssh", c.name, "--",
-			"/bin/bash", "-c", "'du -c /mnt/data1 > "+name+"'",
+			"/bin/bash", "-c", "'du -c /mnt/data1 --exclude lost+found > "+name+"'",
 		); err != nil {
 			// Don't error out because it might've worked on some nodes. Fetching will
 			// error out below but will get everything it can first.
