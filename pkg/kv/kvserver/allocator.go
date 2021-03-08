@@ -618,8 +618,8 @@ func (a *Allocator) computeAction(
 		// The range is over-replicated _and_ has non-voter(s) on a dead node. We'll
 		// just remove these.
 		action = AllocatorRemoveDeadNonVoter
-		log.VEventf(ctx, 3, "%s - dead=%d, live=%d, quorum=%d, priority=%.2f",
-			action, len(deadNonVoters), len(liveNonVoters), quorum, action.Priority())
+		log.VEventf(ctx, 3, "%s - dead=%d, live=%d, priority=%.2f",
+			action, len(deadNonVoters), len(liveNonVoters), action.Priority())
 		return action, action.Priority()
 	}
 
