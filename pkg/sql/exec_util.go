@@ -297,7 +297,7 @@ var localityOptimizedSearchMode = settings.RegisterBoolSetting(
 	"sql.defaults.locality_optimized_partitioned_index_scan.enabled",
 	"default value for locality_optimized_partitioned_index_scan session setting; "+
 		"enables searching for rows in the current region before searching remote regions",
-	false,
+	true,
 )
 
 var implicitSelectForUpdateClusterMode = settings.RegisterBoolSetting(

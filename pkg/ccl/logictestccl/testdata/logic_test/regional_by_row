@@ -621,6 +621,9 @@ pk  pk2  a   b   j
 statement error cannot drop column crdb_region as it is used to store the region in a REGIONAL BY ROW table\nHINT: You must change the table locality before dropping this table
 ALTER TABLE regional_by_row_table DROP COLUMN crdb_region
 
+statement ok
+SET locality_optimized_partitioned_index_scan = false
+
 # Query with locality optimized search disabled.
 query T
 EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1
