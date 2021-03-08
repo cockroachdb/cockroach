@@ -331,7 +331,15 @@ func backup(
 			// Collect all the table stats for this table.
 			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
 			if err != nil {
-				return RowCount{}, err
+				// Successfully backed up data is more valuable than table stats that can
+				// be recomputed after restore, and so if we fail to collect the stats of a
+				// table we do not want to mark the job as failed.
+				// The lack of stats on restore could lead to suboptimal performance when
+				// reading/writing to this table until the stats have been recomputed.
+				log.Warningf(ctx, "failed to collect stats for table: %s, "+
+					"table ID: %d during a backup: %s", tableDesc.GetName(), tableDesc.GetID(),
+					err.Error())
+				continue
 			}
 			for _, stat := range tableStatisticsAcc {
 				tableStatistics = append(tableStatistics, &stat.TableStatisticProto)
