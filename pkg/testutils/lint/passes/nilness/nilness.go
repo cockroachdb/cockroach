@@ -66,6 +66,14 @@ and:
 	}
 `
 
+// reportDegenerateConditions controls the reporting of "impossible"
+// and "tautological" comparisons. While many of these are in error,
+// it also catches nil checks where the current control flow graph
+// can't produce nil but where we might want to guard against changes
+// in the future. It also catches a number of compound conditionals
+// where the "tautological" check produces more readable code.
+var reportDegenerateIfConditions = false
+
 // Analyzer defines a pass that checks for uses of provably nil values
 // that were likely in error.
 var Analyzer = &analysis.Analyzer{
@@ -180,13 +188,15 @@ func runFunc(pass *analysis.Pass, fn *ssa.Function) {
 				// Degenerate condition:
 				// the nilness of both operands is known,
 				// and at least one of them is nil.
-				var adj string
-				if (xnil == ynil) == (binop.Op == token.EQL) {
-					adj = "tautological"
-				} else {
-					adj = "impossible"
+				if reportDegenerateIfConditions {
+					var adj string
+					if (xnil == ynil) == (binop.Op == token.EQL) {
+						adj = "tautological"
+					} else {
+						adj = "impossible"
+					}
+					reportf("cond", binop.Pos(), "%s condition: %s %s %s", adj, xnil, binop.Op, ynil)
 				}
-				reportf("cond", binop.Pos(), "%s condition: %s %s %s", adj, xnil, binop.Op, ynil)
 
 				// If tsucc's or fsucc's sole incoming edge is impossible,
 				// it is unreachable.  Prune traversal of it and
