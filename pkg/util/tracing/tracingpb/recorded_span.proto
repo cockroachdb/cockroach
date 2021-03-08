@@ -75,6 +75,7 @@ message RecordedSpan {
   // The ID of the goroutine on which the span was created.
   uint64 goroutine_id = 12 [(gogoproto.customname) = "GoroutineID"];
 
+  // TODO(angelapwen): Remove and reserve if registry is for unFinish'ed spans.
   // True if the span has been Finish()ed, false otherwise.
   bool finished = 13;
 

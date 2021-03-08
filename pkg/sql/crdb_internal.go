@@ -1196,6 +1196,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 					tree.NewDInt(tree.DInt(parentSpanID)),
 					tree.NewDInt(tree.DInt(spanID)),
 					tree.NewDInt(tree.DInt(goroutineID)),
+					// TODO(angelapwen): Stop surfacing finished bool. All inflight spans will be un-Finish'ed.
 					tree.MakeDBool(tree.DBool(finished)),
 					startTime,
 					tree.NewDInterval(

@@ -114,14 +114,12 @@ func TestTracerRecording(t *testing.T) {
 	s3.Recordf("x=%d", 4)
 	s3.SetTag("tag", "val")
 
-	s2.Finish()
-
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
 			span: b
-				tags: _verbose=1
+				tags: _unfinished=1 _verbose=1
 				event: x=3
 				span: c
 					tags: _unfinished=1 _verbose=1 tag=val
@@ -129,20 +127,72 @@ func TestTracerRecording(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
+
 	s3.Finish()
+
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 			event: x=2
 			span: b
-				tags: _verbose=1
+				tags: _unfinished=1 _verbose=1
 				event: x=3
-				span: c
-					tags: _verbose=1 tag=val
-					event: x=4
 	`); err != nil {
 		t.Fatal(err)
 	}
+
+	// When a Span is Finish'ed, we can still access its recording through
+	// `crdbSpan.getRecordingLocked`
+	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
+		span: c
+			tags: _verbose=1 tag=val
+			event: x=4
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	s4 := tr.StartSpan("d", WithParentAndAutoCollection(s2))
+	s4.Recordf("x=%d", 5)
+
+	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+		span: a
+			tags: _unfinished=1 _verbose=1
+			event: x=2
+			span: b
+				tags: _unfinished=1 _verbose=1
+				event: x=3
+				span: d
+					tags: _unfinished=1 _verbose=1
+					event: x=5
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	// If a Span is Finish'ed, its parent Span can no longer access the Finish'ed
+	// Span or any unFinish'ed children. We do not expect that a Span outlives
+	// any child Spans though.
+	s2.Finish()
+	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
+		span: a
+			tags: _unfinished=1 _verbose=1
+			event: x=2
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	// When a Span is Finish'ed, we can still access its recording and its child
+	// Span recordings if we call GetRecording directly on the Span though.
+	if err := TestingCheckRecordedSpans(s2.GetRecording(), `
+		span: b
+			tags: _verbose=1
+			event: x=3
+			span: d
+				tags: _unfinished=1 _verbose=1
+				event: x=5
+	`); err != nil {
+		t.Fatal(err)
+	}
+
 	s1.ResetRecording()
 	s1.SetVerbose(false)
 	s1.Recordf("x=%d", 100)
@@ -152,7 +202,7 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The child Span, now finished, will drop future recordings.
+	// A Finish'ed Span will drop future recordings.
 	s3.Recordf("x=%d", 5)
 	if err := TestingCheckRecordedSpans(s3.GetRecording(), `
 		span: c
@@ -169,20 +219,21 @@ func TestStartChildSpan(t *testing.T) {
 	sp1 := tr.StartSpan("parent", WithForceRealSpan())
 	sp1.SetVerbose(true)
 	sp2 := tr.StartSpan("child", WithParentAndAutoCollection(sp1))
-	sp2.Finish()
-	sp1.Finish()
 
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
 		span: parent
-			tags: _verbose=1
+			tags: _unfinished=1 _verbose=1
 			span: child
-				tags: _verbose=1
+				tags: _unfinished=1 _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
+	sp2.Finish()
+	sp1.Finish()
 
 	sp1 = tr.StartSpan("parent", WithForceRealSpan())
 	sp1.SetVerbose(true)
+	defer sp1.Finish()
 	sp2 = tr.StartSpan("child", WithParentAndManualCollection(sp1.Meta()))
 	sp2.Finish()
 	sp1.Finish()
@@ -200,16 +251,16 @@ func TestStartChildSpan(t *testing.T) {
 	}
 
 	sp1 = tr.StartSpan("parent", WithForceRealSpan())
+	defer sp1.Finish()
 	sp1.SetVerbose(true)
 	sp2 = tr.StartSpan("child", WithParentAndAutoCollection(sp1),
 		WithLogTags(logtags.SingleTagBuffer("key", "val")))
-	sp2.Finish()
-	sp1.Finish()
+	defer sp2.Finish()
 	if err := TestingCheckRecordedSpans(sp1.GetRecording(), `
 		span: parent
-			tags: _verbose=1
+			tags: _unfinished=1 _verbose=1
 			span: child
-				tags: _verbose=1 key=val
+				tags: _unfinished=1 _verbose=1 key=val
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -464,6 +515,11 @@ func TestActiveSpanVisitorErrors(t *testing.T) {
 	require.Equal(t, 1, numVisited)
 }
 
+// TODO(angelapwen): If we move forward with the understanding that any spanOps
+// surfaced by the visitor are by default in-flight (because the registry only
+// tracks in-flight spans), then I can remove this method - the finished value
+// will never be true. We could rely solely on `getSortedSpanOps`.
+//
 // getSpanOpsWithFinished is a helper method that returns a map of spans in
 // in-flight traces, keyed on operation names and with values representing
 // whether the span is finished.
@@ -474,7 +530,9 @@ func getSpanOpsWithFinished(t *testing.T, tr *Tracer) map[string]bool {
 
 	require.NoError(t, tr.VisitSpans(func(sp *Span) error {
 		for _, rec := range sp.GetRecording() {
-			spanOpsWithFinished[rec.Operation] = rec.Finished
+			if _, found := spanOpsWithFinished[rec.Operation]; !found {
+				spanOpsWithFinished[rec.Operation] = rec.Finished
+			}
 		}
 		return nil
 	}))
@@ -487,11 +545,18 @@ func getSpanOpsWithFinished(t *testing.T, tr *Tracer) map[string]bool {
 func getSortedSpanOps(t *testing.T, tr *Tracer) []string {
 	t.Helper()
 
+	// We use a map to remove duplicate values. A root's local child Span will have
+	// its recording  surfaced twice, once for its own visit and once for the
+	// root's.
+	seen := make(map[string]int)
 	var spanOps []string
 
 	require.NoError(t, tr.VisitSpans(func(sp *Span) error {
 		for _, rec := range sp.GetRecording() {
-			spanOps = append(spanOps, rec.Operation)
+			if _, found := seen[rec.Operation]; !found {
+				spanOps = append(spanOps, rec.Operation)
+				seen[rec.Operation] = 0
+			}
 		}
 		return nil
 	}))
@@ -500,7 +565,7 @@ func getSortedSpanOps(t *testing.T, tr *Tracer) []string {
 	return spanOps
 }
 
-// TestTracer_VisitSpans verifies that in-flight local root Spans
+// TestTracer_VisitSpans verifies that in-flight local Spans
 // are tracked by the Tracer, and that Finish'ed Spans are not.
 func TestTracer_VisitSpans(t *testing.T) {
 	tr1 := NewTracer()
@@ -508,8 +573,9 @@ func TestTracer_VisitSpans(t *testing.T) {
 
 	root := tr1.StartSpan("root", WithForceRealSpan())
 	root.SetVerbose(true)
-	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
 	require.Len(t, tr1.activeSpans.m, 1)
+	child := tr1.StartSpan("root.child", WithParentAndAutoCollection(root))
+	require.Len(t, tr1.activeSpans.m, 2)
 
 	childChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
 	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithParentAndManualCollection(child.Meta()))
@@ -562,20 +628,17 @@ func TestSpanRecordingFinished(t *testing.T) {
 	childChild.Finish()
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
 
+	// Note that the childChild span is no longer tracked in activeSpans.
+	_, found := spanOpsWithFinished["root.child.child"]
+	require.False(t, found)
+
 	// Only childChild should appear to have finished.
 	require.False(t, spanOpsWithFinished["root"])
 	require.False(t, spanOpsWithFinished["root.child"])
-	require.True(t, spanOpsWithFinished["root.child.child"])
+	//require.True(t, spanOpsWithFinished["root.child.child"])
 	require.False(t, spanOpsWithFinished["root.child.remotechild"])
 
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
-
-	// Only childChild should appear to have finished.
-	require.False(t, spanOpsWithFinished["root"])
-	require.False(t, spanOpsWithFinished["root.child"])
-	require.True(t, spanOpsWithFinished["root.child.child"])
-	require.False(t, spanOpsWithFinished["root.child.remotechild"])
-
 	remoteChildChild.SetOperationName("root.child.remotechild-reimport")
 	remoteChildChild.Finish()
 	// NB: importing a span twice is essentially a bad idea. It's ok in
@@ -584,15 +647,18 @@ func TestSpanRecordingFinished(t *testing.T) {
 	child.Finish()
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
 
-	// Only child, childChild, and remoteChildChild should appear to have finished.
+	_, found = spanOpsWithFinished["root.child"]
+	require.False(t, found)
+	_, found = spanOpsWithFinished["root.child.child"]
+	require.False(t, found)
+	// The re-imported remotechild (after it had finished) is finished.
+	_, found = spanOpsWithFinished["root.child.remotechild-reimport"]
+	require.False(t, found)
+
 	require.False(t, spanOpsWithFinished["root"])
-	require.True(t, spanOpsWithFinished["root.child"])
-	require.True(t, spanOpsWithFinished["root.child.child"])
 	// The original remotechild import is still unfinished, as it was imported from
 	// unfinished span.
 	require.False(t, spanOpsWithFinished["root.child.remotechild"])
-	// The re-imported remotechild (after it had finished) is finished, though.
-	require.True(t, spanOpsWithFinished["root.child.remotechild-reimport"])
 
 	root.Finish()
 	// Nothing is tracked anymore.

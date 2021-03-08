@@ -393,8 +393,8 @@ func TestNonVerboseChildSpanRegisteredWithParent(t *testing.T) {
 	defer sp.Finish()
 	ch := tr.StartSpan("child", WithParentAndAutoCollection(sp))
 	defer ch.Finish()
-	require.Len(t, sp.i.crdb.mu.recording.children, 1)
-	require.Equal(t, ch.i.crdb, sp.i.crdb.mu.recording.children[0])
+	require.Len(t, sp.i.crdb.mu.recording.childrenIDs, 1)
+	require.Equal(t, ch.i.crdb.spanID, sp.i.crdb.mu.recording.childrenIDs[0])
 	ch.RecordStructured(&types.Int32Value{Value: 5})
 	// Check that the child span (incl its payload) is in the recording.
 	rec := sp.GetRecording()
@@ -415,7 +415,7 @@ func TestSpanMaxChildren(t *testing.T) {
 		if exp > maxChildrenPerSpan {
 			exp = maxChildrenPerSpan
 		}
-		require.Len(t, sp.i.crdb.mu.recording.children, exp)
+		require.Len(t, sp.i.crdb.mu.recording.childrenIDs, exp)
 	}
 }
 

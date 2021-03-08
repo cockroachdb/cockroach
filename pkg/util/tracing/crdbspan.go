@@ -29,6 +29,7 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
+	tracer       *Tracer
 	traceID      uint64 // probabilistically unique
 	spanID       uint64 // probabilistically unique
 	parentSpanID uint64
@@ -74,9 +75,9 @@ type crdbSpanMu struct {
 		// annotate recordings with the _dropped tag, when applicable.
 		dropped bool
 
-		// children contains the list of child spans started after this Span
+		// childrenIDs contains the list of child span IDs started after this Span
 		// started recording.
-		children []*crdbSpan
+		childrenIDs []uint64
 		// remoteSpan contains the list of remote child span recordings that
 		// were manually imported.
 		remoteSpans []tracingpb.RecordedSpan
@@ -152,7 +153,7 @@ func (s *crdbSpan) resetRecording() {
 	s.mu.recording.structured.Reset()
 	s.mu.recording.dropped = false
 
-	s.mu.recording.children = nil
+	s.mu.recording.childrenIDs = nil
 	s.mu.recording.remoteSpans = nil
 }
 
@@ -196,13 +197,20 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 
 	// The capacity here is approximate since we don't know how many grandchildren
 	// there are.
-	result := make(Recording, 0, 1+len(s.mu.recording.children)+len(s.mu.recording.remoteSpans))
+	result := make(Recording, 0, 1+len(s.mu.recording.childrenIDs)+len(s.mu.recording.remoteSpans))
 	// Shallow-copy the children so we can process them without the lock.
-	children := s.mu.recording.children
+	childrenIDs := s.mu.recording.childrenIDs
 	result = append(result, s.getRecordingLocked(wantTags))
 	result = append(result, s.mu.recording.remoteSpans...)
 	s.mu.Unlock()
 
+	var children []*crdbSpan
+	for _, id := range childrenIDs {
+		span, found := s.tracer.GetActiveSpanFromID(id)
+		if found {
+			children = append(children, span.i.crdb)
+		}
+	}
 	for _, child := range children {
 		result = append(result, child.getRecording(everyoneIsV211, wantTags)...)
 	}
@@ -406,8 +414,8 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 func (s *crdbSpan) addChild(child *crdbSpan) {
 	s.mu.Lock()
 	// Only record the child if the parent still has room.
-	if len(s.mu.recording.children) < maxChildrenPerSpan {
-		s.mu.recording.children = append(s.mu.recording.children, child)
+	if len(s.mu.recording.childrenIDs) < maxChildrenPerSpan {
+		s.mu.recording.childrenIDs = append(s.mu.recording.childrenIDs, child.spanID)
 	}
 	s.mu.Unlock()
 }
@@ -422,8 +430,16 @@ func (s *crdbSpan) setVerboseRecursively(to bool) {
 	}
 
 	s.mu.Lock()
-	children := s.mu.recording.children
+	childrenIDs := s.mu.recording.childrenIDs
 	s.mu.Unlock()
+
+	var children []*crdbSpan
+	for _, id := range childrenIDs {
+		span, found := s.tracer.GetActiveSpanFromID(id)
+		if found {
+			children = append(children, span.i.crdb)
+		}
+	}
 
 	for _, child := range children {
 		child.setVerboseRecursively(to)
