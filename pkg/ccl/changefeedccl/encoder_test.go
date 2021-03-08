@@ -451,7 +451,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 		defer closeFeed(t, prefixFeed)
 
 		assertPayloadsAvro(t, reg, prefixFeed, []string{
-			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 		})
 
 		assertRegisteredSubjects(t, reg, []string{
@@ -469,7 +469,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 		defer closeFeed(t, prefixFQNFeed)
 
 		assertPayloadsAvro(t, reg, prefixFQNFeed, []string{
-			`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			`movr.public.drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 		})
 
 		assertRegisteredSubjects(t, reg, []string{
@@ -482,6 +482,48 @@ func TestAvroSchemaNaming(t *testing.T) {
 			`supermovr.public.drivers-key`,
 			`supermovr.public.drivers-value`,
 		})
+	}
+
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestAvroSchemaNamespace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE DATABASE movr`)
+		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
+		sqlDB.Exec(t,
+			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
+		)
+
+		noNamespaceFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, noNamespaceFeed)
+
+		assertPayloadsAvro(t, reg, noNamespaceFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		namespaceFeed := feed(t, f, `CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=$1, confluent_schema_registry=$2, avro_schema_prefix=super`,
+			changefeedbase.OptFormatAvro, reg.server.URL)
+		defer closeFeed(t, namespaceFeed)
+
+		assertPayloadsAvro(t, reg, namespaceFeed, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		require.NotContains(t, reg.mu.schemas[reg.mu.subjects[`drivers-key`]], `namespace`)
+		require.NotContains(t, reg.mu.schemas[reg.mu.subjects[`drivers-value`]], `namespace`)
+		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`superdrivers-key`]], `"namespace":"super"`)
+		require.Contains(t, reg.mu.schemas[reg.mu.subjects[`superdrivers-value`]], `"namespace":"super"`)
 	}
 
 	t.Run(`enterprise`, enterpriseTest(testFn))
