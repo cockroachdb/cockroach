@@ -2048,6 +2048,8 @@ func TestLint(t *testing.T) {
 			// roachtest is not collecting redactable logs so we don't care
 			// about printf hygiene there as much.
 			stream.GrepNot(`pkg/cmd/roachtest/log\.go:.*format argument is not a constant expression`),
+			// We purposefully produce nil dereferences in this file to test crash conditions
+			stream.GrepNot(`pkg/util/log/logcrash/crash_reporting_test\.go:.*nil dereference in type assertion`),
 		}
 
 		const vetTool = "roachvet"
