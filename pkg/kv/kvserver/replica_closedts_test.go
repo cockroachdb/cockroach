@@ -51,10 +51,15 @@ func TestBumpSideTransportClosed(t *testing.T) {
 	}
 	testCases := []struct {
 		name string
-		exp  bool
+		// exp controls whether the BumpSideTransportClosed is expected to succeed.
+		exp bool
+		// computeTarget controls what timestamp the test will try to close. If not
+		// set, the test will try to close the current time.
+		computeTarget func(r *kvserver.Replica) (target hlc.Timestamp, exp bool)
+
 		// Optional, to configure testing filters.
 		knobs func() (_ *kvserver.StoreTestingKnobs, filterC chan chan struct{})
-		// Configures the replica to test different situtations.
+		// Configures the replica to test different situations.
 		setup func(_ setupArgs) (unblockFilterC chan struct{}, asyncErrC chan error, _ error)
 	}{
 		{
@@ -296,6 +301,34 @@ func TestBumpSideTransportClosed(t *testing.T) {
 				})
 			},
 		},
+		{
+			// We can't close all the way up to the lease expiration. See
+			// propBuf.assignClosedTimestampToProposalLocked.
+			name: "close lease expiration",
+			computeTarget: func(r *kvserver.Replica) (target hlc.Timestamp, exp bool) {
+				ls := r.LeaseStatusAt(context.Background(), r.Clock().NowAsClockTimestamp())
+				return ls.Expiration(), false
+			},
+		},
+		{
+			// Like above, but we can't even close in the same nanosecond as the lease
+			// expiration (or previous nanosecond with Logical: MaxInt32).
+			name: "close lease expiration prev",
+			computeTarget: func(r *kvserver.Replica) (target hlc.Timestamp, exp bool) {
+				ls := r.LeaseStatusAt(context.Background(), r.Clock().NowAsClockTimestamp())
+				return ls.Expiration().Prev(), false
+			},
+		},
+		{
+			// Differently from above, we can close up to leaseExpiration.WallPrev.
+			// Notably, we can close timestamps that fall inside the lease's stasis
+			// period.
+			name: "close lease expiration WallPrev",
+			computeTarget: func(r *kvserver.Replica) (target hlc.Timestamp, exp bool) {
+				ls := r.LeaseStatusAt(context.Background(), r.Clock().NowAsClockTimestamp())
+				return ls.Expiration().WallPrev(), true
+			},
+		},
 	}
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
@@ -325,27 +358,40 @@ func TestBumpSideTransportClosed(t *testing.T) {
 			require.NotNil(t, repl)
 
 			now := tc.Server(0).Clock().NowAsClockTimestamp()
+			var target hlc.Timestamp
+			var exp bool
+			if test.computeTarget == nil {
+				// We'll attempt to close `now`.
+				target = now.ToTimestamp()
+				exp = test.exp
+			} else {
+				target, exp = test.computeTarget(repl)
+			}
 			var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
-			target := now.ToTimestamp()
 			targets[roachpb.LAG_BY_CLUSTER_SETTING] = target
 
 			// Run the setup function to get the replica in the desired state.
-			unblockFilterC, asyncErrC, err := test.setup(setupArgs{
-				tc:        tc,
-				leftDesc:  leftDesc,
-				rightDesc: rightDesc,
-				repl:      repl,
-				now:       now,
-				target:    target,
-				filterC:   filterC,
-			})
-			require.NoError(t, err)
+			var unblockFilterC chan struct{}
+			var asyncErrC chan error
+			if test.setup != nil {
+				var err error
+				unblockFilterC, asyncErrC, err = test.setup(setupArgs{
+					tc:        tc,
+					leftDesc:  leftDesc,
+					rightDesc: rightDesc,
+					repl:      repl,
+					now:       now,
+					target:    target,
+					filterC:   filterC,
+				})
+				require.NoError(t, err)
+			}
 
 			// Try to bump the closed timestamp. Use succeeds soon if we are
 			// expecting the call to succeed, to avoid any flakiness. Don't do
 			// so if we expect the call to fail, in which case any flakiness
 			// would be a serious bug.
-			if test.exp {
+			if exp {
 				testutils.SucceedsSoon(t, func() error {
 					ok, _, _ := repl.BumpSideTransportClosed(ctx, now, targets)
 					if !ok {
