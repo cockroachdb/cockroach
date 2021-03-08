@@ -381,3 +381,86 @@ DROP DATABASE olddb CASCADE
 
 statement ok
 DROP DATABASE newdb CASCADE
+
+# Sanity check for #55709 renaming tables and cross DB references
+
+statement ok
+CREATE DATABASE NEWDB;
+
+statement ok
+use NEWDB;
+
+# First validate renames are blocked
+
+statement ok
+create table t1Ref(i int PRIMARY KEY);
+
+statement ok
+create table t2Ref(j int, constraint t1_reference foreign key(j) references t1Ref(i));
+
+statement error a foreign key constraint "t1_reference" will exist between databases after rename
+alter table t2Ref rename to test2.public.t2;
+
+statement error a foreign key constraint "t1_reference" will exist between databases after rename
+alter table t1Ref rename to test2.public.t1;
+
+
+statement ok
+create table t1VRef(i int PRIMARY KEY);
+
+statement ok
+create view t1View as (select i from t1VRef);
+
+statement error cannot rename relation "t1vref" because view "t1view" depends on it
+alter table t1VRef rename to test2.public.t1Vref;
+
+statement error this view will reference a table "t1vref" in another databases after rename
+alter view t1View rename to test2.public.t1View;
+
+statement ok
+create table t1S1Ref(i int PRIMARY KEY);
+
+statement ok
+create sequence s1 owned by t1S1Ref.i;
+
+statement error a sequence "s1" will be OWNED BY a table in a different database after rename
+alter table t1S1Ref rename to test2.public.t1S1Ref;
+
+statement error this sequence will be OWNED BY a table "t1s1ref" in a different database after rename
+alter sequence s1 rename to test2.public.s1;
+
+# Enable cluster setting to allow foreign keys across DB's
+statement ok
+SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE
+
+statement ok
+alter table t2Ref rename to test2.public.t2Ref;
+
+statement ok
+alter table test2.public.t2Ref rename to t2Ref;
+
+statement ok
+alter table t1Ref rename to test2.public.t1;
+
+#Enable cluster setting for views across DB's
+statement ok
+SET CLUSTER SETTING  sql.cross_db_views.enabled = TRUE
+
+statement error cannot rename relation "t1vref" because view "t1view" depends on it
+alter table t1VRef rename to test2.public.t1Vref;
+
+statement ok
+alter view t1View rename to test2.public.t1View;
+
+#Enable cluster setting for sequence owned by across DB's
+statement ok
+SET CLUSTER SETTING sql.cross_db_sequence_owners.enabled = TRUE
+
+statement ok
+alter table t1S1Ref rename to test2.public.t1S1Ref;
+
+statement ok
+alter table test2.public.t1S1Ref rename to t1S1Ref;
+
+statement ok
+alter sequence s1 rename to test2.public.s1;
