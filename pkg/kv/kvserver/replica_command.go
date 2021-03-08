@@ -3128,8 +3128,24 @@ func (r *Replica) adminVerifyProtectedTimestamp(
 	ctx context.Context, args roachpb.AdminVerifyProtectedTimestampRequest,
 ) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
 	resp.Verified, err = r.protectedTimestampRecordApplies(ctx, &args)
-	if err == nil && !resp.Verified {
-		resp.FailedRanges = append(resp.FailedRanges, *r.Desc())
+	if err != nil {
+		if errors.Is(err, errFailedToVerify) {
+			// We do not want to bubble up the errFailedToVerify. This ensures that
+			// executeAdminBatch adds the response to the batch, thereby allowing us to
+			// construct a more informative error at the sender.
+			if !resp.Verified {
+				failedRange := roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{
+					RangeID:  int64(r.Desc().GetRangeID()),
+					StartKey: r.Desc().GetStartKey(),
+					EndKey:   r.Desc().EndKey,
+					Reason:   err.Error(),
+				}
+				resp.VerificationFailedRanges = append(resp.VerificationFailedRanges, failedRange)
+				resp.DeprecatedFailedRanges = append(resp.DeprecatedFailedRanges, *r.Desc())
+			}
+		} else {
+			return resp, err
+		}
 	}
-	return resp, err
+	return resp, nil
 }
