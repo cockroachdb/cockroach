@@ -26,38 +26,40 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
-const (
-	descriptors = "descriptors"
-	files       = "files"
-	spans       = "spans"
-	metadata    = "metadata"
-)
-
 var externalIODir string
 
 func init() {
-	loadShowCmd := &cobra.Command{
-		Use:   "show [descriptors|files|spans|metadata] <backup_path>",
-		Short: "show backups",
-		Long:  "Shows subset(s) of meta information about a SQL backup.",
+
+	loadShowSummaryCmd := &cobra.Command{
+		Use:   "summary <backup_path>",
+		Short: "show backups summary",
+		Long:  "Shows summary of meta information about a SQL backup.",
 		Args:  cobra.MinimumNArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runLoadShow),
+		RunE:  cli.MaybeDecorateGRPCError(runLoadShowSummary),
+	}
+
+	loadShowCmds := &cobra.Command{
+		Use:   "show [command]",
+		Short: "show backup information",
+		Long:  "Shows subset(s) of information about a SQL backup.",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Usage()
+		},
 	}
 
 	loadCmds := &cobra.Command{
 		Use:   "load [command]",
-		Short: "loading commands",
+		Short: "load backup commands",
 		Long:  `Commands for bulk loading external files.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Usage()
@@ -73,13 +75,14 @@ func init() {
 		cliflags.ExternalIODir.Usage())
 
 	cli.AddCmd(loadCmds)
-	loadCmds.AddCommand(loadShowCmd)
-	loadShowCmd.Flags().AddFlagSet(loadFlags)
+	loadCmds.AddCommand(loadShowCmds)
+	loadShowCmds.AddCommand(loadShowSummaryCmd)
+	loadShowSummaryCmd.Flags().AddFlagSet(loadFlags)
 }
 
 func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClient, error) {
 	if dialing != 0 {
-		return nil, errors.Errorf(`only support nodelocal (0/self) under offline inspection`)
+		return nil, errors.Errorf(`only support nodelocal (0/self) under cli inspection`)
 	}
 	if externalIODir == "" {
 		externalIODir = filepath.Join(server.DefaultStorePath, "extern")
@@ -87,58 +90,14 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 	return blobs.NewLocalClient(externalIODir)
 }
 
-func parseShowArgs(args []string) (options map[string]bool, path string, err error) {
-	options = make(map[string]bool)
-	for _, arg := range args {
-		switch strings.ToLower(arg) {
-		case descriptors:
-			options[descriptors] = true
-		case files:
-			options[files] = true
-		case spans:
-			options[spans] = true
-		case metadata:
-			options[metadata] = true
-		default:
-			if path != "" {
-				return nil, "", errors.New("more than one path is specifiied")
-			}
-			path = arg
-		}
-	}
+func runLoadShowSummary(cmd *cobra.Command, args []string) error {
 
-	if len(options) == 0 {
-		options[descriptors] = true
-		options[files] = true
-		options[spans] = true
-		options[metadata] = true
-	}
-
-	if len(args) == len(options) {
-		return nil, "", errors.New("backup_path argument is required")
-	}
-	return options, path, nil
-}
-
-func runLoadShow(cmd *cobra.Command, args []string) error {
-
-	var options map[string]bool
-	var path string
-	var err error
-	if options, path, err = parseShowArgs(args); err != nil {
-		return err
-	}
-
-	var showHeaders bool
-	if len(options) > 1 {
-		showHeaders = true
-	}
-
-	ctx := context.Background()
+	path := args[0]
 	if !strings.Contains(path, "://") {
 		path = cloudimpl.MakeLocalStorageURI(path)
 	}
 
+	ctx := context.Background()
 	externalStorageFromURI := func(ctx context.Context, uri string,
 		user security.SQLUsername) (cloud.ExternalStorage, error) {
 		return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
@@ -154,25 +113,10 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	if _, ok := options[metadata]; ok {
-		showMeta(desc)
-	}
-
-	if _, ok := options[spans]; ok {
-		showSpans(desc, showHeaders)
-	}
-
-	if _, ok := options[files]; ok {
-		showFiles(desc, showHeaders)
-	}
-
-	if _, ok := options[descriptors]; ok {
-		if err := showDescriptor(desc); err != nil {
-			return err
-		}
-	}
-
+	showMeta(desc)
+	showSpans(desc)
+	showFiles(desc)
+	showDescriptors(desc)
 	return nil
 }
 
@@ -190,75 +134,75 @@ func showMeta(desc backupccl.BackupManifest) {
 	fmt.Printf("BuildInfo: %s\n", desc.BuildInfo.Short())
 }
 
-func showSpans(desc backupccl.BackupManifest, showHeaders bool) {
-	tabfmt := ""
-	if showHeaders {
-		fmt.Printf("Spans:\n")
-		tabfmt = "\t"
-	}
+func showSpans(desc backupccl.BackupManifest) {
+	fmt.Printf("Spans:\n")
 	for _, s := range desc.Spans {
-		fmt.Printf("%s%s\n", tabfmt, s)
+		fmt.Printf("	%s\n", s)
 	}
 }
 
-func showFiles(desc backupccl.BackupManifest, showHeaders bool) {
-	tabfmt := ""
-	if showHeaders {
-		fmt.Printf("Files:\n")
-		tabfmt = "\t"
-	}
+func showFiles(desc backupccl.BackupManifest) {
+	fmt.Printf("Files:\n")
 	for _, f := range desc.Files {
-		fmt.Printf("%s%s:\n", tabfmt, f.Path)
-		fmt.Printf("%s	Span: %s\n", tabfmt, f.Span)
-		fmt.Printf("%s	Sha512: %0128x\n", tabfmt, f.Sha512)
-		fmt.Printf("%s	DataSize: %d (%s)\n", tabfmt, f.EntryCounts.DataSize, humanizeutil.IBytes(f.EntryCounts.DataSize))
-		fmt.Printf("%s	Rows: %d\n", tabfmt, f.EntryCounts.Rows)
-		fmt.Printf("%s	IndexEntries: %d\n", tabfmt, f.EntryCounts.IndexEntries)
+		fmt.Printf("	%s:\n", f.Path)
+		fmt.Printf("		Span: %s\n", f.Span)
+		fmt.Printf("		Sha512: %0128x\n", f.Sha512)
+		fmt.Printf("		DataSize: %d (%s)\n", f.EntryCounts.DataSize, humanizeutil.IBytes(f.EntryCounts.DataSize))
+		fmt.Printf("		Rows: %d\n", f.EntryCounts.Rows)
+		fmt.Printf("		IndexEntries: %d\n", f.EntryCounts.IndexEntries)
 	}
 }
 
-func showDescriptor(desc backupccl.BackupManifest) error {
+func showDescriptors(desc backupccl.BackupManifest) {
 	// Note that these descriptors could be from any past version of the cluster,
 	// in case more fields need to be added to the output.
 	dbIDs := make([]descpb.ID, 0)
 	dbIDToName := make(map[descpb.ID]string)
 	schemaIDs := make([]descpb.ID, 0)
 	schemaIDs = append(schemaIDs, keys.PublicSchemaID)
-	schemaIDToName := make(map[descpb.ID]string)
-	schemaIDToName[keys.PublicSchemaID] = sessiondata.PublicSchemaName
+	schemaIDToNameChain := make(map[descpb.ID]string)
+	schemaIDToNameChain[keys.PublicSchemaID] = sessiondata.PublicSchemaName
+	typeIDs := make([]descpb.ID, 0)
+	typeIDToNameChain := make(map[descpb.ID]string)
 	for i := range desc.Descriptors {
 		d := &desc.Descriptors[i]
 		id := descpb.GetDescriptorID(d)
 		if d.GetDatabase() != nil {
 			dbIDToName[id] = descpb.GetDescriptorName(d)
 			dbIDs = append(dbIDs, id)
-		} else if d.GetSchema() != nil {
-			schemaIDToName[id] = descpb.GetDescriptorName(d)
+		} else if schemaDesc := d.GetSchema(); schemaDesc != nil {
+			dbName := dbIDToName[schemaDesc.GetParentID()]
+			schemaName := descpb.GetDescriptorName(d)
+			schemaIDToNameChain[id] = dbName + "." + schemaName
 			schemaIDs = append(schemaIDs, id)
+		} else if typeDesc := d.GetType(); typeDesc != nil {
+			parentSchema := schemaIDToNameChain[typeDesc.GetParentSchemaID()]
+			if parentSchema == sessiondata.PublicSchemaName {
+				parentSchema = dbIDToName[typeDesc.GetParentID()] + "." + parentSchema
+			}
+			typeName := descpb.GetDescriptorName(d)
+			typeIDToNameChain[id] = parentSchema + "." + typeName
+			typeIDs = append(typeIDs, id)
 		}
 	}
 
 	fmt.Printf("Databases:\n")
 	for _, id := range dbIDs {
-		fmt.Printf("	%s\n",
-			dbIDToName[id])
+		fmt.Printf("	%d.%s\n",
+			id, dbIDToName[id])
 	}
 
 	fmt.Printf("Schemas:\n")
 	for _, id := range schemaIDs {
-		fmt.Printf("	%s\n",
-			schemaIDToName[id])
+		fmt.Printf("	%d.%s\n",
+			id, schemaIDToNameChain[id])
 	}
 
-	fmt.Printf("Tables:\n")
-	for i := range desc.Descriptors {
-		d := &desc.Descriptors[i]
-		if descpb.TableFromDescriptor(d, hlc.Timestamp{}) != nil {
-			tbDesc := tabledesc.NewImmutable(*descpb.TableFromDescriptor(d, hlc.Timestamp{}))
-			dbName := dbIDToName[tbDesc.GetParentID()]
-			schemaName := schemaIDToName[tbDesc.GetParentSchemaID()]
-			fmt.Printf("	%s.%s.%s\n", dbName, schemaName, descpb.GetDescriptorName(d))
+	if len(typeIDs) > 0 {
+		fmt.Printf("Types:\n")
+		for _, id := range typeIDs {
+			fmt.Printf("	%d.%s\n",
+				id, typeIDToNameChain[id])
 		}
 	}
-	return nil
 }
