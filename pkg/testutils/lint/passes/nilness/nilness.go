@@ -66,24 +66,77 @@ and:
 	}
 `
 
+type argExtractor func(c *ssa.CallCommon) ssa.Value
+
+type analyzerConfig struct {
+	// reportDegenerateConditions controls the reporting of "impossible"
+	// and "tautological" comparisons. While many of these are in error,
+	// it also catches nil checks where the current control flow graph
+	// can't produce nil but where we might want to guard against changes
+	// in the future. It also catches a number of compound conditionals
+	// where the "tautological" check produces more readable code.
+	reportDegenerateIfConditions bool
+	// argExtractors is a map from the full name of a function to
+	// a func that returns the argument from a Call that should
+	// not be passed provably nil values.
+	argExtractors map[string]argExtractor
+}
+
+var crdbConfig = analyzerConfig{
+	reportDegenerateIfConditions: false,
+	argExtractors: map[string]argExtractor{
+		"github.com/cockroachdb/errors.Handled":                          firstArg,
+		"github.com/cockroachdb/errors.HandledWithMessage":               firstArg,
+		"github.com/cockroachdb/errors.NewAssertionErrorWithWrappedErrf": firstArg,
+		"github.com/cockroachdb/errors.Mark":                             firstArg,
+		"github.com/cockroachdb/errors.WithContextTags":                  firstArg,
+		"github.com/cockroachdb/errors.WithDetail":                       firstArg,
+		"github.com/cockroachdb/errors.WithDetailf":                      firstArg,
+		"github.com/cockroachdb/errors.WithHint":                         firstArg,
+		"github.com/cockroachdb/errors.WithHintf":                        firstArg,
+		"github.com/cockroachdb/errors.WithMessage":                      firstArg,
+		"github.com/cockroachdb/errors.WithMessagef":                     firstArg,
+		"github.com/cockroachdb/errors.WithStack":                        firstArg,
+		"github.com/cockroachdb/errors.WithStackDepth":                   firstArg,
+		"github.com/cockroachdb/errors.Wrap":                             firstArg,
+		"github.com/cockroachdb/errors.Wrapf":                            firstArg,
+		"github.com/cockroachdb/errors.WrapWithDepth":                    firstArg,
+		"github.com/cockroachdb/errors.WrapWithDepthf":                   firstArg,
+	},
+}
+
+var defaultConfig = analyzerConfig{
+	reportDegenerateIfConditions: true,
+}
+
+// CRDBAnalyzer defines a pass that checks for uses of provably nil
+// values that were likely in error with custom configuruation
+// suitable for the CRDB codebase.
+var CRDBAnalyzer = &analysis.Analyzer{
+	Name:     "nilness",
+	Doc:      doc,
+	Run:      crdbConfig.run,
+	Requires: []*analysis.Analyzer{buildssa.Analyzer},
+}
+
 // Analyzer defines a pass that checks for uses of provably nil values
 // that were likely in error.
 var Analyzer = &analysis.Analyzer{
 	Name:     "nilness",
 	Doc:      doc,
-	Run:      run,
+	Run:      defaultConfig.run,
 	Requires: []*analysis.Analyzer{buildssa.Analyzer},
 }
 
-func run(pass *analysis.Pass) (interface{}, error) {
+func (a *analyzerConfig) run(pass *analysis.Pass) (interface{}, error) {
 	ssainput := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA)
 	for _, fn := range ssainput.SrcFuncs {
-		runFunc(pass, fn)
+		a.runFunc(pass, fn)
 	}
 	return nil, nil
 }
 
-func runFunc(pass *analysis.Pass, fn *ssa.Function) {
+func (a *analyzerConfig) runFunc(pass *analysis.Pass, fn *ssa.Function) {
 	reportf := func(category string, pos token.Pos, format string, args ...interface{}) {
 		pass.Report(analysis.Diagnostic{
 			Pos:      pos,
@@ -130,7 +183,7 @@ func runFunc(pass *analysis.Pass, fn *ssa.Function) {
 				switch f := call.Value.(type) {
 				case *ssa.Function:
 					if tf, ok := f.Object().(*types.Func); ok {
-						if extract, ok := argExtractors[tf.FullName()]; ok {
+						if extract, ok := a.argExtractors[tf.FullName()]; ok {
 							notNilArg(stack, instr, extract(call), tf.FullName())
 						}
 					}
@@ -180,13 +233,15 @@ func runFunc(pass *analysis.Pass, fn *ssa.Function) {
 				// Degenerate condition:
 				// the nilness of both operands is known,
 				// and at least one of them is nil.
-				var adj string
-				if (xnil == ynil) == (binop.Op == token.EQL) {
-					adj = "tautological"
-				} else {
-					adj = "impossible"
+				if a.reportDegenerateIfConditions {
+					var adj string
+					if (xnil == ynil) == (binop.Op == token.EQL) {
+						adj = "tautological"
+					} else {
+						adj = "impossible"
+					}
+					reportf("cond", binop.Pos(), "%s condition: %s %s %s", adj, xnil, binop.Op, ynil)
 				}
-				reportf("cond", binop.Pos(), "%s condition: %s %s %s", adj, xnil, binop.Op, ynil)
 
 				// If tsucc's or fsucc's sole incoming edge is impossible,
 				// it is unreachable.  Prune traversal of it and
@@ -384,23 +439,3 @@ func (ff facts) negate() facts {
 }
 
 var firstArg = func(c *ssa.CallCommon) ssa.Value { return c.Args[0] }
-
-var argExtractors = map[string]func(c *ssa.CallCommon) ssa.Value{
-	"github.com/cockroachdb/errors.Handled":                          firstArg,
-	"github.com/cockroachdb/errors.HandledWithMessage":               firstArg,
-	"github.com/cockroachdb/errors.NewAssertionErrorWithWrappedErrf": firstArg,
-	"github.com/cockroachdb/errors.Mark":                             firstArg,
-	"github.com/cockroachdb/errors.WithContextTags":                  firstArg,
-	"github.com/cockroachdb/errors.WithDetail":                       firstArg,
-	"github.com/cockroachdb/errors.WithDetailf":                      firstArg,
-	"github.com/cockroachdb/errors.WithHint":                         firstArg,
-	"github.com/cockroachdb/errors.WithHintf":                        firstArg,
-	"github.com/cockroachdb/errors.WithMessage":                      firstArg,
-	"github.com/cockroachdb/errors.WithMessagef":                     firstArg,
-	"github.com/cockroachdb/errors.WithStack":                        firstArg,
-	"github.com/cockroachdb/errors.WithStackDepth":                   firstArg,
-	"github.com/cockroachdb/errors.Wrap":                             firstArg,
-	"github.com/cockroachdb/errors.Wrapf":                            firstArg,
-	"github.com/cockroachdb/errors.WrapWithDepth":                    firstArg,
-	"github.com/cockroachdb/errors.WrapWithDepthf":                   firstArg,
-}
