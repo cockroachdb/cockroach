@@ -116,7 +116,6 @@ go_test(
         "validations_test.go",
     ],
     embed = [":changefeedccl"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/blobs",
