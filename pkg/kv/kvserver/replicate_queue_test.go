@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -354,6 +355,120 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 				expectedNonVoterCount, found)
 		}
 		return nil
+	})
+}
+
+// TestReplicateQueueDecommissioningNonVoters is an end-to-end test
+// ensuring that the replicateQueue will replace or remove non-voter(s) on
+// decommissioning nodes.
+func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	check := func(tc *testcluster.TestCluster, scratchRange roachpb.RangeDescriptor) bool {
+		scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+			t.Fatal(err)
+		}
+		if len(scratchRange.Replicas().VoterDescriptors()) != 1 {
+			return false
+		}
+		if len(scratchRange.Replicas().NonVoterDescriptors()) != 2 {
+			return false
+		}
+		return true
+	}
+
+	// Setup a scratch range on a test cluster with 2 non-voters and 1 voter.
+	setupFn := func(t *testing.T) (*testcluster.TestCluster, roachpb.RangeDescriptor) {
+		tc := testcluster.StartTestCluster(t, 5,
+			base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		)
+
+		scratchKey := tc.ScratchRange(t)
+		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+		_, err := tc.ServerConn(0).Exec(
+			`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 3, num_voters = 1`,
+		)
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			return check(tc, scratchRange)
+		}, 15*time.Second, time.Second)
+		return tc, scratchRange
+	}
+
+	getNonVoterNodeIDs := func(scratchRange roachpb.RangeDescriptor) (nonVoterNodeIDs []roachpb.NodeID) {
+		for _, repl := range scratchRange.Replicas().NonVoterDescriptors() {
+			nonVoterNodeIDs = append(nonVoterNodeIDs, repl.NodeID)
+		}
+		return nonVoterNodeIDs
+	}
+
+	t.Run("replace", func(t *testing.T) {
+		tc, scratchRange := setupFn(t)
+		defer tc.Stopper().Stop(ctx)
+		// Do a fresh look up on the range descriptor.
+		scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+		nonVoterNodeIDs := getNonVoterNodeIDs(scratchRange)
+
+		// Decommission each of the two nodes that have the non-voters and make sure
+		// that those non-voters are upreplicated elsewhere.
+		require.NoError(t,
+			tc.Server(0).Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, nonVoterNodeIDs))
+		require.Eventually(t, func() bool {
+			return check(tc, scratchRange)
+		}, 15*time.Second, time.Second)
+
+		scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+		afterNodeIDs := getNonVoterNodeIDs(scratchRange)
+		for _, nodeID := range nonVoterNodeIDs {
+			// Ensure that non-voters are not on the same stores as before.
+			require.NotContains(t, afterNodeIDs, nodeID)
+		}
+	})
+
+	t.Run("remove", func(t *testing.T) {
+		tc, scratchRange := setupFn(t)
+		defer tc.Stopper().Stop(ctx)
+
+		// Turn off the replicateQueue and update the zone configs to remove all
+		// non-voters. At the same time, also mark all the nodes that have
+		// non-voters as decommissioning.
+		tc.ToggleReplicateQueues(false)
+		_, err := tc.ServerConn(0).Exec(
+			`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 1`,
+		)
+		require.NoError(t, err)
+
+		// Do a fresh look up on the range descriptor.
+		scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+		nonVoterNodeIDs := getNonVoterNodeIDs(scratchRange)
+		require.NoError(t,
+			tc.Server(0).Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, nonVoterNodeIDs))
+
+		tc.ToggleReplicateQueues(true)
+		require.Eventually(t, func() bool {
+			if err := forceScanOnAllReplicationQueues(tc); err != nil {
+				t.Fatal(err)
+			}
+			scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+			if len(scratchRange.Replicas().VoterDescriptors()) != 1 {
+				return false
+			}
+			if len(scratchRange.Replicas().NonVoterDescriptors()) != 0 {
+				return false
+			}
+			return true
+		}, 15*time.Second, time.Second)
+
+		scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+		afterNodeIDs := getNonVoterNodeIDs(scratchRange)
+		for _, nodeID := range nonVoterNodeIDs {
+			// Ensure that non-voters are not on the same stores as before.
+			require.NotContains(t, afterNodeIDs, nodeID)
+		}
 	})
 }
 
