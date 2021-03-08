@@ -620,9 +620,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				descriptorChanged = true
 			}
 
-			if err != nil {
-				return err
-			}
 			if err := params.p.removeColumnComment(params.ctx, n.tableDesc.ID, colToDrop.GetID()); err != nil {
 				return err
 			}

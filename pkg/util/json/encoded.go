@@ -436,6 +436,8 @@ func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
 			}
 			return string(data) >= key
 		})
+		// TODO(ssd): This err will always be nil. It looks
+		// like we intended to assign to it at 433 above.
 		if err != nil {
 			return nil, err
 		}

@@ -74,9 +74,6 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	}
 	opts := desc.SequenceOpts
 	seqValueKey := params.p.ExecCfg().Codec.SequenceKey(uint32(desc.ID))
-	if err != nil {
-		return err
-	}
 
 	getSequenceValue := func() (int64, error) {
 		kv, err := params.p.txn.Get(params.ctx, seqValueKey)
