@@ -188,9 +188,6 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 				return errors.Wrap(err, "connector error")
 			}
 			db = gosql.OpenDB(connector)
-			if err != nil {
-				return errors.Wrap(err, "connect")
-			}
 			fmt.Println("connected to", match[1])
 			break
 		}

@@ -348,15 +348,13 @@ func (t *tlsInitHandshaker) getPeerCACert(
 		return nodeHostnameAndCA{}, err
 	}
 
-	// Read and validate server provided ack.
-	// HMAC(hostname + server CA public certificate, secretToken)
-	var msg nodeHostnameAndCA
-	if err != nil {
-		return nodeHostnameAndCA{}, err
-	}
 	if res.StatusCode != 200 {
 		return nodeHostnameAndCA{}, errors.Errorf("unexpected error returned from peer: HTTP %d", res.StatusCode)
 	}
+
+	// Read and validate server provided ack.
+	// HMAC(hostname + server CA public certificate, secretToken)
+	var msg nodeHostnameAndCA
 	if err := json.NewDecoder(res.Body).Decode(&msg); err != nil {
 		return nodeHostnameAndCA{}, err
 	}
