@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -73,29 +74,32 @@ func (r *Replica) maybeUpdateCachedProtectedTS(ts *cachedProtectedTimestampState
 // again. See r.protectedTimestampRecordCurrentlyApplies() for more details.
 func (r *Replica) protectedTimestampRecordApplies(
 	ctx context.Context, args *roachpb.AdminVerifyProtectedTimestampRequest,
-) (willApply bool, _ error) {
+) (willApply bool, doesNotApplyReason string, _ error) {
 	// Check the state of the cache without a refresh.
-	willApply, cacheTooOld, err := r.protectedTimestampRecordCurrentlyApplies(ctx, args)
+	willApply, cacheTooOld, doesNotApplyReason, err := r.protectedTimestampRecordCurrentlyApplies(
+		ctx, args)
 	if err != nil {
-		return false, err
+		return false, doesNotApplyReason, err
 	}
 	if !cacheTooOld {
-		return willApply, nil
+		return willApply, doesNotApplyReason, nil
 	}
 	// Refresh the cache so that we know that the next time we come around we're
 	// certain to either see the record or see a timestamp for readAt that is
 	// greater than or equal to recordAliveAt.
 	if err := r.store.protectedtsCache.Refresh(ctx, args.RecordAliveAt); err != nil {
-		return false, err
+		return false, doesNotApplyReason, err
 	}
-	willApply, cacheTooOld, err = r.protectedTimestampRecordCurrentlyApplies(ctx, args)
+	willApply, cacheTooOld, doesNotApplyReason, err = r.protectedTimestampRecordCurrentlyApplies(
+		ctx, args)
 	if err != nil {
-		return false, err
+		return false, doesNotApplyReason, err
 	}
 	if cacheTooOld {
-		return false, errors.AssertionFailedf("cache was not updated after being refreshed")
+		return false, doesNotApplyReason, errors.AssertionFailedf(
+			"cache was not updated after being refreshed")
 	}
-	return willApply, nil
+	return willApply, doesNotApplyReason, nil
 }
 
 func (r *Replica) readProtectedTimestampsRLocked(
@@ -134,9 +138,14 @@ func (r *Replica) readProtectedTimestampsRLocked(
 // the current state of the cache is too old to determine whether the record
 // will apply. In such cases the cache should be refreshed to recordAliveAt and
 // then this method should be called again.
+// In certain cases we return a doesNotApplyReason explaining why the protected
+// ts record does not currently apply. We do not want to return an error so that
+// we can aggregate the reasons across multiple
+// AdminVerifyProtectedTimestampRequest, as explained in
+// adminVerifyProtectedTimestamp.
 func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	ctx context.Context, args *roachpb.AdminVerifyProtectedTimestampRequest,
-) (willApply, cacheTooOld bool, _ error) {
+) (willApply, cacheTooOld bool, doesNotApplyReason string, _ error) {
 	// We first need to check that we're the current leaseholder.
 	// TODO(ajwerner): what other conditions with regards to time do we need to
 	// check? I don't think there are any. If the recordAliveAt is after our
@@ -146,7 +155,7 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// then they will have to go through the same process.
 	ls, pErr := r.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
-		return false, false, pErr.GoError()
+		return false, false, "", pErr.GoError()
 	}
 
 	// NB: It should be the case that the recordAliveAt timestamp
@@ -177,13 +186,17 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// correct range.
 	desc := r.descRLocked()
 	if !kvserverbase.ContainsKeyRange(desc, args.Key, args.EndKey) {
-		return false, false, roachpb.NewRangeKeyMismatchError(ctx, args.Key, args.EndKey, desc, r.mu.state.Lease)
+		return false, false, "", roachpb.NewRangeKeyMismatchError(ctx, args.Key, args.EndKey, desc,
+			r.mu.state.Lease)
 	}
 	if args.Protected.LessEq(*r.mu.state.GCThreshold) {
-		return false, false, nil
+		gcReason := fmt.Sprintf("protected ts: %s is less than equal to the GCThreshold: %s for the"+
+			" range %s - %s", args.Protected.String(), r.mu.state.GCThreshold.String(),
+			r.Desc().StartKey.String(), r.Desc().EndKey.String())
+		return false, false, gcReason, nil
 	}
 	if args.RecordAliveAt.Less(ls.Lease.Start.ToTimestamp()) {
-		return true, false, nil
+		return true, false, "", nil
 	}
 
 	// Now we're in the case where maybe it is possible that we're going to later
@@ -192,7 +205,11 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	r.protectedTimestampMu.Lock()
 	defer r.protectedTimestampMu.Unlock()
 	if args.Protected.Less(r.protectedTimestampMu.pendingGCThreshold) {
-		return false, false, nil
+		gcReason := fmt.Sprintf(
+			"protected ts: %s is less than the pending GCThreshold: %s for the range %s - %s",
+			args.Protected.String(), r.protectedTimestampMu.pendingGCThreshold.String(),
+			r.Desc().StartKey.String(), r.Desc().EndKey.String())
+		return false, false, gcReason, nil
 	}
 
 	var seen bool
@@ -212,12 +229,18 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// minStateReadTimestamp.
 	if seen {
 		r.protectedTimestampMu.minStateReadTimestamp = read.readAt
-		return true, false, nil
+		return true, false, "", nil
 	}
 
+	isCacheTooOld := read.readAt.Less(args.RecordAliveAt)
 	// Protected timestamp state has progressed past the point at which we
 	// should see this record. This implies that the record has been removed.
-	return false, read.readAt.Less(args.RecordAliveAt), nil
+	if !isCacheTooOld {
+		recordRemovedReason := "protected ts record has been removed"
+		return false, false, recordRemovedReason, nil
+	}
+	// Retry, since the cache is too old.
+	return false, true, "", nil
 }
 
 // checkProtectedTimestampsForGC determines whether the Replica can run GC. If
