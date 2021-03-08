@@ -2555,3 +2555,115 @@ func TestLeaseAcquireAfterDropWithEarlierTimestamp(t *testing.T) {
 	tdb.ExpectErr(t, `relation "sc.foo" does not exist`,
 		"SELECT * FROM sc.foo AS OF SYSTEM TIME "+ev.ts.AsOfSystemTime())
 }
+
+func TestDropDescriptorRacesWithAcquisition(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// We want to have a transaction to acquire a descriptor on one
+	// node that starts and reads version 1. Then we'll write a new
+	// version of the descriptor and then we'll let the acquisition
+	// finish. Before the commit which added this test, that acquired
+	// lease would not be dropped when it was not in use anymore because
+	// it would think it was the latest.
+
+	const tableName = "foo"
+	leaseAcquiredEventCh := make(chan chan struct{}, 1)
+	var seenUpdatesAtVersion2 int64
+	leaseRefreshedForVersion2 := make(chan struct{})
+	recvLeaseRefreshedForVersion2 := leaseRefreshedForVersion2
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &lease.ManagerTestingKnobs{
+			TestingDescriptorUpdateEvent: func(descriptor *descpb.Descriptor) error {
+				_, version, name, _ := descpb.GetDescriptorMetadata(descriptor)
+				if name != tableName {
+					return nil
+				}
+				// Just so we don't get blocked on the refresh below.
+				if version != 2 {
+					return errors.New("swallowed")
+				}
+				if atomic.AddInt64(&seenUpdatesAtVersion2, 1) != 1 {
+					return errors.New("swallowed")
+				}
+				return nil
+			},
+			TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
+				_, version, name, _ := descpb.GetDescriptorMetadata(descriptor)
+				if name != tableName || version != 2 {
+					return
+				}
+				// Just so we don't get blocked on the refresh below.
+				if leaseRefreshedForVersion2 != nil {
+					close(leaseRefreshedForVersion2)
+					leaseRefreshedForVersion2 = nil
+				}
+			},
+			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
+				RemoveOnceDereferenced: true,
+				LeaseAcquiredEvent: func(desc catalog.Descriptor, _ error) {
+					if desc.GetName() != tableName {
+						return
+					}
+					unblock := make(chan struct{})
+					select {
+					case leaseAcquiredEventCh <- unblock:
+					default:
+						return
+					}
+					<-unblock
+				},
+			},
+		},
+	}
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: testingKnobs,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	db := tc.ServerConn(0)
+
+	// Create our table. This will not acquire a lease.
+	{
+		_, err := db.Exec("CREATE TABLE foo ()")
+		require.NoError(t, err)
+	}
+
+	// Attempt to acquire the lease; it will block.
+	readFromFooErr := make(chan error, 1)
+	go func() {
+		_, err := db.Exec("SELECT rowid FROM foo")
+		readFromFooErr <- err
+	}()
+
+	var unblockLeaseRefresh chan<- struct{}
+	select {
+	case unblockLeaseRefresh = <-leaseAcquiredEventCh:
+	case <-readFromFooErr:
+		t.Fatal("expected this to be blocked on lease acquisition")
+	}
+
+	// This will create a version 2 which is dropped and then will wait
+	// to drain the name.
+	dropErrChan := make(chan error, 1)
+	go func() {
+		_, err := db.Exec("DROP TABLE foo")
+		dropErrChan <- err
+	}()
+	// Detect that the drop was noticed by the lease manager (note that this
+	// precedes the older version being seen).
+	<-recvLeaseRefreshedForVersion2
+
+	// Now let the read proceed.
+	close(unblockLeaseRefresh)
+	require.NoError(t, <-readFromFooErr)
+	require.NoError(t, <-dropErrChan)
+
+	tc.Server(0).LeaseManager().(*lease.Manager).VisitLeases(func(
+		desc catalog.Descriptor, takenOffline bool, refCount int, expiration tree.DTimestamp,
+	) (wantMore bool) {
+		t.Log(desc, takenOffline, refCount, expiration)
+		return true
+	})
+}
