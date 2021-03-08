@@ -289,6 +289,21 @@ func (j *Job) SetDescription(ctx context.Context, txn *kv.Txn, updateFn Descript
 	})
 }
 
+// SetNonCancelable updates the NonCancelable field of a created job.
+func (j *Job) SetNonCancelable(
+	ctx context.Context, txn *kv.Txn, updateFn NonCancelableUpdateFn,
+) error {
+	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		prev := md.Payload.Noncancelable
+		newStatus := updateFn(ctx, prev)
+		if prev != newStatus {
+			md.Payload.Noncancelable = newStatus
+			ju.UpdatePayload(md.Payload)
+		}
+		return nil
+	})
+}
+
 // RunningStatusFn is a callback that computes a job's running status
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
@@ -297,6 +312,10 @@ type RunningStatusFn func(ctx context.Context, details jobspb.Details) (RunningS
 // DescriptionUpdateFn is a callback that computes a job's description
 // given its current one.
 type DescriptionUpdateFn func(ctx context.Context, description string) (string, error)
+
+// NonCancelableUpdateFn is a callback that computes a job's non-cancelable
+// status given its current one.
+type NonCancelableUpdateFn func(ctx context.Context, nonCancelable bool) bool
 
 // FractionProgressedFn is a callback that computes a job's completion fraction
 // given its details. It is safe to modify details in the callback; those
