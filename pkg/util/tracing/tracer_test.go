@@ -290,9 +290,7 @@ func TestTracerInjectExtract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s1.ImportRemoteSpans(rec); err != nil {
-		t.Fatal(err)
-	}
+	s1.ImportRemoteSpans(rec)
 	s1.Finish()
 
 	if err := TestingCheckRecordedSpans(s1.GetRecording(), `
@@ -517,7 +515,7 @@ func TestTracer_VisitSpans(t *testing.T) {
 	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithParentAndManualCollection(child.Meta()))
 	require.Len(t, tr2.activeSpans.m, 2)
 
-	require.NoError(t, child.ImportRemoteSpans(childChildFinished.GetRecording()))
+	child.ImportRemoteSpans(childChildFinished.GetRecording())
 
 	childChildFinished.Finish()
 	require.Len(t, tr2.activeSpans.m, 1)
@@ -551,7 +549,7 @@ func TestSpanRecordingFinished(t *testing.T) {
 
 	tr2 := NewTracer()
 	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithParentAndManualCollection(child.Meta()))
-	require.NoError(t, child.ImportRemoteSpans(remoteChildChild.GetRecording()))
+	child.ImportRemoteSpans(remoteChildChild.GetRecording())
 
 	// All spans are un-finished.
 	sortedSpanOps := getSortedSpanOps(t, tr1)
@@ -582,7 +580,7 @@ func TestSpanRecordingFinished(t *testing.T) {
 	remoteChildChild.Finish()
 	// NB: importing a span twice is essentially a bad idea. It's ok in
 	// this test though.
-	require.NoError(t, child.ImportRemoteSpans(remoteChildChild.GetRecording()))
+	child.ImportRemoteSpans(remoteChildChild.GetRecording())
 	child.Finish()
 	spanOpsWithFinished = getSpanOpsWithFinished(t, tr1)
 

@@ -217,16 +217,15 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 	return result
 }
 
-func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) error {
+func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 	// Change the root of the remote recording to be a child of this Span. This is
 	// usually already the case, except with DistSQL traces where remote
 	// processors run in spans that FollowFrom an RPC Span that we don't collect.
 	remoteSpans[0].ParentSpanID = s.spanID
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.mu.recording.remoteSpans = append(s.mu.recording.remoteSpans, remoteSpans...)
-	s.mu.Unlock()
-	return nil
 }
 
 func (s *crdbSpan) setTagLocked(key string, value interface{}) {
