@@ -109,7 +109,8 @@ func TestCombineResponses(t *testing.T) {
 func TestCombinable(t *testing.T) {
 	t.Run("Get", func(t *testing.T) {
 		// Test that GetResponse doesn't have anything to do with combinable.
-		if _, ok := interface{}(&GetResponse{}).(combinable); ok {
+		getResp := GetResponse{}
+		if _, ok := interface{}(&getResp).(combinable); ok {
 			t.Fatalf("GetResponse implements combinable, so presumably all Response types will")
 		}
 	})
@@ -188,8 +189,11 @@ func TestCombinable(t *testing.T) {
 		v1 := &AdminVerifyProtectedTimestampResponse{
 			ResponseHeader: ResponseHeader{},
 			Verified:       false,
-			FailedRanges: []RangeDescriptor{
+			DeprecatedFailedRanges: []RangeDescriptor{
 				{RangeID: 1},
+			},
+			VerificationFailedRanges: []AdminVerifyProtectedTimestampResponse_FailedRange{
+				{RangeID: 1, StartKey: RKeyMin, EndKey: RKeyMax, Reason: "foo"},
 			},
 		}
 
@@ -197,24 +201,31 @@ func TestCombinable(t *testing.T) {
 			t.Fatal("AdminVerifyProtectedTimestampResponse unexpectedly does not implement combinable")
 		}
 		v2 := &AdminVerifyProtectedTimestampResponse{
-			ResponseHeader: ResponseHeader{},
-			Verified:       true,
-			FailedRanges:   nil,
+			ResponseHeader:         ResponseHeader{},
+			Verified:               true,
+			DeprecatedFailedRanges: nil,
 		}
 		v3 := &AdminVerifyProtectedTimestampResponse{
 			ResponseHeader: ResponseHeader{},
 			Verified:       false,
-			FailedRanges: []RangeDescriptor{
+			DeprecatedFailedRanges: []RangeDescriptor{
 				{RangeID: 2},
+			},
+			VerificationFailedRanges: []AdminVerifyProtectedTimestampResponse_FailedRange{
+				{RangeID: 2, StartKey: RKeyMin, EndKey: RKeyMax, Reason: "bar"},
 			},
 		}
 		require.NoError(t, v1.combine(v2))
 		require.NoError(t, v1.combine(v3))
 		require.EqualValues(t, &AdminVerifyProtectedTimestampResponse{
 			Verified: false,
-			FailedRanges: []RangeDescriptor{
+			DeprecatedFailedRanges: []RangeDescriptor{
 				{RangeID: 1},
 				{RangeID: 2},
+			},
+			VerificationFailedRanges: []AdminVerifyProtectedTimestampResponse_FailedRange{
+				{RangeID: 1, StartKey: RKeyMin, EndKey: RKeyMax, Reason: "foo"},
+				{RangeID: 2, StartKey: RKeyMin, EndKey: RKeyMax, Reason: "bar"},
 			},
 		}, v1)
 
