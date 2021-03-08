@@ -86,8 +86,23 @@ var lightstepToken = settings.RegisterStringSetting(
 // to send traces to, if any.
 var ZipkinCollector = settings.RegisterStringSetting(
 	"trace.zipkin.collector",
-	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set",
+	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'). "+
+		"Only one tracer can be configured at a time.",
 	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
+).WithPublic()
+
+var dataDogAgentAddr = settings.RegisterStringSetting(
+	"trace.datadog.agent",
+	"if set, traces will be sent to this DataDog agent; use <host>:<port> or \"default\" for localhost:8126. "+
+		"Only one tracer can be configured at a time.",
+	envutil.EnvOrDefaultString("COCKROACH_DATADOG_AGENT", ""),
+).WithPublic()
+
+var dataDogProjectName = settings.RegisterStringSetting(
+	"trace.datadog.project",
+	"the project under which traces will be reported to the DataDog agent if trace.datadog.agent is set. "+
+		"Only one tracer can be configured at a time.",
+	envutil.EnvOrDefaultString("COCKROACH_DATADOG_PROJECT", "CockroachDB"),
 ).WithPublic()
 
 // Tracer is our own custom implementation of opentracing.Tracer. It supports:
@@ -171,6 +186,8 @@ func (t *Tracer) Configure(sv *settings.Values) {
 			t.setShadowTracer(createLightStepTracer(lsToken))
 		} else if zipkinAddr := ZipkinCollector.Get(sv); zipkinAddr != "" {
 			t.setShadowTracer(createZipkinTracer(zipkinAddr))
+		} else if ddAddr := dataDogAgentAddr.Get(sv); ddAddr != "" {
+			t.setShadowTracer(createDataDogTracer(ddAddr, dataDogProjectName.Get(sv)))
 		} else {
 			t.setShadowTracer(nil, nil)
 		}
@@ -186,6 +203,8 @@ func (t *Tracer) Configure(sv *settings.Values) {
 	enableNetTrace.SetOnChange(sv, reconfigure)
 	lightstepToken.SetOnChange(sv, reconfigure)
 	ZipkinCollector.SetOnChange(sv, reconfigure)
+	dataDogAgentAddr.SetOnChange(sv, reconfigure)
+	dataDogProjectName.SetOnChange(sv, reconfigure)
 }
 
 // HasExternalSink returns whether the tracer is configured to report

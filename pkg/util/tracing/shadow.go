@@ -21,6 +21,8 @@ import (
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentracer"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 type shadowTracerManager interface {
@@ -48,6 +50,19 @@ func (*zipkinManager) Name() string {
 
 func (m *zipkinManager) Close(tr opentracing.Tracer) {
 	_ = m.collector.Close()
+}
+
+type dataDogManager struct{}
+
+func (dataDogManager) Name() string {
+	return "DataDog"
+}
+
+func (dataDogManager) Close(tr opentracing.Tracer) {
+	// TODO(andrei): Figure out what to do here. The docs suggest that
+	// ddtrace.tracer.Stop() flushes, but the problem is that it operates on
+	// global state, and when shadow tracers are changed, we call this *after*
+	// starting the new one.
 }
 
 // A shadowTracer can be any opentracing.Tracer implementation that is used in
@@ -141,4 +156,12 @@ func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.
 		panic(err)
 	}
 	return &zipkinManager{collector: collector}, zipkinTr
+}
+
+func createDataDogTracer(agentAddr, project string) (shadowTracerManager, opentracing.Tracer) {
+	opts := []tracer.StartOption{tracer.WithService(project)}
+	if agentAddr != "" && agentAddr != "default" {
+		opts = append(opts, tracer.WithAgentAddr(agentAddr))
+	}
+	return dataDogManager{}, opentracer.New(opts...)
 }
