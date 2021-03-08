@@ -5790,6 +5790,12 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 	}
 }
 
+func getTableID(db *gosql.DB, dbName, tableName string) (tableID descpb.ID, err error) {
+	err = db.QueryRow(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $1 AND name = $2`,
+		dbName, tableName).Scan(&tableID)
+	return
+}
+
 // TestSpanSelectionDuringBackup tests the method spansForAllTableIndexes which
 // is used to resolve the spans which will be backed up, and spans for which
 // protected ts records will be created.
@@ -5832,7 +5838,9 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 			"INDEX baz(name), INDEX bar (v))")
 
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		require.Equal(t, []string{"/Table/53/{1-4}"}, actualResolvedSpans)
+		tableID, err := getTableID(conn, "test", "foo")
+		require.NoError(t, err)
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-4}", tableID)}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -5846,7 +5854,10 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		runner.Exec(t, "DROP INDEX foo@baz")
 
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		require.Equal(t, []string{"/Table/55/{1-2}", "/Table/55/{3-4}"}, actualResolvedSpans)
+		tableID, err := getTableID(conn, "test", "foo")
+		require.NoError(t, err)
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{3-4}", tableID)}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -5861,13 +5872,14 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		time.Sleep(time.Second * 2)
 
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		require.Equal(t, []string{"/Table/57/{1-4}"}, actualResolvedSpans)
+		tableID, err := getTableID(conn, "test", "foo")
+		require.NoError(t, err)
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-4}", tableID)}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
 
 	t.Run("interleaved-spans", func(t *testing.T) {
-		skip.WithIssue(t, 57546, "flaky test")
 		runner.Exec(t, "CREATE DATABASE test; USE test;")
 		runner.Exec(t, "CREATE TABLE grandparent (a INT PRIMARY KEY, v BYTES, INDEX gpindex (v))")
 		runner.Exec(t, "CREATE TABLE parent (a INT, b INT, v BYTES, "+
@@ -5880,13 +5892,17 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		// tables parent and child.
 		// /Table/59/2 - /Table/59/3 is for the gpindex
 		// /Table/61/{2-3} is for the childindex
-		require.Equal(t, []string{"/Table/59/{1-3}", "/Table/61/{2-3}"}, actualResolvedSpans)
+		grandparentID, err := getTableID(conn, "test", "grandparent")
+		require.NoError(t, err)
+		childID, err := getTableID(conn, "test", "child")
+		require.NoError(t, err)
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-3}", grandparentID),
+			fmt.Sprintf("/Table/%d/{2-3}", childID)}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
 
 	t.Run("revs-span-merge", func(t *testing.T) {
-		skip.WithIssue(t, 57546, "flaky test")
 		runner.Exec(t, "CREATE DATABASE test; USE test;")
 		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, "+
 			"INDEX baz(name), INDEX bar (v))")
@@ -5899,7 +5915,9 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		// The BACKUP with revision history will pickup the dropped index baz as
 		// well because it existed in a non-drop state at some point in the interval
 		// covered by this BACKUP.
-		require.Equal(t, []string{"/Table/63/{1-4}"}, actualResolvedSpans)
+		tableID, err := getTableID(conn, "test", "foo")
+		require.NoError(t, err)
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-4}", tableID)}, actualResolvedSpans)
 		actualResolvedSpans = nil
 		runner.Exec(t, "DROP TABLE foo")
 
@@ -5914,13 +5932,16 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		// incremental backup with revision history. We also expect to see both drop
 		// and non-drop indexes of table foo2 as all the indexes were live at some
 		// point in the interval covered by this BACKUP.
-		require.Equal(t, []string{"/Table/63/{1-2}", "/Table/63/{3-4}", "/Table/64/{1-4}"}, actualResolvedSpans)
+		tableID2, err := getTableID(conn, "test", "foo2")
+		require.NoError(t, err)
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{3-4}", tableID), fmt.Sprintf("/Table/%d/{1-4}", tableID2)},
+			actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
 
 	t.Run("last-index-dropped", func(t *testing.T) {
-		skip.WithIssue(t, 57546, "flaky test")
 		runner.Exec(t, "CREATE DATABASE test; USE test;")
 		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
 		runner.Exec(t, "CREATE TABLE foo2 (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
@@ -5928,13 +5949,17 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		runner.Exec(t, "DROP INDEX foo@baz")
 
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		require.Equal(t, []string{"/Table/66/{1-2}", "/Table/67/{1-3}"}, actualResolvedSpans)
+		tableID, err := getTableID(conn, "test", "foo")
+		require.NoError(t, err)
+		tableID2, err := getTableID(conn, "test", "foo2")
+		require.NoError(t, err)
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{1-3}", tableID2)}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
 
 	t.Run("last-index-gced", func(t *testing.T) {
-		skip.WithIssue(t, 57546, "flaky test")
 		runner.Exec(t, "CREATE DATABASE test; USE test;")
 		runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES, name STRING, INDEX baz(name))")
 		runner.Exec(t, "INSERT INTO foo VALUES (1, NULL, 'test')")
@@ -5945,7 +5970,12 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		runner.Exec(t, "ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds=60")
 
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
-		require.Equal(t, []string{"/Table/69/{1-2}", "/Table/70/{1-3}"}, actualResolvedSpans)
+		tableID, err := getTableID(conn, "test", "foo")
+		require.NoError(t, err)
+		tableID2, err := getTableID(conn, "test", "foo2")
+		require.NoError(t, err)
+		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{1-3}", tableID2)}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
