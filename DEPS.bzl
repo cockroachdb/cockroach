@@ -711,8 +711,8 @@ def go_deps():
         name = "com_github_datadog_datadog_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataDog/datadog-go",
-        sum = "h1:V5BKkxACZLjzHjSgBbr2gvLA2Ae49yhc6CSY7MLy5k4=",
-        version = "v2.2.0+incompatible",
+        sum = "h1:R7WqXWP4fIOAqWJtUKmSfuc7eDsBT58k9AY5WSHVosk=",
+        version = "v4.4.0+incompatible",
     )
 
     go_repository(
@@ -3225,8 +3225,8 @@ def go_deps():
         name = "com_github_tinylib_msgp",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/tinylib/msgp",
-        sum = "h1:TnCZ3FIuKeaIy+F45+Cnp+caqdXGy4z74HvwXN+570Y=",
-        version = "v1.1.1",
+        sum = "h1:gWmO7n0Ys2RBEb7GPYB9Ujq8Mk5p2U08lRnmMcGy6BQ=",
+        version = "v1.1.2",
     )
     go_repository(
         name = "com_github_tmc_grpc_websocket_proxy",
@@ -3549,8 +3549,8 @@ def go_deps():
         name = "in_gopkg_datadog_dd_trace_go_v1",
         build_file_proto_mode = "disable_global",
         importpath = "gopkg.in/DataDog/dd-trace-go.v1",
-        sum = "h1:j9vAp9Re9bbtA/QFehkJpNba/6W2IbJtNuXZophCa54=",
-        version = "v1.17.0",
+        sum = "h1:EmglUJuykRsTwsQDcKaAo3CmOunWU6Dqk7U2lo7Pjss=",
+        version = "v1.28.0",
     )
 
     go_repository(
