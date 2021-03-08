@@ -76,7 +76,7 @@ func makeWorkloadStorage(
 		}
 	}
 	if s.table.Name == `` {
-		return nil, errors.Wrapf(err, `unknown table %s for generator %s`, conf.Table, meta.Name)
+		return nil, errors.Errorf(`unknown table %s for generator %s`, conf.Table, meta.Name)
 	}
 	return s, nil
 }
