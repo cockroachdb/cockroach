@@ -1922,6 +1922,15 @@ func gcArgs(startKey []byte, endKey []byte, keys ...roachpb.GCRequest_GCKey) roa
 	}
 }
 
+func clearRangeArgs(startKey, endKey roachpb.Key) roachpb.ClearRangeRequest {
+	return roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    startKey,
+			EndKey: endKey,
+		},
+	}
+}
+
 // TestOptimizePuts verifies that contiguous runs of puts and
 // conditional puts are marked as "blind" if they're written
 // to a virgin keyspace.
