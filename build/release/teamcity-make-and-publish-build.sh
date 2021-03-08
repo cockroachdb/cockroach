@@ -68,6 +68,7 @@ docker_login_with_google
 # curl unhappy, so passing `i` will cause it to read to the end.
 curl -f -s -S -o- "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
+cp -r licenses build/deploy/
 
 docker build --no-cache --tag="${gcr_repository}:${build_name}" build/deploy
 docker push "${gcr_repository}:${build_name}"
