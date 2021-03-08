@@ -40,7 +40,6 @@ go_test(
         "printer_test.go",
     ],
     embed = [":encoding"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",

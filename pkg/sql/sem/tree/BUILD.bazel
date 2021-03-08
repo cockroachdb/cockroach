@@ -198,7 +198,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":tree"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/internal/rsg",
         "//pkg/kv",
