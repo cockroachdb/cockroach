@@ -80,6 +80,24 @@ func TestSnapToGrid(t *testing.T) {
 			gridSize:     geom.Coord{0.1, 0.1, 0, 0},
 			expectedEWKT: "POLYGON((0 0, 1 0, 1 1.1, 0 0))",
 		},
+		{
+			inEWKT:       "POINT(2.5 36.1 2.3 8)",
+			origin:       geom.Coord{0, 0, 0, 0},
+			gridSize:     geom.Coord{2, 2, 1, 10},
+			expectedEWKT: "POINT ZM (2 36 2 10)",
+		},
+		{
+			inEWKT:       "POINT(2.5 36.1 2.3 8)",
+			origin:       geom.Coord{0, 0, 0, 0},
+			gridSize:     geom.Coord{2, 2, 0, 0},
+			expectedEWKT: "POINT ZM (2 36 2.3 8)",
+		},
+		{
+			inEWKT:       "POINT M EMPTY",
+			origin:       geom.Coord{0, 0, 0, 0},
+			gridSize:     geom.Coord{1, 1, 1, 1},
+			expectedEWKT: "POINT M EMPTY",
+		},
 	}
 
 	for _, tc := range testCases {
