@@ -260,6 +260,9 @@ type StoreTestingKnobs struct {
 	// gossiped store capacity values which need be exceeded before the store will
 	// gossip immediately without waiting for the periodic gossip interval.
 	GossipWhenCapacityDeltaExceedsFraction float64
+	// TimeSeriesDataStore is an interface used by the store's time series
+	// maintenance queue to dispatch individual maintenance tasks.
+	TimeSeriesDataStore TimeSeriesDataStore
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
