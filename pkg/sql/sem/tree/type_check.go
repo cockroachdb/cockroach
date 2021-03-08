@@ -1852,10 +1852,31 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 	}
 	fn, ok := ops.LookupImpl(cmpTypeLeft, cmpTypeRight)
-	if !ok {
+	if !ok || !deepCheckValidCmpOp(ops, cmpTypeLeft, cmpTypeRight) {
 		return nil, nil, nil, false, subOpCompError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
 	}
 	return leftTyped, rightTyped, fn, false, nil
+}
+
+// deepCheckValidCmpOp performs extra checks that a given operation is valid
+// when the types are tuples.
+func deepCheckValidCmpOp(ops cmpOpOverload, leftType, rightType *types.T) bool {
+	if leftType.Family() == types.TupleFamily && rightType.Family() == types.TupleFamily {
+		l := leftType.TupleContents()
+		r := rightType.TupleContents()
+		if len(l) != len(r) {
+			return false
+		}
+		for i := range l {
+			if _, ok := ops.LookupImpl(l[i], r[i]); !ok {
+				return false
+			}
+			if !deepCheckValidCmpOp(ops, l[i], r[i]) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func subOpCompError(leftType, rightType *types.T, subOp, op ComparisonOperator) error {
