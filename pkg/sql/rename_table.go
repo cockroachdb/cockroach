@@ -237,6 +237,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	// TODO(ssd): this looks the same as 202-212 above, safe to remove?
 	if err == nil && exists {
 		// Try and see what kind of object we collided with.
 		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
