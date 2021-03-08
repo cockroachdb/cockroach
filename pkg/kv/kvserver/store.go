@@ -938,10 +938,13 @@ func NewStore(
 		s.scanner.AddQueues(
 			s.gcQueue, s.mergeQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
 			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue)
-
-		if s.cfg.TimeSeriesDataStore != nil {
+		tsDS := s.cfg.TimeSeriesDataStore
+		if s.cfg.TestingKnobs.TimeSeriesDataStore != nil {
+			tsDS = s.cfg.TestingKnobs.TimeSeriesDataStore
+		}
+		if tsDS != nil {
 			s.tsMaintenanceQueue = newTimeSeriesMaintenanceQueue(
-				s, s.db, s.cfg.Gossip, s.cfg.TimeSeriesDataStore,
+				s, s.db, s.cfg.Gossip, tsDS,
 			)
 			s.scanner.AddQueues(s.tsMaintenanceQueue)
 		}
