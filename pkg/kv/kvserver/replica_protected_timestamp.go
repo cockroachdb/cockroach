@@ -23,6 +23,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// errGCThreshold serves as a sentinel error to indicate that the protected
+// timestamp record could not be verified because of the current state of the gc
+// threshold. It is primarily used to bubble up a more useful error to users of
+// protected timestamps eg: BACKUP.
+var errGCThreshold = errors.New("unable to protect because of gc threshold")
+
 // cachedProtectedTimestampState is used to cache information about the state
 // of protected timestamps as they pertain to this replica. The data is
 // refreshed when the replica examines protected timestamps when being
@@ -180,7 +186,10 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 		return false, false, roachpb.NewRangeKeyMismatchError(ctx, args.Key, args.EndKey, desc, r.mu.state.Lease)
 	}
 	if args.Protected.LessEq(*r.mu.state.GCThreshold) {
-		return false, false, nil
+		return false, false, errors.Mark(errors.Newf(
+			"protected ts: %s is less than equal to the GCThreshold: %s for the range %s - %s",
+			args.Protected.String(), r.mu.state.GCThreshold.String(), r.Desc().StartKey.String(),
+			r.Desc().EndKey.String()), errGCThreshold)
 	}
 	if args.RecordAliveAt.Less(ls.Lease.Start.ToTimestamp()) {
 		return true, false, nil
@@ -192,7 +201,10 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	r.protectedTimestampMu.Lock()
 	defer r.protectedTimestampMu.Unlock()
 	if args.Protected.Less(r.protectedTimestampMu.pendingGCThreshold) {
-		return false, false, nil
+		return false, false, errors.Mark(errors.Newf(
+			"protected ts: %s is less than the pending GCThreshold: %s for the range %s - %s",
+			args.Protected.String(), r.protectedTimestampMu.pendingGCThreshold.String(),
+			r.Desc().StartKey.String(), r.Desc().EndKey.String()), errGCThreshold)
 	}
 
 	var seen bool

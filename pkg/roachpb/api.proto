@@ -1556,6 +1556,7 @@ message AdminVerifyProtectedTimestampResponse {
   bool verified = 2;
 
   repeated RangeDescriptor failed_ranges = 3 [(gogoproto.nullable) = false];
+  map<int64, string> range_id_to_failed_reason = 4 [(gogoproto.nullable) = false];
 }
 
 // AddSSTableRequest is arguments to the AddSSTable() method, to link a file

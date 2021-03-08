@@ -3128,8 +3128,17 @@ func (r *Replica) adminVerifyProtectedTimestamp(
 	ctx context.Context, args roachpb.AdminVerifyProtectedTimestampRequest,
 ) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
 	resp.Verified, err = r.protectedTimestampRecordApplies(ctx, &args)
-	if err == nil && !resp.Verified {
+	if err != nil && !errors.Is(err, errGCThreshold) {
+		return resp, err
+	}
+	if !resp.Verified {
 		resp.FailedRanges = append(resp.FailedRanges, *r.Desc())
 	}
-	return resp, err
+	// We do not want to bubble up the gcThresholdErr. This ensures that
+	// executeAdminBatch adds the response to the batch, thereby allowing us to
+	// construct a more informative error at the sender.
+	if errors.Is(err, errGCThreshold) {
+		resp.RangeIdToFailedReason[int64(r.Desc().RangeID)] = err.Error()
+	}
+	return resp, nil
 }

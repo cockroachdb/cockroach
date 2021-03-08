@@ -11,7 +11,9 @@
 package ptverifier
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -96,8 +98,12 @@ func makeVerificationBatch(r *ptpb.Record, aliveAt hlc.Timestamp) kv.Batch {
 func parseResponse(b *kv.Batch, r *ptpb.Record) error {
 	rawResponse := b.RawResponse()
 	var failed []roachpb.RangeDescriptor
-	for _, r := range rawResponse.Responses {
-		resp := r.GetInner().(*roachpb.AdminVerifyProtectedTimestampResponse)
+	var errBuilder bytes.Buffer
+	// Write the error header.
+	_, _ = errBuilder.WriteString(fmt.Sprintf("failed to verify protection record %s with ts: %s:\n",
+		r.ID.String(), r.Timestamp.String()))
+	for _, resp := range rawResponse.Responses {
+		resp := resp.GetInner().(*roachpb.AdminVerifyProtectedTimestampResponse)
 		if len(resp.FailedRanges) == 0 {
 			continue
 		}
@@ -106,9 +112,21 @@ func parseResponse(b *kv.Batch, r *ptpb.Record) error {
 		} else {
 			failed = append(failed, resp.FailedRanges...)
 		}
+
+		for _, rangeDesc := range resp.FailedRanges {
+			if reason, ok := resp.RangeIdToFailedReason[int64(rangeDesc.RangeID)]; ok {
+				// Write the per range reason for failure.
+				_, _ = errBuilder.WriteString(fmt.Sprintf("range ID %d: %s\n",
+					rangeDesc.RangeID, reason))
+			} else {
+				// If no reason was saved, dump relevant information.
+				_, _ = errBuilder.WriteString(fmt.Sprintf("range ID: %d, range: %s - %s\n",
+					rangeDesc.RangeID, rangeDesc.StartKey.String(), rangeDesc.EndKey.String()))
+			}
+		}
 	}
 	if len(failed) > 0 {
-		return errors.Errorf("failed to verify protection %v on %v", r, failed)
+		return errors.New(errBuilder.String())
 	}
 	return nil
 }

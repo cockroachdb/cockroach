@@ -84,7 +84,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				args := makeArgs(r, ts, aliveAt)
 				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
-				require.NoError(t, err)
+				require.Error(t, err)
+				require.True(t, errors.Is(err, errGCThreshold))
+				require.Regexp(t, fmt.Sprintf("protected ts: %s is less than equal to the GCThreshold: %s"+
+					" for the range /Min - /Max", ts.String(), thresh.String()), err.Error())
 			},
 		},
 		// If the GC threshold we're about to protect is newer than the timestamp
@@ -100,7 +103,10 @@ func TestProtectedTimestampRecordApplies(t *testing.T) {
 				args := makeArgs(r, ts, aliveAt)
 				willApply, err := r.protectedTimestampRecordApplies(ctx, &args)
 				require.False(t, willApply)
-				require.NoError(t, err)
+				require.Error(t, err)
+				require.True(t, errors.Is(err, errGCThreshold))
+				require.Regexp(t, fmt.Sprintf("protected ts: %s is less than the pending GCThreshold: %s"+
+					" for the range /Min - /Max", ts.String(), thresh.String()), err.Error())
 			},
 		},
 		// If the timestamp at which the record is known to be alive is newer than

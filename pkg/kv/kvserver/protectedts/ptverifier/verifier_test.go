@@ -146,7 +146,8 @@ func TestVerifier(t *testing.T) {
 					}
 					return ds.Send(ctx, ba)
 				}))
-				require.Regexp(t, "failed to verify protection.*r42", ptv.Verify(ctx, r.ID).Error())
+				require.Regexp(t, "failed to verify protection.*\nrange ID: 42.*range: /Table/42 - /Table/43",
+					ptv.Verify(ctx, r.ID).Error())
 				ensureVerified(t, r.ID, false)
 				release(t, r.ID)
 			},
@@ -167,6 +168,7 @@ func TestVerifier(t *testing.T) {
 								StartKey: roachpb.RKey(r.Spans[0].Key),
 								EndKey:   roachpb.RKey(r.Spans[0].EndKey),
 							}},
+							RangeIdToFailedReason: map[int64]string{42: "foo"},
 						})
 						resp.Add(&roachpb.AdminVerifyProtectedTimestampResponse{
 							FailedRanges: []roachpb.RangeDescriptor{{
@@ -174,12 +176,14 @@ func TestVerifier(t *testing.T) {
 								StartKey: roachpb.RKey(r.Spans[1].Key),
 								EndKey:   roachpb.RKey(r.Spans[1].EndKey),
 							}},
+							RangeIdToFailedReason: map[int64]string{12: "bar"},
 						})
 						return &resp, nil
 					}
 					return ds.Send(ctx, ba)
 				}))
-				require.Regexp(t, "failed to verify protection.*r42.*r12", ptv.Verify(ctx, r.ID).Error())
+				require.Regexp(t, "failed to verify protection.*\nrange ID 42: foo\nrange ID 12: bar\n",
+					ptv.Verify(ctx, r.ID).Error())
 				ensureVerified(t, r.ID, false)
 				release(t, r.ID)
 			},
