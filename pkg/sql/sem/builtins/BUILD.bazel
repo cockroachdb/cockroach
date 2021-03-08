@@ -110,7 +110,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":builtins"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/kv",
