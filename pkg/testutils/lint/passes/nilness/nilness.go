@@ -99,6 +99,13 @@ func runFunc(pass *analysis.Pass, fn *ssa.Function) {
 		}
 	}
 
+	// notNilArg reports an error if v is provably nil.
+	notNilArg := func(stack []fact, instr ssa.Instruction, v ssa.Value, descr string) {
+		if nilnessOf(stack, v) == isnil {
+			reportf("nilarg", instr.Pos(), "nil argument to "+descr)
+		}
+	}
+
 	// visit visits reachable blocks of the CFG in dominance order,
 	// maintaining a stack of dominating nilness facts.
 	//
@@ -117,8 +124,17 @@ func runFunc(pass *analysis.Pass, fn *ssa.Function) {
 		for _, instr := range b.Instrs {
 			switch instr := instr.(type) {
 			case ssa.CallInstruction:
-				notNil(stack, instr, instr.Common().Value,
-					instr.Common().Description())
+				call := instr.Common()
+				notNil(stack, instr, call.Value, call.Description())
+
+				switch f := call.Value.(type) {
+				case *ssa.Function:
+					if tf, ok := f.Object().(*types.Func); ok {
+						if extract, ok := argExtractors[tf.FullName()]; ok {
+							notNilArg(stack, instr, extract(call), tf.FullName())
+						}
+					}
+				}
 			case *ssa.FieldAddr:
 				notNil(stack, instr, instr.X, "field selection")
 			case *ssa.IndexAddr:
@@ -365,4 +381,26 @@ func (ff facts) negate() facts {
 		nn[i] = f.negate()
 	}
 	return nn
+}
+
+var firstArg = func(c *ssa.CallCommon) ssa.Value { return c.Args[0] }
+
+var argExtractors = map[string]func(c *ssa.CallCommon) ssa.Value{
+	"github.com/cockroachdb/errors.Handled":                          firstArg,
+	"github.com/cockroachdb/errors.HandledWithMessage":               firstArg,
+	"github.com/cockroachdb/errors.NewAssertionErrorWithWrappedErrf": firstArg,
+	"github.com/cockroachdb/errors.Mark":                             firstArg,
+	"github.com/cockroachdb/errors.WithContextTags":                  firstArg,
+	"github.com/cockroachdb/errors.WithDetail":                       firstArg,
+	"github.com/cockroachdb/errors.WithDetailf":                      firstArg,
+	"github.com/cockroachdb/errors.WithHint":                         firstArg,
+	"github.com/cockroachdb/errors.WithHintf":                        firstArg,
+	"github.com/cockroachdb/errors.WithMessage":                      firstArg,
+	"github.com/cockroachdb/errors.WithMessagef":                     firstArg,
+	"github.com/cockroachdb/errors.WithStack":                        firstArg,
+	"github.com/cockroachdb/errors.WithStackDepth":                   firstArg,
+	"github.com/cockroachdb/errors.Wrap":                             firstArg,
+	"github.com/cockroachdb/errors.Wrapf":                            firstArg,
+	"github.com/cockroachdb/errors.WrapWithDepth":                    firstArg,
+	"github.com/cockroachdb/errors.WrapWithDepthf":                   firstArg,
 }
