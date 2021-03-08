@@ -64,8 +64,13 @@ const (
 	removeDeadVoterPriority                    float64 = 1000
 	removeDecommissioningVoterPriority         float64 = 900
 	removeExtraVoterPriority                   float64 = 800
-	addMissingNonVoterPriority                 float64 = 700
-	removeExtraNonVoterPriority                float64 = 600
+
+	addDeadReplacementNonVoterPriority            float64 = 700
+	addMissingNonVoterPriority                    float64 = 600
+	addDecommissioningReplacementNonVoterPriority float64 = 500
+	removeDeadNonVoterPriority                    float64 = 400
+	removeDecommissioningNonVoterPriority         float64 = 300
+	removeExtraNonVoterPriority                   float64 = 200
 )
 
 // MinLeaseTransferStatsDuration configures the minimum amount of time a
@@ -113,9 +118,13 @@ const (
 	AllocatorAddVoter
 	AllocatorAddNonVoter
 	AllocatorReplaceDeadVoter
+	AllocatorReplaceDeadNonVoter
 	AllocatorRemoveDeadVoter
+	AllocatorRemoveDeadNonVoter
 	AllocatorReplaceDecommissioningVoter
+	AllocatorReplaceDecommissioningNonVoter
 	AllocatorRemoveDecommissioningVoter
+	AllocatorRemoveDecommissioningNonVoter
 	AllocatorRemoveLearner
 	AllocatorConsiderRebalance
 	AllocatorRangeUnavailable
@@ -129,9 +138,13 @@ var allocatorActionNames = map[AllocatorAction]string{
 	AllocatorAddVoter:                        "add voter",
 	AllocatorAddNonVoter:                     "add non-voter",
 	AllocatorReplaceDeadVoter:                "replace dead voter",
+	AllocatorReplaceDeadNonVoter:             "replace dead non-voter",
 	AllocatorRemoveDeadVoter:                 "remove dead voter",
+	AllocatorRemoveDeadNonVoter:              "remove dead non-voter",
 	AllocatorReplaceDecommissioningVoter:     "replace decommissioning voter",
+	AllocatorReplaceDecommissioningNonVoter:  "replace decommissioning non-voter",
 	AllocatorRemoveDecommissioningVoter:      "remove decommissioning voter",
+	AllocatorRemoveDecommissioningNonVoter:   "remove decommissioning non-voter",
 	AllocatorRemoveLearner:                   "remove learner",
 	AllocatorConsiderRebalance:               "consider rebalance",
 	AllocatorRangeUnavailable:                "range unavailable",
@@ -545,7 +558,7 @@ func (a *Allocator) computeAction(
 
 	// Non-voting replica actions follow.
 	//
-	// Non-voting replica addition.
+	// Non-voting replica addition / replacement.
 	haveNonVoters := len(nonVoterReplicas)
 	neededNonVoters := GetNeededNonVoters(haveVoters, int(zone.GetNumNonVoters()), clusterNodes)
 	if haveNonVoters < neededNonVoters {
@@ -555,12 +568,40 @@ func (a *Allocator) computeAction(
 			action, neededNonVoters, haveNonVoters, priority)
 		return action, priority
 	}
+	liveNonVoters, deadNonVoters := a.storePool.liveAndDeadReplicas(nonVoterReplicas)
+	if haveNonVoters == neededNonVoters && len(deadNonVoters) > 0 {
+		priority := addDeadReplacementNonVoterPriority
+		action := AllocatorReplaceDeadNonVoter
+		log.VEventf(ctx, 3, "%s - replacement for %d dead non-voters priority=%.2f",
+			action, len(deadNonVoters), priority)
+		return action, priority
+	}
+	decommissioningNonVoters := a.storePool.decommissioningReplicas(nonVoterReplicas)
+	if haveNonVoters == neededNonVoters && len(decommissioningNonVoters) > 0 {
+		priority := addDecommissioningReplacementNonVoterPriority
+		action := AllocatorReplaceDecommissioningNonVoter
+		log.VEventf(ctx, 3, "%s - replacement for %d decommissioning non-voters priority=%.2f",
+			action, len(decommissioningNonVoters), priority)
+		return action, priority
+	}
 
 	// Non-voting replica removal.
+	if len(deadNonVoters) > 0 {
+		priority := removeDeadNonVoterPriority
+		action := AllocatorRemoveDeadNonVoter
+		log.VEventf(ctx, 3, "%s - dead=%d, live=%d, quorum=%d, priority=%.2f",
+			action, len(deadNonVoters), len(liveNonVoters), quorum, priority)
+		return action, priority
+	}
 
-	// TODO(aayush): Handle removal/replacement of decommissioning/dead non-voting
-	// replicas.
-
+	if len(decommissioningNonVoters) > 0 {
+		priority := removeDecommissioningNonVoterPriority
+		action := AllocatorRemoveDecommissioningNonVoter
+		log.VEventf(ctx, 3,
+			"%s - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
+			action, neededNonVoters, haveNonVoters, len(decommissioningNonVoters), priority)
+		return action, priority
+	}
 	if haveNonVoters > neededNonVoters {
 		// Like above, the range is over-replicated but should remove a non-voter.
 		priority := removeExtraNonVoterPriority
