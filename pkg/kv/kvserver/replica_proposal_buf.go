@@ -730,7 +730,7 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 			closedTSTarget.Backward(lb.FloorPrev())
 		}
 		// We can't close timestamps above the current lease's expiration.
-		closedTSTarget.Backward(p.leaseStatus.ClosedTimestampUpperBound().WallPrev())
+		closedTSTarget.Backward(p.leaseStatus.ClosedTimestampUpperBound())
 	}
 
 	// We're about to close closedTSTarget. The propBuf needs to remember that in

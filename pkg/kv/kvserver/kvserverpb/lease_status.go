@@ -53,9 +53,12 @@ func (st LeaseStatus) Expiration() hlc.Timestamp {
 // the closed timestamp.
 //
 // We don't want to close timestamps within the same nanosecond as the lease
-// expiration; we want to always leave some space between the closed timestamp
-// and the lease expiration. To see why, check the comments on the similar
-// logic in propBuf.assignClosedTimestampToProposalLocked.
+// expiration. If we did that, writes could not be processed under the current
+// lease any more after such a close, and that would be a bit tricky to handle,
+// particularly when the close time is in the future. To avoid having to deal
+// with it, we leave one nanosecond (i.e. infinite logical time) in the lease.
+// Until a new lease is acquired, all writes will be pushed into this last
+// nanosecond of the lease.
 func (st LeaseStatus) ClosedTimestampUpperBound() hlc.Timestamp {
 	// HACK(andrei): We declare the lease expiration to be synthetic by fiat,
 	// because it frequently is synthetic even though currently it's not marked
