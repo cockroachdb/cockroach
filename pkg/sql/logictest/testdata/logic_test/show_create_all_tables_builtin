@@ -202,7 +202,7 @@ CREATE TABLE public.c (
 );
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 CREATE TABLE public.s_tbl (
-    id INT8 NOT NULL DEFAULT nextval('test_fk_order.public.s':::STRING::REGCLASS),
+    id INT8 NOT NULL DEFAULT nextval('public.s':::STRING::REGCLASS),
     v INT8 NULL,
     CONSTRAINT "primary" PRIMARY KEY (id ASC),
     FAMILY f1 (id, v)

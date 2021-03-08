@@ -576,6 +576,11 @@ type descriptorState struct {
 		// offline temporarily (as opposed to dropped).
 		takenOffline bool
 
+		// maxVersionSeen is used to prevent a race where a concurrent lease
+		// acquisition might miss an event indicating that there is a new version
+		// of a descriptor.
+		maxVersionSeen descpb.DescriptorVersion
+
 		// acquisitionsInProgress indicates that at least one caller is currently
 		// in the process of performing an acquisition. This tracking is critical
 		// to ensure that notifications of new versions which arrive before a lease
@@ -806,6 +811,9 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 func (t *descriptorState) upsertLocked(
 	ctx context.Context, desc *descriptorVersionState,
 ) (_ *storedLease, _ error) {
+	if t.mu.maxVersionSeen < desc.GetVersion() {
+		t.mu.maxVersionSeen = desc.GetVersion()
+	}
 	s := t.mu.active.find(desc.GetVersion())
 	if s == nil {
 		if t.mu.active.findNewest() != nil {
@@ -874,8 +882,8 @@ func acquireNodeLease(ctx context.Context, m *Manager, id descpb.ID) (bool, erro
 	upsertDescriptorAndMaybeDropLease := func(ctx context.Context, desc *descriptorVersionState, takenOffline bool) error {
 		t := m.findDescriptorState(id, false /* create */)
 		t.mu.Lock()
-		t.mu.takenOffline = takenOffline
 		defer t.mu.Unlock()
+		t.mu.takenOffline = takenOffline
 		toRelease, err := t.upsertLocked(ctx, desc)
 		if err != nil {
 			return err
@@ -961,7 +969,8 @@ func (t *descriptorState) release(
 			t.mu.takenOffline ||
 			// Release from the store if the lease is not for the latest
 			// version; only leases for the latest version can be acquired.
-			s != t.mu.active.findNewest()
+			s != t.mu.active.findNewest() ||
+			s.GetVersion() < t.mu.maxVersionSeen
 
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -1026,9 +1035,12 @@ func purgeOldVersions(
 		return nil
 	}
 	t.mu.Lock()
+	if t.mu.maxVersionSeen < minVersion {
+		t.mu.maxVersionSeen = minVersion
+	}
 	empty := len(t.mu.active.data) == 0 && t.mu.acquisitionsInProgress == 0
 	t.mu.Unlock()
-	if empty {
+	if empty && !takenOffline {
 		// We don't currently have a version on this descriptor, so no need to refresh
 		// anything.
 		return nil
@@ -1726,6 +1738,7 @@ func (m *Manager) refreshLeases(
 					if err := evFunc(desc); err != nil {
 						log.Infof(ctx, "skipping update of %v due to knob: %v",
 							desc, err)
+						continue
 					}
 				}
 
@@ -1734,8 +1747,7 @@ func (m *Manager) refreshLeases(
 				// Try to refresh the lease to one >= this version.
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (offline %v)",
 					id, version, goingOffline)
-				if err := purgeOldVersions(
-					ctx, db, id, goingOffline, version, m); err != nil {
+				if err := purgeOldVersions(ctx, db, id, goingOffline, version, m); err != nil {
 					log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
 						id, name, err)
 				}

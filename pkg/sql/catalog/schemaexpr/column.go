@@ -302,11 +302,19 @@ func replaceIDsWithFQNames(
 		if err != nil {
 			return true, expr, nil //nolint:returnerrcheck
 		}
+
+		// Omit the database qualification if the sequence lives in the current database.
+		currDb := semaCtx.TableNameResolver.CurrentDatabase()
+		if seqName.Catalog() == currDb {
+			seqName.CatalogName = ""
+			seqName.ExplicitCatalog = false
+		}
+
 		// Swap out this node to use the qualified table name for the sequence.
 		return false, &tree.CastExpr{
 			Type:       types.RegClass,
 			SyntaxMode: tree.CastShort,
-			Expr:       tree.NewStrVal(seqName.FQString()),
+			Expr:       tree.NewStrVal(seqName.String()),
 		}, nil
 	}
 
