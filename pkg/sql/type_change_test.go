@@ -13,8 +13,10 @@ package sql_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -470,5 +472,131 @@ CREATE TYPE ab AS ENUM ('a', 'b')`,
 	}
 	if _, err := sqlDB.Exec(`SELECT 'c'::ab`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestTypeChangeJobCancelSemantics ensures that type change jobs that involve
+// en enum member being dropped are cancelable and those that don't are not
+// cancelable.
+func TestTypeChangeJobCancelSemantics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc       string
+		query      string
+		cancelable bool
+	}{
+		{
+			"simple drop",
+			"ALTER TYPE db.greetings DROP VALUE 'yo'",
+			true,
+		},
+		{
+			"simple add",
+			"ALTER TYPE db.greetings ADD VALUE 'sup'",
+			false,
+		},
+		{
+			"txn add drop",
+			"BEGIN; ALTER TYPE db.greetings ADD VALUE 'sup'; ALTER TYPE db.greetings DROP VALUE 'yo'; COMMIT",
+			true,
+		},
+		{
+			"txn add add",
+			"BEGIN; ALTER TYPE db.greetings ADD VALUE 'sup'; ALTER TYPE db.greetings ADD VALUE 'hello'; COMMIT",
+			false,
+		},
+		{
+			"txn drop drop",
+			"BEGIN; ALTER TYPE db.greetings DROP VALUE 'yo'; ALTER TYPE db.greetings DROP VALUE 'hi'; COMMIT",
+			true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+
+			params, _ := tests.CreateTestServerParams()
+
+			// Wait groups for synchronizing various parts of the test.
+			var typeSchemaChangeStarted sync.WaitGroup
+			typeSchemaChangeStarted.Add(1)
+			var blockTypeSchemaChange sync.WaitGroup
+			blockTypeSchemaChange.Add(1)
+			var finishedSchemaChange sync.WaitGroup
+			finishedSchemaChange.Add(1)
+
+			params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
+				RunBeforeEnumMemberPromotion: func() {
+					typeSchemaChangeStarted.Done()
+					blockTypeSchemaChange.Wait()
+				},
+			}
+
+			s, sqlDB, _ := serverutils.StartServer(t, params)
+
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+
+			// Setup.
+			_, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
+SET enable_drop_enum_value = true;
+CREATE DATABASE db;
+CREATE TYPE db.greetings AS ENUM ('hi', 'yo');
+`)
+			require.NoError(t, err)
+
+			go func() {
+				_, err := sqlDB.Exec(tc.query)
+				if tc.cancelable && !testutils.IsError(err, "job canceled by user") {
+					t.Errorf("expected user to have canceled job, got %v", err)
+				}
+				if !tc.cancelable && err != nil {
+					t.Error(err)
+				}
+				finishedSchemaChange.Done()
+			}()
+
+			typeSchemaChangeStarted.Wait()
+
+			_, err = sqlDB.Exec(`CANCEL JOB (
+SELECT job_id FROM [SHOW JOBS]
+WHERE 
+	job_type = 'TYPEDESC SCHEMA CHANGE' AND 
+	status = $1
+	)`, jobs.StatusRunning)
+
+			if !tc.cancelable && !testutils.IsError(err, "not cancelable") {
+				t.Fatalf("expected type schema change job to be not cancelable; found %v ", err)
+			} else if tc.cancelable && err != nil {
+				t.Fatal(err)
+			}
+
+			// If the type schema change job is cancelable, then the cleanup job
+			// should kick in soon and the enum should be back in its original state
+			// eventually.
+			if tc.cancelable {
+				testutils.SucceedsSoon(t, func() error {
+					if _, err := sqlDB.Exec(`SELECT 'yo':::db.greetings`); err != nil {
+						return err
+					}
+					if _, err := sqlDB.Exec(`SELECT 'hi':::db.greetings`); err != nil {
+						return err
+					}
+					_, err := sqlDB.Exec(`SELECT 'sup':::db.greetings`)
+					if err == nil {
+						return errors.New("expected error, found none")
+					}
+					if !testutils.IsError(err, "invalid input value for enum") {
+						return errors.Newf("expected invalid input for enum error, found %v", err)
+					}
+					return nil
+				})
+			}
+			blockTypeSchemaChange.Done()
+			finishedSchemaChange.Wait()
+		})
 	}
 }
