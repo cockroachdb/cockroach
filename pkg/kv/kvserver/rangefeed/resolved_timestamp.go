@@ -217,16 +217,29 @@ func (rts *resolvedTimestamp) recompute() bool {
 	if !rts.IsInit() {
 		return false
 	}
-	newTS := rts.closedTS
-	if txn := rts.intentQ.Oldest(); txn != nil {
-		txnTS := txn.timestamp.FloorPrev()
-		if txnTS.Less(newTS) {
-			newTS = txnTS
-		}
+	if rts.closedTS.Less(rts.resolvedTS) {
+		panic(fmt.Sprintf("closed timestamp below resolved timestamp: %s < %s",
+			rts.closedTS, rts.resolvedTS))
 	}
-	if newTS.Less(rts.resolvedTS) {
-		panic(fmt.Sprintf("resolved timestamp regression, was %s, recomputed as %s",
-			rts.resolvedTS, newTS))
+	newTS := rts.closedTS
+
+	// Take into account the intents that haven't been yet resolved - their
+	// timestamps cannot be resolved yet.
+	if txn := rts.intentQ.Oldest(); txn != nil {
+		if txn.timestamp.LessEq(rts.resolvedTS) {
+			panic(fmt.Sprintf("unresolved txn equal to or below resolved timestamp: %s <= %s",
+				txn.timestamp, rts.resolvedTS))
+		}
+		// txn.timestamp cannot be resolved, so the resolved timestamp must be
+		// earlier. txn.timestamp.Prev is dangerous to use, potentially having
+		// Logical=MaxInt32. So, we do a FloorPrev, but that might be too much - it
+		// might takes us down below the existing resolved timestamp (although
+		// that'd be unexpected; it should only happen if we've closed logical
+		// timestamps, which we currently don't do). So, we further Forward to the
+		// existing resolvedTS.
+		txnTS := txn.timestamp.FloorPrev()
+		txnTS.Forward(rts.resolvedTS)
+		newTS.Backward(txnTS)
 	}
 	return rts.resolvedTS.Forward(newTS)
 }
