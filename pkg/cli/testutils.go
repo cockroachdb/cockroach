@@ -40,7 +40,7 @@ func TestingReset() {
 	initCLIDefaults()
 }
 
-// TestCLI represents test for cli
+// TestCLI wraps a test server and is used by tests to make assertions about the output of CLI commands.
 type TestCLI struct {
 	*server.TestServer
 	certsDir    string
