@@ -44,7 +44,6 @@ go_test(
         "geo_test.go",
         "json_array_test.go",
     ],
-    tags = ["broken_in_bazel"],
     deps = [
         ":invertedidx",
         "//pkg/geo",
