@@ -1,5 +1,6 @@
-# LogicTest: 5node-pretend59315IsFixed
-#
+# LogicTest: 5node-default-configs
+# This test fails using the fakedist configs due to a testing limitation
+# (see #61438).
 # Verify that ContentionEvents are emitted. This is mostly a sanity check - look
 # for the datadriven tests in `pkg/kv/kvserver/concurrency` for the actual events
 # that do get emitted in various contention scenarios.
