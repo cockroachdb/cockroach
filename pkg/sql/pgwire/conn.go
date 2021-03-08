@@ -288,7 +288,8 @@ func (c *conn) serveImpl(
 		// we only need the minimum to make pgx happy.
 		var err error
 		for param, value := range testingStatusReportParams {
-			if err := c.sendParamStatus(param, value); err != nil {
+			err = c.sendParamStatus(param, value)
+			if err != nil {
 				break
 			}
 		}

@@ -133,10 +133,6 @@ func (b *Builder) analyzeOrderByIndex(
 	for i, n := 0, index.KeyColumnCount(); i < n; i++ {
 		// Columns which are indexable are always orderable.
 		col := index.Column(i)
-		if err != nil {
-			panic(err)
-		}
-
 		desc := col.Descending
 
 		// DESC inverts the order of the index.
