@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -53,16 +54,21 @@ func scanRoachKey(t *testing.T, td *datadriven.TestData, field string) roachpb.K
 }
 
 func makePrintableKey(k MVCCKey) MVCCKey {
-	if bytes.HasPrefix(k.Key, keys.LocalRangePrefix) {
-		k.Key = append([]byte("L"), k.Key[len(keys.LocalRangePrefix):]...)
-	} else if bytes.HasPrefix(k.Key, keys.LocalStorePrefix) {
-		k.Key = append([]byte("S"), k.Key[len(keys.LocalStorePrefix):]...)
-	} else if bytes.HasPrefix(k.Key, keys.LocalRangeLockTablePrefix.PrefixEnd()) {
-		k.Key = append([]byte("Y"), k.Key[len(keys.LocalRangeLockTablePrefix):]...)
-	} else if bytes.Equal(k.Key, keys.LocalMax) {
-		k.Key = []byte("Z")
+	k.Key = makePrintableRoachpbKey(k.Key)
+	return k
+}
+
+func makePrintableRoachpbKey(k roachpb.Key) roachpb.Key {
+	if bytes.HasPrefix(k, keys.LocalRangePrefix) {
+		k = append([]byte("L"), k[len(keys.LocalRangePrefix):]...)
+	} else if bytes.HasPrefix(k, keys.LocalStorePrefix) {
+		k = append([]byte("S"), k[len(keys.LocalStorePrefix):]...)
+	} else if bytes.HasPrefix(k, keys.LocalRangeLockTablePrefix.PrefixEnd()) {
+		k = append([]byte("Y"), k[len(keys.LocalRangeLockTablePrefix):]...)
+	} else if bytes.Equal(k, keys.LocalMax) {
+		k = []byte("Z")
 	}
-	k.Key = bytes.ReplaceAll(k.Key, []byte{0}, []byte("\\0"))
+	k = bytes.ReplaceAll(k, []byte{0}, []byte("\\0"))
 	return k
 }
 
@@ -453,17 +459,32 @@ func TestIntentInterleavingIterBoundaries(t *testing.T) {
 type lockKeyValue struct {
 	key LockTableKey
 	val []byte
+	// An intent that is not live is written along with a Delete or SingleDelete
+	// to delete it. Deleted intents don't exercise any code in
+	// intentInterleavingIter, but test the underlying Pebble code, just in case
+	// there are any undiscovered bugs.
+	liveIntent bool
+	// When using intentInterleavingIter, there is a mix of interleaved and
+	// separated intents. This bool determines which kind of intent is written.
+	separated bool
 }
 
-func generateRandomData(t *testing.T, rng *rand.Rand) (lkv []lockKeyValue, mvcckv []MVCCKeyValue) {
-	numKeys := 1000
+func generateRandomData(
+	t *testing.T, rng *rand.Rand, isLocal bool,
+) (lkv []lockKeyValue, mvcckv []MVCCKeyValue) {
+	numKeys := 10000
+	txnIDMap := make(map[int32]struct{})
 	for i := 0; i < numKeys; i++ {
-		key := roachpb.Key(fmt.Sprintf("key%08d", i))
+		var key roachpb.Key
+		if isLocal {
+			key = append(key, keys.LocalRangePrefix...)
+		}
+		key = append(key, roachpb.Key(fmt.Sprintf("key%08d", i))...)
 		hasIntent := rng.Int31n(2) == 0
 		numVersions := int(rng.Int31n(4)) + 1
 		var timestamps []int
 		for j := 0; j < numVersions; j++ {
-			timestamps = append(timestamps, rng.Int())
+			timestamps = append(timestamps, rng.Intn(1<<20)+1)
 		}
 		// Sort in descending order and make unique.
 		sort.Sort(sort.Reverse(sort.IntSlice(timestamps)))
@@ -475,25 +496,30 @@ func generateRandomData(t *testing.T, rng *rand.Rand) (lkv []lockKeyValue, mvcck
 			}
 		}
 		timestamps = timestamps[:last+1]
-		if hasIntent {
-			txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(rng.Int31())))
+		for i, ts := range timestamps {
+			var txnID int32
+			for {
+				// Find unique txn ID.
+				txnID = rng.Int31()
+				if _, found := txnIDMap[txnID]; found {
+					continue
+				}
+				txnIDMap[txnID] = struct{}{}
+				break
+			}
+			txnUUID := uuid.FromUint128(uint128.FromInts(0, uint64(txnID)))
 			meta := enginepb.MVCCMetadata{
-				Timestamp: hlc.LegacyTimestamp{WallTime: int64(timestamps[0]) + 1},
+				Timestamp: hlc.LegacyTimestamp{WallTime: int64(ts)},
 				Txn:       &enginepb.TxnMeta{ID: txnUUID},
 			}
 			val, err := protoutil.Marshal(&meta)
 			require.NoError(t, err)
 			isSeparated := rng.Int31n(2) == 0
-			if isSeparated {
-				ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}
-				lkv = append(lkv, lockKeyValue{key: ltKey, val: val})
-			} else {
-				mvcckv = append(mvcckv, MVCCKeyValue{Key: MVCCKey{Key: key}, Value: val})
-			}
-		}
-		for _, ts := range timestamps {
+			ltKey := LockTableKey{Key: key, Strength: lock.Exclusive, TxnUUID: txnUUID[:]}
+			lkv = append(lkv, lockKeyValue{
+				key: ltKey, val: val, liveIntent: hasIntent && i == 0, separated: isSeparated})
 			mvcckv = append(mvcckv, MVCCKeyValue{
-				Key:   MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(ts) + 1}},
+				Key:   MVCCKey{Key: key, Timestamp: hlc.Timestamp{WallTime: int64(ts)}},
 				Value: []byte("value"),
 			})
 		}
@@ -505,17 +531,32 @@ func writeRandomData(
 	t *testing.T, eng Engine, lkv []lockKeyValue, mvcckv []MVCCKeyValue, interleave bool,
 ) {
 	batch := eng.NewBatch()
-	for _, kv := range lkv {
-		if interleave {
+	// Iterate in reverse order, so that older locks for a key are encountered
+	// before newer ones. This is because we use ClearUnversioned below to
+	// delete the non-live locks, for interleaved locks, and don't want that to
+	// delete the live ones (since interleaved locks reuse the same key).
+	//
+	// Even though we are writing and clearing in the same batch, the total data
+	// volume is small enough that these will be placed in the memtable and not
+	// flushed, so both will be in the engine during iteration.
+	for i := len(lkv) - 1; i >= 0; i-- {
+		kv := lkv[i]
+		if interleave || !kv.separated {
 			require.NoError(t, batch.PutUnversioned(kv.key.Key, kv.val))
+			if !kv.liveIntent {
+				require.NoError(t, batch.ClearUnversioned(kv.key.Key))
+			}
 		} else {
 			eKey, _ := kv.key.ToEngineKey(nil)
 			require.NoError(t, batch.PutEngineKey(eKey, kv.val))
+			if !kv.liveIntent {
+				require.NoError(t, batch.SingleClearEngineKey(eKey))
+			}
 		}
 	}
 	for _, kv := range mvcckv {
 		if kv.Key.Timestamp.IsEmpty() {
-			require.NoError(t, batch.PutUnversioned(kv.Key.Key, kv.Value))
+			panic("timestamp should not be empty")
 		} else {
 			require.NoError(t, batch.PutMVCC(kv.Key, kv.Value))
 		}
@@ -523,7 +564,7 @@ func writeRandomData(
 	require.NoError(t, batch.Commit(true))
 }
 
-func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue) []string {
+func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue, isLocal bool) []string {
 	var ops []string
 	lowerIndex := rng.Intn(len(mvcckv) / 2)
 	upperIndex := lowerIndex + rng.Intn(len(mvcckv)/2)
@@ -533,11 +574,23 @@ func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue) []string {
 	lower := mvcckv[lowerIndex].Key.Key
 	upper := mvcckv[upperIndex].Key.Key
 	var iterStr string
-	if bytes.Equal(lower, upper) {
-		upperIndex = len(mvcckv) - 1
-		iterStr = fmt.Sprintf("iter lower=%s upper=%s", string(lower), string(lower.PrefixEnd()))
+	if bytes.Equal(lower, upper) || rng.Intn(2) == 0 {
+		// Generate only one of lower or upper bound. Since we will be comparing
+		// with a non interleaving iterator, which is not restricted to either
+		// local or global keys, make sure to set a lower bound for global key and
+		// an upper bound for local keys, to avoid spurious test failures.
+		if isLocal {
+			lowerIndex = 0
+			lower = nil
+			iterStr = fmt.Sprintf("iter upper=%s", string(makePrintableRoachpbKey(upper)))
+		} else {
+			upperIndex = len(mvcckv) - 1
+			upper = nil
+			iterStr = fmt.Sprintf("iter lower=%s", string(makePrintableRoachpbKey(lower)))
+		}
 	} else {
-		iterStr = fmt.Sprintf("iter lower=%s upper=%s", string(lower), string(upper))
+		iterStr = fmt.Sprintf("iter lower=%s upper=%s",
+			string(makePrintableRoachpbKey(lower)), string(makePrintableRoachpbKey(upper)))
 	}
 	ops = append(ops, iterStr)
 	for i := 0; i < 100; i++ {
@@ -555,9 +608,10 @@ func generateIterOps(rng *rand.Rand, mvcckv []MVCCKeyValue) []string {
 			fwdDirection = false
 		}
 		if useTimestamp {
-			op = fmt.Sprintf("%s k=%s ts=%s", op, string(seekKey.Key), seekKey.Timestamp)
+			op = fmt.Sprintf("%s k=%s ts=%s", op, string(makePrintableRoachpbKey(seekKey.Key)),
+				seekKey.Timestamp)
 		} else {
-			op = fmt.Sprintf("%s k=%s", op, string(seekKey.Key))
+			op = fmt.Sprintf("%s k=%s", op, string(makePrintableRoachpbKey(seekKey.Key)))
 		}
 		ops = append(ops, op)
 		iterCount := rng.Intn(8)
@@ -594,7 +648,9 @@ func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings
 		switch d.Cmd {
 		case "iter":
 			var opts IterOptions
-			opts.LowerBound = scanRoachKey(t, &d, "lower")
+			if d.HasArg("lower") {
+				opts.LowerBound = scanRoachKey(t, &d, "lower")
+			}
 			if d.HasArg("upper") {
 				opts.UpperBound = scanRoachKey(t, &d, "upper")
 			}
@@ -603,8 +659,15 @@ func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings
 			} else {
 				iter = eng.NewMVCCIterator(MVCCKeyIterKind, opts)
 			}
-			fmt.Fprintf(out, "iter lower=%s upper=%s\n",
-				string(opts.LowerBound), string(opts.UpperBound))
+			lowerStr := "nil"
+			if opts.LowerBound != nil {
+				lowerStr = string(makePrintableRoachpbKey(opts.LowerBound))
+			}
+			upperStr := "nil"
+			if opts.UpperBound != nil {
+				upperStr = string(makePrintableRoachpbKey(opts.UpperBound))
+			}
+			fmt.Fprintf(out, "iter lower=%s upper=%s\n", lowerStr, upperStr)
 		case "seek-ge":
 			key := scanSeekKey(t, &d)
 			iter.SeekGE(key)
@@ -635,29 +698,38 @@ func doOps(t *testing.T, ops []string, eng Engine, interleave bool, out *strings
 
 var seedFlag = flag.Int64("seed", -1, "specify seed to use for random number generator")
 
-// TODO(sumeer): generate a mix of local and global keys.
 func TestRandomizedIntentInterleavingIter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	seed := *seedFlag
 	if seed < 0 {
 		seed = rand.Int63()
 	}
 	rng := rand.New(rand.NewSource(seed))
-	lkv, mvcckv := generateRandomData(t, rng)
+	lockKV, mvccKV := generateRandomData(t, rng, false /* isLocal */)
+	localLockKV, localMvccKV := generateRandomData(t, rng, true /* isLocal */)
 	eng1 := createTestPebbleEngine()
 	eng2 := createTestPebbleEngine()
 	defer eng1.Close()
 	defer eng2.Close()
-	writeRandomData(t, eng1, lkv, mvcckv, false)
-	writeRandomData(t, eng2, lkv, mvcckv, true)
+	writeRandomData(t, eng1, lockKV, mvccKV, false /* interleave */)
+	writeRandomData(t, eng1, localLockKV, localMvccKV, false /* interleave */)
+	writeRandomData(t, eng2, lockKV, mvccKV, true /* interleave */)
+	writeRandomData(t, eng2, localLockKV, localMvccKV, true /* interleave */)
 	var ops []string
-	for i := 0; i < 10; i++ {
-		ops = append(ops, generateIterOps(rng, mvcckv)...)
+	for _, isLocal := range []bool{false, true} {
+		for i := 0; i < 10; i++ {
+			kv := mvccKV
+			if isLocal {
+				kv = localMvccKV
+			}
+			ops = append(ops, generateIterOps(rng, kv, isLocal)...)
+		}
 	}
 	var out1, out2 strings.Builder
-	doOps(t, ops, eng1, true, &out1)
-	doOps(t, ops, eng2, false, &out2)
+	doOps(t, ops, eng1, true /* interleave */, &out1)
+	doOps(t, ops, eng2, false /* interleave */, &out2)
 	require.Equal(t, out1.String(), out2.String(),
 		fmt.Sprintf("seed=%d\n=== separated ===\n%s\n=== interleaved ===\n%s\n",
 			seed, out1.String(), out2.String()))
