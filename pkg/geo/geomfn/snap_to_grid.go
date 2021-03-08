@@ -58,7 +58,10 @@ func snapCoordinateToGrid(
 func snapOrdinateToGrid(
 	ordinate float64, originOrdinate float64, gridSizeOrdinate float64,
 ) float64 {
-	if gridSizeOrdinate == 0 {
+	// A zero grid size ordinate indicates a dimension should not be snapped.
+	// For PostGIS compatibility, a negative grid size ordinate also results
+	// in a dimension not being snapped.
+	if gridSizeOrdinate <= 0 {
 		return ordinate
 	}
 	return math.RoundToEven((ordinate-originOrdinate)/gridSizeOrdinate)*gridSizeOrdinate + originOrdinate
