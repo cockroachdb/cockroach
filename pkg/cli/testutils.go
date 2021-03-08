@@ -40,7 +40,7 @@ func TestingReset() {
 	initCLIDefaults()
 }
 
-// TestCLI represents test for cli
+// TestCLI represents test for cli.
 type TestCLI struct {
 	*server.TestServer
 	certsDir    string
