@@ -294,11 +294,9 @@ func (s *initServer) ServeAndWait(
 					return nil, false, err
 				}
 
-				if err != nil {
-					// We expect the join RPC to blindly retry on all errors
-					// save for the two above. This should be unreachable code.
-					return nil, false, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error: %v", err)
-				}
+				// We expect the join RPC to blindly retry on all errors
+				// save for the two above. This should be unreachable code.
+				return nil, false, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error: %v", err)
 			}
 
 			state := result.state
