@@ -14,14 +14,17 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEagerReplication(t *testing.T) {
@@ -29,14 +32,19 @@ func TestEagerReplication(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	storeCfg := kvserver.TestStoreConfig(nil /* clock */)
-	// Disable the replica scanner so that we rely on the eager replication code
-	// path that occurs after splits.
-	storeCfg.TestingKnobs.DisableScanner = true
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				// Disable the replica scanner so that we rely on the eager replication code
+				// path that occurs after splits.
+				DisableScanner: true,
+			},
+		},
+	})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
 
 	// After bootstrap, all of the system ranges should be present in replicate
 	// queue purgatory (because we only have a single store in the test and thus
@@ -55,10 +63,10 @@ func TestEagerReplication(t *testing.T) {
 
 	// The addition of replicas to the replicateQueue after a split
 	// occurs happens after the update of the descriptors in meta2
-	// leaving a tiny window of time in which the newly split replica
+	// leaving a tiny window of time in which the newly split replicas
 	// will not have been added to purgatory. Thus we loop.
 	testutils.SucceedsSoon(t, func() error {
-		expected := purgatoryStartCount + 1
+		expected := purgatoryStartCount + 2
 		if n := store.ReplicateQueuePurgatoryLength(); expected != n {
 			return errors.Errorf("expected %d replicas in purgatory, but found %d", expected, n)
 		}
