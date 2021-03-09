@@ -816,6 +816,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="json_extract_path"></a><code>json_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
 </span></td></tr>
+<tr><td><a name="json_extract_path_text"></a><code>json_extract_path_text(jsonb, <a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the JSON value as text pointed to by the variadic arguments.</p>
+</span></td></tr>
 <tr><td><a name="json_object"></a><code>json_object(keys: <a href="string.html">string</a>[], values: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This form of json_object takes keys and values pairwise from two separate arrays. In all other respects it is identical to the one-argument form.</p>
 </span></td></tr>
 <tr><td><a name="json_object"></a><code>json_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
@@ -839,6 +841,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="jsonb_exists_any"></a><code>jsonb_exists_any(json: jsonb, array: <a href="string.html">string</a>[]) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether any of the strings in the text array exist as top-level keys or array elements</p>
 </span></td></tr>
 <tr><td><a name="jsonb_extract_path"></a><code>jsonb_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
+</span></td></tr>
+<tr><td><a name="jsonb_extract_path_text"></a><code>jsonb_extract_path_text(jsonb, <a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the JSON value as text pointed to by the variadic arguments.</p>
 </span></td></tr>
 <tr><td><a name="jsonb_insert"></a><code>jsonb_insert(target: jsonb, path: <a href="string.html">string</a>[], new_val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. <code>new_val</code> will be inserted before path target.</p>
 </span></td></tr>
