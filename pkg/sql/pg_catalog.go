@@ -1819,7 +1819,7 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 				scNameName := tree.NewDName(scName)
 				tblName := tree.NewDName(table.GetName())
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-					def, err := indexDefFromDescriptor(ctx, p, db, table, index.IndexDesc(), tableLookup)
+					def, err := indexDefFromDescriptor(ctx, p, db, scName, table, index.IndexDesc(), tableLookup)
 					if err != nil {
 						return err
 					}
@@ -1843,6 +1843,7 @@ func indexDefFromDescriptor(
 	ctx context.Context,
 	p *planner,
 	db *dbdesc.Immutable,
+	schemaName string,
 	table catalog.TableDescriptor,
 	index *descpb.IndexDescriptor,
 	tableLookup tableLookupFn,
@@ -1850,7 +1851,7 @@ func indexDefFromDescriptor(
 	colNames := index.ColumnNames[index.ExplicitColumnStartIdx():]
 	indexDef := tree.CreateIndex{
 		Name:     tree.Name(index.Name),
-		Table:    tree.MakeTableName(tree.Name(db.GetName()), tree.Name(table.GetName())),
+		Table:    tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName())),
 		Unique:   index.Unique,
 		Columns:  make(tree.IndexElemList, len(colNames)),
 		Storing:  make(tree.NameList, len(index.StoreColumnNames)),
