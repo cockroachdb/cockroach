@@ -47,6 +47,8 @@ const (
 	maxStructuredBytesPerSpan = 10 * (1 << 10)  // 10 KiB
 	// maxChildrenPerSpan limits the number of (direct) child spans in a Span.
 	maxChildrenPerSpan = 1000
+	// maxRemoteSpansPerSpan limits the number of imported remote spans per Span.
+	maxRemoteSpansPerSpan = 1000
 	// maxSpanRegistrySize limits the number of local root spans tracked in
 	// a Tracer's registry.
 	maxSpanRegistrySize = 5000

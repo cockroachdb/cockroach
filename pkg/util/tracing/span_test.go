@@ -419,6 +419,34 @@ func TestSpanMaxChildren(t *testing.T) {
 	}
 }
 
+// TestMaxRemoteSpans verifies that a Span can track at most
+// maxRemoteSpansPerSpan remote spans.
+func TestMaxRemoteSpans(t *testing.T) {
+	tr := NewTracer()
+	sp := tr.StartSpan("root", WithForceRealSpan())
+	defer sp.Finish()
+	for i := 0; i < maxRemoteSpansPerSpan+123; i++ {
+		ch := tr.StartSpan(fmt.Sprintf("child %d", i), WithForceRealSpan())
+		ch.Finish()
+		sp.ImportRemoteSpans(ch.GetRecording())
+
+		exp := i + 1
+		if exp > maxChildrenPerSpan {
+			exp = maxChildrenPerSpan
+		}
+		require.Len(t, sp.i.crdb.mu.recording.remoteSpans, exp)
+	}
+
+	{
+		// Try importing a recording that blows past the max limit; we already
+		// have one -- our own!
+		require.Len(t, sp.GetRecording(), maxRemoteSpansPerSpan+1)
+		sp.ImportRemoteSpans(sp.GetRecording())
+		require.Len(t, sp.GetRecording(), maxRemoteSpansPerSpan+1)
+		require.Len(t, sp.i.crdb.mu.recording.remoteSpans, maxChildrenPerSpan)
+	}
+}
+
 type explodyNetTr struct {
 	trace.Trace
 }
