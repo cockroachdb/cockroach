@@ -15,8 +15,8 @@
 import _ from "lodash";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
-import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
+export type ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
 export type ExecStats = protos.cockroach.sql.IExecStats;
 export type CollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
