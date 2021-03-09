@@ -70,6 +70,7 @@ max_index_keys                                        32
 node_id                                               1
 optimizer_use_histograms                              on
 optimizer_use_multicol_stats                          on
+override_multi_region_zone_config                     off
 prefer_lookup_joins_for_fks                           off
 reorder_joins_limit                                   8
 require_explicit_primary_keys                         off
