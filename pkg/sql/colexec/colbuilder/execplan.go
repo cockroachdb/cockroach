@@ -596,7 +596,10 @@ func (r opResult) createAndWrapRowSource(
 		return err
 	}
 	r.Op = c
-	r.MetadataSources = append(r.MetadataSources, c)
+	if args.TestingKnobs.PlanInvariantsCheckers {
+		r.Op = colexec.NewInvariantsChecker(r.Op)
+	}
+	r.MetadataSources = append(r.MetadataSources, r.Op.(execinfrapb.MetadataSource))
 	r.ToClose = append(r.ToClose, c)
 	return nil
 }
@@ -716,7 +719,7 @@ func NewColOperator(
 					core.Values.NumRows, len(core.Values.Columns),
 				)
 			}
-			result.Op = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows))
+			result.Op = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows), nil /* opToInitialize */)
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
 				result.ColumnTypes[i] = col.Type
@@ -730,15 +733,18 @@ func NewColOperator(
 			if err != nil {
 				return r, err
 			}
-			result.Op = scanOp
-			result.KVReader = scanOp
-			result.MetadataSources = append(result.MetadataSources, scanOp)
-			result.Releasables = append(result.Releasables, scanOp)
 			// colBatchScan is wrapped with a cancel checker below, so we need
 			// to log its creation separately.
 			if log.V(1) {
-				log.Infof(ctx, "made op %T\n", result.Op)
+				log.Infof(ctx, "made op %T\n", scanOp)
 			}
+			result.Op = scanOp
+			if args.TestingKnobs.PlanInvariantsCheckers {
+				result.Op = colexec.NewInvariantsChecker(result.Op)
+			}
+			result.KVReader = scanOp
+			result.MetadataSources = append(result.MetadataSources, result.Op.(execinfrapb.MetadataSource))
+			result.Releasables = append(result.Releasables, scanOp)
 
 			// We want to check for cancellation once per input batch, and
 			// wrapping only colBatchScan with a CancelChecker allows us to do
@@ -778,7 +784,7 @@ func NewColOperator(
 				// TableReader, so we end up creating an orphaned colBatchScan.
 				// We should avoid that. Ideally the optimizer would not plan a
 				// scan in this unusual case.
-				result.Op, err = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, 1 /* numTuples */), nil
+				result.Op, err = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, 1 /* numTuples */, inputs[0]), nil
 				// We make ColumnTypes non-nil so that sanity check doesn't
 				// panic.
 				result.ColumnTypes = []*types.T{}
@@ -1339,6 +1345,9 @@ func NewColOperator(
 		}
 	}
 	r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, projection)
+	if args.TestingKnobs.PlanInvariantsCheckers {
+		r.Op = colexec.NewInvariantsChecker(r.Op)
+	}
 	return r, err
 }
 
