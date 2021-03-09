@@ -130,15 +130,22 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
 	}
 
+	var override bool
+	// TODO(ajstorm): This branching is temporary until we remove the FORCE option
+	// from database commands
 	if n.Database != "" {
-		if err := p.CheckZoneConfigChangePermittedForMultiRegionDatabase(
-			ctx,
-			n.Database,
-			n.Options,
-			n.Force,
-		); err != nil {
-			return nil, err
-		}
+		override = n.Force
+	} else {
+		override = p.SessionData().OverrideMultiRegionZoneConfigEnabled
+	}
+
+	if err := p.CheckZoneConfigChangePermittedForMultiRegion(
+		ctx,
+		n.ZoneSpecifier,
+		n.Options,
+		override,
+	); err != nil {
+		return nil, err
 	}
 
 	var yamlConfig tree.TypedExpr
@@ -950,8 +957,9 @@ func getZoneConfigRaw(
 }
 
 // RemoveIndexZoneConfigs removes the zone configurations for some
-// indexs being dropped. It is a no-op if there is no zone
-// configuration or run on behalf of a tenant.
+// indexes being dropped. It is a no-op if there is no zone
+// configuration, there's no index zone configs to be dropped,
+// or it is run on behalf of a tenant.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
