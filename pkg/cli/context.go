@@ -342,12 +342,6 @@ func setZipContextDefaults() {
 var dumpCtx struct {
 	// dumpMode determines which part of the database should be dumped.
 	dumpMode dumpMode
-
-	// asOf determines the time stamp at which the dump should be taken.
-	asOf string
-
-	// dumpAll determines whenever we going to dump all databases
-	dumpAll bool
 }
 
 // setDumpContextDefaults set the default values in dumpCtx.  This
@@ -355,8 +349,6 @@ var dumpCtx struct {
 // test that exercises command-line parsing.
 func setDumpContextDefaults() {
 	dumpCtx.dumpMode = dumpBoth
-	dumpCtx.asOf = ""
-	dumpCtx.dumpAll = false
 }
 
 // authCtx captures the command-line parameters of the `auth-session`
