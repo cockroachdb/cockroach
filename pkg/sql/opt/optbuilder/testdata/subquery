@@ -2225,3 +2225,24 @@ build
 SELECT 3::decimal IN (SELECT 1::int)
 ----
 error (22023): unsupported comparison operator: <decimal> IN <tuple{int}>
+
+build
+SELECT ((1, 2), (3, 4)) = ANY (VALUES (('foo', 'bar')))
+----
+error (22023): unsupported comparison operator: <tuple{tuple{int, int}, tuple{int, int}}> = ANY <tuple{tuple{string, string}}>
+
+# Regression test for #61229 - detect uncomparable tuple types.
+build
+SELECT (1, 1) = ANY (VALUES ('foo', 'bar'))
+----
+error (22023): unsupported comparison operator: <tuple{int, int}> = ANY <tuple{tuple{string AS column1, string AS column2}}>
+
+build
+SELECT ARRAY[1, 2] = ANY (VALUES (ARRAY['foo', 'bar']))
+----
+error (22023): unsupported comparison operator: <int[]> = ANY <tuple{string[]}>
+
+build
+SELECT (1, 1) = ANY (VALUES (1, 2, 3))
+----
+error (22023): unsupported comparison operator: <tuple{int, int}> = ANY <tuple{tuple{int AS column1, int AS column2, int AS column3}}>
