@@ -48,10 +48,16 @@ const { latencyClasses } = tableClasses;
 const cx = classNames.bind(statementsPageStyles);
 
 export const TransactionsTable: React.FC<TransactionsTable> = props => {
-  const barChartOptions = {
+  const defaultBarChartOptions = {
     classes: {
       root: cx("statements-table__col--bar-chart"),
       label: cx("statements-table__col--bar-chart__label"),
+    },
+  };
+  const sampledExecStatsBarChartOptions = {
+    classes: defaultBarChartOptions.classes,
+    displayNoSamples: (d: Transaction) => {
+      return longToInt(d.stats_data.stats.exec_stats?.count) == 0;
     },
   };
 
@@ -59,11 +65,11 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
   const countBar = transactionsCountBarChart(transactions);
   const rowsReadBar = transactionsRowsReadBarChart(
     transactions,
-    barChartOptions,
+    defaultBarChartOptions,
   );
   const bytesReadBar = transactionsBytesReadBarChart(
     transactions,
-    barChartOptions,
+    defaultBarChartOptions,
   );
   const latencyBar = transactionsLatencyBarChart(
     transactions,
@@ -71,15 +77,15 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
   );
   const contentionBar = transactionsContentionBarChart(
     transactions,
-    barChartOptions,
+    sampledExecStatsBarChartOptions,
   );
   const maxMemUsageBar = transactionsMaxMemUsageBarChart(
     transactions,
-    barChartOptions,
+    sampledExecStatsBarChartOptions,
   );
   const networkBytesBar = transactionsNetworkBytesBarChart(
     transactions,
-    barChartOptions,
+    sampledExecStatsBarChartOptions,
   );
   const retryBar = transactionsRetryBarChart(transactions);
   const columns = [
