@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "colflow",
     srcs = [
-        "invariants_checker.go",
         "panic_injector.go",
         "routers.go",
         "stats.go",
