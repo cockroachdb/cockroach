@@ -38,13 +38,13 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 646.144762
+ ├── cost: 317.097143
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── stats: [rows=4666.66667, distinct(1)=4666.66667, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=4666.66667, null(1,2)=0]
- │    ├── cost: 645.934762
+ │    ├── cost: 316.887143
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00

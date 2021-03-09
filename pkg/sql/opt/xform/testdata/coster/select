@@ -19,3 +19,105 @@ select
  │    └── fd: (1)-->(3)
  └── filters
       └── s:3 >= 'foo' [outer=(3), constraints=(/3: [/'foo' - ]; tight)]
+
+exec-ddl
+CREATE TABLE g (
+  id INT PRIMARY KEY,
+  geog GEOGRAPHY
+)
+----
+
+exec-ddl
+ALTER TABLE g INJECT STATISTICS '[
+  {
+    "columns": [
+      "id"
+    ],
+    "created_at": "2021-01-01 00:00:00",
+    "distinct_count": 500000,
+    "name": "__auto__",
+    "row_count": 500000
+  }
+]'
+----
+
+# If there is a limit hint, n, the filter is not expected to be evaluated for
+# each input row. It is only expected to be evaluated on the number of rows
+# required to produce n rows.
+opt
+SELECT id FROM g
+WHERE st_dwithin(geog, st_makepoint(1.0, 1.0)::geography, 200)
+LIMIT 10
+----
+project
+ ├── columns: id:1!null
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── stats: [rows=10]
+ ├── cost: 285.159091
+ ├── key: (1)
+ └── limit
+      ├── columns: id:1!null geog:2!null
+      ├── cardinality: [0 - 10]
+      ├── immutable
+      ├── stats: [rows=10]
+      ├── cost: 285.049091
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── select
+      │    ├── columns: id:1!null geog:2!null
+      │    ├── immutable
+      │    ├── stats: [rows=55000, distinct(2)=50000, null(2)=0]
+      │    ├── cost: 284.939091
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── limit hint: 10.00
+      │    ├── scan g
+      │    │    ├── columns: id:1!null geog:2
+      │    │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(2)=50000, null(2)=5000]
+      │    │    ├── cost: 193.100909
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── limit hint: 90.91
+      │    └── filters
+      │         └── st_dwithin(geog:2, '0101000020E6100000000000000000F03F000000000000F03F', 200.0) [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      └── 10
+
+# There is no error when calculating the cost with a limit hint if the
+# selectivity is zero. The build command is used to avoid normalizing the
+# expression to an empty Values expression.
+build
+SELECT id FROM g
+WHERE false
+LIMIT 10
+----
+limit
+ ├── columns: id:1!null
+ ├── cardinality: [0 - 0]
+ ├── stats: [rows=0]
+ ├── cost: 530014.55
+ ├── key: (1)
+ ├── project
+ │    ├── columns: id:1!null
+ │    ├── cardinality: [0 - 0]
+ │    ├── stats: [rows=0]
+ │    ├── cost: 530014.54
+ │    ├── key: (1)
+ │    ├── limit hint: 10.00
+ │    └── select
+ │         ├── columns: id:1!null geog:2 crdb_internal_mvcc_timestamp:3
+ │         ├── cardinality: [0 - 0]
+ │         ├── stats: [rows=0]
+ │         ├── cost: 530014.53
+ │         ├── key: (1)
+ │         ├── fd: (1)-->(2,3)
+ │         ├── limit hint: 10.00
+ │         ├── scan g
+ │         │    ├── columns: id:1!null geog:2 crdb_internal_mvcc_timestamp:3
+ │         │    ├── stats: [rows=500000]
+ │         │    ├── cost: 525014.51
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2,3)
+ │         └── filters
+ │              └── false [constraints=(contradiction; tight)]
+ └── 10
