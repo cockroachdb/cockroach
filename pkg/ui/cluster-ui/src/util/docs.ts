@@ -48,6 +48,16 @@ export const statementsRetries = docsURL(
 export const statementsTimeInterval = docsURL(
   "admin-ui-statements-page.html#time-interval",
 );
+export const readFromDisk = docsURL(
+  "architecture/life-of-a-distributed-transaction.html#reads-from-the-storage-layer",
+);
+export const planningExecutionTime = docsURL(
+  "architecture/sql-layer#sql-parser-planner-executor",
+);
+export const contentionTime = docsURL(
+  "performance-best-practices-overview#understanding-and-avoiding-transaction-contention",
+);
+export const readsAndWrites = docsURL("architecture/reads-and-writes-overview");
 export const capacityMetrics = docsURL(
   "admin-ui-cluster-overview.html#capacity-metrics",
 );
