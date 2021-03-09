@@ -487,7 +487,8 @@ func WriteTableDescs(
 			// Depending on which cluster version we are restoring to, we decide which
 			// namespace table to write the descriptor into. This may cause wrong
 			// behavior if the cluster version is bumped DURING a restore.
-			tkey := sqlbase.MakePublicTableNameKey(ctx, settings, tables[i].ParentID, tables[i].Name)
+			tkey := sqlbase.MakeObjectNameKey(ctx, settings, tables[i].ParentID,
+				tables[i].GetParentSchemaID(), tables[i].Name)
 			b.CPut(tkey.Key(), tables[i].ID, nil)
 		}
 		for _, kv := range extra {

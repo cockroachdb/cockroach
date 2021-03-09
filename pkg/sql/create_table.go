@@ -181,7 +181,7 @@ func getTableCreateParams(
 		tempSchemaName := params.p.TemporarySchemaName()
 		sKey := sqlbase.NewSchemaKey(dbID, tempSchemaName)
 		var err error
-		schemaID, err = getDescriptorID(params.ctx, params.p.txn, sKey)
+		schemaID, err = GetDescriptorID(params.ctx, params.p.txn, sKey)
 		if err != nil {
 			return nil, 0, err
 		} else if schemaID == sqlbase.InvalidID {

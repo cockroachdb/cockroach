@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,10 +61,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
+	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/jackc/pgx"
 	"github.com/kr/pretty"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -177,9 +178,13 @@ func backupRestoreTestSetup(
 }
 
 func backupRestoreTestSetupEmpty(
-	t testing.TB, clusterSize int, tempDir string, init func(*testcluster.TestCluster),
+	t testing.TB,
+	clusterSize int,
+	tempDir string,
+	init func(*testcluster.TestCluster),
+	params base.TestClusterArgs,
 ) (ctx context.Context, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
-	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, base.TestClusterArgs{})
+	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
 }
 
 func verifyBackupRestoreStatementResult(
@@ -4274,4 +4279,133 @@ RESTORE DATABASE d1 FROM 'nodelocal://0/d1_star_backup/';
 	`)
 	sqlDB.Exec(t, `USE d1; SELECT * FROM perm_table`)
 	sqlDB.ExpectErr(t, `pq: relation "temp_table" does not exist`, `USE d1; SELECT * FROM temp_table`)
+}
+
+func TestFullClusterTemporaryBackupAndRestore(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "times out under race cause it starts up two test servers")
+
+	numNodes := 4
+	// Start a new server that shares the data directory.
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params := base.TestClusterArgs{}
+	params.ServerArgs.ExternalIODir = dir
+	params.ServerArgs.UseDatabase = "defaultdb"
+	knobs := base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			DisableTempObjectsCleanupOnSessionExit: true,
+		},
+	}
+	params.ServerArgs.Knobs = knobs
+	tc := testcluster.StartTestCluster(
+		t, numNodes, params,
+	)
+	defer tc.Stopper().Stop(context.Background())
+
+	// Start two temporary schemas and create a table in each. This table will
+	// have different pg_temp schemas but will be created in the same defaultdb.
+	comment := "never see this"
+	for _, connID := range []int{0, 1} {
+		conn := tc.ServerConn(connID)
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+		sqlDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+		sqlDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+		sqlDB.Exec(t, fmt.Sprintf(`COMMENT ON TABLE t IS '%s'`, comment))
+		require.NoError(t, conn.Close())
+	}
+
+	// Create a third session where we have two temp tables which will be in the
+	// same pg_temp schema with the same name but in different DBs.
+	diffDBConn := tc.ServerConn(2)
+	diffDB := sqlutils.MakeSQLRunner(diffDBConn)
+	diffDB.Exec(t, `SET experimental_enable_temp_tables=true`)
+	diffDB.Exec(t, `CREATE DATABASE d1`)
+	diffDB.Exec(t, `USE d1`)
+	diffDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+	diffDB.Exec(t, `CREATE DATABASE d2`)
+	diffDB.Exec(t, `USE d2`)
+	diffDB.Exec(t, `CREATE TEMP TABLE t (x INT)`)
+	require.NoError(t, diffDBConn.Close())
+
+	backupDBConn := tc.ServerConn(3)
+	backupDB := sqlutils.MakeSQLRunner(backupDBConn)
+	backupDB.Exec(t, `BACKUP TO 'nodelocal://0/full_cluster_backup'`)
+	require.NoError(t, backupDBConn.Close())
+
+	params = base.TestClusterArgs{}
+	ch := make(chan time.Time)
+	finishedCh := make(chan struct{})
+	knobs = base.TestingKnobs{
+		SQLExecutor: &sql.ExecutorTestingKnobs{
+			OnTempObjectsCleanupDone: func() {
+				finishedCh <- struct{}{}
+			},
+			TempObjectsCleanupCh: ch,
+		},
+	}
+	params.ServerArgs.Knobs = knobs
+	_, _, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dir, initNone,
+		params)
+	defer cleanupRestore()
+	sqlDBRestore.Exec(t, `RESTORE FROM 'nodelocal://0/full_cluster_backup'`)
+
+	// Before the reconciliation job runs we should be able to see the following:
+	// - 4 synthesized pg_temp sessions in defaultdb.
+	// We synthesize a new temp schema for each unique backed-up <dbID, schemaID>
+	// tuple of a temporary table descriptor.
+	// - All temp tables remapped to belong to the associated synthesized temp
+	// schema, and in the defaultdb.
+	checkSchemasQuery := `SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%' ORDER BY
+schema_name`
+	sqlDBRestore.CheckQueryResults(t, checkSchemasQuery,
+		[][]string{{"pg_temp_0_0"}, {"pg_temp_0_1"}, {"pg_temp_0_2"}, {"pg_temp_0_3"}})
+
+	checkTempTablesQuery := `SELECT count(name) FROM system.namespace where name='t'`
+	var numTempTables int
+	sqlDBRestore.QueryRow(t, checkTempTablesQuery).Scan(&numTempTables)
+	require.Equal(t, 4, numTempTables)
+
+	// Sanity check that the databases the temporary tables originally belonged to
+	// are restored and empty because of the remapping.
+	sqlDBRestore.CheckQueryResults(t,
+		`SELECT database_name FROM [SHOW DATABASES] ORDER BY database_name`,
+		[][]string{{"d1"}, {"d2"}, {"defaultdb"}, {"postgres"}, {"system"}})
+
+	// Check that we can see the comment on the temporary tables before the
+	// reconciliation job runs.
+	checkCommentQuery := fmt.Sprintf(`SELECT count(comment) FROM system.comments WHERE comment='%s'`,
+		comment)
+	var commentCount int
+	sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
+	require.Equal(t, commentCount, 2)
+
+	// Check that show tables in one of the restored DBs returns an empty result.
+	sqlDBRestore.Exec(t, "USE d1")
+	sqlDBRestore.CheckQueryResults(t, "SHOW TABLES", [][]string{})
+
+	sqlDBRestore.Exec(t, "USE d2")
+	sqlDBRestore.CheckQueryResults(t, "SHOW TABLES", [][]string{})
+
+	ch <- timeutil.Now()
+	<-finishedCh
+	testutils.SucceedsSoon(t, func() error {
+		// Check that all the synthesized temp schemas have been wiped.
+		sqlDBRestore.CheckQueryResults(t, checkSchemasQuery, [][]string{})
+
+		// Check that all the temp tables have been wiped.
+		sqlDBRestore.QueryRow(t, checkTempTablesQuery).Scan(&numTempTables)
+		if numTempTables != 0 {
+			return errors.Newf("expected %d temp tables, got %d", 0, numTempTables)
+		}
+
+		// Check that all the temp table comments have been wiped.
+		sqlDBRestore.QueryRow(t, checkCommentQuery).Scan(&commentCount)
+		if commentCount != 0 {
+			return errors.Newf("expected %d comments, got %d", 0, commentCount)
+		}
+		return nil
+	})
 }
