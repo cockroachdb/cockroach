@@ -721,6 +721,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 		}
 	}
+
 	// trailingMetaCallback is called after reading the tracing data because it
 	// generally calls InternalClose, indirectly, which switches the context and
 	// the span.
@@ -856,11 +857,30 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, opentraci
 // StartInternal prepares the ProcessorBase for execution. It returns the
 // annotated context that's also stored in pb.Ctx.
 func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context.Context {
+	return pb.startImpl(ctx, true /* createSpan */, name)
+}
+
+// StartInternalNoSpan does the same as StartInternal except that it does not
+// start a span. This is used by pass-through components whose goal is to be a
+// silent translation layer for components that actually do work (e.g. a
+// planNodeToRowSource wrapping an insertNode, or a columnarizer wrapping a
+// rowexec flow).
+func (pb *ProcessorBase) StartInternalNoSpan(ctx context.Context) context.Context {
+	return pb.startImpl(ctx, false /* createSpan */, "")
+}
+
+func (pb *ProcessorBase) startImpl(
+	ctx context.Context, createSpan bool, spanName string,
+) context.Context {
 	pb.origCtx = ctx
-	pb.Ctx, pb.span = ProcessorSpan(ctx, name)
-	if pb.span != nil && tracing.IsRecording(pb.span) {
-		pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
-		pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.processorID)
+	if createSpan {
+		pb.Ctx, pb.span = ProcessorSpan(ctx, spanName)
+		if pb.span != nil && tracing.IsRecording(pb.span) {
+			pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
+			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.processorID)
+		}
+	} else {
+		pb.Ctx = ctx
 	}
 	pb.EvalCtx.Context = pb.Ctx
 	return pb.Ctx
