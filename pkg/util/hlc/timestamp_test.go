@@ -145,6 +145,7 @@ func TestTimestampFloorPrevWallPrev(t *testing.T) {
 	}
 	for _, c := range testCases {
 		assert.Equal(t, c.expPrev, c.ts.FloorPrev())
+		assert.Equal(t, c.expWallPrev, c.ts.WallPrev())
 	}
 }
 
