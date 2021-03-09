@@ -269,6 +269,12 @@ SELECT 'lru'::store
 statement ok
 CREATE TYPE greetings AS ENUM('hi', 'hello', 'howdy', 'yo')
 
+statement error pq: ALTER TYPE ... DROP VALUE ... is only supported as an alpha feature
+ALTER TYPE greetings DROP VALUE 'hi'
+
+statement ok
+SET enable_drop_enum_value = true;
+
 statement ok
 ALTER TYPE greetings DROP VALUE 'hi'
 
@@ -280,16 +286,6 @@ CREATE TABLE use_greetings(k INT PRIMARY KEY, v greetings)
 
 statement ok
 INSERT INTO use_greetings VALUES(1, 'yo')
-
-statement ok
-SET sql_safe_updates = true;
-
-# ALTER TYPE DROP VALUE is gated behind sql_safe_updates
-statement error pq: rejected \(sql_safe_updates = true\)
-ALTER TYPE greetings DROP VALUE 'yo'
-
-statement ok
-SET sql_safe_updates = false
 
 statement error pq: could not remove enum value "yo" as it is being used by "use_greetings"
 ALTER TYPE greetings DROP VALUE 'yo'
