@@ -144,8 +144,8 @@ type TableDescriptor interface {
 	// AllIndexes returns a slice with all indexes, public and non-public,
 	// in the underlying proto, in their canonical order:
 	// - the primary index,
-	// - the public non-primary indexes in the Indexes array, in order,
-	// - the non-public indexes present in the Mutations array, in order.
+	//	// - the public non-primary indexes in the Indexes array, in order,
+	//	// - the non-public indexes present in the Mutations array, in order.
 	//
 	// See also Index.Ordinal().
 	AllIndexes() []Index
