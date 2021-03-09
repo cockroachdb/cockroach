@@ -4,7 +4,7 @@
 .head-wrapper {
   @include table-base;
 
-  .__cell--header {
+  &__cell--header {
     border-right: 1px solid $colors--neutral-2;
     width: 250px;
   }
