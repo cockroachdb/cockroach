@@ -639,10 +639,12 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		addColumn := func(column *descpb.ColumnDescriptor, attRelID tree.Datum, attNum uint32) error {
 			colTyp := column.Type
 			// Sets the attgenerated column to 's' if the column is generated/
-			// computed, zero byte otherwise.
+			// computed stored, "v" if virtual, zero byte otherwise.
 			var isColumnComputed string
-			if column.IsComputed() {
+			if column.IsComputed() && !column.Virtual {
 				isColumnComputed = "s"
+			} else if column.IsComputed() {
+				isColumnComputed = "v"
 			} else {
 				isColumnComputed = ""
 			}
