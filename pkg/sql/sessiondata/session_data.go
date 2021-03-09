@@ -206,9 +206,11 @@ type LocalOnlySessionData struct {
 	AllowPrepareAsOptPlan bool
 	// TempTablesEnabled indicates whether temporary tables can be created or not.
 	TempTablesEnabled bool
-	// ImplicitPartitioningEnabled indicates whether implicit column partitioning can
-	// be created.
+	// ImplicitPartitioningEnabled indicates whether implicit column partitioning
+	// can be created.
 	ImplicitColumnPartitioningEnabled bool
+	// DropEnumValueEnabled indicates whether enum values can be dropped.
+	DropEnumValueEnabled bool
 	// HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
 	HashShardedIndexesEnabled bool
 	// DisallowFullTableScans indicates whether queries that plan full table scans
