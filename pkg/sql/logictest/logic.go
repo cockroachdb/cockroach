@@ -431,8 +431,10 @@ var (
 
 type testClusterConfig struct {
 	// name is the name of the config (used for subtest names).
-	name                string
-	numNodes            int
+	name     string
+	numNodes int
+	// TODO(asubiotto): The fake span resolver does not currently play well with
+	// contention events and tracing (see #61438).
 	useFakeSpanResolver bool
 	// if non-empty, overrides the default distsql mode.
 	overrideDistSQLMode string
@@ -465,8 +467,7 @@ type testClusterConfig struct {
 	isCCLConfig bool
 	// localities is set if nodes should be set to a particular locality.
 	// Nodes are 1-indexed.
-	localities          map[int]roachpb.Locality
-	pretend59315IsFixed bool
+	localities map[int]roachpb.Locality
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -562,13 +563,6 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            5,
 		overrideDistSQLMode: "on",
 		overrideAutoStats:   "false",
-	},
-	{
-		name:                "5node-pretend59315IsFixed",
-		numNodes:            5,
-		overrideDistSQLMode: "on",
-		overrideAutoStats:   "false",
-		pretend59315IsFixed: true,
 	},
 	{
 		name:                       "5node-metadata",
@@ -1340,7 +1334,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					DeterministicExplainAnalyze: true,
-					Pretend59315IsFixed:         t.cfg.pretend59315IsFixed,
 				},
 			},
 			ClusterName:   "testclustername",

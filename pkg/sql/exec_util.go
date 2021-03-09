@@ -945,12 +945,6 @@ type ExecutorTestingKnobs struct {
 	// DeterministicExplainAnalyze, if set, will result in overriding fields in
 	// EXPLAIN ANALYZE (PLAN) that can vary between runs (like elapsed times).
 	DeterministicExplainAnalyze bool
-
-	// Pretend59315IsFixed pretends that this issue is fixed:
-	// https://github.com/cockroachdb/cockroach/issues/59315
-	// which means that we don't need the WithBypassRegistry option
-	// in resetForNewSQLTxn.
-	Pretend59315IsFixed bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

@@ -121,7 +121,6 @@ type Tracer struct {
 
 	// activeSpans is a map that references all non-Finish'ed local root spans,
 	// i.e. those for which no WithLocalParent(<non-nil>) option was supplied.
-	// It also elides spans created using WithBypassRegistry.
 	// The map is keyed on the span ID, which is deterministically unique.
 	//
 	// In normal operation, a local root Span is inserted on creation and
@@ -417,27 +416,25 @@ func (t *Tracer) startSpanGeneric(
 			opts.Parent.i.crdb.mu.Unlock()
 		}
 	} else {
-		if !opts.BypassRegistry {
-			// Local root span - put it into the registry of active local root
-			// spans. `Span.Finish` takes care of deleting it again.
-			t.activeSpans.Lock()
+		// Local root span - put it into the registry of active local root
+		// spans. `Span.Finish` takes care of deleting it again.
+		t.activeSpans.Lock()
 
-			// Ensure that the registry does not grow unboundedly in case there
-			// is a leak. When the registry reaches max size, each new span added
-			// kicks out some old span. We rely on map iteration order here to
-			// make this cheap.
-			if toDelete := len(t.activeSpans.m) - maxSpanRegistrySize + 1; toDelete > 0 {
-				for k := range t.activeSpans.m {
-					delete(t.activeSpans.m, k)
-					toDelete--
-					if toDelete <= 0 {
-						break
-					}
+		// Ensure that the registry does not grow unboundedly in case there
+		// is a leak. When the registry reaches max size, each new span added
+		// kicks out some old span. We rely on map iteration order here to
+		// make this cheap.
+		if toDelete := len(t.activeSpans.m) - maxSpanRegistrySize + 1; toDelete > 0 {
+			for k := range t.activeSpans.m {
+				delete(t.activeSpans.m, k)
+				toDelete--
+				if toDelete <= 0 {
+					break
 				}
 			}
-			t.activeSpans.m[spanID] = s
-			t.activeSpans.Unlock()
 		}
+		t.activeSpans.m[spanID] = s
+		t.activeSpans.Unlock()
 
 		if opts.RemoteParent != nil {
 			for k, v := range opts.RemoteParent.Baggage {

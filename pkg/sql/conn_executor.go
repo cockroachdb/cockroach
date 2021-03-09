@@ -822,6 +822,22 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 		}
+		switch t := ex.machine.CurState().(type) {
+		case stateNoTxn:
+			// No txn to finish.
+		case stateAborted:
+			// A non-retriable error with IsCommit set to true causes the transaction
+			// to be cleaned up.
+		case stateCommitWait:
+			ex.state.finishSQLTxn()
+		default:
+			if util.CrdbTestBuild {
+				panic(errors.AssertionFailedf("unexpected state in conn executor after ApplyWithPayload %T", t))
+			}
+		}
+		if util.CrdbTestBuild && ex.state.sp != nil {
+			panic(errors.AssertionFailedf("txn span not closed in state %s", ex.machine.CurState()))
+		}
 	} else if closeType == externalTxnClose {
 		ex.state.finishExternalTxn()
 	}
