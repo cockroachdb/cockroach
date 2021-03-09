@@ -35,10 +35,10 @@ type CreateRoleNode struct {
 	userNameInfo
 }
 
-var userTableName = tree.NewTableName("system", "users")
+var userTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "users")
 
 // RoleOptionsTableName represents system.role_options.
-var RoleOptionsTableName = tree.NewTableName("system", "role_options")
+var RoleOptionsTableName = tree.NewTableNameWithSchema("system", tree.PublicSchemaName, "role_options")
 
 // CreateRole represents a CREATE ROLE statement.
 // Privileges: INSERT on system.users.

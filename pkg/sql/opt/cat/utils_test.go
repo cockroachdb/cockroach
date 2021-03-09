@@ -38,11 +38,11 @@ func TestExpandDataSourceGlob(t *testing.T) {
 		expected string
 	}{
 		{
-			pattern:  tree.NewTableName("t", "a"),
+			pattern:  tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a"),
 			expected: `[t.public.a]`,
 		},
 		{
-			pattern:  tree.NewTableName("t", "z"),
+			pattern:  tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "z"),
 			expected: `error: no data source matches prefix: "t.public.z"`,
 		},
 		{
@@ -101,14 +101,14 @@ func TestResolveTableIndex(t *testing.T) {
 		// Both table name and index are set.
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", "a"),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, "a"),
 				Index: "idx1",
 			},
 			expected: `t.public.a@idx1`,
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", "a"),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, "a"),
 				Index: "idx2",
 			},
 			expected: `error: index "idx2" does not exist`,
@@ -117,19 +117,19 @@ func TestResolveTableIndex(t *testing.T) {
 		// Only table name is set.
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", "a"),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, "a"),
 			},
 			expected: `t.public.a@primary`,
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("z", "a"),
+				Table: tree.MakeTableNameWithSchema("z", tree.PublicSchemaName, "a"),
 			},
 			expected: `error: no data source matches prefix: "z.public.a"`,
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", "z"),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, "z"),
 			},
 			expected: `error: no data source matches prefix: "t.public.z"`,
 		},
@@ -143,7 +143,7 @@ func TestResolveTableIndex(t *testing.T) {
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("t", ""),
+				Table: tree.MakeTableNameWithSchema("t", tree.PublicSchemaName, ""),
 				Index: "idx1",
 			},
 			expected: `t.public.a@idx1`,
@@ -162,7 +162,7 @@ func TestResolveTableIndex(t *testing.T) {
 		},
 		{
 			name: tree.TableIndexName{
-				Table: tree.MakeTableName("z", ""),
+				Table: tree.MakeTableNameWithSchema("z", tree.PublicSchemaName, ""),
 				Index: "idx1",
 			},
 			expected: `error: target database or schema does not exist`,
