@@ -350,7 +350,23 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	if err != nil {
 		return cat.DataSourceName{}, err
 	}
-	return tree.MakeTableName(tree.Name(dbDesc.GetName()), tree.Name(desc.GetName())), nil
+	scID := desc.GetParentSchemaID()
+	var scName tree.Name
+	if scID == keys.PublicSchemaID {
+		scName = tree.PublicSchemaName
+	} else {
+		scDesc, err := catalogkv.MustGetSchemaDescByID(ctx, txn, oc.codec(), scID)
+		if err != nil {
+			return cat.DataSourceName{}, err
+		}
+		scName = tree.Name(scDesc.GetName())
+	}
+
+	return tree.MakeTableNameWithSchema(
+			tree.Name(dbDesc.GetName()),
+			scName,
+			tree.Name(desc.GetName())),
+		nil
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
