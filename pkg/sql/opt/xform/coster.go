@@ -433,7 +433,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 		cost = c.computeScanCost(candidate.(*memo.ScanExpr), required)
 
 	case opt.SelectOp:
-		cost = c.computeSelectCost(candidate.(*memo.SelectExpr))
+		cost = c.computeSelectCost(candidate.(*memo.SelectExpr), required)
 
 	case opt.ProjectOp:
 		cost = c.computeProjectCost(candidate.(*memo.ProjectExpr))
@@ -633,9 +633,16 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	return cost
 }
 
-func (c *coster) computeSelectCost(sel *memo.SelectExpr) memo.Cost {
-	// The filter has to be evaluated on each input row.
+func (c *coster) computeSelectCost(sel *memo.SelectExpr, required *physical.Required) memo.Cost {
+	// Typically the filter has to be evaluated on each input row.
 	inputRowCount := sel.Input.Relational().Stats.RowCount
+
+	// If there is a LimitHint, n, it is expected that the filter will only be
+	// evaluated on the number of rows required to produce n rows.
+	if required.LimitHint != 0 {
+		inputRowCount = math.Min(inputRowCount, required.LimitHint / sel.Relational().Stats.Selectivity.AsFloat())
+	}
+
 	filterSetup, filterPerRow := c.computeFiltersCost(sel.Filters, util.FastIntMap{})
 	cost := memo.Cost(inputRowCount) * filterPerRow
 	cost += filterSetup

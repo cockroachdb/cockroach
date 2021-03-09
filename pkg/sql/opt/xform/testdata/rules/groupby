@@ -532,13 +532,13 @@ memo (optimized, ~6KB, required=[presentation: min:6])
  ├── G4: (limit G7 G8 ordering=+2)
  │    └── []
  │         ├── best: (limit G7="[ordering: +2] [limit hint: 1.00]" G8 ordering=+2)
- │         └── cost: 1290.81
+ │         └── cost: 1283.40
  ├── G5: (aggregations G9)
  ├── G6: (min G10)
  ├── G7: (select G2 G11)
  │    ├── [ordering: +2] [limit hint: 1.00]
- │    │    ├── best: (sort G7)
- │    │    └── cost: 1290.79
+ │    │    ├── best: (select G2="[ordering: +2] [limit hint: 1.01]" G11)
+ │    │    └── cost: 1283.38
  │    └── []
  │         ├── best: (select G2 G11)
  │         └── cost: 1064.04
@@ -594,13 +594,13 @@ memo (optimized, ~6KB, required=[presentation: max:6])
  ├── G4: (limit G7 G8 ordering=-2)
  │    └── []
  │         ├── best: (limit G7="[ordering: -2] [limit hint: 1.00]" G8 ordering=-2)
- │         └── cost: 1290.81
+ │         └── cost: 1283.40
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)
  │    ├── [ordering: -2] [limit hint: 1.00]
- │    │    ├── best: (sort G7)
- │    │    └── cost: 1290.79
+ │    │    ├── best: (select G2="[ordering: -2] [limit hint: 1.01]" G11)
+ │    │    └── cost: 1283.38
  │    └── []
  │         ├── best: (select G2 G11)
  │         └── cost: 1064.04
@@ -702,13 +702,13 @@ memo (optimized, ~6KB, required=[presentation: max:6])
  ├── G4: (limit G7 G8 ordering=-2)
  │    └── []
  │         ├── best: (limit G7="[ordering: -2] [limit hint: 1.00]" G8 ordering=-2)
- │         └── cost: 1290.81
+ │         └── cost: 1283.40
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)
  │    ├── [ordering: -2] [limit hint: 1.00]
- │    │    ├── best: (sort G7)
- │    │    └── cost: 1290.79
+ │    │    ├── best: (select G2="[ordering: -2] [limit hint: 1.01]" G11)
+ │    │    └── cost: 1283.38
  │    └── []
  │         ├── best: (select G2 G11)
  │         └── cost: 1064.04

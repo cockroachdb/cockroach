@@ -317,14 +317,14 @@ limit
  ├── cardinality: [0 - 1]
  ├── immutable
  ├── stats: [rows=1]
- ├── cost: 226.059998
+ ├── cost: 217.059998
  ├── key: ()
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
  │    ├── stats: [rows=10.0000001, distinct(1)=1, null(1)=10]
- │    ├── cost: 226.039998
+ │    ├── cost: 217.039998
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── scan tj
