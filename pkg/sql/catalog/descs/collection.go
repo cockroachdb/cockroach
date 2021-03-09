@@ -224,10 +224,12 @@ type Collection struct {
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
-// transaction, acquiring one if necessary.
+// transaction, acquiring one if necessary. Due to a bug in lease acquisition
+// for dropped descriptors, the descriptor may have to be read from the store,
+// in which case shouldReadFromStore will be true.
 func (tc *Collection) getLeasedDescriptorByName(
 	ctx context.Context, txn *kv.Txn, parentID descpb.ID, parentSchemaID descpb.ID, name string,
-) (desc catalog.Descriptor, err error) {
+) (desc catalog.Descriptor, shouldReadFromStore bool, err error) {
 	// First, look to see if we already have the descriptor.
 	// This ensures that, once a SQL transaction resolved name N to id X, it will
 	// continue to use N to refer to X even if N is renamed during the
@@ -236,15 +238,22 @@ func (tc *Collection) getLeasedDescriptorByName(
 		if log.V(2) {
 			log.Eventf(ctx, "found descriptor in collection for '%s'", name)
 		}
-		return desc, nil
+		return desc, false, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()
 	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
 	if err != nil {
+		// Read the descriptor from the store in the face of some specific errors
+		// because of a known limitation of AcquireByName. See the known
+		// limitations of AcquireByName for details.
+		if catalog.HasInactiveDescriptorError(err) ||
+			errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil, true, nil
+		}
 		// Lease acquisition failed with some other error. This we don't
 		// know how to deal with, so propagate the error.
-		return nil, err
+		return nil, false, err
 	}
 
 	if expiration.LessEq(readTimestamp) {
@@ -261,7 +270,7 @@ func (tc *Collection) getLeasedDescriptorByName(
 	// timestamp, so we need to set a deadline on the transaction to prevent it
 	// from committing beyond the version's expiration time.
 	txn.UpdateDeadlineMaybe(ctx, expiration)
-	return desc, nil
+	return desc, false, nil
 }
 
 // getLeasedDescriptorByID return a leased descriptor valid for the transaction,
@@ -409,14 +418,14 @@ func (tc *Collection) getDatabaseByName(
 				ctx, txn, tc.codec(), keys.RootNamespaceID, keys.RootNamespaceID, name, mutable)
 		}
 
-		desc, err := tc.getLeasedDescriptorByName(
+		desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
 			ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, name)
 		if err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) ||
-				errors.Is(err, catalog.ErrDescriptorDropped) {
-				err = nil
-			}
 			return false, nil, err
+		}
+		if shouldReadFromStore {
+			return tc.getDescriptorFromStore(
+				ctx, txn, tc.codec(), keys.RootNamespaceID, keys.RootNamespaceID, name, mutable)
 		}
 		return true, desc, nil
 	}
@@ -511,14 +520,14 @@ func (tc *Collection) getObjectByName(
 			ctx, txn, tc.codec(), dbID, schemaID, objectName, mutable)
 	}
 
-	desc, err := tc.getLeasedDescriptorByName(
+	desc, shouldReadFromStore, err := tc.getLeasedDescriptorByName(
 		ctx, txn, dbID, schemaID, objectName)
 	if err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) ||
-			errors.Is(err, catalog.ErrDescriptorDropped) {
-			err = nil
-		}
 		return false, nil, err
+	}
+	if shouldReadFromStore {
+		return tc.getDescriptorFromStore(
+			ctx, txn, tc.codec(), dbID, schemaID, objectName, mutable)
 	}
 	return true, desc, nil
 }
@@ -978,6 +987,24 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 	flags tree.CommonLookupFlags,
 	mutable, setTxnDeadline bool,
 ) (catalog.Descriptor, error) {
+	readFromStore := func() (catalog.Descriptor, error) {
+		// Always pick up a mutable copy so it can be cached.
+		// TODO (lucy): If the descriptor doesn't exist, should we generate our
+		// own error here instead of using the one from catalogkv?
+		desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id,
+			catalogkv.Mutable, catalogkv.AnyDescriptorKind, true /* required */)
+		if err != nil {
+			return nil, err
+		}
+		ud, err := tc.addUncommittedDescriptor(desc.(catalog.MutableDescriptor))
+		if err != nil {
+			return nil, err
+		}
+		if !mutable {
+			desc = ud.immutable
+		}
+		return desc, nil
+	}
 	getDescriptorByID := func() (catalog.Descriptor, error) {
 		if found, sd := tc.getSyntheticDescriptorByID(id); found {
 			if mutable {
@@ -994,26 +1021,14 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 		}
 
 		if flags.AvoidCached || mutable || lease.TestingTableLeasesAreDisabled() {
-			// Always pick up a mutable copy so it can be cached.
-			// TODO (lucy): If the descriptor doesn't exist, should we generate our
-			// own error here instead of using the one from catalogkv?
-			desc, err := catalogkv.GetDescriptorByID(ctx, txn, tc.codec(), id,
-				catalogkv.Mutable, catalogkv.AnyDescriptorKind, true /* required */)
-			if err != nil {
-				return nil, err
-			}
-			ud, err := tc.addUncommittedDescriptor(desc.(catalog.MutableDescriptor))
-			if err != nil {
-				return nil, err
-			}
-			if !mutable {
-				desc = ud.immutable
-			}
-			return desc, nil
+			return readFromStore()
 		}
 
 		desc, err := tc.getLeasedDescriptorByID(ctx, txn, id, setTxnDeadline)
 		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) || catalog.HasInactiveDescriptorError(err) {
+				return readFromStore()
+			}
 			return nil, err
 		}
 		return desc, nil
