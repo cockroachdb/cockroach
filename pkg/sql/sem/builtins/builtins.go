@@ -4892,7 +4892,8 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryStreamIngestion,
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
