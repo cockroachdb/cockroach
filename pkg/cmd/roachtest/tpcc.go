@@ -653,12 +653,18 @@ func loadTPCCBench(
 		return err
 	}
 
-	// Split and scatter the tables. Ramp up to the expected load in the desired
-	// distribution. This should allow for load-based rebalancing to help
-	// distribute load. Optionally pass some load configuration-specific flags.
+	// Split and scatter the tables. Ramp up to the half of the expected load in
+	// the desired distribution. This should allow for load-based rebalancing to
+	// help distribute load. Optionally pass some load configuration-specific
+	// flags.
+	const txnsPerWarehousePerSecond = 12.8 * (23.0 / 10.0) * (1.0 / 60.0) // max_tpmC/warehouse * all_txns/new_order_txns * minutes/seconds
+	rateAtExpected := txnsPerWarehousePerSecond * float64(b.EstimatedMax)
+	maxRate := int(rateAtExpected / 2)
+	rampTime := (1 * rebalanceWait) / 4
+	loadTime := (3 * rebalanceWait) / 4
 	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d --max-rate=%d "+
-		"--wait=false --duration=%s --scatter --tolerate-errors {pgurl%s}",
-		b.LoadWarehouses, b.LoadWarehouses, b.LoadWarehouses/2, rebalanceWait, roachNodes)
+		"--wait=false --ramp=%s --duration=%s --scatter --tolerate-errors {pgurl%s}",
+		b.LoadWarehouses, b.LoadWarehouses, maxRate, rampTime, loadTime, roachNodes)
 	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
