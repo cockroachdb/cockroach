@@ -348,10 +348,12 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 // wrapWithNetworkVectorizedStatsCollector creates a new
 // colexec.NetworkVectorizedStatsCollector that wraps op.
 func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
-	inbox *colrpc.Inbox, component execinfrapb.ComponentID, latency time.Duration,
+	op colexecop.Operator,
+	inbox *colrpc.Inbox,
+	component execinfrapb.ComponentID,
+	latency time.Duration,
 ) (vectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
-	op := colexecop.Operator(inbox)
 	nvsc := newNetworkVectorizedStatsCollector(op, component, inputWatch, inbox, latency)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, nvsc)
 	return nvsc, nil
@@ -733,6 +735,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 
 	foundLocalOutput := false
 	for i, op := range outputs {
+		if util.CrdbTestBuild {
+			op = colexec.NewInvariantsChecker(op)
+		}
 		stream := &output.Streams[i]
 		switch stream.Type {
 		case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
@@ -837,18 +842,23 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			op := colexecop.Operator(inbox)
+			ms := execinfrapb.MetadataSource(inbox)
+			if util.CrdbTestBuild {
+				op = colexec.NewInvariantsChecker(op)
+				ms = op.(execinfrapb.MetadataSource)
+			}
 			if s.recordingStats {
 				// Note: we can't use flowCtx.StreamComponentID because the stream does
 				// not originate from this node (we are the target node).
 				compID := execinfrapb.StreamComponentID(
 					base.SQLInstanceID(inputStream.OriginNodeID), flowCtx.ID, inputStream.StreamID,
 				)
-				op, err = s.wrapWithNetworkVectorizedStatsCollector(inbox, compID, latency)
+				op, err = s.wrapWithNetworkVectorizedStatsCollector(op, inbox, compID, latency)
 				if err != nil {
 					return nil, nil, nil, err
 				}
 			}
-			inputStreamOps = append(inputStreamOps, colexec.SynchronizerInput{Op: op, MetadataSources: []execinfrapb.MetadataSource{inbox}})
+			inputStreamOps = append(inputStreamOps, colexec.SynchronizerInput{Op: op, MetadataSources: []execinfrapb.MetadataSource{ms}})
 		default:
 			return nil, nil, nil, errors.Errorf("unsupported input stream type %s", inputStream.Type)
 		}
@@ -890,6 +900,10 @@ func (s *vectorizedFlowCreator) setupInput(
 			// given that they run concurrently. The stall time will be collected
 			// instead.
 			statsInputs = nil
+		}
+		if util.CrdbTestBuild {
+			op = colexec.NewInvariantsChecker(op)
+			metaSources[0] = op.(execinfrapb.MetadataSource)
 		}
 		if s.recordingStats {
 			statsInputsAsOps := make([]colexecop.Operator, len(statsInputs))
@@ -1107,6 +1121,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				ExprHelper:           s.exprHelper,
 				Factory:              factory,
 			}
+			args.TestingKnobs.PlanInvariantsCheckers = util.CrdbTestBuild
 			var result *colexecargs.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
 			if result != nil {
@@ -1120,9 +1135,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if err != nil {
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
-			}
-			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
-				result.Op = newInvariantsChecker(result.Op)
 			}
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
 				result.Op = newPanicInjector(result.Op)

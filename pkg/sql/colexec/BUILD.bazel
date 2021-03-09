@@ -19,6 +19,7 @@ go_library(
         "external_sort.go",
         "hash_aggregator.go",
         "hash_based_partitioner.go",
+        "invariants_checker.go",
         "limit.go",
         "materializer.go",
         "offset.go",

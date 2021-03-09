@@ -72,6 +72,10 @@ type NewColOperatorArgs struct {
 		// partitions are opened/closed, which ensures that the number of open
 		// files never exceeds what is expected.
 		DelegateFDAcquisitions bool
+		// PlanInvariantsCheckers indicates whether colexec.InvariantsCheckers
+		// should be planned on top of the main operators. This knob is needed
+		// so that correct operators are added to MetadataSources.
+		PlanInvariantsCheckers bool
 	}
 }
 

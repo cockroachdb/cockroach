@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -202,7 +203,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			// number of metadata sources and then that the input types are what we
 			// expect from the input DAG.
 			require.Len(t, sources, 1)
-			require.Len(t, inboxToNumInputTypes[sources[0].(*colrpc.Inbox)], numInputTypesToOutbox)
+			require.Len(t, inboxToNumInputTypes[sources[0].(*colexec.InvariantsChecker).Input.(*colrpc.Inbox)], numInputTypesToOutbox)
 			return colrpc.NewOutbox(allocator, op, typs, sources, nil /* toClose */, nil /* getStats */)
 		},
 		newInboxFn: func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error) {
