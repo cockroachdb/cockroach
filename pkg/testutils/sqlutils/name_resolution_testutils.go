@@ -46,10 +46,10 @@ type ColumnItemResolverTester interface {
 
 func initColumnItemResolverTester(t *testing.T, ct ColumnItemResolverTester) {
 	ct.AddTable(tree.MakeTableNameWithSchema("", "crdb_internal", "tables"), []tree.Name{"table_name"})
-	ct.AddTable(tree.MakeTableName("db1", "foo"), []tree.Name{"x"})
-	ct.AddTable(tree.MakeTableName("db2", "foo"), []tree.Name{"x"})
+	ct.AddTable(tree.MakeTableNameWithSchema("db1", tree.PublicSchemaName, "foo"), []tree.Name{"x"})
+	ct.AddTable(tree.MakeTableNameWithSchema("db2", tree.PublicSchemaName, "foo"), []tree.Name{"x"})
 	ct.AddTable(tree.MakeUnqualifiedTableName("bar"), []tree.Name{"x"})
-	ct.AddTable(tree.MakeTableName("db1", "kv"), []tree.Name{"k", "v"})
+	ct.AddTable(tree.MakeTableNameWithSchema("db1", tree.PublicSchemaName, "kv"), []tree.Name{"k", "v"})
 }
 
 // RunResolveQualifiedStarTest tests that the given ColumnItemResolverTester

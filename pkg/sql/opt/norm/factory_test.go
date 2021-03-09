@@ -38,7 +38,7 @@ func TestSimplifyFilters(t *testing.T) {
 	var f norm.Factory
 	f.Init(&evalCtx, cat)
 
-	tn := tree.NewTableName("t", "a")
+	tn := tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a")
 	a := f.Metadata().AddTable(cat.Table(tn), tn)
 	ax := a.ColumnID(0)
 

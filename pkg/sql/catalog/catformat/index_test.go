@@ -26,7 +26,7 @@ func TestIndexForDisplay(t *testing.T) {
 
 	database := tree.Name("foo")
 	table := tree.Name("bar")
-	tableName := tree.MakeTableName(database, table)
+	tableName := tree.MakeTableNameWithSchema(database, tree.PublicSchemaName, table)
 
 	colNames := []string{"a", "b"}
 	tableDesc := testTableDesc(

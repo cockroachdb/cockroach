@@ -30,7 +30,7 @@ func TestCheckConstraintBuilder_Build(t *testing.T) {
 
 	database := tree.Name("foo")
 	table := tree.Name("bar")
-	tn := tree.MakeTableName(database, table)
+	tn := tree.MakeTableNameWithSchema(database, tree.PublicSchemaName, table)
 
 	desc := testTableDesc(
 		string(table),
@@ -149,7 +149,7 @@ func TestCheckConstraintBuilder_DefaultName(t *testing.T) {
 
 	database := tree.Name("foo")
 	table := tree.Name("bar")
-	tn := tree.MakeTableName(database, table)
+	tn := tree.MakeTableNameWithSchema(database, tree.PublicSchemaName, table)
 
 	desc := testTableDesc(
 		string(table),
