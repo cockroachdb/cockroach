@@ -70,21 +70,22 @@ project
       ├── stats: [rows=1]
       ├── key: ()
       ├── fd: ()-->(1,2)
-      ├── sort
+      ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
       │    ├── stats: [rows=222.222222, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
-      │    └── select
-      │         ├── columns: i:1(int) g:2(geometry!null)
-      │         ├── immutable
-      │         ├── stats: [rows=222.222222, distinct(2)=7, null(2)=0]
-      │         ├── scan t
-      │         │    ├── columns: i:1(int) g:2(geometry)
-      │         │    └── stats: [rows=2000, distinct(2)=7, null(2)=0]
-      │         └── filters
-      │              └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      │    ├── sort
+      │    │    ├── columns: i:1(int) g:2(geometry)
+      │    │    ├── stats: [rows=2000, distinct(2)=7, null(2)=0]
+      │    │    ├── ordering: +1
+      │    │    ├── limit hint: 9.00
+      │    │    └── scan t
+      │    │         ├── columns: i:1(int) g:2(geometry)
+      │    │         └── stats: [rows=2000, distinct(2)=7, null(2)=0]
+      │    └── filters
+      │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── 1 [type=int]
 
 memo
@@ -94,16 +95,16 @@ memo (optimized, ~11KB, required=[presentation: i:1])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:1]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 4178.12
+ │         └── cost: 2642.30
  ├── G2: (limit G4 G5 ordering=+1)
  │    └── []
  │         ├── best: (limit G4="[ordering: +1] [limit hint: 1.00]" G5 ordering=+1)
- │         └── cost: 4178.10
+ │         └── cost: 2642.28
  ├── G3: (projections)
  ├── G4: (select G6 G7) (select G8 G7)
  │    ├── [ordering: +1] [limit hint: 1.00]
- │    │    ├── best: (sort G4)
- │    │    └── cost: 4178.08
+ │    │    ├── best: (select G6="[ordering: +1] [limit hint: 9.00]" G7)
+ │    │    └── cost: 2642.26
  │    └── []
  │         ├── best: (select G6 G7)
  │         └── cost: 4134.53
@@ -339,21 +340,22 @@ project
       ├── stats: [rows=1, distinct(1)=0.999867838, null(1)=0.025, distinct(2)=0.933913991, null(2)=0]
       ├── key: ()
       ├── fd: ()-->(1,2)
-      ├── sort
+      ├── select
       │    ├── columns: i:1(int) g:2(geometry!null)
       │    ├── immutable
       │    ├── stats: [rows=211.111111, distinct(1)=199.969136, null(1)=5.27777778, distinct(2)=7, null(2)=0]
       │    ├── ordering: +1
       │    ├── limit hint: 1.00
-      │    └── select
-      │         ├── columns: i:1(int) g:2(geometry!null)
-      │         ├── immutable
-      │         ├── stats: [rows=211.111111, distinct(1)=199.969136, null(1)=5.27777778, distinct(2)=7, null(2)=0]
-      │         ├── scan t
-      │         │    ├── columns: i:1(int) g:2(geometry)
-      │         │    └── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
-      │         └── filters
-      │              └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+      │    ├── sort
+      │    │    ├── columns: i:1(int) g:2(geometry)
+      │    │    ├── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
+      │    │    ├── ordering: +1
+      │    │    ├── limit hint: 9.47
+      │    │    └── scan t
+      │    │         ├── columns: i:1(int) g:2(geometry)
+      │    │         └── stats: [rows=2000, distinct(1)=1000, null(1)=50, distinct(2)=7, null(2)=100]
+      │    └── filters
+      │         └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
       └── 1 [type=int]
 
 
