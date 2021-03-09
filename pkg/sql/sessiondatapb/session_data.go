@@ -82,7 +82,7 @@ func (m VectorizeExecMode) String() string {
 	switch m {
 	case VectorizeOff:
 		return "off"
-	case VectorizeOn:
+	case Vectorize201Auto, VectorizeOn:
 		return "on"
 	case VectorizeExperimentalAlways:
 		return "experimental_always"
