@@ -3164,6 +3164,10 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_extract_path": makeBuiltin(jsonProps(), jsonExtractPathImpl),
 
+	"json_extract_path_text": makeBuiltin(jsonProps(), jsonExtractPathTextImpl),
+
+	"jsonb_extract_path_text": makeBuiltin(jsonProps(), jsonExtractPathTextImpl),
+
 	"json_set": makeBuiltin(jsonProps(), jsonSetImpl, jsonSetWithCreateMissingImpl),
 
 	"jsonb_set": makeBuiltin(jsonProps(), jsonSetImpl, jsonSetWithCreateMissingImpl),
@@ -5576,6 +5580,38 @@ var jsonExtractPathImpl = tree.Overload{
 		return &tree.DJSON{JSON: result}, nil
 	},
 	Info:       "Returns the JSON value pointed to by the variadic arguments.",
+	Volatility: tree.VolatilityImmutable,
+}
+
+var jsonExtractPathTextImpl = tree.Overload{
+	Types:      tree.VariadicType{FixedTypes: []*types.T{types.Jsonb}, VarType: types.String},
+	ReturnType: tree.FixedReturnType(types.String),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		j := tree.MustBeDJSON(args[0])
+		path := make([]string, len(args)-1)
+		for i, v := range args {
+			if i == 0 {
+				continue
+			}
+			if v == tree.DNull {
+				return tree.DNull, nil
+			}
+			path[i-1] = string(tree.MustBeDString(v))
+		}
+		result, err := json.FetchPath(j.JSON, path)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil {
+			return tree.DNull, nil
+		}
+		text, err := result.AsText()
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDString(*text), nil
+	},
+	Info:       "Returns the JSON value as text pointed to by the variadic arguments.",
 	Volatility: tree.VolatilityImmutable,
 }
 
