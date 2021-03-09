@@ -1355,9 +1355,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 	if cfg.distSQLMetadataTestEnabled {
 		distSQLKnobs.MetadataTestLevel = execinfra.On
 	}
-	if strings.Compare(cfg.overrideVectorize, "off") != 0 {
-		distSQLKnobs.EnableVectorizedInvariantsChecker = true
-	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 	if cfg.bootstrapVersion != (roachpb.Version{}) {
 		if params.ServerArgs.Knobs.Server == nil {

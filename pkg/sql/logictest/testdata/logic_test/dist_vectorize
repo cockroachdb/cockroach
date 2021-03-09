@@ -146,45 +146,66 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv
 │
 ├ Node 1
 │ └ *colexec.Materializer
-│   └ *colexec.orderedAggregator
-│     └ *colexecbase.distinctChainOps
-│       └ *colexec.ParallelUnorderedSynchronizer
-│         ├ *colexec.countOp
-│         │ └ *colexecbase.simpleProjectOp
-│         │   └ *colexecutils.CancelChecker
-│         │     └ *colfetcher.ColBatchScan
-│         ├ *colrpc.Inbox
-│         ├ *colrpc.Inbox
-│         ├ *colrpc.Inbox
-│         └ *colrpc.Inbox
+│   └ *colexec.InvariantsChecker
+│     └ *colexec.orderedAggregator
+│       └ *colexecbase.distinctChainOps
+│         └ *colexec.InvariantsChecker
+│           └ *colexec.ParallelUnorderedSynchronizer
+│             ├ *colexec.InvariantsChecker
+│             │ └ *colexec.countOp
+│             │   └ *colexec.InvariantsChecker
+│             │     └ *colexecbase.simpleProjectOp
+│             │       └ *colexecutils.CancelChecker
+│             │         └ *colexec.InvariantsChecker
+│             │           └ *colfetcher.ColBatchScan
+│             ├ *colexec.InvariantsChecker
+│             │ └ *colrpc.Inbox
+│             ├ *colexec.InvariantsChecker
+│             │ └ *colrpc.Inbox
+│             ├ *colexec.InvariantsChecker
+│             │ └ *colrpc.Inbox
+│             └ *colexec.InvariantsChecker
+│               └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
-│     └ *colexec.countOp
-│       └ *colexecbase.simpleProjectOp
-│         └ *colexecutils.CancelChecker
-│           └ *colfetcher.ColBatchScan
+│     └ *colexec.InvariantsChecker
+│       └ *colexec.countOp
+│         └ *colexec.InvariantsChecker
+│           └ *colexecbase.simpleProjectOp
+│             └ *colexecutils.CancelChecker
+│               └ *colexec.InvariantsChecker
+│                 └ *colfetcher.ColBatchScan
 ├ Node 3
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
-│     └ *colexec.countOp
-│       └ *colexecbase.simpleProjectOp
-│         └ *colexecutils.CancelChecker
-│           └ *colfetcher.ColBatchScan
+│     └ *colexec.InvariantsChecker
+│       └ *colexec.countOp
+│         └ *colexec.InvariantsChecker
+│           └ *colexecbase.simpleProjectOp
+│             └ *colexecutils.CancelChecker
+│               └ *colexec.InvariantsChecker
+│                 └ *colfetcher.ColBatchScan
 ├ Node 4
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
-│     └ *colexec.countOp
-│       └ *colexecbase.simpleProjectOp
-│         └ *colexecutils.CancelChecker
-│           └ *colfetcher.ColBatchScan
+│     └ *colexec.InvariantsChecker
+│       └ *colexec.countOp
+│         └ *colexec.InvariantsChecker
+│           └ *colexecbase.simpleProjectOp
+│             └ *colexecutils.CancelChecker
+│               └ *colexec.InvariantsChecker
+│                 └ *colfetcher.ColBatchScan
 └ Node 5
   └ *colrpc.Outbox
     └ *colexecutils.deselectorOp
-      └ *colexec.countOp
-        └ *colexecbase.simpleProjectOp
-          └ *colexecutils.CancelChecker
-            └ *colfetcher.ColBatchScan
+      └ *colexec.InvariantsChecker
+        └ *colexec.countOp
+          └ *colexec.InvariantsChecker
+            └ *colexecbase.simpleProjectOp
+              └ *colexecutils.CancelChecker
+                └ *colexec.InvariantsChecker
+                  └ *colfetcher.ColBatchScan
 
 query T
 EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
@@ -192,160 +213,256 @@ EXPLAIN (VEC, VERBOSE) SELECT count(*) FROM kv NATURAL INNER HASH JOIN kv kv2
 │
 ├ Node 1
 │ └ *colexec.Materializer
-│   └ *colexec.orderedAggregator
-│     └ *colexecbase.distinctChainOps
-│       └ *colexec.ParallelUnorderedSynchronizer
-│         ├ *colexec.countOp
-│         │ └ *colexecbase.simpleProjectOp
-│         │   └ *colexec.diskSpillerBase
-│         │     ├ *colexecjoin.hashJoiner
-│         │     │ ├ *colexec.ParallelUnorderedSynchronizer
-│         │     │ │ ├ *colflow.routerOutputOp
-│         │     │ │ │ └ *colflow.HashRouter
-│         │     │ │ │   └ *colexecutils.CancelChecker
-│         │     │ │ │     └ *colfetcher.ColBatchScan
-│         │     │ │ ├ *colrpc.Inbox
-│         │     │ │ ├ *colrpc.Inbox
-│         │     │ │ ├ *colrpc.Inbox
-│         │     │ │ └ *colrpc.Inbox
-│         │     │ └ *colexec.ParallelUnorderedSynchronizer
-│         │     │   ├ *colflow.routerOutputOp
-│         │     │   │ └ *colflow.HashRouter
-│         │     │   │   └ *colexecutils.CancelChecker
-│         │     │   │     └ *colfetcher.ColBatchScan
-│         │     │   ├ *colrpc.Inbox
-│         │     │   ├ *colrpc.Inbox
-│         │     │   ├ *colrpc.Inbox
-│         │     │   └ *colrpc.Inbox
-│         │     ├ *colexec.ParallelUnorderedSynchronizer
-│         │     ├ *colexec.ParallelUnorderedSynchronizer
-│         │     └ *colexec.hashBasedPartitioner
-│         │       ├ *colexec.bufferExportingOperator
-│         │       └ *colexec.bufferExportingOperator
-│         ├ *colrpc.Inbox
-│         ├ *colrpc.Inbox
-│         ├ *colrpc.Inbox
-│         └ *colrpc.Inbox
+│   └ *colexec.InvariantsChecker
+│     └ *colexec.orderedAggregator
+│       └ *colexecbase.distinctChainOps
+│         └ *colexec.InvariantsChecker
+│           └ *colexec.ParallelUnorderedSynchronizer
+│             ├ *colexec.InvariantsChecker
+│             │ └ *colexec.countOp
+│             │   └ *colexec.InvariantsChecker
+│             │     └ *colexecbase.simpleProjectOp
+│             │       └ *colexec.diskSpillerBase
+│             │         ├ *colexecjoin.hashJoiner
+│             │         │ ├ *colexec.InvariantsChecker
+│             │         │ │ └ *colexec.ParallelUnorderedSynchronizer
+│             │         │ │   ├ *colexec.InvariantsChecker
+│             │         │ │   │ └ *colflow.routerOutputOp
+│             │         │ │   │   └ *colflow.HashRouter
+│             │         │ │   │     └ *colexec.InvariantsChecker
+│             │         │ │   │       └ *colexecutils.CancelChecker
+│             │         │ │   │         └ *colexec.InvariantsChecker
+│             │         │ │   │           └ *colfetcher.ColBatchScan
+│             │         │ │   ├ *colexec.InvariantsChecker
+│             │         │ │   │ └ *colrpc.Inbox
+│             │         │ │   ├ *colexec.InvariantsChecker
+│             │         │ │   │ └ *colrpc.Inbox
+│             │         │ │   ├ *colexec.InvariantsChecker
+│             │         │ │   │ └ *colrpc.Inbox
+│             │         │ │   └ *colexec.InvariantsChecker
+│             │         │ │     └ *colrpc.Inbox
+│             │         │ └ *colexec.InvariantsChecker
+│             │         │   └ *colexec.ParallelUnorderedSynchronizer
+│             │         │     ├ *colexec.InvariantsChecker
+│             │         │     │ └ *colflow.routerOutputOp
+│             │         │     │   └ *colflow.HashRouter
+│             │         │     │     └ *colexec.InvariantsChecker
+│             │         │     │       └ *colexecutils.CancelChecker
+│             │         │     │         └ *colexec.InvariantsChecker
+│             │         │     │           └ *colfetcher.ColBatchScan
+│             │         │     ├ *colexec.InvariantsChecker
+│             │         │     │ └ *colrpc.Inbox
+│             │         │     ├ *colexec.InvariantsChecker
+│             │         │     │ └ *colrpc.Inbox
+│             │         │     ├ *colexec.InvariantsChecker
+│             │         │     │ └ *colrpc.Inbox
+│             │         │     └ *colexec.InvariantsChecker
+│             │         │       └ *colrpc.Inbox
+│             │         ├ *colexec.InvariantsChecker
+│             │         ├ *colexec.InvariantsChecker
+│             │         └ *colexec.hashBasedPartitioner
+│             │           ├ *colexec.bufferExportingOperator
+│             │           └ *colexec.bufferExportingOperator
+│             ├ *colexec.InvariantsChecker
+│             │ └ *colrpc.Inbox
+│             ├ *colexec.InvariantsChecker
+│             │ └ *colrpc.Inbox
+│             ├ *colexec.InvariantsChecker
+│             │ └ *colrpc.Inbox
+│             └ *colexec.InvariantsChecker
+│               └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
-│     └ *colexec.countOp
-│       └ *colexecbase.simpleProjectOp
-│         └ *colexec.diskSpillerBase
-│           ├ *colexecjoin.hashJoiner
-│           │ ├ *colexec.ParallelUnorderedSynchronizer
-│           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colflow.routerOutputOp
-│           │ │ │ └ *colflow.HashRouter
-│           │ │ │   └ *colexecutils.CancelChecker
-│           │ │ │     └ *colfetcher.ColBatchScan
-│           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colrpc.Inbox
-│           │ │ └ *colrpc.Inbox
-│           │ └ *colexec.ParallelUnorderedSynchronizer
-│           │   ├ *colrpc.Inbox
-│           │   ├ *colflow.routerOutputOp
-│           │   │ └ *colflow.HashRouter
-│           │   │   └ *colexecutils.CancelChecker
-│           │   │     └ *colfetcher.ColBatchScan
-│           │   ├ *colrpc.Inbox
-│           │   ├ *colrpc.Inbox
-│           │   └ *colrpc.Inbox
-│           ├ *colexec.ParallelUnorderedSynchronizer
-│           ├ *colexec.ParallelUnorderedSynchronizer
-│           └ *colexec.hashBasedPartitioner
-│             ├ *colexec.bufferExportingOperator
-│             └ *colexec.bufferExportingOperator
+│     └ *colexec.InvariantsChecker
+│       └ *colexec.countOp
+│         └ *colexec.InvariantsChecker
+│           └ *colexecbase.simpleProjectOp
+│             └ *colexec.diskSpillerBase
+│               ├ *colexecjoin.hashJoiner
+│               │ ├ *colexec.InvariantsChecker
+│               │ │ └ *colexec.ParallelUnorderedSynchronizer
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colrpc.Inbox
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colflow.routerOutputOp
+│               │ │   │   └ *colflow.HashRouter
+│               │ │   │     └ *colexec.InvariantsChecker
+│               │ │   │       └ *colexecutils.CancelChecker
+│               │ │   │         └ *colexec.InvariantsChecker
+│               │ │   │           └ *colfetcher.ColBatchScan
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colrpc.Inbox
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colrpc.Inbox
+│               │ │   └ *colexec.InvariantsChecker
+│               │ │     └ *colrpc.Inbox
+│               │ └ *colexec.InvariantsChecker
+│               │   └ *colexec.ParallelUnorderedSynchronizer
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colrpc.Inbox
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colflow.routerOutputOp
+│               │     │   └ *colflow.HashRouter
+│               │     │     └ *colexec.InvariantsChecker
+│               │     │       └ *colexecutils.CancelChecker
+│               │     │         └ *colexec.InvariantsChecker
+│               │     │           └ *colfetcher.ColBatchScan
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colrpc.Inbox
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colrpc.Inbox
+│               │     └ *colexec.InvariantsChecker
+│               │       └ *colrpc.Inbox
+│               ├ *colexec.InvariantsChecker
+│               ├ *colexec.InvariantsChecker
+│               └ *colexec.hashBasedPartitioner
+│                 ├ *colexec.bufferExportingOperator
+│                 └ *colexec.bufferExportingOperator
 ├ Node 3
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
-│     └ *colexec.countOp
-│       └ *colexecbase.simpleProjectOp
-│         └ *colexec.diskSpillerBase
-│           ├ *colexecjoin.hashJoiner
-│           │ ├ *colexec.ParallelUnorderedSynchronizer
-│           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colflow.routerOutputOp
-│           │ │ │ └ *colflow.HashRouter
-│           │ │ │   └ *colexecutils.CancelChecker
-│           │ │ │     └ *colfetcher.ColBatchScan
-│           │ │ ├ *colrpc.Inbox
-│           │ │ └ *colrpc.Inbox
-│           │ └ *colexec.ParallelUnorderedSynchronizer
-│           │   ├ *colrpc.Inbox
-│           │   ├ *colrpc.Inbox
-│           │   ├ *colflow.routerOutputOp
-│           │   │ └ *colflow.HashRouter
-│           │   │   └ *colexecutils.CancelChecker
-│           │   │     └ *colfetcher.ColBatchScan
-│           │   ├ *colrpc.Inbox
-│           │   └ *colrpc.Inbox
-│           ├ *colexec.ParallelUnorderedSynchronizer
-│           ├ *colexec.ParallelUnorderedSynchronizer
-│           └ *colexec.hashBasedPartitioner
-│             ├ *colexec.bufferExportingOperator
-│             └ *colexec.bufferExportingOperator
+│     └ *colexec.InvariantsChecker
+│       └ *colexec.countOp
+│         └ *colexec.InvariantsChecker
+│           └ *colexecbase.simpleProjectOp
+│             └ *colexec.diskSpillerBase
+│               ├ *colexecjoin.hashJoiner
+│               │ ├ *colexec.InvariantsChecker
+│               │ │ └ *colexec.ParallelUnorderedSynchronizer
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colrpc.Inbox
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colrpc.Inbox
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colflow.routerOutputOp
+│               │ │   │   └ *colflow.HashRouter
+│               │ │   │     └ *colexec.InvariantsChecker
+│               │ │   │       └ *colexecutils.CancelChecker
+│               │ │   │         └ *colexec.InvariantsChecker
+│               │ │   │           └ *colfetcher.ColBatchScan
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colrpc.Inbox
+│               │ │   └ *colexec.InvariantsChecker
+│               │ │     └ *colrpc.Inbox
+│               │ └ *colexec.InvariantsChecker
+│               │   └ *colexec.ParallelUnorderedSynchronizer
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colrpc.Inbox
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colrpc.Inbox
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colflow.routerOutputOp
+│               │     │   └ *colflow.HashRouter
+│               │     │     └ *colexec.InvariantsChecker
+│               │     │       └ *colexecutils.CancelChecker
+│               │     │         └ *colexec.InvariantsChecker
+│               │     │           └ *colfetcher.ColBatchScan
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colrpc.Inbox
+│               │     └ *colexec.InvariantsChecker
+│               │       └ *colrpc.Inbox
+│               ├ *colexec.InvariantsChecker
+│               ├ *colexec.InvariantsChecker
+│               └ *colexec.hashBasedPartitioner
+│                 ├ *colexec.bufferExportingOperator
+│                 └ *colexec.bufferExportingOperator
 ├ Node 4
 │ └ *colrpc.Outbox
 │   └ *colexecutils.deselectorOp
-│     └ *colexec.countOp
-│       └ *colexecbase.simpleProjectOp
-│         └ *colexec.diskSpillerBase
-│           ├ *colexecjoin.hashJoiner
-│           │ ├ *colexec.ParallelUnorderedSynchronizer
-│           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colrpc.Inbox
-│           │ │ ├ *colflow.routerOutputOp
-│           │ │ │ └ *colflow.HashRouter
-│           │ │ │   └ *colexecutils.CancelChecker
-│           │ │ │     └ *colfetcher.ColBatchScan
-│           │ │ └ *colrpc.Inbox
-│           │ └ *colexec.ParallelUnorderedSynchronizer
-│           │   ├ *colrpc.Inbox
-│           │   ├ *colrpc.Inbox
-│           │   ├ *colrpc.Inbox
-│           │   ├ *colflow.routerOutputOp
-│           │   │ └ *colflow.HashRouter
-│           │   │   └ *colexecutils.CancelChecker
-│           │   │     └ *colfetcher.ColBatchScan
-│           │   └ *colrpc.Inbox
-│           ├ *colexec.ParallelUnorderedSynchronizer
-│           ├ *colexec.ParallelUnorderedSynchronizer
-│           └ *colexec.hashBasedPartitioner
-│             ├ *colexec.bufferExportingOperator
-│             └ *colexec.bufferExportingOperator
+│     └ *colexec.InvariantsChecker
+│       └ *colexec.countOp
+│         └ *colexec.InvariantsChecker
+│           └ *colexecbase.simpleProjectOp
+│             └ *colexec.diskSpillerBase
+│               ├ *colexecjoin.hashJoiner
+│               │ ├ *colexec.InvariantsChecker
+│               │ │ └ *colexec.ParallelUnorderedSynchronizer
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colrpc.Inbox
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colrpc.Inbox
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colrpc.Inbox
+│               │ │   ├ *colexec.InvariantsChecker
+│               │ │   │ └ *colflow.routerOutputOp
+│               │ │   │   └ *colflow.HashRouter
+│               │ │   │     └ *colexec.InvariantsChecker
+│               │ │   │       └ *colexecutils.CancelChecker
+│               │ │   │         └ *colexec.InvariantsChecker
+│               │ │   │           └ *colfetcher.ColBatchScan
+│               │ │   └ *colexec.InvariantsChecker
+│               │ │     └ *colrpc.Inbox
+│               │ └ *colexec.InvariantsChecker
+│               │   └ *colexec.ParallelUnorderedSynchronizer
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colrpc.Inbox
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colrpc.Inbox
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colrpc.Inbox
+│               │     ├ *colexec.InvariantsChecker
+│               │     │ └ *colflow.routerOutputOp
+│               │     │   └ *colflow.HashRouter
+│               │     │     └ *colexec.InvariantsChecker
+│               │     │       └ *colexecutils.CancelChecker
+│               │     │         └ *colexec.InvariantsChecker
+│               │     │           └ *colfetcher.ColBatchScan
+│               │     └ *colexec.InvariantsChecker
+│               │       └ *colrpc.Inbox
+│               ├ *colexec.InvariantsChecker
+│               ├ *colexec.InvariantsChecker
+│               └ *colexec.hashBasedPartitioner
+│                 ├ *colexec.bufferExportingOperator
+│                 └ *colexec.bufferExportingOperator
 └ Node 5
   └ *colrpc.Outbox
     └ *colexecutils.deselectorOp
-      └ *colexec.countOp
-        └ *colexecbase.simpleProjectOp
-          └ *colexec.diskSpillerBase
-            ├ *colexecjoin.hashJoiner
-            │ ├ *colexec.ParallelUnorderedSynchronizer
-            │ │ ├ *colrpc.Inbox
-            │ │ ├ *colrpc.Inbox
-            │ │ ├ *colrpc.Inbox
-            │ │ ├ *colrpc.Inbox
-            │ │ └ *colflow.routerOutputOp
-            │ │   └ *colflow.HashRouter
-            │ │     └ *colexecutils.CancelChecker
-            │ │       └ *colfetcher.ColBatchScan
-            │ └ *colexec.ParallelUnorderedSynchronizer
-            │   ├ *colrpc.Inbox
-            │   ├ *colrpc.Inbox
-            │   ├ *colrpc.Inbox
-            │   ├ *colrpc.Inbox
-            │   └ *colflow.routerOutputOp
-            │     └ *colflow.HashRouter
-            │       └ *colexecutils.CancelChecker
-            │         └ *colfetcher.ColBatchScan
-            ├ *colexec.ParallelUnorderedSynchronizer
-            ├ *colexec.ParallelUnorderedSynchronizer
-            └ *colexec.hashBasedPartitioner
-              ├ *colexec.bufferExportingOperator
-              └ *colexec.bufferExportingOperator
+      └ *colexec.InvariantsChecker
+        └ *colexec.countOp
+          └ *colexec.InvariantsChecker
+            └ *colexecbase.simpleProjectOp
+              └ *colexec.diskSpillerBase
+                ├ *colexecjoin.hashJoiner
+                │ ├ *colexec.InvariantsChecker
+                │ │ └ *colexec.ParallelUnorderedSynchronizer
+                │ │   ├ *colexec.InvariantsChecker
+                │ │   │ └ *colrpc.Inbox
+                │ │   ├ *colexec.InvariantsChecker
+                │ │   │ └ *colrpc.Inbox
+                │ │   ├ *colexec.InvariantsChecker
+                │ │   │ └ *colrpc.Inbox
+                │ │   ├ *colexec.InvariantsChecker
+                │ │   │ └ *colrpc.Inbox
+                │ │   └ *colexec.InvariantsChecker
+                │ │     └ *colflow.routerOutputOp
+                │ │       └ *colflow.HashRouter
+                │ │         └ *colexec.InvariantsChecker
+                │ │           └ *colexecutils.CancelChecker
+                │ │             └ *colexec.InvariantsChecker
+                │ │               └ *colfetcher.ColBatchScan
+                │ └ *colexec.InvariantsChecker
+                │   └ *colexec.ParallelUnorderedSynchronizer
+                │     ├ *colexec.InvariantsChecker
+                │     │ └ *colrpc.Inbox
+                │     ├ *colexec.InvariantsChecker
+                │     │ └ *colrpc.Inbox
+                │     ├ *colexec.InvariantsChecker
+                │     │ └ *colrpc.Inbox
+                │     ├ *colexec.InvariantsChecker
+                │     │ └ *colrpc.Inbox
+                │     └ *colexec.InvariantsChecker
+                │       └ *colflow.routerOutputOp
+                │         └ *colflow.HashRouter
+                │           └ *colexec.InvariantsChecker
+                │             └ *colexecutils.CancelChecker
+                │               └ *colexec.InvariantsChecker
+                │                 └ *colfetcher.ColBatchScan
+                ├ *colexec.InvariantsChecker
+                ├ *colexec.InvariantsChecker
+                └ *colexec.hashBasedPartitioner
+                  ├ *colexec.bufferExportingOperator
+                  └ *colexec.bufferExportingOperator
 
 # Test that SelOnDest flag of coldata.SliceArgs is respected when setting
 # nulls.

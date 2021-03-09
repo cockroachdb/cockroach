@@ -44,27 +44,36 @@ func (s *zeroOperator) Next(context.Context) coldata.Batch {
 type fixedNumTuplesNoInputOp struct {
 	colexecop.ZeroInputNode
 	colexecop.NonExplainable
-	batch         coldata.Batch
-	numTuplesLeft int
+	batch          coldata.Batch
+	numTuplesLeft  int
+	opToInitialize colexecop.Operator
 }
 
 var _ colexecop.Operator = &fixedNumTuplesNoInputOp{}
 
 // NewFixedNumTuplesNoInputOp creates a new Operator which returns batches with
 // no actual columns that have specified number of tuples as the sum of their
-// lengths.
-func NewFixedNumTuplesNoInputOp(allocator *colmem.Allocator, numTuples int) colexecop.Operator {
+// lengths. It takes in an optional colexecop.Operator that will be initialized
+// in Init() but is otherwise ignored. This behavior is needed when the returned
+// operator replaces a tree of operators which are expected to be initialized.
+func NewFixedNumTuplesNoInputOp(
+	allocator *colmem.Allocator, numTuples int, opToInitialize colexecop.Operator,
+) colexecop.Operator {
 	capacity := numTuples
 	if capacity > coldata.BatchSize() {
 		capacity = coldata.BatchSize()
 	}
 	return &fixedNumTuplesNoInputOp{
-		batch:         allocator.NewMemBatchWithFixedCapacity(nil /* types */, capacity),
-		numTuplesLeft: numTuples,
+		batch:          allocator.NewMemBatchWithFixedCapacity(nil /* types */, capacity),
+		numTuplesLeft:  numTuples,
+		opToInitialize: opToInitialize,
 	}
 }
 
 func (s *fixedNumTuplesNoInputOp) Init() {
+	if s.opToInitialize != nil {
+		s.opToInitialize.Init()
+	}
 }
 
 func (s *fixedNumTuplesNoInputOp) Next(context.Context) coldata.Batch {
