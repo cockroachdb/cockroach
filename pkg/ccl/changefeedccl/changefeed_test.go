@@ -1027,6 +1027,77 @@ func TestChangefeedColumnFamily(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestChangefeedAuthorization(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		rootDB := sqlutils.MakeSQLRunner(db)
+
+		rootDB.Exec(t, `create user guest with password 'password'`)
+		rootDB.Exec(t, `create user feedcreator with controlchangefeed password 'hunter2'`)
+
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(`guest`, `password`),
+			Host:   f.Server().ServingSQLAddr(),
+		}
+
+		db2, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		guestDB := sqlutils.MakeSQLRunner(db2)
+		defer db2.Close()
+
+		pgURL = url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(`feedcreator`, `hunter2`),
+			Host:   f.Server().ServingSQLAddr(),
+		}
+
+		db3, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		feedCreatorDB := sqlutils.MakeSQLRunner(db3)
+		defer db3.Close()
+
+		rootDB.Exec(t, `create type type_a as enum ('a');`)
+		rootDB.Exec(t, `create table table_a (id int, type type_a);`)
+
+		var createChangefeedCmd string
+		var gotPastAuth string
+		if strings.Contains(t.Name(), `enterprise`) {
+			createChangefeedCmd = `CREATE CHANGEFEED FOR d.table_a INTO 'kafka://nope'`
+			gotPastAuth = `connecting to kafka`
+		} else {
+			createChangefeedCmd = `EXPERIMENTAL CHANGEFEED FOR d.table_a WITH resolved='1'`
+			gotPastAuth = `missing unit in duration`
+		}
+
+		guestDB.ExpectErr(t, `permission denied to create changefeed`, createChangefeedCmd)
+
+		feedCreatorDB.ExpectErr(t, `user feedcreator does not have SELECT privilege on relation table_a`, createChangefeedCmd)
+
+		// Actual success would hang in sinkless and require cleanup in enterprise, so checking for successful authorization
+		// on a non-root user by asserting we get to an unrelated error
+
+		/*
+			        // This could be tested much more cleanly with the below code,
+					// but https://github.com/cockroachdb/cockroach/issues/49313 deeply breaks
+					// all of our cdc test helpers when running as not admin.
+					// TODO(zinger): Give this test a happier ending once #49313 is fixed.
+					nonRootFeedFactory := cdctest.MakeSinklessFeedFactory(f.Server(), feedCreatorPgURL)
+					nonRootFeed := feed(t, nonRootFeedFactory, createChangefeedCmd)
+					closeFeed(t, nonRootFeed)
+		*/
+
+		rootDB.Exec(t, `grant select on table table_a to feedcreator`)
+		feedCreatorDB.ExpectErr(t, gotPastAuth, createChangefeedCmd)
+
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestChangefeedStopOnSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

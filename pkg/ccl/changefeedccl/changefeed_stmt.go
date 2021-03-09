@@ -174,14 +174,13 @@ func changefeedPlanHook(
 		if err != nil {
 			return errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
 		}
-		for _, desc := range targetDescs {
-			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-				return err
-			}
-		}
+
 		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
 		for _, desc := range targetDescs {
 			if table, isTable := desc.(catalog.TableDescriptor); isTable {
+				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+					return err
+				}
 				targets[table.GetID()] = jobspb.ChangefeedTarget{
 					StatementTimeName: table.GetName(),
 				}
