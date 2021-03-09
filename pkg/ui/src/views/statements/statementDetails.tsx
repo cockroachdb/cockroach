@@ -56,6 +56,7 @@ interface Fraction {
 interface StatementDetailsData {
   nodeId: number;
   implicitTxn: boolean;
+  fullScan: boolean;
   stats: StatementStatistics[];
 }
 
@@ -74,6 +75,7 @@ function coalesceNodeStats(
       byNodeAndImplicitTxn[key] = {
         nodeId: stmt.node_id,
         implicitTxn: stmt.implicit_txn,
+        fullScan: stmt.full_scan,
         stats: [],
       };
     }
@@ -85,6 +87,7 @@ function coalesceNodeStats(
     return {
       label: stmt.nodeId.toString(),
       implicitTxn: stmt.implicitTxn,
+      fullScan: stmt.fullScan,
       stats: combineStatementStats(stmt.stats),
     };
   });
