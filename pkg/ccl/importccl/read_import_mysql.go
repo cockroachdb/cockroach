@@ -516,8 +516,9 @@ func mysqlTableToCockroach(
 				continue
 			}
 			fromCols := i.Source
-			toTable := tree.MakeTableName(
+			toTable := tree.MakeTableNameWithSchema(
 				safeName(i.ReferencedTable.Qualifier),
+				tree.PublicSchemaName,
 				safeName(i.ReferencedTable.Name),
 			)
 			toCols := i.ReferencedColumns
