@@ -78,6 +78,30 @@ var MultiRegionZoneConfigFieldsSet = func() map[tree.Name]struct{} {
 	return ret
 }()
 
+// IsAnyMultiRegionFieldSet returns true if any of the multi-region fields are
+// set on the given zone config, and false if none of them are set.
+func (z *ZoneConfig) IsAnyMultiRegionFieldSet() (bool, string) {
+	if z.GlobalReads != nil {
+		return true, "global_reads"
+	}
+	if z.NumVoters != nil {
+		return true, "num_voters"
+	}
+	if z.NumReplicas != nil {
+		return true, "num_replicas"
+	}
+	if len(z.Constraints) != 0 {
+		return true, "constraints"
+	}
+	if len(z.LeasePreferences) != 0 {
+		return true, "lease_preferences"
+	}
+	if len(z.VoterConstraints) != 0 {
+		return true, "voter_constraints"
+	}
+	return false, ""
+}
+
 // ZoneSpecifierFromID creates a tree.ZoneSpecifier for the zone with the
 // given ID.
 func ZoneSpecifierFromID(
@@ -704,6 +728,24 @@ func (z *ZoneConfig) DiffWithZone(other ZoneConfig, fieldList []tree.Name) (bool
 			}
 		default:
 			return false, "", errors.AssertionFailedf("unknown zone configuration field %q", fieldName)
+		}
+	}
+
+	// Look into all subzones and ensure they're equal across both zone
+	// configs.
+	if len(z.Subzones) != len(other.Subzones) {
+		return false, "subzones", nil
+	}
+	for i, s := range z.Subzones {
+		o := other.Subzones[i]
+		if s.IndexID != o.IndexID {
+			return false, "subzone_index_id", nil
+		}
+		if s.PartitionName != o.PartitionName {
+			return false, "subzone_partition_name", nil
+		}
+		if b, str, err := s.Config.DiffWithZone(o.Config, fieldList); !b {
+			return b, str, err
 		}
 	}
 	return true, "", nil

@@ -545,8 +545,11 @@ COMMIT;`)
 	// and we won't require the explicit force here.
 	testutils.SucceedsSoon(t, func() error {
 		_, err = sqlDB.Exec(`BEGIN;
+  SET override_multi_region_zone_config = true;
 	ALTER DATABASE db ADD REGION "us-east3";
 	ALTER DATABASE db DROP REGION "us-east2" FORCE;
+	ALTER DATABASE db DROP REGION "us-east2";
+  SET override_multi_region_zone_config = false;
 	COMMIT;`)
 		return err
 	})
