@@ -18,7 +18,10 @@ import {
   statementsRetries,
   statementsSql,
   statementsTimeInterval,
-  transactionalPipelining,
+  readFromDisk,
+  planningExecutionTime,
+  contentionTime,
+  readsAndWrites,
   summarize,
   TimestampToMoment,
 } from "src/util";
@@ -87,8 +90,12 @@ export const StatementTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
+            {"Aggregation of all rows "}
+            <Anchor href={readFromDisk} target="_blank">
+              read from disk
+            </Anchor>
             {
-              "Average number of rows read while executing statements with this fingerprint within the last hour or specified "
+              " across all operators for statements with this fingerprint within the last hour or specified "
             }
             <Anchor href={statementsTimeInterval} target="_blank">
               time interval
@@ -96,8 +103,8 @@ export const StatementTableTitle = {
             .
           </p>
           <p>
-            The gray bar indicates the mean number of rows returned. The blue
-            bar indicates one standard deviation from the mean.
+            The gray bar indicates the mean number of rows read from disk. The
+            blue bar indicates one standard deviation from the mean.
           </p>
         </div>
       }
@@ -111,8 +118,12 @@ export const StatementTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
+            {"Aggregation of all bytes "}
+            <Anchor href={readFromDisk} target="_blank">
+              read from disk
+            </Anchor>
             {
-              "Average number of bytes read while executing statements with this fingerprint within the last hour or specified "
+              " across all operators for statements with this fingerprint within the last hour or specified "
             }
             <Anchor href={statementsTimeInterval} target="_blank">
               time interval
@@ -120,8 +131,8 @@ export const StatementTableTitle = {
             .
           </p>
           <p>
-            The gray bar indicates the mean number of rows returned. The blue
-            bar indicates one standard deviation from the mean.
+            The gray bar indicates the mean number of bytes read from disk. The
+            blue bar indicates one standard deviation from the mean.
           </p>
         </div>
       }
@@ -135,8 +146,13 @@ export const StatementTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
-            Average service latency of statements with this fingerprint within
-            the last hour or specified time interval.
+            {"Average "}
+            <Anchor href={planningExecutionTime} target="_blank">
+              planning and execution time
+            </Anchor>
+            {
+              " of statements with this fingerprint within the last hour or specified time interval."
+            }
           </p>
           <p>
             The gray bar indicates the mean latency. The blue bar indicates one
@@ -154,8 +170,13 @@ export const StatementTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
-            Average service latency of transactions with this fingerprint within
-            the last hour or specified time interval.
+            {"Average "}
+            <Anchor href={planningExecutionTime} target="_blank">
+              planning and execution time
+            </Anchor>
+            {
+              " of transactions with this fingerprint within the last hour or specified time interval."
+            }
           </p>
           <p>
             The gray bar indicates the mean latency. The blue bar indicates one
@@ -173,9 +194,11 @@ export const StatementTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
-            {
-              "Average time statements with this fingerprint spent contending on other queries within the last hour or specified "
-            }
+            {"Average time statements with this fingerprint were "}
+            <Anchor href={contentionTime} target="_blank">
+              in contention
+            </Anchor>
+            {" with other transactions within the last hour or specified "}
             <Anchor href={statementsTimeInterval} target="_blank">
               time interval
             </Anchor>
@@ -198,7 +221,7 @@ export const StatementTableTitle = {
         <div className={cx("tooltip__table--title")}>
           <p>
             {
-              "Average of the maximum memory used while executing statements with this fingerprint within the last hour or specified "
+              "Maximum memory used by a statement with this fingerprint at any time during its execution within the last hour or specified "
             }
             <Anchor href={statementsTimeInterval} target="_blank">
               time interval
@@ -221,13 +244,20 @@ export const StatementTableTitle = {
       title={
         <div className={cx("tooltip__table--title")}>
           <p>
+            {"Amount of data "}
+            <Anchor href={readsAndWrites} target="_blank">
+              data transferred over the network
+            </Anchor>
             {
-              "Average number of bytes sent over the network while executing statements with this fingerprint within the last hour or specified "
+              " (e.g., between regions and nodes) for statements with this fingerprint within the last hour or speicifed "
             }
             <Anchor href={statementsTimeInterval} target="_blank">
               time interval
             </Anchor>
             .
+          </p>
+          <p>
+            If this value is 0, the statement was executed on a single node.
           </p>
           <p>
             The gray bar indicates the mean number of bytes sent over the
