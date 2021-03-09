@@ -1929,9 +1929,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	// Not sure whether run in the past and so sees clock uncertainty push.
-	// Must be a DDL as a regular DML would use the lease and not get pushed.
 	if _, err := tx1.Exec(`
-ALTER TABLE t.kv RENAME COLUMN v TO vv;
+INSERT INTO t.kv VALUES ('c', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2459,6 +2458,49 @@ func TestOutstandingLeasesMetric(t *testing.T) {
 	if actual < 3 {
 		t.Errorf("expected at least 3 outstanding leases, found %d", actual)
 	}
+}
+
+// TestHistoricalAcquireDroppedDescriptor ensures that a historical transaction
+// can read an old descriptor.
+func TestHistoricalAcquireDroppedDescriptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const typeName = "foo"
+	seenDrop := make(chan error)
+	recvSeenDrop := seenDrop
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLLeaseManager: &lease.ManagerTestingKnobs{
+					TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
+						name := descpb.GetDescriptorName(descriptor)
+						if name != typeName || seenDrop == nil {
+							return
+						}
+						state := descpb.GetDescriptorState(descriptor)
+						if state == descpb.DescriptorState_DROP {
+							close(seenDrop)
+							seenDrop = nil
+						}
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb.Exec(t, "CREATE TYPE "+typeName+" AS ENUM ('a')")
+	var now string
+	tdb.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&now)
+	tdb.CheckQueryResults(t, `WITH a AS (SELECT 'a'::`+typeName+`) SELECT * FROM a`, [][]string{{"a"}})
+	tdb.CheckQueryResults(t, `WITH a AS (SELECT 'a'::`+typeName+`) SELECT * FROM a AS OF SYSTEM TIME `+now, [][]string{{"a"}})
+	tdb.Exec(t, "DROP TYPE foo")
+	// Make sure that the leases on the old version get dropped.
+	<-recvSeenDrop
+	// This should still work.
+	tdb.CheckQueryResults(t, `WITH a AS (SELECT 'a'::`+typeName+`) SELECT * FROM a AS OF SYSTEM TIME `+now, [][]string{{"a"}})
 }
 
 // Test that attempts to use a descriptor at a timestamp that precedes when

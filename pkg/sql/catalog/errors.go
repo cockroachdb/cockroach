@@ -72,6 +72,12 @@ func NewInactiveDescriptorError(err error) error {
 	return &inactiveDescriptorError{err}
 }
 
+// HasInactiveDescriptorError returns true if the error contains an
+// inactiveDescriptorError.
+func HasInactiveDescriptorError(err error) bool {
+	return errors.HasType(err, (*inactiveDescriptorError)(nil))
+}
+
 // ErrDescriptorNotFound is returned to signal that a descriptor could not be
 // found with the given id.
 var ErrDescriptorNotFound = errors.New("descriptor not found")
