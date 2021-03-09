@@ -105,9 +105,6 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			// if it attempts to use the node which was brought down by chaos.
 			tolerateErrors: args.crdbChaos,
 		}
-		// TODO(dan): Remove this when we fix whatever is causing the "duplicate key
-		// value" errors #34025.
-		tpcc.tolerateErrors = true
 
 		tpcc.install(ctx, c)
 		// TODO(dan,ajwerner): sleeping momentarily before running the workload
