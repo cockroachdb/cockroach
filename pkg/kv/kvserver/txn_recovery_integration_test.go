@@ -274,24 +274,12 @@ func TestTxnClearRangeIntents(t *testing.T) {
 	// implicitly committed above. 😱
 	get := getArgs(keyA)
 	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &get)
+	require.Nil(t, pErr, "error: %s", pErr)
+	require.Nil(t, reply.(*roachpb.GetResponse).Value, "unexpected value for key %q", keyA)
 
-	// When separated intents are enabled, ClearRange will only remove the B key
-	// but not its intent (stored in a separate lock table). This sometimes (but
-	// not always) causes an iterator error during txn recovery, and is a
-	// separate bug in ClearRange:
-	// https://github.com/cockroachdb/cockroach/issues/61606
-	if pErr != nil {
-		require.True(t, store.Engine().IsSeparatedIntentsEnabledForTesting(),
-			"unexpected error with separated intents disabled: %s", pErr.String())
-		require.Contains(t, pErr.String(), "intentIter at intent, but iter not at provisional value")
-
-	} else {
-		require.Nil(t, reply.(*roachpb.GetResponse).Value, "unexpected value for key %q", keyA)
-
-		// Query the original transaction, which should now be aborted.
-		queryTxn := queryTxnArgs(txn.TxnMeta, false)
-		reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &queryTxn)
-		require.Nil(t, pErr, "error: %s", pErr)
-		require.Equal(t, roachpb.ABORTED, reply.(*roachpb.QueryTxnResponse).QueriedTxn.Status)
-	}
+	// Query the original transaction, which should now be aborted.
+	queryTxn := queryTxnArgs(txn.TxnMeta, false)
+	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &queryTxn)
+	require.Nil(t, pErr, "error: %s", pErr)
+	require.Equal(t, roachpb.ABORTED, reply.(*roachpb.QueryTxnResponse).QueriedTxn.Status)
 }
