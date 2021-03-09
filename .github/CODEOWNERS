@@ -23,12 +23,16 @@
 /pkg/cli/                    @cockroachdb/cli-prs
 /pkg/server/                 @cockroachdb/cli-prs
 
+/pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
+/pkg/ccl/streamingccl/       @cockroachdb/cdc-prs
+
 /pkg/ccl/backupccl/          @cockroachdb/bulk-prs
 /pkg/ccl/importccl/          @cockroachdb/bulk-prs
 /pkg/ccl/storageccl/         @cockroachdb/bulk-prs
-/pkg/ccl/changefeedccl/      @cockroachdb/bulk-prs
 /pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
-/pkg/cli/dump.go             @cockroachdb/bulk-prs
+/pkg/cli/userfile.go         @cockroachdb/bulk-prs
+# last-rule-wins so *after* CDC takes most of streamingccl we take ingest pkg.
+/pkg/ccl/streamingccl/streamingest       @cockroachdb/bulk-prs
 
 /pkg/geo                     @cockroachdb/geospatial
 
