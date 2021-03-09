@@ -226,8 +226,7 @@ example [::1]:26257 or [fe80::f6f2:::]:26257.`,
 	DumpMode = FlagInfo{
 		Name: "dump-mode",
 		Description: `
-What to dump. "schema" dumps the schema only. "data" dumps the data only.
-"both" (default) dumps the schema then the data.`,
+What to dump. Only --dump-mode=schema is supported.`,
 	}
 
 	DumpTime = FlagInfo{
