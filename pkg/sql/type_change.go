@@ -44,9 +44,12 @@ import (
 
 // findTransitioningMembers returns a list of all physical representations that
 // are being mutated (either being added or removed) in the current txn by
-// diffing mutated type descriptor against the one read from the cluster.
-func findTransitioningMembers(desc *typedesc.Mutable) [][]byte {
+// diffing mutated type descriptor against the one read from the cluster. The
+// second return parameter indicates whether at least one of the members is
+// being dropped.
+func findTransitioningMembers(desc *typedesc.Mutable) ([][]byte, bool) {
 	var transitioningMembers [][]byte
+	beingDropped := false
 
 	// If the type descriptor was created fresh in the current transaction, then
 	// there is no cluster version to diff against. All members the type is
@@ -58,9 +61,12 @@ func findTransitioningMembers(desc *typedesc.Mutable) [][]byte {
 		for _, member := range desc.EnumMembers {
 			if member.Capability != descpb.TypeDescriptor_EnumMember_ALL {
 				transitioningMembers = append(transitioningMembers, member.PhysicalRepresentation)
+				if member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE {
+					beingDropped = true
+				}
 			}
 		}
-		return transitioningMembers
+		return transitioningMembers, beingDropped
 	}
 
 	// We diff against the cluster version in the general case.
@@ -71,6 +77,10 @@ func findTransitioningMembers(desc *typedesc.Mutable) [][]byte {
 				found = true
 				if member.Capability != clusterMember.Capability {
 					transitioningMembers = append(transitioningMembers, member.PhysicalRepresentation)
+					if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+						member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE {
+						beingDropped = true
+					}
 				}
 				break
 			}
@@ -80,7 +90,7 @@ func findTransitioningMembers(desc *typedesc.Mutable) [][]byte {
 			transitioningMembers = append(transitioningMembers, member.PhysicalRepresentation)
 		}
 	}
-	return transitioningMembers
+	return transitioningMembers, beingDropped
 }
 
 // writeTypeSchemaChange should be called on a mutated type descriptor to ensure that
@@ -91,7 +101,7 @@ func (p *planner) writeTypeSchemaChange(
 ) error {
 	// Check if there is an active job for this type, otherwise create one.
 	job, jobExists := p.extendedEvalCtx.SchemaChangeJobCache[typeDesc.ID]
-	transitioningMembers := findTransitioningMembers(typeDesc)
+	transitioningMembers, beingDropped := findTransitioningMembers(typeDesc)
 	if jobExists {
 		// Update it.
 		newDetails := jobspb.TypeSchemaChangeDetails{
@@ -108,6 +118,20 @@ func (p *planner) writeTypeSchemaChange(
 		); err != nil {
 			return err
 		}
+		if err := job.SetNonCancelable(ctx, p.txn,
+			func(ctx context.Context, nonCancelable bool) bool {
+				// If the job is already cancelable, then it should stay as such
+				// regardless of if a member is being dropped or not in the current
+				// statement.
+				if !nonCancelable {
+					return nonCancelable
+				}
+				// Type change jobs are non-cancelable unless an enum member is being
+				// dropped.
+				return !beingDropped
+			}); err != nil {
+			return err
+		}
 		log.Infof(ctx, "job %d: updated with type change for type %d", job.ID(), typeDesc.ID)
 	} else {
 		// Or, create a new job.
@@ -120,8 +144,9 @@ func (p *planner) writeTypeSchemaChange(
 				TransitioningMembers: transitioningMembers,
 			},
 			Progress: jobspb.TypeSchemaChangeProgress{},
-			// Type change jobs are not cancellable.
-			NonCancelable: true,
+			// Type change jobs in general are not cancelable, unless they include
+			// a transition that drops an enum member.
+			NonCancelable: !beingDropped,
 		}
 		newJob, err := p.extendedEvalCtx.QueueJob(ctx, jobRecord)
 		if err != nil {
