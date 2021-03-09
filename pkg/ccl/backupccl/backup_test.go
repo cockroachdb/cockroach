@@ -2749,6 +2749,8 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 
 			// Create a database with a type.
 			sqlDB.Exec(t, `
+SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
+SET enable_drop_enum_value = true;
 CREATE DATABASE d;
 CREATE TYPE d.greeting AS ENUM ('hello', 'howdy', 'hi');
 `)
