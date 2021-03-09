@@ -1512,6 +1512,7 @@ func indexDefFromDescriptor(
 		if err != nil {
 			return "", err
 		}
+		parentSchemaName := tableLookup.getSchemaName(parentTable)
 		parentDb, err := tableLookup.getDatabaseByID(parentTable.GetParentID())
 		if err != nil {
 			return "", err
@@ -1522,7 +1523,9 @@ func indexDefFromDescriptor(
 		}
 		fields := index.ColumnNames[:sharedPrefixLen]
 		intlDef := &tree.InterleaveDef{
-			Parent: tree.MakeTableName(tree.Name(parentDb.GetName()),
+			Parent: tree.MakeTableNameWithSchema(
+				tree.Name(parentDb.GetName()),
+				tree.Name(parentSchemaName),
 				tree.Name(parentTable.GetName())),
 			Fields: make(tree.NameList, len(fields)),
 		}
