@@ -132,9 +132,9 @@ func (s *statementsValue) Set(value string) error {
 type dumpMode int
 
 const (
-	dumpBoth dumpMode = iota
+	//dumpNone is set by default and will error if it is set.
+	dumpNone dumpMode = iota
 	dumpSchemaOnly
-	dumpDataOnly
 )
 
 // Type implements the pflag.Value interface.
@@ -143,12 +143,8 @@ func (m *dumpMode) Type() string { return "string" }
 // String implements the pflag.Value interface.
 func (m *dumpMode) String() string {
 	switch *m {
-	case dumpBoth:
-		return "both"
 	case dumpSchemaOnly:
 		return "schema"
-	case dumpDataOnly:
-		return "data"
 	}
 	return ""
 }
@@ -156,12 +152,9 @@ func (m *dumpMode) String() string {
 // Set implements the pflag.Value interface.
 func (m *dumpMode) Set(s string) error {
 	switch s {
-	case "both":
-		*m = dumpBoth
 	case "schema":
 		*m = dumpSchemaOnly
-	case "data":
-		*m = dumpDataOnly
+
 	default:
 		return fmt.Errorf("invalid value for --dump-mode: %s", s)
 	}
