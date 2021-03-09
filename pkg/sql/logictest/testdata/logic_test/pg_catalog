@@ -3130,6 +3130,24 @@ select * from pg_indexes where indexname = 'regression_46450_idx'
 ----
 1136917443  public  regression_46450  regression_46450_idx  NULL  CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json ASC)
 
+# Make sure indexdef uses user-defined schemas.
+
+statement ok
+CREATE SCHEMA test_schema;
+CREATE TABLE test_schema.test (
+  a INT PRIMARY KEY,
+  b INT
+);
+CREATE index on test_schema.test(b)
+
+query TTTT colnames
+SELECT schemaname, tablename, indexname, indexdef
+FROM pg_indexes WHERE schemaname='test_schema' and tablename='test'
+----
+schemaname   tablename  indexname   indexdef
+test_schema  test       primary     CREATE UNIQUE INDEX "primary" ON test.test_schema.test USING btree (a ASC)
+test_schema  test       test_b_idx  CREATE INDEX test_b_idx ON test.test_schema.test USING btree (b ASC)
+
 # Make sure that selecting from vtables with indexes in other dbs properly
 # hides descriptors that should be hidden.
 
@@ -3241,13 +3259,13 @@ CREATE TABLE jt (a INT PRIMARY KEY); INSERT INTO jt VALUES(1); INSERT INTO jt VA
 query ITT
 SELECT a, oid, relname FROM jt INNER LOOKUP JOIN pg_class ON a::oid=oid
 ----
-100  100  jt
+102  102  jt
 
 query ITT
 SELECT a, oid, relname FROM jt LEFT OUTER LOOKUP JOIN pg_class ON a::oid=oid
 ----
 1    NULL  NULL
-100  100   jt
+102  102   jt
 
 subtest regression_49207
 statement ok
