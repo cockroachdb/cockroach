@@ -384,6 +384,13 @@ var experimentalDistSQLPlanningClusterMode = settings.RegisterEnumSetting(
 // the VectorizeClusterMode below.
 const VectorizeClusterSettingName = "sql.defaults.vectorize"
 
+// deprecatedVectorize201Auto is the VectorizeExecMode value in which supported
+// queries only with streaming operators are run using the columnar execution.
+// This was the default in 20.1 and was called '201auto' in 20.2, and it exists
+// only in order to handle the upgrade from 20.2 to 21.1 clusters without an
+// error.
+const deprecatedVectorize201Auto = 1
+
 // VectorizeClusterMode controls the cluster default for when automatic
 // vectorization is enabled.
 var VectorizeClusterMode = settings.RegisterEnumSetting(
@@ -392,6 +399,7 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"on",
 	map[int64]string{
 		int64(sessiondatapb.VectorizeOff): "off",
+		int64(deprecatedVectorize201Auto): "on",
 		int64(sessiondatapb.VectorizeOn):  "on",
 	},
 )
