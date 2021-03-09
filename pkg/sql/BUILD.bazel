@@ -400,7 +400,7 @@ go_library(
 
 go_test(
     name = "sql_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "admin_audit_log_test.go",
         "alter_column_type_test.go",
@@ -495,7 +495,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":sql"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",

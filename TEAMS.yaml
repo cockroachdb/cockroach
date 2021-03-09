@@ -78,6 +78,14 @@ cockroachdb/bulk-io:
   email: bulk-io@cockroachlabs.com
   slack: bulk-io
   triage_column_id: 3097123
+cockroachdb/cdc-prs: # TODO: remove
+  email: cdc@cockroachlabs.com
+  slack: cdc
+  triage_column_id: 3570120
+cockroachdb/cdc-io:
+  email: cdc@cockroachlabs.com
+  slack: cdc
+  triage_column_id: 3570120
 cockroachdb/cli-prs:
   email: TODO@cockroachlabs.com
   slack: cli
