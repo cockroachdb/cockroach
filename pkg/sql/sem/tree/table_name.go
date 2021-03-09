@@ -68,23 +68,10 @@ func (t *TableName) Equals(other *TableName) bool {
 // tableExpr implements the TableExpr interface.
 func (*TableName) tableExpr() {}
 
-// MakeTableName creates a new table name qualified with just a schema.
-func MakeTableName(db, tbl Name) TableName {
-	return TableName{objName{
-		ObjectName: tbl,
-		ObjectNamePrefix: ObjectNamePrefix{
-			CatalogName:     db,
-			SchemaName:      PublicSchemaName,
-			ExplicitSchema:  true,
-			ExplicitCatalog: true,
-		},
-	}}
-}
-
-// NewTableName creates a new table name qualified with a given
-// catalog and the public schema.
-func NewTableName(db, tbl Name) *TableName {
-	tn := MakeTableName(db, tbl)
+// NewTableNameWithSchema creates a new table name qualified with a given
+// catalog and schema.
+func NewTableNameWithSchema(db, sc, tbl Name) *TableName {
+	tn := MakeTableNameWithSchema(db, sc, tbl)
 	return &tn
 }
 
