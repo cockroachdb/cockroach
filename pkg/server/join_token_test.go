@@ -11,13 +11,10 @@
 package server
 
 import (
-	"io/ioutil"
 	"math/rand"
-	"path"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -54,14 +51,11 @@ func TestGenerateJoinToken(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tempDir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-	caCertFile := path.Join(tempDir, security.CACertFilename())
-	caCert := []byte("foobar")
-	require.NoError(t, ioutil.WriteFile(caCertFile, caCert, 0600))
+	cm, err := security.NewCertificateManager(security.EmbeddedCertsDir, security.CommandTLSSettings{})
+	require.NoError(t, err)
 
-	token, err := generateJoinToken(tempDir)
+	token, err := generateJoinToken(cm)
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
-	require.True(t, token.verifySignature(caCert))
+	require.True(t, token.verifySignature(cm.CACert().FileContents))
 }

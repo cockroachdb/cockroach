@@ -41,19 +41,13 @@ type joinToken struct {
 }
 
 // Generates a new join token, and signs it with the CA cert in sslCertsDir.
-func generateJoinToken(sslCertsDir string) (joinToken, error) {
+func generateJoinToken(cm *security.CertificateManager) (joinToken, error) {
 	var jt joinToken
 
 	jt.tokenID = uuid.MakeV4()
 	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	jt.sharedSecret = randutil.RandBytes(r, joinTokenSecretLen)
-
-	certLocator := security.MakeCertsLocator(sslCertsDir)
-	caCert, err := loadCertificateFile(certLocator.CACertPath())
-	if err != nil {
-		return joinToken{}, errors.Wrap(err, "could not open CA cert")
-	}
-	jt.sign(caCert)
+	jt.sign(cm.CACert().FileContents)
 	return jt, nil
 }
 
