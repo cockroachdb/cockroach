@@ -3519,7 +3519,6 @@ func BenchmarkNodelocalImport(b *testing.B) {
 // BenchmarkUserfileImport-16    	       1	4060204527 ns/op	   6.68 MB/s
 // BenchmarkUserfileImport-16    	       1	4627419761 ns/op	   5.86 MB/s
 func BenchmarkUserfileImport(b *testing.B) {
-	skip.WithIssue(b, 59126)
 	benchUserUpload(b, "userfile://defaultdb.public.root")
 }
 
