@@ -2015,6 +2015,14 @@ WHERE proname='json_extract_path'
 proname            provariadic  pronargs  prorettype  proargtypes  proargmodes
 json_extract_path  25           2         3802        3802 25      {i,v}
 
+query TOIOTT colnames
+SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
+FROM pg_catalog.pg_proc
+WHERE proname='json_extract_path_text'
+----
+proname                 provariadic  pronargs  prorettype  proargtypes  proargmodes
+json_extract_path_text  25           2         25          3802 25      {i,v}
+
 user testuser
 
 # Should be globally visible
