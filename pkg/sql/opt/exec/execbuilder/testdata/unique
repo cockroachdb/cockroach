@@ -2505,7 +2505,7 @@ vectorized: true
 │               │
 │               └── • scan
 │                     columns: (r, a, b, c)
-│                     estimated row count: 1 (0.10% of the table)
+│                     estimated row count: 1 (0.10% of the table; stats collected <hidden> ago)
 │                     table: uniq_partial_enum@primary
 │                     spans: /"@"/2/0-/"@"/2/1 /"@"/2/2/1-/"@"/2/3/2 /"\x80"/2/0-/"\x80"/2/1 /"\x80"/2/2/1-/"\x80"/2/3/2 /"\xc0"/2/0-/"\xc0"/2/1 /"\xc0"/2/2/1-/"\xc0"/2/3/2
 │                     parallel

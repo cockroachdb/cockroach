@@ -28,6 +28,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/timeutil",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dustin_go_humanize//:go-humanize",

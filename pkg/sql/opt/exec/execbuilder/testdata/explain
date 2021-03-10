@@ -1476,7 +1476,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 1,000,000 (100% of the table)
+  estimated row count: 1,000,000 (100% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: FULL SCAN
 
@@ -1487,7 +1487,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 150,000 (15% of the table)
+  estimated row count: 150,000 (15% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /150000]
 
@@ -1498,7 +1498,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 20,000 (2.0% of the table)
+  estimated row count: 20,000 (2.0% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /20000]
 
@@ -1509,7 +1509,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 1,234 (0.12% of the table)
+  estimated row count: 1,234 (0.12% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /1234]
 
@@ -1520,7 +1520,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 980 (0.10% of the table)
+  estimated row count: 980 (0.10% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /980]
 
@@ -1531,7 +1531,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 100 (0.01% of the table)
+  estimated row count: 100 (0.01% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /100]
 
@@ -1542,7 +1542,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 99 (<0.01% of the table)
+  estimated row count: 99 (<0.01% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /99]
 
@@ -1553,7 +1553,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 1 (<0.01% of the table)
+  estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
   table: percent@primary
   spans: [/1 - /1]
 
