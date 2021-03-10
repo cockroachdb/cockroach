@@ -121,6 +121,7 @@ go_test(
         "version_test.go",
     ],
     embed = [":roachpb"],
+    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cli/exit",
         "//pkg/keys",
