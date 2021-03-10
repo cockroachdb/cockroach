@@ -168,9 +168,7 @@ func (c *crossJoiner) consumeInputs(ctx context.Context) {
 	if needLeftTuples {
 		for {
 			batch := c.inputOne.Next(ctx)
-			if err := c.left.tuples.Enqueue(ctx, batch); err != nil {
-				colexecerror.InternalError(err)
-			}
+			c.left.tuples.Enqueue(ctx, batch)
 			if batch.Length() == 0 {
 				break
 			}
@@ -180,9 +178,7 @@ func (c *crossJoiner) consumeInputs(ctx context.Context) {
 	if needRightTuples {
 		for {
 			batch := c.inputTwo.Next(ctx)
-			if err := c.right.tuples.Enqueue(ctx, batch); err != nil {
-				colexecerror.InternalError(err)
-			}
+			c.right.tuples.Enqueue(ctx, batch)
 			if batch.Length() == 0 {
 				break
 			}
