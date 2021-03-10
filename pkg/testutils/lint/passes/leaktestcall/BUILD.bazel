@@ -15,10 +15,13 @@ go_library(
 go_test(
     name = "leaktestcall_test",
     srcs = ["leaktestcall_test.go"],
-    data = glob(["testdata/**"]),
-    tags = ["broken_in_bazel"],
+    data = glob(["testdata/**"]) + [
+        "@go_sdk//:files",
+    ],
     deps = [
         ":leaktestcall",
+        "//pkg/build/bazel",
+        "//pkg/testutils",
         "//pkg/testutils/skip",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],
