@@ -3444,6 +3444,7 @@ func (dsp *DistSQLPlanner) createPlanForExport(
 		Options:          n.csvOpts,
 		ChunkRows:        int64(n.chunkRows),
 		CompressionCodec: n.fileCompression,
+		User:             planCtx.planner.User(),
 	}}
 
 	resTypes := make([]*types.T, len(colinfo.ExportColumns))
