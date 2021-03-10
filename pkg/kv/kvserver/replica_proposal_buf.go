@@ -223,6 +223,7 @@ type proposer interface {
 	withGroupLocked(func(proposerRaft) error) error
 	registerProposalLocked(*ProposalData)
 	leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderInfo
+	ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool
 	// rejectProposalWithRedirectLocked rejects a proposal and redirects the
 	// proposer to try it on another node. This is used to sometimes reject lease
 	// acquisitions when another replica is the leader; the intended consequence
@@ -562,18 +563,26 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		//
 		// A special case is when the leader is known, but is ineligible to get the
 		// lease. In that case, we have no choice but to continue with the proposal.
+		//
+		// Lease extensions for a currently held lease always go through, to
+		// keep the lease alive until the normal lease transfer mechanism can
+		// colocate it with the leader.
 		if !leaderInfo.iAmTheLeader && p.Request.IsLeaseRequest() {
 			leaderKnownAndEligible := leaderInfo.leaderKnown && leaderInfo.leaderEligibleForLease
-			if leaderKnownAndEligible && !b.testing.allowLeaseProposalWhenNotLeader {
+			ownsCurrentLease := b.p.ownsValidLeaseRLocked(ctx, b.clock.NowAsClockTimestamp())
+			if leaderKnownAndEligible && !ownsCurrentLease && !b.testing.allowLeaseProposalWhenNotLeader {
 				log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 					leaderInfo.leader)
 				b.p.rejectProposalWithRedirectLocked(ctx, p, leaderInfo.leader)
 				p.tok.doneIfNotMovedLocked(ctx)
 				continue
 			}
-			// If the leader is not known, or if it is known but it's ineligible for
-			// the lease, continue with the proposal as explained above.
-			if !leaderInfo.leaderKnown {
+			// If the leader is not known, or if it is known but it's ineligible
+			// for the lease, continue with the proposal as explained above. We
+			// also send lease extensions for an existing leaseholder.
+			if ownsCurrentLease {
+				log.VEventf(ctx, 2, "proposing lease extension even though we're not the leader; we hold the current lease")
+			} else if !leaderInfo.leaderKnown {
 				log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is unknown")
 			} else {
 				log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is ineligible")
@@ -1064,6 +1073,10 @@ func (rp *replicaProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLead
 		iAmTheLeader:           iAmTheLeader,
 		leaderEligibleForLease: leaderEligibleForLease,
 	}
+}
+
+func (rp *replicaProposer) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool {
+	return (*Replica)(rp).ownsValidLeaseRLocked(ctx, now)
 }
 
 // rejectProposalWithRedirectLocked is part of the proposer interface.
