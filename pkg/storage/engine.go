@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -859,6 +860,69 @@ func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, err
 		return nil
 	})
 	return kvs, err
+}
+
+// ScanIntents scans up to max intents in the range [start, end). This uses an
+// MVCC iterator to support both interleaved and separated intents, since we
+// currently do not migrate interleaved to separated intents and thus can't know
+// when it is safe to only scan the lock table.
+//
+// TODO(erikgrinaker): Maybe take a context here and return early if canceled?
+func ScanIntents(reader Reader, start, end roachpb.Key, max int64) ([]roachpb.Intent, error) {
+	var (
+		intents []roachpb.Intent
+		meta    enginepb.MVCCMetadata
+	)
+	err := reader.MVCCIterate(start, end, MVCCKeyAndIntentsIterKind, func(kv MVCCKeyValue) error {
+		if max != 0 && int64(len(intents)) >= max {
+			return iterutil.StopIteration()
+		}
+		if !kv.Key.Timestamp.IsEmpty() {
+			return nil
+		}
+		if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+			return err
+		}
+		intents = append(intents, roachpb.MakeIntent(meta.Txn, kv.Key.Key))
+		return nil
+	})
+	return intents, err
+}
+
+// ScanSeparatedIntents is like ScanIntents, but only uses the lock table. It
+// should be used when the caller is certain that no interleaved intents can
+// exist in the range, only separated intents.
+//
+// TODO(erikgrinaker): When we are fully migrated to separated intents, this
+// should replace ScanIntents.
+func ScanSeparatedIntents(
+	reader Reader, start, end roachpb.Key, max int64,
+) ([]roachpb.Intent, error) {
+	var (
+		intents []roachpb.Intent
+		meta    enginepb.MVCCMetadata
+	)
+	ltStart, _ := keys.LockTableSingleKey(start, nil)
+	ltEnd, _ := keys.LockTableSingleKey(end, nil)
+	iter := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	defer iter.Close()
+
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: ltStart})
+	for ; valid && (max == 0 || int64(len(intents)) < max); valid, err = iter.NextEngineKey() {
+		key, err := iter.EngineKey()
+		if err != nil {
+			return nil, err
+		}
+		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		if err != nil {
+			return nil, err
+		}
+		if err = protoutil.Unmarshal(iter.Value(), &meta); err != nil {
+			return nil, err
+		}
+		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
+	}
+	return intents, err
 }
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.

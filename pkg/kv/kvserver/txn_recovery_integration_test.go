@@ -200,12 +200,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 // TestTxnClearRangeIntents tests whether a ClearRange call over a range
 // containing a write intent from an implicitly committed txn can cause the
 // intent to be removed such that txn recovery ends up rolling back a committed
-// txn. 😱 This isn't strictly a bug, since ClearRange documents this and
-// requires the caller to ensure there are no intents in the cleared range. This
-// test verifies the behavior.
-//
-// This is a footgun, ClearRange should make sure txn invariants are never
-// violated. For ideas, see:
+// txn (including any values outside of the cleared range). Regression test for:
 // https://github.com/cockroachdb/cockroach/issues/46764
 func TestTxnClearRangeIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -268,18 +263,33 @@ func TestTxnClearRangeIntents(t *testing.T) {
 	_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &clearRange)
 	require.Nil(t, pErr, "error: %s", pErr)
 
-	// Try to read A. This should have been committed, but because we cleared
-	// B's intent above txn recovery will fail to find an in-flight write for B
-	// and thus roll back the entire txn (including A) even though it has been
-	// implicitly committed above. 😱
+	// Reading A should succeed, but B should be gone.
 	get := getArgs(keyA)
 	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &get)
 	require.Nil(t, pErr, "error: %s", pErr)
-	require.Nil(t, reply.(*roachpb.GetResponse).Value, "unexpected value for key %q", keyA)
+	value, err := reply.(*roachpb.GetResponse).Value.GetBytes()
+	require.NoError(t, err)
+	require.Equal(t, value, valueA)
 
-	// Query the original transaction, which should now be aborted.
+	get = getArgs(keyB)
+	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &get)
+	require.Nil(t, pErr, "error: %s", pErr)
+	require.Nil(t, reply.(*roachpb.GetResponse).Value, "unexpected value for B")
+
+	// Query the original transaction, which should now be committed.
 	queryTxn := queryTxnArgs(txn.TxnMeta, false)
 	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &queryTxn)
 	require.Nil(t, pErr, "error: %s", pErr)
-	require.Equal(t, roachpb.ABORTED, reply.(*roachpb.QueryTxnResponse).QueriedTxn.Status)
+	require.Equal(t, roachpb.COMMITTED, reply.(*roachpb.QueryTxnResponse).QueriedTxn.Status)
+
+	// Intents for A and B should also both be gone.
+	queryIntent = queryIntentArgs(keyA, txn.TxnMeta, false)
+	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &queryIntent)
+	require.Nil(t, pErr, "error: %s", pErr)
+	require.False(t, reply.(*roachpb.QueryIntentResponse).FoundIntent, "unexpected intent for %q", keyA)
+
+	queryIntent = queryIntentArgs(keyB, txn.TxnMeta, false)
+	reply, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{}, &queryIntent)
+	require.Nil(t, pErr, "error: %s", pErr)
+	require.False(t, reply.(*roachpb.QueryIntentResponse).FoundIntent, "unexpected intent for %q", keyB)
 }
