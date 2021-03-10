@@ -391,8 +391,9 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"default vectorize mode",
 	"on",
 	map[int64]string{
-		int64(sessiondatapb.VectorizeOff): "off",
-		int64(sessiondatapb.VectorizeOn):  "on",
+		int64(sessiondatapb.VectorizeOff):               "off",
+		int64(sessiondatapb.DeprecatedVectorize201Auto): "on",
+		int64(sessiondatapb.VectorizeOn):                "on",
 	},
 )
 
