@@ -51,6 +51,8 @@ type testProposer struct {
 	// If not nil, this is called by RejectProposalWithRedirectLocked(). If nil,
 	// RejectProposalWithRedirectLocked() panics.
 	onRejectProposalWithRedirectLocked func(prop *ProposalData, redirectTo roachpb.ReplicaID)
+	// ownsValidLease is returned by ownsValidLeaseRLocked()
+	ownsValidLease bool
 
 	// leaderReplicaInDescriptor is set if the leader (as indicated by raftGroup)
 	// is known, and that leader is part of the range's descriptor (as seen by the
@@ -146,6 +148,10 @@ func (t *testProposer) withGroupLocked(fn func(proposerRaft) error) error {
 
 func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
+}
+
+func (t *testProposer) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool {
+	return t.ownsValidLease
 }
 
 func (t *testProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderInfo {
@@ -560,6 +566,8 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		// Set to simulate situations where the local replica is so behind that the
 		// leader is not even part of the range descriptor.
 		leaderNotInRngDesc bool
+		// If true, the follower has a valid lease.
+		ownsValidLease bool
 
 		expRejection bool
 	}{
@@ -577,6 +585,15 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			leader: self + 1,
 			// Rejection - a follower can't request a lease.
 			expRejection: true,
+		},
+		{
+			name:  "follower, lease extension despite known eligible leader",
+			state: raft.StateFollower,
+			// Someone else is leader, but we're the leaseholder.
+			leader:         self + 1,
+			ownsValidLease: true,
+			// No rejection of lease extensions.
+			expRejection: false,
 		},
 		{
 			name:  "follower, known ineligible leader",
@@ -643,6 +660,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			p.raftGroup = r
 			p.leaderReplicaInDescriptor = !tc.leaderNotInRngDesc
 			p.leaderReplicaType = tc.leaderRepType
+			p.ownsValidLease = tc.ownsValidLease
 
 			var b propBuf
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
