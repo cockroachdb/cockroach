@@ -48,6 +48,6 @@ for file in $LOGICTESTS; do
           PKG=./pkg/sql/logictest \
           TESTS='^TestLogic/local/'${file}'$$' \
           TESTTIMEOUT="${TESTTIMEOUT}" \
-          TESTFLAGS='-disable-opt-rule-probability=0.5' \
+          TESTFLAGS='-disable-opt-rule-probability=0.5'
     fi
 done
