@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1586,6 +1587,64 @@ func TestFS(t *testing.T) {
 			// descendant files.
 			require.NoError(t, fs.RemoveAll(path("a/b")))
 			expectLS(path("a"), []string{})
+		})
+	}
+}
+
+func TestScanSeparatedIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	maxKey := keys.MaxKey
+
+	keys := []roachpb.Key{
+		roachpb.Key("a"),
+		roachpb.Key("b"),
+		roachpb.Key("c"),
+	}
+	testcases := map[string]struct {
+		from          roachpb.Key
+		to            roachpb.Key
+		max           int64
+		expectIntents []roachpb.Key
+	}{
+		"no keys":    {keys[0], keys[0], 0, []roachpb.Key{}},
+		"one key":    {keys[0], keys[1], 0, keys[0:1]},
+		"two keys":   {keys[0], keys[2], 0, keys[0:2]},
+		"all keys":   {keys[0], maxKey, 0, keys},
+		"nil end":    {keys[0], nil, 0, []roachpb.Key{}},
+		"limit keys": {keys[0], maxKey, 2, keys[0:2]},
+	}
+
+	for name, enableSeparatedIntents := range map[string]bool{"interleaved": false, "separated": true} {
+		t.Run(name, func(t *testing.T) {
+			version := clusterversion.ByKey(clusterversion.SeparatedIntents)
+			settings := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
+			SeparatedIntentsEnabled.Override(&settings.SV, enableSeparatedIntents)
+			eng := newPebbleInMem(ctx, roachpb.Attributes{}, 1<<20, settings)
+			defer eng.Close()
+
+			for _, key := range keys {
+				err := MVCCPut(ctx, eng, nil, key, txn1.ReadTimestamp, roachpb.Value{RawBytes: key}, txn1)
+				require.NoError(t, err)
+			}
+
+			for name, tc := range testcases {
+				tc := tc
+				t.Run(name, func(t *testing.T) {
+					intents, err := ScanSeparatedIntents(eng, tc.from, tc.to, tc.max)
+					require.NoError(t, err)
+					if enableSeparatedIntents {
+						require.Len(t, intents, len(tc.expectIntents), "unexpected number of separated intents")
+						for i, intent := range intents {
+							require.Equal(t, keys[i], intent.Key)
+						}
+					} else {
+						require.Empty(t, intents)
+					}
+				})
+			}
 		})
 	}
 }
