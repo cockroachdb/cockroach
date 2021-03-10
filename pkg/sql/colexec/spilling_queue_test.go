@@ -96,7 +96,7 @@ func TestSpillingQueue(t *testing.T) {
 			ctx := context.Background()
 			for {
 				b = op.Next(ctx)
-				require.NoError(t, q.enqueue(ctx, b))
+				q.enqueue(ctx, b)
 				if b.Length() == 0 {
 					break
 				}

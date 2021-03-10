@@ -119,14 +119,14 @@ func newRewindableSpillingQueue(
 	return q
 }
 
-func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error {
+func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) {
 	if batch.Length() == 0 {
 		if q.diskQueue != nil {
 			if err := q.diskQueue.Enqueue(ctx, batch); err != nil {
-				return err
+				handleErrorFromDiskQueue(err)
 			}
 		}
-		return nil
+		return
 	}
 
 	if q.numOnDiskItems > 0 || q.unlimitedAllocator.Used() > q.maxMemoryLimit || q.numInMemoryItems == len(q.items) {
@@ -136,14 +136,14 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 		// might be wrong). The tail of the queue might also already be on disk, in
 		// which case that is where the batch must be enqueued to maintain order.
 		if err := q.maybeSpillToDisk(ctx); err != nil {
-			return err
+			handleErrorFromDiskQueue(err)
 		}
 		q.unlimitedAllocator.ReleaseBatch(batch)
 		if err := q.diskQueue.Enqueue(ctx, batch); err != nil {
-			return err
+			handleErrorFromDiskQueue(err)
 		}
 		q.numOnDiskItems++
-		return nil
+		return
 	}
 
 	q.items[q.curTailIdx] = batch
@@ -152,7 +152,6 @@ func (q *spillingQueue) enqueue(ctx context.Context, batch coldata.Batch) error 
 		q.curTailIdx = 0
 	}
 	q.numInMemoryItems++
-	return nil
 }
 
 func (q *spillingQueue) dequeue(ctx context.Context) (coldata.Batch, error) {

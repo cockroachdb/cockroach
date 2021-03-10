@@ -381,12 +381,11 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 
 	if batch.Length() == 0 {
 		if o.mu.pendingBatch != nil {
-			err := o.mu.data.enqueue(ctx, o.mu.pendingBatch)
-			if err == nil && o.testingKnobs.addBatchTestInducedErrorCb != nil {
-				err = o.testingKnobs.addBatchTestInducedErrorCb()
-			}
-			if err != nil {
-				colexecerror.InternalError(err)
+			o.mu.data.enqueue(ctx, o.mu.pendingBatch)
+			if o.testingKnobs.addBatchTestInducedErrorCb != nil {
+				if err := o.testingKnobs.addBatchTestInducedErrorCb(); err != nil {
+					colexecerror.InternalError(err)
+				}
 			}
 		} else if o.testingKnobs.addBatchTestInducedErrorCb != nil {
 			// This is the last chance to run addBatchTestInducedErorCb if it has
@@ -436,12 +435,11 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch, sele
 		o.mu.pendingBatch.SetLength(newLength)
 		if o.testingKnobs.alwaysFlush || newLength >= o.mu.pendingBatch.Capacity() {
 			// The capacity in o.mu.pendingBatch has been filled.
-			err := o.mu.data.enqueue(ctx, o.mu.pendingBatch)
-			if err == nil && o.testingKnobs.addBatchTestInducedErrorCb != nil {
-				err = o.testingKnobs.addBatchTestInducedErrorCb()
-			}
-			if err != nil {
-				colexecerror.InternalError(err)
+			o.mu.data.enqueue(ctx, o.mu.pendingBatch)
+			if o.testingKnobs.addBatchTestInducedErrorCb != nil {
+				if err := o.testingKnobs.addBatchTestInducedErrorCb(); err != nil {
+					colexecerror.InternalError(err)
+				}
 			}
 			o.mu.pendingBatch = nil
 		}

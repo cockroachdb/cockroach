@@ -272,7 +272,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.partitioner = s.partitionerCreator()
 			}
 			if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
-				colexecerror.InternalError(err)
+				handleErrorFromDiskQueue(err)
 			}
 			s.state = externalSorterSpillPartition
 			continue
@@ -305,7 +305,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.fdState.acquiredFDs = toAcquire
 			}
 			if err := s.partitioner.Enqueue(ctx, curPartitionIdx, b); err != nil {
-				colexecerror.InternalError(err)
+				handleErrorFromDiskQueue(err)
 			}
 			continue
 		case externalSorterRepeatedMerging:
@@ -330,7 +330,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 			newPartitionIdx := s.firstPartitionIdx + s.numPartitions
 			for b := merger.Next(ctx); b.Length() > 0; b = merger.Next(ctx) {
 				if err := s.partitioner.Enqueue(ctx, newPartitionIdx, b); err != nil {
-					colexecerror.InternalError(err)
+					handleErrorFromDiskQueue(err)
 				}
 			}
 			// We are now done with the merger, so we can release the memory
