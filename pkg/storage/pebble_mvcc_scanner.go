@@ -48,7 +48,12 @@ func (p *pebbleResults) put(key MVCCKey, value []byte) {
 	// Key value lengths take up 8 bytes (2 x Uint32).
 	const kvLenSize = 8
 	const minSize = 16
-	const maxSize = 128 << 20 // 128 MB
+	// This used to be 128MB, but the enforcement of key+value size limit is
+	// currently done based on the cluster setting kv.raft.command.max_size,
+	// which defaults to 64MB but can be increased. Until we add proper
+	// enforcement, we are increasing this to 512MB, under the assumption that
+	// no one will increase kv.raft.command.max_size to > 512MB.
+	const maxSize = 512 << 20 // 512 MB
 
 	// We maintain a list of buffers, always encoding into the last one (a.k.a.
 	// pebbleResults.repr). The size of the buffers is exponentially increasing,
