@@ -41,7 +41,7 @@ func declareKeysClearRange(
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
-	DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
+	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
@@ -72,6 +72,32 @@ func ClearRange(
 		if now := cArgs.EvalCtx.Clock().Now(); args.Deadline.LessEq(now) {
 			return result.Result{}, errors.Errorf("ClearRange has deadline %s <= %s", args.Deadline, now)
 		}
+	}
+
+	// Check for any intents, and return them for the caller to resolve. This
+	// prevents removal of intents belonging to implicitly committed STAGING
+	// txns. Otherwise, txn recovery would fail to find these intents and
+	// consider the txn incomplete, uncommitting it and its writes (even those
+	// outside of the cleared range).
+	//
+	// We return 1000 at a time, or 1 MB. The intent resolver currently
+	// processes intents in batches of 100, so this gives it a few to chew on.
+	//
+	// NOTE: This only takes into account separated intents, which are currently
+	// not enabled by default. For interleaved intents we would have to do full
+	// range scans, which would be too expensive. We could mitigate this by
+	// relying on statistics to skip scans when no intents are known, but due
+	// to #60585 we are often likely to encounter intents. See discussion in:
+	// https://github.com/cockroachdb/cockroach/pull/61850
+	var (
+		maxIntents  int64 = 1000
+		intentBytes int64 = 1e6
+	)
+	intents, err := storage.ScanSeparatedIntents(readWriter, from, to, maxIntents, intentBytes)
+	if err != nil {
+		return result.Result{}, err
+	} else if len(intents) > 0 {
+		return result.Result{}, &roachpb.WriteIntentError{Intents: intents}
 	}
 
 	// Before clearing, compute the delta in MVCCStats.
