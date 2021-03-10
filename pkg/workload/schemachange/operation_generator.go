@@ -1716,9 +1716,23 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting table columns for insert row")
 	}
+
+	// Filter out computed columns.
+	{
+		truncated := cols[:0]
+		for _, c := range cols {
+			if !c.generated {
+				truncated = append(truncated, c)
+			}
+		}
+		cols = truncated
+	}
 	colNames := []string{}
 	rows := [][]string{}
 	for _, col := range cols {
+		if col.generated {
+			continue
+		}
 		colNames = append(colNames, col.name)
 	}
 	numRows := og.randIntn(3) + 1
@@ -1745,6 +1759,11 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// TODO(ajwerner): Errors can occur if computed columns are referenced. It's
+	// hard to classify all the ways this can cause problems. One source of
+	// problems is that the expression may overflow the width of a computed column
+	// that has a smaller width than the inputs.
 
 	codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: uniqueConstraintViolation},
