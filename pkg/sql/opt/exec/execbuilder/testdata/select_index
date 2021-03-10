@@ -1576,7 +1576,7 @@ vectorized: true
     │
     └── • scan
           columns: (a, b, c)
-          estimated row count: 3 (3.3% of the table)
+          estimated row count: 3 (3.3% of the table; stats collected <hidden> ago)
           table: t2@bc
           spans: /2-/3
 
@@ -1612,7 +1612,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b, c)
-      estimated row count: 3 (3.1% of the table)
+      estimated row count: 3 (3.1% of the table; stats collected <hidden> ago)
       table: t2@bc
       spans: /2/!NULL-/2/2 /2/3-/3
 
@@ -1723,7 +1723,7 @@ vectorized: true
 │
 └── • scan
       columns: (a, b)
-      estimated row count: 3 (3.3% of the table)
+      estimated row count: 3 (3.3% of the table; stats collected <hidden> ago)
       table: t2@bc
       spans: /2-/3
 
