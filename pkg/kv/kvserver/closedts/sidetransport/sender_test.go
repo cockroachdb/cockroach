@@ -51,15 +51,12 @@ var _ Replica = &mockReplica{}
 
 func (m *mockReplica) StoreID() roachpb.StoreID    { return m.storeID }
 func (m *mockReplica) GetRangeID() roachpb.RangeID { return m.rangeID }
-func (m *mockReplica) Desc() *roachpb.RangeDescriptor {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return &m.mu.desc
-}
 func (m *mockReplica) BumpSideTransportClosed(
 	_ context.Context, _ hlc.ClockTimestamp, _ [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
-) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy) {
-	return m.canBump, m.lai, m.policy
+) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy, *roachpb.RangeDescriptor) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.canBump, m.lai, m.policy, &m.mu.desc
 }
 
 func (m *mockReplica) removeReplica(nid roachpb.NodeID) {
