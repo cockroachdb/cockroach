@@ -8,7 +8,7 @@ SELECT k, s FROM a
 scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=1000]
- ├── cost: 1064.02
+ ├── cost: 1074.61
  ├── key: (1)
  └── fd: (1)-->(3)
 

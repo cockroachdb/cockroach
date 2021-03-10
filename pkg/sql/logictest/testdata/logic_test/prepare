@@ -1171,14 +1171,14 @@ select
  ├── columns: k:1 str:2
  ├── immutable
  ├── stats: [rows=333.333333]
- ├── cost: 1054.04
+ ├── cost: 1064.43
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
  ├── scan t2
  │    ├── columns: k:1 str:2
  │    ├── stats: [rows=1000]
- │    ├── cost: 1044.02
+ │    ├── cost: 1054.41
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── prune: (1,2)
