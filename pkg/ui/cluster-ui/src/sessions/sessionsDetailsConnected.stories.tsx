@@ -16,7 +16,7 @@ import {
   Store,
 } from "redux";
 import { SessionDetailsPageConnected } from "./sessionDetailsConnected";
-import { AppState, rootReducer, sagas } from "../store";
+import { AppState, sagas, rootReducer } from "../store";
 import { Route } from "react-router-dom";
 
 const TEST_ID = "165f9819-2feb-40f0-0000-000000000001";
