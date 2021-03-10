@@ -428,11 +428,14 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		f.TypeResolverFactory.CleanupFunc(ctx)
 	}
 
-	if f.Gateway {
-		// If this is the gateway node, output the maximum memory usage to the flow
-		// span. Note that non-gateway nodes use the last outbox to send this
-		// information over.
-		if sp := tracing.SpanFromContext(ctx); sp != nil {
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil {
+		defer sp.Finish()
+		if f.Gateway && f.CollectStats {
+			// If this is the gateway node and we're collecting execution stats,
+			// output the maximum memory usage to the flow span. Note that
+			// non-gateway nodes use the last outbox to send this information
+			// over.
 			sp.RecordStructured(&execinfrapb.ComponentStats{
 				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
@@ -455,7 +458,6 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}
-	sp := tracing.SpanFromContext(ctx)
 	// Local flows do not get registered.
 	if !f.IsLocal() && f.status != FlowNotStarted {
 		f.flowRegistry.UnregisterFlow(f.ID)
@@ -464,9 +466,6 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	f.ctxCancel()
 	if f.doneFn != nil {
 		f.doneFn()
-	}
-	if sp != nil {
-		sp.Finish()
 	}
 }
 
