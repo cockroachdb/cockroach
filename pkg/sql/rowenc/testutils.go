@@ -824,6 +824,12 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 func RandColumnType(rng *rand.Rand) *types.T {
 	for {
 		typ := RandType(rng)
+		switch typ.Oid() {
+		case oid.T_int2vector, oid.T_oidvector:
+			// OIDVECTOR and INT2VECTOR are not valid column types for
+			// user-created tables.
+			continue
+		}
 		if err := colinfo.ValidateColumnDefType(typ); err == nil {
 			return typ
 		}
@@ -1517,7 +1523,7 @@ func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnT
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		Name: tree.Name(fmt.Sprintf("col%d_%d", tableIdx, colIdx)),
-		Type: RandSortingType(rand),
+		Type: RandColumnType(rand),
 	}
 	columnDef.Nullable.Nullability = tree.Nullability(rand.Intn(int(tree.SilentNull) + 1))
 	return columnDef
