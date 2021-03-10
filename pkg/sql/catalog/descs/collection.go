@@ -185,6 +185,8 @@ type Collection struct {
 	// numbers of descriptors.
 	allDescriptors []catalog.Descriptor
 
+	allDescriptorsByID map[descpb.ID]catalog.Descriptor
+
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
 	allDatabaseDescriptors []*dbdesc.Immutable
@@ -1024,6 +1026,12 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			return readFromStore()
 		}
 
+		if tc.allDescriptors != nil {
+			if _, exists := tc.allDescriptorsByID[id]; !exists {
+				return nil, catalog.ErrDescriptorNotFound
+			}
+		}
+
 		desc, err := tc.getLeasedDescriptorByID(ctx, txn, id, setTxnDeadline)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) || catalog.HasInactiveDescriptorError(err) {
@@ -1680,6 +1688,10 @@ func (tc *Collection) GetAllDescriptors(
 		}
 
 		tc.allDescriptors = descs
+		tc.allDescriptorsByID = make(map[descpb.ID]catalog.Descriptor, len(descs))
+		for _, d := range descs {
+			tc.allDescriptorsByID[d.GetID()] = d
+		}
 	}
 	return tc.allDescriptors, nil
 }
@@ -1902,6 +1914,7 @@ func (tc *Collection) GetObjectNames(
 // held by Collection.
 func (tc *Collection) releaseAllDescriptors() {
 	tc.allDescriptors = nil
+	tc.allDescriptorsByID = nil
 	tc.allDatabaseDescriptors = nil
 	tc.allSchemasForDatabase = nil
 }
