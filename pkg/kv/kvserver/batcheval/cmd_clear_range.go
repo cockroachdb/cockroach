@@ -41,7 +41,7 @@ func declareKeysClearRange(
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
 ) {
-	DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
+	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
@@ -80,6 +80,31 @@ func ClearRange(
 		return result.Result{}, err
 	}
 	cArgs.Stats.Subtract(statsDelta)
+
+	// If the range has any intents, return a WriteIntentError so the caller can
+	// run txn recovery. This prevents removal of intents belonging to
+	// implicitly committed STAGING txns, which would uncommit the txn and its
+	// writes (even those outside of the cleared range).
+	maxIntents := int64(10000)
+	var intents []roachpb.Intent
+	switch {
+	// TODO(erikgrinaker): For now, we play it safe and always check for intents
+	// if the stats are inaccurate. It's possible estimates won't affect the
+	// intent stats, but we need to verify this.
+	case statsDelta.ContainsEstimates > 0:
+		intents, err = storage.ScanIntents(readWriter, from, to, maxIntents)
+	case statsDelta.IntentCount == 0:
+	case statsDelta.SeparatedIntentCount == statsDelta.IntentCount:
+		intents, err = storage.ScanSeparatedIntents(readWriter, from, to, maxIntents)
+	default:
+		intents, err = storage.ScanIntents(readWriter, from, to, maxIntents)
+	}
+	if err != nil {
+		return result.Result{}, err
+	}
+	if len(intents) > 0 {
+		return result.Result{}, &roachpb.WriteIntentError{Intents: intents}
+	}
 
 	// If the total size of data to be cleared is less than
 	// clearRangeBytesThreshold, clear the individual values with an iterator,
