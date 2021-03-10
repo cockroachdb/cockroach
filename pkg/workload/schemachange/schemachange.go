@@ -408,7 +408,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	}
 
 	// Release log entry locks if holding all.
-	w.releaseLocksIfHeld()
+	defer w.releaseLocksIfHeld()
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	start := timeutil.Now()
