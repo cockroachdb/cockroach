@@ -51,6 +51,7 @@ var (
 	rewriteIterations = flag.Int("rewrite-iterations", 50,
 		"if re-writing, the number of times to execute each benchmark to "+
 			"determine the range of possible values")
+	validate = flag.String("validate", ".", "regexp of benchmarks to validate")
 )
 
 // TestBenchmarkExpectation runs all of the benchmarks and
@@ -64,7 +65,6 @@ func TestBenchmarkExpectation(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderShort(t)
 	skip.UnderMetamorphic(t)
-	skip.WithIssue(t, 57771)
 
 	expecations := readExpectationsFile(t)
 
@@ -81,7 +81,7 @@ func TestBenchmarkExpectation(t *testing.T) {
 
 	results := runBenchmarks(t,
 		"--test.run=^$",
-		"--test.bench=.",
+		"--test.bench="+*validate,
 		"--test.benchtime=1x")
 
 	for _, r := range results {
