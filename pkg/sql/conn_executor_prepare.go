@@ -201,7 +201,15 @@ func (ex *connExecutor) prepare(
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
 		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 		p := &ex.planner
-		ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+		if origin != PreparedStatementOriginSQL {
+			// If the PREPARE command was issued as a SQL statement, then we
+			// have already reset the planner at the very beginning of the
+			// execution (in execStmtInOpenState). We might have also
+			// instrumented the planner to collect execution statistics, and
+			// resetting the planner here would break the assumptions of the
+			// instrumentation.
+			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+		}
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p)
