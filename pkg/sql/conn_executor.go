@@ -2270,7 +2270,8 @@ func (ex *connExecutor) resetPlanner(
 ) {
 	p.txn = txn
 	p.stmt = Statement{}
-	p.instrumentation = instrumentationHelper{}
+	// Note that we deliberately do not reset p.instrumentation since we need to
+	// have more fine-grained control over resetting that field.
 
 	p.cancelChecker.Reset(ctx)
 

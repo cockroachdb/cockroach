@@ -346,6 +346,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutator.paramStatusUpdater = res
 	p.noticeSender = res
+	p.instrumentation = instrumentationHelper{}
 	ih := &p.instrumentation
 
 	if e, ok := ast.(*tree.ExplainAnalyze); ok {
