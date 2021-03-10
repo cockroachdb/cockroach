@@ -17,15 +17,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingutils" // Load the cutover builtin.
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -87,22 +85,28 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	completeJobAfterCheckpoints := makeCheckpointEventCounter(&mu, threshold, func() {
 		canBeCompletedCh <- struct{}{}
 	})
+
+	// Register interceptors on the random stream client, which will be used by
+	// the processors.
 	streamValidator := newStreamClientValidator()
 	registerValidator := registerValidatorWithClient(streamValidator)
-	knobs := base.TestingKnobs{
-		DistSQL: &execinfra.TestingKnobs{StreamIngestionTestingKnobs: &sql.StreamIngestionTestingKnobs{
-			Interceptors: []func(event streamingccl.Event, pa streamingccl.PartitionAddress){completeJobAfterCheckpoints,
-				registerValidator},
-		},
-		},
+	client := streamclient.GetRandomStreamClientSingletonForTesting()
+	interceptEvents := []streamclient.InterceptFn{
+		completeJobAfterCheckpoints,
+		registerValidator,
 	}
-	serverArgs := base.TestServerArgs{}
-	serverArgs.Knobs = knobs
+	if interceptable, ok := client.(streamclient.InterceptableStreamClient); ok {
+		for _, interceptor := range interceptEvents {
+			interceptable.RegisterInterception(interceptor)
+		}
+	} else {
+		t.Fatal("expected the random stream client to be interceptable")
+	}
 
 	var receivedRevertRequest chan struct{}
 	var allowResponse chan struct{}
 	var revertRangeTargetTime hlc.Timestamp
-	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	params := base.TestClusterArgs{}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 			for _, req := range ba.Requests {
