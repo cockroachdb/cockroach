@@ -1237,3 +1237,50 @@ upsert t_idx2
            ├── CASE WHEN a:12 IS NULL THEN column3:9 ELSE c_new:18 END [as=upsert_c:23]
            ├── CASE WHEN a:12 IS NULL THEN column10:10 ELSE v:15 END [as=upsert_v:24]
            └── CASE WHEN a:12 IS NULL THEN column11:11 ELSE column20:20 END [as=upsert_w:25]
+
+# Test that virtual column expressions are forced to have the column type.
+exec-ddl
+CREATE TABLE coltyp (
+  k INT,
+  v INT AS (NULL) VIRTUAL,
+  w STRING AS (IF(k IS NULL, NULL, NULL)) VIRTUAL
+)
+----
+
+build format=(show-types,show-scalars)
+SELECT * FROM coltyp
+----
+project
+ ├── columns: k:1(int) v:2(int) w:3(string)
+ └── project
+      ├── columns: v:2(int) w:3(string) k:1(int) rowid:4(int!null) crdb_internal_mvcc_timestamp:5(decimal)
+      ├── scan coltyp
+      │    ├── columns: k:1(int) rowid:4(int!null) crdb_internal_mvcc_timestamp:5(decimal)
+      │    └── computed column expressions
+      │         ├── v:2
+      │         │    └── cast: INT8 [type=int]
+      │         │         └── null [type=unknown]
+      │         └── w:3
+      │              └── case [type=string]
+      │                   ├── is [type=bool]
+      │                   │    ├── variable: k:1 [type=int]
+      │                   │    └── null [type=unknown]
+      │                   ├── when [type=string]
+      │                   │    ├── true [type=bool]
+      │                   │    └── cast: STRING [type=string]
+      │                   │         └── null [type=unknown]
+      │                   └── cast: STRING [type=string]
+      │                        └── null [type=unknown]
+      └── projections
+           ├── cast: INT8 [as=v:2, type=int]
+           │    └── null [type=unknown]
+           └── case [as=w:3, type=string]
+                ├── is [type=bool]
+                │    ├── variable: k:1 [type=int]
+                │    └── null [type=unknown]
+                ├── when [type=string]
+                │    ├── true [type=bool]
+                │    └── cast: STRING [type=string]
+                │         └── null [type=unknown]
+                └── cast: STRING [type=string]
+                     └── null [type=unknown]

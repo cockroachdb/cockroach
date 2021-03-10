@@ -20,14 +20,6 @@ CREATE TABLE t_float (
 ----
 
 exec-ddl
-CREATE TABLE t_now (
-    k_interval INTERVAL,
-    c_ts TIMESTAMP AS (now() + k_interval) STORED,
-    INDEX c_ts_index (c_ts, k_interval)
-)
-----
-
-exec-ddl
 CREATE TABLE t_rand (
     k_int INT,
     c_int INT AS ((random()*100)::INT + k_int) STORED,
@@ -150,18 +142,6 @@ select
  │              └── k_float:1 + 1.0
  └── filters
       └── k_float:1 = 5.0 [outer=(1), constraints=(/1: [/5.0 - /5.0]; tight), fd=()-->(1)]
-
-# Don't constrain the index when the computed column has a stable function.
-opt
-SELECT k_interval FROM t_now WHERE k_interval = '3 hours'
-----
-select
- ├── columns: k_interval:1!null
- ├── fd: ()-->(1)
- ├── scan t_now
- │    └── columns: k_interval:1
- └── filters
-      └── k_interval:1 = '03:00:00' [outer=(1), constraints=(/1: [/'03:00:00' - /'03:00:00']; tight), fd=()-->(1)]
 
 # Don't constrain the index when the computed column has a volatile function.
 opt
