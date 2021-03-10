@@ -259,7 +259,7 @@ func TestBumpSideTransportClosed(t *testing.T) {
 				var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
 				targets[roachpb.LAG_BY_CLUSTER_SETTING] = a.target.Add(-1, 0)
 				return nil, nil, testutils.SucceedsSoonError(func() error {
-					ok, _, _ := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
+					ok, _, _, _ := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
 					if !ok {
 						return errors.New("bumping side-transport unexpectedly failed")
 					}
@@ -276,7 +276,7 @@ func TestBumpSideTransportClosed(t *testing.T) {
 				var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
 				targets[roachpb.LAG_BY_CLUSTER_SETTING] = a.target
 				return nil, nil, testutils.SucceedsSoonError(func() error {
-					ok, _, _ := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
+					ok, _, _, _ := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
 					if !ok {
 						return errors.New("bumping side-transport unexpectedly failed")
 					}
@@ -293,7 +293,7 @@ func TestBumpSideTransportClosed(t *testing.T) {
 				var targets [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp
 				targets[roachpb.LAG_BY_CLUSTER_SETTING] = a.target.Add(1, 0)
 				return nil, nil, testutils.SucceedsSoonError(func() error {
-					ok, _, _ := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
+					ok, _, _, _ := a.repl.BumpSideTransportClosed(ctx, a.now, targets)
 					if !ok {
 						return errors.New("bumping side-transport unexpectedly failed")
 					}
@@ -393,14 +393,14 @@ func TestBumpSideTransportClosed(t *testing.T) {
 			// would be a serious bug.
 			if exp {
 				testutils.SucceedsSoon(t, func() error {
-					ok, _, _ := repl.BumpSideTransportClosed(ctx, now, targets)
+					ok, _, _, _ := repl.BumpSideTransportClosed(ctx, now, targets)
 					if !ok {
 						return errors.New("bumping side-transport unexpectedly failed")
 					}
 					return nil
 				})
 			} else {
-				ok, _, _ := repl.BumpSideTransportClosed(ctx, now, targets)
+				ok, _, _, _ := repl.BumpSideTransportClosed(ctx, now, targets)
 				require.False(t, ok)
 			}
 
@@ -462,7 +462,7 @@ func BenchmarkBumpSideTransportClosed(b *testing.B) {
 		targets[roachpb.LAG_BY_CLUSTER_SETTING] = now.ToTimestamp()
 
 		// Perform the call.
-		ok, _, _ := r.BumpSideTransportClosed(ctx, now, targets)
+		ok, _, _, _ := r.BumpSideTransportClosed(ctx, now, targets)
 		if !ok {
 			b.Fatal("BumpSideTransportClosed unexpectedly failed")
 		}
