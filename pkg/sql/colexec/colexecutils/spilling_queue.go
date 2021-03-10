@@ -147,19 +147,19 @@ func NewRewindableSpillingQueue(args *NewSpillingQueueArgs) *SpillingQueue {
 // The ownership of the batch still lies with the caller, so the caller is
 // responsible for accounting for the memory used by batch (although the
 // spilling queue will account for memory used by the in-memory copies).
-func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) error {
+func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 	if q.rewindable && q.rewindableState.numItemsDequeued > 0 {
-		return errors.Errorf("attempted to Enqueue to rewindable SpillingQueue after Dequeue has been called")
+		colexecerror.InternalError(errors.Errorf("attempted to Enqueue to rewindable SpillingQueue after Dequeue has been called"))
 	}
 
 	n := batch.Length()
 	if n == 0 {
 		if q.diskQueue != nil {
 			if err := q.diskQueue.Enqueue(ctx, batch); err != nil {
-				return err
+				HandleErrorFromDiskQueue(err)
 			}
 		}
-		return nil
+		return
 	}
 	q.testingKnobs.numEnqueues++
 
@@ -175,7 +175,7 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) error 
 		//    in-memory buffer
 		// so we have to add batch to the disk queue.
 		if err := q.maybeSpillToDisk(ctx); err != nil {
-			return err
+			HandleErrorFromDiskQueue(err)
 		}
 		if sel := batch.Selection(); sel != nil {
 			// We need to perform the deselection since the disk queue
@@ -204,10 +204,10 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) error 
 			batch = q.diskQueueDeselectionScratch
 		}
 		if err := q.diskQueue.Enqueue(ctx, batch); err != nil {
-			return err
+			HandleErrorFromDiskQueue(err)
 		}
 		q.numOnDiskItems++
-		return nil
+		return
 	}
 
 	if q.numInMemoryItems == len(q.items) {
@@ -261,7 +261,7 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) error 
 			if alreadyCopied == n {
 				// We were able to append all of the tuples, so we return early
 				// since we don't need to update any of the state.
-				return nil
+				return
 			}
 		}
 	}
@@ -315,7 +315,6 @@ func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) error 
 		q.curTailIdx = 0
 	}
 	q.numInMemoryItems++
-	return nil
 }
 
 // Dequeue returns the next batch from the queue which is valid only until the

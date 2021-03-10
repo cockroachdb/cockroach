@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -577,9 +576,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	if batch.Length() == 0 || groupLength == 0 {
 		// We have finished appending to this buffered group, so we need to
 		// Enqueue a zero-length batch per the contract of the spilling queue.
-		if err := bufferedTuples.Enqueue(ctx, coldata.ZeroBatch); err != nil {
-			colexecerror.InternalError(err)
-		}
+		bufferedTuples.Enqueue(ctx, coldata.ZeroBatch)
 		return
 	}
 	// TODO(yuzefovich): for LEFT/RIGHT ANTI joins we only need to store the
@@ -625,9 +622,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		}
 		bufferedGroup.scratchBatch.SetLength(groupLength)
 	})
-	if err := bufferedTuples.Enqueue(ctx, bufferedGroup.scratchBatch); err != nil {
-		colexecerror.InternalError(err)
-	}
+	bufferedTuples.Enqueue(ctx, bufferedGroup.scratchBatch)
 }
 
 // setBuilderSourceToBatch sets the builder state to use groups from the
