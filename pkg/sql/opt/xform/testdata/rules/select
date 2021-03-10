@@ -2440,6 +2440,145 @@ project
       └── filters
            └── a:2 IS NULL [outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
 
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a <@ ARRAY[1]
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["C", "C"]
+ │         │         └── ["\x89", "\x89"]
+ │         ├── key: (1)
+ │         └── scan c@a_inv_idx
+ │              ├── columns: k:1!null a_inverted_key:5!null
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── ["C", "C"]
+ │              │         └── ["\x89", "\x89"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(5)
+ └── filters
+      └── ARRAY[1] @> a:2 [outer=(2), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a <@ ARRAY[]::INT[]
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan c@a_inv_idx
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["C", "C"]
+ │         └── key: (1)
+ └── filters
+      └── ARRAY[] @> a:2 [outer=(2), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a <@ ARRAY[NULL]::INT[]
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── scan c@a_inv_idx
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /5/1
+ │         │    └── spans: ["C", "C"]
+ │         └── key: (1)
+ └── filters
+      └── ARRAY[NULL] @> a:2 [outer=(2), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a <@ ARRAY[1] OR a <@ ARRAY[2]
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["C", "C"]
+ │         │         └── ["\x89", "\x8b")
+ │         ├── key: (1)
+ │         └── scan c@a_inv_idx
+ │              ├── columns: k:1!null a_inverted_key:5!null
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── ["C", "C"]
+ │              │         └── ["\x89", "\x8b")
+ │              ├── key: (1)
+ │              └── fd: (1)-->(5)
+ └── filters
+      └── (ARRAY[1] @> a:2) OR (ARRAY[2] @> a:2) [outer=(2), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a <@ ARRAY[1] AND a <@ ARRAY[2]
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── index-join c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /5
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: ["C", "C"]
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: false
+ │         │         │    └── union spans: ["\x89", "\x89"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans: ["\x8a", "\x8a"]
+ │         ├── key: (1)
+ │         └── scan c@a_inv_idx
+ │              ├── columns: k:1!null a_inverted_key:5!null
+ │              ├── inverted constraint: /5/1
+ │              │    └── spans
+ │              │         ├── ["C", "C"]
+ │              │         └── ["\x89", "\x8b")
+ │              ├── key: (1)
+ │              └── fd: (1)-->(5)
+ └── filters
+      ├── ARRAY[1] @> a:2 [outer=(2), immutable]
+      └── ARRAY[2] @> a:2 [outer=(2), immutable]
+
 # Tests for indexes with older descriptor versions.
 
 exec-ddl
@@ -2518,6 +2657,23 @@ index-join b
            │         └── ["7\x00\x03", "7\x00\x03"]
            ├── key: (1)
            └── fd: (1)-->(7)
+
+# The inverted index will never be used for <@ expressions if the index version
+# does not have empty arrays in the inverted index.
+opt expect-not=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a <@ '{2}'
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── ARRAY[2] @> a:2 [outer=(2), immutable]
 
 exec-ddl
 DROP INDEX j_inv_idx
