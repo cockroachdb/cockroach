@@ -51,7 +51,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":parser"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/sql/lex",
         "//pkg/sql/pgwire/pgerror",
@@ -108,7 +107,7 @@ genrule(
     ],
     outs = ["helpmap_test.go"],
     cmd = """
-      $(location :help-gen-test) < $< >$@
+      $(location :help-gen-test) < $< >$@.tmp
       mv -f $@.tmp $@
     """,
     tools = [

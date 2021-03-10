@@ -1877,36 +1877,38 @@ func NewTableDesc(
 		}
 	}
 
-	setupShardedIndexForNewTable := func(d *tree.IndexTableDef, idx *descpb.IndexDescriptor) error {
+	setupShardedIndexForNewTable := func(
+		d tree.IndexTableDef, idx *descpb.IndexDescriptor,
+	) (columns tree.IndexElemList, _ error) {
 		if n.PartitionByTable.ContainsPartitions() {
-			return pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
+			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 		}
-		shardCol, newColumn, err := setupShardedIndex(
+		shardCol, newColumns, newColumn, err := setupShardedIndex(
 			ctx,
 			evalCtx,
 			semaCtx,
 			sessionData.HashShardedIndexesEnabled,
-			&d.Columns,
+			d.Columns,
 			d.Sharded.ShardBuckets,
 			&desc,
 			idx,
 			true /* isNewTable */)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if newColumn {
 			buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.Sharded.ShardBuckets)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			n.Defs = append(n.Defs, checkConstraint)
 			columnDefaultExprs = append(columnDefaultExprs, nil)
 		}
-		return nil
+		return newColumns, nil
 	}
 
 	idxValidator := schemaexpr.MakeIndexPredicateValidator(ctx, n.Table, &desc, semaCtx)
@@ -1929,6 +1931,7 @@ func NewTableDesc(
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
 			}
+			columns := d.Columns
 			if d.Sharded != nil {
 				if d.Interleave != nil {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
@@ -1936,11 +1939,13 @@ func NewTableDesc(
 				if isRegionalByRow {
 					return nil, hashShardedIndexesOnRegionalByRowError()
 				}
-				if err := setupShardedIndexForNewTable(d, &idx); err != nil {
+				var err error
+				columns, err = setupShardedIndexForNewTable(*d, &idx)
+				if err != nil {
 					return nil, err
 				}
 			}
-			if err := idx.FillColumns(d.Columns); err != nil {
+			if err := idx.FillColumns(columns); err != nil {
 				return nil, err
 			}
 			if d.Inverted {
@@ -2024,6 +2029,7 @@ func NewTableDesc(
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
 			}
+			columns := d.Columns
 			if d.Sharded != nil {
 				if n.Interleave != nil && d.PrimaryKey {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
@@ -2031,11 +2037,13 @@ func NewTableDesc(
 				if isRegionalByRow {
 					return nil, hashShardedIndexesOnRegionalByRowError()
 				}
-				if err := setupShardedIndexForNewTable(&d.IndexTableDef, &idx); err != nil {
+				var err error
+				columns, err = setupShardedIndexForNewTable(d.IndexTableDef, &idx)
+				if err != nil {
 					return nil, err
 				}
 			}
-			if err := idx.FillColumns(d.Columns); err != nil {
+			if err := idx.FillColumns(columns); err != nil {
 				return nil, err
 			}
 			// Specifying a partitioning on a PRIMARY KEY constraint should be disallowed by the
@@ -2096,7 +2104,7 @@ func NewTableDesc(
 						"interleave not supported in primary key constraint definition",
 					)
 				}
-				for _, c := range d.Columns {
+				for _, c := range columns {
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
 				}
 			}
