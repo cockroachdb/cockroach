@@ -722,6 +722,17 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	optIdx := idx.(*optIndex)
+
+	// Resolve the object name for logging if
+	// its missing.
+	if tableWithIndex.Table.ObjectName == "" {
+		tableName, err := p.getQualifiedTableName(ctx, optIdx.tab.desc)
+		if err != nil {
+			return nil, nil, err
+		}
+		tableWithIndex.Table = *tableName
+	}
+
 	return tabledesc.NewExistingMutable(*optIdx.tab.desc.TableDesc()), optIdx.desc, nil
 }
 
