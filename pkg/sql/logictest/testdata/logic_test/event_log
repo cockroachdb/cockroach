@@ -940,7 +940,7 @@ SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'comment_on_index'
 ----
-1  {"Comment": "This is an index.", "EventType": "comment_on_index", "IndexName": "b_index", "Statement": "COMMENT ON INDEX \"\".\"\".b_index IS 'This is an index.'", "TableName": "defaultdb.public.a", "User": "root"}
+1  {"Comment": "This is an index.", "EventType": "comment_on_index", "IndexName": "b_index", "Statement": "COMMENT ON INDEX defaultdb.public.a@b_index IS 'This is an index.'", "TableName": "defaultdb.public.a", "User": "root"}
 
 statement ok
 COMMENT ON TABLE a IS 'This is a table.'
