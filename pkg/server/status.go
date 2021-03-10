@@ -2551,7 +2551,11 @@ func (s *statusServer) GenerateJoinToken(ctx context.Context) (string, error) {
 		return "", errors.New("join token generation disabled")
 	}
 
-	jt, err := generateJoinToken(s.cfg.SSLCertsDir)
+	cm, err := s.rpcCtx.GetCertificateManager()
+	if err != nil {
+		return "", errors.Wrap(err, "error when getting certificate manager")
+	}
+	jt, err := generateJoinToken(cm)
 	if err != nil {
 		return "", errors.Wrap(err, "error when generating join token")
 	}
