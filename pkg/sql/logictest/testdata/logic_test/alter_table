@@ -1699,3 +1699,16 @@ ORDER BY feature_name DESC
 ----
 job.schema_change.successful
 job.schema_change.failed
+
+# Regression test for #61762. Do not allow adding OIDVECTOR or INT2VECTOR
+# columns.
+subtest regression_61762
+
+statement ok
+CREATE TABLE t61762 ()
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v OIDVECTOR
+
+statement error VECTOR column types are unsupported
+ALTER TABLE t61762 ADD COLUMN v INT2VECTOR
