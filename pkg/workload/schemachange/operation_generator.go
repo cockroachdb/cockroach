@@ -518,11 +518,22 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 	// If there are extra columns not used in the index, randomly use them
 	// as stored columns.
 	duplicateStore := false
+	virtualComputedStored := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
 		def.Storing = make(tree.NameList, og.randIntn(1+n))
 		for i := range def.Storing {
 			def.Storing[i] = tree.Name(columnNames[i].name)
+			// Virtual computed columns are not allowed to be indexed
+			if columnNames[i].generated && !virtualComputedStored {
+				isStored, err := columnIsStoredComputed(tx, tableName, columnNames[i].name)
+				if err != nil {
+					return "", err
+				}
+				if !isStored {
+					virtualComputedStored = true
+				}
+			}
 		}
 
 		// If the column is already used in the primary key, then attempting to store
@@ -565,6 +576,7 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
+			{code: pgcode.Uncategorized, condition: virtualComputedStored},
 		}.add(og.expectedExecErrors)
 	}
 
@@ -1079,13 +1091,13 @@ func (og *operationGenerator) dropColumnStored(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnIsComputed, err := columnIsComputed(tx, tableName, columnName)
+	columnIsStored, err := columnIsStoredComputed(tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
 
 	codesWithConditions{
-		{code: pgcode.InvalidColumnDefinition, condition: !columnIsComputed},
+		{code: pgcode.InvalidColumnDefinition, condition: !columnIsStored},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 	}.add(og.expectedExecErrors)
 
@@ -1764,17 +1776,21 @@ func (og *operationGenerator) validate(tx *pgx.Tx) (string, error) {
 }
 
 type column struct {
-	name     string
-	typ      *types.T
-	nullable bool
+	name      string
+	typ       *types.T
+	nullable  bool
+	generated bool
 }
 
 func (og *operationGenerator) getTableColumns(
 	tx *pgx.Tx, tableName string, shuffle bool,
 ) ([]column, error) {
 	q := fmt.Sprintf(`
-  SELECT column_name, data_type, is_nullable
-    FROM [SHOW COLUMNS FROM %s]
+SELECT column_name,
+       data_type,
+       is_nullable,
+       generation_expression != '' AS is_generated
+  FROM [SHOW COLUMNS FROM %s];
 `, tableName)
 	rows, err := tx.Query(q)
 	if err != nil {
@@ -1786,7 +1802,7 @@ func (og *operationGenerator) getTableColumns(
 	for rows.Next() {
 		var c column
 		var typName string
-		err := rows.Scan(&c.name, &typName, &c.nullable)
+		err := rows.Scan(&c.name, &typName, &c.nullable, &c.generated)
 		if err != nil {
 			return nil, err
 		}
