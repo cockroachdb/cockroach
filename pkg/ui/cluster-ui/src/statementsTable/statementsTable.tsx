@@ -24,6 +24,7 @@ import {
 } from "./statementsTableContent";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+type ICollectedStatementStatistics = cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
 const cx = classNames.bind(styles);
 const longToInt = (d: number | Long) => Number(FixLong(d));
@@ -31,21 +32,36 @@ const longToInt = (d: number | Long) => Number(FixLong(d));
 function makeCommonColumns(
   statements: AggregateStatistics[],
 ): ColumnDescriptor<AggregateStatistics>[] {
-  const barChartOptions = {
+  const defaultBarChartOptions = {
     classes: {
       root: cx("statements-table__col--bar-chart"),
       label: cx("statements-table__col--bar-chart__label"),
     },
   };
+  const sampledExecStatsBarChartOptions = {
+    classes: defaultBarChartOptions.classes,
+    displayNoSamples: (d: ICollectedStatementStatistics) => {
+      return longToInt(d.stats.exec_stats?.count) == 0;
+    },
+  };
 
-  const countBar = countBarChart(statements, barChartOptions);
-  const rowsReadBar = rowsReadBarChart(statements, barChartOptions);
-  const bytesReadBar = bytesReadBarChart(statements, barChartOptions);
-  const latencyBar = latencyBarChart(statements, barChartOptions);
-  const contentionBar = contentionBarChart(statements, barChartOptions);
-  const maxMemUsageBar = maxMemUsageBarChart(statements, barChartOptions);
-  const networkBytesBar = networkBytesBarChart(statements, barChartOptions);
-  const retryBar = retryBarChart(statements, barChartOptions);
+  const countBar = countBarChart(statements, defaultBarChartOptions);
+  const rowsReadBar = rowsReadBarChart(statements, defaultBarChartOptions);
+  const bytesReadBar = bytesReadBarChart(statements, defaultBarChartOptions);
+  const latencyBar = latencyBarChart(statements, defaultBarChartOptions);
+  const contentionBar = contentionBarChart(
+    statements,
+    sampledExecStatsBarChartOptions,
+  );
+  const maxMemUsageBar = maxMemUsageBarChart(
+    statements,
+    sampledExecStatsBarChartOptions,
+  );
+  const networkBytesBar = networkBytesBarChart(
+    statements,
+    sampledExecStatsBarChartOptions,
+  );
+  const retryBar = retryBarChart(statements, defaultBarChartOptions);
 
   return [
     {
