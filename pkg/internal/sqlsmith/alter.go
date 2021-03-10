@@ -52,7 +52,14 @@ func makeAlter(s *Smither) (tree.Statement, bool) {
 		// up the change). This has the added benefit of leaving
 		// behind old column references for a bit, which should
 		// test some additional logic.
-		_ = s.ReloadSchemas()
+		err := s.ReloadSchemas()
+		if err != nil {
+			// If we fail to load any schema information, then
+			// the actual statement generation could panic, so
+			// fail out here.
+			return nil, false
+		}
+
 		for i := 0; i < retryCount; i++ {
 			stmt, ok := s.alterSampler.Next()(s)
 			if ok {
