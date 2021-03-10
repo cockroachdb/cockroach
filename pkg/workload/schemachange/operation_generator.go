@@ -186,7 +186,7 @@ var opWeights = []int{
 	createView:              1,
 	createEnum:              1,
 	createSchema:            1,
-	dropColumn:              1,
+	dropColumn:              0,
 	dropColumnDefault:       1,
 	dropColumnNotNull:       1,
 	dropColumnStored:        1,
@@ -204,7 +204,7 @@ var opWeights = []int{
 	setColumnDefault:        1,
 	setColumnNotNull:        1,
 	setColumnType:           1,
-	insertRow:               1,
+	insertRow:               0,
 	validate:                2, // validate twice more often
 }
 
