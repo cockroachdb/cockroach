@@ -4973,14 +4973,15 @@ The calculations are done on a sphere.`,
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				g := tree.MustBeDGeometry(args[0])
 				size := float64(tree.MustBeDFloat(args[1]))
-				ret, err := geomfn.SnapToGrid(g.Geometry, geom.Coord{0, 0, 0, 0}, geom.Coord{size, size, size, size})
+				ret, err := geomfn.SnapToGrid(g.Geometry, geom.Coord{0, 0, 0, 0}, geom.Coord{size, size, 0, 0})
 				if err != nil {
 					return nil, err
 				}
 				return tree.NewDGeometry(ret), nil
 			},
 			Info: infoBuilder{
-				info: "Snap a geometry to a grid of the given size.",
+				info: "Snap a geometry to a grid of the given size. " +
+					"The specified size is only used to snap X and Y coordinates.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
@@ -5029,6 +5030,51 @@ The calculations are done on a sphere.`,
 			},
 			Info: infoBuilder{
 				info: "Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y based on an origin of (origin_x, origin_y).",
+			}.String(),
+			Volatility: tree.VolatilityImmutable,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"geometry", types.Geometry},
+				{"origin", types.Geometry},
+				{"size_x", types.Float},
+				{"size_y", types.Float},
+				{"size_z", types.Float},
+				{"size_m", types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				origin := tree.MustBeDGeometry(args[1])
+				sizeX := float64(tree.MustBeDFloat(args[2]))
+				sizeY := float64(tree.MustBeDFloat(args[3]))
+				sizeZ := float64(tree.MustBeDFloat(args[4]))
+				sizeM := float64(tree.MustBeDFloat(args[5]))
+				originT, err := origin.Geometry.AsGeomT()
+				if err != nil {
+					return nil, err
+				}
+				switch originT := originT.(type) {
+				case *geom.Point:
+					// Prevent nil dereference if origin is an empty point.
+					if originT.Empty() {
+						originT = geom.NewPoint(originT.Layout())
+					}
+					ret, err := geomfn.SnapToGrid(
+						g.Geometry,
+						geom.Coord{originT.X(), originT.Y(), originT.Z(), originT.M()},
+						geom.Coord{sizeX, sizeY, sizeZ, sizeM})
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDGeometry(ret), nil
+				default:
+					return nil, errors.Newf("origin must be a POINT")
+				}
+			},
+			Info: infoBuilder{
+				info: "Snap a geometry to a grid defined by the given origin and X, Y, Z, and M cell sizes. " +
+					"Any dimension with a 0 cell size will not be snapped.",
 			}.String(),
 			Volatility: tree.VolatilityImmutable,
 		},
