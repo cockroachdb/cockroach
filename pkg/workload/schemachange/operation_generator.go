@@ -786,23 +786,43 @@ func (og *operationGenerator) createTableAs(tx *pgx.Tx) (string, error) {
 		// If the table does not exist, columns cannot be fetched from it. For this reason, the placeholder
 		// "IrrelevantColumnName" is used, and a pgcode.UndefinedTable error is expected on execution.
 		if tableExists {
-			columnNamesForTable, err := og.tableColumnsShuffled(tx, tableName.(*tree.TableName).String())
+			tn := tableName.(*tree.TableName)
+			columnNamesForTable, err := og.getTableColumns(tx, tn.String(), true /* shuffle */)
 			if err != nil {
 				return "", err
+			}
+
+			// Filter out the generated virtual columns.
+			// TODO(ajwerner): Remove this after #61768 is fixed.
+			{
+				truncated := columnNamesForTable[:0]
+				for _, c := range columnNamesForTable {
+					if c.generated {
+						isStored, err := columnIsStoredComputed(tx, tn, c.name)
+						if err != nil {
+							return "", err
+						}
+						if !isStored {
+							continue
+						}
+					}
+					truncated = append(truncated, c)
+				}
+				columnNamesForTable = truncated
 			}
 			columnNamesForTable = columnNamesForTable[:1+og.randIntn(len(columnNamesForTable))]
 
 			for j := range columnNamesForTable {
 				colItem := tree.ColumnItem{
 					TableName:  tableName.(*tree.TableName).ToUnresolvedObjectName(),
-					ColumnName: tree.Name(columnNamesForTable[j]),
+					ColumnName: tree.Name(columnNamesForTable[j].name),
 				}
 				selectStatement.Exprs = append(selectStatement.Exprs, tree.SelectExpr{Expr: &colItem})
 
-				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists {
+				if _, exists := uniqueColumnNames[columnNamesForTable[j].name]; exists {
 					duplicateColumns = true
 				} else {
-					uniqueColumnNames[columnNamesForTable[j]] = true
+					uniqueColumnNames[columnNamesForTable[j].name] = true
 				}
 			}
 		} else {
