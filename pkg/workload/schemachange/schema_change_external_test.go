@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/url"
+	"strconv"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestWorkload(t *testing.T) {
@@ -38,7 +40,7 @@ func TestWorkload(t *testing.T) {
 	dir, err := ioutil.TempDir("", t.Name())
 	require.NoError(t, err)
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			ExternalIODir: dir,
 		},
@@ -79,8 +81,10 @@ func TestWorkload(t *testing.T) {
 
 	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).ServingSQLAddr(), t.Name(), url.User("testuser"))
 	defer cleanup()
+
+	const concurrency = 2
 	require.NoError(t, wl.Flags().Parse([]string{
-		"--concurrency", "1",
+		"--concurrency", strconv.Itoa(concurrency),
 		"--verbose", "2",
 	}))
 
@@ -88,9 +92,19 @@ func TestWorkload(t *testing.T) {
 	require.NoError(t, err)
 
 	const N = 100
-	for i := 0; i < N; i++ {
-		if err := ql.WorkerFns[0](ctx); err != nil {
-			t.Fatal(err)
+	workerFn := func(ctx context.Context, fn func(ctx context.Context) error) func() error {
+		return func() error {
+			for i := 0; i < N; i++ {
+				if err := fn(ctx); err != nil || ctx.Err() != nil {
+					return err
+				}
+			}
+			return nil
 		}
 	}
+	g, gCtx := errgroup.WithContext(ctx)
+	for i := 0; i < concurrency; i++ {
+		g.Go(workerFn(gCtx, ql.WorkerFns[i]))
+	}
+	require.NoError(t, g.Wait())
 }
