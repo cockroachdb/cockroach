@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -48,7 +49,7 @@ type alterPrimaryKeyLocalitySwap struct {
 func (p *planner) AlterPrimaryKey(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,
-	alterPKNode *tree.AlterTableAlterPrimaryKey,
+	alterPKNode tree.AlterTableAlterPrimaryKey,
 	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
 ) error {
 	if alterPKNode.Interleave != nil {
@@ -153,11 +154,12 @@ func (p *planner) AlterPrimaryKey(
 	// primary index, which would mean nothing needs to be modified
 	// here.
 	{
-		requiresIndexChange, err := p.shouldCreateIndexes(ctx, tableDesc, alterPKNode, alterPrimaryKeyLocalitySwap)
+		requiresIndexChange, err := p.shouldCreateIndexes(ctx, tableDesc, &alterPKNode, alterPrimaryKeyLocalitySwap)
 		if err != nil {
 			return err
 		}
 		if !requiresIndexChange {
+			log.Infof(ctx, "does not require index change %v %v", tableDesc, alterPKNode)
 			return nil
 		}
 	}
@@ -190,12 +192,12 @@ func (p *planner) AlterPrimaryKey(
 	// If the new index is requested to be sharded, set up the index descriptor
 	// to be sharded, and add the new shard column if it is missing.
 	if alterPKNode.Sharded != nil {
-		shardCol, newColumn, err := setupShardedIndex(
+		shardCol, newColumns, newColumn, err := setupShardedIndex(
 			ctx,
 			p.EvalContext(),
 			&p.semaCtx,
 			p.SessionData().HashShardedIndexesEnabled,
-			&alterPKNode.Columns,
+			alterPKNode.Columns,
 			alterPKNode.Sharded.ShardBuckets,
 			tableDesc,
 			newPrimaryIndexDesc,
@@ -205,6 +207,7 @@ func (p *planner) AlterPrimaryKey(
 			return err
 		}
 		if newColumn {
+			alterPKNode.Columns = newColumns
 			if err := p.setupFamilyAndConstraintForShard(
 				ctx,
 				tableDesc,

@@ -220,7 +220,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					if err := params.p.AlterPrimaryKey(
 						params.ctx,
 						n.tableDesc,
-						alterPK,
+						*alterPK,
 						nil, /* localityConfigSwap */
 					); err != nil {
 						return err
@@ -373,7 +373,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if err := params.p.AlterPrimaryKey(
 				params.ctx,
 				n.tableDesc,
-				t,
+				*t,
 				nil, /* localityConfigSwap */
 			); err != nil {
 				return err
