@@ -201,9 +201,15 @@ func (pc proposalCreator) newPutProposal() (*ProposalData, []byte) {
 	return pc.newProposal(ba)
 }
 
-func (pc proposalCreator) newLeaseProposal(lease roachpb.Lease) (*ProposalData, []byte) {
+func (pc proposalCreator) newLeaseProposal(
+	lease roachpb.Lease, extension bool,
+) (*ProposalData, []byte) {
 	var ba roachpb.BatchRequest
-	ba.Add(&roachpb.RequestLeaseRequest{Lease: lease})
+	req := roachpb.RequestLeaseRequest{Lease: lease}
+	if extension {
+		req.PrevLease = req.Lease
+	}
+	ba.Add(&req)
 	return pc.newProposal(ba)
 }
 
@@ -260,7 +266,7 @@ func TestProposalBuffer(t *testing.T) {
 		var pd *ProposalData
 		var data []byte
 		if leaseReq {
-			pd, data = pc.newLeaseProposal(roachpb.Lease{})
+			pd, data = pc.newLeaseProposal(roachpb.Lease{}, false)
 		} else {
 			pd, data = pc.newPutProposal()
 		}
@@ -466,7 +472,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 		var pd *ProposalData
 		var data []byte
 		if i%2 == 0 {
-			pd, data = pc.newLeaseProposal(roachpb.Lease{})
+			pd, data = pc.newLeaseProposal(roachpb.Lease{}, false)
 		} else {
 			pd, data = pc.newPutProposal()
 		}
@@ -485,7 +491,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 		var pd *ProposalData
 		var data []byte
 		if i%2 == 0 {
-			pd, data = pc.newLeaseProposal(roachpb.Lease{})
+			pd, data = pc.newLeaseProposal(roachpb.Lease{}, false)
 		} else {
 			pd, data = pc.newPutProposal()
 		}
@@ -560,6 +566,9 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		// Set to simulate situations where the local replica is so behind that the
 		// leader is not even part of the range descriptor.
 		leaderNotInRngDesc bool
+		// If true, the lease acquisition is instead a lease extension, which
+		// should be accepted from followers.
+		extension bool
 
 		expRejection bool
 	}{
@@ -577,6 +586,15 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			leader: self + 1,
 			// Rejection - a follower can't request a lease.
 			expRejection: true,
+		},
+		{
+			name:  "follower, lease extension to known eligible leader",
+			state: raft.StateFollower,
+			// Someone else is leader, but we're the leaseholder.
+			leader:    self + 1,
+			extension: true,
+			// No rejection of lease extensions.
+			expRejection: false,
 		},
 		{
 			name:  "follower, known ineligible leader",
@@ -649,7 +667,13 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			tracker := tracker.NewLockfreeTracker()
 			b.Init(&p, tracker, clock, cluster.MakeTestingClusterSettings())
 
-			pd, data := pc.newLeaseProposal(roachpb.Lease{})
+			pd, data := pc.newLeaseProposal(roachpb.Lease{
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID:    roachpb.NodeID(self),
+					StoreID:   roachpb.StoreID(self),
+					ReplicaID: roachpb.ReplicaID(self),
+				},
+			}, tc.extension)
 			_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 			_, err := b.Insert(ctx, pd, data, tok.Move(ctx))
 			require.NoError(t, err)
@@ -855,7 +879,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			case regularWrite:
 				pd, data = pc.newPutProposal()
 			case newLease:
-				pd, data = pc.newLeaseProposal(tc.lease)
+				pd, data = pc.newLeaseProposal(tc.lease, false)
 			case leaseTransfer:
 				var ba roachpb.BatchRequest
 				ba.Add(&roachpb.TransferLeaseRequest{

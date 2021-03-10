@@ -274,6 +274,13 @@ func (tlr *TransferLeaseRequest) prevLease() Lease {
 	return tlr.PrevLease
 }
 
+// IsExtension returns whether the lease request is an extension of an existing
+// lease or whether it is claiming the lease away from a previous owner.
+func (rlr *RequestLeaseRequest) IsExtension() bool {
+	return rlr.PrevLease.Replica.StoreID == rlr.Lease.Replica.StoreID &&
+		rlr.PrevLease.Equivalent(rlr.Lease)
+}
+
 // Response is an interface for RPC responses.
 type Response interface {
 	protoutil.Message

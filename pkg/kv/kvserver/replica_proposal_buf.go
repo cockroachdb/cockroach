@@ -562,18 +562,24 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 		//
 		// A special case is when the leader is known, but is ineligible to get the
 		// lease. In that case, we have no choice but to continue with the proposal.
+		//
+		// Lease extensions always go through.
 		if !leaderInfo.iAmTheLeader && p.Request.IsLeaseRequest() {
 			leaderKnownAndEligible := leaderInfo.leaderKnown && leaderInfo.leaderEligibleForLease
-			if leaderKnownAndEligible && !b.testing.allowLeaseProposalWhenNotLeader {
+			isExtension := p.Request.Requests[0].GetRequestLease().IsExtension()
+			if leaderKnownAndEligible && !isExtension && !b.testing.allowLeaseProposalWhenNotLeader {
 				log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 					leaderInfo.leader)
 				b.p.rejectProposalWithRedirectLocked(ctx, p, leaderInfo.leader)
 				p.tok.doneIfNotMovedLocked(ctx)
 				continue
 			}
-			// If the leader is not known, or if it is known but it's ineligible for
-			// the lease, continue with the proposal as explained above.
-			if !leaderInfo.leaderKnown {
+			// If the leader is not known, or if it is known but it's ineligible
+			// for the lease, continue with the proposal as explained above. We
+			// also send lease extensions for an existing leaseholder.
+			if isExtension {
+				log.VEventf(ctx, 4, "proposing lease extension even though we're not the leader")
+			} else if !leaderInfo.leaderKnown {
 				log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is unknown")
 			} else {
 				log.VEventf(ctx, 2, "proposing lease acquisition even though we're not the leader; the leader is ineligible")
