@@ -551,7 +551,7 @@ with &2 (cte)
  ├── cardinality: [1 - 2]
  ├── volatile, mutations
  ├── stats: [rows=2, distinct(12)=2, null(12)=0]
- ├── cost: 1036.7175
+ ├── cost: 1046.9075
  ├── key: (12)
  ├── insert t.public.child
  │    ├── columns: t.public.child.c:1(int!null)
@@ -562,7 +562,7 @@ with &2 (cte)
  │    ├── cardinality: [1 - 1]
  │    ├── volatile, mutations
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- │    ├── cost: 1036.6075
+ │    ├── cost: 1046.7975
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── values
@@ -582,7 +582,7 @@ with &2 (cte)
  │                   ├── columns: p:6(int!null)
  │                   ├── cardinality: [0 - 1]
  │                   ├── stats: [rows=1e-10]
- │                   ├── cost: 1036.5775
+ │                   ├── cost: 1046.7675
  │                   ├── key: ()
  │                   ├── fd: ()-->(6)
  │                   ├── cte-uses
@@ -602,7 +602,7 @@ with &2 (cte)
  │                   ├── scan t.public.parent
  │                   │    ├── columns: t.public.parent.p:7(int!null)
  │                   │    ├── stats: [rows=1000, distinct(7)=1000, null(7)=0]
- │                   │    ├── cost: 1024.02
+ │                   │    ├── cost: 1034.21
  │                   │    ├── key: (7)
  │                   │    ├── prune: (7)
  │                   │    ├── interesting orderings: (+7)

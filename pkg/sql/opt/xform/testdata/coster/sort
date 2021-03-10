@@ -15,12 +15,12 @@ SELECT f FROM a ORDER BY f DESC
 sort
  ├── columns: f:2!null
  ├── stats: [rows=1000]
- ├── cost: 1283.34569
+ ├── cost: 1293.83569
  ├── ordering: -2
  └── scan a
       ├── columns: f:2!null
       ├── stats: [rows=1000]
-      └── cost: 1054.02
+      └── cost: 1064.51
 
 # Test sort on 0 rows.
 opt
@@ -53,12 +53,12 @@ SELECT * FROM abc ORDER BY b, c, a
 sort
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000]
- ├── cost: 1335.40805
+ ├── cost: 1346.09805
  ├── ordering: +2,+3,+1
  └── scan abc
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000]
-      └── cost: 1074.02
+      └── cost: 1084.71
 
 # The sort ordering has a common prefix with the ordering provided with index ab
 opt
@@ -67,12 +67,12 @@ SELECT * FROM abc ORDER BY a, b, c
 sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1]
- ├── cost: 1144.03
+ ├── cost: 1154.72
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1]
-      ├── cost: 1074.02
+      ├── cost: 1084.71
       └── ordering: +1,+2
 
 # The sort ordering has a common prefix with the ordering provided with index cb
@@ -82,12 +82,12 @@ SELECT * FROM abc ORDER BY c, b, a
 sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
- ├── cost: 1144.03
+ ├── cost: 1154.72
  ├── ordering: +3,+2,+1
  └── scan abc@cb
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
-      ├── cost: 1074.02
+      ├── cost: 1084.71
       └── ordering: +3,+2
 
 # Testing segmented sort cost with only one common prefix column (c).
@@ -97,12 +97,12 @@ SELECT * FROM abc ORDER BY c, a, b
 sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
- ├── cost: 1204.79049
+ ├── cost: 1215.48049
  ├── ordering: +3,+1,+2
  └── scan abc@cb
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
-      ├── cost: 1074.02
+      ├── cost: 1084.71
       └── ordering: +3
 
 # Reduce the number of segments/chunks.
@@ -130,12 +130,12 @@ SELECT * FROM abc ORDER BY a, b, c
 sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0]
- ├── cost: 13397.1869
+ ├── cost: 13407.8769
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0]
-      ├── cost: 10704.02
+      ├── cost: 10714.71
       └── ordering: +1,+2
 
 # Segmented sort should still be chosen with if equality columns help provide the required ordering.
