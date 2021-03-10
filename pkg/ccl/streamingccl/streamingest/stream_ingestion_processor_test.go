@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -131,8 +130,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		partitionAddresses := []streamingccl.PartitionAddress{"partition1", "partition2"}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, "randomgen://test/",
-			partitionAddresses,
-			startTime, nil /* interceptEvents */, mockClient)
+			partitionAddresses, startTime, nil /* interceptEvents */, mockClient)
 		require.NoError(t, err)
 
 		actualRows := make(map[string]struct{})
@@ -308,8 +306,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	streamValidator := newStreamClientValidator()
 	validator := registerValidatorWithClient(streamValidator)
 	out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB, streamAddr, topo.Partitions,
-		startTime, []func(streamingccl.Event, streamingccl.PartitionAddress){cancelAfterCheckpoints,
-			validator}, nil /* mockClient */)
+		startTime, []streamclient.InterceptFn{cancelAfterCheckpoints, validator}, nil /* mockClient */)
 	require.NoError(t, err)
 
 	partitionSpanToTableID := getPartitionSpanToTableID(t, topo.Partitions)
@@ -379,7 +376,7 @@ func runStreamIngestionProcessor(
 	streamAddr string,
 	partitionAddresses []streamingccl.PartitionAddress,
 	startTime hlc.Timestamp,
-	interceptEvents []func(streamingccl.Event, streamingccl.PartitionAddress),
+	interceptEvents []streamclient.InterceptFn,
 	mockClient streamclient.Client,
 ) (*distsqlutils.RowBuffer, error) {
 	st := cluster.MakeTestingClusterSettings()
@@ -397,16 +394,17 @@ func runStreamIngestionProcessor(
 		EvalCtx:     &evalCtx,
 		DiskMonitor: testDiskMonitor,
 	}
-	flowCtx.Cfg.TestingKnobs.StreamIngestionTestingKnobs = &sql.StreamIngestionTestingKnobs{
-		Interceptors: interceptEvents}
 
 	out := &distsqlutils.RowBuffer{}
 	post := execinfrapb.PostProcessSpec{}
 
 	var spec execinfrapb.StreamIngestionDataSpec
-	spec.StreamAddress = streamingccl.StreamAddress(streamAddr)
+	spec.StreamAddress = streamAddr
 
-	spec.PartitionAddresses = partitionAddresses
+	spec.PartitionAddresses = make([]string, len(partitionAddresses))
+	for i, pa := range partitionAddresses {
+		spec.PartitionAddresses[i] = string(pa)
+	}
 	spec.StartTime = startTime
 	processorID := int32(0)
 	proc, err := newStreamIngestionDataProcessor(&flowCtx, processorID, spec, &post, out)
@@ -418,6 +416,12 @@ func runStreamIngestionProcessor(
 
 	if mockClient != nil {
 		sip.client = mockClient
+	}
+
+	if interceptable, ok := sip.client.(streamclient.InterceptableStreamClient); ok {
+		for _, interceptor := range interceptEvents {
+			interceptable.RegisterInterception(interceptor)
+		}
 	}
 
 	sip.Run(ctx)
