@@ -646,11 +646,12 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 
 			var b propBuf
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
+			tracker := tracker.NewLockfreeTracker()
+			b.Init(&p, tracker, clock, cluster.MakeTestingClusterSettings())
 
 			pd, data := pc.newLeaseProposal(roachpb.Lease{})
 			_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
-			_, err := b.Insert(ctx, pd, data, tok)
+			_, err := b.Insert(ctx, pd, data, tok.Move(ctx))
 			require.NoError(t, err)
 			require.NoError(t, b.flushLocked(ctx))
 			if tc.expRejection {
@@ -658,6 +659,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			} else {
 				require.Equal(t, roachpb.ReplicaID(0), rejected)
 			}
+			require.Zero(t, tracker.Count())
 		})
 	}
 }
