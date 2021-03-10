@@ -699,7 +699,7 @@ func (b *Builder) constructComparison(
 	case tree.Contains:
 		return b.factory.ConstructContains(left, right)
 	case tree.ContainedBy:
-		// This is just syntatic sugar that reverses the operands.
+		// This is just syntactic sugar that reverses the operands.
 		return b.factory.ConstructContains(right, left)
 	case tree.JSONExists:
 		return b.factory.ConstructJsonExists(left, right)

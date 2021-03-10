@@ -827,26 +827,24 @@ func EncodeInvertedIndexTableKeys(
 		// arrays.
 		return json.EncodeInvertedIndexKeys(inKey, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
-		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey, version)
+		return encodeArrayInvertedIndexTableKeys(val.(*tree.DArray), inKey, version, false /* excludeNulls */)
 	}
 	return nil, errors.AssertionFailedf("trying to apply inverted index to unsupported type %s", datum.ResolvedType())
 }
 
-// EncodeContainingInvertedIndexSpans takes in a key prefix and returns the
-// spans that must be scanned in the inverted index to evaluate a contains (@>)
-// predicate with the given datum, which should be a container (either JSON
-// or Array). These spans should be used to find the objects in the index that
-// contain the given json or array. In other words, if we have a predicate
-// x @> y, this function should use the value of y to find the spans to scan
-// in an inverted index on x.
+// EncodeContainingInvertedIndexSpans returns the spans that must be scanned in
+// the inverted index to evaluate a contains (@>) predicate with the given
+// datum, which should be a container (either JSON or Array). These spans
+// should be used to find the objects in the index that contain the given json
+// or array. In other words, if we have a predicate x @> y, this function
+// should use the value of y to find the spans to scan in an inverted index on
+// x.
 //
 // The spans are returned in an inverted.SpanExpression, which represents the
 // set operations that must be applied on the spans read during execution. See
 // comments in the SpanExpression definition for details.
-//
-// The input inKey is prefixed to the keys in all returned spans.
 func EncodeContainingInvertedIndexSpans(
-	evalCtx *tree.EvalContext, val tree.Datum, inKey []byte, version descpb.IndexDescriptorVersion,
+	evalCtx *tree.EvalContext, val tree.Datum,
 ) (invertedExpr inverted.Expression, err error) {
 	if val == tree.DNull {
 		return nil, nil
@@ -854,13 +852,45 @@ func EncodeContainingInvertedIndexSpans(
 	datum := tree.UnwrapDatum(evalCtx, val)
 	switch val.ResolvedType().Family() {
 	case types.JsonFamily:
-		return json.EncodeContainingInvertedIndexSpans(inKey, val.(*tree.DJSON).JSON)
+		return json.EncodeContainingInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
 	case types.ArrayFamily:
-		return encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), inKey, version)
+		return encodeContainingArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
+	default:
+		return nil, errors.AssertionFailedf(
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+		)
 	}
-	return nil, errors.AssertionFailedf(
-		"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
-	)
+}
+
+// EncodeContainedInvertedIndexSpans returns the spans that must be scanned in
+// the inverted index to evaluate a contained by (<@) predicate with the given
+// datum, which should be a container (currently only Arrays, not JSON). These
+// spans should be used to find the objects in the index that could be
+// contained by the given json or array. In other words, if we have a predicate
+// x <@ y, this function should use the value of y to find the spans to scan in
+// an inverted index on x.
+//
+// The spans are returned in an inverted.SpanExpression, which represents the
+// set operations that must be applied on the spans read during execution. The
+// span expression returned will never be tight. See comments in the
+// SpanExpression definition for details.
+func EncodeContainedInvertedIndexSpans(
+	evalCtx *tree.EvalContext, val tree.Datum,
+) (invertedExpr inverted.Expression, err error) {
+	if val == tree.DNull {
+		return nil, nil
+	}
+	datum := tree.UnwrapDatum(evalCtx, val)
+	switch val.ResolvedType().Family() {
+	case types.ArrayFamily:
+		return encodeContainedArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
+	case types.JsonFamily:
+		return inverted.NonInvertedColExpression{}, nil
+	default:
+		return nil, errors.AssertionFailedf(
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+		)
+	}
 }
 
 // encodeArrayInvertedIndexTableKeys returns a list of inverted index keys for
@@ -869,8 +899,11 @@ func EncodeContainingInvertedIndexSpans(
 //
 // This function does not return keys for empty arrays or for NULL array elements
 // unless the version is at least descpb.EmptyArraysInInvertedIndexesVersion.
+// It also does not return keys for NULL array elements if excludeNulls is
+// true. This option is used by encodeContainedArrayInvertedIndexSpans, which
+// builds index spans to evaluate <@ (contained by) expressions.
 func encodeArrayInvertedIndexTableKeys(
-	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
+	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion, excludeNulls bool,
 ) (key [][]byte, err error) {
 	if val.Array.Len() == 0 {
 		if version >= descpb.EmptyArraysInInvertedIndexesVersion {
@@ -881,7 +914,7 @@ func encodeArrayInvertedIndexTableKeys(
 	outKeys := make([][]byte, 0, len(val.Array))
 	for i := range val.Array {
 		d := val.Array[i]
-		if d == tree.DNull && version < descpb.EmptyArraysInInvertedIndexesVersion {
+		if d == tree.DNull && (version < descpb.EmptyArraysInInvertedIndexesVersion || excludeNulls) {
 			// Older versions did not include null elements, but we must include them
 			// going forward since `SELECT ARRAY[NULL] @> ARRAY[]` returns true.
 			continue
@@ -906,7 +939,7 @@ func encodeArrayInvertedIndexTableKeys(
 // Returns unique=true if the spans are guaranteed not to produce
 // duplicate primary keys. Otherwise, returns unique=false.
 func encodeContainingArrayInvertedIndexSpans(
-	val *tree.DArray, inKey []byte, version descpb.IndexDescriptorVersion,
+	val *tree.DArray, inKey []byte,
 ) (invertedExpr inverted.Expression, err error) {
 	if val.Array.Len() == 0 {
 		// All arrays contain the empty array. Return a SpanExpression that
@@ -923,7 +956,7 @@ func encodeContainingArrayInvertedIndexSpans(
 		return &inverted.SpanExpression{Tight: true, Unique: true}, nil
 	}
 
-	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, version)
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.EmptyArraysInInvertedIndexesVersion, false /* excludeNulls */)
 	if err != nil {
 		return nil, err
 	}
@@ -938,6 +971,54 @@ func encodeContainingArrayInvertedIndexSpans(
 			invertedExpr = inverted.And(invertedExpr, spanExpr)
 		}
 	}
+	return invertedExpr, nil
+}
+
+// encodeContainedArrayInvertedIndexSpans returns the spans that must be
+// scanned in the inverted index to evaluate a contained by (<@) predicate with
+// the given array, one slice of spans per entry in the array. The input
+// inKey is prefixed to all returned keys.
+//
+// Returns unique=true if the spans are guaranteed not to produce
+// duplicate primary keys. Otherwise, returns unique=false.
+func encodeContainedArrayInvertedIndexSpans(
+	val *tree.DArray, inKey []byte,
+) (invertedExpr inverted.Expression, err error) {
+	// The empty array should always be added to the spans, since it is contained
+	// by everything.
+	emptyArrSpanExpr := inverted.ExprForSpan(
+		inverted.MakeSingleValSpan(encoding.EncodeEmptyArray(inKey)), false, /* tight */
+	)
+	emptyArrSpanExpr.Unique = true
+
+	// If the given array is empty, we return the SpanExpression.
+	if val.Array.Len() == 0 {
+		return emptyArrSpanExpr, nil
+	}
+
+	// We always exclude nulls from the list of keys when evaluating <@.
+	// This is because an expression like ARRAY[NULL] <@ ARRAY[NULL] is false,
+	// since NULL in SQL represents an unknown value.
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.EmptyArraysInInvertedIndexesVersion, true /* excludeNulls */)
+	if err != nil {
+		return nil, err
+	}
+	invertedExpr = emptyArrSpanExpr
+	for _, key := range keys {
+		spanExpr := inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(key), false, /* tight */
+		)
+		invertedExpr = inverted.Or(invertedExpr, spanExpr)
+	}
+
+	// The inverted expression produced for <@ will never be tight.
+	// For example, if we are evaluating if indexed column x <@ ARRAY[1], the
+	// inverted expression would scan for all arrays in x that contain the
+	// empty array or ARRAY[1]. The resulting arrays could contain other values
+	// and would need to be passed through an additional filter. For example,
+	// ARRAY[1, 2, 3] would be returned by the scan, but it should be filtered
+	// out since ARRAY[1, 2, 3] <@ ARRAY[1] is false.
+	invertedExpr.SetNotTight()
 	return invertedExpr, nil
 }
 

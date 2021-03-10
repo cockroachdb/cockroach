@@ -408,14 +408,14 @@ func TestInvertedIndexKey(t *testing.T) {
 
 func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	testCases := []struct {
-		value    string
-		contains string
-		expected bool
-		unique   bool
+		indexedValue string
+		value        string
+		expected     bool
+		unique       bool
 	}{
 		// This test uses EncodeInvertedIndexTableKeys and EncodeContainingInvertedIndexSpans
-		// to determine whether the first Array value contains the second. If the first
-		// value contains the second, expected is true. Otherwise it is false.
+		// to determine whether the first Array value contains the second. If
+		// indexedValue @> value, expected is true. Otherwise it is false.
 		//
 		// If EncodeContainingInvertedIndexSpans produces spans that are guaranteed not to
 		// contain duplicate primary keys, unique is true. Otherwise it is false.
@@ -450,12 +450,11 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 		return arr
 	}
 
-	version := descpb.EmptyArraysInInvertedIndexesVersion
 	runTest := func(left, right tree.Datum, expected, expectUnique bool) {
-		keys, err := EncodeInvertedIndexTableKeys(left, nil, version)
+		keys, err := EncodeInvertedIndexTableKeys(left, nil, descpb.EmptyArraysInInvertedIndexesVersion)
 		require.NoError(t, err)
 
-		invertedExpr, err := EncodeContainingInvertedIndexSpans(&evalCtx, right, nil, version)
+		invertedExpr, err := EncodeContainingInvertedIndexSpans(&evalCtx, right)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -486,21 +485,21 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 
 	// Run pre-defined test cases from above.
 	for _, c := range testCases {
-		value, contains := parseArray(c.value), parseArray(c.contains)
+		indexedValue, value := parseArray(c.indexedValue), parseArray(c.value)
 
-		// First check that evaluating `value @> contains` matches the expected
+		// First check that evaluating `indexedValue @> value` matches the expected
 		// result.
-		res, err := tree.ArrayContains(&evalCtx, value.(*tree.DArray), contains.(*tree.DArray))
+		res, err := tree.ArrayContains(&evalCtx, indexedValue.(*tree.DArray), value.(*tree.DArray))
 		require.NoError(t, err)
 		if bool(*res) != c.expected {
 			t.Fatalf(
 				"expected value of %s @> %s did not match actual value. Expected: %v. Got: %s",
-				c.value, c.contains, c.expected, res.String(),
+				c.indexedValue, c.value, c.expected, res.String(),
 			)
 		}
 
 		// Now check that we get the same result with the inverted index spans.
-		runTest(value, contains, c.expected, c.unique)
+		runTest(indexedValue, value, c.expected, c.unique)
 	}
 
 	// Run a set of randomly generated test cases.
@@ -522,6 +521,154 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 
 		// Now check that we get the same result with the inverted index spans.
 		runTest(left, right, bool(*res), expectUnique)
+	}
+}
+
+func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		indexedValue string
+		value        string
+		containsKeys bool
+		expected     bool
+		unique       bool
+	}{
+
+		// This test uses EncodeInvertedIndexTableKeys and EncodeContainedInvertedIndexSpans
+		// to determine if the spans produced from the second Array value will
+		// correctly include or exclude the first value, indicated by
+		// containsKeys. Then, if indexedValue <@ value, expected is true.
+
+		// Not all indexedValues included in the spans are contained by the value,
+		// so the expression is never tight. Also, the expression is a union of
+		// spans, so unique should never be true unless the value produces a single
+		// empty array span.
+
+		// First we test that the spans will include expected values, even if
+		// they are not necessarily contained by the value.
+		{`{}`, `{}`, true, true, true},
+		{`{1}`, `{1}`, true, true, false},
+		{`{}`, `{1}`, true, true, false},
+		{`{1, 2}`, `{1}`, true, false, false},
+		{`{}`, `{1, 2}`, true, true, false},
+		{`{2}`, `{1, 2}`, true, true, false},
+		{`{2, NULL}`, `{1, 2}`, true, false, false},
+		{`{1, 2}`, `{1, 2}`, true, true, false},
+		{`{1, 3}`, `{1, 2}`, true, false, false},
+		{`{2}`, `{2, 2}`, true, true, false},
+		{`{1, 2}`, `{1, 2, 1}`, true, true, false},
+		{`{1, 1, 2, 3}`, `{1, 2, 1}`, true, false, false},
+		{`{1, 2, 4}`, `{1, 2, 3}`, true, false, false},
+		{`{}`, `{NULL}`, true, true, true},
+		{`{}`, `{NULL, NULL}`, true, true, true},
+		{`{2}`, `{2, NULL}`, true, true, false},
+		{`{2, 3}`, `{2, NULL}`, true, false, false},
+		{`{1, NULL}`, `{1, 2, NULL}`, true, false, false},
+
+		// Then we test that the spans exclude results that should be excluded.
+		{`{1}`, `{}`, false, false, true},
+		{`{NULL}`, `{}`, false, false, true},
+		{`{2}`, `{1}`, false, false, false},
+		{`{4, 3}`, `{2, 1}`, false, false, false},
+		{`{5}`, `{1, 2, 1}`, false, false, false},
+		{`{NULL, 3}`, `{1, 2, 1}`, false, false, false},
+		{`{NULL}`, `{NULL}`, false, false, true},
+		{`{NULL}`, `{1, NULL}`, false, false, false},
+		{`{2, NULL}`, `{1, NULL}`, false, false, false},
+	}
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	parseArray := func(s string) tree.Datum {
+		arr, _, err := tree.ParseDArrayFromString(&evalCtx, s, types.Int)
+		if err != nil {
+			t.Fatalf("Failed to parse array %s: %v", s, err)
+		}
+		return arr
+	}
+
+	runTest := func(indexedValue, value tree.Datum, expectContainsKeys, expected, expectUnique bool) {
+		keys, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.EmptyArraysInInvertedIndexesVersion)
+		require.NoError(t, err)
+
+		invertedExpr, err := EncodeContainedInvertedIndexSpans(&evalCtx, value)
+		require.NoError(t, err)
+
+		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
+		if !ok {
+			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		}
+
+		// Array spans for <@ are never tight.
+		if spanExpr.Tight == true {
+			t.Errorf("For %s, expected tight=false, but got true", value)
+		}
+
+		// Array spans for <@ are never unique unless the value produces a single
+		// empty array span.
+		if spanExpr.Unique != expectUnique {
+			if expectUnique {
+				t.Errorf("For %s, expected unique=true, but got false", value)
+			} else {
+				t.Errorf("For %s, expected unique=false, but got true", value)
+			}
+		}
+
+		// Check if the indexedValue is included by the spans.
+		containsKeys, err := spanExpr.ContainsKeys(keys)
+		require.NoError(t, err)
+
+		if containsKeys != expectContainsKeys {
+			if expectContainsKeys {
+				t.Errorf("expected spans of %s to include %s but they did not", value, indexedValue)
+			} else {
+				t.Errorf("expected spans of %s not to include %s but they did", value, indexedValue)
+			}
+		}
+
+		// Since the spans are never tight, apply an additional filter to determine
+		// if the result is contained.
+		actual, err := tree.ArrayContains(&evalCtx, value.(*tree.DArray), indexedValue.(*tree.DArray))
+		require.NoError(t, err)
+		if bool(*actual) != expected {
+			if expected {
+				t.Errorf("expected %s to be contained by %s but it was not", indexedValue, value)
+			} else {
+				t.Errorf("expected %s not to be contained by %s but it was", indexedValue, value)
+			}
+		}
+	}
+
+	// Run pre-defined test cases from above.
+	for _, c := range testCases {
+		indexedValue, value := parseArray(c.indexedValue), parseArray(c.value)
+		runTest(indexedValue, value, c.containsKeys, c.expected, c.unique)
+	}
+
+	// Run a set of randomly generated test cases.
+	rng, _ := randutil.NewPseudoRand()
+	for i := 0; i < 100; i++ {
+		typ := RandArrayType(rng)
+
+		// Generate two random arrays and evaluate the result of `left <@ right`.
+		left := RandArray(rng, typ, 0 /* nullChance */)
+		right := RandArray(rng, typ, 0 /* nullChance */)
+
+		// We cannot check for false positives with these tests (due to the fact that
+		// the spans are not tight), so we will only test for false negatives.
+		isContained, err := tree.ArrayContains(&evalCtx, right.(*tree.DArray), left.(*tree.DArray))
+		require.NoError(t, err)
+		if !*isContained {
+			continue
+		}
+
+		// Check for uniqueness. We do not have to worry about cases containing
+		// NULL since nullChance is set to 0.
+		unique := false
+		if len(right.(*tree.DArray).Array) == 0 {
+			unique = true
+		}
+
+		// Now check that we get the same result with the inverted index spans.
+		runTest(left, right, true, true, unique)
 	}
 }
 
