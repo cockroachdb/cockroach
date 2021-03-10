@@ -430,7 +430,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	if err := params.p.AlterPrimaryKey(
 		params.ctx,
 		n.tableDesc,
-		&tree.AlterTableAlterPrimaryKey{
+		tree.AlterTableAlterPrimaryKey{
 			Name:    tree.Name(n.tableDesc.PrimaryIndex.Name),
 			Columns: cols,
 		},
