@@ -39,20 +39,22 @@ import TerminateSessionModal, {
 } from "./terminateSessionModal";
 
 import {
-  CancelSessionRequestMessage,
-  CancelQueryRequestMessage,
-} from "src/api/terminateQueryApi";
+  ICancelSessionRequest,
+  ICancelQueryRequest,
+} from "src/store/terminateQuery";
 
 import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "src/statementsPage/statementsPage.module.scss";
+
 const sortableTableCx = classNames.bind(sortedTableStyles);
 const cx = classNames.bind(styles);
+
 interface OwnProps {
   sessions: SessionInfo[];
   sessionsError: Error | Error[];
   refreshSessions: () => void;
-  cancelSession: (req: CancelSessionRequestMessage) => void;
-  cancelQuery: (req: CancelQueryRequestMessage) => void;
+  cancelSession: (payload: ICancelSessionRequest) => void;
+  cancelQuery: (payload: ICancelQueryRequest) => void;
   onPageChanged?: (newPage: number) => void;
 }
 
