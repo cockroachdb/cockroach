@@ -186,6 +186,7 @@ func queryPairs(t *testing.T, sqlDB *gosql.DB, query string) []pair {
 // and ensures that the data was backfilled properly.
 func TestIndexBackfillerComputedAndGeneratedColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// A test case exists to exercise the behavior of an index backfill.
 	// The case gets to do arbitrary things to the table (which is created with
