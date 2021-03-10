@@ -532,6 +532,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			continue
 		}
 		buf[i] = nil // clear buffer
+		reproposal := !p.tok.stillTracked()
 
 		// Handle an edge case about lease acquisitions: we don't want to forward
 		// lease acquisitions to another node (which is what happens when we're not
@@ -566,6 +567,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			if leaderKnownAndEligible && !b.testing.allowLeaseProposalWhenNotLeader {
 				log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 					leaderInfo.leader)
+				p.tok.doneLockedMaybe(ctx)
 				b.p.rejectProposalWithRedirectLocked(ctx, p, leaderInfo.leader)
 				continue
 			}
@@ -578,13 +580,10 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			}
 		}
 
-		// Exit the tracker.
-		reproposal := !p.tok.stillTracked()
-		if !reproposal {
-			p.tok.doneLocked(ctx)
-		}
 		// Raft processing bookkeeping.
 		b.p.registerProposalLocked(p)
+		// Exit the tracker.
+		p.tok.doneLockedMaybe(ctx)
 
 		// Potentially drop the proposal before passing it to etcd/raft, but
 		// only after performing necessary bookkeeping.
@@ -855,6 +854,16 @@ func (t *TrackedRequestToken) doneLocked(ctx context.Context) {
 	}
 	t.done = true
 	t.b.evalTracker.Untrack(ctx, t.tok)
+}
+
+// doneLockedMaybe is like doneLocked, but it tolerates being called on a token
+// that Done* was already called on. In particular, this is used when wanting to
+// untrack a proposal that might, in fact, be a reproposal.
+func (t *TrackedRequestToken) doneLockedMaybe(ctx context.Context) {
+	if t.done {
+		return
+	}
+	t.doneLocked(ctx)
 }
 
 // stillTracked returns true if no Done* method has been called.
