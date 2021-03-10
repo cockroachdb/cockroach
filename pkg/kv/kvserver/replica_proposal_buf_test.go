@@ -51,6 +51,8 @@ type testProposer struct {
 	// If not nil, this is called by RejectProposalWithRedirectLocked(). If nil,
 	// RejectProposalWithRedirectLocked() panics.
 	onRejectProposalWithRedirectLocked func(prop *ProposalData, redirectTo roachpb.ReplicaID)
+	// ownsValidLease is returned by ownsValidLeaseRLocked()
+	ownsValidLease bool
 
 	// leaderReplicaInDescriptor is set if the leader (as indicated by raftGroup)
 	// is known, and that leader is part of the range's descriptor (as seen by the
@@ -148,6 +150,10 @@ func (t *testProposer) registerProposalLocked(p *ProposalData) {
 	t.registered++
 }
 
+func (t *testProposer) ownsValidLeaseRLocked(ctx context.Context, now hlc.ClockTimestamp) bool {
+	return t.ownsValidLease
+}
+
 func (t *testProposer) leaderStatusRLocked(raftGroup proposerRaft) rangeLeaderInfo {
 	leaderKnown := raftGroup.BasicStatus().Lead != raft.None
 	var leaderRep roachpb.ReplicaID
@@ -201,9 +207,15 @@ func (pc proposalCreator) newPutProposal() (*ProposalData, []byte) {
 	return pc.newProposal(ba)
 }
 
-func (pc proposalCreator) newLeaseProposal(lease roachpb.Lease) (*ProposalData, []byte) {
+func (pc proposalCreator) newLeaseProposal(
+	lease roachpb.Lease, extension bool,
+) (*ProposalData, []byte) {
 	var ba roachpb.BatchRequest
-	ba.Add(&roachpb.RequestLeaseRequest{Lease: lease})
+	req := roachpb.RequestLeaseRequest{Lease: lease}
+	if extension {
+		req.PrevLease = req.Lease
+	}
+	ba.Add(&req)
 	return pc.newProposal(ba)
 }
 
@@ -260,7 +272,7 @@ func TestProposalBuffer(t *testing.T) {
 		var pd *ProposalData
 		var data []byte
 		if leaseReq {
-			pd, data = pc.newLeaseProposal(roachpb.Lease{})
+			pd, data = pc.newLeaseProposal(roachpb.Lease{}, false /* extension */)
 		} else {
 			pd, data = pc.newPutProposal()
 		}
@@ -466,7 +478,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 		var pd *ProposalData
 		var data []byte
 		if i%2 == 0 {
-			pd, data = pc.newLeaseProposal(roachpb.Lease{})
+			pd, data = pc.newLeaseProposal(roachpb.Lease{}, false /* extension */)
 		} else {
 			pd, data = pc.newPutProposal()
 		}
@@ -485,7 +497,7 @@ func TestProposalBufferRegistrationWithInsertionErrors(t *testing.T) {
 		var pd *ProposalData
 		var data []byte
 		if i%2 == 0 {
-			pd, data = pc.newLeaseProposal(roachpb.Lease{})
+			pd, data = pc.newLeaseProposal(roachpb.Lease{}, false /* extension */)
 		} else {
 			pd, data = pc.newPutProposal()
 		}
@@ -560,6 +572,10 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 		// Set to simulate situations where the local replica is so behind that the
 		// leader is not even part of the range descriptor.
 		leaderNotInRngDesc bool
+		// If true, the follower has a valid lease.
+		ownsValidLease bool
+		// If true, the lease acquisition is instead a lease extension.
+		extension bool
 
 		expRejection bool
 	}{
@@ -576,6 +592,27 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			// Someone else is leader.
 			leader: self + 1,
 			// Rejection - a follower can't request a lease.
+			expRejection: true,
+		},
+		{
+			name:  "follower, lease extension despite known eligible leader",
+			state: raft.StateFollower,
+			// Someone else is leader, but we're the leaseholder.
+			leader:         self + 1,
+			extension:      true,
+			ownsValidLease: true,
+			// No rejection of lease extensions.
+			expRejection: false,
+		},
+		{
+			name:  "follower, stale lease extension rejected with known eligible leader",
+			state: raft.StateFollower,
+			// Someone else is leader, we're trying to extend a lease that
+			// we had but it's no longer valid.
+			leader:         self + 1,
+			extension:      true,
+			ownsValidLease: false,
+			// Extension of invalid lease is rejected.
 			expRejection: true,
 		},
 		{
@@ -643,13 +680,20 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			p.raftGroup = r
 			p.leaderReplicaInDescriptor = !tc.leaderNotInRngDesc
 			p.leaderReplicaType = tc.leaderRepType
+			p.ownsValidLease = tc.ownsValidLease
 
 			var b propBuf
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 			tracker := tracker.NewLockfreeTracker()
 			b.Init(&p, tracker, clock, cluster.MakeTestingClusterSettings())
 
-			pd, data := pc.newLeaseProposal(roachpb.Lease{})
+			pd, data := pc.newLeaseProposal(roachpb.Lease{
+				Replica: roachpb.ReplicaDescriptor{
+					NodeID:    roachpb.NodeID(self),
+					StoreID:   roachpb.StoreID(self),
+					ReplicaID: roachpb.ReplicaID(self),
+				},
+			}, tc.extension)
 			_, tok := b.TrackEvaluatingRequest(ctx, hlc.MinTimestamp)
 			_, err := b.Insert(ctx, pd, data, tok.Move(ctx))
 			require.NoError(t, err)
@@ -855,7 +899,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 			case regularWrite:
 				pd, data = pc.newPutProposal()
 			case newLease:
-				pd, data = pc.newLeaseProposal(tc.lease)
+				pd, data = pc.newLeaseProposal(tc.lease, false /* extension */)
 			case leaseTransfer:
 				var ba roachpb.BatchRequest
 				ba.Add(&roachpb.TransferLeaseRequest{
