@@ -1235,7 +1235,7 @@ vectorized: true
             │     label: buffer 1
             │
             └── • scan
-                  estimated row count: 1 (100% of the table)
+                  estimated row count: 1 (100% of the table; stats collected <hidden> ago)
                   table: p@primary
                   spans: FULL SCAN
 
@@ -1258,7 +1258,7 @@ vectorized: true
 │           │ estimated row count: 33
 │           │
 │           └── • scan
-│                 estimated row count: 33 (33% of the table)
+│                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
 │                 table: c@primary
 │                 spans: [/1 - ]
 │                 locking strength: for update
@@ -1280,7 +1280,7 @@ vectorized: true
             │         label: buffer 1
             │
             └── • scan
-                  estimated row count: 1 (100% of the table)
+                  estimated row count: 1 (100% of the table; stats collected <hidden> ago)
                   table: p@primary
                   spans: FULL SCAN
 
@@ -1300,7 +1300,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • scan
-│             estimated row count: 1 (100% of the table)
+│             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │             table: p@primary
 │             spans: [/1 - ]
 │
@@ -1352,7 +1352,7 @@ vectorized: true
 │           │ estimated row count: 33
 │           │
 │           └── • scan
-│                 estimated row count: 33 (33% of the table)
+│                 estimated row count: 33 (33% of the table; stats collected <hidden> ago)
 │                 table: c@primary
 │                 spans: [/1 - ]
 │                 locking strength: for update
@@ -1389,7 +1389,7 @@ vectorized: true
 │       │ label: buffer 1
 │       │
 │       └── • scan
-│             estimated row count: 1 (100% of the table)
+│             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │             table: p@primary
 │             spans: [/1 - ]
 │
@@ -1461,7 +1461,7 @@ vectorized: true
             │     label: buffer 1
             │
             └── • scan
-                  estimated row count: 10 (100% of the table)
+                  estimated row count: 10 (100% of the table; stats collected <hidden> ago)
                   table: small_parent@primary
                   spans: FULL SCAN
 

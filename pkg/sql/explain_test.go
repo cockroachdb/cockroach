@@ -13,8 +13,11 @@ package sql_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -23,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestStatementReuses(t *testing.T) {
@@ -254,5 +258,62 @@ func TestPrepareExplain(t *testing.T) {
 		}
 
 		stmt.Close()
+	}
+}
+
+// TestExplainStatsCollected verifies that we correctly show how long ago table
+// stats were collected. This cannot be tested through the usual datadriven
+// tests because the value depends on the current time.
+func TestExplainStatsCollected(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(godb)
+	r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
+
+	testCases := []struct {
+		ago      time.Duration
+		expected string
+	}{
+		// Note: the test times must be significantly larger than the time that can
+		// pass between issuing the ALTER TABLE and the EXPLAIN.
+		{ago: 10 * time.Minute, expected: "10 minutes"},
+		{ago: time.Hour, expected: "1 hour"},
+		{ago: 5 * 24 * time.Hour, expected: "5 days"},
+	}
+
+	for _, tc := range testCases {
+		timestamp := timeutil.Now().UTC().Add(-tc.ago).Format("2006-01-02 15:04:05.999999-07:00")
+		inject := fmt.Sprintf(
+			`ALTER TABLE abc INJECT STATISTICS '[{
+			  "columns": ["a"],
+				"created_at": "%s",
+				"row_count": 1000,
+				"distinct_count": 1000
+			}]'`,
+			timestamp,
+		)
+		r.Exec(t, inject)
+		explainOutput := r.QueryStr(t, "EXPLAIN SELECT * FROM abc")
+		var statsRow string
+		for _, row := range explainOutput {
+			if len(row) != 1 {
+				t.Fatalf("expected one column")
+			}
+			val := row[0]
+			if strings.Contains(val, "estimated row count") {
+				statsRow = val
+				break
+			}
+		}
+		if statsRow == "" {
+			t.Fatal("could not find statistics row in explain output")
+		}
+		if !strings.Contains(statsRow, fmt.Sprintf("stats collected %s ago", tc.expected)) {
+			t.Errorf("expected '%s', got '%s'", tc.expected, strings.TrimSpace(statsRow))
+		}
 	}
 }

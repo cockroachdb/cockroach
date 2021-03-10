@@ -81,7 +81,7 @@ network usage: <hidden>
       actual row count: 2
       KV rows read: 2
       KV bytes read: 16 B
-      estimated row count: 1 (100% of the table)
+      estimated row count: 1 (100% of the table; stats collected <hidden> ago)
       table: c@sec
       spans: FULL SCAN
 ·
@@ -155,7 +155,7 @@ network usage: <hidden>
 │         actual row count: 2
 │         KV rows read: 2
 │         KV bytes read: 16 B
-│         estimated row count: 1 (100% of the table)
+│         estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │         table: c@sec
 │         spans: FULL SCAN
 │

@@ -357,7 +357,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		case tree.ExplainPlan:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
 			flags := explain.MakeFlags(&e.ExplainOptions)
-			if ex.server.cfg.TestingKnobs.DeterministicExplainAnalyze {
+			if ex.server.cfg.TestingKnobs.DeterministicExplain {
 				flags.Redact = explain.RedactAll
 			}
 			ih.SetOutputMode(explainAnalyzePlanOutput, flags)
@@ -365,7 +365,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		case tree.ExplainDistSQL:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDistSQLUseCounter)
 			flags := explain.MakeFlags(&e.ExplainOptions)
-			if ex.server.cfg.TestingKnobs.DeterministicExplainAnalyze {
+			if ex.server.cfg.TestingKnobs.DeterministicExplain {
 				flags.Redact = explain.RedactAll
 			}
 			ih.SetOutputMode(explainAnalyzeDistSQLOutput, flags)
