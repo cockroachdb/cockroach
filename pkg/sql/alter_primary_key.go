@@ -48,7 +48,7 @@ type alterPrimaryKeyLocalitySwap struct {
 func (p *planner) AlterPrimaryKey(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,
-	alterPKNode *tree.AlterTableAlterPrimaryKey,
+	alterPKNode tree.AlterTableAlterPrimaryKey,
 	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
 ) error {
 	if alterPKNode.Interleave != nil {
@@ -153,7 +153,7 @@ func (p *planner) AlterPrimaryKey(
 	// primary index, which would mean nothing needs to be modified
 	// here.
 	{
-		requiresIndexChange, err := p.shouldCreateIndexes(ctx, tableDesc, alterPKNode, alterPrimaryKeyLocalitySwap)
+		requiresIndexChange, err := p.shouldCreateIndexes(ctx, tableDesc, &alterPKNode, alterPrimaryKeyLocalitySwap)
 		if err != nil {
 			return err
 		}
@@ -190,12 +190,12 @@ func (p *planner) AlterPrimaryKey(
 	// If the new index is requested to be sharded, set up the index descriptor
 	// to be sharded, and add the new shard column if it is missing.
 	if alterPKNode.Sharded != nil {
-		shardCol, newColumn, err := setupShardedIndex(
+		shardCol, newColumns, newColumn, err := setupShardedIndex(
 			ctx,
 			p.EvalContext(),
 			&p.semaCtx,
 			p.SessionData().HashShardedIndexesEnabled,
-			&alterPKNode.Columns,
+			alterPKNode.Columns,
 			alterPKNode.Sharded.ShardBuckets,
 			tableDesc,
 			newPrimaryIndexDesc,
@@ -204,6 +204,7 @@ func (p *planner) AlterPrimaryKey(
 		if err != nil {
 			return err
 		}
+		alterPKNode.Columns = newColumns
 		if newColumn {
 			if err := p.setupFamilyAndConstraintForShard(
 				ctx,
