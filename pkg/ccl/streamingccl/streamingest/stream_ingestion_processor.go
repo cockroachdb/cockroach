@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -138,23 +137,9 @@ func newStreamIngestionDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	streamClient, err := streamclient.NewStreamClient(spec.StreamAddress)
+	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(spec.StreamAddress))
 	if err != nil {
 		return nil, err
-	}
-
-	// Check if there are any interceptor methods that need to be registered with
-	// the stream client.
-	// These methods are invoked on every emitted Event.
-	if knobs, ok := flowCtx.Cfg.TestingKnobs.StreamIngestionTestingKnobs.(*sql.
-		StreamIngestionTestingKnobs); ok {
-		if knobs.Interceptors != nil {
-			if interceptable, ok := streamClient.(streamclient.InterceptableStreamClient); ok {
-				for _, interceptor := range knobs.Interceptors {
-					interceptable.RegisterInterception(interceptor)
-				}
-			}
-		}
 	}
 
 	sip := &streamIngestionProcessor{
@@ -212,7 +197,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	// Initialize the event streams.
 	eventChs := make(map[streamingccl.PartitionAddress]chan streamingccl.Event)
 	errChs := make(map[streamingccl.PartitionAddress]chan error)
-	for _, partitionAddress := range sip.spec.PartitionAddresses {
+	for _, pa := range sip.spec.PartitionAddresses {
+		partitionAddress := streamingccl.PartitionAddress(pa)
 		eventCh, errCh, err := sip.client.ConsumePartition(ctx, partitionAddress, sip.spec.StartTime)
 		if err != nil {
 			sip.MoveToDraining(errors.Wrapf(err, "consuming partition %v", partitionAddress))
