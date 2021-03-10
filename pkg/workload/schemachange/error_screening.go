@@ -474,21 +474,36 @@ func constraintIsUnique(
 	`, tableName.String(), constraintName))
 }
 
+func columnIsStoredComputed(
+	tx *pgx.Tx, tableName *tree.TableName, columnName string,
+) (bool, error) {
+	// Note that we COALESCE because the column may not exist.
+	return scanBool(tx, `
+SELECT COALESCE(
+        (
+            SELECT attgenerated
+              FROM pg_catalog.pg_attribute
+             WHERE attrelid = $1:::REGCLASS AND attname = $2
+        )
+        = 's',
+        false
+       );
+`, tableName.String(), columnName)
+}
+
 func columnIsComputed(tx *pgx.Tx, tableName *tree.TableName, columnName string) (bool, error) {
 	// Note that we COALESCE because the column may not exist.
 	return scanBool(tx, `
-     SELECT COALESCE(
+SELECT COALESCE(
         (
-            SELECT is_generated
-              FROM information_schema.columns
-             WHERE table_schema = $1
-               AND table_name = $2
-               AND column_name = $3
+            SELECT attgenerated
+              FROM pg_catalog.pg_attribute
+             WHERE attrelid = $1:::REGCLASS AND attname = $2
         )
-        = 'YES',
+        != '',
         false
        );
-`, tableName.Schema(), tableName.Object(), columnName)
+`, tableName.String(), columnName)
 }
 
 func constraintExists(tx *pgx.Tx, constraintName string) (bool, error) {
