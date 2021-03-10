@@ -201,7 +201,9 @@ func (ex *connExecutor) prepare(
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
 		ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 		p := &ex.planner
-		ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+		if origin != PreparedStatementOriginSQL {
+			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+		}
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p)
