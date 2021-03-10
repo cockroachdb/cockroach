@@ -26,6 +26,7 @@ require (
 	github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e
 	github.com/aws/aws-sdk-go v1.36.33
 	github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e
+	github.com/bazelbuild/rules_go v0.26.0
 	github.com/benesch/cgosymbolizer v0.0.0-20180702220239-70e1ee2b39d3
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
 	github.com/cenkalti/backoff v2.1.1+incompatible
