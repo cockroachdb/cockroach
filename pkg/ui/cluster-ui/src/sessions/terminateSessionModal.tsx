@@ -14,24 +14,18 @@ import React, {
   useImperativeHandle,
   useState,
 } from "react";
+import { ICancelSessionRequest } from "src/store/terminateQuery";
 import { Modal } from "../modal";
 import { Text } from "../text";
-
-//import {cockroach} from "src/js/protos";
-//import ICancelSessionRequest = cockroach.server.serverpb.ICancelSessionRequest;
-type ICancelSessionRequest = any;
-//import {trackTerminateSession} from "src/util/analytics/trackTerminate";
 
 export interface TerminateSessionModalRef {
   showModalFor: (req: ICancelSessionRequest) => void;
 }
 
 interface TerminateSessionModalProps {
-  //cancel: (req: ICancelSessionRequest) => void;
-  cancel?: (req: ICancelSessionRequest) => void;
+  cancel: (payload: ICancelSessionRequest) => void;
 }
 
-// tslint:disable-next-line:variable-name
 const TerminateSessionModal = (
   props: TerminateSessionModalProps,
   ref: React.RefObject<TerminateSessionModalRef>,
@@ -42,7 +36,6 @@ const TerminateSessionModal = (
 
   const onOkHandler = useCallback(() => {
     cancel(req);
-    //trackTerminateSession();
     setVisible(false);
   }, [req, cancel]);
 

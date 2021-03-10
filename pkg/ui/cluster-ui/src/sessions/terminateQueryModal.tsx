@@ -16,23 +16,15 @@ import React, {
 } from "react";
 import { Modal } from "../modal";
 import { Text } from "../text";
-
-// import {cockroach} from "src/js/protos";
-// import {trackTerminateQuery} from "src/util/analytics/trackTerminate";
-
-// import ICancelQueryRequest = cockroach.server.serverpb.ICancelQueryRequest;
-type ICancelQueryRequest = any;
-
+import { ICancelQueryRequest } from "src/store/terminateQuery";
 export interface TerminateQueryModalRef {
   showModalFor: (req: ICancelQueryRequest) => void;
 }
 
 interface TerminateQueryModalProps {
-  //cancel: (req: ICancelQueryRequest) => void;
-  cancel?: (req: ICancelQueryRequest) => void;
+  cancel: (payload: ICancelQueryRequest) => void;
 }
 
-// tslint:disable-next-line:variable-name
 const TerminateQueryModal = (
   props: TerminateQueryModalProps,
   ref: React.RefObject<TerminateQueryModalRef>,
@@ -43,7 +35,6 @@ const TerminateQueryModal = (
 
   const onOkHandler = useCallback(() => {
     cancel(req);
-    //trackTerminateQuery();
     setVisible(false);
   }, [req, cancel]);
 
