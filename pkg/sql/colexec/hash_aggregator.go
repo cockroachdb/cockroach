@@ -216,9 +216,7 @@ func (op *hashAggregator) Next(ctx context.Context) coldata.Batch {
 			op.bufferingState.pendingBatch, op.bufferingState.unprocessedIdx = op.Input.Next(ctx), 0
 			n := op.bufferingState.pendingBatch.Length()
 			if op.inputTrackingState.tuples != nil {
-				if err := op.inputTrackingState.tuples.Enqueue(ctx, op.bufferingState.pendingBatch); err != nil {
-					colexecerror.InternalError(err)
-				}
+				op.inputTrackingState.tuples.Enqueue(ctx, op.bufferingState.pendingBatch)
 				op.inputTrackingState.zeroBatchEnqueued = n == 0
 			}
 			if n == 0 {
@@ -480,9 +478,7 @@ func (op *hashAggregator) ExportBuffered(ctx context.Context, _ colexecop.Operat
 	if !op.inputTrackingState.zeroBatchEnqueued {
 		// Per the contract of the spilling queue, we need to append a
 		// zero-length batch.
-		if err := op.inputTrackingState.tuples.Enqueue(ctx, coldata.ZeroBatch); err != nil {
-			colexecerror.InternalError(err)
-		}
+		op.inputTrackingState.tuples.Enqueue(ctx, coldata.ZeroBatch)
 		op.inputTrackingState.zeroBatchEnqueued = true
 	}
 	batch, err := op.inputTrackingState.tuples.Dequeue(ctx)
