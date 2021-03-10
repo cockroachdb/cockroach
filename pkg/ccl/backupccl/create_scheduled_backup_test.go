@@ -722,8 +722,8 @@ INSERT INTO t values (1), (10), (100);
 		require.NoError(t, th.executeSchedules())
 		th.waitForSuccessfulScheduledJob(t, incID)
 
-		return schedules[0].ScheduleID(),
-			schedules[1].ScheduleID(),
+		return fullID,
+			incID,
 			func() {
 				th.sqlDB.Exec(t, "DROP SCHEDULE $1", schedules[0].ScheduleID())
 				th.sqlDB.Exec(t, "DROP SCHEDULE $1", schedules[1].ScheduleID())
