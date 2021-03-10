@@ -1730,11 +1730,6 @@ CREATE TABLE pg_catalog.pg_aggregate (
    aggfinalmodify "char" NULL,
    aggmfinalmodify "char" NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_aggregate_fnoid_index (
-   aggfnoid REGPROC NULL
-)  CREATE TABLE pg_catalog.pg_aggregate_fnoid_index (
-   aggfnoid REGPROC NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_am (
    oid OID NULL,
    amname NAME NULL,
@@ -1804,11 +1799,6 @@ CREATE TABLE pg_catalog.pg_am (
    amhandler OID NULL,
    amtype "char" NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_am_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_am_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_amop (
    amoplefttype OID NULL,
    amopmethod OID NULL,
@@ -1830,31 +1820,6 @@ CREATE TABLE pg_catalog.pg_amop (
    amopsortfamily OID NULL,
    amopstrategy INT2 NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_amop_fam_strat_index (
-   amoplefttype OID NULL,
-   amoprighttype OID NULL,
-   amopstrategy INT2 NULL,
-   amopfamily OID NULL
-)  CREATE TABLE pg_catalog.pg_amop_fam_strat_index (
-   amoplefttype OID NULL,
-   amoprighttype OID NULL,
-   amopstrategy INT2 NULL,
-   amopfamily OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_amop_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_amop_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_amop_opr_fam_index (
-   amoppurpose "char" NULL,
-   amopfamily OID NULL,
-   amopopr OID NULL
-)  CREATE TABLE pg_catalog.pg_amop_opr_fam_index (
-   amoppurpose "char" NULL,
-   amopfamily OID NULL,
-   amopopr OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_amproc (
    amproc REGPROC NULL,
    amprocfamily OID NULL,
@@ -1868,22 +1833,6 @@ CREATE TABLE pg_catalog.pg_amproc (
    amproclefttype OID NULL,
    amprocnum INT2 NULL,
    amprocrighttype OID NULL,
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_amproc_fam_proc_index (
-   amprocfamily OID NULL,
-   amproclefttype OID NULL,
-   amprocnum INT2 NULL,
-   amprocrighttype OID NULL
-)  CREATE TABLE pg_catalog.pg_amproc_fam_proc_index (
-   amprocfamily OID NULL,
-   amproclefttype OID NULL,
-   amprocnum INT2 NULL,
-   amprocrighttype OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_amproc_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_amproc_oid_index (
    oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_attrdef (
@@ -1900,18 +1849,6 @@ CREATE TABLE pg_catalog.pg_attrdef (
    adbin STRING NULL,
    adsrc STRING NULL,
    INDEX pg_attrdef_adrelid_idx (adrelid ASC) STORING (oid, adnum, adbin, adsrc)
-)  {}  {}
-CREATE TABLE pg_catalog.pg_attrdef_adrelid_adnum_index (
-   adnum INT2 NULL,
-   adrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_attrdef_adrelid_adnum_index (
-   adnum INT2 NULL,
-   adrelid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_attrdef_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_attrdef_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_attribute (
    attrelid OID NOT NULL,
@@ -1966,13 +1903,6 @@ CREATE TABLE pg_catalog.pg_attribute (
    atthasmissing BOOL NULL,
    INDEX pg_attribute_attrelid_idx (attrelid ASC) STORING (attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated, attisdropped, attislocal, attinhcount, attcollation, attacl, attoptions, attfdwoptions, atthasmissing)
 )  {}  {}
-CREATE TABLE pg_catalog.pg_attribute_relid_attnum_index (
-   attnum INT2 NULL,
-   attrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_attribute_relid_attnum_index (
-   attnum INT2 NULL,
-   attrelid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_auth_members (
    roleid OID NULL,
    member OID NULL,
@@ -1983,20 +1913,6 @@ CREATE TABLE pg_catalog.pg_auth_members (
    member OID NULL,
    grantor OID NULL,
    admin_option BOOL NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_auth_members_member_role_index (
-   member OID NULL,
-   roleid OID NULL
-)  CREATE TABLE pg_catalog.pg_auth_members_member_role_index (
-   member OID NULL,
-   roleid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_auth_members_role_member_index (
-   member OID NULL,
-   roleid OID NULL
-)  CREATE TABLE pg_catalog.pg_auth_members_role_member_index (
-   member OID NULL,
-   roleid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_authid (
    oid OID NULL,
@@ -2024,11 +1940,6 @@ CREATE TABLE pg_catalog.pg_authid (
    rolconnlimit INT4 NULL,
    rolpassword STRING NULL,
    rolvaliduntil TIMESTAMPTZ NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_authid_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_authid_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_available_extension_versions (
    trusted BOOL NULL,
@@ -2076,18 +1987,6 @@ CREATE TABLE pg_catalog.pg_cast (
    castfunc OID NULL,
    castcontext "char" NULL,
    castmethod "char" NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_cast_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_cast_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_cast_source_target_index (
-   castsource OID NULL,
-   casttarget OID NULL
-)  CREATE TABLE pg_catalog.pg_cast_source_target_index (
-   castsource OID NULL,
-   casttarget OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_class (
    oid OID NOT NULL,
@@ -2164,18 +2063,6 @@ CREATE TABLE pg_catalog.pg_class (
    relpartbound STRING NULL,
    INDEX pg_class_oid_idx (oid ASC) STORING (relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound)
 )  {}  {}
-CREATE TABLE pg_catalog.pg_class_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_class_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_class_tblspc_relfilenode_index (
-   relfilenode OID NULL,
-   reltablespace OID NULL
-)  CREATE TABLE pg_catalog.pg_class_tblspc_relfilenode_index (
-   relfilenode OID NULL,
-   reltablespace OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_collation (
    oid OID NULL,
    collname STRING NULL,
@@ -2198,11 +2085,6 @@ CREATE TABLE pg_catalog.pg_collation (
    collprovider "char" NULL,
    collversion STRING NULL,
    collisdeterministic BOOL NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_collation_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_collation_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_config (
    name STRING NULL,
@@ -2268,21 +2150,6 @@ CREATE TABLE pg_catalog.pg_constraint (
    condef STRING NULL,
    INDEX pg_constraint_conrelid_idx (conrelid ASC) STORING (oid, conname, connamespace, contype, condeferrable, condeferred, convalidated, contypid, conindid, confrelid, confupdtype, confdeltype, confmatchtype, conislocal, coninhcount, connoinherit, conkey, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc, condef)
 )  {}  {}
-CREATE TABLE pg_catalog.pg_constraint_conparentid_index (
-   conparentid OID NULL
-)  CREATE TABLE pg_catalog.pg_constraint_conparentid_index (
-   conparentid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_constraint_contypid_index (
-   contypid OID NULL
-)  CREATE TABLE pg_catalog.pg_constraint_contypid_index (
-   contypid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_constraint_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_constraint_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_conversion (
    oid OID NULL,
    conname NAME NULL,
@@ -2301,22 +2168,6 @@ CREATE TABLE pg_catalog.pg_conversion (
    contoencoding INT4 NULL,
    conproc OID NULL,
    condefault BOOL NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_conversion_default_index (
-   oid OID NULL,
-   conforencoding INT4 NULL,
-   connamespace OID NULL,
-   contoencoding INT4 NULL
-)  CREATE TABLE pg_catalog.pg_conversion_default_index (
-   oid OID NULL,
-   conforencoding INT4 NULL,
-   connamespace OID NULL,
-   contoencoding INT4 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_conversion_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_conversion_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_cursors (
    is_scrollable BOOL NULL,
@@ -2364,24 +2215,12 @@ CREATE TABLE pg_catalog.pg_database (
    dattablespace OID NULL,
    datacl STRING[] NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_database_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_database_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_db_role_setting (
    setconfig STRING[] NULL,
    setdatabase OID NULL,
    setrole OID NULL
 )  CREATE TABLE pg_catalog.pg_db_role_setting (
    setconfig STRING[] NULL,
-   setdatabase OID NULL,
-   setrole OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_db_role_setting_databaseid_rol_index (
-   setdatabase OID NULL,
-   setrole OID NULL
-)  CREATE TABLE pg_catalog.pg_db_role_setting_databaseid_rol_index (
    setdatabase OID NULL,
    setrole OID NULL
 )  {}  {}
@@ -2397,20 +2236,6 @@ CREATE TABLE pg_catalog.pg_default_acl (
    defaclnamespace OID NULL,
    defaclobjtype "char" NULL,
    defaclacl STRING[] NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_default_acl_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_default_acl_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_default_acl_role_nsp_obj_index (
-   defaclnamespace OID NULL,
-   defaclobjtype "char" NULL,
-   defaclrole OID NULL
-)  CREATE TABLE pg_catalog.pg_default_acl_role_nsp_obj_index (
-   defaclnamespace OID NULL,
-   defaclobjtype "char" NULL,
-   defaclrole OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_depend (
    classid OID NULL,
@@ -2429,24 +2254,6 @@ CREATE TABLE pg_catalog.pg_depend (
    refobjsubid INT4 NULL,
    deptype "char" NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_depend_depender_index (
-   classid OID NULL,
-   objid OID NULL,
-   objsubid INT4 NULL
-)  CREATE TABLE pg_catalog.pg_depend_depender_index (
-   classid OID NULL,
-   objid OID NULL,
-   objsubid INT4 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_depend_reference_index (
-   refclassid OID NULL,
-   refobjid OID NULL,
-   refobjsubid INT4 NULL
-)  CREATE TABLE pg_catalog.pg_depend_reference_index (
-   refclassid OID NULL,
-   refobjid OID NULL,
-   refobjsubid INT4 NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_description (
    objoid OID NULL,
    classoid OID NULL,
@@ -2458,15 +2265,6 @@ CREATE TABLE pg_catalog.pg_description (
    objsubid INT4 NULL,
    description STRING NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_description_o_c_o_index (
-   classoid OID NULL,
-   objoid OID NULL,
-   objsubid INT4 NULL
-)  CREATE TABLE pg_catalog.pg_description_o_c_o_index (
-   classoid OID NULL,
-   objoid OID NULL,
-   objsubid INT4 NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_enum (
    oid OID NULL,
    enumtypid OID NULL,
@@ -2477,18 +2275,6 @@ CREATE TABLE pg_catalog.pg_enum (
    enumtypid OID NULL,
    enumsortorder FLOAT4 NULL,
    enumlabel STRING NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_enum_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_enum_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_enum_typid_sortorder_index (
-   enumsortorder FLOAT4 NULL,
-   enumtypid OID NULL
-)  CREATE TABLE pg_catalog.pg_enum_typid_sortorder_index (
-   enumsortorder FLOAT4 NULL,
-   enumtypid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_event_trigger (
    evtname NAME NULL,
@@ -2505,11 +2291,6 @@ CREATE TABLE pg_catalog.pg_event_trigger (
    evtfoid OID NULL,
    evtenabled "char" NULL,
    evttags STRING[] NULL,
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_event_trigger_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_event_trigger_oid_index (
    oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_extension (
@@ -2530,11 +2311,6 @@ CREATE TABLE pg_catalog.pg_extension (
    extversion STRING NULL,
    extconfig STRING NULL,
    extcondition STRING NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_extension_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_extension_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_file_settings (
    error STRING NULL,
@@ -2570,11 +2346,6 @@ CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
    fdwacl STRING[] NULL,
    fdwoptions STRING[] NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_foreign_data_wrapper_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_foreign_data_wrapper_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_foreign_server (
    oid OID NULL,
    srvname NAME NULL,
@@ -2594,11 +2365,6 @@ CREATE TABLE pg_catalog.pg_foreign_server (
    srvacl STRING[] NULL,
    srvoptions STRING[] NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_foreign_server_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_foreign_server_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_foreign_table (
    ftrelid OID NULL,
    ftserver OID NULL,
@@ -2607,11 +2373,6 @@ CREATE TABLE pg_catalog.pg_foreign_table (
    ftrelid OID NULL,
    ftserver OID NULL,
    ftoptions STRING[] NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_foreign_table_relid_index (
-   ftrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_foreign_table_relid_index (
-   ftrelid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_group (
    grolist OID[] NULL,
@@ -2686,16 +2447,6 @@ CREATE TABLE pg_catalog.pg_index (
    indpred STRING NULL,
    indnkeyatts INT2 NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_index_indexrelid_index (
-   indexrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_index_indexrelid_index (
-   indexrelid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_index_indrelid_index (
-   indrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_index_indrelid_index (
-   indrelid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_indexes (
    crdb_oid OID NULL,
    schemaname NAME NULL,
@@ -2720,27 +2471,6 @@ CREATE TABLE pg_catalog.pg_inherits (
    inhparent OID NULL,
    inhseqno INT4 NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_inherits_parent_index (
-   inhparent OID NULL
-)  CREATE TABLE pg_catalog.pg_inherits_parent_index (
-   inhparent OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_inherits_relid_seqno_index (
-   inhrelid OID NULL,
-   inhseqno INT4 NULL
-)  CREATE TABLE pg_catalog.pg_inherits_relid_seqno_index (
-   inhrelid OID NULL,
-   inhseqno INT4 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_init_privs_o_c_o_index (
-   classoid OID NULL,
-   objoid OID NULL,
-   objsubid INT4 NULL
-)  CREATE TABLE pg_catalog.pg_init_privs_o_c_o_index (
-   classoid OID NULL,
-   objoid OID NULL,
-   objsubid INT4 NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_language (
    oid OID NULL,
    lanname NAME NULL,
@@ -2762,11 +2492,6 @@ CREATE TABLE pg_catalog.pg_language (
    lanvalidator OID NULL,
    lanacl STRING[] NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_language_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_language_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_largeobject (
    data BYTES NULL,
    loid OID NULL,
@@ -2775,18 +2500,6 @@ CREATE TABLE pg_catalog.pg_largeobject (
    data BYTES NULL,
    loid OID NULL,
    pageno INT4 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_largeobject_loid_pn_index (
-   loid OID NULL,
-   pageno INT4 NULL
-)  CREATE TABLE pg_catalog.pg_largeobject_loid_pn_index (
-   loid OID NULL,
-   pageno INT4 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_largeobject_metadata_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_largeobject_metadata_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_locks (
    locktype STRING NULL,
@@ -2849,11 +2562,6 @@ CREATE TABLE pg_catalog.pg_namespace (
    nspowner OID NULL,
    nspacl STRING[] NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_namespace_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_namespace_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_opclass (
    oid OID NULL,
    opcmethod OID NULL,
@@ -2874,11 +2582,6 @@ CREATE TABLE pg_catalog.pg_opclass (
    opcintype OID NULL,
    opcdefault BOOL NULL,
    opckeytype OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_opclass_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_opclass_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_operator (
    oid OID NULL,
@@ -2913,11 +2616,6 @@ CREATE TABLE pg_catalog.pg_operator (
    oprrest OID NULL,
    oprjoin OID NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_operator_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_operator_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_opfamily (
    opfname NAME NULL,
    opfnamespace OID NULL,
@@ -2930,16 +2628,6 @@ CREATE TABLE pg_catalog.pg_opfamily (
    opfowner OID NULL,
    oid OID NULL,
    opfmethod OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_opfamily_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_opfamily_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_partitioned_table_partrelid_index (
-   partrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_partitioned_table_partrelid_index (
-   partrelid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_policies (
    with_check STRING NULL,
@@ -2959,11 +2647,6 @@ CREATE TABLE pg_catalog.pg_policies (
    roles NAME[] NULL,
    schemaname NAME NULL,
    tablename NAME NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_policy_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_policy_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_prepared_statements (
    name STRING NULL,
@@ -3058,11 +2741,6 @@ CREATE TABLE pg_catalog.pg_proc (
    prokind "char" NULL,
    prosupport REGPROC NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_proc_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_proc_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_publication (
    pubupdate BOOL NULL,
    oid OID NULL,
@@ -3084,29 +2762,12 @@ CREATE TABLE pg_catalog.pg_publication (
    pubtruncate BOOL NULL,
    pubviaroot BOOL NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_publication_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_publication_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_publication_rel (
    oid OID NULL,
    prpubid OID NULL,
    prrelid OID NULL
 )  CREATE TABLE pg_catalog.pg_publication_rel (
    oid OID NULL,
-   prpubid OID NULL,
-   prrelid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_publication_rel_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_publication_rel_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_publication_rel_prrelid_prpubid_index (
-   prpubid OID NULL,
-   prrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_publication_rel_prrelid_prpubid_index (
    prpubid OID NULL,
    prrelid OID NULL
 )  {}  {}
@@ -3134,26 +2795,11 @@ CREATE TABLE pg_catalog.pg_range (
    rngcanonical OID NULL,
    rngsubdiff OID NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_range_rngtypid_index (
-   rngtypid OID NULL
-)  CREATE TABLE pg_catalog.pg_range_rngtypid_index (
-   rngtypid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_replication_origin (
    roident OID NULL,
    roname STRING NULL
 )  CREATE TABLE pg_catalog.pg_replication_origin (
    roident OID NULL,
-   roname STRING NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_replication_origin_roiident_index (
-   roident OID NULL
-)  CREATE TABLE pg_catalog.pg_replication_origin_roiident_index (
-   roident OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_replication_origin_roname_index (
-   roname STRING NULL
-)  CREATE TABLE pg_catalog.pg_replication_origin_roname_index (
    roname STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_rewrite (
@@ -3174,11 +2820,6 @@ CREATE TABLE pg_catalog.pg_rewrite (
    is_instead BOOL NULL,
    ev_qual STRING NULL,
    ev_action STRING NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_rewrite_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_rewrite_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_roles (
    oid OID NULL,
@@ -3235,17 +2876,6 @@ CREATE TABLE pg_catalog.pg_seclabel (
    provider STRING NULL,
    label STRING NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_seclabel_object_index (
-   objoid OID NULL,
-   objsubid INT4 NULL,
-   provider STRING NULL,
-   classoid OID NULL
-)  CREATE TABLE pg_catalog.pg_seclabel_object_index (
-   objoid OID NULL,
-   objsubid INT4 NULL,
-   provider STRING NULL,
-   classoid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_seclabels (
    objoid OID NULL,
    classoid OID NULL,
@@ -3283,11 +2913,6 @@ CREATE TABLE pg_catalog.pg_sequence (
    seqmin INT8 NULL,
    seqcache INT8 NULL,
    seqcycle BOOL NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_sequence_seqrelid_index (
-   seqrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_sequence_seqrelid_index (
-   seqrelid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_settings (
    name STRING NULL,
@@ -3364,24 +2989,6 @@ CREATE TABLE pg_catalog.pg_shdepend (
    refobjid OID NULL,
    deptype "char" NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_shdepend_depender_index (
-   objsubid INT4 NULL,
-   classid OID NULL,
-   dbid OID NULL,
-   objid OID NULL
-)  CREATE TABLE pg_catalog.pg_shdepend_depender_index (
-   objsubid INT4 NULL,
-   classid OID NULL,
-   dbid OID NULL,
-   objid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_shdepend_reference_index (
-   refclassid OID NULL,
-   refobjid OID NULL
-)  CREATE TABLE pg_catalog.pg_shdepend_reference_index (
-   refclassid OID NULL,
-   refobjid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_shdescription (
    objoid OID NULL,
    classoid OID NULL,
@@ -3390,13 +2997,6 @@ CREATE TABLE pg_catalog.pg_shdescription (
    objoid OID NULL,
    classoid OID NULL,
    description STRING NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_shdescription_o_c_index (
-   classoid OID NULL,
-   objoid OID NULL
-)  CREATE TABLE pg_catalog.pg_shdescription_o_c_index (
-   classoid OID NULL,
-   objoid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_shmem_allocations (
    name STRING NULL,
@@ -3419,15 +3019,6 @@ CREATE TABLE pg_catalog.pg_shseclabel (
    classoid OID NULL,
    provider STRING NULL,
    label STRING NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_shseclabel_object_index (
-   classoid OID NULL,
-   objoid OID NULL,
-   provider STRING NULL
-)  CREATE TABLE pg_catalog.pg_shseclabel_object_index (
-   classoid OID NULL,
-   objoid OID NULL,
-   provider STRING NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_stat_activity (
    datid OID NULL,
@@ -3474,766 +3065,6 @@ CREATE TABLE pg_catalog.pg_stat_activity (
    backend_type STRING NULL,
    leader_pid INT4 NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_stat_all_indexes (
-   schemaname NAME NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL
-)  CREATE TABLE pg_catalog.pg_stat_all_indexes (
-   schemaname NAME NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_all_tables (
-   n_tup_ins INT8 NULL,
-   schemaname NAME NULL,
-   analyze_count INT8 NULL,
-   autovacuum_count INT8 NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   seq_tup_read INT8 NULL,
-   vacuum_count INT8 NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_ins_since_vacuum INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_live_tup INT8 NULL,
-   relid OID NULL,
-   seq_scan INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_upd INT8 NULL,
-   relname NAME NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_all_tables (
-   n_tup_ins INT8 NULL,
-   schemaname NAME NULL,
-   analyze_count INT8 NULL,
-   autovacuum_count INT8 NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   seq_tup_read INT8 NULL,
-   vacuum_count INT8 NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_ins_since_vacuum INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_live_tup INT8 NULL,
-   relid OID NULL,
-   seq_scan INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_upd INT8 NULL,
-   relname NAME NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_archiver (
-   last_archived_time TIMESTAMPTZ NULL,
-   last_archived_wal STRING NULL,
-   last_failed_time TIMESTAMPTZ NULL,
-   last_failed_wal STRING NULL,
-   stats_reset TIMESTAMPTZ NULL,
-   archived_count INT8 NULL,
-   failed_count INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_archiver (
-   last_archived_time TIMESTAMPTZ NULL,
-   last_archived_wal STRING NULL,
-   last_failed_time TIMESTAMPTZ NULL,
-   last_failed_wal STRING NULL,
-   stats_reset TIMESTAMPTZ NULL,
-   archived_count INT8 NULL,
-   failed_count INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_bgwriter (
-   buffers_backend_fsync INT8 NULL,
-   buffers_clean INT8 NULL,
-   checkpoint_sync_time FLOAT8 NULL,
-   checkpoints_req INT8 NULL,
-   checkpoints_timed INT8 NULL,
-   maxwritten_clean INT8 NULL,
-   buffers_alloc INT8 NULL,
-   buffers_backend INT8 NULL,
-   buffers_checkpoint INT8 NULL,
-   checkpoint_write_time FLOAT8 NULL,
-   stats_reset TIMESTAMPTZ NULL
-)  CREATE TABLE pg_catalog.pg_stat_bgwriter (
-   buffers_backend_fsync INT8 NULL,
-   buffers_clean INT8 NULL,
-   checkpoint_sync_time FLOAT8 NULL,
-   checkpoints_req INT8 NULL,
-   checkpoints_timed INT8 NULL,
-   maxwritten_clean INT8 NULL,
-   buffers_alloc INT8 NULL,
-   buffers_backend INT8 NULL,
-   buffers_checkpoint INT8 NULL,
-   checkpoint_write_time FLOAT8 NULL,
-   stats_reset TIMESTAMPTZ NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_database (
-   blks_read INT8 NULL,
-   datid OID NULL,
-   deadlocks INT8 NULL,
-   temp_files INT8 NULL,
-   tup_updated INT8 NULL,
-   conflicts INT8 NULL,
-   temp_bytes INT8 NULL,
-   tup_returned INT8 NULL,
-   xact_rollback INT8 NULL,
-   blk_read_time FLOAT8 NULL,
-   blks_hit INT8 NULL,
-   checksum_failures INT8 NULL,
-   tup_deleted INT8 NULL,
-   xact_commit INT8 NULL,
-   blk_write_time FLOAT8 NULL,
-   checksum_last_failure TIMESTAMPTZ NULL,
-   datname NAME NULL,
-   numbackends INT4 NULL,
-   stats_reset TIMESTAMPTZ NULL,
-   tup_fetched INT8 NULL,
-   tup_inserted INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_database (
-   blks_read INT8 NULL,
-   datid OID NULL,
-   deadlocks INT8 NULL,
-   temp_files INT8 NULL,
-   tup_updated INT8 NULL,
-   conflicts INT8 NULL,
-   temp_bytes INT8 NULL,
-   tup_returned INT8 NULL,
-   xact_rollback INT8 NULL,
-   blk_read_time FLOAT8 NULL,
-   blks_hit INT8 NULL,
-   checksum_failures INT8 NULL,
-   tup_deleted INT8 NULL,
-   xact_commit INT8 NULL,
-   blk_write_time FLOAT8 NULL,
-   checksum_last_failure TIMESTAMPTZ NULL,
-   datname NAME NULL,
-   numbackends INT4 NULL,
-   stats_reset TIMESTAMPTZ NULL,
-   tup_fetched INT8 NULL,
-   tup_inserted INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_database_conflicts (
-   confl_lock INT8 NULL,
-   confl_snapshot INT8 NULL,
-   confl_tablespace INT8 NULL,
-   datid OID NULL,
-   datname NAME NULL,
-   confl_bufferpin INT8 NULL,
-   confl_deadlock INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_database_conflicts (
-   confl_lock INT8 NULL,
-   confl_snapshot INT8 NULL,
-   confl_tablespace INT8 NULL,
-   datid OID NULL,
-   datname NAME NULL,
-   confl_bufferpin INT8 NULL,
-   confl_deadlock INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_gssapi (
-   encrypted BOOL NULL,
-   gss_authenticated BOOL NULL,
-   pid INT4 NULL,
-   principal STRING NULL
-)  CREATE TABLE pg_catalog.pg_stat_gssapi (
-   encrypted BOOL NULL,
-   gss_authenticated BOOL NULL,
-   pid INT4 NULL,
-   principal STRING NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_progress_analyze (
-   sample_blks_scanned INT8 NULL,
-   datname NAME NULL,
-   ext_stats_computed INT8 NULL,
-   relid OID NULL,
-   datid OID NULL,
-   ext_stats_total INT8 NULL,
-   phase STRING NULL,
-   pid INT4 NULL,
-   sample_blks_total INT8 NULL,
-   child_tables_done INT8 NULL,
-   child_tables_total INT8 NULL,
-   current_child_table_relid OID NULL
-)  CREATE TABLE pg_catalog.pg_stat_progress_analyze (
-   sample_blks_scanned INT8 NULL,
-   datname NAME NULL,
-   ext_stats_computed INT8 NULL,
-   relid OID NULL,
-   datid OID NULL,
-   ext_stats_total INT8 NULL,
-   phase STRING NULL,
-   pid INT4 NULL,
-   sample_blks_total INT8 NULL,
-   child_tables_done INT8 NULL,
-   child_tables_total INT8 NULL,
-   current_child_table_relid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_progress_basebackup (
-   backup_streamed INT8 NULL,
-   backup_total INT8 NULL,
-   phase STRING NULL,
-   pid INT4 NULL,
-   tablespaces_streamed INT8 NULL,
-   tablespaces_total INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_progress_basebackup (
-   backup_streamed INT8 NULL,
-   backup_total INT8 NULL,
-   phase STRING NULL,
-   pid INT4 NULL,
-   tablespaces_streamed INT8 NULL,
-   tablespaces_total INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_progress_cluster (
-   heap_blks_scanned INT8 NULL,
-   heap_tuples_scanned INT8 NULL,
-   index_rebuild_count INT8 NULL,
-   phase STRING NULL,
-   relid OID NULL,
-   cluster_index_relid OID NULL,
-   command STRING NULL,
-   datname NAME NULL,
-   pid INT4 NULL,
-   datid OID NULL,
-   heap_blks_total INT8 NULL,
-   heap_tuples_written INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_progress_cluster (
-   heap_blks_scanned INT8 NULL,
-   heap_tuples_scanned INT8 NULL,
-   index_rebuild_count INT8 NULL,
-   phase STRING NULL,
-   relid OID NULL,
-   cluster_index_relid OID NULL,
-   command STRING NULL,
-   datname NAME NULL,
-   pid INT4 NULL,
-   datid OID NULL,
-   heap_blks_total INT8 NULL,
-   heap_tuples_written INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_progress_create_index (
-   blocks_total INT8 NULL,
-   partitions_total INT8 NULL,
-   relid OID NULL,
-   tuples_done INT8 NULL,
-   current_locker_pid INT8 NULL,
-   datid OID NULL,
-   index_relid OID NULL,
-   partitions_done INT8 NULL,
-   blocks_done INT8 NULL,
-   datname NAME NULL,
-   lockers_total INT8 NULL,
-   phase STRING NULL,
-   command STRING NULL,
-   lockers_done INT8 NULL,
-   pid INT4 NULL,
-   tuples_total INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_progress_create_index (
-   blocks_total INT8 NULL,
-   partitions_total INT8 NULL,
-   relid OID NULL,
-   tuples_done INT8 NULL,
-   current_locker_pid INT8 NULL,
-   datid OID NULL,
-   index_relid OID NULL,
-   partitions_done INT8 NULL,
-   blocks_done INT8 NULL,
-   datname NAME NULL,
-   lockers_total INT8 NULL,
-   phase STRING NULL,
-   command STRING NULL,
-   lockers_done INT8 NULL,
-   pid INT4 NULL,
-   tuples_total INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_progress_vacuum (
-   index_vacuum_count INT8 NULL,
-   num_dead_tuples INT8 NULL,
-   relid OID NULL,
-   datid OID NULL,
-   datname NAME NULL,
-   heap_blks_vacuumed INT8 NULL,
-   max_dead_tuples INT8 NULL,
-   phase STRING NULL,
-   pid INT4 NULL,
-   heap_blks_scanned INT8 NULL,
-   heap_blks_total INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_progress_vacuum (
-   index_vacuum_count INT8 NULL,
-   num_dead_tuples INT8 NULL,
-   relid OID NULL,
-   datid OID NULL,
-   datname NAME NULL,
-   heap_blks_vacuumed INT8 NULL,
-   max_dead_tuples INT8 NULL,
-   phase STRING NULL,
-   pid INT4 NULL,
-   heap_blks_scanned INT8 NULL,
-   heap_blks_total INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_slru (
-   blks_exists INT8 NULL,
-   blks_hit INT8 NULL,
-   blks_written INT8 NULL,
-   flushes INT8 NULL,
-   name STRING NULL,
-   truncates INT8 NULL,
-   blks_read INT8 NULL,
-   blks_zeroed INT8 NULL,
-   stats_reset TIMESTAMPTZ NULL
-)  CREATE TABLE pg_catalog.pg_stat_slru (
-   blks_exists INT8 NULL,
-   blks_hit INT8 NULL,
-   blks_written INT8 NULL,
-   flushes INT8 NULL,
-   name STRING NULL,
-   truncates INT8 NULL,
-   blks_read INT8 NULL,
-   blks_zeroed INT8 NULL,
-   stats_reset TIMESTAMPTZ NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_ssl (
-   pid INT4 NULL,
-   ssl BOOL NULL,
-   client_dn STRING NULL,
-   client_serial DECIMAL NULL,
-   compression BOOL NULL,
-   issuer_dn STRING NULL,
-   version STRING NULL,
-   bits INT4 NULL,
-   cipher STRING NULL
-)  CREATE TABLE pg_catalog.pg_stat_ssl (
-   pid INT4 NULL,
-   ssl BOOL NULL,
-   client_dn STRING NULL,
-   client_serial DECIMAL NULL,
-   compression BOOL NULL,
-   issuer_dn STRING NULL,
-   version STRING NULL,
-   bits INT4 NULL,
-   cipher STRING NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_sys_indexes (
-   idx_tup_fetch INT8 NULL,
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   idx_scan INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_sys_indexes (
-   idx_tup_fetch INT8 NULL,
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   idx_scan INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_sys_tables (
-   relid OID NULL,
-   relname NAME NULL,
-   vacuum_count INT8 NULL,
-   n_ins_since_vacuum INT8 NULL,
-   n_tup_ins INT8 NULL,
-   schemaname NAME NULL,
-   seq_tup_read INT8 NULL,
-   autovacuum_count INT8 NULL,
-   idx_scan INT8 NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_upd INT8 NULL,
-   seq_scan INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_live_tup INT8 NULL,
-   analyze_count INT8 NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   n_tup_hot_upd INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_sys_tables (
-   relid OID NULL,
-   relname NAME NULL,
-   vacuum_count INT8 NULL,
-   n_ins_since_vacuum INT8 NULL,
-   n_tup_ins INT8 NULL,
-   schemaname NAME NULL,
-   seq_tup_read INT8 NULL,
-   autovacuum_count INT8 NULL,
-   idx_scan INT8 NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_upd INT8 NULL,
-   seq_scan INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_live_tup INT8 NULL,
-   analyze_count INT8 NULL,
-   last_analyze TIMESTAMPTZ NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   n_tup_hot_upd INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_user_functions (
-   funcname NAME NULL,
-   schemaname NAME NULL,
-   self_time FLOAT8 NULL,
-   total_time FLOAT8 NULL,
-   calls INT8 NULL,
-   funcid OID NULL
-)  CREATE TABLE pg_catalog.pg_stat_user_functions (
-   funcname NAME NULL,
-   schemaname NAME NULL,
-   self_time FLOAT8 NULL,
-   total_time FLOAT8 NULL,
-   calls INT8 NULL,
-   funcid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_user_indexes (
-   relname NAME NULL,
-   schemaname NAME NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL
-)  CREATE TABLE pg_catalog.pg_stat_user_indexes (
-   relname NAME NULL,
-   schemaname NAME NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   idx_tup_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_user_tables (
-   last_analyze TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL,
-   n_ins_since_vacuum INT8 NULL,
-   n_live_tup INT8 NULL,
-   n_tup_ins INT8 NULL,
-   seq_tup_read INT8 NULL,
-   autovacuum_count INT8 NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   relid OID NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_tup_upd INT8 NULL,
-   relname NAME NULL,
-   analyze_count INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   schemaname NAME NULL,
-   seq_scan INT8 NULL,
-   vacuum_count INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_user_tables (
-   last_analyze TIMESTAMPTZ NULL,
-   n_dead_tup INT8 NULL,
-   n_ins_since_vacuum INT8 NULL,
-   n_live_tup INT8 NULL,
-   n_tup_ins INT8 NULL,
-   seq_tup_read INT8 NULL,
-   autovacuum_count INT8 NULL,
-   last_autovacuum TIMESTAMPTZ NULL,
-   last_vacuum TIMESTAMPTZ NULL,
-   n_mod_since_analyze INT8 NULL,
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   relid OID NULL,
-   last_autoanalyze TIMESTAMPTZ NULL,
-   n_tup_upd INT8 NULL,
-   relname NAME NULL,
-   analyze_count INT8 NULL,
-   autoanalyze_count INT8 NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   schemaname NAME NULL,
-   seq_scan INT8 NULL,
-   vacuum_count INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_xact_all_tables (
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
-   schemaname NAME NULL,
-   seq_scan INT8 NULL,
-   seq_tup_read INT8 NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_tup_upd INT8 NULL,
-   relid OID NULL,
-   relname NAME NULL
-)  CREATE TABLE pg_catalog.pg_stat_xact_all_tables (
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
-   schemaname NAME NULL,
-   seq_scan INT8 NULL,
-   seq_tup_read INT8 NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_tup_upd INT8 NULL,
-   relid OID NULL,
-   relname NAME NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_xact_sys_tables (
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_upd INT8 NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   seq_scan INT8 NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   seq_tup_read INT8 NULL,
-   n_tup_ins INT8 NULL,
-   relid OID NULL
-)  CREATE TABLE pg_catalog.pg_stat_xact_sys_tables (
-   n_tup_del INT8 NULL,
-   n_tup_hot_upd INT8 NULL,
-   n_tup_upd INT8 NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   seq_scan INT8 NULL,
-   idx_scan INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   seq_tup_read INT8 NULL,
-   n_tup_ins INT8 NULL,
-   relid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_xact_user_functions (
-   total_time FLOAT8 NULL,
-   calls INT8 NULL,
-   funcid OID NULL,
-   funcname NAME NULL,
-   schemaname NAME NULL,
-   self_time FLOAT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_xact_user_functions (
-   total_time FLOAT8 NULL,
-   calls INT8 NULL,
-   funcid OID NULL,
-   funcname NAME NULL,
-   schemaname NAME NULL,
-   self_time FLOAT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_stat_xact_user_tables (
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
-   relid OID NULL,
-   seq_scan INT8 NULL,
-   n_tup_del INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_tup_upd INT8 NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   seq_tup_read INT8 NULL,
-   idx_scan INT8 NULL
-)  CREATE TABLE pg_catalog.pg_stat_xact_user_tables (
-   n_tup_hot_upd INT8 NULL,
-   n_tup_ins INT8 NULL,
-   relid OID NULL,
-   seq_scan INT8 NULL,
-   n_tup_del INT8 NULL,
-   idx_tup_fetch INT8 NULL,
-   n_tup_upd INT8 NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   seq_tup_read INT8 NULL,
-   idx_scan INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statio_all_indexes (
-   idx_blks_hit INT8 NULL,
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL
-)  CREATE TABLE pg_catalog.pg_statio_all_indexes (
-   idx_blks_hit INT8 NULL,
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statio_all_sequences (
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL
-)  CREATE TABLE pg_catalog.pg_statio_all_sequences (
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statio_all_tables (
-   schemaname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   tidx_blks_read INT8 NULL,
-   toast_blks_read INT8 NULL,
-   heap_blks_read INT8 NULL,
-   idx_blks_read INT8 NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   heap_blks_hit INT8 NULL,
-   idx_blks_hit INT8 NULL,
-   toast_blks_hit INT8 NULL
-)  CREATE TABLE pg_catalog.pg_statio_all_tables (
-   schemaname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   tidx_blks_read INT8 NULL,
-   toast_blks_read INT8 NULL,
-   heap_blks_read INT8 NULL,
-   idx_blks_read INT8 NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   heap_blks_hit INT8 NULL,
-   idx_blks_hit INT8 NULL,
-   toast_blks_hit INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statio_sys_indexes (
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   idx_blks_hit INT8 NULL,
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_statio_sys_indexes (
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   idx_blks_hit INT8 NULL,
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statio_sys_sequences (
-   relname NAME NULL,
-   schemaname NAME NULL,
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL,
-   relid OID NULL
-)  CREATE TABLE pg_catalog.pg_statio_sys_sequences (
-   relname NAME NULL,
-   schemaname NAME NULL,
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL,
-   relid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statio_sys_tables (
-   idx_blks_hit INT8 NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   tidx_blks_read INT8 NULL,
-   toast_blks_read INT8 NULL,
-   heap_blks_read INT8 NULL,
-   idx_blks_read INT8 NULL,
-   schemaname NAME NULL,
-   toast_blks_hit INT8 NULL,
-   heap_blks_hit INT8 NULL
-)  CREATE TABLE pg_catalog.pg_statio_sys_tables (
-   idx_blks_hit INT8 NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   tidx_blks_read INT8 NULL,
-   toast_blks_read INT8 NULL,
-   heap_blks_read INT8 NULL,
-   idx_blks_read INT8 NULL,
-   schemaname NAME NULL,
-   toast_blks_hit INT8 NULL,
-   heap_blks_hit INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statio_user_indexes (
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   idx_blks_hit INT8 NULL
-)  CREATE TABLE pg_catalog.pg_statio_user_indexes (
-   idx_blks_read INT8 NULL,
-   indexrelid OID NULL,
-   indexrelname NAME NULL,
-   relid OID NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   idx_blks_hit INT8 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statio_user_sequences (
-   relname NAME NULL,
-   schemaname NAME NULL,
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL,
-   relid OID NULL
-)  CREATE TABLE pg_catalog.pg_statio_user_sequences (
-   relname NAME NULL,
-   schemaname NAME NULL,
-   blks_hit INT8 NULL,
-   blks_read INT8 NULL,
-   relid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statio_user_tables (
-   idx_blks_read INT8 NULL,
-   relid OID NULL,
-   tidx_blks_read INT8 NULL,
-   toast_blks_read INT8 NULL,
-   heap_blks_hit INT8 NULL,
-   heap_blks_read INT8 NULL,
-   idx_blks_hit INT8 NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   toast_blks_hit INT8 NULL
-)  CREATE TABLE pg_catalog.pg_statio_user_tables (
-   idx_blks_read INT8 NULL,
-   relid OID NULL,
-   tidx_blks_read INT8 NULL,
-   toast_blks_read INT8 NULL,
-   heap_blks_hit INT8 NULL,
-   heap_blks_read INT8 NULL,
-   idx_blks_hit INT8 NULL,
-   relname NAME NULL,
-   schemaname NAME NULL,
-   tidx_blks_hit INT8 NULL,
-   toast_blks_hit INT8 NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_statistic_ext (
    stxrelid OID NULL,
    stxstattarget INT4 NULL,
@@ -4252,30 +3083,6 @@ CREATE TABLE pg_catalog.pg_statistic_ext (
    stxname NAME NULL,
    stxnamespace OID NULL,
    stxowner OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statistic_ext_data_stxoid_index (
-   stxoid OID NULL
-)  CREATE TABLE pg_catalog.pg_statistic_ext_data_stxoid_index (
-   stxoid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statistic_ext_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_statistic_ext_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statistic_ext_relid_index (
-   stxrelid OID NULL
-)  CREATE TABLE pg_catalog.pg_statistic_ext_relid_index (
-   stxrelid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_statistic_relid_att_inh_index (
-   staattnum INT2 NULL,
-   stainherit BOOL NULL,
-   starelid OID NULL
-)  CREATE TABLE pg_catalog.pg_statistic_relid_att_inh_index (
-   staattnum INT2 NULL,
-   stainherit BOOL NULL,
-   starelid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_subscription (
    subname NAME NULL,
@@ -4297,18 +3104,6 @@ CREATE TABLE pg_catalog.pg_subscription (
    subdbid OID NULL,
    subenabled BOOL NULL,
    subowner OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_subscription_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_subscription_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_subscription_rel_srrelid_srsubid_index (
-   srrelid OID NULL,
-   srsubid OID NULL
-)  CREATE TABLE pg_catalog.pg_subscription_rel_srrelid_srsubid_index (
-   srrelid OID NULL,
-   srsubid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_tables (
    schemaname NAME NULL,
@@ -4344,11 +3139,6 @@ CREATE TABLE pg_catalog.pg_tablespace (
    spcacl STRING[] NULL,
    spcoptions STRING[] NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_tablespace_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_tablespace_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_timezone_abbrevs (
    abbrev STRING NULL,
    is_dst BOOL NULL,
@@ -4381,18 +3171,6 @@ CREATE TABLE pg_catalog.pg_transform (
    trftosql REGPROC NULL,
    trftype OID NULL,
    oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_transform_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_transform_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_transform_type_lang_index (
-   trflang OID NULL,
-   trftype OID NULL
-)  CREATE TABLE pg_catalog.pg_transform_type_lang_index (
-   trflang OID NULL,
-   trftype OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_trigger (
    oid OID NULL,
@@ -4435,16 +3213,6 @@ CREATE TABLE pg_catalog.pg_trigger (
    tgnewtable NAME NULL,
    tgparentid OID NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_trigger_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_trigger_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_trigger_tgconstraint_index (
-   tgconstraint OID NULL
-)  CREATE TABLE pg_catalog.pg_trigger_tgconstraint_index (
-   tgconstraint OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_ts_config (
    cfgname NAME NULL,
    cfgnamespace OID NULL,
@@ -4469,20 +3237,6 @@ CREATE TABLE pg_catalog.pg_ts_config_map (
    mapseqno INT4 NULL,
    maptokentype INT4 NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_ts_config_map_index (
-   mapcfg OID NULL,
-   mapseqno INT4 NULL,
-   maptokentype INT4 NULL
-)  CREATE TABLE pg_catalog.pg_ts_config_map_index (
-   mapcfg OID NULL,
-   mapseqno INT4 NULL,
-   maptokentype INT4 NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_ts_config_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_ts_config_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_ts_dict (
    dictinitoption STRING NULL,
    dictname NAME NULL,
@@ -4496,11 +3250,6 @@ CREATE TABLE pg_catalog.pg_ts_dict (
    dictnamespace OID NULL,
    dictowner OID NULL,
    dicttemplate OID NULL,
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_ts_dict_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_ts_dict_oid_index (
    oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_ts_parser (
@@ -4522,11 +3271,6 @@ CREATE TABLE pg_catalog.pg_ts_parser (
    prsend REGPROC NULL,
    prsheadline REGPROC NULL
 )  {}  {}
-CREATE TABLE pg_catalog.pg_ts_parser_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_ts_parser_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_ts_template (
    oid OID NULL,
    tmplinit REGPROC NULL,
@@ -4539,11 +3283,6 @@ CREATE TABLE pg_catalog.pg_ts_template (
    tmpllexize REGPROC NULL,
    tmplname NAME NULL,
    tmplnamespace OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_ts_template_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_ts_template_oid_index (
-   oid OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_type (
    oid OID NOT NULL,
@@ -4612,11 +3351,6 @@ CREATE TABLE pg_catalog.pg_type (
    typacl STRING[] NULL,
    INDEX pg_type_oid_idx (oid ASC) STORING (typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
 )  {}  {}
-CREATE TABLE pg_catalog.pg_type_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_type_oid_index (
-   oid OID NULL
-)  {}  {}
 CREATE TABLE pg_catalog.pg_user (
    usename NAME NULL,
    usesysid OID NULL,
@@ -4648,18 +3382,6 @@ CREATE TABLE pg_catalog.pg_user_mapping (
    umuser OID NULL,
    umserver OID NULL,
    umoptions STRING[] NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_user_mapping_oid_index (
-   oid OID NULL
-)  CREATE TABLE pg_catalog.pg_user_mapping_oid_index (
-   oid OID NULL
-)  {}  {}
-CREATE TABLE pg_catalog.pg_user_mapping_user_server_index (
-   umserver OID NULL,
-   umuser OID NULL
-)  CREATE TABLE pg_catalog.pg_user_mapping_user_server_index (
-   umserver OID NULL,
-   umuser OID NULL
 )  {}  {}
 CREATE TABLE pg_catalog.pg_user_mappings (
    srvname NAME NULL,

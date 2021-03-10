@@ -1,4 +1,5 @@
 {
+  "pg_aggregate_fnoid_index": {},
   "pg_am": {
     "amhandler": {
       "oid": 26,
@@ -8,6 +9,12 @@
     }
   },
   "pg_am_name_index": {},
+  "pg_am_oid_index": {},
+  "pg_amop_fam_strat_index": {},
+  "pg_amop_oid_index": {},
+  "pg_amop_opr_fam_index": {},
+  "pg_amproc_fam_proc_index": {},
+  "pg_amproc_oid_index": {},
   "pg_attrdef": {
     "adbin": {
       "oid": 25,
@@ -16,6 +23,8 @@
       "expectedDataType": "pg_node_tree"
     }
   },
+  "pg_attrdef_adrelid_adnum_index": {},
+  "pg_attrdef_oid_index": {},
   "pg_attribute": {
     "attacl": {
       "oid": 1009,
@@ -26,7 +35,13 @@
     "attmissingval": null
   },
   "pg_attribute_relid_attnam_index": {},
+  "pg_attribute_relid_attnum_index": {},
+  "pg_auth_members_member_role_index": {},
+  "pg_auth_members_role_member_index": {},
+  "pg_authid_oid_index": {},
   "pg_authid_rolname_index": {},
+  "pg_cast_oid_index": {},
+  "pg_cast_source_target_index": {},
   "pg_class": {
     "relacl": {
       "oid": 1009,
@@ -48,7 +63,9 @@
       "expectedDataType": "pg_node_tree"
     }
   },
+  "pg_class_oid_index": {},
   "pg_class_relname_nsp_index": {},
+  "pg_class_tblspc_relfilenode_index": {},
   "pg_collation": {
     "collcollate": {
       "oid": 25,
@@ -70,6 +87,7 @@
     }
   },
   "pg_collation_name_enc_nsp_index": {},
+  "pg_collation_oid_index": {},
   "pg_constraint": {
     "conbin": {
       "oid": 25,
@@ -104,7 +122,10 @@
     }
   },
   "pg_constraint_conname_nsp_index": {},
+  "pg_constraint_conparentid_index": {},
   "pg_constraint_conrelid_contypid_conname_index": {},
+  "pg_constraint_contypid_index": {},
+  "pg_constraint_oid_index": {},
   "pg_conversion": {
     "conproc": {
       "oid": 26,
@@ -113,7 +134,9 @@
       "expectedDataType": "regproc"
     }
   },
+  "pg_conversion_default_index": {},
   "pg_conversion_name_nsp_index": {},
+  "pg_conversion_oid_index": {},
   "pg_database": {
     "datacl": {
       "oid": 1009,
@@ -147,6 +170,8 @@
     }
   },
   "pg_database_datname_index": {},
+  "pg_database_oid_index": {},
+  "pg_db_role_setting_databaseid_rol_index": {},
   "pg_default_acl": {
     "defaclacl": {
       "oid": 1009,
@@ -155,6 +180,11 @@
       "expectedDataType": "_aclitem"
     }
   },
+  "pg_default_acl_oid_index": {},
+  "pg_default_acl_role_nsp_obj_index": {},
+  "pg_depend_depender_index": {},
+  "pg_depend_reference_index": {},
+  "pg_description_o_c_o_index": {},
   "pg_enum": {
     "enumlabel": {
       "oid": 25,
@@ -163,8 +193,11 @@
       "expectedDataType": "name"
     }
   },
+  "pg_enum_oid_index": {},
   "pg_enum_typid_label_index": {},
+  "pg_enum_typid_sortorder_index": {},
   "pg_event_trigger_evtname_index": {},
+  "pg_event_trigger_oid_index": {},
   "pg_extension": {
     "extcondition": {
       "oid": 25,
@@ -180,6 +213,7 @@
     }
   },
   "pg_extension_name_index": {},
+  "pg_extension_oid_index": {},
   "pg_foreign_data_wrapper": {
     "fdwacl": {
       "oid": 1009,
@@ -189,6 +223,7 @@
     }
   },
   "pg_foreign_data_wrapper_name_index": {},
+  "pg_foreign_data_wrapper_oid_index": {},
   "pg_foreign_server": {
     "srvacl": {
       "oid": 1009,
@@ -198,6 +233,8 @@
     }
   },
   "pg_foreign_server_name_index": {},
+  "pg_foreign_server_oid_index": {},
+  "pg_foreign_table_relid_index": {},
   "pg_index": {
     "indexprs": {
       "oid": 25,
@@ -212,7 +249,12 @@
       "expectedDataType": "pg_node_tree"
     }
   },
+  "pg_index_indexrelid_index": {},
+  "pg_index_indrelid_index": {},
+  "pg_inherits_parent_index": {},
+  "pg_inherits_relid_seqno_index": {},
   "pg_init_privs": {},
+  "pg_init_privs_o_c_o_index": {},
   "pg_language": {
     "lanacl": {
       "oid": 1009,
@@ -222,7 +264,10 @@
     }
   },
   "pg_language_name_index": {},
+  "pg_language_oid_index": {},
+  "pg_largeobject_loid_pn_index": {},
   "pg_largeobject_metadata": {},
+  "pg_largeobject_metadata_oid_index": {},
   "pg_locks": {
     "transactionid": {
       "oid": 20,
@@ -240,7 +285,9 @@
     }
   },
   "pg_namespace_nspname_index": {},
+  "pg_namespace_oid_index": {},
   "pg_opclass_am_name_nsp_index": {},
+  "pg_opclass_oid_index": {},
   "pg_operator": {
     "oprcode": {
       "oid": 26,
@@ -267,10 +314,14 @@
       "expectedDataType": "regproc"
     }
   },
+  "pg_operator_oid_index": {},
   "pg_operator_oprname_l_r_n_index": {},
   "pg_opfamily_am_name_nsp_index": {},
+  "pg_opfamily_oid_index": {},
   "pg_partitioned_table": {},
+  "pg_partitioned_table_partrelid_index": {},
   "pg_policy": {},
+  "pg_policy_oid_index": {},
   "pg_policy_polrelid_polname_index": {},
   "pg_prepared_xacts": {
     "transaction": {
@@ -300,8 +351,12 @@
       "expectedDataType": "_char"
     }
   },
+  "pg_proc_oid_index": {},
   "pg_proc_proname_args_nsp_index": {},
+  "pg_publication_oid_index": {},
   "pg_publication_pubname_index": {},
+  "pg_publication_rel_oid_index": {},
+  "pg_publication_rel_prrelid_prpubid_index": {},
   "pg_range": {
     "rngcanonical": {
       "oid": 26,
@@ -316,6 +371,9 @@
       "expectedDataType": "regproc"
     }
   },
+  "pg_range_rngtypid_index": {},
+  "pg_replication_origin_roiident_index": {},
+  "pg_replication_origin_roname_index": {},
   "pg_replication_origin_status": {},
   "pg_replication_slots": {},
   "pg_rewrite": {
@@ -344,6 +402,7 @@
       "expectedDataType": "char"
     }
   },
+  "pg_rewrite_oid_index": {},
   "pg_rewrite_rel_rulename_index": {},
   "pg_seclabel": {
     "objsubid": {
@@ -353,6 +412,8 @@
       "expectedDataType": "int4"
     }
   },
+  "pg_seclabel_object_index": {},
+  "pg_sequence_seqrelid_index": {},
   "pg_sequences": {},
   "pg_settings": {
     "enumvals": {
@@ -362,6 +423,10 @@
       "expectedDataType": "_text"
     }
   },
+  "pg_shdepend_depender_index": {},
+  "pg_shdepend_reference_index": {},
+  "pg_shdescription_o_c_index": {},
+  "pg_shseclabel_object_index": {},
   "pg_stat_activity": {
     "backend_xid": {
       "oid": 20,
@@ -388,15 +453,53 @@
       "expectedDataType": "int4"
     }
   },
+  "pg_stat_all_indexes": {},
+  "pg_stat_all_tables": {},
+  "pg_stat_archiver": {},
+  "pg_stat_bgwriter": {},
+  "pg_stat_database": {},
+  "pg_stat_database_conflicts": {},
+  "pg_stat_gssapi": {},
+  "pg_stat_progress_analyze": {},
+  "pg_stat_progress_basebackup": {},
+  "pg_stat_progress_cluster": {},
+  "pg_stat_progress_create_index": {},
+  "pg_stat_progress_vacuum": {},
   "pg_stat_replication": {},
+  "pg_stat_slru": {},
+  "pg_stat_ssl": {},
   "pg_stat_subscription": {},
+  "pg_stat_sys_indexes": {},
+  "pg_stat_sys_tables": {},
+  "pg_stat_user_functions": {},
+  "pg_stat_user_indexes": {},
+  "pg_stat_user_tables": {},
   "pg_stat_wal_receiver": {},
+  "pg_stat_xact_all_tables": {},
+  "pg_stat_xact_sys_tables": {},
+  "pg_stat_xact_user_functions": {},
+  "pg_stat_xact_user_tables": {},
+  "pg_statio_all_indexes": {},
+  "pg_statio_all_sequences": {},
+  "pg_statio_all_tables": {},
+  "pg_statio_sys_indexes": {},
+  "pg_statio_sys_sequences": {},
+  "pg_statio_sys_tables": {},
+  "pg_statio_user_indexes": {},
+  "pg_statio_user_sequences": {},
+  "pg_statio_user_tables": {},
   "pg_statistic": {},
   "pg_statistic_ext_data": {},
+  "pg_statistic_ext_data_stxoid_index": {},
   "pg_statistic_ext_name_index": {},
+  "pg_statistic_ext_oid_index": {},
+  "pg_statistic_ext_relid_index": {},
+  "pg_statistic_relid_att_inh_index": {},
   "pg_stats": {},
   "pg_stats_ext": {},
+  "pg_subscription_oid_index": {},
   "pg_subscription_rel": {},
+  "pg_subscription_rel_srrelid_srsubid_index": {},
   "pg_subscription_subname_index": {},
   "pg_tablespace": {
     "spcacl": {
@@ -406,7 +509,10 @@
       "expectedDataType": "_aclitem"
     }
   },
+  "pg_tablespace_oid_index": {},
   "pg_tablespace_spcname_index": {},
+  "pg_transform_oid_index": {},
+  "pg_transform_type_lang_index": {},
   "pg_trigger": {
     "tgenabled": {
       "oid": 25,
@@ -421,10 +527,17 @@
       "expectedDataType": "pg_node_tree"
     }
   },
+  "pg_trigger_oid_index": {},
+  "pg_trigger_tgconstraint_index": {},
   "pg_trigger_tgrelid_tgname_index": {},
   "pg_ts_config_cfgname_index": {},
+  "pg_ts_config_map_index": {},
+  "pg_ts_config_oid_index": {},
   "pg_ts_dict_dictname_index": {},
+  "pg_ts_dict_oid_index": {},
+  "pg_ts_parser_oid_index": {},
   "pg_ts_parser_prsname_index": {},
+  "pg_ts_template_oid_index": {},
   "pg_ts_template_tmplname_index": {},
   "pg_type": {
     "typacl": {
@@ -440,6 +553,7 @@
       "expectedDataType": "pg_node_tree"
     }
   },
+  "pg_type_oid_index": {},
   "pg_type_typname_nsp_index": {},
   "pg_user": {
     "valuntil": {
@@ -448,5 +562,7 @@
       "expectedOid": 1184,
       "expectedDataType": "timestamptz"
     }
-  }
+  },
+  "pg_user_mapping_oid_index": {},
+  "pg_user_mapping_user_server_index": {}
 }
