@@ -124,6 +124,20 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="SQL Statement Contention"
+      sources={nodeSources}
+      tooltip={`The total number of SQL statements that experienced contention ${tooltipSelection}.`}
+    >
+      <Axis label="queries">
+        <Metric
+          name="cr.node.sql.distsql.contended_queries.count"
+          title="Contention"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Active Flows for Distributed SQL Statements"
       tooltip="The number of flows on each node contributing to currently running distributed SQL statements."
     >
