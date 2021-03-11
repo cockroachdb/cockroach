@@ -19,11 +19,15 @@ const singleIndentation = "  "
 const doubleIndentation = singleIndentation + singleIndentation
 const tripleIndentation = doubleIndentation + singleIndentation
 
+const contentionEventsStr = "num contention events:"
+const cumulativeContentionTimeStr = "cumulative contention time:"
+const contendingTxnsStr = "contending txns:"
+
 func (ice IndexContentionEvents) String() string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("tableID=%d indexID=%d\n", ice.TableID, ice.IndexID))
-	b.WriteString(fmt.Sprintf("%snum contention events: %d\n", singleIndentation, ice.NumContentionEvents))
-	b.WriteString(fmt.Sprintf("%scumulative contention time: %s\n", singleIndentation, ice.CumulativeContentionTime))
+	b.WriteString(fmt.Sprintf("%s%s %d\n", singleIndentation, contentionEventsStr, ice.NumContentionEvents))
+	b.WriteString(fmt.Sprintf("%s%s %s\n", singleIndentation, cumulativeContentionTimeStr, ice.CumulativeContentionTime))
 	b.WriteString(fmt.Sprintf("%skeys:\n", singleIndentation))
 	for i := range ice.Events {
 		b.WriteString(ice.Events[i].String())
@@ -33,13 +37,28 @@ func (ice IndexContentionEvents) String() string {
 
 func (skc SingleKeyContention) String() string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("%s%s contending txns:\n", doubleIndentation, skc.Key))
+	b.WriteString(fmt.Sprintf("%s%s %s\n", doubleIndentation, skc.Key, contendingTxnsStr))
 	for i := range skc.Txns {
 		b.WriteString(skc.Txns[i].String())
 	}
 	return b.String()
 }
 
-func (stx SingleKeyContention_SingleTxnContention) String() string {
-	return fmt.Sprintf("%sid=%s count=%d\n", tripleIndentation, stx.TxnID, stx.Count)
+func toString(stx SingleTxnContention, indentation string) string {
+	return fmt.Sprintf("%sid=%s count=%d\n", indentation, stx.TxnID, stx.Count)
+}
+
+func (stx SingleTxnContention) String() string {
+	return toString(stx, tripleIndentation)
+}
+
+func (skc SingleNonSQLKeyContention) String() string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("non-SQL key %s %s\n", skc.Key, contendingTxnsStr))
+	b.WriteString(fmt.Sprintf("%s%s %d\n", singleIndentation, contentionEventsStr, skc.NumContentionEvents))
+	b.WriteString(fmt.Sprintf("%s%s %s\n", singleIndentation, cumulativeContentionTimeStr, skc.CumulativeContentionTime))
+	for i := range skc.Txns {
+		b.WriteString(toString(skc.Txns[i], doubleIndentation))
+	}
+	return b.String()
 }
