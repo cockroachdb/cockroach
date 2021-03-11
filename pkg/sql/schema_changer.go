@@ -1045,10 +1045,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	// Jobs (for GC, etc.) that need to be started immediately after the table
 	// descriptor updates are published.
 	var didUpdate bool
+	var committedMutations []descpb.DescriptorMutation
+	var scTable *tabledesc.Mutable
 	modified, err := sc.txnWithModified(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		var err error
+		scTable, err = descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
 		}
@@ -1292,6 +1295,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			// The table descriptor is unchanged, return without writing anything.
 			return nil
 		}
+		committedMutations = scTable.Mutations[:i]
 		// Trim the executed mutations from the descriptor.
 		scTable.Mutations = scTable.Mutations[i:]
 
@@ -1385,6 +1389,14 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	if err := sc.jobRegistry.NotifyToAdoptJobs(ctx); err != nil {
 		return err
 	}
+
+	// If any operations was skipped because a mutation was made
+	// redundant due to a column getting dropped later on then we should
+	// wait for those jobs to complete before returning our result back.
+	if err := sc.waitForDependentMutations(ctx, scTable, committedMutations); err != nil {
+		return errors.Wrap(err, "A dependent transaction failed for this schema change")
+	}
+
 	return nil
 }
 
@@ -1525,6 +1537,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 		// Mutation is already reversed, so we don't need to do any more work.
 		// This can happen if the mutations were already reversed, but before
 		// the rollback completed the job was adopted.
+		// the rollback completed the job was adopted.
 		if alreadyReversed {
 			return nil
 		}
@@ -1562,6 +1575,12 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				// Can actually never happen. Since we should have checked for this case
 				// above.
 				return errors.AssertionFailedf("mutation already rolled back: %v", mutation)
+			}
+
+			// Ignore mutations that would be skipped, nothing
+			// to reverse here.
+			if discarded, _ := isCurrentMutationDiscarded(scTable, mutation, i+1); discarded {
+				continue
 			}
 
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
@@ -2094,7 +2113,6 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			return err
 		}
 	}
-
 	execSchemaChange := func(descID descpb.ID, mutationID descpb.MutationID, droppedDatabaseID descpb.ID) error {
 		sc := SchemaChanger{
 			descID:               descID,
@@ -2518,4 +2536,66 @@ func DeleteTableDescAndZoneConfig(
 		}
 		return txn.Run(ctx, b)
 	})
+}
+
+// waitForDependentMutations waits for dependent mutations that made a mutation in
+// the current list redundant. If any of the later operation fails, then the error
+// from it will be gather here. A example of this a column is dropped later on, then
+// there would be no point in creating a unique index on that column.
+func (sc *SchemaChanger) waitForDependentMutations(
+	ctx context.Context, tableDesc *tabledesc.Mutable, mutations []descpb.DescriptorMutation,
+) error {
+	dependentJobs := make([]jobspb.JobID, 0, len(tableDesc.MutationJobs))
+	for _, m := range mutations {
+		// Find all the mutations that we depend
+		discarded, dependentID := isCurrentMutationDiscarded(tableDesc, m, 0)
+		if discarded {
+			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, dependentID)
+			if err != nil {
+				return err
+			}
+			dependentJobs = append(dependentJobs, jobID)
+		}
+	}
+	err := sc.jobRegistry.WaitForJobs(ctx, sc.execCfg.InternalExecutor, dependentJobs)
+	return err
+}
+
+// isCurrentMutationDiscarded returns if the current column mutation is made irrelevant
+// by a later operation. The nextMutationIdx provides the index at which to check for
+// later mutation.
+func isCurrentMutationDiscarded(
+	tableDesc *tabledesc.Mutable, currentMutation descpb.DescriptorMutation, nextMutationIdx int,
+) (bool, descpb.MutationID) {
+	if nextMutationIdx+1 > len(tableDesc.Mutations) {
+		return false, descpb.InvalidMutationID
+	}
+
+	colToCheck := make([]descpb.ColumnID, 0, 1)
+	// Both NOT NULL related updates and check constraint updates
+	// involving this column will get cancelled out by a drop column.
+	if constraint := currentMutation.GetConstraint(); constraint != nil {
+		if constraint.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL {
+			colToCheck = append(colToCheck, constraint.NotNullColumn)
+		} else if constraint.ConstraintType == descpb.ConstraintToUpdate_CHECK {
+			colToCheck = constraint.Check.ColumnIDs
+		}
+	}
+
+	for _, m := range tableDesc.Mutations[nextMutationIdx:] {
+		colDesc := m.GetColumn()
+		if m.Direction == descpb.DescriptorMutation_DROP &&
+			colDesc != nil &&
+			!m.Rollback {
+			// Column was dropped later on, so this operation
+			// should be a no-op.
+			for _, col := range colToCheck {
+				if colDesc.ID == col {
+					return true, m.MutationID
+				}
+			}
+		}
+	}
+	// Not discarded by any later operation.
+	return false, descpb.InvalidMutationID
 }

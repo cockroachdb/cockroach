@@ -7030,3 +7030,220 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 		}
 	})
 }
+
+// TestDropColumnAfterMutations tests the imapct of a drop column
+// after an existing a mutation on the column
+func TestDropColumnAfterMutations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+	ctx := context.Background()
+	hookOnJobResume := true
+	proceedBeforeBackfill := make(chan error)
+	proceedJobResume := make(chan struct{})
+	nextStep := make(chan int)
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				if hookOnJobResume {
+					<-proceedJobResume
+				}
+				return nil
+			},
+			RunBeforeBackfill: func() error {
+				return <-proceedBeforeBackfill
+				return nil
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	conn1 := sqlutils.MakeSQLRunner(sqlDB)
+	conn2 := sqlutils.MakeSQLRunner(sqlDB)
+	var schemaChangeWaitGroup sync.WaitGroup
+
+	// Sub test 1: with concurrent drop and mutations
+	conn1.Exec(t, `
+CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+INSERT INTO t VALUES (1, 1);
+`)
+
+	schemaChangeWaitGroup.Add(1)
+	go func() {
+		defer schemaChangeWaitGroup.Done()
+		nextStep <- 1
+		conn2.Exec(t,
+			`
+BEGIN;
+ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL UNIQUE;
+COMMIT TRANSACTION;
+`)
+	}()
+
+	// Wait for the alter to get submitted first
+	<-nextStep
+
+	schemaChangeWaitGroup.Add(1)
+	go func() {
+		defer schemaChangeWaitGroup.Done()
+		conn1.Exec(t,
+			`
+SET sql_safe_updates = false;
+BEGIN;
+ALTER TABLE t DROP COLUMN j;
+ALTER TABLE t ALTER COLUMN k SET NOT NULL;
+COMMIT;
+`)
+	}()
+
+	// Allow jobs to proceed once both are concurrent.
+	proceedJobResume <- struct{}{}
+	proceedJobResume <- struct{}{}
+	// Allow both backfill jobs to proceed
+	proceedBeforeBackfill <- nil
+	proceedBeforeBackfill <- nil
+	schemaChangeWaitGroup.Wait()
+
+	// Sub test 2: with concurrent drop and mutations, where
+	// the drop column will be failed intentionally
+	hookOnJobResume = false
+	conn2.Exec(t, `
+DROP TABLE t;
+CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+INSERT INTO t VALUES (1, 1);
+`)
+	hookOnJobResume = true
+	schemaChangeWaitGroup.Add(1)
+	go func() {
+		defer schemaChangeWaitGroup.Done()
+		nextStep <- 1
+		_, err := conn2.DB.ExecContext(context.Background(),
+			`
+BEGIN;
+ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL UNIQUE;
+COMMIT;
+`)
+		failureError := "pq: transaction committed but schema change aborted with error: (XXUUU): A dependent transaction failed for this schema change: Bogus error for drop column transaction"
+		if err != nil &&
+			!strings.Contains(err.Error(), failureError) {
+			t.Fatalf(err.Error())
+		} else if err == nil {
+			t.Fatalf("Expected error was not hit")
+		}
+	}()
+
+	// Wait for the alter to get submitted first
+	<-nextStep
+
+	schemaChangeWaitGroup.Add(1)
+	go func() {
+		defer schemaChangeWaitGroup.Done()
+		_, err := conn1.DB.ExecContext(context.Background(),
+			`
+SET sql_safe_updates = false;
+BEGIN;
+ALTER TABLE t DROP COLUMN j;
+ALTER TABLE t ALTER COLUMN k SET NOT NULL;
+ALTER TABLE t ALTER COLUMN k SET DEFAULT 421;
+ALTER TABLE t ADD COLUMN o INT8 DEFAULT 42 NOT NULL UNIQUE;
+COMMIT;
+`)
+		failureError := "pq: transaction committed but schema change aborted with error: (XXUUU): Bogus error for drop column transaction"
+		if err != nil &&
+			!strings.Contains(err.Error(), failureError) {
+			t.Fatalf(err.Error())
+		} else if err == nil {
+			t.Fatalf("Expected error was not hit")
+		}
+	}()
+
+	// Allow jobs to proceed once both are concurrent.
+	proceedJobResume <- struct{}{}
+	proceedJobResume <- struct{}{}
+	// Allow the first backfill to succeed and the
+	// second one with the drop to fail, which should
+	// cause both to return errors.
+	proceedBeforeBackfill <- nil
+	proceedBeforeBackfill <- errors.Newf("Bogus error for drop column transaction")
+	proceedBeforeBackfill <- nil
+	proceedBeforeBackfill <- nil
+	schemaChangeWaitGroup.Wait()
+
+	hookOnJobResume = false
+	conn2.Exec(t, `
+DROP TABLE t;
+CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+INSERT INTO t VALUES (1, 1);
+`)
+	hookOnJobResume = true
+
+	// Sub test 3: with concurrent drop and mutations where an insert will
+	// cause the backfill operation to fail.
+	schemaChangeWaitGroup.Add(1)
+	go func() {
+		defer schemaChangeWaitGroup.Done()
+		nextStep <- 1
+		_, err := conn2.DB.ExecContext(context.Background(),
+			`
+BEGIN;
+ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL;
+COMMIT;
+	   `)
+		// Two possibilities exist based on timing, either the current transaction
+		// will fail during backfill or the dependent one with the drop will fail.
+		failureError := "pq: transaction committed but schema change aborted with error: (23505): failed to ingest index entries during backfill: duplicate key value violates unique constraint \"t_k_key\""
+		failureError2 := "pq: transaction committed but schema change aborted with error: (23505): A dependent transaction failed for this schema change: failed to ingest index entries during backfill: duplicate key value violates unique constraint \"t_o_key\""
+		if err != nil &&
+			!strings.Contains(err.Error(), failureError) &&
+			!strings.Contains(err.Error(), failureError2) {
+			t.Fatalf(err.Error())
+		} else if err == nil {
+			t.Fatalf("Expected error was not hit")
+		}
+		fmt.Printf("====================FAILED\n")
+	}()
+
+	// Wait for the alter to get submitted first
+	<-nextStep
+
+	schemaChangeWaitGroup.Add(1)
+	go func() {
+		defer schemaChangeWaitGroup.Done()
+		_, err := conn1.DB.ExecContext(context.Background(),
+			`
+SET sql_safe_updates = false;
+BEGIN;
+ALTER TABLE t DROP COLUMN j;
+ALTER TABLE t ALTER COLUMN k SET NOT NULL;
+ALTER TABLE t ALTER COLUMN k SET DEFAULT 421;
+ALTER TABLE t ADD COLUMN o INT8 DEFAULT 42 NOT NULL UNIQUE;
+INSERT INTO t VALUES (2);
+COMMIT;
+	   `)
+		failureError := "pq: transaction committed but schema change aborted with error: (23505): failed to ingest index entries during backfill: duplicate key value violates unique constraint \"t_o_key\""
+		if err != nil &&
+			!strings.Contains(err.Error(), failureError) {
+			t.Fatalf(err.Error())
+		} else if err == nil {
+			t.Fatalf("Expected error was not hit")
+		}
+	}()
+
+	// Allow jobs to proceed once both are concurrent.
+	proceedJobResume <- struct{}{}
+	proceedJobResume <- struct{}{}
+	// Let every backfill request continue
+	proceedBeforeBackfill <- nil
+	proceedBeforeBackfill <- nil
+	proceedBeforeBackfill <- nil
+	proceedBeforeBackfill <- nil
+	schemaChangeWaitGroup.Wait()
+
+	close(proceedBeforeBackfill)
+	close(proceedJobResume)
+
+}
