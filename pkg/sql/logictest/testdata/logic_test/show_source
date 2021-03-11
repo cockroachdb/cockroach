@@ -85,6 +85,7 @@ session_user                                          root
 sql_safe_updates                                      off
 standard_conforming_strings                           on
 statement_timeout                                     0
+stub_catalog_tables                                   on
 synchronize_seqscans                                  on
 synchronous_commit                                    on
 testing_vectorize_inject_panics                       off
