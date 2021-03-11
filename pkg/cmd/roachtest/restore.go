@@ -348,6 +348,8 @@ func registerRestore(r *testRegistry) {
 					defer hc.Done()
 					t.Status(`running restore`)
 					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
+					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.concurrent_import_requests=8"`)
+					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests=5"`)
 					// TODO(dan): It'd be nice if we could keep track over time of how
 					// long this next line took.
 					c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
