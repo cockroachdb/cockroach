@@ -1426,19 +1426,19 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	var forwardIndexes []*descpb.IndexDescriptor
 	var invertedIndexes []*descpb.IndexDescriptor
 
-	for _, m := range tableDesc.GetMutations() {
-		if sc.mutationID != m.MutationID {
+	for _, m := range tableDesc.AllMutations() {
+		if sc.mutationID != m.MutationID() {
 			break
 		}
-		idx := m.GetIndex()
-		if idx == nil || m.Direction == descpb.DescriptorMutation_DROP {
+		idx := m.AsIndex()
+		if idx == nil || idx.Dropped() {
 			continue
 		}
-		switch idx.Type {
+		switch idx.GetType() {
 		case descpb.IndexDescriptor_FORWARD:
-			forwardIndexes = append(forwardIndexes, idx)
+			forwardIndexes = append(forwardIndexes, idx.IndexDesc())
 		case descpb.IndexDescriptor_INVERTED:
-			invertedIndexes = append(invertedIndexes, idx)
+			invertedIndexes = append(invertedIndexes, idx.IndexDesc())
 		}
 	}
 	if len(forwardIndexes) == 0 && len(invertedIndexes) == 0 {

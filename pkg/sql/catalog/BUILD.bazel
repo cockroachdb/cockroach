@@ -11,6 +11,7 @@ go_library(
         "errors.go",
         "table_col_map.go",
         "table_col_set.go",
+        "table_elements.go",
         "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog",
