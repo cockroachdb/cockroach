@@ -299,17 +299,13 @@ func (r *Registry) NotifyToAdoptJobs(ctx context.Context) error {
 	return nil
 }
 
-// Run starts previously unstarted jobs from a list of scheduled
-// jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
-func (r *Registry) Run(
+// WaitForJobs waits for a given list of jobs to reach some sort
+// of terminal state.
+func (r *Registry) WaitForJobs(
 	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
 ) error {
 	if len(jobs) == 0 {
 		return nil
-	}
-	log.Infof(ctx, "scheduled jobs %+v", jobs)
-	if err := r.NotifyToAdoptJobs(ctx); err != nil {
-		return err
 	}
 	buf := bytes.Buffer{}
 	for i, id := range jobs {
@@ -368,6 +364,25 @@ func (r *Registry) Run(
 		if j.Payload().Error != "" {
 			return errors.Newf("job %d failed with error: %s", jobs[i], j.Payload().Error)
 		}
+	}
+	return nil
+}
+
+// Run starts previously unstarted jobs from a list of scheduled
+// jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
+func (r *Registry) Run(
+	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
+) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+	log.Infof(ctx, "scheduled jobs %+v", jobs)
+	if err := r.NotifyToAdoptJobs(ctx); err != nil {
+		return err
+	}
+	err := r.WaitForJobs(ctx, ex, jobs)
+	if err != nil {
+		return err
 	}
 	return nil
 }
