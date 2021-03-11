@@ -1718,9 +1718,9 @@
     regenerator-runtime "^0.13.2"
 
 "@babel/runtime@^7.12.13":
-  version "7.13.7"
-  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.13.7.tgz#d494e39d198ee9ca04f4dcb76d25d9d7a1dc961a"
-  integrity sha512-h+ilqoX998mRVM5FtB5ijRuHUDVt5l3yfoOi2uh18Z/O3hvyaHQ39NpxVkCIG5yFs+mLq/ewFp8Bss6zmWv6ZA==
+  version "7.13.10"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.13.10.tgz#47d42a57b6095f4468da440388fdbad8bebf0d7d"
+  integrity sha512-4QPkjJq6Ns3V/RgpEahRk+AGfL0eO6RHHtTWoNNr5mO49G6B5+X6d6THgWEAvTrznU5xYpbAlVKRYcsCgh/Akw==
   dependencies:
     regenerator-runtime "^0.13.4"
 
@@ -1813,10 +1813,10 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/cluster-ui@^0.2.12":
-  version "0.2.12"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.12.tgz#0dc482bbdc70923f3c52a9e1388f7539b8a4f536"
-  integrity sha512-fnlcLrQL2QJXyiv16EzPc6sDd/mjV53u7OKi7sCTMSMM/fBqF9pNuUaRYG0azMtVPrkpHmaDvRaiDcNJHdF9Ww==
+"@cockroachlabs/cluster-ui@^0.2.14":
+  version "0.2.14"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.14.tgz#d07a562aa81768e2a71dcc823fb446e0f9a88e3f"
+  integrity sha512-KLHI2ZOYJGtZvE4zs2a7WGD5PdaSMU1wzaa3HE4NrEyLlHvUE3sYkBOHJlcSPWJt0oxSt97L4J5Kp61EGpNkwg==
   dependencies:
     "@babel/runtime" "^7.12.13"
     "@cockroachlabs/crdb-protobuf-client" "^0.0.7"
@@ -2016,9 +2016,9 @@
     fastq "^1.6.0"
 
 "@popperjs/core@^2.4.0", "@popperjs/core@^2.4.3":
-  version "2.8.4"
-  resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.8.4.tgz#6f1744b0f69f507a433f42874cc3b2eb4b11b337"
-  integrity sha512-h0lY7g36rhjNV8KVHKS3/BEOgfsxu0AiRI8+ry5IFBGEsQFkpjxtcpVc9ndN8zrKUeMZXAWMc7eQMepfgykpxQ==
+  version "2.9.1"
+  resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.9.1.tgz#7f554e7368c9ab679a11f4a042ca17149d70cf12"
+  integrity sha512-DvJbbn3dUgMxDnJLH+RZQPnXak1h4ZVYQ7CWiFWjQwBFkVajT4rfw2PdpHLTSTwxrYfnoEXkuBiwkDm6tPMQeA==
 
 "@protobufjs/aspromise@^1.1.1", "@protobufjs/aspromise@^1.1.2":
   version "1.1.2"
