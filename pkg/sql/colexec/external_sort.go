@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -453,7 +454,7 @@ func (s *externalSorter) enqueue(ctx context.Context, b coldata.Batch) {
 	// performs a deselection when buffering up the tuples, and the in-memory
 	// sorter has allSpooler as its input.
 	if err := s.partitioner.Enqueue(ctx, s.currentPartitionIdx, b); err != nil {
-		colexecerror.InternalError(err)
+		colexecutils.HandleErrorFromDiskQueue(err)
 	}
 }
 

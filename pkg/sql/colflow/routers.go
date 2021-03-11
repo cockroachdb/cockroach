@@ -334,12 +334,11 @@ func (o *routerOutputOp) addBatch(ctx context.Context, batch coldata.Batch) bool
 	}
 
 	o.mu.numUnread += batch.Length()
-	err := o.mu.data.Enqueue(ctx, batch)
-	if err == nil && o.testingKnobs.addBatchTestInducedErrorCb != nil {
-		err = o.testingKnobs.addBatchTestInducedErrorCb()
-	}
-	if err != nil {
-		colexecerror.InternalError(err)
+	o.mu.data.Enqueue(ctx, batch)
+	if o.testingKnobs.addBatchTestInducedErrorCb != nil {
+		if err := o.testingKnobs.addBatchTestInducedErrorCb(); err != nil {
+			colexecerror.InternalError(err)
+		}
 	}
 
 	if batch.Length() == 0 {
