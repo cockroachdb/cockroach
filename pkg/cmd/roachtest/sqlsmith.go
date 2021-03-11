@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 func registerSQLSmith(r *testRegistry) {
@@ -159,10 +160,29 @@ func registerSQLSmith(r *testRegistry) {
 				return
 			default:
 			}
-			stmt := smither.Generate()
+
+			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
 				go func(context.Context) {
+					defer func() {
+						if r := recover(); r != nil {
+							done <- errors.Newf("Caught error %s", r)
+							return
+						}
+					}()
+
+					// Generate can potentially panic in bad cases, so
+					// to avoid Go routines from dying we are going
+					// catch that here, and only pass the error into
+					// the channel.
+					stmt = smither.Generate()
+					if stmt == "" {
+						// If an empty statement is generated, then ignore it.
+						done <- errors.Newf("Empty statement returned by generate")
+						return
+					}
+
 					// At the moment, CockroachDB doesn't support pgwire query
 					// cancellation which is needed for correct handling of context
 					// cancellation, so instead of using a context with timeout, we opt
@@ -201,6 +221,11 @@ func registerSQLSmith(r *testRegistry) {
 					// a non-gateway node has crashed.
 					logStmt(stmt)
 					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
+				} else if strings.Contains(es, "Empty statement returned by generate") ||
+					stmt == "" {
+					// Either were unable to generate a statement or
+					// we panicked making one.
+					t.Fatalf("Failed generating a query %s", err)
 				}
 				// Ignore other errors because they happen so
 				// frequently (due to sqlsmith not crafting

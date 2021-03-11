@@ -68,6 +68,7 @@ func TestBenchmarkExpectation(t *testing.T) {
 	skip.UnderRace(t)
 	skip.UnderShort(t)
 	skip.UnderMetamorphic(t)
+	skip.WithIssue(t, 61856)
 
 	expecations := readExpectationsFile(t)
 
