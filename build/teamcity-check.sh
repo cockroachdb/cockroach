@@ -38,18 +38,15 @@ fi
 
 tc_start_block "Ensure generated code is up-to-date"
 # Buffer noisy output and only print it on failure.
-run build/builder.sh make generate &> artifacts/generate.log || (cat artifacts/generate.log && false)
+run build/builder.sh make buildshort generate &> artifacts/generate.log || (cat artifacts/generate.log && false)
 rm artifacts/generate.log
-check_clean "Run \`make generate\` to automatically regenerate these."
-run build/builder.sh make buildshort &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
-rm artifacts/buildshort.log
-check_clean "Run \`make buildshort\` to automatically regenerate these."
+check_clean "Run \`make buildshort generate\` to automatically regenerate these."
 # NB: $root is set by teamcity-support.sh.
 run docker run -i ${tty-} --rm --init \
        --workdir="/go/src/github.com/cockroachdb/cockroach" \
        -v "$root:/go/src/github.com/cockroachdb/cockroach" \
-       $BAZEL_IMAGE build/bazelutil/bazel-generate.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
-rm artifacts/buildshort.log
+       $BAZEL_IMAGE build/bazelutil/bazel-generate.sh &> artifacts/bazel-generate.log || (cat artifacts/bazel-generate.log && false)
+rm artifacts/bazel-generate.log
 check_clean "Run \`make bazel-generate\` to automatically regenerate these."
 tc_end_block "Ensure generated code is up-to-date"
 
