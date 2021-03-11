@@ -323,12 +323,12 @@ func (b *baseStatusServer) hasContentionEventsPermissions(ctx context.Context) e
 
 func (b *baseStatusServer) getLocalContentionEvents(
 	ctx context.Context, _ *serverpb.ListContentionEventsRequest,
-) ([]contentionpb.IndexContentionEvents, error) {
+) (contentionpb.SerializedRegistry, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
 
 	if err := b.hasContentionEventsPermissions(ctx); err != nil {
-		return nil, err
+		return contentionpb.SerializedRegistry{}, err
 	}
 
 	return b.contentionRegistry.Serialize(), nil
@@ -1898,15 +1898,6 @@ func (s *statusServer) ListLocalSessions(
 }
 
 // ListLocalContentionEvents returns a list of contention events on this node.
-//
-// On the highest level, all IndexContentionEvents objects are ordered according
-// to their importance (as defined by the number of contention events within
-// each object).
-// On the middle level, all SingleKeyContention objects are ordered by their
-// keys lexicographically.
-// On the lowest level, all SingleTxnContention objects are ordered by the
-// number of times that transaction was observed to contend with other
-// transactions.
 func (s *statusServer) ListLocalContentionEvents(
 	ctx context.Context, req *serverpb.ListContentionEventsRequest,
 ) (*serverpb.ListContentionEventsResponse, error) {
@@ -2206,15 +2197,6 @@ func (s *statusServer) CancelQuery(
 
 // ListContentionEvents returns a list of contention events on all nodes in the
 // cluster.
-//
-// On the highest level, all IndexContentionEvents objects are ordered according
-// to their importance (as defined by the number of contention events within
-// each object).
-// On the middle level, all SingleKeyContention objects are ordered by their
-// keys lexicographically.
-// On the lowest level, all SingleTxnContention objects are ordered by the
-// number of times that transaction was observed to contend with other
-// transactions.
 func (s *statusServer) ListContentionEvents(
 	ctx context.Context, req *serverpb.ListContentionEventsRequest,
 ) (*serverpb.ListContentionEventsResponse, error) {
@@ -2226,9 +2208,7 @@ func (s *statusServer) ListContentionEvents(
 		return nil, err
 	}
 
-	response := &serverpb.ListContentionEventsResponse{
-		Events: make([]contentionpb.IndexContentionEvents, 0),
-	}
+	var response serverpb.ListContentionEventsResponse
 	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
 		client, err := s.dialNode(ctx, nodeID)
 		return client, err
@@ -2259,7 +2239,7 @@ func (s *statusServer) ListContentionEvents(
 	if err := s.iterateNodes(ctx, "contention events list", dialFn, nodeFn, responseFn, errorFn); err != nil {
 		return nil, err
 	}
-	return response, nil
+	return &response, nil
 }
 
 // SpanStats requests the total statistics stored on a node for a given key

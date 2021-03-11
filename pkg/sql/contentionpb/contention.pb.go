@@ -9,8 +9,8 @@ import math "math"
 
 import github_com_cockroachdb_cockroach_pkg_sql_catalog_descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 import time "time"
-import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 
@@ -52,7 +52,7 @@ type IndexContentionEvents struct {
 func (m *IndexContentionEvents) Reset()      { *m = IndexContentionEvents{} }
 func (*IndexContentionEvents) ProtoMessage() {}
 func (*IndexContentionEvents) Descriptor() ([]byte, []int) {
-	return fileDescriptor_contention_c4b958fee1c9da1f, []int{0}
+	return fileDescriptor_contention_69057c7b1b7c67fd, []int{0}
 }
 func (m *IndexContentionEvents) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -77,6 +77,44 @@ func (m *IndexContentionEvents) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_IndexContentionEvents proto.InternalMessageInfo
 
+// SingleTxnContention describes a single transaction that contended with the
+// key.
+type SingleTxnContention struct {
+	// TxnID is the contending transaction.
+	TxnID github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,2,opt,name=txn_id,json=txnId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_id"`
+	// Count is the number of times the corresponding transaction was
+	// encountered.
+	Count uint64 `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+}
+
+func (m *SingleTxnContention) Reset()      { *m = SingleTxnContention{} }
+func (*SingleTxnContention) ProtoMessage() {}
+func (*SingleTxnContention) Descriptor() ([]byte, []int) {
+	return fileDescriptor_contention_69057c7b1b7c67fd, []int{1}
+}
+func (m *SingleTxnContention) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SingleTxnContention) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SingleTxnContention) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SingleTxnContention.Merge(dst, src)
+}
+func (m *SingleTxnContention) XXX_Size() int {
+	return m.Size()
+}
+func (m *SingleTxnContention) XXX_DiscardUnknown() {
+	xxx_messageInfo_SingleTxnContention.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SingleTxnContention proto.InternalMessageInfo
+
 // SingleKeyContention describes all of the available contention information for
 // a single key.
 type SingleKeyContention struct {
@@ -88,13 +126,13 @@ type SingleKeyContention struct {
 	//
 	// The transactions are ordered by the number of times they were encountered
 	// in DESC order (i.e. most frequent first).
-	Txns []SingleKeyContention_SingleTxnContention `protobuf:"bytes,2,rep,name=txns,proto3" json:"txns"`
+	Txns []SingleTxnContention `protobuf:"bytes,2,rep,name=txns,proto3" json:"txns"`
 }
 
 func (m *SingleKeyContention) Reset()      { *m = SingleKeyContention{} }
 func (*SingleKeyContention) ProtoMessage() {}
 func (*SingleKeyContention) Descriptor() ([]byte, []int) {
-	return fileDescriptor_contention_c4b958fee1c9da1f, []int{1}
+	return fileDescriptor_contention_69057c7b1b7c67fd, []int{2}
 }
 func (m *SingleKeyContention) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -119,27 +157,35 @@ func (m *SingleKeyContention) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SingleKeyContention proto.InternalMessageInfo
 
-// SingleTxnContention describes a single transaction that contended with the
-// key.
-type SingleKeyContention_SingleTxnContention struct {
-	// TxnID is the contending transaction.
-	TxnID github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,2,opt,name=txn_ids,json=txnIds,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"txn_ids"`
-	// Count is the number of times the corresponding transaction was
-	// encountered.
-	Count uint64 `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+// SingleNonSQLKeyContention describes all of the available contention
+// information for a single non-SQL key.
+type SingleNonSQLKeyContention struct {
+	// Key is the key that other transactions conflicted on.
+	Key github_com_cockroachdb_cockroach_pkg_roachpb.Key `protobuf:"bytes,1,opt,name=key,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.Key" json:"key,omitempty"`
+	// NumContentionEvents is the number of contention events that have happened
+	// on the key.
+	NumContentionEvents uint64 `protobuf:"varint,2,opt,name=num_contention_events,json=numContentionEvents,proto3" json:"num_contention_events,omitempty"`
+	// CumulativeContentionTime is the total duration that transactions touching
+	// the key have spent contended.
+	CumulativeContentionTime time.Duration `protobuf:"bytes,3,opt,name=cumulative_contention_time,json=cumulativeContentionTime,proto3,stdduration" json:"cumulative_contention_time"`
+	// Txns are all contending transactions that we kept track of. Note that some
+	// transactions could have been forgotten since we're keeping a limited LRU
+	// cache of them.
+	//
+	// The transactions are ordered by the number of times they were encountered
+	// in DESC order (i.e. most frequent first).
+	Txns []SingleTxnContention `protobuf:"bytes,4,rep,name=txns,proto3" json:"txns"`
 }
 
-func (m *SingleKeyContention_SingleTxnContention) Reset() {
-	*m = SingleKeyContention_SingleTxnContention{}
+func (m *SingleNonSQLKeyContention) Reset()      { *m = SingleNonSQLKeyContention{} }
+func (*SingleNonSQLKeyContention) ProtoMessage() {}
+func (*SingleNonSQLKeyContention) Descriptor() ([]byte, []int) {
+	return fileDescriptor_contention_69057c7b1b7c67fd, []int{3}
 }
-func (*SingleKeyContention_SingleTxnContention) ProtoMessage() {}
-func (*SingleKeyContention_SingleTxnContention) Descriptor() ([]byte, []int) {
-	return fileDescriptor_contention_c4b958fee1c9da1f, []int{1, 0}
-}
-func (m *SingleKeyContention_SingleTxnContention) XXX_Unmarshal(b []byte) error {
+func (m *SingleNonSQLKeyContention) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *SingleKeyContention_SingleTxnContention) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SingleNonSQLKeyContention) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
 	n, err := m.MarshalTo(b)
 	if err != nil {
@@ -147,22 +193,75 @@ func (m *SingleKeyContention_SingleTxnContention) XXX_Marshal(b []byte, determin
 	}
 	return b[:n], nil
 }
-func (dst *SingleKeyContention_SingleTxnContention) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SingleKeyContention_SingleTxnContention.Merge(dst, src)
+func (dst *SingleNonSQLKeyContention) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SingleNonSQLKeyContention.Merge(dst, src)
 }
-func (m *SingleKeyContention_SingleTxnContention) XXX_Size() int {
+func (m *SingleNonSQLKeyContention) XXX_Size() int {
 	return m.Size()
 }
-func (m *SingleKeyContention_SingleTxnContention) XXX_DiscardUnknown() {
-	xxx_messageInfo_SingleKeyContention_SingleTxnContention.DiscardUnknown(m)
+func (m *SingleNonSQLKeyContention) XXX_DiscardUnknown() {
+	xxx_messageInfo_SingleNonSQLKeyContention.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_SingleKeyContention_SingleTxnContention proto.InternalMessageInfo
+var xxx_messageInfo_SingleNonSQLKeyContention proto.InternalMessageInfo
+
+// SerializedRegistry is the serialized representation of contention.Registry.
+type SerializedRegistry struct {
+	// IndexContentionEvents contains all of the available contention information
+	// on the SQL keys. The following orderings are maintained:
+	// - on the highest level, all IndexContentionEvents objects are ordered
+	//   according to their importance
+	// - on the middle level, all SingleKeyContention objects are ordered by their
+	//   keys
+	// - on the lowest level, all SingleTxnContention objects are ordered by the
+	//   number of times that transaction was observed to contend with other
+	//   transactions.
+	IndexContentionEvents []IndexContentionEvents `protobuf:"bytes,1,rep,name=index_contention_events,json=indexContentionEvents,proto3" json:"index_contention_events"`
+	// NonSQLKeysContention contains all of the available contention information
+	// on the non-SQL keys. The following orderings are maintained:
+	// - on the top level, all SingleNonSQLKeyContention objects are ordered
+	//   by their keys
+	// - on the bottom level, all SingleTxnContention objects are ordered by the
+	//   number of times that transaction was observed to contend with other
+	//   transactions.
+	NonSQLKeysContention []SingleNonSQLKeyContention `protobuf:"bytes,2,rep,name=non_sql_keys_contention,json=nonSqlKeysContention,proto3" json:"non_sql_keys_contention"`
+}
+
+func (m *SerializedRegistry) Reset()         { *m = SerializedRegistry{} }
+func (m *SerializedRegistry) String() string { return proto.CompactTextString(m) }
+func (*SerializedRegistry) ProtoMessage()    {}
+func (*SerializedRegistry) Descriptor() ([]byte, []int) {
+	return fileDescriptor_contention_69057c7b1b7c67fd, []int{4}
+}
+func (m *SerializedRegistry) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SerializedRegistry) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *SerializedRegistry) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SerializedRegistry.Merge(dst, src)
+}
+func (m *SerializedRegistry) XXX_Size() int {
+	return m.Size()
+}
+func (m *SerializedRegistry) XXX_DiscardUnknown() {
+	xxx_messageInfo_SerializedRegistry.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SerializedRegistry proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*IndexContentionEvents)(nil), "cockroach.sql.contentionpb.IndexContentionEvents")
+	proto.RegisterType((*SingleTxnContention)(nil), "cockroach.sql.contentionpb.SingleTxnContention")
 	proto.RegisterType((*SingleKeyContention)(nil), "cockroach.sql.contentionpb.SingleKeyContention")
-	proto.RegisterType((*SingleKeyContention_SingleTxnContention)(nil), "cockroach.sql.contentionpb.SingleKeyContention.SingleTxnContention")
+	proto.RegisterType((*SingleNonSQLKeyContention)(nil), "cockroach.sql.contentionpb.SingleNonSQLKeyContention")
+	proto.RegisterType((*SerializedRegistry)(nil), "cockroach.sql.contentionpb.SerializedRegistry")
 }
 func (m *IndexContentionEvents) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -217,6 +316,37 @@ func (m *IndexContentionEvents) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *SingleTxnContention) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SingleTxnContention) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintContention(dAtA, i, uint64(m.TxnID.Size()))
+	n2, err := m.TxnID.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	if m.Count != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintContention(dAtA, i, uint64(m.Count))
+	}
+	return i, nil
+}
+
 func (m *SingleKeyContention) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -253,7 +383,7 @@ func (m *SingleKeyContention) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *SingleKeyContention_SingleTxnContention) Marshal() (dAtA []byte, err error) {
+func (m *SingleNonSQLKeyContention) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -263,23 +393,83 @@ func (m *SingleKeyContention_SingleTxnContention) Marshal() (dAtA []byte, err er
 	return dAtA[:n], nil
 }
 
-func (m *SingleKeyContention_SingleTxnContention) MarshalTo(dAtA []byte) (int, error) {
+func (m *SingleNonSQLKeyContention) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x12
+	if len(m.Key) > 0 {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintContention(dAtA, i, uint64(len(m.Key)))
+		i += copy(dAtA[i:], m.Key)
+	}
+	if m.NumContentionEvents != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintContention(dAtA, i, uint64(m.NumContentionEvents))
+	}
+	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintContention(dAtA, i, uint64(m.TxnID.Size()))
-	n2, err := m.TxnID.MarshalTo(dAtA[i:])
+	i = encodeVarintContention(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.CumulativeContentionTime)))
+	n3, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.CumulativeContentionTime, dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n2
-	if m.Count != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintContention(dAtA, i, uint64(m.Count))
+	i += n3
+	if len(m.Txns) > 0 {
+		for _, msg := range m.Txns {
+			dAtA[i] = 0x22
+			i++
+			i = encodeVarintContention(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
+}
+
+func (m *SerializedRegistry) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SerializedRegistry) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.IndexContentionEvents) > 0 {
+		for _, msg := range m.IndexContentionEvents {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintContention(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.NonSQLKeysContention) > 0 {
+		for _, msg := range m.NonSQLKeysContention {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintContention(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	return i, nil
 }
@@ -319,6 +509,20 @@ func (m *IndexContentionEvents) Size() (n int) {
 	return n
 }
 
+func (m *SingleTxnContention) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.TxnID.Size()
+	n += 1 + l + sovContention(uint64(l))
+	if m.Count != 0 {
+		n += 1 + sovContention(uint64(m.Count))
+	}
+	return n
+}
+
 func (m *SingleKeyContention) Size() (n int) {
 	if m == nil {
 		return 0
@@ -338,16 +542,47 @@ func (m *SingleKeyContention) Size() (n int) {
 	return n
 }
 
-func (m *SingleKeyContention_SingleTxnContention) Size() (n int) {
+func (m *SingleNonSQLKeyContention) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	l = m.TxnID.Size()
+	l = len(m.Key)
+	if l > 0 {
+		n += 1 + l + sovContention(uint64(l))
+	}
+	if m.NumContentionEvents != 0 {
+		n += 1 + sovContention(uint64(m.NumContentionEvents))
+	}
+	l = github_com_gogo_protobuf_types.SizeOfStdDuration(m.CumulativeContentionTime)
 	n += 1 + l + sovContention(uint64(l))
-	if m.Count != 0 {
-		n += 1 + sovContention(uint64(m.Count))
+	if len(m.Txns) > 0 {
+		for _, e := range m.Txns {
+			l = e.Size()
+			n += 1 + l + sovContention(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *SerializedRegistry) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.IndexContentionEvents) > 0 {
+		for _, e := range m.IndexContentionEvents {
+			l = e.Size()
+			n += 1 + l + sovContention(uint64(l))
+		}
+	}
+	if len(m.NonSQLKeysContention) > 0 {
+		for _, e := range m.NonSQLKeysContention {
+			l = e.Size()
+			n += 1 + l + sovContention(uint64(l))
+		}
 	}
 	return n
 }
@@ -533,6 +768,105 @@ func (m *IndexContentionEvents) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *SingleTxnContention) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowContention
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SingleTxnContention: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SingleTxnContention: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TxnID", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContention
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthContention
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.TxnID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Count", wireType)
+			}
+			m.Count = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContention
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Count |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipContention(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthContention
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *SingleKeyContention) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -619,7 +953,7 @@ func (m *SingleKeyContention) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Txns = append(m.Txns, SingleKeyContention_SingleTxnContention{})
+			m.Txns = append(m.Txns, SingleTxnContention{})
 			if err := m.Txns[len(m.Txns)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -645,7 +979,7 @@ func (m *SingleKeyContention) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SingleKeyContention_SingleTxnContention) Unmarshal(dAtA []byte) error {
+func (m *SingleNonSQLKeyContention) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -668,15 +1002,15 @@ func (m *SingleKeyContention_SingleTxnContention) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: SingleTxnContention: wiretype end group for non-group")
+			return fmt.Errorf("proto: SingleNonSQLKeyContention: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SingleTxnContention: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SingleNonSQLKeyContention: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
-		case 2:
+		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TxnID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -700,15 +1034,16 @@ func (m *SingleKeyContention_SingleTxnContention) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.TxnID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
+			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
+			if m.Key == nil {
+				m.Key = []byte{}
 			}
 			iNdEx = postIndex
-		case 3:
+		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Count", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field NumContentionEvents", wireType)
 			}
-			m.Count = 0
+			m.NumContentionEvents = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowContention
@@ -718,11 +1053,184 @@ func (m *SingleKeyContention_SingleTxnContention) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Count |= (uint64(b) & 0x7F) << shift
+				m.NumContentionEvents |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CumulativeContentionTime", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContention
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContention
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(&m.CumulativeContentionTime, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Txns", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContention
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContention
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Txns = append(m.Txns, SingleTxnContention{})
+			if err := m.Txns[len(m.Txns)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipContention(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthContention
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SerializedRegistry) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowContention
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SerializedRegistry: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SerializedRegistry: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexContentionEvents", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContention
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContention
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IndexContentionEvents = append(m.IndexContentionEvents, IndexContentionEvents{})
+			if err := m.IndexContentionEvents[len(m.IndexContentionEvents)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NonSQLKeysContention", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowContention
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthContention
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.NonSQLKeysContention = append(m.NonSQLKeysContention, SingleNonSQLKeyContention{})
+			if err := m.NonSQLKeysContention[len(m.NonSQLKeysContention)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipContention(dAtA[iNdEx:])
@@ -850,42 +1358,49 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/contentionpb/contention.proto", fileDescriptor_contention_c4b958fee1c9da1f)
+	proto.RegisterFile("sql/contentionpb/contention.proto", fileDescriptor_contention_69057c7b1b7c67fd)
 }
 
-var fileDescriptor_contention_c4b958fee1c9da1f = []byte{
-	// 520 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x52, 0x3f, 0x6f, 0xd3, 0x40,
-	0x14, 0xb7, 0xf3, 0x5f, 0xd7, 0xb0, 0xb8, 0xad, 0x14, 0x32, 0xd8, 0xa1, 0x53, 0xa6, 0x33, 0x4a,
-	0x99, 0xba, 0x20, 0xb9, 0x06, 0xc9, 0xaa, 0x60, 0x30, 0xe9, 0x82, 0x54, 0x45, 0xb6, 0xef, 0x70,
-	0x4f, 0xb1, 0xef, 0xd2, 0xf8, 0xae, 0x72, 0xbe, 0x45, 0xc7, 0x8e, 0x7c, 0x9c, 0x8c, 0x1d, 0x40,
-	0xaa, 0x18, 0x0c, 0x38, 0xdf, 0xa2, 0x13, 0xf2, 0xd9, 0xad, 0x83, 0x0a, 0x52, 0x61, 0xb1, 0xde,
-	0xb3, 0xde, 0xfb, 0xfd, 0xbb, 0x07, 0x5e, 0x24, 0x17, 0x91, 0x19, 0x30, 0xca, 0x31, 0xe5, 0x84,
-	0xd1, 0x85, 0xbf, 0xd5, 0xc0, 0xc5, 0x92, 0x71, 0xa6, 0x0d, 0x03, 0x16, 0xcc, 0x97, 0xcc, 0x0b,
-	0xce, 0x61, 0x72, 0x11, 0xc1, 0xed, 0xe1, 0xe1, 0x5e, 0xc8, 0x42, 0x26, 0xc7, 0xcc, 0xa2, 0x2a,
-	0x37, 0x86, 0x7a, 0xc8, 0x58, 0x18, 0x61, 0x53, 0x76, 0xbe, 0xf8, 0x64, 0x22, 0xb1, 0xf4, 0x6a,
-	0xc4, 0x83, 0x2f, 0x4d, 0xb0, 0xef, 0x50, 0x84, 0xd3, 0xe3, 0x07, 0xac, 0x37, 0x97, 0x98, 0xf2,
-	0x44, 0x43, 0xa0, 0xc7, 0x3d, 0x3f, 0xc2, 0x33, 0x82, 0x06, 0xea, 0x48, 0x1d, 0x3f, 0xb3, 0x9c,
-	0x3c, 0x33, 0xba, 0xd3, 0xe2, 0x9f, 0x63, 0xdf, 0x65, 0xc6, 0x51, 0x48, 0xf8, 0xb9, 0xf0, 0x61,
-	0xc0, 0x62, 0xf3, 0x41, 0x17, 0xf2, 0xeb, 0xda, 0x5c, 0xcc, 0x43, 0x53, 0x9a, 0xf2, 0xb8, 0x17,
-	0xb1, 0xd0, 0x44, 0x38, 0x09, 0x16, 0x3e, 0x74, 0x6c, 0xb7, 0x2b, 0xa1, 0x1d, 0xa4, 0x11, 0xd0,
-	0x23, 0x05, 0x7d, 0xc1, 0xd2, 0x90, 0x2c, 0xef, 0x0b, 0x16, 0x29, 0x49, 0xb2, 0xbc, 0xfe, 0x6f,
-	0x96, 0x12, 0xc2, 0xed, 0x4a, 0x7c, 0x07, 0x69, 0x13, 0xb0, 0x4f, 0x45, 0x3c, 0xab, 0x43, 0x9b,
-	0x61, 0xe9, 0x74, 0xd0, 0x1c, 0xa9, 0xe3, 0x96, 0xbb, 0x4b, 0x45, 0xfc, 0x28, 0x04, 0x0f, 0x0c,
-	0x03, 0x11, 0x8b, 0xc8, 0xe3, 0xe4, 0x12, 0x6f, 0xaf, 0x72, 0x12, 0xe3, 0x41, 0x6b, 0xa4, 0x8e,
-	0x77, 0x26, 0xcf, 0x61, 0x99, 0x31, 0xbc, 0xcf, 0x18, 0xda, 0x55, 0xc6, 0x56, 0x6f, 0x9d, 0x19,
-	0xca, 0xf5, 0x77, 0x43, 0x75, 0x07, 0x35, 0x4c, 0x4d, 0x32, 0x25, 0x31, 0xd6, 0xde, 0x81, 0x4e,
-	0xa5, 0xa3, 0x3d, 0x6a, 0x8e, 0x77, 0x26, 0x26, 0xfc, 0xfb, 0x23, 0xc3, 0x0f, 0x84, 0x86, 0x11,
-	0x3e, 0xc1, 0xab, 0x1a, 0xc4, 0x6a, 0x15, 0x24, 0x6e, 0x05, 0x72, 0xd4, 0xba, 0xfe, 0x6c, 0x28,
-	0x07, 0x5f, 0x1b, 0x60, 0xf7, 0x0f, 0xb3, 0xda, 0x5b, 0xd0, 0x9c, 0xe3, 0x95, 0x7c, 0xcf, 0xbe,
-	0xf5, 0xea, 0x2e, 0x33, 0x5e, 0x3e, 0x29, 0x5e, 0x59, 0x2d, 0x7c, 0x78, 0x82, 0x57, 0x6e, 0x01,
-	0xa0, 0x9d, 0x81, 0x16, 0x4f, 0x69, 0x32, 0x68, 0x48, 0xc9, 0xc7, 0xff, 0x28, 0xb9, 0xfa, 0x37,
-	0x4d, 0xe9, 0x23, 0x1b, 0x12, 0x76, 0x78, 0xa5, 0xde, 0xcb, 0xff, 0x6d, 0x46, 0x3b, 0x03, 0x5d,
-	0x9e, 0xd2, 0x19, 0x41, 0x89, 0x3c, 0x96, 0xbe, 0x65, 0x17, 0x4b, 0xdf, 0x32, 0xe3, 0xf0, 0x49,
-	0x36, 0x04, 0x27, 0x91, 0x29, 0x04, 0x41, 0xf0, 0xf4, 0xd4, 0xb1, 0xf3, 0xcc, 0x68, 0x4f, 0x53,
-	0xea, 0xd8, 0x6e, 0x87, 0xa7, 0xd4, 0x41, 0x89, 0xb6, 0x07, 0xda, 0x01, 0x13, 0x94, 0x57, 0x17,
-	0x51, 0x36, 0x65, 0xa2, 0xe5, 0xd7, 0x82, 0xeb, 0x9f, 0xba, 0xb2, 0xce, 0x75, 0xf5, 0x26, 0xd7,
-	0xd5, 0xdb, 0x5c, 0x57, 0x7f, 0xe4, 0xba, 0x7a, 0xb5, 0xd1, 0x95, 0x9b, 0x8d, 0xae, 0xdc, 0x6e,
-	0x74, 0xe5, 0x63, 0x7f, 0xdb, 0xbc, 0xdf, 0x91, 0x37, 0x71, 0xf8, 0x2b, 0x00, 0x00, 0xff, 0xff,
-	0xf4, 0xab, 0x85, 0x91, 0xdc, 0x03, 0x00, 0x00,
+var fileDescriptor_contention_69057c7b1b7c67fd = []byte{
+	// 640 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x94, 0x3d, 0x6f, 0xd3, 0x40,
+	0x1c, 0xc6, 0x73, 0x79, 0x69, 0xab, 0x6b, 0x59, 0xdc, 0x54, 0x4d, 0x23, 0x64, 0x87, 0x4e, 0x99,
+	0xce, 0xd0, 0xc2, 0xd2, 0x05, 0xc9, 0x04, 0x24, 0xab, 0x50, 0x09, 0x27, 0x5d, 0x60, 0x88, 0xfc,
+	0x72, 0xb8, 0xa7, 0xd8, 0x77, 0x49, 0x7c, 0xae, 0x1c, 0x3e, 0x02, 0x03, 0x42, 0x4c, 0x1d, 0xf9,
+	0x04, 0x7c, 0x8e, 0x4a, 0x2c, 0x1d, 0x18, 0x2a, 0x06, 0x03, 0xee, 0xb7, 0xe8, 0x84, 0x7c, 0x76,
+	0xe3, 0x54, 0x6d, 0x21, 0xaa, 0xca, 0x76, 0xe7, 0xfb, 0xdf, 0xf3, 0x3c, 0xf7, 0xbb, 0xbf, 0x0f,
+	0x3e, 0x08, 0x46, 0x9e, 0x6a, 0x33, 0xca, 0x31, 0xe5, 0x84, 0xd1, 0xa1, 0x35, 0x33, 0x41, 0xc3,
+	0x31, 0xe3, 0x4c, 0x6a, 0xda, 0xcc, 0x1e, 0x8c, 0x99, 0x69, 0x1f, 0xa0, 0x60, 0xe4, 0xa1, 0xd9,
+	0xe2, 0x66, 0xdd, 0x65, 0x2e, 0x13, 0x65, 0x6a, 0x3a, 0xca, 0x76, 0x34, 0x65, 0x97, 0x31, 0xd7,
+	0xc3, 0xaa, 0x98, 0x59, 0xe1, 0x3b, 0xd5, 0x09, 0xc7, 0x66, 0xa1, 0xb8, 0xf9, 0xbd, 0x02, 0xd7,
+	0x74, 0xea, 0xe0, 0xe8, 0xd9, 0x54, 0xeb, 0xf9, 0x21, 0xa6, 0x3c, 0x90, 0x1c, 0xb8, 0xc4, 0x4d,
+	0xcb, 0xc3, 0x7d, 0xe2, 0x34, 0x40, 0x0b, 0xb4, 0xef, 0x69, 0x7a, 0x12, 0x2b, 0x8b, 0xbd, 0xf4,
+	0x9b, 0xde, 0x39, 0x8f, 0x95, 0x1d, 0x97, 0xf0, 0x83, 0xd0, 0x42, 0x36, 0xf3, 0xd5, 0x69, 0x2e,
+	0xc7, 0x2a, 0xc6, 0xea, 0x70, 0xe0, 0xaa, 0xe2, 0x50, 0x26, 0x37, 0x3d, 0xe6, 0xaa, 0x0e, 0x0e,
+	0xec, 0xa1, 0x85, 0xf4, 0x8e, 0xb1, 0x28, 0xa4, 0x75, 0x47, 0x22, 0x70, 0x89, 0xa4, 0xf6, 0xa9,
+	0x4b, 0x59, 0xb8, 0xec, 0xa5, 0x2e, 0x22, 0x92, 0x70, 0x79, 0x7a, 0x6b, 0x97, 0x4c, 0xc2, 0x58,
+	0x14, 0xfa, 0xba, 0x23, 0x6d, 0xc1, 0x35, 0x1a, 0xfa, 0xfd, 0x02, 0x5a, 0x1f, 0x8b, 0x93, 0x36,
+	0x2a, 0x2d, 0xd0, 0xae, 0x1a, 0xab, 0x34, 0xf4, 0xaf, 0x40, 0x30, 0x61, 0xd3, 0x0e, 0xfd, 0xd0,
+	0x33, 0x39, 0x39, 0xc4, 0xb3, 0x5b, 0x39, 0xf1, 0x71, 0xa3, 0xda, 0x02, 0xed, 0xe5, 0xad, 0x0d,
+	0x94, 0x31, 0x46, 0x17, 0x8c, 0x51, 0x27, 0x67, 0xac, 0x2d, 0x1d, 0xc7, 0x4a, 0xe9, 0xe8, 0xa7,
+	0x02, 0x8c, 0x46, 0x21, 0x53, 0x98, 0xf4, 0x88, 0x8f, 0xa5, 0x57, 0x70, 0x21, 0xcf, 0x51, 0x6b,
+	0x55, 0xda, 0xcb, 0x5b, 0x2a, 0xba, 0xf9, 0x92, 0x51, 0x97, 0x50, 0xd7, 0xc3, 0xbb, 0x78, 0x52,
+	0x88, 0x68, 0xd5, 0xd4, 0xc4, 0xc8, 0x45, 0x76, 0xaa, 0x47, 0x5f, 0x94, 0xd2, 0xe6, 0x47, 0x00,
+	0x57, 0xb3, 0xda, 0x5e, 0x44, 0x8b, 0x5a, 0xe9, 0x2d, 0x5c, 0xe0, 0x11, 0xbd, 0x80, 0xbd, 0xa2,
+	0x75, 0xd2, 0xbd, 0x3f, 0x62, 0x65, 0x7b, 0x2e, 0xca, 0x21, 0x27, 0x9e, 0x1a, 0x86, 0xc4, 0x41,
+	0xfb, 0xfb, 0x7a, 0x27, 0x89, 0x95, 0x5a, 0x2f, 0xa2, 0x7a, 0xc7, 0xa8, 0xf1, 0x88, 0xea, 0x8e,
+	0x54, 0x87, 0x35, 0x9b, 0x85, 0x94, 0xe7, 0x40, 0xb3, 0x49, 0x1e, 0xe8, 0xeb, 0x34, 0xd0, 0xa5,
+	0xf0, 0xd2, 0x0b, 0x58, 0x19, 0xe0, 0x89, 0x68, 0xb0, 0x15, 0xed, 0xf1, 0x79, 0xac, 0x3c, 0x9c,
+	0x2b, 0x89, 0x18, 0x0d, 0x2d, 0xb4, 0x8b, 0x27, 0x46, 0x2a, 0x20, 0xe9, 0xb0, 0xca, 0x23, 0x1a,
+	0x34, 0xca, 0xf3, 0x32, 0xbc, 0xc4, 0x25, 0x67, 0x28, 0x24, 0xf2, 0xc0, 0xdf, 0xca, 0x70, 0x23,
+	0xab, 0xdc, 0x63, 0xb4, 0xfb, 0xfa, 0xe5, 0xff, 0x89, 0x7d, 0x63, 0x4f, 0x96, 0x6f, 0xdb, 0x93,
+	0x95, 0xbb, 0xe8, 0xc9, 0x0b, 0x9a, 0xd5, 0xbb, 0xa2, 0xf9, 0xb9, 0x0c, 0xa5, 0x2e, 0x1e, 0x13,
+	0xd3, 0x23, 0xef, 0xb1, 0x63, 0x60, 0x97, 0x04, 0x7c, 0x3c, 0x91, 0x18, 0x5c, 0xcf, 0xfe, 0xfe,
+	0xab, 0x00, 0x80, 0xb0, 0x7e, 0xf4, 0x37, 0xeb, 0x6b, 0xdf, 0xad, 0xdc, 0x7c, 0x8d, 0x5c, 0xfb,
+	0xa8, 0x7d, 0x00, 0x70, 0x9d, 0x32, 0xda, 0x0f, 0x46, 0x5e, 0x7f, 0x80, 0x27, 0xc1, 0x8c, 0x71,
+	0xde, 0x3a, 0x4f, 0xfe, 0x7d, 0xd8, 0x6b, 0x1a, 0x42, 0xbb, 0x9f, 0xba, 0x26, 0xb1, 0x52, 0x9f,
+	0x2e, 0x06, 0xc5, 0xaa, 0x51, 0xa7, 0x8c, 0x76, 0x47, 0xde, 0xe5, 0xaf, 0x1a, 0x3a, 0xfe, 0x2d,
+	0x97, 0x8e, 0x13, 0x19, 0x9c, 0x24, 0x32, 0x38, 0x4d, 0x64, 0xf0, 0x2b, 0x91, 0xc1, 0xa7, 0x33,
+	0xb9, 0x74, 0x72, 0x26, 0x97, 0x4e, 0xcf, 0xe4, 0xd2, 0x9b, 0x95, 0x59, 0x77, 0x6b, 0x41, 0x5c,
+	0xe6, 0xf6, 0x9f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xc8, 0x64, 0x11, 0x31, 0x29, 0x06, 0x00, 0x00,
 }
