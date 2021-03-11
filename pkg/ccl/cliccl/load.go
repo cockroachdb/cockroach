@@ -49,6 +49,14 @@ func init() {
 		RunE:  cli.MaybeDecorateGRPCError(runLoadShowSummary),
 	}
 
+	loadShowBackupsCmd := &cobra.Command{
+		Use:   "backups <backup_path>",
+		Short: "show backups in collections",
+		Long:  "Shows full backups in a backup collections.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  cli.MaybeDecorateGRPCError(runLoadShowBackups),
+	}
+
 	loadShowCmds := &cobra.Command{
 		Use:   "show [command]",
 		Short: "show backups",
@@ -79,7 +87,9 @@ func init() {
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadShowCmds)
 	loadShowCmds.AddCommand(loadShowSummaryCmd)
+	loadShowCmds.AddCommand(loadShowBackupsCmd)
 	loadShowSummaryCmd.Flags().AddFlagSet(loadFlags)
+	loadShowBackupsCmd.Flags().AddFlagSet(loadFlags)
 }
 
 func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClient, error) {
@@ -119,6 +129,35 @@ func runLoadShowSummary(cmd *cobra.Command, args []string) error {
 	showSpans(desc)
 	showFiles(desc)
 	showDescriptors(desc)
+	return nil
+}
+
+func runLoadShowBackups(cmd *cobra.Command, args []string) error {
+
+	path := args[0]
+	if !strings.Contains(path, "://") {
+		path = cloudimpl.MakeLocalStorageURI(path)
+	}
+	ctx := context.Background()
+	store, err := cloudimpl.ExternalStorageFromURI(ctx, path, base.ExternalIODirConfig{},
+		cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+	if err != nil {
+		return err
+	}
+
+	backupPaths, err := store.ListFiles(ctx, "/*/*/*/"+backupccl.BackupManifestName)
+	if err != nil {
+		return err
+	}
+
+	if len(backupPaths) == 0 {
+		fmt.Println("no backups found.")
+	}
+
+	for _, backupPath := range backupPaths {
+		fmt.Println(strings.TrimSuffix("./"+backupPath, "/"+backupccl.BackupManifestName))
+	}
+
 	return nil
 }
 

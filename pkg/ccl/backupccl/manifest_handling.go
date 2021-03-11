@@ -45,6 +45,7 @@ import (
 const (
 	// backupManifestName is the file name used for serialized BackupManifest
 	// protos.
+	BackupManifestName = "BACKUP_MANIFEST"
 	backupManifestName = "BACKUP_MANIFEST"
 	// backupOldManifestName is an old name for the serialized BackupManifest
 	// proto. It is used by 20.1 nodes and earlier.
@@ -72,8 +73,9 @@ const (
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 
-	dateBasedIncFolderName  = "/20060102/150405.00"
-	dateBasedIntoFolderName = "/2006/01/02-150405.00"
+	dateBasedIncFolderName = "/20060102/150405.00"
+	// DateBasedIntoFolderName exported to cliccl for backup collection inspection
+	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 	latestFileName          = "LATEST"
 )
 
