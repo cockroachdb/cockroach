@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -93,11 +92,11 @@ func MakeKeyRewriterFromRekeys(
 		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
 			return nil, errors.Wrapf(err, "unmarshalling rekey descriptor for old table id %d", rekey.OldID)
 		}
-		table := descpb.TableFromDescriptor(&desc, hlc.Timestamp{})
+		table, _, _, _ := descpb.FromDescriptor(&desc)
 		if table == nil {
 			return nil, errors.New("expected a table descriptor")
 		}
-		descs[descpb.ID(rekey.OldID)] = tabledesc.NewImmutable(*table)
+		descs[descpb.ID(rekey.OldID)] = tabledesc.NewBuilder(table).BuildImmutableTable()
 	}
 	return makeKeyRewriter(codec, descs)
 }

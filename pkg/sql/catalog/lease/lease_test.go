@@ -1694,7 +1694,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 				t.Fatalf("error while reading proto: %v", err)
 			}
 			// Look at the descriptor that comes back from the database.
-			dbTable := descpb.TableFromDescriptor(dbDesc, ts)
+			dbTable, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(dbDesc, ts)
 
 			if dbTable.Version != table.GetVersion() || dbTable.ModificationTime != table.GetModificationTime() {
 				t.Fatalf("db has version %d at ts %s, expected version %d at ts %s",
@@ -2322,8 +2322,8 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	var lmKnobs lease.ManagerTestingKnobs
 	blockDescRefreshed := make(chan struct{}, 1)
 	lmKnobs.TestingDescriptorRefreshedEvent = func(desc *descpb.Descriptor) {
-		t := descpb.TableFromDescriptor(desc, hlc.Timestamp{})
-		if t != nil && testTableID() == t.ID {
+		tbl, _, _, _ := descpb.FromDescriptor(desc)
+		if tbl != nil && testTableID() == tbl.ID {
 			blockDescRefreshed <- struct{}{}
 		}
 	}

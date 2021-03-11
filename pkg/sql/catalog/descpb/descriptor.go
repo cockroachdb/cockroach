@@ -144,9 +144,7 @@ func setDescriptorModificationTime(desc *Descriptor, ts hlc.Timestamp) {
 //
 // It is vital that users which read table descriptor values from the KV store
 // call this method.
-func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
-	ctx context.Context, desc *Descriptor, ts hlc.Timestamp,
-) {
+func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(desc *Descriptor, ts hlc.Timestamp) {
 	switch t := desc.Union.(type) {
 	case nil:
 		// Empty descriptors shouldn't be touched.
@@ -198,30 +196,41 @@ func MaybeSetDescriptorModificationTimeFromMVCCTimestamp(
 	}
 }
 
-// TableFromDescriptor is a replacement for GetTable() which seeks to ensure
-// that clients which unmarshal Descriptor structs properly set the
-// ModificationTime on tables based on the MVCC timestamp at which the
-// descriptor was read.
+// FromDescriptorWithMVCCTimestamp is a replacement for
+// Get(Table|Database|Type|Schema)() methods which seeks to ensure that clients
+// which unmarshal Descriptor structs properly set the ModificationTime based on
+// the MVCC timestamp at which the descriptor was read.
 //
-// A linter should ensure that GetTable() is not called.
-//
-// TODO(ajwerner): Now that all descriptors have their modification time set
-// this way, this function should be retired and similar or better safeguards
-// for all descriptors should be pursued.
-func TableFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TableDescriptor {
-	//nolint:descriptormarshal
-	t := desc.GetTable()
-	if t != nil {
-		MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.TODO(), desc, ts)
+// A linter check ensures that GetTable() et al. are not called elsewhere unless
+// absolutely necessary.
+func FromDescriptorWithMVCCTimestamp(
+	desc *Descriptor, ts hlc.Timestamp,
+) (
+	table *TableDescriptor,
+	database *DatabaseDescriptor,
+	typ *TypeDescriptor,
+	schema *SchemaDescriptor,
+) {
+	if desc == nil {
+		return nil, nil, nil, nil
 	}
-	return t
+	//nolint:descriptormarshal
+	table = desc.GetTable()
+	//nolint:descriptormarshal
+	database = desc.GetDatabase()
+	//nolint:descriptormarshal
+	typ = desc.GetType()
+	//nolint:descriptormarshal
+	schema = desc.GetSchema()
+	MaybeSetDescriptorModificationTimeFromMVCCTimestamp(desc, ts)
+	return table, database, typ, schema
 }
 
-// TypeFromDescriptor is the same thing as TableFromDescriptor, but for types.
-func TypeFromDescriptor(desc *Descriptor, ts hlc.Timestamp) *TypeDescriptor {
-	t := desc.GetType()
-	if t != nil {
-		MaybeSetDescriptorModificationTimeFromMVCCTimestamp(context.TODO(), desc, ts)
-	}
-	return t
+// FromDescriptor is a convenience function for FromDescriptorWithMVCCTimestamp
+// called with an empty timestamp. As a result this does not modify the
+// descriptor.
+func FromDescriptor(
+	desc *Descriptor,
+) (*TableDescriptor, *DatabaseDescriptor, *TypeDescriptor, *SchemaDescriptor) {
+	return FromDescriptorWithMVCCTimestamp(desc, hlc.Timestamp{})
 }

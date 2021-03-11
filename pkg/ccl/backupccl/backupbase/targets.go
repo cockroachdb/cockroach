@@ -560,7 +560,7 @@ func FullClusterTargets(
 	for _, desc := range allDescs {
 		switch desc := desc.(type) {
 		case catalog.DatabaseDescriptor:
-			dbDesc := dbdesc.NewImmutable(*desc.DatabaseDesc())
+			dbDesc := dbdesc.NewBuilder(desc.DatabaseDesc()).BuildImmutableDatabase()
 			fullClusterDescs = append(fullClusterDescs, desc)
 			if dbDesc.GetID() != systemschema.SystemDB.GetID() {
 				// The only database that isn't being fully backed up is the system DB.

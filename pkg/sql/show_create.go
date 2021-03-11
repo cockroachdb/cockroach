@@ -256,6 +256,11 @@ func (p *planner) ShowCreate(
 		if lErr != nil {
 			return "", lErr
 		}
+		// Overwrite desc with hydrated descriptor.
+		desc, err = lCtx.getTableByID(desc.GetID())
+		if err != nil {
+			return "", err
+		}
 		stmt, err = ShowCreateTable(ctx, p, &tn, dbPrefix, desc, lCtx, displayOptions)
 	}
 

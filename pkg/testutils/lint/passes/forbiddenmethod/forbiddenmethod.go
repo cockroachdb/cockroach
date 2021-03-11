@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
+	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/passesutil"
 	"golang.org/x/tools/go/analysis"
@@ -52,6 +53,7 @@ type Options struct {
 // Analyzer returns an Analyzer that vets against calls to the method
 // described in the provided Options.
 func Analyzer(options Options) *analysis.Analyzer {
+	methodRe := regexp.MustCompile(options.Method)
 	return &analysis.Analyzer{
 		Name:     options.PassName,
 		Doc:      options.Doc,
@@ -91,7 +93,7 @@ func Analyzer(options Options) *analysis.Analyzer {
 					})
 				}
 
-				if f.Pkg() == nil || f.Pkg().Path() != options.Package || f.Name() != options.Method {
+				if f.Pkg() == nil || f.Pkg().Path() != options.Package || !methodRe.MatchString(f.Name()) {
 					return
 				}
 				if !isMethodForNamedType(f, options.Type) {
@@ -103,7 +105,7 @@ func Analyzer(options Options) *analysis.Analyzer {
 				}
 				pass.Report(analysis.Diagnostic{
 					Pos:     n.Pos(),
-					Message: fmt.Sprintf("Illegal call to %s.%s(), %s", options.Type, options.Method, options.Hint),
+					Message: fmt.Sprintf("Illegal call to %s.%s(), %s", options.Type, f.Name(), options.Hint),
 				})
 			})
 			return nil, nil

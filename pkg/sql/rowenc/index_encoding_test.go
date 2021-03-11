@@ -107,7 +107,7 @@ func makeTableDescForTest(test indexKeyTest) (catalog.TableDescriptor, catalog.T
 			Type:             secondaryType,
 		}},
 	}
-	return tabledesc.NewImmutable(tableDesc), colMap
+	return tabledesc.NewBuilder(&tableDesc).BuildImmutableTable(), colMap
 }
 
 func decodeIndex(

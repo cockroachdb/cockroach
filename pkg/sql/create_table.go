@@ -201,15 +201,18 @@ func getTableCreateParams(
 		return nil, 0, err
 	}
 
-	exists, id, err := catalogkv.LookupObjectID(
-		params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName.Table())
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return nil, 0, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-
+	desc, err := catalogkv.GetDescriptorCollidingWithObject(
+		params.ctx,
+		params.p.txn,
+		params.ExecCfg().Codec,
+		dbID,
+		schemaID,
+		tableName.Table(),
+	)
+	if err != nil {
+		return nil, descpb.InvalidID, err
+	}
+	if desc != nil {
 		// Ensure that the descriptor that does exist has the appropriate type.
 		{
 			mismatchedType := true
@@ -229,7 +232,7 @@ func getTableCreateParams(
 			// Only complain about mismatched types for
 			// if not exists clauses.
 			if mismatchedType && ifNotExists {
-				return nil, 0, pgerror.Newf(pgcode.WrongObjectType,
+				return nil, descpb.InvalidID, pgerror.Newf(pgcode.WrongObjectType,
 					"%q is not a %s",
 					tableName.Table(),
 					kind)
@@ -238,16 +241,14 @@ func getTableCreateParams(
 
 		// Check if the object already exists in a dropped state
 		if desc.Dropped() {
-			return nil, 0, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			return nil, descpb.InvalidID, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"%s %q is being dropped, try again later",
 				kind,
 				tableName.Table())
 		}
 
 		// Still return data in this case.
-		return tKey, schemaID, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.Table())
-	} else if err != nil {
-		return nil, 0, err
+		return tKey, schemaID, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.FQString())
 	}
 
 	return tKey, schemaID, nil
@@ -617,12 +618,10 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 	maybeUpgradeFKRepresentation := func(id descpb.ID) error {
 		// Read the referenced table and see if the foreign key representation has changed. If it has, write
 		// the upgraded descriptor back to disk.
-		desc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id,
-			catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+		tbl, err := catalogkv.MustGetMutableTableDescByID(ctx, p.txn, p.ExecCfg().Codec, id)
 		if err != nil {
 			return err
 		}
-		tbl := desc.(*tabledesc.Mutable)
 		changes := tbl.GetPostDeserializationChanges()
 		if changes.UpgradedForeignKeyRepresentation {
 			err := p.writeSchemaChange(ctx, tbl, descpb.InvalidMutationID,
