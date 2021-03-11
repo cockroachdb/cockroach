@@ -66,13 +66,6 @@ func TestDiagnosticsRequest(t *testing.T) {
 
 	checkCompleted(reqID)
 
-	// Check the trace.
-	row := db.QueryRow("SELECT jsonb_pretty(trace) FROM system.statement_diagnostics WHERE ID = $1", traceID.Int64)
-	var json string
-	require.NoError(t, row.Scan(&json))
-	require.Contains(t, json, "traced statement")
-	require.Contains(t, json, "statement execution committed the txn")
-
 	// Verify that we can handle multiple requests at the same time.
 	id1, err := registry.InsertRequestInternal(ctx, "INSERT INTO test VALUES (_)")
 	require.NoError(t, err)
@@ -139,13 +132,6 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 			return nil
 		})
 		require.True(t, traceID.Valid)
-
-		// Check the trace.
-		row := db0.QueryRow(`SELECT jsonb_pretty(trace) FROM system.statement_diagnostics
-                         WHERE ID = $1`, traceID.Int64)
-		var json string
-		require.NoError(t, row.Scan(&json))
-		require.Contains(t, json, "traced statement")
 	}
 	runUntilTraced("INSERT INTO test VALUES (1)", reqID)
 
