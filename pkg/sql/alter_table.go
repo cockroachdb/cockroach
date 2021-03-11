@@ -1164,6 +1164,10 @@ func applyColumnMutation(
 			return pgerror.Newf(pgcode.InvalidColumnDefinition,
 				"column %q is not a computed column", col.Name)
 		}
+		if col.Virtual {
+			return pgerror.Newf(pgcode.InvalidColumnDefinition,
+				"column %q is not a stored computed column", col.Name)
+		}
 		col.ComputeExpr = nil
 	}
 	return nil
