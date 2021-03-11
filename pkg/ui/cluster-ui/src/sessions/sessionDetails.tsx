@@ -40,10 +40,11 @@ import {
   NodeLink,
   StatementLinkTarget,
 } from "src/statementsTable/statementsTableContent";
+
 import {
-  CancelQueryRequestMessage,
-  CancelSessionRequestMessage,
-} from "src/api/terminateQueryApi";
+  ICancelQueryRequest,
+  ICancelSessionRequest,
+} from "src/store/terminateQuery";
 interface OwnProps {
   id?: string;
   nodeNames: { [nodeId: string]: string };
@@ -52,8 +53,8 @@ interface OwnProps {
   refreshSessions: () => void;
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
-  cancelSession: (req: CancelSessionRequestMessage) => void;
-  cancelQuery: (req: CancelQueryRequestMessage) => void;
+  cancelSession: (payload: ICancelSessionRequest) => void;
+  cancelQuery: (payload: ICancelQueryRequest) => void;
 }
 
 const cx = classNames.bind(styles);
