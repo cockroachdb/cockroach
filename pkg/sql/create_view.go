@@ -13,6 +13,8 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -281,6 +283,12 @@ func (n *createViewNode) startExec(params runParams) error {
 		return err
 	}
 
+	if err := addBackRefsSomething(
+		params.ctx, params.p, newDesc.ViewQuery, newDesc,
+	); err != nil {
+		return err
+	}
+
 	if err := validateDescriptor(params.ctx, params.p, newDesc); err != nil {
 		return err
 	}
@@ -386,6 +394,41 @@ func startViewWalk(
 	}
 
 	return WalkViewQuery(stmt.AST, replaceSeqFunc)
+}
+
+// TODO: Rename this to something better.
+func addBackRefsSomething(
+	ctx context.Context,
+	p *planner,
+	viewQuery string,
+	desc *tabledesc.Mutable) error {
+	f := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		annotateTypeExpr, ok := expr.(*tree.AnnotateTypeExpr)
+		if !ok {
+			return true, expr, nil
+		}
+		typedExpr, err := tree.TypeCheck(ctx, annotateTypeExpr, &p.semaCtx, types.Any)
+		if err != nil {
+			return true, expr, nil // TODO: Just skip or return error?
+		}
+
+		for id := range typedesc.GetTypeDescriptorClosure(typedExpr.ResolvedType()) {
+			jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, desc.ID)
+			if err := p.addTypeBackReference(ctx, id, desc.ID, jobDesc); err != nil {
+				return false, expr, err
+			}
+		}
+
+		return false, expr, nil
+	}
+
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return err
+	}
+
+	_, err = WalkViewQuery(stmt.AST, f)
+	return err
 }
 
 // WalkViewQuery takes in a tree.Statement and walks the
