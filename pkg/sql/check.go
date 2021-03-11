@@ -238,12 +238,10 @@ func validateForeignKey(
 	txn *kv.Txn,
 	codec keys.SQLCodec,
 ) error {
-	desc, err := catalogkv.GetDescriptorByID(ctx, txn, codec, fk.ReferencedTableID, catalogkv.Immutable,
-		catalogkv.TableDescriptorKind, true /* required */)
+	targetTable, err := catalogkv.MustGetTableDescByID(ctx, txn, codec, fk.ReferencedTableID)
 	if err != nil {
 		return err
 	}
-	targetTable := desc.(catalog.TableDescriptor)
 	nCols := len(fk.OriginColumnIDs)
 
 	referencedColumnNames, err := targetTable.NamesForColumnIDs(fk.ReferencedColumnIDs)

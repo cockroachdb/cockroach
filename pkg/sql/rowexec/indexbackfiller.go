@@ -85,7 +85,7 @@ func newIndexBackfiller(
 	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
 		"index-backfill-mon")
 	ib := &indexBackfiller{
-		desc:    tabledesc.NewImmutable(spec.Table),
+		desc:    tabledesc.NewBuilder(&spec.Table).BuildImmutableTable(),
 		spec:    spec,
 		flowCtx: flowCtx,
 		output:  output,

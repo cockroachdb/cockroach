@@ -914,7 +914,7 @@ func newTestSpec(
 	switch format.Format {
 	case roachpb.IOFileFormat_CSV:
 		descr = descForTable(ctx, t,
-			"CREATE TABLE simple (i INT PRIMARY KEY, s text )", 10, 20, NoFKs)
+			"CREATE TABLE simple (i INT PRIMARY KEY, s text )", 100, 200, NoFKs)
 	case
 		roachpb.IOFileFormat_Mysqldump,
 		roachpb.IOFileFormat_MysqlOutfile,
@@ -922,7 +922,7 @@ func newTestSpec(
 		roachpb.IOFileFormat_PgCopy,
 		roachpb.IOFileFormat_Avro:
 		descr = descForTable(ctx, t,
-			"CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 10, 20, NoFKs)
+			"CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea default null)", 100, 200, NoFKs)
 	default:
 		t.Fatalf("Unsupported input format: %v", format)
 	}

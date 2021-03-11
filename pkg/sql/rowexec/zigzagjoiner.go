@@ -289,7 +289,7 @@ func newZigzagJoiner(
 	// TODO(ajwerner): Utilize a cached copy of these tables.
 	tables := make([]catalog.TableDescriptor, len(spec.Tables))
 	for i := range spec.Tables {
-		tables[i] = tabledesc.NewImmutable(spec.Tables[i])
+		tables[i] = tabledesc.NewBuilder(&spec.Tables[i]).BuildImmutableTable()
 	}
 	leftColumnTypes := catalog.ColumnTypes(tables[0].PublicColumns())
 	rightColumnTypes := catalog.ColumnTypes(tables[1].PublicColumns())

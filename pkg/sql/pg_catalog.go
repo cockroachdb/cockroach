@@ -1211,15 +1211,7 @@ func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescr
 
 func (r oneAtATimeSchemaResolver) getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error) {
 	// TODO (rohany): This should use the descs.Collection.
-	desc, err := catalogkv.GetAnyDescriptorByID(r.ctx, r.p.txn, r.p.ExecCfg().Codec, id, catalogkv.Immutable)
-	if err != nil {
-		return nil, err
-	}
-	sc, ok := desc.(*schemadesc.Immutable)
-	if !ok {
-		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
-	}
-	return sc, nil
+	return catalogkv.MustGetSchemaDescByID(r.ctx, r.p.txn, r.p.ExecCfg().Codec, id)
 }
 
 // makeAllRelationsVirtualTableWithDescriptorIDIndex creates a virtual table that searches through

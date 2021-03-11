@@ -534,17 +534,8 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descri
 func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descriptor, error) {
 	// Retrieve the descriptor that is being changed.
 	var desc catalog.Descriptor
-	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		desc, err = catalogkv.GetDescriptorByID(
-			ctx,
-			txn,
-			sc.execCfg.Codec,
-			sc.descID,
-			catalogkv.Immutable,
-			catalogkv.AnyDescriptorKind,
-			true, /* required */
-		)
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		return err
 	}); err != nil {
 		return nil, err

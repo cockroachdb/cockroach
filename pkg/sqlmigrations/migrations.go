@@ -763,7 +763,8 @@ func createNewSystemNamespaceDescriptor(ctx context.Context, r runner) error {
 		if err != nil {
 			return err
 		}
-		descpb.TableFromDescriptor(deprecatedDesc, ts).Name = systemschema.DeprecatedNamespaceTable.GetName()
+		deprecatedTable, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(deprecatedDesc, ts)
+		deprecatedTable.Name = systemschema.DeprecatedNamespaceTable.GetName()
 		b.Put(deprecatedKey, deprecatedDesc)
 
 		// The 19.2 namespace table contains an entry for "namespace" which maps to

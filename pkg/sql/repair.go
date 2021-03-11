@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -110,39 +111,36 @@ func (p *planner) UnsafeUpsertDescriptor(
 		previousUserPrivileges = existing.GetPrivileges().Users
 	}
 
-	var objectType privilege.ObjectType
+	tbl, db, typ, schema := descpb.FromDescriptor(&desc)
 	switch md := existing.(type) {
 	case *tabledesc.Mutable:
-		md.TableDescriptor = *desc.GetTable() // nolint:descriptormarshal
-		objectType = privilege.Table
+		md.TableDescriptor = *tbl
 	case *schemadesc.Mutable:
-		md.SchemaDescriptor = *desc.GetSchema()
-		objectType = privilege.Schema
+		md.SchemaDescriptor = *schema
 	case *dbdesc.Mutable:
-		md.DatabaseDescriptor = *desc.GetDatabase()
-		objectType = privilege.Database
+		md.DatabaseDescriptor = *db
 	case *typedesc.Mutable:
-		md.TypeDescriptor = *desc.GetType()
-		objectType = privilege.Type
+		md.TypeDescriptor = *typ
 	case nil:
-		// nolint:descriptormarshal
-		if tableDesc := desc.GetTable(); tableDesc != nil {
-			existing = tabledesc.NewCreatedMutable(*tableDesc)
-			objectType = privilege.Table
-		} else if schemaDesc := desc.GetSchema(); schemaDesc != nil {
-			existing = schemadesc.NewCreatedMutable(*schemaDesc)
-			objectType = privilege.Schema
-		} else if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			existing = dbdesc.NewCreatedMutable(*dbDesc)
-			objectType = privilege.Database
-		} else if typeDesc := desc.GetType(); typeDesc != nil {
-			existing = typedesc.NewCreatedMutable(*typeDesc)
-			objectType = privilege.Type
-		} else {
+		b := catalogkv.NewBuilder(&desc)
+		if b == nil {
 			return pgerror.New(pgcode.InvalidTableDefinition, "invalid ")
 		}
+		existing = b.BuildCreatedMutable()
 	default:
 		return errors.AssertionFailedf("unknown descriptor type %T for id %d", existing, id)
+	}
+
+	objectType := privilege.Any
+	switch existing.DescriptorType() {
+	case catalog.Database:
+		objectType = privilege.Database
+	case catalog.Table:
+		objectType = privilege.Table
+	case catalog.Type:
+		objectType = privilege.Type
+	case catalog.Schema:
+		objectType = privilege.Schema
 	}
 
 	if force {
@@ -415,7 +413,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if invalid {
 			return pgerror.Newf(pgcode.InvalidCatalogName,
 				"invalid prefix (%d, %d) for %s %d",
-				parentID, parentSchemaID, desc.TypeName(), descID)
+				parentID, parentSchemaID, desc.DescriptorType(), descID)
 		}
 		return nil
 	}
@@ -569,7 +567,7 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 	mut, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
 	var forceNoticeString string // for the event
 	if err != nil {
-		if !errors.Is(err, catalog.ErrDescriptorNotFound) && force {
+		if force {
 			notice := pgnotice.NewWithSeverityf("WARNING",
 				"failed to retrieve existing descriptor, continuing with force flag: %v", err)
 			p.BufferClientNotice(ctx, notice)
