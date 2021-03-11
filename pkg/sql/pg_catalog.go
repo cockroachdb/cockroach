@@ -505,6 +505,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 		// maintainability anyway.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogAuthIDTable = virtualSchemaTable{
@@ -571,6 +572,7 @@ https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html`,
 		// We support no extensions.
 		return nil
 	},
+	unimplemented: true,
 }
 
 func getOwnerOID(desc catalog.Descriptor) tree.Datum {
@@ -1137,6 +1139,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-conversion.html`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogDatabaseTable = virtualSchemaTable{
@@ -1175,6 +1178,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-default-acl.html`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var (
@@ -1454,6 +1458,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-event-trigger.html`,
 		// Event triggers are not currently supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogExtensionTable = virtualSchemaTable{
@@ -1464,6 +1469,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-extension.html`,
 		// Extensions are not supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogForeignDataWrapperTable = virtualSchemaTable{
@@ -1474,6 +1480,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-foreign-data-wrapper.html`,
 		// Foreign data wrappers are not supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogForeignServerTable = virtualSchemaTable{
@@ -1484,6 +1491,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-foreign-server.html`,
 		// Foreign servers are not supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogForeignTableTable = virtualSchemaTable{
@@ -1494,6 +1502,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-foreign-table.html`,
 		// Foreign tables are not supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 func makeZeroedOidVector(size int) (tree.Datum, error) {
@@ -1714,6 +1723,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-inherits.html`,
 		// Table inheritance is not supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogLanguageTable = virtualSchemaTable{
@@ -1724,6 +1734,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-language.html`,
 		// Languages to write functions and stored procedures are not supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogLocksTable = virtualSchemaTable{
@@ -1733,6 +1744,7 @@ https://www.postgresql.org/docs/9.6/view-pg-locks.html`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogMatViewsTable = virtualSchemaTable{
@@ -1809,6 +1821,7 @@ https://www.postgresql.org/docs/12/catalog-pg-opclass.html`,
 	populate: func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogOperatorTable = virtualSchemaTable{
@@ -1916,6 +1929,7 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-xacts.html`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 // pgCatalogPreparedStatementsTable implements the pg_prepared_statements table.
@@ -2114,6 +2128,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-range.html`,
 		// oidToDatum (and therefore pg_type).
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogRewriteTable = virtualSchemaTable{
@@ -2124,6 +2139,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-rewrite.html`,
 		// Rewrite rules are not supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogRolesTable = virtualSchemaTable{
@@ -2177,6 +2193,7 @@ https://www.postgresql.org/docs/9.6/view-pg-seclabels.html`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogSequencesTable = virtualSchemaTable{
@@ -2270,6 +2287,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogTablesTable = virtualSchemaTable{
@@ -2323,6 +2341,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-trigger.html`,
 		// Triggers are unsupported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var (
@@ -2574,6 +2593,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-user-mapping.html`,
 		// Foreign servers are not supported.
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogStatActivityTable = virtualSchemaTable{
@@ -2583,6 +2603,7 @@ https://www.postgresql.org/docs/9.6/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW`
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogSecurityLabelTable = virtualSchemaTable{
@@ -2592,6 +2613,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-seclabel.html`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogSharedSecurityLabelTable = virtualSchemaTable{
@@ -2601,6 +2623,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-shseclabel.html`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogPublicationRelTable = virtualSchemaTable{
@@ -2609,6 +2632,7 @@ var pgCatalogPublicationRelTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogConfigTable = virtualSchemaTable{
@@ -2617,6 +2641,7 @@ var pgCatalogConfigTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogAvailableExtensionVersionsTable = virtualSchemaTable{
@@ -2625,6 +2650,7 @@ var pgCatalogAvailableExtensionVersionsTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogOpfamilyTable = virtualSchemaTable{
@@ -2633,6 +2659,7 @@ var pgCatalogOpfamilyTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogShmemAllocationsTable = virtualSchemaTable{
@@ -2641,6 +2668,7 @@ var pgCatalogShmemAllocationsTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogDbRoleSettingTable = virtualSchemaTable{
@@ -2649,6 +2677,7 @@ var pgCatalogDbRoleSettingTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogTimezoneNamesTable = virtualSchemaTable{
@@ -2657,6 +2686,7 @@ var pgCatalogTimezoneNamesTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogPublicationTablesTable = virtualSchemaTable{
@@ -2665,6 +2695,7 @@ var pgCatalogPublicationTablesTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogUserMappingsTable = virtualSchemaTable{
@@ -2673,6 +2704,7 @@ var pgCatalogUserMappingsTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogTsTemplateTable = virtualSchemaTable{
@@ -2681,6 +2713,7 @@ var pgCatalogTsTemplateTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogRulesTable = virtualSchemaTable{
@@ -2689,6 +2722,7 @@ var pgCatalogRulesTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogShadowTable = virtualSchemaTable{
@@ -2697,6 +2731,7 @@ var pgCatalogShadowTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogPublicationTable = virtualSchemaTable{
@@ -2705,6 +2740,7 @@ var pgCatalogPublicationTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogGroupTable = virtualSchemaTable{
@@ -2713,6 +2749,7 @@ var pgCatalogGroupTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogCursorsTable = virtualSchemaTable{
@@ -2721,6 +2758,7 @@ var pgCatalogCursorsTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogTsParserTable = virtualSchemaTable{
@@ -2729,6 +2767,7 @@ var pgCatalogTsParserTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogSubscriptionTable = virtualSchemaTable{
@@ -2737,6 +2776,7 @@ var pgCatalogSubscriptionTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogAmprocTable = virtualSchemaTable{
@@ -2745,6 +2785,7 @@ var pgCatalogAmprocTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogTsDictTable = virtualSchemaTable{
@@ -2753,6 +2794,7 @@ var pgCatalogTsDictTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogTimezoneAbbrevsTable = virtualSchemaTable{
@@ -2761,6 +2803,7 @@ var pgCatalogTimezoneAbbrevsTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogTransformTable = virtualSchemaTable{
@@ -2769,6 +2812,7 @@ var pgCatalogTransformTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogTsConfigMapTable = virtualSchemaTable{
@@ -2777,6 +2821,7 @@ var pgCatalogTsConfigMapTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogFileSettingsTable = virtualSchemaTable{
@@ -2785,6 +2830,7 @@ var pgCatalogFileSettingsTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogPoliciesTable = virtualSchemaTable{
@@ -2793,6 +2839,7 @@ var pgCatalogPoliciesTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogTsConfigTable = virtualSchemaTable{
@@ -2801,6 +2848,7 @@ var pgCatalogTsConfigTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogHbaFileRulesTable = virtualSchemaTable{
@@ -2809,6 +2857,7 @@ var pgCatalogHbaFileRulesTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogStatisticExtTable = virtualSchemaTable{
@@ -2817,6 +2866,7 @@ var pgCatalogStatisticExtTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogReplicationOriginTable = virtualSchemaTable{
@@ -2825,6 +2875,7 @@ var pgCatalogReplicationOriginTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogAmopTable = virtualSchemaTable{
@@ -2833,6 +2884,7 @@ var pgCatalogAmopTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var pgCatalogLargeobjectTable = virtualSchemaTable{
@@ -2841,6 +2893,7 @@ var pgCatalogLargeobjectTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 // typOid is the only OID generation approach that does not use oidHasher, because
