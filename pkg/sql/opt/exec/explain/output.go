@@ -105,10 +105,10 @@ func (ob *OutputBuilder) AddField(key, value string) {
 	ob.entries = append(ob.entries, entry{field: key, fieldVal: value})
 }
 
-// AddNonDeterministicField adds an information field under the current node,
-// but hides the information if the MakeDeterministic flag is set.
-func (ob *OutputBuilder) AddNonDeterministicField(key, value string) {
-	if ob.flags.MakeDeterministic {
+// AddRedactableField adds an information field under the current node, hiding
+// the value depending depending on the given redact flag.
+func (ob *OutputBuilder) AddRedactableField(flag RedactFlags, key, value string) {
+	if ob.flags.Redact.Has(flag) {
 		value = "<hidden>"
 	}
 	ob.AddField(key, value)
@@ -321,10 +321,10 @@ func (ob *OutputBuilder) AddTopLevelField(key, value string) {
 	ob.AddField(key, value)
 }
 
-// AddNonDeterministicTopLevelField adds a top-level field, hiding the value if
-// the MakeDeterministic flag is used.
-func (ob *OutputBuilder) AddNonDeterministicTopLevelField(key, value string) {
-	if ob.flags.MakeDeterministic {
+// AddRedactableTopLevelField adds a top-level field, hiding the value depending
+// depending on the given redact flag.
+func (ob *OutputBuilder) AddRedactableTopLevelField(redactFlag RedactFlags, key, value string) {
+	if ob.flags.Redact.Has(redactFlag) {
 		value = "<hidden>"
 	}
 	ob.AddTopLevelField(key, value)
@@ -333,19 +333,19 @@ func (ob *OutputBuilder) AddNonDeterministicTopLevelField(key, value string) {
 // AddDistribution adds a top-level distribution field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddDistribution(value string) {
-	ob.AddNonDeterministicTopLevelField("distribution", value)
+	ob.AddRedactableTopLevelField(RedactDistribution, "distribution", value)
 }
 
 // AddVectorized adds a top-level vectorized field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddVectorized(value bool) {
-	ob.AddNonDeterministicTopLevelField("vectorized", fmt.Sprintf("%t", value))
+	ob.AddRedactableTopLevelField(RedactVectorized, "vectorized", fmt.Sprintf("%t", value))
 }
 
 // AddPlanningTime adds a top-level planning time field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
-	if ob.flags.MakeDeterministic {
+	if ob.flags.Redact.Has(RedactVolatile) {
 		delta = 10 * time.Microsecond
 	}
 	ob.AddTopLevelField("planning time", humanizeutil.Duration(delta))
@@ -354,7 +354,7 @@ func (ob *OutputBuilder) AddPlanningTime(delta time.Duration) {
 // AddExecutionTime adds a top-level execution time field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddExecutionTime(delta time.Duration) {
-	if ob.flags.MakeDeterministic {
+	if ob.flags.Redact.Has(RedactVolatile) {
 		delta = 100 * time.Microsecond
 	}
 	ob.AddTopLevelField("execution time", humanizeutil.Duration(delta))
@@ -369,24 +369,30 @@ func (ob *OutputBuilder) AddKVReadStats(rows, bytes int64) {
 
 // AddKVTime adds a top-level field for the cumulative time spent in KV.
 func (ob *OutputBuilder) AddKVTime(kvTime time.Duration) {
-	ob.AddNonDeterministicTopLevelField("cumulative time spent in KV", humanizeutil.Duration(kvTime))
+	ob.AddRedactableTopLevelField(RedactVolatile, "cumulative time spent in KV", humanizeutil.Duration(kvTime))
 }
 
 // AddContentionTime adds a top-level field for the cumulative contention time.
 func (ob *OutputBuilder) AddContentionTime(contentionTime time.Duration) {
-	ob.AddNonDeterministicTopLevelField(
-		"cumulative time spent due to contention", humanizeutil.Duration(contentionTime),
+	ob.AddRedactableTopLevelField(
+		RedactVolatile,
+		"cumulative time spent due to contention",
+		humanizeutil.Duration(contentionTime),
 	)
 }
 
 // AddMaxMemUsage adds a top-level field for the memory used by the query.
 func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
-	ob.AddNonDeterministicTopLevelField("maximum memory usage", humanizeutil.IBytes(bytes))
+	ob.AddRedactableTopLevelField(
+		RedactVolatile, "maximum memory usage", humanizeutil.IBytes(bytes),
+	)
 }
 
 // AddNetworkStats adds a top-level field for network statistics.
 func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
-	ob.AddNonDeterministicTopLevelField("network usage", fmt.Sprintf(
-		"%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages)),
-	))
+	ob.AddRedactableTopLevelField(
+		RedactVolatile,
+		"network usage",
+		fmt.Sprintf("%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages))),
+	)
 }
