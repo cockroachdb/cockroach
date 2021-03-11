@@ -40,9 +40,10 @@ type RoundTripBenchTestCase struct {
 // RunRoundTripBenchmark sets up a db run the RoundTripBenchTestCase test cases
 // and counts how many round trips the stmt specified by the test case performs.
 func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
-	defer log.Scope(b).Close(b)
+	expData := readExpectationsFile(b)
 	for _, tc := range tests {
 		b.Run(tc.name, func(b *testing.B) {
+			defer log.Scope(b).Close(b)
 			var stmtToKvBatchRequests sync.Map
 
 			beforePlan := func(trace tracing.Recording, stmt string) {
@@ -59,6 +60,7 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 					},
 				},
 			}
+			exp, haveExp := expData.find(strings.TrimPrefix(b.Name(), "Benchmark"))
 
 			s, db, _ := serverutils.StartServer(
 				b, params,
@@ -70,6 +72,7 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 			roundTrips := 0
 			b.ResetTimer()
 			b.StopTimer()
+			var r tracing.Recording
 			for i := 0; i < b.N; i++ {
 				sql.Exec(b, "CREATE DATABASE bench;")
 				sql.Exec(b, tc.setup)
@@ -80,8 +83,8 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 				b.StopTimer()
 
 				out, _ := stmtToKvBatchRequests.Load(tc.stmt)
-				r, ok := out.(tracing.Recording)
-				if !ok {
+				var ok bool
+				if r, ok = out.(tracing.Recording); !ok {
 					b.Fatalf(
 						"could not find number of round trips for statement: %s",
 						tc.stmt,
@@ -101,7 +104,11 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 				sql.Exec(b, tc.reset)
 			}
 
-			b.ReportMetric(float64(roundTrips)/float64(b.N), "roundtrips")
+			res := float64(roundTrips) / float64(b.N)
+			if haveExp && !exp.matches(int(res)) && *rewriteFlag == "" {
+				b.Fatalf("got %v, expected %v. trace: \n%v", res, exp, r)
+			}
+			b.ReportMetric(res, "roundtrips")
 		})
 	}
 }
