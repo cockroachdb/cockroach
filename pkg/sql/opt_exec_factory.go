@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -645,6 +646,10 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	virtual, err := ef.planner.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
+	}
+	if !QueriesEnabled(ef.planner.EvalContext(), virtual) {
+		return nil, unimplemented.Newf(tn.Schema()+"."+tn.Table(),
+			"virtual schema table not implemented: %s.%s", tn.Schema(), tn.Table())
 	}
 	if len(eqCols) > 1 {
 		return nil, errors.AssertionFailedf("vtable indexes with more than one column aren't supported yet")

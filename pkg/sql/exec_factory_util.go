@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -221,6 +222,10 @@ func constructVirtualScan(
 	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
+	}
+	if !QueriesEnabled(p.EvalContext(), virtual) {
+		return nil, unimplemented.Newf(tn.Schema()+"."+tn.Table(),
+			"virtual schema table not implemented: %s.%s", tn.Schema(), tn.Table())
 	}
 	indexDesc := index.(*optVirtualIndex).desc
 	columns, constructor := virtual.getPlanInfo(

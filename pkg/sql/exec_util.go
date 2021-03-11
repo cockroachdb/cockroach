@@ -388,6 +388,12 @@ var experimentalStreamReplicationEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+var unimplementedVirtualTableQueriesEnabledClusterValue = settings.RegisterBoolSetting(
+	`sql.defaults.unimplemented_virtual_table_queries.enabled`,
+	`setting to allow queries against unimplemented tables`,
+	true,
+)
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -2368,6 +2374,10 @@ func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplayS
 // initSequenceCache creates an empty sequence cache instance for the session.
 func (m *sessionDataMutator) initSequenceCache() {
 	m.data.SequenceCache = sessiondata.SequenceCache{}
+}
+
+func (m *sessionDataMutator) SetUnimplementedVirtualTableQueriesEnabled(enabled bool) {
+	m.data.UnimplementedVirtualTableQueriesEnabled = enabled
 }
 
 type sqlStatsCollector struct {

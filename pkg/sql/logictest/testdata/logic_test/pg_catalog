@@ -2157,6 +2157,7 @@ transaction_isolation                                 serializable        NULL  
 transaction_priority                                  normal              NULL      NULL        NULL        string
 transaction_read_only                                 off                 NULL      NULL        NULL        string
 transaction_status                                    NoTxn               NULL      NULL        NULL        string
+unimplemented_virtual_table_queries_enabled           on                  NULL      NULL        NULL        string
 vectorize                                             on                  NULL      NULL        NULL        string
 
 query TTTTTTT colnames
@@ -2236,6 +2237,7 @@ transaction_isolation                                 serializable        NULL  
 transaction_priority                                  normal              NULL  user     NULL      normal              normal
 transaction_read_only                                 off                 NULL  user     NULL      off                 off
 transaction_status                                    NoTxn               NULL  user     NULL      NoTxn               NoTxn
+unimplemented_virtual_table_queries_enabled           on                  NULL  user     NULL      on                  on
 vectorize                                             on                  NULL  user     NULL      on                  on
 
 query TTTTTT colnames
@@ -2313,6 +2315,7 @@ transaction_isolation                                 NULL    NULL     NULL     
 transaction_priority                                  NULL    NULL     NULL     NULL        NULL
 transaction_read_only                                 NULL    NULL     NULL     NULL        NULL
 transaction_status                                    NULL    NULL     NULL     NULL        NULL
+unimplemented_virtual_table_queries_enabled           NULL    NULL     NULL     NULL        NULL
 vectorize                                             NULL    NULL     NULL     NULL        NULL
 
 # pg_catalog.pg_sequence
@@ -3257,3 +3260,18 @@ GROUP BY indexname, indisunique, indisprimary, amname, exprdef, attoptions
 indexname            array_agg  indisunique  indisprimary  array_agg      amname  exprdef  attoptions
 indexes_include_idx  {a,c,d}    false        false         {ASC,ASC,ASC}  prefix  NULL     NULL
 primary              {id}       true         true          {ASC}          prefix  NULL     NULL
+
+statement ok
+SET unimplemented_virtual_table_queries_enabled=false
+
+statement error pq: unimplemented: virtual schema table not implemented: pg_catalog.pg_seclabel
+SELECT * FROM pg_seclabel
+
+statement ok
+SELECT count(*) FROM pg_depend
+
+statement ok
+SET unimplemented_virtual_table_queries_enabled=true
+
+statement ok
+SELECT * FROM pg_seclabel
