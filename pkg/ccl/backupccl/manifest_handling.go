@@ -71,11 +71,15 @@ const (
 const (
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
+
 	// DateBasedIncFolderName is the date format used when creating sub-directories
 	// storing incremental backups for auto-appendable backups.
 	// It is exported for testing backup inspection tooling.
-	DateBasedIncFolderName  = "/20060102/150405.00"
-	dateBasedIntoFolderName = "/2006/01/02-150405.00"
+	DateBasedIncFolderName = "/20060102/150405.00"
+	// DateBasedIntoFolderName is the date format used when creating sub-directories
+	// for storing backups in a collection.
+	// Also exported for testing backup inspection tooling.
+	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 	latestFileName          = "LATEST"
 )
 
@@ -1000,4 +1004,19 @@ func checkForPreviousBackup(
 // tempCheckpointFileNameForJob returns temporary filename for backup manifest checkpoint.
 func tempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 	return fmt.Sprintf("%s-%d", backupManifestCheckpointName, jobID)
+}
+
+// ListFullBackupsInCollection lists full backup paths in the collection
+// of an export store
+func ListFullBackupsInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) ([]string, error) {
+	backupPaths, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName)
+	if err != nil {
+		return nil, err
+	}
+	for i, backupPath := range backupPaths {
+		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupManifestName)
+	}
+	return backupPaths, nil
 }
