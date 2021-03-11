@@ -148,7 +148,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 }
 
 // AlmostEqual compares two StatementStatistics and their contained NumericStats
-// objects within an window of size eps.
+// objects within an window of size eps, ExecStats are ignored.
 func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float64) bool {
 	return s.Count == other.Count &&
 		s.FirstAttemptCount == other.FirstAttemptCount &&
@@ -161,8 +161,10 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.OverheadLat.AlmostEqual(other.OverheadLat, eps) &&
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
-		s.RowsRead.AlmostEqual(other.RowsRead, eps) &&
-		s.ExecStats.AlmostEqual(&other.ExecStats, eps)
+		s.RowsRead.AlmostEqual(other.RowsRead, eps)
+	// s.ExecStats are deliberately ignored since they are subject to sampling
+	// probability and are not fully deterministic (e.g. the number of network
+	// messages depends on the range cache state).
 }
 
 // Add combines other into this ExecStats.
@@ -181,15 +183,4 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 
 	s.Count += s.Count
-}
-
-// AlmostEqual compares two ExecStats and their contained NumericStats objects
-// within an window of size eps.
-func (s *ExecStats) AlmostEqual(other *ExecStats, eps float64) bool {
-	return s.Count == other.Count &&
-		s.NetworkBytes.AlmostEqual(other.NetworkBytes, eps) &&
-		s.MaxMemUsage.AlmostEqual(other.MaxMemUsage, eps) &&
-		s.ContentionTime.AlmostEqual(other.ContentionTime, eps) &&
-		s.NetworkMessages.AlmostEqual(other.NetworkMessages, eps) &&
-		s.MaxDiskUsage.AlmostEqual(other.MaxDiskUsage, eps)
 }
