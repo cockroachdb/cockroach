@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 type benchmarkResult struct {
@@ -79,10 +80,15 @@ func TestBenchmarkExpectation(t *testing.T) {
 		}
 	}()
 
-	results := runBenchmarks(t,
+	flags := []string{
 		"--test.run=^$",
-		"--test.bench="+*validate,
-		"--test.benchtime=1x")
+		"--test.bench=" + *validate,
+		"--test.benchtime=1x",
+	}
+	if testing.Verbose() {
+		flags = append(flags, "--test.v")
+	}
+	results := runBenchmarks(t, flags...)
 
 	for _, r := range results {
 		exp, ok := expecations.find(r.name)
@@ -93,6 +99,9 @@ func TestBenchmarkExpectation(t *testing.T) {
 		if exp.min > r.result || exp.max < r.result {
 			t.Errorf("expected %s to perform KV lookups in [%d, %d], got %d",
 				r.name, exp.min, exp.max, r.result)
+		} else {
+			t.Logf("expected %s to perform KV lookups in [%d, %d], got %d",
+				r.name, exp.min, exp.max, r.result)
 		}
 	}
 }
@@ -100,13 +109,20 @@ func TestBenchmarkExpectation(t *testing.T) {
 func runBenchmarks(t *testing.T, flags ...string) []benchmarkResult {
 	cmd := exec.Command(os.Args[0], flags...)
 	t.Log(cmd)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("failed to run cmd %q: %v\nstderr:\n%v", cmd, err, stderr)
-	}
-	return readBenchmarkResults(t, &stdout)
+	stdout, err := cmd.StdoutPipe()
+	require.NoError(t, err)
+	cmd.Stderr = os.Stderr
+	var stdoutBuf bytes.Buffer
+	var g errgroup.Group
+	g.Go(func() error {
+		defer stdout.Close()
+		_, err := io.Copy(os.Stdout, io.TeeReader(stdout, &stdoutBuf))
+		return err
+	})
+	require.NoErrorf(t, cmd.Start(), "failed to start command %v", cmd)
+	require.NoError(t, g.Wait())
+	require.NoErrorf(t, cmd.Wait(), "failed to wait for command %v", cmd)
+	return readBenchmarkResults(t, &stdoutBuf)
 }
 
 var (
@@ -143,11 +159,16 @@ func rewriteBenchmarkExpecations(t *testing.T) {
 	expectations := readExpectationsFile(t)
 
 	expectations = removeMatching(expectations, rewritePattern)
-	results := runBenchmarks(t,
+	flags := []string{
 		"--test.run", "^$",
 		"--test.benchtime", "1x",
 		"--test.bench", *rewriteFlag,
-		"--test.count", strconv.Itoa(*rewriteIterations))
+		"--test.count", strconv.Itoa(*rewriteIterations),
+	}
+	if testing.Verbose() {
+		flags = append(flags, "--test.v")
+	}
+	results := runBenchmarks(t, flags...)
 	expectations = append(removeMatching(expectations, rewritePattern),
 		resultsToExpectations(results)...)
 	sort.Sort(expectations)
