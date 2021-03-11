@@ -1598,6 +1598,7 @@ var (
 			{Name: "statement_fingerprint", ID: 2, Type: types.String, Nullable: false},
 			{Name: "statement", ID: 3, Type: types.String, Nullable: false},
 			{Name: "collected_at", ID: 4, Type: types.TimestampTZ, Nullable: false},
+			// TODO(radu): remove this column; it is no longer used.
 			{Name: "trace", ID: 5, Type: types.Jsonb, Nullable: true},
 			{Name: "bundle_chunks", ID: 6, Type: types.IntArray, Nullable: true},
 			{Name: "error", ID: 7, Type: types.String, Nullable: true},

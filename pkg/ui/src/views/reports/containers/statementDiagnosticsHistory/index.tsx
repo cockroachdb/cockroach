@@ -13,14 +13,12 @@ import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import moment from "moment";
 import { Action, Dispatch } from "redux";
-import Long from "long";
 import { Link } from "react-router-dom";
 import { isUndefined } from "lodash";
 
 import { Anchor, Button, Text, TextTypes, Tooltip } from "src/components";
 import HeaderSection from "src/views/shared/components/headerSection";
 import { AdminUIState } from "src/redux/state";
-import { getStatementDiagnostics } from "src/util/api";
 import { trustIcon } from "src/util/trust";
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import {
@@ -36,7 +34,6 @@ import { DiagnosticStatusBadge } from "src/views/statements/diagnostics/diagnost
 import "./statementDiagnosticsHistoryView.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
 import {
   SortedTable,
   ColumnDescriptor,
@@ -202,19 +199,6 @@ class StatementDiagnosticsHistoryView extends React.Component<
       <div className="diagnostics-history-view__table-header">
         <Text>{`${this.tablePageSize} of ${totalCount} traces`}</Text>
       </div>
-    );
-  };
-
-  getStatementDiagnostics = async (diagnosticsId: Long) => {
-    const request = new StatementDiagnosticsRequest({
-      statement_diagnostics_id: diagnosticsId,
-    });
-    const response = await getStatementDiagnostics(request);
-    const trace = response.diagnostics?.trace;
-    this.downloadRef.current?.download(
-      "statement-diagnostics.json",
-      "application/json",
-      trace,
     );
   };
 

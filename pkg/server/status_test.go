@@ -2070,13 +2070,6 @@ func TestStatementDiagnosticsCompleted(t *testing.T) {
 	if err := getStatusJSONProto(s, diagPath, &diagRespGet); err != nil {
 		t.Fatal(err)
 	}
-
-	json := diagRespGet.Diagnostics.Trace
-	if json == "" ||
-		!strings.Contains(json, "traced statement") ||
-		!strings.Contains(json, "statement execution committed the txn") {
-		t.Fatal("statement diagnostics did not capture a trace")
-	}
 }
 
 func TestJobStatusResponse(t *testing.T) {
