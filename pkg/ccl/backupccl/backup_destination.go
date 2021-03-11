@@ -272,7 +272,7 @@ func resolveBackupCollection(
 		chosenSuffix = strings.TrimPrefix(subdir, "/")
 		chosenSuffix = "/" + chosenSuffix
 	} else {
-		chosenSuffix = endTime.GoTime().Format(dateBasedIntoFolderName)
+		chosenSuffix = endTime.GoTime().Format(DateBasedIntoFolderName)
 	}
 	return collectionURI, chosenSuffix, nil
 }

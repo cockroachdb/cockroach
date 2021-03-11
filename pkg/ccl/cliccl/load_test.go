@@ -110,6 +110,53 @@ Tables:
 	})
 }
 
+func TestLoadShowBackups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := cli.NewCLITest(cli.TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
+
+	ctx := context.Background()
+	dir, cleanFn := testutils.TempDir(t)
+	defer cleanFn()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE testDB`)
+	sqlDB.Exec(t, `USE testDB`)
+	const backupPath = "nodelocal://0/fooFolder"
+
+	t.Run("show-backups-without-backups-in-collection", func(t *testing.T) {
+		out, err := c.RunWithCapture(fmt.Sprintf("load show backups %s --external-io-dir=%s", backupPath, dir))
+		require.NoError(t, err)
+		expectedOutput := "no backups found.\n"
+		checkExpectedOutput(t, expectedOutput, out)
+	})
+
+	intoTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	initAOST := intoTS.AsOfSystemTime()
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, initAOST), backupPath)
+	intoTS1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	intoAOST1 := intoTS1.AsOfSystemTime()
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, intoAOST1), backupPath)
+	intoTS2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	intoAOST2 := intoTS2.AsOfSystemTime()
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, intoAOST2), backupPath)
+
+	t.Run("show-backups-with-backups-in-collection", func(t *testing.T) {
+		out, err := c.RunWithCapture(fmt.Sprintf("load show backups %s --external-io-dir=%s", backupPath, dir))
+		require.NoError(t, err)
+
+		expectedOutput := fmt.Sprintf(".%s\n.%s\n.%s\n",
+			intoTS.GoTime().Format(backupccl.DateBasedIntoFolderName),
+			intoTS1.GoTime().Format(backupccl.DateBasedIntoFolderName),
+			intoTS2.GoTime().Format(backupccl.DateBasedIntoFolderName))
+		checkExpectedOutput(t, expectedOutput, out)
+	})
+}
+
 func TestLoadShowIncremental(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
