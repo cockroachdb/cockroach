@@ -532,8 +532,8 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sum = "h1:XdZUrLbpSS/DuvlJNlQh7ihh0OgrkxeR/bHKYaHXrKk=",
-        version = "v0.0.0-20210302221659-e755a0512369",
+        sum = "h1:eDPZb4vP/jcgEAh/IRShMewRVlwqAUNv73BBZnhw/yI=",
+        version = "v0.0.0-20210310192349-958290ba5bd6",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
@@ -2093,8 +2093,8 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sum = "h1:5OCMOdde1TCT2sookEuVeEZzA8bmRSFV3AwPDZAG8AA=",
-        version = "v1.11.9",
+        sum = "h1:famVnQVu7QwryBN4jNseQdUKES71ZAOnB6UQQJPZvqk=",
+        version = "v1.11.12",
     )
     go_repository(
         name = "com_github_klauspost_cpuid",
@@ -3910,8 +3910,8 @@ def go_deps():
         name = "org_golang_x_exp",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/exp",
-        sum = "h1:8LMx3JFCswBZrnLWtxzpogDG5g1Hb7KWy/16Msz0hQk=",
-        version = "v0.0.0-20210212053707-62dc52270d37",
+        sum = "h1:GrkO5AtFUU9U/1f5ctbIBXtBGeSJbWwIYfIsTcFMaX4=",
+        version = "v0.0.0-20210220032938-85be41e4509f",
     )
     go_repository(
         name = "org_golang_x_image",
