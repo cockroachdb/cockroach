@@ -185,7 +185,7 @@ func showBackupPlanHook(
 		}
 
 		manifests := make([]BackupManifest, len(incPaths)+1)
-		manifests[0], err = readBackupManifestFromStore(ctx, store, encryption)
+		manifests[0], err = ReadBackupManifestFromStore(ctx, store, encryption)
 		if err != nil {
 			return err
 		}
