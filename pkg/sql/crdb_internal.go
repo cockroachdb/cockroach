@@ -1753,7 +1753,7 @@ func populateContentionEventsTable(
 	addRow func(...tree.Datum) error,
 	response *serverpb.ListContentionEventsResponse,
 ) error {
-	for _, ice := range response.Events {
+	for _, ice := range response.Events.IndexContentionEvents {
 		for _, skc := range ice.Events {
 			for _, stc := range skc.Txns {
 				cumulativeContentionTime := tree.NewDInterval(
@@ -1771,6 +1771,25 @@ func populateContentionEventsTable(
 				); err != nil {
 					return err
 				}
+			}
+		}
+	}
+	for _, nkc := range response.Events.NonSQLKeysContention {
+		for _, stc := range nkc.Txns {
+			cumulativeContentionTime := tree.NewDInterval(
+				duration.MakeDuration(nkc.CumulativeContentionTime.Nanoseconds(), 0 /* days */, 0 /* months */),
+				types.DefaultIntervalTypeMetadata,
+			)
+			if err := addRow(
+				tree.DNull, // table_id
+				tree.DNull, // index_id
+				tree.NewDInt(tree.DInt(nkc.NumContentionEvents)), // num_contention_events
+				cumulativeContentionTime,                         // cumulative_contention_time
+				tree.NewDBytes(tree.DBytes(nkc.Key)),             // key
+				tree.NewDUuid(tree.DUuid{UUID: stc.TxnID}),       // txn_id
+				tree.NewDInt(tree.DInt(stc.Count)),               // count
+			); err != nil {
+				return err
 			}
 		}
 	}
