@@ -1643,16 +1643,18 @@ func (st *SessionTracing) StartTracing(
 		return nil
 	}
 
-	// If we're inside a transaction, start recording on the txn span.
+	// If we're inside a transaction, hijack the txn's ctx with one that has a
+	// recording span.
 	if _, ok := st.ex.machine.CurState().(stateNoTxn); !ok {
-		sp := tracing.SpanFromContext(st.ex.state.Ctx)
-		if sp == nil {
+		txnCtx := st.ex.state.Ctx
+		if sp := tracing.SpanFromContext(txnCtx); sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
-		// We want to clear out any existing recordings so they don't show up in
-		// future traces.
-		sp.ResetRecording()
+
+		newTxnCtx, sp := tracing.EnsureChildSpan(txnCtx, st.ex.server.cfg.AmbientCtx.Tracer,
+			"session tracing", tracing.WithForceRealSpan())
 		sp.SetVerbose(true)
+		st.ex.state.Ctx = newTxnCtx
 		st.firstTxnSpan = sp
 	}
 
