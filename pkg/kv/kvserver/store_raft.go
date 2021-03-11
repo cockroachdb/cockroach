@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	crdberrors "github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 type raftRequestInfo struct {

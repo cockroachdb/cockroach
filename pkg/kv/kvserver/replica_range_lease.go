@@ -58,7 +58,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/opentracing/opentracing-go"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 var leaseStatusLogLimiter = log.Every(5 * time.Second)

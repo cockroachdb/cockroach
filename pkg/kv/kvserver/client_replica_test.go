@@ -58,7 +58,7 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their

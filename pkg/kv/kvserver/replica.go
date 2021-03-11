@@ -56,7 +56,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 const (

@@ -29,7 +29,7 @@ import "kv/kvserver/kvserverpb/liveness.proto";
 import "util/log/log.proto";
 import "util/unresolved_addr.proto";
 
-import "etcd/raft/raftpb/raft.proto";
+import "etcd/raft/v3/raftpb/raft.proto";
 
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";

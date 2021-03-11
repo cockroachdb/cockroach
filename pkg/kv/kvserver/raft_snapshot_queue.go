@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"go.etcd.io/etcd/raft/tracker"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 const (

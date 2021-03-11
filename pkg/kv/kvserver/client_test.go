@@ -66,7 +66,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/v3"
 	"google.golang.org/grpc"
 )
 
