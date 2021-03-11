@@ -223,3 +223,25 @@ func TestWithTemporarySchema(t *testing.T) {
 	sp = sp.UpdatePaths([]string{"x", "pg_temp"})
 	assert.True(t, sp.GetTemporarySchemaName() == testTempSchemaName)
 }
+
+func TestSearchPathSpecialChar(t * testing.T) {
+	testCases := []struct {
+		searchPath               []string
+		expectedSearchPathString string
+	}{
+		{
+			searchPath:               []string{`$user`, `public`, `postgis`},
+			expectedSearchPathString: `"$user", public, postgis`,
+		},
+		{
+			searchPath: 	          []string{`dirt`, `test`, `$user`, `public`, `prod`},
+			expectedSearchPathString: `dirt, test, "$user", public, prod`,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(strings.Join(testCase.searchPath, ", "), func(t *testing.T) {
+			sp := MakeSearchPath(testCase.searchPath)
+			assert.True(t, sp.String() == testCase.expectedSearchPathString)
+		})
+	}
+}

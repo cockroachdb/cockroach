@@ -11,9 +11,11 @@
 package sessiondata
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
@@ -241,8 +243,17 @@ func (s SearchPath) Equals(other *SearchPath) bool {
 	return true
 }
 
+// Returns SearchPath as a string with identifiers in quotes
+// if they contain special characters, e.g. `"$user".
 func (s SearchPath) String() string {
-	return strings.Join(s.paths, ",")
+	escapedPaths := make([]string, 0, len(s.paths))
+	var buf bytes.Buffer
+	for _, path := range s.paths {
+		buf.Reset()
+		lexbase.EncodeRestrictedSQLIdent(&buf, path, lexbase.EncNoFlags)
+		escapedPaths = append(escapedPaths, buf.String())
+	}
+	return strings.Join(escapedPaths, ", ")
 }
 
 // SearchPathIter enables iteration over the search paths without triggering an
