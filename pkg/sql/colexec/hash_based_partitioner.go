@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -374,7 +375,7 @@ func (op *hashBasedPartitioner) partitionBatch(
 				scratchBatch.SetLength(len(sel))
 			})
 			if err := op.partitioners[inputIdx].Enqueue(ctx, partitionIdx, scratchBatch); err != nil {
-				colexecerror.InternalError(err)
+				colexecutils.HandleErrorFromDiskQueue(err)
 			}
 			partitionInfo, ok := op.partitionsToProcessUsingMain[partitionIdx]
 			if !ok {

@@ -217,13 +217,27 @@ func (rts *resolvedTimestamp) recompute() bool {
 	if !rts.IsInit() {
 		return false
 	}
-	newTS := rts.closedTS
-	if txn := rts.intentQ.Oldest(); txn != nil {
-		txnTS := txn.timestamp.FloorPrev()
-		if txnTS.Less(newTS) {
-			newTS = txnTS
-		}
+	if rts.closedTS.Less(rts.resolvedTS) {
+		panic(fmt.Sprintf("closed timestamp below resolved timestamp: %s < %s",
+			rts.closedTS, rts.resolvedTS))
 	}
+	newTS := rts.closedTS
+
+	// Take into account the intents that haven't been yet resolved - their
+	// timestamps cannot be resolved yet.
+	if txn := rts.intentQ.Oldest(); txn != nil {
+		if txn.timestamp.LessEq(rts.resolvedTS) {
+			panic(fmt.Sprintf("unresolved txn equal to or below resolved timestamp: %s <= %s",
+				txn.timestamp, rts.resolvedTS))
+		}
+		// txn.timestamp cannot be resolved, so the resolved timestamp must be Prev.
+		txnTS := txn.timestamp.Prev()
+		newTS.Backward(txnTS)
+	}
+	// Truncate the logical part. It might have come from a Prev call above, and
+	// it's dangerous to start pushing things above Logical=MaxInt32.
+	newTS.Logical = 0
+
 	if newTS.Less(rts.resolvedTS) {
 		panic(fmt.Sprintf("resolved timestamp regression, was %s, recomputed as %s",
 			rts.resolvedTS, newTS))

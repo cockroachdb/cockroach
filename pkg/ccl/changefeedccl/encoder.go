@@ -414,6 +414,7 @@ func (e *confluentAvroEncoder) EncodeValue(ctx context.Context, row encodeRow) (
 
 		opts := avroEnvelopeOpts{afterField: true, beforeField: e.beforeField, updatedField: e.updatedField}
 		registered.schema, err = envelopeToAvroSchema(e.rawTableName(row.tableDesc), opts, beforeDataSchema, afterDataSchema, e.schemaPrefix)
+
 		if err != nil {
 			return nil, err
 		}
