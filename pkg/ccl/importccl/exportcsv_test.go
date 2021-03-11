@@ -75,7 +75,7 @@ func TestExportImportBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	db, _, cleanup := setupExportableBank(t, 3, 100)
+	db, dir, cleanup := setupExportableBank(t, 3, 100)
 	defer cleanup()
 
 	// Add some unicode to prove FmtExport works as advertised.
@@ -83,7 +83,6 @@ func TestExportImportBank(t *testing.T) {
 	db.Exec(t, "UPDATE bank SET payload = NULL WHERE id % 2 = 0")
 
 	chunkSize := 13
-	baseExportDir := "userfile:///t/"
 	for _, null := range []string{"", "NULL"} {
 		nullAs, nullIf := "", ", nullif = ''"
 		if null != "" {
@@ -91,19 +90,27 @@ func TestExportImportBank(t *testing.T) {
 			nullIf = fmt.Sprintf(", nullif = '%s'", null)
 		}
 		t.Run("null="+null, func(t *testing.T) {
-			exportDir := filepath.Join(baseExportDir, t.Name())
+			var files []string
+
 			var asOf string
 			db.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&asOf)
 
-			db.Exec(t,
-				fmt.Sprintf(`EXPORT INTO CSV $1 
-					WITH chunk_rows = $2, delimiter = '|' %s
-					FROM SELECT * FROM bank AS OF SYSTEM TIME %s`, nullAs, asOf), exportDir, chunkSize,
-			)
+			for _, row := range db.QueryStr(t,
+				fmt.Sprintf(`EXPORT INTO CSV 'nodelocal://0/t'
+					WITH chunk_rows = $1, delimiter = '|' %s
+					FROM SELECT * FROM bank AS OF SYSTEM TIME %s`, nullAs, asOf), chunkSize,
+			) {
+				files = append(files, row[0])
+				f, err := ioutil.ReadFile(filepath.Join(dir, "t", row[0]))
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Log(string(f))
+			}
 
 			schema := bank.FromRows(1).Tables()[0].Schema
-			exportedFiles := filepath.Join(exportDir, "*")
-			db.Exec(t, fmt.Sprintf(`IMPORT TABLE bank2 %s CSV DATA ($1) WITH delimiter = '|'%s`, schema, nullIf), exportedFiles)
+			fileList := "'nodelocal://0/t/" + strings.Join(files, "', 'nodelocal://0/t/") + "'"
+			db.Exec(t, fmt.Sprintf(`IMPORT TABLE bank2 %s CSV DATA (%s) WITH delimiter = '|'%s`, schema, fileList, nullIf))
 
 			db.CheckQueryResults(t,
 				fmt.Sprintf(`SELECT * FROM bank AS OF SYSTEM TIME %s ORDER BY id`, asOf), db.QueryStr(t, `SELECT * FROM bank2 ORDER BY id`),
