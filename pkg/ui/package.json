@@ -15,7 +15,7 @@
     "cypress:update-snapshots": "yarn cypress run --env updateSnapshots=true --spec 'cypress/integration/**/*.visual.spec.ts'"
   },
   "dependencies": {
-    "@cockroachlabs/cluster-ui": "^0.2.14",
+    "@cockroachlabs/cluster-ui": "^0.2.15",
     "analytics-node": "^3.5.0",
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
