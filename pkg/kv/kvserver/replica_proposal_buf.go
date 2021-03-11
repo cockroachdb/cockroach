@@ -729,24 +729,8 @@ func (b *propBuf) assignClosedTimestampToProposalLocked(
 			// logical ticks when there's no good reason for them.
 			closedTSTarget.Backward(lb.FloorPrev())
 		}
-		// We can't close timestamps above the current lease's expiration(*). This is
-		// in order to keep the monotonic property of closed timestamps carried by
-		// commands, which makes for straight-forward closed timestamp management on
-		// the command application side: if we allowed requests to close timestamps
-		// above the lease's expiration, then a future LeaseRequest proposed by
-		// another node might carry a lower closed timestamp (i.e. the lease start
-		// time).
-		// (*) If we've previously closed a higher timestamp under a previous lease
-		// with a higher expiration, then requests will keep carrying that closed
-		// timestamp; we won't regress the closed timestamp.
-		//
-		// HACK(andrei): We declare the lease expiration to be synthetic by fiat,
-		// because it frequently is synthetic even though currently it's not marked
-		// as such. See the TODO in Timestamp.Add() about the work remaining to
-		// properly mark these timestamps as synthetic. We need to make sure it's
-		// synthetic here so that the results of Backwards() can be synthetic.
-		leaseExpiration := p.leaseStatus.Expiration().WithSynthetic(true)
-		closedTSTarget.Backward(leaseExpiration)
+		// We can't close timestamps above the current lease's expiration.
+		closedTSTarget.Backward(p.leaseStatus.ClosedTimestampUpperBound())
 	}
 
 	// We're about to close closedTSTarget. The propBuf needs to remember that in
