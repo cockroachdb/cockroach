@@ -115,3 +115,8 @@ WHERE variable IN ('cloudstorage.gs.default.key', 'sql.defaults.default_int_size
 ----
 cloudstorage.gs.default.key    foo
 sql.defaults.default_int_size  4
+
+query B
+SHOW CLUSTER SETTING sql.defaults.stub_catalog_tables.enabled
+----
+true

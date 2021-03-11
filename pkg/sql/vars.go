@@ -706,6 +706,25 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	`stub_catalog_tables`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`stub_catalog_tables`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("stub_catalog_tables", s)
+			if err != nil {
+				return err
+			}
+			m.SetStubCatalogTablesEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.StubCatalogTablesEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(stubCatalogTablesEnabledClusterValue.Get(sv))
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	`extra_float_digits`: {
 		GetStringVal: makeIntGetStringValFn(`extra_float_digits`),
