@@ -925,70 +925,6 @@ CREATE TABLE pg_catalog.pg_aggregate (
 	aggmfinalmodify "char"
 )`
 
-// PgCatalogStatioUserTables is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatioUserTables = `
-CREATE TABLE pg_catalog.pg_statio_user_tables (
-	idx_blks_read INT,
-	relid OID,
-	tidx_blks_read INT,
-	toast_blks_read INT,
-	heap_blks_hit INT,
-	heap_blks_read INT,
-	idx_blks_hit INT,
-	relname NAME,
-	schemaname NAME,
-	tidx_blks_hit INT,
-	toast_blks_hit INT
-)`
-
-// PgCatalogStatioSysTables is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatioSysTables = `
-CREATE TABLE pg_catalog.pg_statio_sys_tables (
-	idx_blks_hit INT,
-	relid OID,
-	relname NAME,
-	tidx_blks_hit INT,
-	tidx_blks_read INT,
-	toast_blks_read INT,
-	heap_blks_read INT,
-	idx_blks_read INT,
-	schemaname NAME,
-	toast_blks_hit INT,
-	heap_blks_hit INT
-)`
-
-// PgCatalogAmopOprFamIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAmopOprFamIndex = `
-CREATE TABLE pg_catalog.pg_amop_opr_fam_index (
-	amoppurpose "char",
-	amopfamily OID,
-	amopopr OID
-)`
-
-// PgCatalogDatabaseOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogDatabaseOidIndex = `
-CREATE TABLE pg_catalog.pg_database_oid_index (
-	oid OID
-)`
-
-// PgCatalogExtensionOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogExtensionOidIndex = `
-CREATE TABLE pg_catalog.pg_extension_oid_index (
-	oid OID
-)`
-
-// PgCatalogIndexIndexrelidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogIndexIndexrelidIndex = `
-CREATE TABLE pg_catalog.pg_index_indexrelid_index (
-	indexrelid OID
-)`
-
 // PgCatalogLargeobject is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogLargeobject = `
@@ -998,74 +934,12 @@ CREATE TABLE pg_catalog.pg_largeobject (
 	pageno INT4
 )`
 
-// PgCatalogTriggerOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTriggerOidIndex = `
-CREATE TABLE pg_catalog.pg_trigger_oid_index (
-	oid OID
-)`
-
-// PgCatalogTsConfigMapIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTsConfigMapIndex = `
-CREATE TABLE pg_catalog.pg_ts_config_map_index (
-	mapcfg OID,
-	mapseqno INT4,
-	maptokentype INT4
-)`
-
-// PgCatalogAmopOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAmopOidIndex = `
-CREATE TABLE pg_catalog.pg_amop_oid_index (
-	oid OID
-)`
-
-// PgCatalogNamespaceOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogNamespaceOidIndex = `
-CREATE TABLE pg_catalog.pg_namespace_oid_index (
-	oid OID
-)`
-
 // PgCatalogConfig is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogConfig = `
 CREATE TABLE pg_catalog.pg_config (
 	name STRING,
 	setting STRING
-)`
-
-// PgCatalogPublicationOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogPublicationOidIndex = `
-CREATE TABLE pg_catalog.pg_publication_oid_index (
-	oid OID
-)`
-
-// PgCatalogAttributeRelidAttnumIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAttributeRelidAttnumIndex = `
-CREATE TABLE pg_catalog.pg_attribute_relid_attnum_index (
-	attnum INT2,
-	attrelid OID
-)`
-
-// PgCatalogStatioAllTables is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatioAllTables = `
-CREATE TABLE pg_catalog.pg_statio_all_tables (
-	schemaname NAME,
-	tidx_blks_hit INT,
-	tidx_blks_read INT,
-	toast_blks_read INT,
-	heap_blks_read INT,
-	idx_blks_read INT,
-	relid OID,
-	relname NAME,
-	heap_blks_hit INT,
-	idx_blks_hit INT,
-	toast_blks_hit INT
 )`
 
 // PgCatalogAvailableExtensionVersions is an empty table created by pg_catalog_test
@@ -1081,14 +955,6 @@ CREATE TABLE pg_catalog.pg_available_extension_versions (
 	name NAME,
 	superuser BOOL,
 	version STRING
-)`
-
-// PgCatalogInheritsRelidSeqnoIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogInheritsRelidSeqnoIndex = `
-CREATE TABLE pg_catalog.pg_inherits_relid_seqno_index (
-	inhrelid OID,
-	inhseqno INT4
 )`
 
 // PgCatalogPublicationRel is an empty table created by pg_catalog_test
@@ -1111,13 +977,6 @@ CREATE TABLE pg_catalog.pg_opfamily (
 	opfmethod OID
 )`
 
-// PgCatalogPolicyOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogPolicyOidIndex = `
-CREATE TABLE pg_catalog.pg_policy_oid_index (
-	oid OID
-)`
-
 // PgCatalogShmemAllocations is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogShmemAllocations = `
@@ -1137,67 +996,6 @@ CREATE TABLE pg_catalog.pg_db_role_setting (
 	setrole OID
 )`
 
-// PgCatalogPublicationRelPrrelidPrpubidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogPublicationRelPrrelidPrpubidIndex = `
-CREATE TABLE pg_catalog.pg_publication_rel_prrelid_prpubid_index (
-	prpubid OID,
-	prrelid OID
-)`
-
-// PgCatalogStatUserTables is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatUserTables = `
-CREATE TABLE pg_catalog.pg_stat_user_tables (
-	last_analyze TIMESTAMPTZ,
-	n_dead_tup INT,
-	n_ins_since_vacuum INT,
-	n_live_tup INT,
-	n_tup_ins INT,
-	seq_tup_read INT,
-	autovacuum_count INT,
-	last_autovacuum TIMESTAMPTZ,
-	last_vacuum TIMESTAMPTZ,
-	n_mod_since_analyze INT,
-	n_tup_del INT,
-	n_tup_hot_upd INT,
-	relid OID,
-	last_autoanalyze TIMESTAMPTZ,
-	n_tup_upd INT,
-	relname NAME,
-	analyze_count INT,
-	autoanalyze_count INT,
-	idx_scan INT,
-	idx_tup_fetch INT,
-	schemaname NAME,
-	seq_scan INT,
-	vacuum_count INT
-)`
-
-// PgCatalogAmprocFamProcIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAmprocFamProcIndex = `
-CREATE TABLE pg_catalog.pg_amproc_fam_proc_index (
-	amprocfamily OID,
-	amproclefttype OID,
-	amprocnum INT2,
-	amprocrighttype OID
-)`
-
-// PgCatalogUserMappingOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogUserMappingOidIndex = `
-CREATE TABLE pg_catalog.pg_user_mapping_oid_index (
-	oid OID
-)`
-
-// PgCatalogPartitionedTablePartrelidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogPartitionedTablePartrelidIndex = `
-CREATE TABLE pg_catalog.pg_partitioned_table_partrelid_index (
-	partrelid OID
-)`
-
 // PgCatalogTimezoneNames is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogTimezoneNames = `
@@ -1208,53 +1006,6 @@ CREATE TABLE pg_catalog.pg_timezone_names (
 	utc_offset INTERVAL
 )`
 
-// PgCatalogStatioSysSequences is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatioSysSequences = `
-CREATE TABLE pg_catalog.pg_statio_sys_sequences (
-	relname NAME,
-	schemaname NAME,
-	blks_hit INT,
-	blks_read INT,
-	relid OID
-)`
-
-// PgCatalogAuthidOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAuthidOidIndex = `
-CREATE TABLE pg_catalog.pg_authid_oid_index (
-	oid OID
-)`
-
-// PgCatalogIndexIndrelidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogIndexIndrelidIndex = `
-CREATE TABLE pg_catalog.pg_index_indrelid_index (
-	indrelid OID
-)`
-
-// PgCatalogStatProgressCreateIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatProgressCreateIndex = `
-CREATE TABLE pg_catalog.pg_stat_progress_create_index (
-	blocks_total INT,
-	partitions_total INT,
-	relid OID,
-	tuples_done INT,
-	current_locker_pid INT,
-	datid OID,
-	index_relid OID,
-	partitions_done INT,
-	blocks_done INT,
-	datname NAME,
-	lockers_total INT,
-	phase STRING,
-	command STRING,
-	lockers_done INT,
-	pid INT4,
-	tuples_total INT
-)`
-
 // PgCatalogPublicationTables is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogPublicationTables = `
@@ -1262,13 +1013,6 @@ CREATE TABLE pg_catalog.pg_publication_tables (
 	pubname NAME,
 	schemaname NAME,
 	tablename NAME
-)`
-
-// PgCatalogTriggerTgconstraintIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTriggerTgconstraintIndex = `
-CREATE TABLE pg_catalog.pg_trigger_tgconstraint_index (
-	tgconstraint OID
 )`
 
 // PgCatalogUserMappings is an empty table created by pg_catalog_test
@@ -1294,59 +1038,6 @@ CREATE TABLE pg_catalog.pg_ts_template (
 	tmplnamespace OID
 )`
 
-// PgCatalogSubscriptionRelSrrelidSrsubidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogSubscriptionRelSrrelidSrsubidIndex = `
-CREATE TABLE pg_catalog.pg_subscription_rel_srrelid_srsubid_index (
-	srrelid OID,
-	srsubid OID
-)`
-
-// PgCatalogStatSysTables is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatSysTables = `
-CREATE TABLE pg_catalog.pg_stat_sys_tables (
-	relid OID,
-	relname NAME,
-	vacuum_count INT,
-	n_ins_since_vacuum INT,
-	n_tup_ins INT,
-	schemaname NAME,
-	seq_tup_read INT,
-	autovacuum_count INT,
-	idx_scan INT,
-	last_vacuum TIMESTAMPTZ,
-	n_dead_tup INT,
-	n_mod_since_analyze INT,
-	n_tup_del INT,
-	n_tup_upd INT,
-	seq_scan INT,
-	autoanalyze_count INT,
-	idx_tup_fetch INT,
-	last_autoanalyze TIMESTAMPTZ,
-	n_live_tup INT,
-	analyze_count INT,
-	last_analyze TIMESTAMPTZ,
-	last_autovacuum TIMESTAMPTZ,
-	n_tup_hot_upd INT
-)`
-
-// PgCatalogShseclabelObjectIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogShseclabelObjectIndex = `
-CREATE TABLE pg_catalog.pg_shseclabel_object_index (
-	classoid OID,
-	objoid OID,
-	provider STRING
-)`
-
-// PgCatalogConstraintOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogConstraintOidIndex = `
-CREATE TABLE pg_catalog.pg_constraint_oid_index (
-	oid OID
-)`
-
 // PgCatalogRules is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogRules = `
@@ -1355,13 +1046,6 @@ CREATE TABLE pg_catalog.pg_rules (
 	rulename NAME,
 	schemaname NAME,
 	tablename NAME
-)`
-
-// PgCatalogEventTriggerOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogEventTriggerOidIndex = `
-CREATE TABLE pg_catalog.pg_event_trigger_oid_index (
-	oid OID
 )`
 
 // PgCatalogShadow is an empty table created by pg_catalog_test
@@ -1379,88 +1063,6 @@ CREATE TABLE pg_catalog.pg_shadow (
 	usebypassrls BOOL
 )`
 
-// PgCatalogStatGssapi is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatGssapi = `
-CREATE TABLE pg_catalog.pg_stat_gssapi (
-	encrypted BOOL,
-	gss_authenticated BOOL,
-	pid INT4,
-	principal STRING
-)`
-
-// PgCatalogTsParserOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTsParserOidIndex = `
-CREATE TABLE pg_catalog.pg_ts_parser_oid_index (
-	oid OID
-)`
-
-// PgCatalogReplicationOriginRonameIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogReplicationOriginRonameIndex = `
-CREATE TABLE pg_catalog.pg_replication_origin_roname_index (
-	roname STRING
-)`
-
-// PgCatalogDbRoleSettingDatabaseidRolIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogDbRoleSettingDatabaseidRolIndex = `
-CREATE TABLE pg_catalog.pg_db_role_setting_databaseid_rol_index (
-	setdatabase OID,
-	setrole OID
-)`
-
-// PgCatalogLargeobjectLoidPnIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogLargeobjectLoidPnIndex = `
-CREATE TABLE pg_catalog.pg_largeobject_loid_pn_index (
-	loid OID,
-	pageno INT4
-)`
-
-// PgCatalogTablespaceOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTablespaceOidIndex = `
-CREATE TABLE pg_catalog.pg_tablespace_oid_index (
-	oid OID
-)`
-
-// PgCatalogCollationOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogCollationOidIndex = `
-CREATE TABLE pg_catalog.pg_collation_oid_index (
-	oid OID
-)`
-
-// PgCatalogAggregateFnoidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAggregateFnoidIndex = `
-CREATE TABLE pg_catalog.pg_aggregate_fnoid_index (
-	aggfnoid REGPROC
-)`
-
-// PgCatalogTsTemplateOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTsTemplateOidIndex = `
-CREATE TABLE pg_catalog.pg_ts_template_oid_index (
-	oid OID
-)`
-
-// PgCatalogReplicationOriginRoiidentIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogReplicationOriginRoiidentIndex = `
-CREATE TABLE pg_catalog.pg_replication_origin_roiident_index (
-	roident OID
-)`
-
-// PgCatalogAttrdefOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAttrdefOidIndex = `
-CREATE TABLE pg_catalog.pg_attrdef_oid_index (
-	oid OID
-)`
-
 // PgCatalogPublication is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogPublication = `
@@ -1476,34 +1078,6 @@ CREATE TABLE pg_catalog.pg_publication (
 	pubviaroot BOOL
 )`
 
-// PgCatalogClassOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogClassOidIndex = `
-CREATE TABLE pg_catalog.pg_class_oid_index (
-	oid OID
-)`
-
-// PgCatalogStatisticExtDataStxoidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatisticExtDataStxoidIndex = `
-CREATE TABLE pg_catalog.pg_statistic_ext_data_stxoid_index (
-	stxoid OID
-)`
-
-// PgCatalogTsDictOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTsDictOidIndex = `
-CREATE TABLE pg_catalog.pg_ts_dict_oid_index (
-	oid OID
-)`
-
-// PgCatalogCastOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogCastOidIndex = `
-CREATE TABLE pg_catalog.pg_cast_oid_index (
-	oid OID
-)`
-
 // PgCatalogGroup is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogGroup = `
@@ -1511,76 +1085,6 @@ CREATE TABLE pg_catalog.pg_group (
 	grolist OID[],
 	groname NAME,
 	grosysid OID
-)`
-
-// PgCatalogDependDependerIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogDependDependerIndex = `
-CREATE TABLE pg_catalog.pg_depend_depender_index (
-	classid OID,
-	objid OID,
-	objsubid INT4
-)`
-
-// PgCatalogStatProgressBasebackup is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatProgressBasebackup = `
-CREATE TABLE pg_catalog.pg_stat_progress_basebackup (
-	backup_streamed INT,
-	backup_total INT,
-	phase STRING,
-	pid INT4,
-	tablespaces_streamed INT,
-	tablespaces_total INT
-)`
-
-// PgCatalogDescriptionOCOIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogDescriptionOCOIndex = `
-CREATE TABLE pg_catalog.pg_description_o_c_o_index (
-	classoid OID,
-	objoid OID,
-	objsubid INT4
-)`
-
-// PgCatalogStatAllIndexes is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatAllIndexes = `
-CREATE TABLE pg_catalog.pg_stat_all_indexes (
-	schemaname NAME,
-	idx_scan INT,
-	idx_tup_fetch INT,
-	idx_tup_read INT,
-	indexrelid OID,
-	indexrelname NAME,
-	relid OID,
-	relname NAME
-)`
-
-// PgCatalogStatBgwriter is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatBgwriter = `
-CREATE TABLE pg_catalog.pg_stat_bgwriter (
-	buffers_backend_fsync INT,
-	buffers_clean INT,
-	checkpoint_sync_time FLOAT,
-	checkpoints_req INT,
-	checkpoints_timed INT,
-	maxwritten_clean INT,
-	buffers_alloc INT,
-	buffers_backend INT,
-	buffers_checkpoint INT,
-	checkpoint_write_time FLOAT,
-	stats_reset TIMESTAMPTZ
-)`
-
-// PgCatalogInitPrivsOCOIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogInitPrivsOCOIndex = `
-CREATE TABLE pg_catalog.pg_init_privs_o_c_o_index (
-	classoid OID,
-	objoid OID,
-	objsubid INT4
 )`
 
 // PgCatalogCursors is an empty table created by pg_catalog_test
@@ -1595,56 +1099,6 @@ CREATE TABLE pg_catalog.pg_cursors (
 	is_holdable BOOL
 )`
 
-// PgCatalogConstraintContypidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogConstraintContypidIndex = `
-CREATE TABLE pg_catalog.pg_constraint_contypid_index (
-	contypid OID
-)`
-
-// PgCatalogStatProgressCluster is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatProgressCluster = `
-CREATE TABLE pg_catalog.pg_stat_progress_cluster (
-	heap_blks_scanned INT,
-	heap_tuples_scanned INT,
-	index_rebuild_count INT,
-	phase STRING,
-	relid OID,
-	cluster_index_relid OID,
-	command STRING,
-	datname NAME,
-	pid INT4,
-	datid OID,
-	heap_blks_total INT,
-	heap_tuples_written INT
-)`
-
-// PgCatalogConversionDefaultIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogConversionDefaultIndex = `
-CREATE TABLE pg_catalog.pg_conversion_default_index (
-	oid OID,
-	conforencoding INT4,
-	connamespace OID,
-	contoencoding INT4
-)`
-
-// PgCatalogStatSsl is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatSsl = `
-CREATE TABLE pg_catalog.pg_stat_ssl (
-	pid INT4,
-	ssl BOOL,
-	client_dn STRING,
-	client_serial DECIMAL,
-	compression BOOL,
-	issuer_dn STRING,
-	version STRING,
-	bits INT4,
-	cipher STRING
-)`
-
 // PgCatalogTsParser is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogTsParser = `
@@ -1657,89 +1111,6 @@ CREATE TABLE pg_catalog.pg_ts_parser (
 	oid OID,
 	prsend REGPROC,
 	prsheadline REGPROC
-)`
-
-// PgCatalogStatisticExtRelidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatisticExtRelidIndex = `
-CREATE TABLE pg_catalog.pg_statistic_ext_relid_index (
-	stxrelid OID
-)`
-
-// PgCatalogAttrdefAdrelidAdnumIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAttrdefAdrelidAdnumIndex = `
-CREATE TABLE pg_catalog.pg_attrdef_adrelid_adnum_index (
-	adnum INT2,
-	adrelid OID
-)`
-
-// PgCatalogTypeOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTypeOidIndex = `
-CREATE TABLE pg_catalog.pg_type_oid_index (
-	oid OID
-)`
-
-// PgCatalogStatXactUserTables is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatXactUserTables = `
-CREATE TABLE pg_catalog.pg_stat_xact_user_tables (
-	n_tup_hot_upd INT,
-	n_tup_ins INT,
-	relid OID,
-	seq_scan INT,
-	n_tup_del INT,
-	idx_tup_fetch INT,
-	n_tup_upd INT,
-	relname NAME,
-	schemaname NAME,
-	seq_tup_read INT,
-	idx_scan INT
-)`
-
-// PgCatalogAuthMembersMemberRoleIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAuthMembersMemberRoleIndex = `
-CREATE TABLE pg_catalog.pg_auth_members_member_role_index (
-	member OID,
-	roleid OID
-)`
-
-// PgCatalogStatAllTables is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatAllTables = `
-CREATE TABLE pg_catalog.pg_stat_all_tables (
-	n_tup_ins INT,
-	schemaname NAME,
-	analyze_count INT,
-	autovacuum_count INT,
-	last_autovacuum TIMESTAMPTZ,
-	seq_tup_read INT,
-	vacuum_count INT,
-	last_vacuum TIMESTAMPTZ,
-	n_ins_since_vacuum INT,
-	n_tup_del INT,
-	n_live_tup INT,
-	relid OID,
-	seq_scan INT,
-	autoanalyze_count INT,
-	idx_scan INT,
-	idx_tup_fetch INT,
-	n_mod_since_analyze INT,
-	n_tup_hot_upd INT,
-	n_tup_upd INT,
-	relname NAME,
-	last_analyze TIMESTAMPTZ,
-	last_autoanalyze TIMESTAMPTZ,
-	n_dead_tup INT
-)`
-
-// PgCatalogEnumOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogEnumOidIndex = `
-CREATE TABLE pg_catalog.pg_enum_oid_index (
-	oid OID
 )`
 
 // PgCatalogSubscription is an empty table created by pg_catalog_test
@@ -1757,21 +1128,6 @@ CREATE TABLE pg_catalog.pg_subscription (
 	subowner OID
 )`
 
-// PgCatalogEnumTypidSortorderIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogEnumTypidSortorderIndex = `
-CREATE TABLE pg_catalog.pg_enum_typid_sortorder_index (
-	enumsortorder FLOAT4,
-	enumtypid OID
-)`
-
-// PgCatalogProcOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogProcOidIndex = `
-CREATE TABLE pg_catalog.pg_proc_oid_index (
-	oid OID
-)`
-
 // PgCatalogAmproc is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogAmproc = `
@@ -1782,32 +1138,6 @@ CREATE TABLE pg_catalog.pg_amproc (
 	amprocnum INT2,
 	amprocrighttype OID,
 	oid OID
-)`
-
-// PgCatalogRewriteOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogRewriteOidIndex = `
-CREATE TABLE pg_catalog.pg_rewrite_oid_index (
-	oid OID
-)`
-
-// PgCatalogTsConfigOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTsConfigOidIndex = `
-CREATE TABLE pg_catalog.pg_ts_config_oid_index (
-	oid OID
-)`
-
-// PgCatalogStatUserFunctions is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatUserFunctions = `
-CREATE TABLE pg_catalog.pg_stat_user_functions (
-	funcname NAME,
-	schemaname NAME,
-	self_time FLOAT,
-	total_time FLOAT,
-	calls INT,
-	funcid OID
 )`
 
 // PgCatalogTsDict is an empty table created by pg_catalog_test
@@ -1822,49 +1152,6 @@ CREATE TABLE pg_catalog.pg_ts_dict (
 	oid OID
 )`
 
-// PgCatalogStatXactUserFunctions is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatXactUserFunctions = `
-CREATE TABLE pg_catalog.pg_stat_xact_user_functions (
-	total_time FLOAT,
-	calls INT,
-	funcid OID,
-	funcname NAME,
-	schemaname NAME,
-	self_time FLOAT
-)`
-
-// PgCatalogSeclabelObjectIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogSeclabelObjectIndex = `
-CREATE TABLE pg_catalog.pg_seclabel_object_index (
-	objoid OID,
-	objsubid INT4,
-	provider STRING,
-	classoid OID
-)`
-
-// PgCatalogTransformTypeLangIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTransformTypeLangIndex = `
-CREATE TABLE pg_catalog.pg_transform_type_lang_index (
-	trflang OID,
-	trftype OID
-)`
-
-// PgCatalogStatioUserIndexes is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatioUserIndexes = `
-CREATE TABLE pg_catalog.pg_statio_user_indexes (
-	idx_blks_read INT,
-	indexrelid OID,
-	indexrelname NAME,
-	relid OID,
-	relname NAME,
-	schemaname NAME,
-	idx_blks_hit INT
-)`
-
 // PgCatalogTimezoneAbbrevs is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogTimezoneAbbrevs = `
@@ -1872,38 +1159,6 @@ CREATE TABLE pg_catalog.pg_timezone_abbrevs (
 	abbrev STRING,
 	is_dst BOOL,
 	utc_offset INTERVAL
-)`
-
-// PgCatalogAmopFamStratIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAmopFamStratIndex = `
-CREATE TABLE pg_catalog.pg_amop_fam_strat_index (
-	amoplefttype OID,
-	amoprighttype OID,
-	amopstrategy INT2,
-	amopfamily OID
-)`
-
-// PgCatalogForeignDataWrapperOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogForeignDataWrapperOidIndex = `
-CREATE TABLE pg_catalog.pg_foreign_data_wrapper_oid_index (
-	oid OID
-)`
-
-// PgCatalogShdescriptionOCIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogShdescriptionOCIndex = `
-CREATE TABLE pg_catalog.pg_shdescription_o_c_index (
-	classoid OID,
-	objoid OID
-)`
-
-// PgCatalogPublicationRelOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogPublicationRelOidIndex = `
-CREATE TABLE pg_catalog.pg_publication_rel_oid_index (
-	oid OID
 )`
 
 // PgCatalogTransform is an empty table created by pg_catalog_test
@@ -1917,105 +1172,6 @@ CREATE TABLE pg_catalog.pg_transform (
 	oid OID
 )`
 
-// PgCatalogOpclassOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogOpclassOidIndex = `
-CREATE TABLE pg_catalog.pg_opclass_oid_index (
-	oid OID
-)`
-
-// PgCatalogInheritsParentIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogInheritsParentIndex = `
-CREATE TABLE pg_catalog.pg_inherits_parent_index (
-	inhparent OID
-)`
-
-// PgCatalogStatSlru is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatSlru = `
-CREATE TABLE pg_catalog.pg_stat_slru (
-	blks_exists INT,
-	blks_hit INT,
-	blks_written INT,
-	flushes INT,
-	name STRING,
-	truncates INT,
-	blks_read INT,
-	blks_zeroed INT,
-	stats_reset TIMESTAMPTZ
-)`
-
-// PgCatalogStatProgressAnalyze is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatProgressAnalyze = `
-CREATE TABLE pg_catalog.pg_stat_progress_analyze (
-	sample_blks_scanned INT,
-	datname NAME,
-	ext_stats_computed INT,
-	relid OID,
-	datid OID,
-	ext_stats_total INT,
-	phase STRING,
-	pid INT4,
-	sample_blks_total INT,
-	child_tables_done INT,
-	child_tables_total INT,
-	current_child_table_relid OID
-)`
-
-// PgCatalogShdependReferenceIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogShdependReferenceIndex = `
-CREATE TABLE pg_catalog.pg_shdepend_reference_index (
-	refclassid OID,
-	refobjid OID
-)`
-
-// PgCatalogAuthMembersRoleMemberIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAuthMembersRoleMemberIndex = `
-CREATE TABLE pg_catalog.pg_auth_members_role_member_index (
-	member OID,
-	roleid OID
-)`
-
-// PgCatalogOperatorOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogOperatorOidIndex = `
-CREATE TABLE pg_catalog.pg_operator_oid_index (
-	oid OID
-)`
-
-// PgCatalogStatioAllIndexes is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatioAllIndexes = `
-CREATE TABLE pg_catalog.pg_statio_all_indexes (
-	idx_blks_hit INT,
-	idx_blks_read INT,
-	indexrelid OID,
-	indexrelname NAME,
-	relid OID,
-	relname NAME,
-	schemaname NAME
-)`
-
-// PgCatalogForeignServerOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogForeignServerOidIndex = `
-CREATE TABLE pg_catalog.pg_foreign_server_oid_index (
-	oid OID
-)`
-
-// PgCatalogDefaultACLRoleNspObjIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogDefaultACLRoleNspObjIndex = `
-CREATE TABLE pg_catalog.pg_default_acl_role_nsp_obj_index (
-	defaclnamespace OID,
-	defaclobjtype "char",
-	defaclrole OID
-)`
-
 // PgCatalogTsConfigMap is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogTsConfigMap = `
@@ -2024,66 +1180,6 @@ CREATE TABLE pg_catalog.pg_ts_config_map (
 	mapdict OID,
 	mapseqno INT4,
 	maptokentype INT4
-)`
-
-// PgCatalogStatDatabaseConflicts is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatDatabaseConflicts = `
-CREATE TABLE pg_catalog.pg_stat_database_conflicts (
-	confl_lock INT,
-	confl_snapshot INT,
-	confl_tablespace INT,
-	datid OID,
-	datname NAME,
-	confl_bufferpin INT,
-	confl_deadlock INT
-)`
-
-// PgCatalogRangeRngtypidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogRangeRngtypidIndex = `
-CREATE TABLE pg_catalog.pg_range_rngtypid_index (
-	rngtypid OID
-)`
-
-// PgCatalogTransformOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogTransformOidIndex = `
-CREATE TABLE pg_catalog.pg_transform_oid_index (
-	oid OID
-)`
-
-// PgCatalogStatioUserSequences is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatioUserSequences = `
-CREATE TABLE pg_catalog.pg_statio_user_sequences (
-	relname NAME,
-	schemaname NAME,
-	blks_hit INT,
-	blks_read INT,
-	relid OID
-)`
-
-// PgCatalogUserMappingUserServerIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogUserMappingUserServerIndex = `
-CREATE TABLE pg_catalog.pg_user_mapping_user_server_index (
-	umserver OID,
-	umuser OID
-)`
-
-// PgCatalogSubscriptionOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogSubscriptionOidIndex = `
-CREATE TABLE pg_catalog.pg_subscription_oid_index (
-	oid OID
-)`
-
-// PgCatalogStatisticExtOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatisticExtOidIndex = `
-CREATE TABLE pg_catalog.pg_statistic_ext_oid_index (
-	oid OID
 )`
 
 // PgCatalogFileSettings is an empty table created by pg_catalog_test
@@ -2097,13 +1193,6 @@ CREATE TABLE pg_catalog.pg_file_settings (
 	sourcefile STRING,
 	sourceline INT4,
 	applied BOOL
-)`
-
-// PgCatalogSequenceSeqrelidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogSequenceSeqrelidIndex = `
-CREATE TABLE pg_catalog.pg_sequence_seqrelid_index (
-	seqrelid OID
 )`
 
 // PgCatalogPolicies is an empty table created by pg_catalog_test
@@ -2120,39 +1209,6 @@ CREATE TABLE pg_catalog.pg_policies (
 	tablename NAME
 )`
 
-// PgCatalogLanguageOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogLanguageOidIndex = `
-CREATE TABLE pg_catalog.pg_language_oid_index (
-	oid OID
-)`
-
-// PgCatalogClassTblspcRelfilenodeIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogClassTblspcRelfilenodeIndex = `
-CREATE TABLE pg_catalog.pg_class_tblspc_relfilenode_index (
-	relfilenode OID,
-	reltablespace OID
-)`
-
-// PgCatalogDependReferenceIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogDependReferenceIndex = `
-CREATE TABLE pg_catalog.pg_depend_reference_index (
-	refclassid OID,
-	refobjid OID,
-	refobjsubid INT4
-)`
-
-// PgCatalogStatisticRelidAttInhIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatisticRelidAttInhIndex = `
-CREATE TABLE pg_catalog.pg_statistic_relid_att_inh_index (
-	staattnum INT2,
-	stainherit BOOL,
-	starelid OID
-)`
-
 // PgCatalogTsConfig is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogTsConfig = `
@@ -2162,30 +1218,6 @@ CREATE TABLE pg_catalog.pg_ts_config (
 	cfgowner OID,
 	cfgparser OID,
 	oid OID
-)`
-
-// PgCatalogConversionOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogConversionOidIndex = `
-CREATE TABLE pg_catalog.pg_conversion_oid_index (
-	oid OID
-)`
-
-// PgCatalogStatXactAllTables is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatXactAllTables = `
-CREATE TABLE pg_catalog.pg_stat_xact_all_tables (
-	n_tup_del INT,
-	n_tup_hot_upd INT,
-	n_tup_ins INT,
-	schemaname NAME,
-	seq_scan INT,
-	seq_tup_read INT,
-	idx_scan INT,
-	idx_tup_fetch INT,
-	n_tup_upd INT,
-	relid OID,
-	relname NAME
 )`
 
 // PgCatalogHbaFileRules is an empty table created by pg_catalog_test
@@ -2203,78 +1235,6 @@ CREATE TABLE pg_catalog.pg_hba_file_rules (
 	options STRING[]
 )`
 
-// PgCatalogAmOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAmOidIndex = `
-CREATE TABLE pg_catalog.pg_am_oid_index (
-	oid OID
-)`
-
-// PgCatalogConstraintConparentidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogConstraintConparentidIndex = `
-CREATE TABLE pg_catalog.pg_constraint_conparentid_index (
-	conparentid OID
-)`
-
-// PgCatalogStatXactSysTables is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatXactSysTables = `
-CREATE TABLE pg_catalog.pg_stat_xact_sys_tables (
-	n_tup_del INT,
-	n_tup_hot_upd INT,
-	n_tup_upd INT,
-	relname NAME,
-	schemaname NAME,
-	seq_scan INT,
-	idx_scan INT,
-	idx_tup_fetch INT,
-	seq_tup_read INT,
-	n_tup_ins INT,
-	relid OID
-)`
-
-// PgCatalogStatDatabase is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatDatabase = `
-CREATE TABLE pg_catalog.pg_stat_database (
-	blks_read INT,
-	datid OID,
-	deadlocks INT,
-	temp_files INT,
-	tup_updated INT,
-	conflicts INT,
-	temp_bytes INT,
-	tup_returned INT,
-	xact_rollback INT,
-	blk_read_time FLOAT,
-	blks_hit INT,
-	checksum_failures INT,
-	tup_deleted INT,
-	xact_commit INT,
-	blk_write_time FLOAT,
-	checksum_last_failure TIMESTAMPTZ,
-	datname NAME,
-	numbackends INT4,
-	stats_reset TIMESTAMPTZ,
-	tup_fetched INT,
-	tup_inserted INT
-)`
-
-// PgCatalogStatSysIndexes is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatSysIndexes = `
-CREATE TABLE pg_catalog.pg_stat_sys_indexes (
-	idx_tup_fetch INT,
-	idx_tup_read INT,
-	indexrelid OID,
-	indexrelname NAME,
-	relid OID,
-	relname NAME,
-	schemaname NAME,
-	idx_scan INT
-)`
-
 // PgCatalogStatisticExt is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogStatisticExt = `
@@ -2289,110 +1249,12 @@ CREATE TABLE pg_catalog.pg_statistic_ext (
 	stxowner OID
 )`
 
-// PgCatalogCastSourceTargetIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogCastSourceTargetIndex = `
-CREATE TABLE pg_catalog.pg_cast_source_target_index (
-	castsource OID,
-	casttarget OID
-)`
-
 // PgCatalogReplicationOrigin is an empty table created by pg_catalog_test
 // and is currently unimplemented.
 const PgCatalogReplicationOrigin = `
 CREATE TABLE pg_catalog.pg_replication_origin (
 	roident OID,
 	roname STRING
-)`
-
-// PgCatalogOpfamilyOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogOpfamilyOidIndex = `
-CREATE TABLE pg_catalog.pg_opfamily_oid_index (
-	oid OID
-)`
-
-// PgCatalogStatUserIndexes is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatUserIndexes = `
-CREATE TABLE pg_catalog.pg_stat_user_indexes (
-	relname NAME,
-	schemaname NAME,
-	idx_scan INT,
-	idx_tup_fetch INT,
-	idx_tup_read INT,
-	indexrelid OID,
-	indexrelname NAME,
-	relid OID
-)`
-
-// PgCatalogAmprocOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogAmprocOidIndex = `
-CREATE TABLE pg_catalog.pg_amproc_oid_index (
-	oid OID
-)`
-
-// PgCatalogDefaultACLOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogDefaultACLOidIndex = `
-CREATE TABLE pg_catalog.pg_default_acl_oid_index (
-	oid OID
-)`
-
-// PgCatalogForeignTableRelidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogForeignTableRelidIndex = `
-CREATE TABLE pg_catalog.pg_foreign_table_relid_index (
-	ftrelid OID
-)`
-
-// PgCatalogStatProgressVacuum is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatProgressVacuum = `
-CREATE TABLE pg_catalog.pg_stat_progress_vacuum (
-	index_vacuum_count INT,
-	num_dead_tuples INT,
-	relid OID,
-	datid OID,
-	datname NAME,
-	heap_blks_vacuumed INT,
-	max_dead_tuples INT,
-	phase STRING,
-	pid INT4,
-	heap_blks_scanned INT,
-	heap_blks_total INT
-)`
-
-// PgCatalogLargeobjectMetadataOidIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogLargeobjectMetadataOidIndex = `
-CREATE TABLE pg_catalog.pg_largeobject_metadata_oid_index (
-	oid OID
-)`
-
-// PgCatalogStatioAllSequences is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatioAllSequences = `
-CREATE TABLE pg_catalog.pg_statio_all_sequences (
-	relid OID,
-	relname NAME,
-	schemaname NAME,
-	blks_hit INT,
-	blks_read INT
-)`
-
-// PgCatalogStatArchiver is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatArchiver = `
-CREATE TABLE pg_catalog.pg_stat_archiver (
-	last_archived_time TIMESTAMPTZ,
-	last_archived_wal STRING,
-	last_failed_time TIMESTAMPTZ,
-	last_failed_wal STRING,
-	stats_reset TIMESTAMPTZ,
-	archived_count INT,
-	failed_count INT
 )`
 
 // PgCatalogAmop is an empty table created by pg_catalog_test
@@ -2408,27 +1270,4 @@ CREATE TABLE pg_catalog.pg_amop (
 	amopfamily OID,
 	amopsortfamily OID,
 	amopstrategy INT2
-)`
-
-// PgCatalogShdependDependerIndex is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogShdependDependerIndex = `
-CREATE TABLE pg_catalog.pg_shdepend_depender_index (
-	objsubid INT4,
-	classid OID,
-	dbid OID,
-	objid OID
-)`
-
-// PgCatalogStatioSysIndexes is an empty table created by pg_catalog_test
-// and is currently unimplemented.
-const PgCatalogStatioSysIndexes = `
-CREATE TABLE pg_catalog.pg_statio_sys_indexes (
-	indexrelname NAME,
-	relid OID,
-	relname NAME,
-	schemaname NAME,
-	idx_blks_hit INT,
-	idx_blks_read INT,
-	indexrelid OID
 )`
