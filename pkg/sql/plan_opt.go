@@ -584,8 +584,6 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 
 	planTop.planComponents = *result
-	planTop.mem = mem
-	planTop.catalog = &opc.catalog
 	planTop.stmt = stmt
 	planTop.flags = opc.flags
 	if isDDL {
@@ -596,6 +594,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if containsFullIndexScan {
 		planTop.flags.Set(planFlagContainsFullIndexScan)
+	}
+	if planTop.instrumentation.ShouldSaveMemo() {
+		planTop.mem = mem
+		planTop.catalog = &opc.catalog
 	}
 	return nil
 }
