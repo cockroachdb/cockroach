@@ -2223,9 +2223,11 @@ The paths themselves are given in the direction of the first geometry.</p>
 Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped.
 If no snapping occurs then the input geometry is returned unchanged.</p>
 </span></td></tr>
+<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, origin: geometry, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>, size_z: <a href="float.html">float</a>, size_m: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid defined by the given origin and X, Y, Z, and M cell sizes. Any dimension with a 0 cell size will not be snapped.</p>
+</span></td></tr>
 <tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, origin_x: <a href="float.html">float</a>, origin_y: <a href="float.html">float</a>, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y based on an origin of (origin_x, origin_y).</p>
 </span></td></tr>
-<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of the given size.</p>
+<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of the given size. The specified size is only used to snap X and Y coordinates.</p>
 </span></td></tr>
 <tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y.</p>
 </span></td></tr>
