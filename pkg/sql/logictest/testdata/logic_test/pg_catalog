@@ -2146,6 +2146,7 @@ session_user                                          root                NULL  
 sql_safe_updates                                      off                 NULL      NULL        NULL        string
 standard_conforming_strings                           on                  NULL      NULL        NULL        string
 statement_timeout                                     0                   NULL      NULL        NULL        string
+stub_catalog_tables                           on                  NULL      NULL        NULL        string
 synchronize_seqscans                                  on                  NULL      NULL        NULL        string
 synchronous_commit                                    on                  NULL      NULL        NULL        string
 testing_vectorize_inject_panics                       off                 NULL      NULL        NULL        string
@@ -2226,6 +2227,7 @@ session_user                                          root                NULL  
 sql_safe_updates                                      off                 NULL  user     NULL      off                 off
 standard_conforming_strings                           on                  NULL  user     NULL      on                  on
 statement_timeout                                     0                   NULL  user     NULL      0s                  0s
+stub_catalog_tables                           on                  NULL  user     NULL      on                  on
 synchronize_seqscans                                  on                  NULL  user     NULL      on                  on
 synchronous_commit                                    on                  NULL  user     NULL      on                  on
 testing_vectorize_inject_panics                       off                 NULL  user     NULL      off                 off
@@ -2304,6 +2306,7 @@ session_user                                          NULL    NULL     NULL     
 sql_safe_updates                                      NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings                           NULL    NULL     NULL     NULL        NULL
 statement_timeout                                     NULL    NULL     NULL     NULL        NULL
+stub_catalog_tables                                   NULL    NULL     NULL     NULL        NULL
 synchronize_seqscans                                  NULL    NULL     NULL     NULL        NULL
 synchronous_commit                                    NULL    NULL     NULL     NULL        NULL
 testing_vectorize_inject_panics                       NULL    NULL     NULL     NULL        NULL
@@ -3258,3 +3261,18 @@ GROUP BY indexname, indisunique, indisprimary, amname, exprdef, attoptions
 indexname            array_agg  indisunique  indisprimary  array_agg      amname  exprdef  attoptions
 indexes_include_idx  {a,c,d}    false        false         {ASC,ASC,ASC}  prefix  NULL     NULL
 primary              {id}       true         true          {ASC}          prefix  NULL     NULL
+
+statement ok
+SET stub_catalog_tables=false
+
+statement error pq: unimplemented: virtual schema table not implemented: pg_catalog.pg_seclabel
+SELECT * FROM pg_seclabel
+
+statement ok
+SELECT count(*) FROM pg_depend
+
+statement ok
+SET stub_catalog_tables=true
+
+statement ok
+SELECT * FROM pg_seclabel
