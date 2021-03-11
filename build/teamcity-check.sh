@@ -39,7 +39,7 @@ fi
 tc_start_block "Ensure generated code is up-to-date"
 # Buffer noisy output and only print it on failure.
 run build/builder.sh make buildshort generate &> artifacts/generate.log || (cat artifacts/generate.log && false)
-rm artifacts/generate.log
+# rm artifacts/generate.log
 check_clean "Run \`make buildshort generate\` to automatically regenerate these."
 # NB: $root is set by teamcity-support.sh.
 run docker run -i ${tty-} --rm --init \
