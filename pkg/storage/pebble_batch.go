@@ -424,6 +424,9 @@ func (p *pebbleBatch) PutMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
 	}
+	if err := checkMVCCWriteSizeLimit(key, value); err != nil {
+		return err
+	}
 	return p.put(key, value)
 }
 

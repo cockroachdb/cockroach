@@ -127,6 +127,9 @@ func (fw *SSTWriter) PutMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
 	}
+	if err := checkMVCCWriteSizeLimit(key, value); err != nil {
+		return err
+	}
 	return fw.put(key, value)
 }
 

@@ -1024,3 +1024,29 @@ func iterateOnReader(
 	}
 	return nil
 }
+
+// checkMVCCWriteSizeLimit returns an error if a versioned key-value pair
+// exceeds a constant maximum size on the write path. This is not the only
+// enforcement of a maximum size: the cluster setting kv.raft.command.max_size
+// defaults to 64MB, and since that includes additional data in that limit,
+// imposes a stricter limit than this code. However, a cluster setting can be
+// increased and we do not want to allow huge key-value pairs to creep into
+// CockroachDB, due to the negative performance implications. This code must
+// not be called for inline metadata or intents -- we are not imposing a size
+// limit on value history in an intent, or on inline metadata/timeseries which
+// will later be subject to merges. Due to the limited cases where this code
+// is called, it is not a foolproof way of preventing large key-value pairs
+// from being stored. Additionally, there is the risk that clusters that have
+// been running with a larger kv.raft.command.max_size have larger key-value
+// pairs than maxMVCCWriteSize, and updates to those that maintain the same
+// size will fail. In those cases, if the key by itself does not exceed
+// maxMVCCWriteSize, the user can at least delete it. If the key alone exceeds
+// maxMVCCWriteSize, it would not be deletable either (except if the
+// table/index were dropped).
+func checkMVCCWriteSizeLimit(key MVCCKey, value []byte) error {
+	const maxMVCCWriteSize = 64 << 20
+	if key.Len()+len(value) > maxMVCCWriteSize {
+		return errors.Errorf("key-value pair is too large")
+	}
+	return nil
+}
