@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package bench_test
+package bench
 
 import (
 	"bufio"
@@ -98,11 +98,11 @@ func TestBenchmarkExpectation(t *testing.T) {
 			t.Logf("no expectation for benchmark %s, got %d", r.name, r.result)
 			continue
 		}
-		if exp.min > r.result || exp.max < r.result {
-			t.Errorf("expected %s to perform KV lookups in [%d, %d], got %d",
+		if !exp.matches(r.result) {
+			t.Errorf("fail: expected %s to perform KV lookups in [%d, %d], got %d",
 				r.name, exp.min, exp.max, r.result)
 		} else {
-			t.Logf("expected %s to perform KV lookups in [%d, %d], got %d",
+			t.Logf("success: expected %s to perform KV lookups in [%d, %d], got %d",
 				r.name, exp.min, exp.max, r.result)
 		}
 	}
@@ -237,12 +237,7 @@ func writeExpectationsFile(t *testing.T, expectations benchmarkExpectations) {
 	w.Comma = ','
 	require.NoError(t, w.Write(expectationsHeader))
 	for _, exp := range expectations {
-		expStr := strconv.Itoa(exp.min)
-		if exp.min != exp.max {
-			expStr += "-"
-			expStr += strconv.Itoa(exp.max)
-		}
-		require.NoError(t, w.Write([]string{expStr, exp.name}))
+		require.NoError(t, w.Write([]string{exp.String(), exp.name}))
 	}
 	w.Flush()
 	require.NoError(t, w.Error())
@@ -295,6 +290,19 @@ func (b benchmarkExpectations) find(name string) (benchmarkExpectation, bool) {
 		return b[idx], true
 	}
 	return benchmarkExpectation{}, false
+}
+
+func (e benchmarkExpectation) matches(roundTrips int) bool {
+	return e.min <= roundTrips && roundTrips <= e.max
+}
+
+func (e benchmarkExpectation) String() string {
+	expStr := strconv.Itoa(e.min)
+	if e.min != e.max {
+		expStr += "-"
+		expStr += strconv.Itoa(e.max)
+	}
+	return expStr
 }
 
 type benchmarkExpectations []benchmarkExpectation
