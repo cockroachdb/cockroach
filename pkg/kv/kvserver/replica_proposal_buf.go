@@ -532,6 +532,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			continue
 		}
 		buf[i] = nil // clear buffer
+		reproposal := !p.tok.stillTracked()
 
 		// Handle an edge case about lease acquisitions: we don't want to forward
 		// lease acquisitions to another node (which is what happens when we're not
@@ -567,6 +568,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; replica %d is",
 					leaderInfo.leader)
 				b.p.rejectProposalWithRedirectLocked(ctx, p, leaderInfo.leader)
+				p.tok.doneIfNotMovedLocked(ctx)
 				continue
 			}
 			// If the leader is not known, or if it is known but it's ineligible for
@@ -578,13 +580,10 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			}
 		}
 
-		// Exit the tracker.
-		reproposal := !p.tok.stillTracked()
-		if !reproposal {
-			p.tok.doneLocked(ctx)
-		}
 		// Raft processing bookkeeping.
 		b.p.registerProposalLocked(p)
+		// Exit the tracker.
+		p.tok.doneIfNotMovedLocked(ctx)
 
 		// Potentially drop the proposal before passing it to etcd/raft, but
 		// only after performing necessary bookkeeping.
@@ -845,13 +844,16 @@ func (t *TrackedRequestToken) DoneIfNotMoved(ctx context.Context) {
 		return
 	}
 	t.b.p.locker().Lock()
-	t.doneLocked(ctx)
+	t.doneIfNotMovedLocked(ctx)
 	t.b.p.locker().Unlock()
 }
 
-func (t *TrackedRequestToken) doneLocked(ctx context.Context) {
+// doneIfNotMovedLocked untrackes the request. It is idempotent; in particular,
+// this is used when wanting to untrack a proposal that might, in fact, be a
+// reproposal.
+func (t *TrackedRequestToken) doneIfNotMovedLocked(ctx context.Context) {
 	if t.done {
-		log.Fatalf(ctx, "duplicate Done() call")
+		return
 	}
 	t.done = true
 	t.b.evalTracker.Untrack(ctx, t.tok)

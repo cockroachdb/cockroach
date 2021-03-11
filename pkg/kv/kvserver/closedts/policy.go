@@ -27,10 +27,11 @@ func TargetForPolicy(
 	sideTransportCloseInterval time.Duration,
 	policy roachpb.RangeClosedTimestampPolicy,
 ) hlc.Timestamp {
+	var res hlc.Timestamp
 	switch policy {
 	case roachpb.LAG_BY_CLUSTER_SETTING:
 		// Simple calculation: lag now by desired duration.
-		return now.ToTimestamp().Add(-lagTargetDuration.Nanoseconds(), 0)
+		res = now.ToTimestamp().Add(-lagTargetDuration.Nanoseconds(), 0)
 	case roachpb.LEAD_FOR_GLOBAL_READS:
 		// The LEAD_FOR_GLOBAL_READS calculation is more complex. Instead of the
 		// policy defining an offset from the publisher's perspective, the
@@ -121,8 +122,12 @@ func TargetForPolicy(
 		}
 
 		// Mark as synthetic, because this time is in the future.
-		return now.ToTimestamp().Add(leadTimeAtSender.Nanoseconds(), 0).WithSynthetic(true)
+		res = now.ToTimestamp().Add(leadTimeAtSender.Nanoseconds(), 0).WithSynthetic(true)
 	default:
 		panic("unexpected RangeClosedTimestampPolicy")
 	}
+	// We truncate the logical part in order to save a few bytes over the network,
+	// and also because arithmetic with logical timestamp doesn't make much sense.
+	res.Logical = 0
+	return res
 }
