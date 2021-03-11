@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -129,6 +130,11 @@ func TestBenchmarkExpectation(t *testing.T) {
 
 func runBenchmarks(t *testing.T, flags ...string) []benchmarkResult {
 	cmd := exec.Command(os.Args[0], flags...)
+
+	// Disable metamorphic testing in the subprocesses.
+	env := os.Environ()
+	env = append(env, util.DisableMetamorphicEnvVar+"=t")
+	cmd.Env = env
 	t.Log(cmd)
 	stdout, err := cmd.StdoutPipe()
 	require.NoError(t, err)
@@ -184,6 +190,7 @@ func rewriteBenchmarkExpecations(t *testing.T) {
 		"--test.run", "^$",
 		"--test.benchtime", "1x",
 		"--test.bench", *rewriteFlag,
+		"--rewrite", *rewriteFlag,
 		"--test.count", strconv.Itoa(*rewriteIterations),
 	}
 	if testing.Verbose() {
