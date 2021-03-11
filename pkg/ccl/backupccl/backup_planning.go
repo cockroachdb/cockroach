@@ -879,7 +879,7 @@ func backupPlanHook(
 		if err != nil {
 			return err
 		}
-		prevBackups, encryptionOptions, err := fetchPreviousBackups(ctx, p.User(), makeCloudStorage, prevs,
+		prevBackups, encryptionOptions, err := FetchPreviousBackups(ctx, p.User(), makeCloudStorage, prevs,
 			encryptionParams)
 		if err != nil {
 			return err

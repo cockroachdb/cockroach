@@ -11,8 +11,10 @@ package cliccl
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
@@ -47,6 +50,14 @@ func init() {
 		Long:  "Shows summary of meta information about a SQL backup.",
 		Args:  cobra.ExactArgs(1),
 		RunE:  cli.MaybeDecorateGRPCError(runLoadShowSummary),
+	}
+
+	loadShowIncrementalCmd := &cobra.Command{
+		Use:   "incremental <backup_path>",
+		Short: "show incremental backups",
+		Long:  "Shows incremental chain of a SQL backup.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  cli.MaybeDecorateGRPCError(runLoadShowIncremental),
 	}
 
 	loadShowCmds := &cobra.Command{
@@ -79,7 +90,9 @@ func init() {
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadShowCmds)
 	loadShowCmds.AddCommand(loadShowSummaryCmd)
+	loadShowCmds.AddCommand(loadShowIncrementalCmd)
 	loadShowSummaryCmd.Flags().AddFlagSet(loadFlags)
+	loadShowIncrementalCmd.Flags().AddFlagSet(loadFlags)
 }
 
 func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClient, error) {
@@ -119,6 +132,55 @@ func runLoadShowSummary(cmd *cobra.Command, args []string) error {
 	showSpans(desc)
 	showFiles(desc)
 	showDescriptors(desc)
+	return nil
+}
+
+func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
+
+	path := args[0]
+	if !strings.Contains(path, "://") {
+		path = cloudimpl.MakeLocalStorageURI(path)
+	}
+	ctx := context.Background()
+	store, err := cloudimpl.ExternalStorageFromURI(ctx, path, base.ExternalIODirConfig{},
+		cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+	if err != nil {
+		return err
+	}
+
+	incPaths, err := backupccl.FindPriorBackupLocations(ctx, store)
+	if err != nil {
+		if errors.Is(err, cloudimpl.ErrListingUnsupported) {
+			// If we do not support listing, we have to just assume there are none
+			// and show the specified base.
+			log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", store)
+			incPaths = nil
+		} else {
+			return err
+		}
+	}
+
+	manifestPaths := append([]string{""}, incPaths...)
+
+	w := tabwriter.NewWriter(os.Stdout, 28, 1, 2, ' ', 0)
+
+	for i, path := range manifestPaths {
+		manifestPath := filepath.Join(path, backupccl.BackupManifestName)
+		manifest, err := backupccl.ReadBackupManifest(ctx, store, manifestPath, nil)
+		if err != nil {
+			return err
+		}
+		startTime := manifest.StartTime.GoTime().Format(time.RFC3339)
+		endTime := manifest.EndTime.GoTime().Format(time.RFC3339)
+		if i == 0 {
+			startTime = "-"
+		}
+		fmt.Fprintf(w, "./%s	%s	%s\n", path, startTime, endTime)
+	}
+
+	if err := w.Flush(); err != nil {
+		return err
+	}
 	return nil
 }
 

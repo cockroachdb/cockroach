@@ -45,6 +45,7 @@ import (
 const (
 	// backupManifestName is the file name used for serialized BackupManifest
 	// protos.
+	BackupManifestName = "BACKUP_MANIFEST"
 	backupManifestName = "BACKUP_MANIFEST"
 	// backupOldManifestName is an old name for the serialized BackupManifest
 	// proto. It is used by 20.1 nodes and earlier.
@@ -71,8 +72,8 @@ const (
 const (
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
-
-	dateBasedIncFolderName  = "/20060102/150405.00"
+	// DateBasedIncFolderName exported for cliccl backup inspection
+	DateBasedIncFolderName  = "/20060102/150405.00"
 	dateBasedIntoFolderName = "/2006/01/02-150405.00"
 	latestFileName          = "LATEST"
 )
@@ -178,6 +179,17 @@ func decompressData(descBytes []byte) ([]byte, error) {
 	}
 	defer r.Close()
 	return ioutil.ReadAll(r)
+}
+
+// ReadBackupManifest is the export version of readBackupManifest,
+// used in cliccl backup inspection.
+func ReadBackupManifest(
+	ctx context.Context,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	encryption *jobspb.BackupEncryptionOptions,
+) (BackupManifest, error) {
+	return readBackupManifest(ctx, exportStore, filename, encryption)
 }
 
 // readBackupManifest reads and unmarshals a BackupManifest from filename in
@@ -592,12 +604,12 @@ func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]s
 	return prev, nil
 }
 
-// findPriorBackupLocations finds "appended" incremental backups by searching
+// FindPriorBackupLocations finds "appended" incremental backups by searching
 // for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
 // Using file-system searching rather than keeping an explicit list allows
 // layers to be manually moved/removed/etc without needing to update/maintain
 // said list.
-func findPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
+func FindPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
 	backupManifestSuffix := backupManifestName
 	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
 	if err != nil {
