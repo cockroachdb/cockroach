@@ -1394,6 +1394,9 @@ func (tc *TestCluster) GetRaftLeader(t testing.TB, key roachpb.RKey) *kvserver.R
 					return nil
 				}
 				raftStatus := repl.RaftStatus()
+				if raftStatus == nil {
+					return errors.Errorf("raft group is not initialized for replica with key %s", key)
+				}
 				if raftStatus.Term > latestTerm || (raftLeaderRepl == nil && raftStatus.Term == latestTerm) {
 					// If we find any newer term, it means any previous election is
 					// invalid.
