@@ -97,7 +97,6 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	ts := txnState{
 		Ctx:           ctx,
 		connCtx:       tc.ctx,
-		sp:            sp,
 		cancel:        cancel,
 		sqlTimestamp:  timeutil.Now(),
 		priority:      roachpb.NormalUserPriority,

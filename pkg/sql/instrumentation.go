@@ -184,6 +184,7 @@ func (ih *instrumentationHelper) Setup(
 			ih.origCtx = ctx
 			ih.startedExplicitTrace = true
 			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement")
+			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithForceRealSpan())
 			return newCtx, true
 		}
 		return ctx, false

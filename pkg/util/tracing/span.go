@@ -396,6 +396,14 @@ func (s *Span) SetBaggageItem(restrictedKey, value string) *Span {
 	return s
 }
 
+// TraceID retrieves a span's trace ID.
+func (s *Span) TraceID() uint64 {
+	if s.isNoop() {
+		return 0
+	}
+	return s.crdb.traceID
+}
+
 // Tracer exports the tracer this span was created using.
 func (s *Span) Tracer() *Tracer {
 	return s.tracer
