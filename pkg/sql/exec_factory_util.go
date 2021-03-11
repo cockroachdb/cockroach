@@ -222,6 +222,9 @@ func constructVirtualScan(
 	if err != nil {
 		return nil, err
 	}
+	if !virtual.QueriesEnabled(p.EvalContext()) {
+		return nil, errors.Errorf("queries are disabled for unimplemented tables: %s", tn.Table())
+	}
 	indexDesc := index.(*optVirtualIndex).desc
 	columns, constructor := virtual.getPlanInfo(
 		table.(*optVirtualTable).desc,

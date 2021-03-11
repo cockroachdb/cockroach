@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -53,7 +52,6 @@ import (
 // in code. This means that they are accessed separately from standard descriptors.
 type virtualSchema struct {
 	name           string
-	allTableNames  map[string]struct{}
 	tableDefs      map[descpb.ID]virtualSchemaDef
 	tableValidator func(*descpb.TableDescriptor) error // optional
 	// Some virtual tables can be used if there is no current database set; others can't.
@@ -69,6 +67,7 @@ type virtualSchemaDef interface {
 		ctx context.Context, st *cluster.Settings, parentSchemaID, id descpb.ID,
 	) (descpb.TableDescriptor, error)
 	getComment() string
+	isUnimplemented() bool
 }
 
 type virtualIndex struct {
@@ -111,6 +110,11 @@ type virtualSchemaTable struct {
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
 	generator func(ctx context.Context, p *planner, db *dbdesc.Immutable, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error)
+
+	// unimplemented indicates that the table does not have an implementation
+	// available. The purpose is to enable/disable queries, if enabled queries
+	// will not return rows.
+	unimplemented bool
 }
 
 // virtualSchemaView represents a view within a virtualSchema
@@ -220,6 +224,11 @@ func (t virtualSchemaTable) getIndex(id descpb.IndexID) *virtualIndex {
 	return &t.indexes[id-2]
 }
 
+// unimplemented retrieves whether the virtualSchemaDef is implemented or not
+func (t virtualSchemaTable) isUnimplemented() bool {
+	return t.unimplemented
+}
+
 // getSchema is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) getSchema() string {
 	return v.schema
@@ -260,6 +269,11 @@ func (v virtualSchemaView) initVirtualTableDesc(
 // getComment is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) getComment() string {
 	return ""
+}
+
+// isUnimplemented is part of the virtualSchemaDef interface.
+func (v virtualSchemaView) isUnimplemented() bool {
+	return false
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -309,7 +323,6 @@ type virtualSchemaEntry struct {
 	desc            *dbdesc.Immutable
 	defs            map[string]*virtualDefEntry
 	orderedDefNames []string
-	allTableNames   map[string]struct{}
 	containsTypes   bool
 }
 
@@ -339,10 +352,6 @@ func (v *virtualSchemaEntry) GetObjectByName(
 				}, nil
 			}
 			return def, nil
-		}
-		if _, ok := v.allTableNames[name]; ok {
-			return nil, unimplemented.Newf(v.desc.GetName()+"."+name,
-				"virtual schema table not implemented: %s.%s", v.desc.GetName(), name)
 		}
 		return nil, nil
 	case tree.TypeObject:
@@ -382,10 +391,19 @@ type virtualDefEntry struct {
 	desc                       catalog.TableDescriptor
 	comment                    string
 	validWithNoDatabaseContext bool
+	unimplemented              bool
 }
 
 func (e *virtualDefEntry) Desc() catalog.Descriptor {
 	return e.desc
+}
+
+func (e *virtualDefEntry) QueriesEnabled(evalCtx *tree.EvalContext) bool {
+	if evalCtx == nil || evalCtx.SessionData == nil || evalCtx.SessionData.UnimplementedVirtualTableQueriesEnabled {
+		return true
+	}
+
+	return !e.unimplemented
 }
 
 type mutableVirtualDefEntry struct {
@@ -664,6 +682,7 @@ func NewVirtualSchemaHolder(
 				desc:                       td,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 				comment:                    def.getComment(),
+				unimplemented:              def.isUnimplemented(),
 			}
 			defs[tableDesc.Name] = entry
 			vs.defsByID[tableDesc.ID] = entry
@@ -676,7 +695,6 @@ func NewVirtualSchemaHolder(
 			desc:            dbDesc,
 			defs:            defs,
 			orderedDefNames: orderedDefNames,
-			allTableNames:   schema.allTableNames,
 			containsTypes:   schema.containsTypes,
 		}
 		vs.orderedNames[order] = dbName
@@ -732,11 +750,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (*virtua
 			sqltelemetry.IncrementGetVirtualTableEntry(tn.Schema(), tableName)
 			return t, nil
 		}
-		if _, ok := db.allTableNames[tableName]; ok {
-			return nil, unimplemented.NewWithIssueDetailf(8675,
-				tn.Schema()+"."+tableName,
-				"virtual schema table not implemented: %s.%s", tn.Schema(), tableName)
-		}
+
 		return nil, sqlerrors.NewUndefinedRelationError(tn)
 	}
 	return nil, nil

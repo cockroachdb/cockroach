@@ -86,6 +86,7 @@ const (
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 `
@@ -290,7 +291,6 @@ func fixVtable(t *testing.T, notImplemented PGMetadataTables) {
 // fixPgCatalogGo will update pgCatalog.allTableNames, pgCatalog.tableDefs and
 // will add needed virtualSchemas.
 func fixPgCatalogGo(notImplemented PGMetadataTables) {
-	allTableNamesText := getAllTableNamesText(notImplemented)
 	tableDefinitionText := getTableDefinitionsText(pgCatalogGo, notImplemented)
 
 	rewriteFile(pgCatalogGo, func(input *os.File, output outputFile) {
@@ -305,11 +305,8 @@ func fixPgCatalogGo(notImplemented PGMetadataTables) {
 			output.appendString(text)
 			output.appendString("\n")
 
-			switch trimText {
-			case tableDefsDeclaration:
+			if trimText == tableDefsDeclaration {
 				printBeforeTerminalString(reader, output, tableDefsTerminal, tableDefinitionText)
-			case allTableNamesDeclaration:
-				printBeforeTerminalString(reader, output, allTableNamesTerminal, allTableNamesText)
 			}
 		}
 	})
@@ -501,34 +498,6 @@ func printVirtualSchemas(newTableNameList PGMetadataTables) string {
 		variableName := "p" + constantName(tableName, "Table")[1:]
 		vTableName := constantName(tableName, "")
 		sb.WriteString(fmt.Sprintf(virtualTableTemplate, variableName, tableName, vTableName))
-	}
-	return sb.String()
-}
-
-// getAllTableNamesText retrieves pgCatalog.allTableNames, then it merges the
-// new table names and formats the replacement text.
-func getAllTableNamesText(notImplemented PGMetadataTables) string {
-	newTableNameSet := make(map[string]struct{})
-	for tableName := range pgCatalog.allTableNames {
-		newTableNameSet[tableName] = none
-	}
-	for tableName := range notImplemented {
-		newTableNameSet[tableName] = none
-	}
-	newTableList := make([]string, 0, len(newTableNameSet))
-	for tableName := range newTableNameSet {
-		newTableList = append(newTableList, tableName)
-	}
-	sort.Strings(newTableList)
-	return formatAllTableNamesText(newTableList)
-}
-
-func formatAllTableNamesText(newTableNameList []string) string {
-	var sb strings.Builder
-	for _, tableName := range newTableNameList {
-		sb.WriteString("\t\t\"")
-		sb.WriteString(tableName)
-		sb.WriteString("\",\n")
 	}
 	return sb.String()
 }

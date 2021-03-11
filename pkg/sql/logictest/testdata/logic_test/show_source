@@ -94,6 +94,7 @@ transaction_isolation                                 serializable
 transaction_priority                                  normal
 transaction_read_only                                 off
 transaction_status                                    NoTxn
+unimplemented_virtual_table_queries_enabled           on
 vectorize                                             on
 vectorize_row_count_threshold                         0
 

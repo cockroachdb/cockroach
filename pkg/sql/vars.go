@@ -729,6 +729,25 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	`unimplemented_virtual_table_queries_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`unimplemented_virtual_table_queries_enabled`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("unimplemented_virtual_table_queries_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetUnimplementedVirtualTableQueriesEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.UnimplementedVirtualTableQueriesEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(unimplementedVirtualTableQueriesEnabledClusterValue.Get(sv))
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	`extra_float_digits`: {
 		GetStringVal: makeIntGetStringValFn(`extra_float_digits`),
