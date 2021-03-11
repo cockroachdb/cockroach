@@ -16,6 +16,9 @@ user testuser
 statement ok
 BEGIN
 
+statement ok
+SET TRACING = on
+
 let $curr_trace_id
 SELECT * FROM crdb_internal.trace_id()
 

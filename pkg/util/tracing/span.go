@@ -146,6 +146,8 @@ func (sp *Span) SetVerboseRecursively(to bool) {
 
 // ResetRecording clears any previously recorded information. This doesn't
 // affect any auxiliary trace sinks such as net/trace or zipkin.
+//
+// TODO(irfansharif): Remove this, it's no longer used.
 func (sp *Span) ResetRecording() {
 	sp.i.ResetRecording()
 }
