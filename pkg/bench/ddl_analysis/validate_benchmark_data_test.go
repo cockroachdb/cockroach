@@ -20,11 +20,13 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -44,7 +46,7 @@ type benchmarkExpectation struct {
 
 const expectationsFilename = "benchmark_expectations"
 
-var expectationsHeader = []string{"min", "max", "benchmark"}
+var expectationsHeader = []string{"exp", "benchmark"}
 
 var (
 	rewriteFlag = flag.String("rewrite", "",
@@ -232,14 +234,15 @@ func writeExpectationsFile(t *testing.T, expectations benchmarkExpectations) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, f.Close()) }()
 	w := csv.NewWriter(f)
-	w.Comma = '\t'
+	w.Comma = ','
 	require.NoError(t, w.Write(expectationsHeader))
 	for _, exp := range expectations {
-		require.NoError(t, w.Write([]string{
-			strconv.Itoa(exp.min),
-			strconv.Itoa(exp.max),
-			exp.name,
-		}))
+		expStr := strconv.Itoa(exp.min)
+		if exp.min != exp.max {
+			expStr += "-"
+			expStr += strconv.Itoa(exp.max)
+		}
+		require.NoError(t, w.Write([]string{expStr, exp.name}))
 	}
 	w.Flush()
 	require.NoError(t, w.Error())
@@ -251,23 +254,34 @@ func readExpectationsFile(t *testing.T) benchmarkExpectations {
 	defer func() { _ = f.Close() }()
 
 	r := csv.NewReader(f)
-	r.Comma = '\t'
+	r.Comma = ','
 	records, err := r.ReadAll()
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(records), 1, "must have at least a header")
 	require.Equal(t, expectationsHeader, records[0])
 	records = records[1:] // strip header
 	ret := make(benchmarkExpectations, len(records))
-	for i, r := range records {
-		min, err := strconv.Atoi(r[0])
-		require.NoErrorf(t, err, "line %d", i+1)
-		max, err := strconv.Atoi(r[1])
-		require.NoErrorf(t, err, "line %d", i+1)
-		ret[i] = benchmarkExpectation{
-			name: r[2],
-			min:  min,
-			max:  max,
+
+	parseExp := func(expStr string) (min, max int, err error) {
+		split := strings.Split(expStr, "-")
+		if len(split) > 2 {
+			return 0, 0, errors.Errorf("expected <min>-<max>, got %q", expStr)
 		}
+		min, err = strconv.Atoi(split[0])
+		if err != nil {
+			return 0, 0, err
+		}
+		if len(split) == 1 {
+			max = min
+			return min, max, err
+		}
+		max, err = strconv.Atoi(split[1])
+		return min, max, err
+	}
+	for i, r := range records {
+		min, max, err := parseExp(r[0])
+		require.NoErrorf(t, err, "line %d", i+1)
+		ret[i] = benchmarkExpectation{min: min, max: max, name: r[1]}
 	}
 	sort.Sort(ret)
 	return ret
