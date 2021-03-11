@@ -38,6 +38,9 @@ type spanInner struct {
 }
 
 func (s *spanInner) TraceID() uint64 {
+	if s.isNoop() {
+		return 0
+	}
 	return s.crdb.traceID
 }
 
@@ -73,6 +76,9 @@ func (s *spanInner) ResetRecording() {
 }
 
 func (s *spanInner) GetRecording() Recording {
+	if s.isNoop() {
+		return nil
+	}
 	// If the span is not verbose, optimize by avoiding the tags.
 	// This span is likely only used to carry payloads around.
 	wantTags := s.crdb.recordingType() == RecordingVerbose
