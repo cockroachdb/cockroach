@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// fetchPreviousBackup takes a list of URIs of previous backups and returns
+// fetchPreviousBackups takes a list of URIs of previous backups and returns
 // their manifest as well as the encryption options of the first backup in the
 // chain.
 func fetchPreviousBackups(
@@ -123,7 +123,7 @@ func resolveDest(
 		if exists {
 			// The backup in the auto-append directory is the full backup.
 			prevBackupURIs = append(prevBackupURIs, defaultURI)
-			priors, err := findPriorBackupLocations(ctx, defaultStore)
+			priors, err := FindPriorBackupLocations(ctx, defaultStore)
 			for _, prior := range priors {
 				priorURI, err := url.Parse(defaultURI)
 				if err != nil {
@@ -137,7 +137,7 @@ func resolveDest(
 			}
 
 			// Pick a piece-specific suffix and update the destination path(s).
-			partName := endTime.GoTime().Format(dateBasedIncFolderName)
+			partName := endTime.GoTime().Format(DateBasedIncFolderName)
 			partName = path.Join(chosenSuffix, partName)
 			defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(to, partName)
 			if err != nil {
