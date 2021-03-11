@@ -11,9 +11,12 @@
 package timeutil
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,4 +68,51 @@ func TestStopWatchElapsed(t *testing.T) {
 	w.Stop()
 
 	require.Equal(t, expected, w.Elapsed())
+}
+
+// TestStopWatchConcurrentUsage makes sure that the stop watch is safe for
+// concurrent usage.
+func TestStopWatchConcurrentUsage(t *testing.T) {
+	const testDuration = time.Second
+	const maxSleepTime = testDuration / 100
+	const numGoroutines = 10
+
+	// All operations that we can do on the stop watch.
+	const (
+		start int = iota
+		stop
+		elapsed
+		numOperations
+	)
+
+	w := newStopWatch(time.Now)
+	var wg sync.WaitGroup
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		// Spin up multiple goroutines that will be using the stop watch
+		// concurrently.
+		go func() {
+			defer wg.Done()
+			rng, _ := randutil.NewPseudoRand()
+			var timeSpent time.Duration
+			for timeSpent < testDuration {
+				// Sleep some random time, up to maxSleepTime.
+				toSleep := time.Duration(float64(maxSleepTime) * rng.Float64())
+				time.Sleep(toSleep)
+				timeSpent += toSleep
+				// Pick the operation randomly.
+				switch operation := rng.Intn(numOperations); operation {
+				case start:
+					w.Start()
+				case stop:
+					w.Stop()
+				case elapsed:
+					_ = w.Elapsed()
+				default:
+					panic(fmt.Sprintf("unexpected operation %d", operation))
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
