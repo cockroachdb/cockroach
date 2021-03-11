@@ -53,7 +53,7 @@ func newSQLForeignKeyCheckOperation(
 		tableName:           tableName,
 		tableDesc:           tableDesc,
 		constraint:          &constraint,
-		referencedTableDesc: tabledesc.NewImmutable(*constraint.ReferencedTable),
+		referencedTableDesc: tabledesc.NewBuilder(constraint.ReferencedTable).BuildImmutableTable(),
 		asOf:                asOf,
 	}
 }

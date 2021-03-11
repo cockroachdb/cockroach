@@ -20,8 +20,8 @@ var descriptorMarshalOptions = Options{
 	Doc:      `check for correct unmarshaling of descpb descriptors`,
 	Package:  "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb",
 	Type:     "Descriptor",
-	Method:   "GetTable",
-	Hint:     "see descpb.TableFromDescriptor()",
+	Method:   "^Get(Table|Database|Type|Schema)$",
+	Hint:     "see descpb.FromDescriptorWithMVCCTimestamp()",
 }
 
 var grpcClientConnCloseOptions = Options{
@@ -44,7 +44,7 @@ var grpcStatusWithDetailsOptions = Options{
 }
 
 // DescriptorMarshalAnalyzer checks for correct unmarshaling of descpb
-// descriptors by disallowing calls to (descpb.Descriptor).GetTable().
+// descriptors by disallowing calls to (descpb.Descriptor).GetTable() et al.
 var DescriptorMarshalAnalyzer = Analyzer(descriptorMarshalOptions)
 
 // GRPCClientConnCloseAnalyzer checks for calls to (*grpc.ClientConn).Close.

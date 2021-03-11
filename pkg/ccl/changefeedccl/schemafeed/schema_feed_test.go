@@ -69,7 +69,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 
 	// validates
 	require.NoError(t, m.ingestDescriptors(ctx, ts(3), ts(4), []catalog.Descriptor{
-		tabledesc.NewImmutable(descpb.TableDescriptor{ID: 0}),
+		tabledesc.NewBuilder(&descpb.TableDescriptor{ID: 0}).BuildImmutable(),
 	}, validateFn))
 	require.Equal(t, ts(4), m.highWater())
 
@@ -109,7 +109,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 
 	// does not validate, high-water does not change
 	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(10), []catalog.Descriptor{
-		tabledesc.NewImmutable(descpb.TableDescriptor{ID: 0, Name: `whoops!`}),
+		tabledesc.NewBuilder(&descpb.TableDescriptor{ID: 0, Name: `whoops!`}).BuildImmutable(),
 	}, validateFn), `descriptor: whoops!`)
 	require.Equal(t, ts(7), m.highWater())
 
@@ -126,7 +126,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 
 	// turns out ts 10 is not a tight bound. ts 9 also has an error
 	require.EqualError(t, m.ingestDescriptors(ctx, ts(7), ts(9), []catalog.Descriptor{
-		tabledesc.NewImmutable(descpb.TableDescriptor{ID: 0, Name: `oh no!`}),
+		tabledesc.NewBuilder(&descpb.TableDescriptor{ID: 0, Name: `oh no!`}).BuildImmutable(),
 	}, validateFn), `descriptor: oh no!`)
 	require.Equal(t, ts(7), m.highWater())
 	require.EqualError(t, <-errCh9, `descriptor: oh no!`)

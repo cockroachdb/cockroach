@@ -95,7 +95,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	for id, updated := range n.planDeps {
 		backRefMutable := params.p.Descriptors().GetUncommittedTableByID(id)
 		if backRefMutable == nil {
-			backRefMutable = tabledesc.NewExistingMutable(*updated.desc.TableDesc())
+			backRefMutable = tabledesc.NewBuilder(updated.desc.TableDesc()).BuildExistingMutableTable()
 		}
 		if !n.persistence.IsTemporary() && backRefMutable.Temporary {
 			hasTempBackref = true

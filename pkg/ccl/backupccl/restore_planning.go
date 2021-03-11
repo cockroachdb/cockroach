@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -393,17 +392,17 @@ func allocateDescriptorRewrites(
 		// DB.
 		descriptorRewrites[tempSysDBID] = &jobspb.RestoreDetails_DescriptorRewrite{ID: tempSysDBID}
 		for _, table := range tablesByID {
-			if table.GetParentID() == systemschema.SystemDB.ID {
+			if table.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[table.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
 			}
 		}
 		for _, sc := range typesByID {
-			if sc.GetParentID() == systemschema.SystemDB.ID {
+			if sc.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[sc.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
 			}
 		}
 		for _, typ := range typesByID {
-			if typ.GetParentID() == systemschema.SystemDB.ID {
+			if typ.GetParentID() == systemschema.SystemDB.GetID() {
 				descriptorRewrites[typ.GetID()] = &jobspb.RestoreDetails_DescriptorRewrite{ParentID: tempSysDBID}
 			}
 		}
@@ -575,7 +574,9 @@ func allocateDescriptorRewrites(
 				}
 				// Check that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
-				if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, table.GetParentSchemaID(), table.Name); err != nil {
+				tableName := tree.NewUnqualifiedTableName(tree.Name(table.GetName()))
+				err := catalogkv.CheckObjectCollision(ctx, txn, p.ExecCfg().Codec, parentID, table.GetParentSchemaID(), tableName)
+				if err != nil {
 					return err
 				}
 
@@ -649,11 +650,18 @@ func allocateDescriptorRewrites(
 				}
 
 				// See if there is an existing type with the same name.
-				found, id, err := catalogkv.LookupObjectID(ctx, txn, p.ExecCfg().Codec, parentID, typ.GetParentSchemaID(), typ.Name)
+				desc, err := catalogkv.GetDescriptorCollidingWithObject(
+					ctx,
+					txn,
+					p.ExecCfg().Codec,
+					parentID,
+					typ.GetParentSchemaID(),
+					typ.Name,
+				)
 				if err != nil {
 					return err
 				}
-				if !found {
+				if desc == nil {
 					// If we didn't find a type with the same name, then mark that we
 					// need to create the type.
 
@@ -667,7 +675,9 @@ func allocateDescriptorRewrites(
 
 					// Ensure that there isn't a collision with the array type name.
 					arrTyp := typesByID[typ.ArrayTypeID]
-					if err := CheckObjectExists(ctx, txn, p.ExecCfg().Codec, parentID, typ.GetParentSchemaID(), arrTyp.Name); err != nil {
+					typeName := tree.NewUnqualifiedTypeName(tree.Name(arrTyp.GetName()))
+					err := catalogkv.CheckObjectCollision(ctx, txn, p.ExecCfg().Codec, parentID, typ.GetParentSchemaID(), typeName)
+					if err != nil {
 						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
 					}
 					// Create the rewrite entry for the array type as well.
@@ -676,11 +686,6 @@ func allocateDescriptorRewrites(
 					// If there was a name collision, we'll try to see if we can remap
 					// this type to the type existing in the cluster.
 
-					// See what kind of object we collided with.
-					desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, p.ExecCfg().Codec, id, catalogkv.Immutable)
-					if err != nil {
-						return err
-					}
 					// If the collided object isn't a type, then error out.
 					existingType, isType := desc.(*typedesc.Immutable)
 					if !isType {
@@ -873,9 +878,8 @@ func maybeUpgradeTableDescsInBackupManifests(
 	// descriptors so that they can be looked up.
 	for _, backupManifest := range backupManifests {
 		for _, desc := range backupManifest.Descriptors {
-			if table := descpb.TableFromDescriptor(&desc, hlc.Timestamp{}); table != nil {
-				descGetter[table.ID] =
-					tabledesc.NewImmutable(*protoutil.Clone(table).(*descpb.TableDescriptor))
+			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil {
+				descGetter[table.ID] = tabledesc.NewBuilder(table).BuildImmutable()
 			}
 		}
 	}
@@ -883,18 +887,19 @@ func maybeUpgradeTableDescsInBackupManifests(
 	for i := range backupManifests {
 		backupManifest := &backupManifests[i]
 		for j := range backupManifest.Descriptors {
-			table := descpb.TableFromDescriptor(&backupManifest.Descriptors[j], hlc.Timestamp{})
+			table, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[j])
 			if table == nil {
 				continue
 			}
 			if !tabledesc.TableHasDeprecatedForeignKeyRepresentation(table) {
 				continue
 			}
-			desc, err := tabledesc.NewFilledInExistingMutable(ctx, descGetter, skipFKsWithNoMatchingTable, table)
+			b := tabledesc.NewBuilderForFKUpgrade(table, skipFKsWithNoMatchingTable)
+			err := b.RunPostDeserializationChanges(ctx, descGetter)
 			if err != nil {
 				return err
 			}
-			backupManifest.Descriptors[j] = *desc.DescriptorProto()
+			backupManifest.Descriptors[j] = *b.BuildExistingMutable().DescriptorProto()
 		}
 	}
 	return nil

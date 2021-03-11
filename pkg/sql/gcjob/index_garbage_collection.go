@@ -66,7 +66,11 @@ func gcIndexes(
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return sql.RemoveIndexZoneConfigs(ctx, txn, execCfg, parentTable.GetID(), []descpb.IndexDescriptor{indexDesc})
+			freshParentTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, parentID)
+			if err != nil {
+				return err
+			}
+			return sql.RemoveIndexZoneConfigs(ctx, txn, execCfg, freshParentTableDesc, []descpb.IndexDescriptor{indexDesc})
 		}); err != nil {
 			return errors.Wrapf(err, "removing index %d zone configs", indexDesc.ID)
 		}

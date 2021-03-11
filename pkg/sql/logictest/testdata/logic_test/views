@@ -13,10 +13,10 @@ INSERT INTO t VALUES (1, 99), (2, 98), (3, 97)
 statement ok
 CREATE VIEW v1 AS SELECT a, b FROM t
 
-statement error pgcode 42P07 relation \"v1\" already exists
+statement error pgcode 42P07 relation \"test.public.v1\" already exists
 CREATE VIEW v1 AS SELECT a, b FROM t
 
-statement error pgcode 42P07 relation \"t\" already exists
+statement error pgcode 42P07 relation \"test.public.t\" already exists
 CREATE VIEW t AS SELECT a, b FROM t
 
 # view statement ignored if other way around.
@@ -429,7 +429,7 @@ DROP TABLE t
 statement ok
 CREATE VIEW foo AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
 
-statement error pq: relation "foo" already exists
+statement error pq: relation "test.public.foo" already exists
 CREATE VIEW foo AS SELECT catalog_name, schema_name, sql_path FROM information_schema.schemata
 
 # Ensure views work with dates/timestamps (#12420)

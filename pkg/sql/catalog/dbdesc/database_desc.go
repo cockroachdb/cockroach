@@ -16,13 +16,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -49,76 +47,6 @@ type Mutable struct {
 	ClusterVersion *Immutable
 }
 
-// NewInitialOption is an optional argument for NewInitial.
-type NewInitialOption func(*descpb.DatabaseDescriptor)
-
-// NewInitialOptionDatabaseRegionConfig is an option allowing an optional
-// regional configuration to be set on the database descriptor.
-func NewInitialOptionDatabaseRegionConfig(
-	regionConfig *descpb.DatabaseDescriptor_RegionConfig,
-) NewInitialOption {
-	return func(desc *descpb.DatabaseDescriptor) {
-		desc.RegionConfig = regionConfig
-	}
-}
-
-// NewInitial constructs a new Mutable for an initial version from an id and
-// name with default privileges.
-func NewInitial(
-	id descpb.ID, name string, owner security.SQLUsername, options ...NewInitialOption,
-) *Mutable {
-	return NewInitialWithPrivileges(
-		id,
-		name,
-		descpb.NewDefaultPrivilegeDescriptor(owner),
-		options...,
-	)
-}
-
-// NewInitialWithPrivileges constructs a new Mutable for an initial version
-// from an id and name and custom privileges.
-func NewInitialWithPrivileges(
-	id descpb.ID, name string, privileges *descpb.PrivilegeDescriptor, options ...NewInitialOption,
-) *Mutable {
-	ret := descpb.DatabaseDescriptor{
-		Name:       name,
-		ID:         id,
-		Version:    1,
-		Privileges: privileges,
-	}
-	for _, option := range options {
-		option(&ret)
-	}
-	return NewCreatedMutable(ret)
-}
-
-func makeImmutable(desc descpb.DatabaseDescriptor) Immutable {
-	return Immutable{DatabaseDescriptor: desc}
-}
-
-// NewImmutable makes a new immutable database descriptor.
-func NewImmutable(desc descpb.DatabaseDescriptor) *Immutable {
-	ret := makeImmutable(desc)
-	return &ret
-}
-
-// NewCreatedMutable returns a Mutable from the given database descriptor with
-// a nil cluster version. This is for a database that is created in the same
-// transaction.
-func NewCreatedMutable(desc descpb.DatabaseDescriptor) *Mutable {
-	return &Mutable{Immutable: makeImmutable(desc)}
-}
-
-// NewExistingMutable returns a Mutable from the given database descriptor with
-// the cluster version also set to the descriptor. This is for databases that
-// already exist.
-func NewExistingMutable(desc descpb.DatabaseDescriptor) *Mutable {
-	return &Mutable{
-		Immutable:      makeImmutable(*protoutil.Clone(&desc).(*descpb.DatabaseDescriptor)),
-		ClusterVersion: NewImmutable(desc),
-	}
-}
-
 // SafeMessage makes Immutable a SafeMessager.
 func (desc *Immutable) SafeMessage() string {
 	return formatSafeMessage("dbdesc.Immutable", desc)
@@ -137,9 +65,9 @@ func formatSafeMessage(typeName string, desc catalog.DatabaseDescriptor) string 
 	return buf.String()
 }
 
-// TypeName returns the plain type of this descriptor.
-func (desc *Immutable) TypeName() string {
-	return "database"
+// DescriptorType returns the plain type of this descriptor.
+func (desc *Immutable) DescriptorType() catalog.DescriptorType {
+	return catalog.Database
 }
 
 // DatabaseDesc implements the Descriptor interface.
@@ -279,11 +207,6 @@ func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	if desc.GetID() == descpb.InvalidID {
 		vea.Report(fmt.Errorf("invalid database ID %d", desc.GetID()))
 	}
-
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
-	descpb.MaybeFixPrivileges(desc.ID, &desc.Privileges)
 
 	// Validate the privilege descriptor.
 	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Database))
@@ -437,9 +360,7 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	// TODO (lucy): Should the immutable descriptor constructors always make a
-	// copy, so we don't have to do it here?
-	imm := NewImmutable(*protoutil.Clone(desc.DatabaseDesc()).(*descpb.DatabaseDescriptor))
+	imm := NewBuilder(desc.DatabaseDesc()).BuildImmutableDatabase()
 	imm.isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
 }

@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -186,8 +187,12 @@ func evalExport(
 		}
 
 		if args.Encryption != nil {
-			// TODO(dt): cluster version gate use EncryptFileChunked.
-			data, err = EncryptFile(data, args.Encryption.Key)
+			// NonVotingReplicas was minted after chunked encryption reader merged.
+			if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.NonVotingReplicas) {
+				data, err = EncryptFileChunked(data, args.Encryption.Key)
+			} else {
+				data, err = EncryptFile(data, args.Encryption.Key)
+			}
 			if err != nil {
 				return result.Result{}, err
 			}

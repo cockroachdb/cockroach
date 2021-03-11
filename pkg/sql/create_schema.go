@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -69,7 +70,7 @@ func CreateUserDefinedSchemaDescriptor(
 			// and can't be in a dropping state.
 			if schemaID != descpb.InvalidID {
 				// Check if the object already exists in a dropped state
-				desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, execCfg.Codec, schemaID, catalogkv.Immutable)
+				desc, err := catalogkv.MustGetSchemaDescByID(ctx, txn, execCfg.Codec, schemaID)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -81,7 +82,7 @@ func CreateUserDefinedSchemaDescriptor(
 			}
 			return nil, nil, nil
 		}
-		return nil, nil, pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", schemaName)
+		return nil, nil, sqlerrors.NewSchemaAlreadyExistsError(schemaName)
 	}
 
 	// Check validity of the schema name.
@@ -127,13 +128,13 @@ func CreateUserDefinedSchemaDescriptor(
 	}
 
 	// Create the SchemaDescriptor.
-	desc := schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
+	desc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   db.ID,
 		Name:       schemaName,
 		ID:         id,
 		Privileges: privs,
 		Version:    1,
-	})
+	}).BuildCreatedMutableSchema()
 
 	return desc, privs, nil
 }

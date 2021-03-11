@@ -569,11 +569,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		}
 	}
 
-	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
-	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
-	// run again and mixed-version clusters always write "good" descriptors.
-	descpb.MaybeFixPrivileges(desc.ID, &desc.Privileges)
-
 	// Validate the privilege descriptor.
 	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Table))
 

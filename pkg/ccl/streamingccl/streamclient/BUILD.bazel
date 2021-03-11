@@ -13,6 +13,7 @@ go_library(
         "//pkg/ccl/streamingccl",
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/security",
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/descpb",

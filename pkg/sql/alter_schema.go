@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -189,7 +190,7 @@ func (p *planner) renameSchema(
 		return err
 	}
 	if found {
-		return pgerror.Newf(pgcode.DuplicateSchema, "schema %q already exists", newName)
+		return sqlerrors.NewSchemaAlreadyExistsError(newName)
 	}
 
 	// Ensure that the new name is a valid schema name.

@@ -731,7 +731,7 @@ CREATE TABLE information_schema.constraint_column_usage (
 					// For foreign key constraint, constraint_column_usage
 					// identifies the table/columns that the foreign key
 					// references.
-					conTable = tabledesc.NewImmutable(*con.ReferencedTable)
+					conTable = tabledesc.NewBuilder(con.ReferencedTable).BuildImmutableTable()
 					conCols, err = conTable.NamesForColumnIDs(con.FK.ReferencedColumnIDs)
 					if err != nil {
 						return err

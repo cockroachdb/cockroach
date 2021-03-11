@@ -28,27 +28,27 @@ import (
 
 func TestSafeMessage(t *testing.T) {
 	for _, tc := range []struct {
-		desc catalog.SchemaDescriptor
+		desc catalog.Descriptor
 		exp  string
 	}{
 		{
-			desc: schemadesc.NewImmutable(descpb.SchemaDescriptor{
+			desc: schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 				ID:            12,
 				Version:       1,
 				ParentID:      2,
 				State:         descpb.DescriptorState_OFFLINE,
 				OfflineReason: "foo",
-			}),
+			}).BuildImmutable(),
 			exp: "schemadesc.Immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", ParentID: 2, State: OFFLINE, OfflineReason: \"foo\"}",
 		},
 		{
-			desc: schemadesc.NewCreatedMutable(descpb.SchemaDescriptor{
+			desc: schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 				ID:            42,
 				Version:       1,
 				ParentID:      2,
 				State:         descpb.DescriptorState_OFFLINE,
 				OfflineReason: "bar",
-			}),
+			}).BuildCreatedMutable(),
 			exp: "schemadesc.Mutable: {ID: 42, Version: 1, IsUncommitted: true, ModificationTime: \"0,0\", ParentID: 2, State: OFFLINE, OfflineReason: \"bar\"}",
 		},
 	} {
@@ -166,11 +166,11 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 		privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
 		descs := catalog.MapDescGetter{}
 		test.desc.Privileges = privilege
-		desc := schemadesc.NewImmutable(test.desc)
+		desc := schemadesc.NewBuilder(&test.desc).BuildImmutable()
 		descs[test.desc.ID] = desc
 		test.dbDesc.Privileges = privilege
-		descs[test.dbDesc.ID] = dbdesc.NewImmutable(test.dbDesc)
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.TypeName(), desc.GetName(), desc.GetID(), test.err)
+		descs[test.dbDesc.ID] = dbdesc.NewBuilder(&test.dbDesc).BuildImmutable()
+		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 		const validateCrossReferencesOnly = catalog.ValidationLevelSelfAndCrossReferences &^ (catalog.ValidationLevelSelfAndCrossReferences >> 1)
 		if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
 			if test.err != "" {

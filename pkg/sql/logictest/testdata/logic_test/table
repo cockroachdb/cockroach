@@ -10,7 +10,7 @@ CREATE TABLE test."" (id INT PRIMARY KEY)
 statement ok
 CREATE TABLE test.a (id INT PRIMARY KEY)
 
-statement error pgcode 42P07 relation "a" already exists
+statement error pgcode 42P07 relation "test.public.a" already exists
 CREATE TABLE test.a (id INT PRIMARY KEY)
 
 statement ok
@@ -19,7 +19,7 @@ SET DATABASE = test
 statement error invalid table name: ""
 CREATE TABLE "" (id INT PRIMARY KEY)
 
-statement error pgcode 42P07 relation "a" already exists
+statement error pgcode 42P07 relation "test.public.a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement error duplicate column name: "id"

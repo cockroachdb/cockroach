@@ -204,7 +204,7 @@ func newJoinReader(
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
 	jr := &joinReader{
-		desc:                              tabledesc.NewImmutable(spec.Table),
+		desc:                              tabledesc.NewBuilder(&spec.Table).BuildImmutableTable(),
 		maintainOrdering:                  spec.MaintainOrdering,
 		input:                             input,
 		lookupCols:                        lookupCols,

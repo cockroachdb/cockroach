@@ -44,7 +44,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 	files := getMysqldumpTestdata(t)
 
 	ctx := context.Background()
-	table := descForTable(ctx, t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20, NoFKs)
+	table := descForTable(ctx, t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 100, 200, NoFKs)
 	tables := map[string]*execinfrapb.ReadImportDataSpec_ImportTable{"simple": {Desc: table.TableDesc()}}
 	opts := roachpb.MysqldumpOptions{}
 
@@ -221,8 +221,8 @@ func compareTables(t *testing.T, expected, got *descpb.TableDescriptor) {
 		ctx := context.Background()
 		semaCtx := tree.MakeSemaContext()
 		tableName := &descpb.AnonymousTable
-		expectedDesc := tabledesc.NewImmutable(*expected)
-		gotDesc := tabledesc.NewImmutable(*got)
+		expectedDesc := tabledesc.NewBuilder(expected).BuildImmutableTable()
+		gotDesc := tabledesc.NewBuilder(got).BuildImmutableTable()
 		e, err := catformat.IndexForDisplay(
 			ctx, expectedDesc, tableName, &expected.Indexes[i], "" /* partition */, "" /* interleave */, &semaCtx,
 		)

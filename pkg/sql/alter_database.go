@@ -525,6 +525,15 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		)
 	}
 
+	// Get the type descriptor for the multi-region enum.
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+		params.ctx,
+		params.p.txn,
+		n.desc.RegionConfig.RegionEnumID)
+	if err != nil {
+		return err
+	}
+
 	// To update the primary region we need to modify the database descriptor, update the multi-region
 	// enum, and write a new zone configuration.
 	n.desc.RegionConfig.PrimaryRegion = descpb.RegionName(n.n.PrimaryRegion)
@@ -533,15 +542,6 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
-		return err
-	}
-
-	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-		params.ctx,
-		params.p.txn,
-		n.desc.RegionConfig.RegionEnumID)
-	if err != nil {
 		return err
 	}
 

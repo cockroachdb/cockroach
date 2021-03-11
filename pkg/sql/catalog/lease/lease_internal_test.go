@@ -85,18 +85,14 @@ func TestTableSet(t *testing.T) {
 		switch op := d.op.(type) {
 		case insert:
 			s := &descriptorVersionState{
-				Descriptor: tabledesc.NewImmutable(
-					descpb.TableDescriptor{Version: op.version},
-				),
+				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
 			s.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.insert(s)
 
 		case remove:
 			s := &descriptorVersionState{
-				Descriptor: tabledesc.NewImmutable(
-					descpb.TableDescriptor{Version: op.version},
-				),
+				Descriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Version: op.version}).BuildImmutable(),
 			}
 			s.expiration = hlc.Timestamp{WallTime: op.expiration}
 			set.remove(s)

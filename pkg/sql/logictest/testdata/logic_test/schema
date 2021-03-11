@@ -766,13 +766,13 @@ ALTER TABLE sch.table_to_rename RENAME TO renamed_table;
 statement ok
 ALTER TABLE sch.renamed_table RENAME TO sch.renamed_table_2;
 
-statement error pq: relation "table_exists" already exists
+statement error pq: relation "d54662.sch.table_exists" already exists
 ALTER TABLE sch.renamed_table_2 RENAME TO sch.table_exists;
 
 statement ok
 ALTER TABLE public_table_to_rename RENAME TO public.renamed_public_table;
 
-statement error pq: relation "public_table_exists" already exists
+statement error pq: relation "d54662.public.public_table_exists" already exists
 ALTER TABLE renamed_public_table RENAME TO public_table_exists;
 
 subtest show_tables

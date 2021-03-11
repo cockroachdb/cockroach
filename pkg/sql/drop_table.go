@@ -339,7 +339,7 @@ func (p *planner) dropTableImpl(
 	dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), tableDesc.DependedOnBy...)
 	for _, ref := range dependedOnBy {
 		viewDesc, err := p.getViewDescForCascade(
-			ctx, tableDesc.TypeName(), tableDesc.Name, tableDesc.ParentID, ref.ID, tree.DropCascade,
+			ctx, string(tableDesc.DescriptorType()), tableDesc.Name, tableDesc.ParentID, ref.ID, tree.DropCascade,
 		)
 		if err != nil {
 			return droppedViews, err

@@ -6058,7 +6058,7 @@ func getMockTableDesc(
 		PrimaryIndex: pkIndex,
 		Indexes:      indexes,
 	}
-	return tabledesc.NewImmutable(mockTableDescriptor)
+	return tabledesc.NewBuilder(&mockTableDescriptor).BuildImmutableTable()
 }
 
 // Unit tests for the getLogicallyMergedTableSpans() method.

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -104,14 +103,17 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Descriptors:\n")
 	for i := range desc.Descriptors {
 		d := &desc.Descriptors[i]
-		if desc := descpb.TableFromDescriptor(d, hlc.Timestamp{}); desc != nil {
-			fmt.Printf("	%d: %s (table)\n",
-				descpb.GetDescriptorID(d), descpb.GetDescriptorName(d))
+		table, database, _, _ := descpb.FromDescriptor(d)
+		var typeName string
+		if table != nil {
+			typeName = "table"
+		} else if database != nil {
+			typeName = "database"
+		} else {
+			continue
 		}
-		if desc := d.GetDatabase(); desc != nil {
-			fmt.Printf("	%d: %s (database)\n",
-				descpb.GetDescriptorID(d), descpb.GetDescriptorName(d))
-		}
+		fmt.Printf("	%d: %s (%s)\n",
+			descpb.GetDescriptorID(d), descpb.GetDescriptorName(d), typeName)
 	}
 	return nil
 }

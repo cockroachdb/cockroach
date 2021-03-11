@@ -46,7 +46,7 @@ statement ok
 BEGIN;
 DROP TYPE t
 
-statement error pq: type \"t\" already exists
+statement error pq: type \"test.public.t\" already exists
 CREATE TYPE t AS ENUM ()
 
 statement ok

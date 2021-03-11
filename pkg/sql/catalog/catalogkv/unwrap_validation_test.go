@@ -19,6 +19,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -55,13 +58,12 @@ func TestUnwrapValidation(t *testing.T) {
 func unwrapValidationTest(t *testing.T, descriptorCSVPath string) {
 	m := decodeDescriptorDSV(t, descriptorCSVPath)
 	for id, data := range m {
-		var desc descpb.Descriptor
-		require.NoError(t, protoutil.Unmarshal(data, &desc))
-		ts := descpb.GetDescriptorModificationTime(&desc)
-		if ts == (hlc.Timestamp{}) {
-			ts = hlc.Timestamp{WallTime: 1}
-		}
-		_, err := unwrapDescriptor(context.Background(), m, ts, &desc, true)
+		var descProto descpb.Descriptor
+		require.NoError(t, protoutil.Unmarshal(data, &descProto))
+		desc, err := m.GetDesc(context.Background(), id)
+		require.NoErrorf(t, err, "id: %d", id)
+		require.NotNilf(t, desc, "id: %d", id)
+		err = catalog.ValidateSelfAndCrossReferences(context.Background(), m, desc)
 		require.NoErrorf(t, err, "id: %d", id)
 	}
 }
@@ -84,7 +86,20 @@ func (o oneLevelMapDescGetter) GetDesc(
 	if mt == (hlc.Timestamp{}) {
 		mt = hlc.Timestamp{WallTime: 1}
 	}
-	return unwrapDescriptorMutable(ctx, nil, mt, &desc)
+	v := roachpb.Value{Timestamp: mt}
+	if err := v.SetProto(&desc); err != nil {
+		return nil, err
+	}
+	return descriptorFromKeyValue(
+		ctx,
+		keys.SQLCodec{}, // dummy value, not used due to passing Any and bestEffort.
+		kv.KeyValue{Value: &v},
+		immutable,
+		catalog.Any,
+		bestEffort,
+		nil, /* dg */ // See oneLevelUncachedDescGetter.fromKeyValuePair().
+		catalog.ValidationLevelSelfOnly,
+	)
 }
 
 func decodeDescriptorDSV(t *testing.T, descriptorCSVPath string) oneLevelMapDescGetter {
