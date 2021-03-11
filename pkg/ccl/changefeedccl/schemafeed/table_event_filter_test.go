@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
@@ -75,10 +76,10 @@ func TestTableEventFilter(t *testing.T) {
 			e: TableEvent{
 				Before: func() catalog.TableDescriptor {
 					td := addColBackfill(mkTableDesc(42, 4, ts(4), 1))
-					col := td.GetMutations()[0].GetColumn()
+					col := td.TableDesc().Mutations[0].GetColumn()
 					col.Nullable = true
 					col.ComputeExpr = proto.String("1")
-					return td
+					return tabledesc.NewBuilder(td.TableDesc()).BuildImmutableTable()
 				}(),
 				After: mkTableDesc(42, 4, ts(4), 2),
 			},

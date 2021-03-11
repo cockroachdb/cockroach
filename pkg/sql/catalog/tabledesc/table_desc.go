@@ -31,11 +31,13 @@ var _ catalog.TableDescriptor = (*wrapper)(nil)
 type wrapper struct {
 	descpb.TableDescriptor
 
-	// indexCache and columnCache, when not nil, respectively point to a struct
-	// containing precomputed catalog.Index or catalog.Column slices.
-	// This can therefore only be set when creating an immutable.
-	indexCache  *indexCache
-	columnCache *columnCache
+	// mutationCache, indexCache and columnCache, when not nil, respectively point
+	// to a struct containing precomputed catalog.Mutation, catalog.Index or
+	// catalog.Column slices.
+	// Those can therefore only be set when creating an immutable.
+	mutationCache *mutationCache
+	indexCache    *indexCache
+	columnCache   *columnCache
 
 	postDeserializationChanges PostDeserializationTableDescriptorChanges
 }
@@ -164,7 +166,7 @@ func (desc *wrapper) getExistingOrNewIndexCache() *indexCache {
 	if desc.indexCache != nil {
 		return desc.indexCache
 	}
-	return newIndexCache(desc.TableDesc())
+	return newIndexCache(desc.TableDesc(), desc.getExistingOrNewMutationCache())
 }
 
 // AllIndexes returns a slice with all indexes, public and non-public,
@@ -284,7 +286,7 @@ func (desc *wrapper) getExistingOrNewColumnCache() *columnCache {
 	if desc.columnCache != nil {
 		return desc.columnCache
 	}
-	return newColumnCache(desc.TableDesc())
+	return newColumnCache(desc.TableDesc(), desc.getExistingOrNewMutationCache())
 }
 
 // AllColumns returns a slice of Column interfaces containing the
@@ -373,4 +375,18 @@ func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) 
 		}
 	}
 	return nil, colinfo.NewUndefinedColumnError(string(name))
+}
+
+// getExistingOrNewMutationCache should be the only place where the
+// mutationCache field in wrapper is ever read.
+func (desc *wrapper) getExistingOrNewMutationCache() *mutationCache {
+	if desc.mutationCache != nil {
+		return desc.mutationCache
+	}
+	return newMutationCache(desc.TableDesc())
+}
+
+// AllMutations returns all of the table descriptor's mutations.
+func (desc *wrapper) AllMutations() []catalog.Mutation {
+	return desc.getExistingOrNewMutationCache().all
 }
