@@ -279,7 +279,7 @@ type planTop struct {
 	planComponents
 
 	// mem/catalog retains the memo and catalog that were used to create the
-	// plan.
+	// plan. Only set if savePlanForStats or savePlanString is true.
 	mem     *memo.Memo
 	catalog *optCatalog
 
