@@ -869,6 +869,7 @@ CREATE TABLE information_schema.parameters (
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 var (
@@ -1081,6 +1082,7 @@ CREATE TABLE information_schema.routines (
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return nil
 	},
+	unimplemented: true,
 }
 
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/schemata-table.html

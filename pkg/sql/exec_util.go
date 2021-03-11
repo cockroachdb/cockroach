@@ -388,6 +388,12 @@ var experimentalStreamReplicationEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+var stubCatalogTablesEnabledClusterValue = settings.RegisterBoolSetting(
+	`sql.defaults.stub_catalog_tables.enabled`,
+	`setting to allow queries against unimplemented virtual tables`,
+	true,
+)
+
 // ExperimentalDistSQLPlanningClusterSettingName is the name for the cluster
 // setting that controls experimentalDistSQLPlanningClusterMode below.
 const ExperimentalDistSQLPlanningClusterSettingName = "sql.defaults.experimental_distsql_planning"
@@ -2368,6 +2374,12 @@ func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplayS
 // initSequenceCache creates an empty sequence cache instance for the session.
 func (m *sessionDataMutator) initSequenceCache() {
 	m.data.SequenceCache = sessiondata.SequenceCache{}
+}
+
+// SetStubCatalogTableEnabled enable or disable queries on unimplemented
+// virtual tables.
+func (m *sessionDataMutator) SetStubCatalogTablesEnabled(enabled bool) {
+	m.data.StubCatalogTablesEnabled = enabled
 }
 
 type sqlStatsCollector struct {
