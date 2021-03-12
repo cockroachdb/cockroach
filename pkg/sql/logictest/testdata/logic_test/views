@@ -902,3 +902,37 @@ DROP TYPE v4
 
 statement ok
 DROP TABLE t
+
+# Validate that cross DB views are detected by internal tables
+
+statement ok
+USE DB1;
+
+statement ok
+CREATE SEQUENCE SQ1;
+
+statement ok
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+
+statement ok
+CREATE TABLE tval (val int primary key);
+
+statement ok
+CREATE VIEW rv as select val from tval;
+
+statement ok;
+USE DB2;
+
+statement ok;
+CREATE VIEW vm as (select s.last_value, t.val as a, v.val as b, cast('open' as db1.status) from db1.tval as t, db1.sq1 as s, db1.rv as v)
+
+query TTTTTTT
+select * from "".crdb_internal.cross_db_references order by object_database, object_schema, object_name, referenced_object_database, referenced_object_schema, referenced_object_name desc;
+----
+db1  public  sys   system  public  descriptor  view references table
+db1  public  sys2  system  public  descriptor  view references table
+db2  public  v1    db1     public  ab          view references table
+db2  public  v2    db1     public  ab          view references table
+db2  public  vm    db1     public  tval        view references table
+db2  public  vm    db1     public  sq1         view references table
+db2  public  vm    db1     public  rv          view references table

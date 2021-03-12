@@ -36,6 +36,7 @@ test           crdb_internal       cluster_settings                       public
 test           crdb_internal       cluster_transactions                   public   SELECT
 test           crdb_internal       create_statements                      public   SELECT
 test           crdb_internal       create_type_statements                 public   SELECT
+test           crdb_internal       cross_db_references                    public   SELECT
 test           crdb_internal       databases                              public   SELECT
 test           crdb_internal       feature_usage                          public   SELECT
 test           crdb_internal       forward_dependencies                   public   SELECT
@@ -44,6 +45,7 @@ test           crdb_internal       gossip_liveness                        public
 test           crdb_internal       gossip_network                         public   SELECT
 test           crdb_internal       gossip_nodes                           public   SELECT
 test           crdb_internal       index_columns                          public   SELECT
+test           crdb_internal       interleaved                            public   SELECT
 test           crdb_internal       invalid_objects                        public   SELECT
 test           crdb_internal       jobs                                   public   SELECT
 test           crdb_internal       kv_node_status                         public   SELECT

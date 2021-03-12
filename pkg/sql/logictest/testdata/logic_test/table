@@ -545,6 +545,7 @@ cluster_settings                       NULL
 cluster_transactions                   NULL
 create_statements                      NULL
 create_type_statements                 NULL
+cross_db_references                    NULL
 databases                              NULL
 feature_usage                          NULL
 forward_dependencies                   NULL
@@ -553,6 +554,7 @@ gossip_liveness                        NULL
 gossip_network                         NULL
 gossip_nodes                           NULL
 index_columns                          NULL
+interleaved                            NULL
 invalid_objects                        NULL
 jobs                                   NULL
 kv_node_status                         NULL
