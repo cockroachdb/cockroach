@@ -62,6 +62,9 @@ func registerDiskFull(r *testRegistry) {
 						return nil
 					}
 					t.l.Printf("starting %d when disk is full\n", n)
+					// Pebble treats "no space left on device" as a background error. Kill
+					// cockroach if it is still running.
+					_ = c.StopE(ctx, c.Node(n))
 					// We expect cockroach to die during startup, though it might get far
 					// enough along that the monitor detects the death.
 					m.ExpectDeath()
