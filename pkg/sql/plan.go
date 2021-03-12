@@ -285,7 +285,7 @@ type planTop struct {
 	planComponents
 
 	// mem/catalog retains the memo and catalog that were used to create the
-	// plan.
+	// plan. Only set if needed by instrumentation (see ShouldSaveMemo).
 	mem     *memo.Memo
 	catalog *optCatalog
 
