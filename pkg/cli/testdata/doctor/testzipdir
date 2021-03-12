@@ -8,7 +8,7 @@ Examining 38 descriptors and 43 namespace entries...
   ParentID  52, ParentSchemaID 29: relation "vehicle_location_histories" (56): referenced database ID 52: descriptor not found
   ParentID  52, ParentSchemaID 29: relation "promo_codes" (57): referenced database ID 52: descriptor not found
   ParentID  52, ParentSchemaID 29: relation "user_promo_codes" (58): referenced database ID 52: descriptor not found
-Descriptor 52: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:movr}] but no descriptor
+  ParentID   0, ParentSchemaID  0: namespace entry "movr" (52): descriptor not found
 Examining 1 running jobs...
 job 587337426984566785: schema change GC refers to missing table descriptor(s) [59]
 	existing descriptors that still need to be dropped []
