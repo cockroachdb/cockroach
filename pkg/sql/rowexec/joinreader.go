@@ -13,7 +13,6 @@ package rowexec
 import (
 	"context"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -150,7 +149,6 @@ var _ execinfra.Processor = &joinReader{}
 var _ execinfra.RowSource = &joinReader{}
 var _ execinfrapb.MetadataSource = &joinReader{}
 var _ execinfra.OpNode = &joinReader{}
-var _ execinfra.KVReader = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -745,36 +743,21 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
-			BytesRead:      optional.MakeUint(uint64(jr.GetBytesRead())),
+			BytesRead:      optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
-			ContentionTime: optional.MakeTimeValue(jr.GetCumulativeContentionTime()),
+			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(jr.Ctx)),
 		},
 		Output: jr.Out.Stats(),
 	}
 }
 
-// GetBytesRead is part of the execinfra.KVReader interface.
-func (jr *joinReader) GetBytesRead() int64 {
-	return jr.fetcher.GetBytesRead()
-}
-
-// GetRowsRead is part of the execinfra.KVReader interface.
-func (jr *joinReader) GetRowsRead() int64 {
-	return jr.rowsRead
-}
-
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
-func (jr *joinReader) GetCumulativeContentionTime() time.Duration {
-	return execinfra.GetCumulativeContentionTime(jr.Ctx)
-}
-
 func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	trailingMeta := make([]execinfrapb.ProducerMetadata, 1)
+	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
-	meta.Metrics.RowsRead = jr.GetRowsRead()
-	meta.Metrics.BytesRead = jr.GetBytesRead()
+	meta.Metrics.RowsRead = jr.rowsRead
+	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, jr.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}

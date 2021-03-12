@@ -695,7 +695,10 @@ func TestInvertedJoiner(t *testing.T) {
 
 				var result rowenc.EncDatumRows
 				for {
-					row := out.NextNoMeta(t)
+					row, meta := out.Next()
+					if meta != nil && meta.Metrics == nil {
+						t.Fatalf("unexpected metadata %+v", meta)
+					}
 					if row == nil {
 						break
 					}
