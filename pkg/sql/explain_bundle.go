@@ -162,9 +162,8 @@ func buildStatementBundle(
 	b.addStatement()
 	b.addOptPlans()
 	b.addExecPlan(planString)
-	// TODO(yuzefovich): consider adding some variant of EXPLAIN (VEC) output
-	// of the query to the bundle.
 	b.addDistSQLDiagrams()
+	b.addExplainVec()
 	traceJSON := b.addTrace()
 	b.addEnv(ctx)
 
@@ -309,6 +308,25 @@ func (b *stmtBundleBuilder) addDistSQLDiagrams() {
 			filename = fmt.Sprintf("distsql-%d-%s.html", i+1, d.typ)
 		}
 		b.z.AddFile(filename, contents)
+	}
+}
+
+func (b *stmtBundleBuilder) addExplainVec() {
+	for i, d := range b.plan.distSQLFlowInfos {
+		if len(d.explainVec) > 0 || len(d.explainVecVerbose) > 0 {
+			var filenameFormat string
+			if len(b.plan.distSQLFlowInfos) == 1 {
+				filenameFormat = "vec%s.txt"
+			} else {
+				filenameFormat = "vec%s" + fmt.Sprintf("-%d-%s.txt", i+1, d.typ)
+			}
+			if len(d.explainVec) > 0 {
+				b.z.AddFile(fmt.Sprintf(filenameFormat, ""), strings.Join(d.explainVec, "\n"))
+			}
+			if len(d.explainVecVerbose) > 0 {
+				b.z.AddFile(fmt.Sprintf(filenameFormat, "-v"), strings.Join(d.explainVecVerbose, "\n"))
+			}
+		}
 	}
 }
 

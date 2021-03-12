@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -693,8 +694,36 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 				return err
 			}
 		}
+		var explainVec []string
+		var explainVecVerbose []string
+		if planner.instrumentation.collectBundle && planner.curPlan.flags.IsSet(planFlagVectorized) {
+			flowCtx := newFlowCtxForExplainPurposes(p, planner, &planner.extendedEvalCtx.DistSQLPlanner.rpcCtx.ClusterID)
+			getExplain := func(verbose bool) []string {
+				explain, err := colflow.ExplainVec(
+					ctx, flowCtx, flows, p.infra.LocalProcessors, verbose, planner.curPlan.flags.IsDistributed(),
+				)
+				if err != nil {
+					// In some edge cases (like when subqueries are present or
+					// when certain component doesn't implement execinfra.OpNode
+					// interface) an error might occur. In such scenario, we
+					// don't want to fail the collection of the bundle, so we
+					// deliberately ignoring the error.
+					explain = nil
+				}
+				return explain
+			}
+			explainVec = getExplain(false /* verbose */)
+			explainVecVerbose = getExplain(true /* verbose */)
+		}
 		planner.curPlan.distSQLFlowInfos = append(
-			planner.curPlan.distSQLFlowInfos, flowInfo{typ: typ, diagram: diagram, flowsMetadata: execstats.NewFlowsMetadata(flows)},
+			planner.curPlan.distSQLFlowInfos,
+			flowInfo{
+				typ:               typ,
+				diagram:           diagram,
+				explainVec:        explainVec,
+				explainVecVerbose: explainVecVerbose,
+				flowsMetadata:     execstats.NewFlowsMetadata(flows),
+			},
 		)
 		return nil
 	}
