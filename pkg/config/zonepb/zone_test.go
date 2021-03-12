@@ -804,8 +804,9 @@ func TestZoneSpecifiers(t *testing.T) {
 	}
 
 	// Simulate the following schema:
-	//   CREATE DATABASE db;   CREATE TABLE db.tbl ...
-	//   CREATE DATABASE carl; CREATE TABLE carl.toys ...
+	//   CREATE DATABASE db;        CREATE TABLE db.public.tbl ...
+	//   CREATE DATABASE carl;      CREATE TABLE carl.public.toys ...
+	//   CREATE SCHEMA test_schema; CREATE TABLE carl.test_schema.toys ...
 	type namespaceEntry struct {
 		parentID uint32
 		name     string
@@ -832,13 +833,16 @@ func TestZoneSpecifiers(t *testing.T) {
 		}
 		return 0, fmt.Errorf("%q not found", name)
 	}
-	resolveID := func(id uint32) (parentID uint32, name string, err error) {
+	resolveID := func(id uint32) (parentID, parentSchemaID uint32, name string, err error) {
+		if id == keys.PublicSchemaID {
+			return 0, 0, string(tree.PublicSchemaName), nil
+		}
 		for entry, entryID := range namespace {
 			if id == entryID {
-				return entry.parentID, entry.name, nil
+				return entry.parentID, entry.schemaID, entry.name, nil
 			}
 		}
-		return 0, "", fmt.Errorf("%d not found", id)
+		return 0, 0, "", fmt.Errorf("%d not found", id)
 	}
 
 	for _, tc := range []struct {
@@ -896,6 +900,7 @@ func TestZoneSpecifiers(t *testing.T) {
 		{55, "DATABASE carl", ""},
 		{56, "TABLE carl.public.toys", ""},
 		{57, "", "9000 not found"},
+		{59, "TABLE carl.test_schema.toys", ""},
 		{600, "", "600 not found"},
 	} {
 		t.Run(fmt.Sprintf("resolve-id=%d", tc.id), func(t *testing.T) {
