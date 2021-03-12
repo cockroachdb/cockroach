@@ -2444,8 +2444,20 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 				switch lcSwap.NewLocalityConfig.Locality.(type) {
 				case *descpb.TableDescriptor_LocalityConfig_Global_,
 					*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-					// Nothing to do here. The table re-writing the locality config is all
-					// that is required.
+					// The table re-writing the LocalityConfig does most of the work for
+					// us here, but if we're coming from REGIONAL BY ROW, it's also
+					// necessary to drop the zone configurations on the index partitions.
+					if lcSwap.OldLocalityConfig.GetRegionalByRow() != nil {
+						opts = append(
+							opts,
+							dropZoneConfigsForMultiRegionIndexes(
+								append(
+									[]descpb.IndexID{pkSwap.OldPrimaryIndexId},
+									pkSwap.OldIndexes...,
+								)...,
+							),
+						)
+					}
 				case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 					// Apply new zone configurations for all newly partitioned indexes.
 					opts = append(
