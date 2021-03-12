@@ -373,25 +373,38 @@ func (j *Job) HighWaterProgressed(
 	ctx context.Context, txn *kv.Txn, progressedFn HighWaterProgressedFn,
 ) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		if err := md.CheckRunningOrReverting(); err != nil {
-			return err
+		if err := UpdateHighwaterProgressed(ctx, txn, md, ju, progressedFn); err != nil {
+			return errors.Wrapf(err, "updating highwater for job %d", j.ID())
 		}
-		highWater, err := progressedFn(ctx, txn, md.Progress.Details)
-		if err != nil {
-			return err
-		}
-		if highWater.Less(hlc.Timestamp{}) {
-			return errors.Errorf(
-				"job %d: high-water %s is outside allowable range > 0.0",
-				j.ID(), highWater,
-			)
-		}
-		md.Progress.Progress = &jobspb.Progress_HighWater{
-			HighWater: &highWater,
-		}
-		ju.UpdateProgress(md.Progress)
 		return nil
 	})
+}
+
+// UpdateHighwaterProgressed is a helper that updates highwater mark
+// in the job metadata.  It is intended to be used as a helper for the Update
+// method.
+func UpdateHighwaterProgressed(
+	ctx context.Context,
+	txn *kv.Txn,
+	md JobMetadata,
+	ju *JobUpdater,
+	progressedFn HighWaterProgressedFn,
+) error {
+	if err := md.CheckRunningOrReverting(); err != nil {
+		return err
+	}
+	highWater, err := progressedFn(ctx, txn, md.Progress.Details)
+	if err != nil {
+		return err
+	}
+	if highWater.Less(hlc.Timestamp{}) {
+		return errors.Errorf("high-water %s is outside allowable range > 0.0", highWater)
+	}
+	md.Progress.Progress = &jobspb.Progress_HighWater{
+		HighWater: &highWater,
+	}
+	ju.UpdateProgress(md.Progress)
+	return nil
 }
 
 // paused sets the status of the tracked job to paused. It is called by the
