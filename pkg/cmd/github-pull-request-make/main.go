@@ -273,6 +273,16 @@ func main() {
 					tests = "(" + strings.Join(pkg.tests, "$$|") + "$$)"
 				}
 
+				// The stress -p flag defaults to the number of CPUs, which is too
+				// aggressive on big machines and can cause tests to fail. Under nightly
+				// stress, we usually use 4 or 2, so run with 8 here to make sure the
+				// test becomes an obvious candidate for skipping under race before it
+				// has to deal with the nightlies.
+				parallelism := 16
+				if target == "stressrace" {
+					parallelism = 8
+				}
+
 				cmd := exec.Command(
 					"make",
 					target,
@@ -280,7 +290,7 @@ func main() {
 					fmt.Sprintf("TESTS=%s", tests),
 					fmt.Sprintf("TESTTIMEOUT=%s", timeout),
 					"GOTESTFLAGS=-json", // allow TeamCity to parse failures
-					fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
+					fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s -p %d", duration, parallelism),
 				)
 				cmd.Env = append(os.Environ(), "COCKROACH_NIGHTLY_STRESS=true")
 				cmd.Dir = crdb.Dir
