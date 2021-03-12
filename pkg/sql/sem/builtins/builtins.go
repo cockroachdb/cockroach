@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"github.com/knz/strtime"
 )
@@ -4923,6 +4924,32 @@ may increase either contention or retry errors, or both.`,
 				"but instead returns the job id as soon as it has signaled the job to complete. " +
 				"This builtin can be used in conjunction with SHOW JOBS WHEN COMPLETE to ensure that the" +
 				" job has left the cluster in a consistent state.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.version_upgrade_type": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"to_version", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				toVersion, err := version.Parse(string(tree.MustBeDString(args[0])))
+				if err != nil {
+					return nil, pgerror.New(pgcode.InvalidParameterValue, "unable to parse version")
+				}
+
+				currentVersion := version.MustParse(build.GetInfo().Tag)
+
+				upgradeType := currentVersion.UpgradeType(toVersion)
+
+				return tree.NewDString(string(upgradeType)), nil
+			},
+			Info: "Returns a string describing the version change that will occur when moving to a different cockroachdb" +
+				"binary. Possible return values are MinorUpgrade, MinorDowngrade, MajorUpgrade, MajorRollback, Unsupported, " +
+				"and None. version_upgrade_type does not take into account the preserve_downgrade_option when returning MajorRollback.",
 			Volatility: tree.VolatilityVolatile,
 		},
 	),

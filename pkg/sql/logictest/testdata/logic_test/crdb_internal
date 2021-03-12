@@ -854,3 +854,11 @@ query B
 SELECT is_temporary FROM crdb_internal.create_statements WHERE descriptor_name = 'temp'
 ----
 true
+
+query T
+SELECT crdb_internal.version_upgrade_type('v0.0.0');
+----
+Unsupported
+
+query error unable to parse version
+SELECT crdb_internal.version_upgrade_type('not a version');
