@@ -30,8 +30,8 @@ import (
 )
 
 func Example_userfile_upload() {
-	c := newCLITest(cliTestParams{})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{})
+	defer c.Cleanup()
 
 	file, cleanUp := createTestFile("test.csv", "content")
 	defer cleanUp()
@@ -101,8 +101,8 @@ func checkUserFileContent(
 func TestUserFileUpload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
 
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()
@@ -173,7 +173,7 @@ func TestUserFileUpload(t *testing.T) {
 	}
 }
 
-func checkListedFiles(t *testing.T, c cliTest, uri string, args string, expectedFiles []string) {
+func checkListedFiles(t *testing.T, c TestCLI, uri string, args string, expectedFiles []string) {
 	cmd := []string{"userfile", "list", uri, args}
 	cliOutput, err := c.RunWithCaptureArgs(cmd)
 	require.NoError(t, err)
@@ -188,7 +188,7 @@ func checkListedFiles(t *testing.T, c cliTest, uri string, args string, expected
 	require.Equal(t, expectedFiles, listedFiles, "listed files from %v", cmd)
 }
 
-func checkDeletedFiles(t *testing.T, c cliTest, uri, args string, expectedFiles []string) {
+func checkDeletedFiles(t *testing.T, c TestCLI, uri, args string, expectedFiles []string) {
 	cmd := []string{"userfile", "delete", uri, args}
 	cliOutput, err := c.RunWithCaptureArgs(cmd)
 	require.NoError(t, err)
@@ -209,9 +209,9 @@ func checkDeletedFiles(t *testing.T, c cliTest, uri, args string, expectedFiles 
 func TestUserfile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
+	c := NewCLITest(TestCLIParams{T: t})
 	c.omitArgs = true
-	defer c.cleanup()
+	defer c.Cleanup()
 
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()
@@ -392,9 +392,9 @@ func TestUserfile(t *testing.T) {
 func TestUsernameUserfileInteraction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
+	c := NewCLITest(TestCLIParams{T: t})
 	c.omitArgs = true
-	defer c.cleanup()
+	defer c.Cleanup()
 
 	dir, cleanFn := testutils.TempDir(t)
 	defer cleanFn()

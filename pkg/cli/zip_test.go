@@ -115,12 +115,12 @@ func TestZip(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	c := newCLITest(cliTestParams{
-		storeSpecs: []base.StoreSpec{{
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
 			Path: dir,
 		}},
 	})
-	defer c.cleanup()
+	defer c.Cleanup()
 
 	out, err := c.RunWithCapture("debug zip --cpu-profile-duration=1s " + os.DevNull)
 	if err != nil {
@@ -143,12 +143,12 @@ func TestZipSpecialNames(t *testing.T) {
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
 
-	c := newCLITest(cliTestParams{
-		storeSpecs: []base.StoreSpec{{
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
 			Path: dir,
 		}},
 	})
-	defer c.cleanup()
+	defer c.Cleanup()
 
 	c.RunWithArgs([]string{"sql", "-e", `
 create database "a:b";
@@ -228,7 +228,7 @@ func TestUnavailableZip(t *testing.T) {
 	defer close(ch)
 
 	// Zip it. We fake a CLI test context for this.
-	c := cliTest{
+	c := TestCLI{
 		t:          t,
 		TestServer: tc.Server(0).(*server.TestServer),
 	}
@@ -300,7 +300,7 @@ func TestPartialZip(t *testing.T) {
 	tc.StopServer(1)
 
 	// Zip it. We fake a CLI test context for this.
-	c := cliTest{
+	c := TestCLI{
 		t:          t,
 		TestServer: tc.Server(0).(*server.TestServer),
 	}
@@ -456,12 +456,12 @@ func TestToHex(t *testing.T) {
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
-	c := newCLITest(cliTestParams{
-		storeSpecs: []base.StoreSpec{{
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
 			Path: dir,
 		}},
 	})
-	defer c.cleanup()
+	defer c.Cleanup()
 
 	// Create a job to have non-empty system.jobs table.
 	c.RunWithArgs([]string{"sql", "-e", "CREATE STATISTICS foo FROM system.namespace"})
