@@ -972,14 +972,29 @@ func RemoveIndexZoneConfigs(
 		return nil
 	}
 
+	// Look through all of the subzones and determine if we need to remove any
+	// of them. We only want to rewrite the zone config below if there's actual
+	// work to be done here.
+	zcRewriteNecessary := false
 	for _, indexDesc := range indexDescs {
-		zone.DeleteIndexSubzones(uint32(indexDesc.ID))
+		for _, s := range zone.Subzones {
+			if s.IndexID == uint32(indexDesc.ID) {
+				// We've found an subzone that matches the given indexID. Delete all of
+				// this index's subzones and move on to the next index.
+				zone.DeleteIndexSubzones(uint32(indexDesc.ID))
+				zcRewriteNecessary = true
+				break
+			}
+		}
 	}
 
-	// Ignore CCL required error to allow schema change to progress.
-	_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, false /* hasNewSubzones */)
-	if err != nil && !sqlerrors.IsCCLRequiredError(err) {
-		return err
+	if zcRewriteNecessary {
+		// Ignore CCL required error to allow schema change to progress.
+		_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, false /* hasNewSubzones */)
+		if err != nil && !sqlerrors.IsCCLRequiredError(err) {
+			return err
+		}
 	}
+
 	return nil
 }
