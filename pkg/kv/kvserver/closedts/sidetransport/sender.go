@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -78,10 +80,15 @@ type Sender struct {
 	buf *updatesBuf
 
 	// conns contains connections to all nodes with follower replicas of any of
-	// the registered leaseholder. connections are added as nodes get replicas
-	// for ranges with local leases and removed when the respective node no
-	// longer has any replicas with local leases.
-	conns map[roachpb.NodeID]conn
+	// the registered leaseholder. connections are added as nodes get replicas for
+	// ranges with local leases and removed when the respective node no longer has
+	// any replicas with local leases. A conn persists in this map across
+	// underlying network connects and disconnects. As long as it's in the map, it
+	// will continuously try to reconnect.
+	connsMu struct {
+		syncutil.Mutex
+		conns map[roachpb.NodeID]conn
+	}
 }
 
 // streamState encapsulates the state that's tracked by a stream. Both the
@@ -140,8 +147,6 @@ type Replica interface {
 	//
 	// The desired closed timestamp is passed as a map from range policy to
 	// timestamp; this function looks up the entry for this range.
-	//
-	// The RangeDescriptor is returned in both the true and false cases.
 	BumpSideTransportClosed(
 		ctx context.Context,
 		now hlc.ClockTimestamp,
@@ -156,7 +161,7 @@ type BumpSideTransportClosedResult struct {
 	OK         bool
 	FailReason CantCloseReason
 
-	// Desc is set regardless of ok.
+	// Desc is set regardless of OK.
 	Desc *roachpb.RangeDescriptor
 
 	// Fields only set when ok.
@@ -167,8 +172,13 @@ type BumpSideTransportClosedResult struct {
 	Policy roachpb.RangeClosedTimestampPolicy
 }
 
+// CantCloseReason enumerates the reasons why BunpSideTransportClosed might fail
+// to close a timestamp.
 type CantCloseReason int
 
+//go:generate stringer -type=CantCloseReason
+
+// Reasons for failing to close a timestamp.
 const (
 	ReasonUnknown CantCloseReason = iota
 	ReplicaDestroyed
@@ -200,7 +210,7 @@ func newSenderWithConnFactory(
 	}
 	s.trackedMu.tracked = make(map[roachpb.RangeID]trackedRange)
 	s.leaseholdersMu.leaseholders = make(map[roachpb.RangeID]leaseholder)
-	s.conns = make(map[roachpb.NodeID]conn)
+	s.connsMu.conns = make(map[roachpb.NodeID]conn)
 	return s
 }
 
@@ -425,25 +435,29 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	// Close connections to the nodes that no longer need any info from us
 	// (because they don't have replicas for any of the ranges with leases on this
 	// node).
-	for nodeID, c := range s.conns {
-		if !nodesWithFollowers.Contains(int(nodeID)) {
-			delete(s.conns, nodeID)
-			c.close()
+	{
+		s.connsMu.Lock()
+		for nodeID, c := range s.connsMu.conns {
+			if !nodesWithFollowers.Contains(int(nodeID)) {
+				delete(s.connsMu.conns, nodeID)
+				c.close()
+			}
 		}
-	}
 
-	// Open connections to any node that needs info from us and is missing a conn.
-	nodesWithFollowers.ForEach(func(nid int) {
-		nodeID := roachpb.NodeID(nid)
-		// Note that we don't open a connection to ourselves. The timestamps that
-		// we're closing are written directly to the sideTransportClosedTimestamp
-		// fields of the local replicas in BumpSideTransportClosed.
-		if _, ok := s.conns[nodeID]; !ok && nodeID != s.nodeID {
-			c := s.connFactory.new(s, nodeID)
-			c.run(ctx, s.stopper)
-			s.conns[nodeID] = c
-		}
-	})
+		// Open connections to any node that needs info from us and is missing a conn.
+		nodesWithFollowers.ForEach(func(nid int) {
+			nodeID := roachpb.NodeID(nid)
+			// Note that we don't open a connection to ourselves. The timestamps that
+			// we're closing are written directly to the sideTransportClosedTimestamp
+			// fields of the local replicas in BumpSideTransportClosed.
+			if _, ok := s.connsMu.conns[nodeID]; !ok && nodeID != s.nodeID {
+				c := s.connFactory.new(s, nodeID)
+				c.run(ctx, s.stopper)
+				s.connsMu.conns[nodeID] = c
+			}
+		})
+		s.connsMu.Unlock()
+	}
 
 	// Publish the new message to all connections.
 	log.VEventf(ctx, 4, "side-transport publishing message with closed timestamps: %v (%v)", msg.ClosedTimestamps, msg)
@@ -634,6 +648,7 @@ type connFactory interface {
 type conn interface {
 	run(context.Context, *stop.Stopper)
 	close()
+	getState() connState
 }
 
 // rpcConnFactory is an implementation of connFactory that establishes
@@ -678,6 +693,11 @@ type rpcConn struct {
 	// It needs to be called whenever stream is discarded.
 	cancelStreamCtx context.CancelFunc
 	closed          int32 // atomic
+
+	mu struct {
+		syncutil.Mutex
+		state connState
+	}
 }
 
 func newRPCConn(
@@ -689,13 +709,17 @@ func newRPCConn(
 		nodeID:       nodeID,
 		testingKnobs: testingKnobs,
 	}
+	r.mu.state.connected = false
 	r.AddLogTag("ctstream", nodeID)
 	return r
 }
 
 // cleanupStream releases the resources associated with r.stream and marks the conn
 // as needing a new stream.
-func (r *rpcConn) cleanupStream() {
+//
+// err is the communication error that led to the stream being closed. Can be
+// nil if the stream was closed because we're shutting down.
+func (r *rpcConn) cleanupStream(err error) {
 	if r.stream == nil {
 		return
 	}
@@ -708,6 +732,12 @@ func (r *rpcConn) cleanupStream() {
 	// Generally, the buffer is not going to have that message any more and so
 	// we'll generate a new snapshot.
 	r.lastSent = 0
+
+	r.mu.Lock()
+	r.mu.state.connected = false
+	r.mu.state.lastDisconnect = err
+	r.mu.state.lastDisconnectTime = timeutil.Now()
+	r.mu.Unlock()
 }
 
 // close makes the connection stop sending messages. The run() goroutine will
@@ -733,6 +763,7 @@ func (r *rpcConn) maybeConnect(ctx context.Context, stopper *stop.Stopper) error
 		cancel()
 		return err
 	}
+	r.recordConnect()
 	r.stream = stream
 	// This will need to be called when we're done with the stream.
 	r.cancelStreamCtx = cancel
@@ -748,7 +779,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 			ctx, cancel := stopper.WithCancelOnQuiesce(r.AnnotateCtx(ctx))
 			defer cancel()
 
-			defer r.cleanupStream()
+			defer r.cleanupStream(nil /* err */)
 			everyN := log.Every(10 * time.Second)
 
 			// On sending errors, we sleep a bit as to not spin on a tripped
@@ -804,9 +835,79 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 					// the circuit breaker if the remote node is still unreachable, we
 					// should have a blocking version of Dial() that we just leave hanging
 					// and get a notification when it succeeds.
-					r.cleanupStream()
+					r.cleanupStream(err)
 					time.Sleep(sleepOnErr)
 				}
 			}
 		})
+}
+
+type connState struct {
+	connected          bool
+	connectedTime      time.Time
+	lastDisconnect     error
+	lastDisconnectTime time.Time
+}
+
+func (r *rpcConn) getState() connState {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.mu.state
+}
+
+func (r *rpcConn) recordConnect() {
+	r.mu.Lock()
+	r.mu.state.connected = true
+	r.mu.state.connectedTime = timeutil.Now()
+	r.mu.Unlock()
+}
+
+func (s streamState) String() string {
+	sb := &strings.Builder{}
+
+	fmt.Fprintf(sb, "ranges tracked: %d\n", len(s.tracked))
+
+	// List the closed timestamps.
+	sb.WriteString("closed timestamps: ")
+	now := timeutil.Now()
+	for policy, closedTS := range s.lastClosed {
+		if policy != 0 {
+			sb.WriteString(", ")
+		}
+		ago := now.Sub(closedTS.GoTime()).Truncate(time.Millisecond)
+		var agoMsg string
+		if ago >= 0 {
+			agoMsg = fmt.Sprintf("%s ago", ago)
+		} else {
+			agoMsg = fmt.Sprintf("%s in the future", -ago)
+		}
+		fmt.Fprintf(sb, "%s:%s (%s)", roachpb.RangeClosedTimestampPolicy(policy), closedTS, agoMsg)
+	}
+
+	// List the tracked ranges.
+	sb.WriteString("\nTracked ranges by policy: (<range>:<LAI>)\n")
+	type rangeInfo struct {
+		id roachpb.RangeID
+		trackedRange
+	}
+	rangesByPolicy := make(map[roachpb.RangeClosedTimestampPolicy][]rangeInfo)
+	for rid, info := range s.tracked {
+		rangesByPolicy[info.policy] = append(rangesByPolicy[info.policy], rangeInfo{id: rid, trackedRange: info})
+	}
+	for policy, ranges := range rangesByPolicy {
+		fmt.Fprintf(sb, "%s: ", policy)
+		sort.Slice(ranges, func(i, j int) bool {
+			return ranges[i].id < ranges[j].id
+		})
+		for i, rng := range ranges {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			fmt.Fprintf(sb, "r%d:%d", rng.id, rng.lai)
+		}
+		if len(ranges) != 0 {
+			sb.WriteRune('\n')
+		}
+	}
+	return sb.String()
 }
