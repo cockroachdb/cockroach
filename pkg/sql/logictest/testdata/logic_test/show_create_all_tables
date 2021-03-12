@@ -386,3 +386,43 @@ SHOW CREATE ALL TABLES
 ----
 create_statement
 CREATE SEQUENCE public.s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 START 1;
+
+# Test with UDTs.
+statement ok
+CREATE DATABASE type_test;
+USE type_test;
+CREATE TYPE test AS enum();
+CREATE TABLE t(x test);
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.t (
+    x public.test NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY "primary" (x, rowid)
+);
+
+# Test with column families.
+statement ok
+CREATE DATABASE column_family_test;
+USE column_family_test;
+CREATE TABLE t(x INT, y INT, z INT, h STRING, FAMILY f1 (x, y), FAMILY f2 (z), FAMILY f3(h));
+
+query T colnames
+SHOW CREATE ALL TABLES
+----
+create_statement
+CREATE TABLE public.t (
+    x INT8 NULL,
+    y INT8 NULL,
+    z INT8 NULL,
+    h STRING NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY f1 (x, y, rowid),
+    FAMILY f2 (z),
+    FAMILY f3 (h)
+);

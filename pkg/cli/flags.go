@@ -557,6 +557,7 @@ func init() {
 		initCmd,
 		quitCmd,
 		sqlShellCmd,
+		dumpCmd,
 		/* StartCmds are covered above */
 	}
 	clientCmds = append(clientCmds, authCmds...)
@@ -674,6 +675,11 @@ func init() {
 		boolFlag(f, &sqlCtx.embeddedMode, cliflags.EmbeddedMode)
 	}
 
+	// Dump
+	{
+		varFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
+	}
+
 	// Commands that establish a SQL connection.
 	sqlCmds := []*cobra.Command{
 		sqlShellCmd,
@@ -681,6 +687,7 @@ func init() {
 		doctorClusterCmd,
 		lsNodesCmd,
 		statusNodeCmd,
+		dumpCmd,
 	}
 	sqlCmds = append(sqlCmds, authCmds...)
 	sqlCmds = append(sqlCmds, demoCmd.Commands()...)
