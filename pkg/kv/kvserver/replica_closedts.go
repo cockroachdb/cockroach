@@ -84,8 +84,7 @@ func (r *Replica) BumpSideTransportClosed(
 	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	desc := r.descRLocked()
-	res.Desc = desc
+	res.Desc = r.descRLocked()
 
 	// This method can be called even after a Replica is destroyed and removed
 	// from the Store's replicas map, because unlinkReplicaByRangeIDLocked does
@@ -209,6 +208,7 @@ type sidetransportReceiver interface {
 	GetClosedTimestamp(
 		ctx context.Context, rangeID roachpb.RangeID, leaseholderNode roachpb.NodeID,
 	) (hlc.Timestamp, ctpb.LAI)
+	HTML() string
 }
 
 func (st *sidetransportAccess) init(receiver sidetransportReceiver, rangeID roachpb.RangeID) {
