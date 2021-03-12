@@ -469,7 +469,8 @@ const (
 // for more details.
 type funcDep struct {
 	// from is the determinant of the functional dependency (easier to read the
-	// code when "from" is used rather than "determinant").
+	// code when "from" is used rather than "determinant"). If equiv is true,
+	// from may only consist of a single column.
 	//
 	// This set is immutable; to update it, replace it with a different set
 	// containing the desired columns.
@@ -763,10 +764,51 @@ func (f *FuncDepSet) AddLaxKey(keyCols, allCols opt.ColSet) {
 //
 //   ()-->(a,b)
 //
+// If f has equivalence dependencies of columns that are a subset of cols, those
+// dependencies are retained in f. This prevents losing additional information
+// about the columns, which a single FD with an empty key cannot describe. For
+// example:
+//
+//   f:      (a)-->(b,c), (a)==(b), (b)==(a), (a)==(c), (c)==(a)
+//   cols:   (a,c)
+//   result: ()-->(a,c), (a)==(c), (c)==(a)
+//
 func (f *FuncDepSet) MakeMax1Row(cols opt.ColSet) {
-	f.deps = f.deps[:0]
+	// Remove all FDs except for equivalency FDs with columns that are a subset
+	// of cols.
+	copyIdx := 0
+	for i := range f.deps {
+		fd := &f.deps[i]
+
+		// Skip non-equivalence dependencies.
+		if !fd.equiv {
+			continue
+		}
+
+		// If fd is an equivalence dependency, from has a single column.
+		fromCol, ok := fd.from.Next(0)
+		if !ok {
+			panic(errors.AssertionFailedf("equivalence dependency from cannot be empty"))
+		}
+
+		// Add a new equivalence dependency with the same from column and the to
+		// columns that are present in cols.
+		if cols.Contains(fromCol) && fd.to.Intersects(cols) {
+			f.deps[copyIdx] = funcDep{
+				from:   fd.from,
+				to:     fd.to.Intersection(cols),
+				strict: true,
+				equiv:  true,
+			}
+			copyIdx++
+		}
+	}
+	f.deps = f.deps[:copyIdx]
+
 	if !cols.Empty() {
 		f.deps = append(f.deps, funcDep{to: cols, strict: true})
+		// The constant FD must be the first in the set.
+		f.deps[0], f.deps[len(f.deps)-1] = f.deps[len(f.deps)-1], f.deps[0]
 	}
 	f.setKey(opt.ColSet{}, strictKey)
 }
