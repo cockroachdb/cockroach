@@ -1980,17 +1980,30 @@ func (r *restoreResumer) dropDescriptors(
 	// Delete the database descriptors.
 	deletedDBs := make(map[descpb.ID]struct{})
 	for _, dbDesc := range details.DatabaseDescs {
-		db := dbdesc.NewBuilder(dbDesc).BuildExistingMutable()
-		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
-		isDBEmpty, err := isDatabaseEmpty(ctx, txn, db.GetID(), allDescs, ignoredChildDescIDs)
-		if err != nil {
-			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", db.GetName())
-		}
 
+		// We need to ignore descriptors we just added since we haven't committed the txn that deletes these.
+		isDBEmpty, err := isDatabaseEmpty(ctx, txn, dbDesc.GetID(), allDescs, ignoredChildDescIDs)
+		if err != nil {
+			return errors.Wrapf(err, "checking if database %s is empty during restore cleanup", dbDesc.GetName())
+		}
 		if !isDBEmpty {
-			log.Warningf(ctx, "preserving database %s on restore failure because it contains new child objects or schemas", db.GetName())
+			log.Warningf(ctx, "preserving database %s on restore failure because it contains new child objects or schemas", dbDesc.GetName())
 			continue
 		}
+
+		db, err := descsCol.GetMutableDescriptorByID(ctx, dbDesc.GetID(), txn)
+		if err != nil {
+			return err
+		}
+
+		// Mark db as dropped and add uncommitted version to pass pre-txn
+		// descriptor validation.
+		db.SetDropped()
+		db.MaybeIncrementVersion()
+		if err := descsCol.AddUncommittedDescriptor(db); err != nil {
+			return err
+		}
+
 		descKey := catalogkeys.MakeDescMetadataKey(codec, db.GetID())
 		b.Del(descKey)
 		b.Del(catalogkeys.NewDatabaseKey(db.GetName()).Key(codec))

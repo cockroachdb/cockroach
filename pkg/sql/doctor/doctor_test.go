@@ -102,16 +102,16 @@ func TestExamineDescriptors(t *testing.T) {
 		errStr         string
 		expected       string
 	}{
-		{
+		{ // 1
 			valid:    true,
 			expected: "Examining 0 descriptors and 0 namespace entries...\n",
 		},
-		{
+		{ // 2
 			descTable: doctor.DescriptorTable{{ID: 1, DescBytes: []byte("#$@#@#$#@#")}},
 			errStr:    "failed to unmarshal descriptor",
 			expected:  "Examining 1 descriptors and 0 namespace entries...\n",
 		},
-		{
+		{ // 3
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
@@ -124,7 +124,7 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID   0, ParentSchemaID 29: relation "" (2): different id in descriptor table: 1
 `,
 		},
-		{
+		{ // 4
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
@@ -138,7 +138,7 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID   0, ParentSchemaID 29: relation "foo" (1): table must contain at least 1 column
 `,
 		},
-		{
+		{ // 5
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
@@ -155,7 +155,7 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID   0, ParentSchemaID 29: relation "foo" (1): table must contain at least 1 column
 `,
 		},
-		{
+		{ // 6
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
@@ -165,10 +165,10 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			expected: `Examining 1 descriptors and 0 namespace entries...
-  ParentID   0, ParentSchemaID  0: database "db" (1): not being dropped but no namespace entry found
+  ParentID   0, ParentSchemaID  0: database "db" (1): expected matching namespace entry, found none
 `,
 		},
-		{
+		{ // 7
 			descTable: doctor.DescriptorTable{
 				{ID: 1, DescBytes: toBytes(t, validTableDesc)},
 				{
@@ -183,11 +183,11 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID   2, ParentSchemaID 29: relation "t" (1): namespace entry {ParentID:0 ParentSchemaID:29 Name:t} not found in draining names
-  ParentID   2, ParentSchemaID 29: relation "t" (1): could not find name in namespace table
+  ParentID   2, ParentSchemaID 29: relation "t" (1): expected matching namespace entry, found none
+  ParentID   0, ParentSchemaID 29: namespace entry "t" (1): no matching name info found in non-dropped relation "t"
 `,
 		},
-		{
+		{ // 8
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
@@ -203,7 +203,7 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID   2, ParentSchemaID  0: schema "schema" (1): referenced database ID 2: descriptor not found
 `,
 		},
-		{
+		{ // 9
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
@@ -220,7 +220,7 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID   0, ParentSchemaID  0: type "type" (1): invalid parent schema ID 0
 `,
 		},
-		{
+		{ // 10
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 1,
@@ -244,7 +244,7 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID   3, ParentSchemaID  2: type "type" (1): arrayTypeID 0 does not exist for "ENUM": referenced type ID 0: descriptor not found
 `,
 		},
-		{
+		{ // 11
 			descTable: doctor.DescriptorTable{
 				{
 					ID: 51,
@@ -284,7 +284,7 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID  51, ParentSchemaID 29: type "type" (52): validation: runtime error: invalid memory address or nil pointer dereference
 `,
 		},
-		{
+		{ // 12
 			descTable: doctor.DescriptorTable{
 				{ID: 1, DescBytes: toBytes(t, inSchemaValidTableDesc)},
 				{
@@ -317,26 +317,26 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID   4, ParentSchemaID  0: schema "schema" (3): not present in parent database [4] schemas mapping
 `,
 		},
-		{
+		{ // 13
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{Name: "foo"}, ID: keys.PublicSchemaID},
 				{NameInfo: descpb.NameInfo{Name: "bar"}, ID: keys.PublicSchemaID},
-				{NameInfo: descpb.NameInfo{Name: "pg_temp_foo"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "pg_temp_foo", ParentID: 123}, ID: 1},
 				{NameInfo: descpb.NameInfo{Name: "causes_error"}, ID: 2},
 			},
 			expected: `Examining 0 descriptors and 4 namespace entries...
-Descriptor 2: has namespace row(s) [{ParentID:0 ParentSchemaID:0 Name:causes_error}] but no descriptor
+  ParentID   0, ParentSchemaID  0: namespace entry "causes_error" (2): descriptor not found
 `,
 		},
-		{
+		{ // 14
 			namespaceTable: doctor.NamespaceTable{
 				{NameInfo: descpb.NameInfo{Name: "null"}, ID: int64(descpb.InvalidID)},
 			},
 			expected: `Examining 0 descriptors and 1 namespace entries...
-Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
+  ParentID   0, ParentSchemaID  0: namespace entry "null" (0): invalid descriptor ID
 `,
 		},
-		{
+		{ // 15
 			valid: true,
 			descTable: doctor.DescriptorTable{
 				{ID: 1, DescBytes: toBytes(t, validTableDesc)},
@@ -353,7 +353,7 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 			},
 			expected: "Examining 2 descriptors and 2 namespace entries...\n",
 		},
-		{
+		{ // 16
 			valid: true,
 			descTable: doctor.DescriptorTable{
 				{
@@ -374,7 +374,7 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 			},
 			expected: "Examining 1 descriptors and 3 namespace entries...\n",
 		},
-		{
+		{ // 17
 			valid: false,
 			descTable: doctor.DescriptorTable{
 				{
@@ -394,10 +394,10 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 1},
 			},
 			expected: `Examining 1 descriptors and 3 namespace entries...
-  ParentID   0, ParentSchemaID  0: database "db" (1): extra draining names found [{ParentID:0 ParentSchemaID:0 Name:db3}]
+  ParentID   0, ParentSchemaID  0: database "db" (1): expected matching namespace entry for draining name (0, 0, db3), found none
 `,
 		},
-		{
+		{ // 18
 			descTable: doctor.DescriptorTable{
 				{ID: 1, DescBytes: toBytes(t, droppedValidTableDesc)},
 				{
@@ -412,7 +412,7 @@ Row(s) [{ParentID:0 ParentSchemaID:0 Name:null}]: NULL value found
 				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
-  ParentID   2, ParentSchemaID 29: relation "t" (1): dropped but namespace entry(s) found: [{2 29 t}]
+  ParentID   2, ParentSchemaID 29: namespace entry "t" (1): no matching name info in draining names of dropped relation
 `,
 		},
 	}
