@@ -273,6 +273,11 @@ func main() {
 					tests = "(" + strings.Join(pkg.tests, "$$|") + "$$)"
 				}
 
+				parallelism := 16
+				if target == "stressrace" {
+					parallelism = 8
+				}
+
 				cmd := exec.Command(
 					"make",
 					target,
@@ -280,7 +285,7 @@ func main() {
 					fmt.Sprintf("TESTS=%s", tests),
 					fmt.Sprintf("TESTTIMEOUT=%s", timeout),
 					"GOTESTFLAGS=-json", // allow TeamCity to parse failures
-					fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
+					fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s -p %d", duration, parallelism),
 				)
 				cmd.Env = append(os.Environ(), "COCKROACH_NIGHTLY_STRESS=true")
 				cmd.Dir = crdb.Dir
