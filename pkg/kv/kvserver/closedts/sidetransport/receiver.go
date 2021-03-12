@@ -13,8 +13,11 @@ package sidetransport
 import (
 	"context"
 	"fmt"
+	"html"
 	"io"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -30,6 +33,8 @@ import (
 // Receiver is the gRPC server for the closed timestamp side-transport,
 // receiving updates from remote nodes. It maintains the set of current
 // streaming connections.
+//
+// The state of the Receiver is exposed on each node at /debug/closedts-receiver.
 type Receiver struct {
 	log.AmbientContext
 	stop         *stop.Stopper
@@ -38,8 +43,20 @@ type Receiver struct {
 
 	mu struct {
 		syncutil.RWMutex
+		// conns maintains the list of currently-open connections.
 		conns map[roachpb.NodeID]*incomingStream
 	}
+
+	historyMu struct {
+		syncutil.Mutex
+		lastClosed map[roachpb.NodeID]streamCloseInfo
+	}
+}
+
+type streamCloseInfo struct {
+	nodeID    roachpb.NodeID
+	closeErr  error
+	closeTime time.Time
 }
 
 // receiverTestingKnobs contains knobs for incomingStreams connected to a
@@ -63,6 +80,7 @@ func NewReceiver(
 	}
 	r.AmbientContext.AddLogTag("n", nodeID)
 	r.mu.conns = make(map[roachpb.NodeID]*incomingStream)
+	r.historyMu.lastClosed = make(map[roachpb.NodeID]streamCloseInfo)
 	return r
 }
 
@@ -117,16 +135,24 @@ func (s *Receiver) onFirstMsg(ctx context.Context, r *incomingStream, nodeID roa
 
 // onRecvErr is called when one of the inbound streams errors out. The stream is
 // removed from the Receiver's collection.
-func (s *Receiver) onRecvErr(ctx context.Context, nodeID roachpb.NodeID, err error) {
+func (s *Receiver) onRecvErr(ctx context.Context, r *incomingStream, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	nodeID := r.nodeID
 	if err != io.EOF {
 		log.Warningf(ctx, "closed timestamps side-transport connection dropped from node: %d", nodeID)
 	} else {
 		log.VEventf(ctx, 2, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	}
 	if nodeID != 0 {
+		s.historyMu.Lock()
+		s.historyMu.lastClosed[nodeID] = streamCloseInfo{
+			nodeID:    nodeID,
+			closeErr:  err,
+			closeTime: timeutil.Now(),
+		}
+		s.historyMu.Unlock()
 		delete(s.mu.conns, nodeID)
 	}
 }
@@ -139,12 +165,14 @@ type incomingStream struct {
 	server       *Receiver
 	stores       Stores
 	testingKnobs incomingStreamTestingKnobs
+	connectedAt  time.Time
 	// The node that's sending info on this stream.
 	nodeID roachpb.NodeID
 
 	mu struct {
 		syncutil.RWMutex
 		streamState
+		lastReceived time.Time
 	}
 }
 
@@ -164,8 +192,9 @@ type Stores interface {
 
 func newIncomingStream(s *Receiver, stores Stores) *incomingStream {
 	r := &incomingStream{
-		server: s,
-		stores: stores,
+		server:      s,
+		stores:      stores,
+		connectedAt: timeutil.Now(),
 	}
 	return r
 }
@@ -225,6 +254,7 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.mu.lastReceived = timeutil.Now()
 
 	// Reset all the state on snapshots.
 	if msg.Snapshot {
@@ -273,7 +303,8 @@ func (r *incomingStream) Run(
 				if fn := r.testingKnobs.onRecvErr; fn != nil {
 					fn(r.nodeID, err)
 				}
-				r.server.onRecvErr(ctx, r.nodeID, err)
+
+				r.server.onRecvErr(ctx, r, err)
 				return
 			}
 
@@ -313,33 +344,71 @@ func (r *incomingStream) Run(
 	return nil
 }
 
-func (r *incomingStream) String() string {
+func (s *Receiver) String() string {
+	return s.stringWithOpt(false /* useHTML */)
+}
+
+// HTML is exposed at /debug/closedts-receiver.
+func (s *Receiver) HTML() string {
+	return s.stringWithOpt(true /* useHTML */)
+}
+
+func (s *Receiver) stringWithOpt(useHTML bool) string {
+	sb := &strings.Builder{}
+
+	header := func(s string) {
+		if !useHTML {
+			sb.WriteString(s + ":\n")
+		} else {
+			fmt.Fprintf(sb, "<h4>%s</h4>", s)
+		}
+	}
+
+	header("Incoming streams")
+	s.mu.RLock()
+	conns := make([]*incomingStream, 0, len(s.mu.conns))
+	for _, c := range s.mu.conns {
+		conns = append(conns, c)
+	}
+	s.mu.RUnlock()
+	// Sort by node id.
+	sort.Slice(conns, func(i, j int) bool {
+		return conns[i].nodeID < conns[j].nodeID
+	})
+	for _, c := range conns {
+		sb.WriteString(c.html() + "<br>")
+	}
+
+	header("Closed streams (most recent first; only one per node)")
+	s.historyMu.Lock()
+	closed := make([]streamCloseInfo, 0, len(s.historyMu.lastClosed))
+	for _, c := range s.historyMu.lastClosed {
+		closed = append(closed, c)
+	}
+	s.historyMu.Unlock()
+	// Sort by disconnection time, descending.
+	sort.Slice(closed, func(i, j int) bool {
+		return closed[i].closeTime.After(closed[j].closeTime)
+	})
+	now := timeutil.Now()
+	for _, c := range closed {
+		fmt.Fprintf(sb, "n%d: incoming conn closed at %s (%s ago). err: %s\n",
+			c.nodeID, c.closeTime.Truncate(time.Millisecond), now.Sub(c.closeTime).Truncate(time.Second), c.closeErr)
+	}
+
+	return strings.ReplaceAll(sb.String(), "\n", "<br>")
+}
+
+func (r *incomingStream) html() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var s strings.Builder
-	s.WriteString(fmt.Sprintf("n%d closed timestamps: ", r.nodeID))
+	sb := &strings.Builder{}
 	now := timeutil.Now()
-	rangesByPoicy := make(map[roachpb.RangeClosedTimestampPolicy]*strings.Builder)
-	for pol, ts := range r.mu.lastClosed {
-		if pol != 0 {
-			s.WriteString(", ")
-		}
-		policy := roachpb.RangeClosedTimestampPolicy(pol)
-		s.WriteString(fmt.Sprintf("%s: %s (lead/lag: %s)", policy, ts, now.Sub(ts.GoTime())))
-		rangesByPoicy[policy] = &strings.Builder{}
-	}
-	s.WriteRune('\n')
-	for rid, info := range r.mu.tracked {
-		rangesByPoicy[info.policy].WriteString(fmt.Sprintf("%d, ", rid))
-	}
-	first := true
-	for policy, sb := range rangesByPoicy {
-		if !first {
-			s.WriteRune('\n')
-		} else {
-			first = false
-		}
-		s.WriteString(fmt.Sprintf("%s tracked: %s", policy, sb.String()))
-	}
-	return s.String()
+	fmt.Fprintf(sb, "<b>n%d</b> conn open: %s (%s ago), last received: %s (%s ago), last seq num: %d, closed timestamps: %s",
+		r.nodeID, r.connectedAt.Truncate(time.Second),
+		now.Sub(r.connectedAt).Truncate(time.Second),
+		r.mu.lastReceived.Truncate(time.Millisecond), now.Sub(r.mu.lastReceived).Truncate(time.Millisecond),
+		r.mu.streamState.lastSeqNum,
+		html.EscapeString(r.mu.streamState.String()))
+	return sb.String()
 }

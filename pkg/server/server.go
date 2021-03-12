@@ -697,6 +697,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	debugServer := debug.NewServer(st, sqlServer.pgServer.HBADebugFn())
+	debugServer.RegisterClosedTimestampSideTransport(ctSender, ctReceiver)
 	node.InitLogger(sqlServer.execCfg)
 
 	*lateBoundServer = Server{
