@@ -10,7 +10,10 @@
 
 package humanizeutil
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Duration formats a duration in a user-friendly way. The result is not exact
 // and the granularity is no smaller than microseconds.
@@ -42,4 +45,45 @@ func Duration(val time.Duration) string {
 
 	// Everything larger is rounded to the nearest second.
 	return val.Round(time.Second).String()
+}
+
+// LongDuration formats a duration that is expected to be on the order of
+// minutes / hours / days in a user-friendly way. The result is not exact and
+// the granularity is no smaller than seconds.
+//
+// Examples:
+//  - 0 seconds
+//  - 1 second
+//  - 3 minutes
+//  - 1 hour
+//  - 5 days
+//  - 1000 days
+func LongDuration(val time.Duration) string {
+	var round time.Duration
+	var unit string
+
+	switch {
+	case val < time.Minute:
+		round = time.Second
+		unit = "second"
+
+	case val < time.Hour:
+		round = time.Minute
+		unit = "minute"
+
+	case val < 24*time.Hour:
+		round = time.Hour
+		unit = "hour"
+
+	default:
+		round = 24 * time.Hour
+		unit = "day"
+	}
+
+	n := int64(val.Round(round) / round)
+	s := ""
+	if n != 1 {
+		s = "s"
+	}
+	return fmt.Sprintf("%d %s%s", n, unit, s)
 }

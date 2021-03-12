@@ -611,13 +611,6 @@ func (sb *statisticsBuilder) colStatTable(
 	return sb.colStatLeaf(colSet, tableStats, tableFD, tableNotNullCols)
 }
 
-// GetCachedTableStatistics returns the statistics for the given table, if they
-// were calculated already.
-func (m *Memo) GetCachedTableStatistics(tabID opt.TableID) (_ *props.Statistics, ok bool) {
-	stats, ok := m.metadata.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
-	return stats, ok
-}
-
 // +------+
 // | Scan |
 // +------+

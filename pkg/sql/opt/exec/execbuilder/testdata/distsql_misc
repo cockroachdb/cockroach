@@ -120,7 +120,7 @@ vectorized: true
 ·
 • scan
   columns: (a int, b int, c float, d decimal)
-  estimated row count: 1,000 (100% of the table)
+  estimated row count: 1,000 (100% of the table; stats collected <hidden> ago)
   table: data@primary
   spans: FULL SCAN
 ·

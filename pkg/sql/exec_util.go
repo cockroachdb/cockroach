@@ -941,9 +941,16 @@ type ExecutorTestingKnobs struct {
 	// unsupported and will lead to a panic.
 	TestingSaveFlows func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error
 
-	// DeterministicExplainAnalyze, if set, will result in overriding fields in
-	// EXPLAIN ANALYZE (PLAN) that can vary between runs (like elapsed times).
-	DeterministicExplainAnalyze bool
+	// DeterministicExplain, if set, will result in overriding fields in EXPLAIN
+	// and EXPLAIN ANALYZE that can vary between runs (like elapsed times).
+	//
+	// TODO(radu): this flag affects EXPLAIN and EXPLAIN ANALYZE differently. It
+	// hides the vectorization, distribution, and cluster nodes in EXPLAIN ANALYZE
+	// but not in EXPLAIN. This is just a consequence of how the tests we have are
+	// written. We should replace this knob with a session setting that allows
+	// exact control of the redaction flags (and have each test set it as
+	// necessary).
+	DeterministicExplain bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.

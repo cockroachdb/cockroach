@@ -1918,6 +1918,9 @@ func (ef *execFactory) ConstructExplain(
 		}, nil
 	}
 	flags := explain.MakeFlags(options)
+	if ef.planner.execCfg.TestingKnobs.DeterministicExplain {
+		flags.Redact = explain.RedactVolatile
+	}
 	n := &explainPlanNode{
 		options: options,
 		flags:   flags,

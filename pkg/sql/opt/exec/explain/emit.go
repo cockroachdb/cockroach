@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 )
@@ -332,7 +333,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok {
 		s := stats.(*exec.ExecutionStats)
 		if len(s.Nodes) > 0 {
-			e.ob.AddNonDeterministicField("cluster nodes", strings.Join(s.Nodes, ", "))
+			e.ob.AddRedactableField(RedactNodes, "cluster nodes", strings.Join(s.Nodes, ", "))
 		}
 		if s.RowCount.HasValue() {
 			e.ob.AddField("actual row count", humanizeutil.Count(s.RowCount.Value()))
@@ -352,8 +353,8 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if n.op != valuesOp {
 			count := uint64(math.Round(s.RowCount))
 			if s.TableStatsAvailable {
-				if n.op == scanOp && s.TableRowCount != 0 {
-					percentage := s.RowCount / s.TableRowCount * 100
+				if n.op == scanOp && s.TableStatsRowCount != 0 {
+					percentage := s.RowCount / float64(s.TableStatsRowCount) * 100
 					// We want to print the percentage in a user-friendly way; we include
 					// decimals depending on how small the value is.
 					var percentageStr string
@@ -368,8 +369,20 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 						percentageStr = "<0.01"
 					}
 
+					var duration string
+					if e.ob.flags.Redact.Has(RedactVolatile) {
+						duration = "<hidden>"
+					} else {
+						timeSinceStats := timeutil.Since(s.TableStatsCreatedAt)
+						if timeSinceStats < 0 {
+							timeSinceStats = 0
+						}
+						duration = humanizeutil.LongDuration(timeSinceStats)
+					}
 					e.ob.AddField("estimated row count", fmt.Sprintf(
-						"%s (%s%% of the table)", humanizeutil.Count(count), percentageStr,
+						"%s (%s%% of the table; stats collected %s ago)",
+						humanizeutil.Count(count), percentageStr,
+						duration,
 					))
 				} else {
 					e.ob.AddField("estimated row count", humanizeutil.Count(count))
