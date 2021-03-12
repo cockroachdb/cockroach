@@ -1236,9 +1236,9 @@ func TestJobLifecycle(t *testing.T) {
 			{WallTime: 2, Logical: 0},
 		}
 		for _, ts := range highWaters {
-			if err := job.HighWaterProgressed(ctx, nil /* txn */, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) { return ts, nil }); err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, job.Update(ctx, nil, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				return jobs.UpdateHighwaterProgressed(ts, md, ju)
+			}))
 			p := job.Progress()
 			if actual := *p.GetHighWater(); actual != ts {
 				t.Fatalf(`got %s expected %s`, actual, ts)
@@ -1257,8 +1257,8 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(1.1)); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
-		if err := job.HighWaterProgressed(ctx, nil /* txn */, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) {
-			return hlc.Timestamp{WallTime: -1}, nil
+		if err := job.Update(ctx, nil, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			return jobs.UpdateHighwaterProgressed(hlc.Timestamp{WallTime: -1}, md, ju)
 		}); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
@@ -1269,8 +1269,8 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.HighWaterProgressed(ctx, nil /* txn */, func(context.Context, *kv.Txn, jobspb.ProgressDetails) (hlc.Timestamp, error) {
-			return hlc.Timestamp{WallTime: 2}, errors.Errorf("boom")
+		if err := job.Update(ctx, nil, func(_ *kv.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			return errors.Errorf("boom")
 		}); !testutils.IsError(err, "boom") {
 			t.Fatalf("expected 'boom' error, but got %v", err)
 		}
