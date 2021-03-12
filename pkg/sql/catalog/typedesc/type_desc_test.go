@@ -348,21 +348,21 @@ func TestValidateTypeDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	descs := catalog.MapDescGetter{}
-	descs[100] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
+	descs := catalog.MakeMapDescGetter()
+	descs.Descriptors[100] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name: "db",
 		ID:   100,
 	}).BuildImmutable()
-	descs[101] = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
+	descs.Descriptors[101] = schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ID:       101,
 		ParentID: 100,
 		Name:     "schema",
 	}).BuildImmutable()
-	descs[102] = typedesc.NewBuilder(&descpb.TypeDescriptor{
+	descs.Descriptors[102] = typedesc.NewBuilder(&descpb.TypeDescriptor{
 		ID:   102,
 		Name: "type",
 	}).BuildImmutable()
-	descs[200] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
+	descs.Descriptors[200] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name: "multi-region-db",
 		ID:   200,
 		RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
