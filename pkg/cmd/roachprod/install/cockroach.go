@@ -149,13 +149,14 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 	fmt.Printf("%s: starting nodes\n", c.Name)
 	c.Parallel("", len(nodes), parallelism, func(nodeIdx int) ([]byte, error) {
-		vers, err := getCockroachVersion(c, nodes[nodeIdx])
-		if err != nil {
-			return nil, err
-		}
+		//vers, err := getCockroachVersion(c, nodes[nodeIdx])
+		//if err != nil {
+		//	return nil, err
+		//}
 
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
+		vers := version.MustParse("v21.1.0")
 		if _, err := h.startNode(nodeIdx, extraArgs, vers); err != nil {
 			return nil, err
 		}
@@ -216,14 +217,14 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		// We're sure to set cluster settings after having initialized the
 		// cluster.
 
-		fmt.Printf("%s: setting cluster settings\n", h.c.Name)
-		clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
-		if err != nil {
-			log.Fatalf("unable to set cluster settings: %v", err)
-		}
-		if clusterSettingsOut != "" {
-			fmt.Println(clusterSettingsOut)
-		}
+		//fmt.Printf("%s: setting cluster settings\n", h.c.Name)
+		//clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
+		//if err != nil {
+		//	log.Fatalf("unable to set cluster settings: %v", err)
+		//}
+		//if clusterSettingsOut != "" {
+		//	fmt.Println(clusterSettingsOut)
+		//}
 		return nil, nil
 	})
 }
@@ -396,6 +397,8 @@ func (h *crdbInstallHelper) generateStartCmd(
 	binary := cockroachNodeBinary(h.c, nodes[nodeIdx])
 	keyCmd := h.generateKeyCmd(nodeIdx, extraArgs)
 
+	// NB hard-coding uid/gid 1000 is no good
+	binary = "docker run -d -u 1000:1000 -v /mnt:/mnt -v /home/ubuntu/logs:/home/ubuntu/logs -p 0.0.0.0:26257:26257 -p 0.0.0.0:26258:26258 -p 0.0.0.0:8080:8080 cockroachdb/cockroach"
 	// NB: this is awkward as when the process fails, the test runner will show an
 	// unhelpful empty error (since everything has been redirected away). This is
 	// unfortunately equally awkward to address.
@@ -427,7 +430,7 @@ func (h *crdbInstallHelper) generateStartArgs(
 	var args []string
 	nodes := h.c.ServerNodes()
 
-	args = append(args, "--background")
+	// args = append(args, "--background")
 	if h.c.Secure {
 		args = append(args, "--certs-dir="+h.c.Impl.CertsDir(h.c, nodes[nodeIdx]))
 	} else {
