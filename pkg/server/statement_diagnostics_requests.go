@@ -11,9 +11,7 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -34,7 +32,6 @@ type stmtDiagnosticsRequest struct {
 type stmtDiagnostics struct {
 	ID                   int
 	StatementFingerprint string
-	Trace                string
 	CollectedAt          time.Time
 }
 
@@ -54,7 +51,6 @@ func (diagnostics *stmtDiagnostics) toProto() serverpb.StatementDiagnostics {
 		Id:                   int64(diagnostics.ID),
 		StatementFingerprint: diagnostics.StatementFingerprint,
 		CollectedAt:          diagnostics.CollectedAt,
-		Trace:                diagnostics.Trace,
 	}
 	return resp
 }
@@ -179,8 +175,7 @@ func (s *statusServer) StatementDiagnostics(
 		`SELECT
 			id,
 			statement_fingerprint,
-			collected_at,
-			trace
+			collected_at
 		FROM
 			system.statement_diagnostics
 		WHERE
@@ -205,19 +200,6 @@ func (s *statusServer) StatementDiagnostics(
 
 	if collectedAt, ok := row[2].(*tree.DTimestampTZ); ok {
 		diagnostics.CollectedAt = collectedAt.Time
-	}
-
-	if traceJSON, ok := row[3].(*tree.DJSON); ok {
-		traceJSONString, err := traceJSON.AsText()
-		if err != nil {
-			return nil, err
-		}
-		var prettyJSON bytes.Buffer
-		if err := json.Indent(
-			&prettyJSON, []byte(*traceJSONString), "" /* prefix */, "\t" /* indent */); err != nil {
-			return nil, errors.Wrap(err, "failed to parse JSON")
-		}
-		diagnostics.Trace = prettyJSON.String()
 	}
 
 	diagnosticsProto := diagnostics.toProto()

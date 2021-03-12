@@ -401,9 +401,9 @@ func (r *Registry) InsertStatementDiagnostics(
 			ctx, "stmt-diag-insert", txn,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"INSERT INTO system.statement_diagnostics "+
-				"(statement_fingerprint, statement, collected_at, trace, bundle_chunks, error) "+
-				"VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-			stmtFingerprint, stmt, collectionTime, traceJSON, bundleChunksVal, errorVal,
+				"(statement_fingerprint, statement, collected_at, bundle_chunks, error) "+
+				"VALUES ($1, $2, $3, $4, $5) RETURNING id",
+			stmtFingerprint, stmt, collectionTime, bundleChunksVal, errorVal,
 		)
 		if err != nil {
 			return err

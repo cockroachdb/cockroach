@@ -41,6 +41,8 @@ go_library(
         "@com_github_openzipkin_contrib_zipkin_go_opentracing//:zipkin-go-opentracing",
         "@com_github_petermattis_goid//:goid",
         "@com_github_pmezard_go_difflib//difflib",
+        "@in_gopkg_datadog_dd_trace_go_v1//ddtrace/opentracer",
+        "@in_gopkg_datadog_dd_trace_go_v1//ddtrace/tracer",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",
