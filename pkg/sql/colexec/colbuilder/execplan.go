@@ -575,9 +575,6 @@ func (r opResult) createAndWrapRowSource(
 			if err != nil {
 				return nil, err
 			}
-			if kvReader, ok := proc.(execinfra.KVReader); ok {
-				r.KVReader = kvReader
-			}
 			var (
 				rs execinfra.RowSource
 				ok bool
