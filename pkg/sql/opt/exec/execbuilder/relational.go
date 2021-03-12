@@ -353,9 +353,15 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 			Cost:                float64(e.Cost()),
 		}
 		if scan, ok := e.(*memo.ScanExpr); ok {
-			tableStats, ok := b.mem.GetCachedTableStatistics(scan.Table)
-			if ok {
-				val.TableRowCount = tableStats.RowCount
+			tab := b.mem.Metadata().Table(scan.Table)
+			if tab.StatisticCount() > 0 {
+				// The first stat is the most recent one.
+				stat := tab.Statistic(0)
+				val.TableStatsRowCount = stat.RowCount()
+				if val.TableStatsRowCount == 0 {
+					val.TableStatsRowCount = 1
+				}
+				val.TableStatsCreatedAt = stat.CreatedAt()
 			}
 		}
 		ef.AnnotateNode(ep.root, exec.EstimatedStatsID, &val)
