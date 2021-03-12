@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -264,7 +263,6 @@ var _ execinfra.Processor = &zigzagJoiner{}
 var _ execinfra.RowSource = &zigzagJoiner{}
 var _ execinfrapb.MetadataSource = &zigzagJoiner{}
 var _ execinfra.OpNode = &zigzagJoiner{}
-var _ execinfra.KVReader = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
 
@@ -998,8 +996,8 @@ func (z *zigzagJoiner) ConsumerClosed() {
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	kvStats := execinfrapb.KVStats{
-		BytesRead:      optional.MakeUint(uint64(z.GetBytesRead())),
-		ContentionTime: optional.MakeTimeValue(z.GetCumulativeContentionTime()),
+		BytesRead:      optional.MakeUint(uint64(z.getBytesRead())),
+		ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(z.Ctx)),
 	}
 	for i := range z.infos {
 		fis, ok := getFetcherInputStats(z.infos[i].fetcher)
@@ -1015,8 +1013,7 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-// GetBytesRead is part of the execinfra.KVReader interface.
-func (z *zigzagJoiner) GetBytesRead() int64 {
+func (z *zigzagJoiner) getBytesRead() int64 {
 	var bytesRead int64
 	for i := range z.infos {
 		bytesRead += z.infos[i].fetcher.GetBytesRead()
@@ -1024,8 +1021,7 @@ func (z *zigzagJoiner) GetBytesRead() int64 {
 	return bytesRead
 }
 
-// GetRowsRead is part of the execinfra.KVReader interface.
-func (z *zigzagJoiner) GetRowsRead() int64 {
+func (z *zigzagJoiner) getRowsRead() int64 {
 	var rowsRead int64
 	for i := range z.infos {
 		rowsRead += z.infos[i].rowsRead
@@ -1033,16 +1029,16 @@ func (z *zigzagJoiner) GetRowsRead() int64 {
 	return rowsRead
 }
 
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
-func (z *zigzagJoiner) GetCumulativeContentionTime() time.Duration {
-	return execinfra.GetCumulativeContentionTime(z.Ctx)
-}
-
 func (z *zigzagJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
+	meta := &trailingMeta[0]
+	meta.Metrics = execinfrapb.GetMetricsMeta()
+	meta.Metrics.BytesRead = z.getBytesRead()
+	meta.Metrics.RowsRead = z.getRowsRead()
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, z.FlowCtx.Txn); tfs != nil {
-		return []execinfrapb.ProducerMetadata{{LeafTxnFinalState: tfs}}
+		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
-	return nil
+	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.

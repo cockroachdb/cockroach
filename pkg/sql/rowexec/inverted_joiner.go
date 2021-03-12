@@ -12,7 +12,6 @@ package rowexec
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -167,7 +166,6 @@ var _ execinfra.Processor = &invertedJoiner{}
 var _ execinfra.RowSource = &invertedJoiner{}
 var _ execinfrapb.MetadataSource = &invertedJoiner{}
 var _ execinfra.OpNode = &invertedJoiner{}
-var _ execinfra.KVReader = &invertedJoiner{}
 
 const invertedJoinerProcName = "inverted joiner"
 
@@ -777,7 +775,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
-			BytesRead:      optional.MakeUint(uint64(ij.GetBytesRead())),
+			BytesRead:      optional.MakeUint(uint64(ij.fetcher.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
 			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(ij.Ctx)),
@@ -790,23 +788,12 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 }
 
-// GetBytesRead is part of the execinfra.KVReader interface.
-func (ij *invertedJoiner) GetBytesRead() int64 {
-	return ij.fetcher.GetBytesRead()
-}
-
-// GetRowsRead is part of the execinfra.KVReader interface.
-func (ij *invertedJoiner) GetRowsRead() int64 {
-	return ij.rowsRead
-}
-
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
-func (ij *invertedJoiner) GetCumulativeContentionTime() time.Duration {
-	return execinfra.GetCumulativeContentionTime(ij.Ctx)
-}
-
 func (ij *invertedJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	var trailingMeta []execinfrapb.ProducerMetadata
+	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
+	meta := &trailingMeta[0]
+	meta.Metrics = execinfrapb.GetMetricsMeta()
+	meta.Metrics.BytesRead = ij.fetcher.GetBytesRead()
+	meta.Metrics.RowsRead = ij.rowsRead
 	if tfs := execinfra.GetLeafTxnFinalState(ctx, ij.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
