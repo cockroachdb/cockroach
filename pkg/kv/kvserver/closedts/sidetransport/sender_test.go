@@ -42,9 +42,10 @@ type mockReplica struct {
 		desc roachpb.RangeDescriptor
 	}
 
-	canBump bool
-	lai     ctpb.LAI
-	policy  roachpb.RangeClosedTimestampPolicy
+	canBump        bool
+	cantBumpReason CantCloseReason
+	lai            ctpb.LAI
+	policy         roachpb.RangeClosedTimestampPolicy
 }
 
 var _ Replica = &mockReplica{}
@@ -53,10 +54,20 @@ func (m *mockReplica) StoreID() roachpb.StoreID    { return m.storeID }
 func (m *mockReplica) GetRangeID() roachpb.RangeID { return m.rangeID }
 func (m *mockReplica) BumpSideTransportClosed(
 	_ context.Context, _ hlc.ClockTimestamp, _ [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
-) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy, *roachpb.RangeDescriptor) {
+) BumpSideTransportClosedResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.canBump, m.lai, m.policy, &m.mu.desc
+	reason := ReasonUnknown
+	if !m.canBump {
+		reason = m.cantBumpReason
+	}
+	return BumpSideTransportClosedResult{
+		OK:         m.canBump,
+		FailReason: reason,
+		Desc:       &m.mu.desc,
+		LAI:        m.lai,
+		Policy:     m.policy,
+	}
 }
 
 func (m *mockReplica) removeReplica(nid roachpb.NodeID) {
@@ -189,10 +200,12 @@ func TestSenderBasic(t *testing.T) {
 
 	// The leaseholder can not close the next timestamp.
 	r1.canBump = false
+	r1.cantBumpReason = ProposalsInFlight
 	now = s.publish(ctx)
 	require.Len(t, s.trackedMu.tracked, 0)
 	require.Len(t, s.leaseholdersMu.leaseholders, 1)
 	require.Len(t, s.conns, 2)
+	require.Equal(t, 1, s.trackedMu.closingFailures[r1.cantBumpReason])
 
 	require.Equal(t, ctpb.SeqNum(3), s.trackedMu.lastSeqNum)
 	up, ok = s.buf.GetBySeq(ctx, 3)
