@@ -30,9 +30,9 @@ import (
 func TestConnRecover(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p := cliTestParams{t: t}
-	c := newCLITest(p)
-	defer c.cleanup()
+	p := TestCLIParams{T: t}
+	c := NewCLITest(p)
+	defer c.Cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
@@ -96,7 +96,7 @@ func TestConnRecover(t *testing.T) {
 // simulateServerRestart restarts the test server and reconfigures the connection
 // to use the new test server's port number. This is necessary because the port
 // number is selected randomly.
-func simulateServerRestart(c *cliTest, p cliTestParams, conn *sqlConn) func() {
+func simulateServerRestart(c *TestCLI, p TestCLIParams, conn *sqlConn) func() {
 	c.restartServer(p)
 	url2, cleanup2 := sqlutils.PGUrl(c.t, c.ServingSQLAddr(), c.t.Name(), url.User(security.RootUser))
 	conn.url = url2.String()
@@ -106,8 +106,8 @@ func simulateServerRestart(c *cliTest, p cliTestParams, conn *sqlConn) func() {
 func TestRunQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
@@ -226,8 +226,8 @@ SET
 func TestUtfName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
@@ -282,9 +282,9 @@ ALTER TABLE test_utf.żółw ADD CONSTRAINT żó UNIQUE (value)`)); err != nil {
 func TestTransactionRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	p := cliTestParams{t: t}
-	c := newCLITest(p)
-	defer c.cleanup()
+	p := TestCLIParams{T: t}
+	c := NewCLITest(p)
+	defer c.Cleanup()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
