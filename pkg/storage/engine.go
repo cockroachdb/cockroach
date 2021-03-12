@@ -715,7 +715,7 @@ type Engine interface {
 	// IsSeparatedIntentsEnabledForTesting is a test only method used in tests
 	// that know that this enabled setting is not changing and need the value to
 	// adjust their expectations.
-	IsSeparatedIntentsEnabledForTesting() bool
+	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
 }
 
 // Batch is the interface for batch specific operations.
