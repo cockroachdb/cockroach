@@ -2071,7 +2071,7 @@ func showAlterStatementWithInterleave(
 					return err
 				}
 			} else {
-				parentName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", parentTableID)))
+				parentName = tree.MakeTableNameWithSchema(tree.Name(""), tree.PublicSchemaName, tree.Name(fmt.Sprintf("[%d as parent]", parentTableID)))
 				parentName.ExplicitCatalog = false
 				parentName.ExplicitSchema = false
 			}
@@ -2083,7 +2083,7 @@ func showAlterStatementWithInterleave(
 					return err
 				}
 			} else {
-				tableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", table.GetID())))
+				tableName = tree.MakeTableNameWithSchema(tree.Name(""), tree.PublicSchemaName, tree.Name(fmt.Sprintf("[%d as parent]", table.GetID())))
 				tableName.ExplicitCatalog = false
 				tableName.ExplicitSchema = false
 			}
