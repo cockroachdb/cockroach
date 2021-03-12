@@ -3,6 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "sidetransport",
     srcs = [
+        "cantclosereason_string.go",
+        "debug.go",
         "receiver.go",
         "sender.go",
     ],

@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -222,6 +223,28 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 			})
 	}
 	return nil
+}
+
+// sidetransportReceiver abstracts *sidetransport.Receiver.
+type sidetransportReceiver interface {
+	HTML() string
+}
+
+// RegisterClosedTimestampSideTransport registers web endpoints for the closed
+// timestamp side transport sender and receiver.
+func (ds *Server) RegisterClosedTimestampSideTransport(
+	sender *sidetransport.Sender, receiver sidetransportReceiver,
+) {
+	ds.mux.HandleFunc("/debug/closedts-receiver",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Add("Content-type", "text/html")
+			fmt.Fprint(w, receiver.HTML())
+		})
+	ds.mux.HandleFunc("/debug/closedts-sender",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Add("Content-type", "text/html")
+			fmt.Fprint(w, sender.HTML())
+		})
 }
 
 // ServeHTTP serves various tools under the /debug endpoint.
