@@ -35,6 +35,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/log",
+        "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
