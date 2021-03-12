@@ -12,7 +12,6 @@ package colflow
 
 import (
 	"context"
-	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1376,50 +1375,4 @@ func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpe
 		}
 	}
 	return nil
-}
-
-// ConvertToVecTree converts the flow to a tree of vectorized operators
-// returning a list of the leap operators or an error if the flow vectorization
-// is not supported. Note that it does so by setting up the full flow without
-// running the components asynchronously, so it is pretty expensive.
-// It also returns a non-nil cleanup function that releases all
-// execinfra.Releasable objects which can *only* be performed once leaves are
-// no longer needed.
-func ConvertToVecTree(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	flow *execinfrapb.FlowSpec,
-	localProcessors []execinfra.LocalProcessor,
-	isPlanLocal bool,
-) (leaves []execinfra.OpNode, cleanup func(), err error) {
-	if !isPlanLocal && len(localProcessors) > 0 {
-		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
-	}
-	fuseOpt := flowinfra.FuseNormally
-	if isPlanLocal {
-		fuseOpt = flowinfra.FuseAggressively
-	}
-	creator := newVectorizedFlowCreator(
-		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, false,
-		nil, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		flowCtx.Cfg.VecFDSemaphore, flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
-	)
-	// We create an unlimited memory account because we're interested whether the
-	// flow is supported via the vectorized engine in general (without paying
-	// attention to the memory since it is node-dependent in the distributed
-	// case).
-	memoryMonitor := mon.NewMonitor(
-		"convert-to-vec-tree",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		flowCtx.Cfg.Settings,
-	)
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	defer memoryMonitor.Stop(ctx)
-	defer creator.cleanup(ctx)
-	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
-	return leaves, creator.Release, err
 }
