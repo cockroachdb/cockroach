@@ -763,10 +763,32 @@ func (f *FuncDepSet) AddLaxKey(keyCols, allCols opt.ColSet) {
 //
 //   ()-->(a,b)
 //
+// If f has equivalence dependencies of columns that are a subset of cols, those
+// dependencies are retained in f. This prevents losing additional information
+// about the columns, which a single FD with an empty key cannot describe. For
+// example:
+//
+//   f:      (a)-->(b,c), (a)==(b), (b)==(a), (a)==(c), (c)==(a)
+//   cols:   (a,c)
+//   result: ()-->(a,c), (a)==(c), (c)==(a)
+//
 func (f *FuncDepSet) MakeMax1Row(cols opt.ColSet) {
-	f.deps = f.deps[:0]
+	// Remove all FDs except for equivalency FDs with columns that are a subset
+	// of cols.
+	copyIdx := 0
+	for i := range f.deps {
+		fd := &f.deps[i]
+		if fd.equiv && fd.to.SubsetOf(cols) && fd.from.SubsetOf(cols) {
+			f.deps[copyIdx] = *fd
+			copyIdx++
+		}
+	}
+	f.deps = f.deps[:copyIdx]
+
 	if !cols.Empty() {
 		f.deps = append(f.deps, funcDep{to: cols, strict: true})
+		// The constant FD must be the first in the set.
+		f.deps[0], f.deps[len(f.deps)-1] = f.deps[len(f.deps)-1], f.deps[0]
 	}
 	f.setKey(opt.ColSet{}, strictKey)
 }

@@ -719,6 +719,31 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 		// These operators eliminate duplicates, so a strict key exists.
 		rel.FuncDeps.AddStrictKey(rel.OutputCols, rel.OutputCols)
 	}
+	switch setNode.Op() {
+	case opt.UnionOp, opt.UnionAllOp, opt.IntersectOp, opt.IntersectAllOp:
+		// If columns at ordinals (i, j) are equivalent in both the left input
+		// and right input, then the output columns at ordinals at (i, j) are
+		// also equivalent.
+		for i := range setPrivate.OutCols {
+			for j := i + 1; j < len(setPrivate.OutCols); j++ {
+				if leftProps.FuncDeps.AreColsEquiv(setPrivate.LeftCols[i], setPrivate.LeftCols[j]) &&
+					rightProps.FuncDeps.AreColsEquiv(setPrivate.RightCols[i], setPrivate.RightCols[j]) {
+					rel.FuncDeps.AddEquivalency(setPrivate.OutCols[i], setPrivate.OutCols[j])
+				}
+			}
+		}
+	case opt.ExceptOp, opt.ExceptAllOp:
+		// Except and ExceptAll only output rows from the left input, so if
+		// columns at ordinals (i, j) are equivalent in the left input, then
+		// they are equivalent in the output.
+		for i := range setPrivate.OutCols {
+			for j := i + 1; j < len(setPrivate.OutCols); j++ {
+				if leftProps.FuncDeps.AreColsEquiv(setPrivate.LeftCols[i], setPrivate.LeftCols[j]) {
+					rel.FuncDeps.AddEquivalency(setPrivate.OutCols[i], setPrivate.OutCols[j])
+				}
+			}
+		}
+	}
 
 	// Cardinality
 	// -----------
