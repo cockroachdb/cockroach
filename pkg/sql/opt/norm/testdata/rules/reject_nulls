@@ -970,7 +970,7 @@ ON x = i
 inner-join-apply
  ├── columns: x:1!null y:2 v:4!null k:5!null i:6!null f:7 s:8
  ├── key: (1)
- ├── fd: (1)-->(2,4,5,7,8), (1)==(6), (6)==(1)
+ ├── fd: (1)-->(2,4,5,7,8), (4)==(5), (5)==(4), (1)==(6), (6)==(1)
  ├── scan xy
  │    ├── columns: x:1!null y:2
  │    ├── key: (1)
@@ -981,7 +981,7 @@ inner-join-apply
  │    ├── cardinality: [0 - 1]
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: ()
- │    ├── fd: ()-->(4-8)
+ │    ├── fd: ()-->(4-8), (5)==(4), (4)==(5)
  │    ├── values
  │    │    ├── columns: column1:4
  │    │    ├── outer: (2)
@@ -1132,7 +1132,7 @@ ON u = y
 left-join-apply
  ├── columns: u:1!null v:2 v:4 x:5 y:6
  ├── key: (1)
- ├── fd: (1)-->(2,4-6)
+ ├── fd: (1)-->(2,4-6), (4)==(5), (5)==(4)
  ├── scan uv
  │    ├── columns: u:1!null v:2
  │    ├── key: (1)
@@ -1143,7 +1143,7 @@ left-join-apply
  │    ├── cardinality: [0 - 1]
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: ()
- │    ├── fd: ()-->(4-6)
+ │    ├── fd: ()-->(4-6), (5)==(4), (4)==(5)
  │    ├── values
  │    │    ├── columns: column1:4
  │    │    ├── outer: (1)
