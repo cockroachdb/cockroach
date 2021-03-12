@@ -220,7 +220,18 @@ func filter(in io.Reader, out io.Writer, mode modeT) error {
 			// At this point, either we are still processing a package's
 			// output before it completes, or the last package event.
 
-			const helpMessage = "\nCheck full_output.txt in artifacts for stray panics or other errors that broke the test process."
+			const helpMessage = `
+Check full_output.txt in artifacts for stray panics or other errors that broke
+the test process. Note that you might be looking at this message from a parent
+CI job. To reliably get to the "correct" job, click the drop-down next to
+"PackageLevel" above, then "Show in build log", and then navigate to the
+artifacts tab. See:
+
+https://user-images.githubusercontent.com/5076964/110923167-e2ab4780-8320-11eb-8fba-99da632aa814.png
+https://user-images.githubusercontent.com/5076964/110923299-08d0e780-8321-11eb-91af-f4eedcf8bacb.png
+
+for details.
+`
 			if ev.Action != "output" {
 				// This is the final event for the package.
 				//
