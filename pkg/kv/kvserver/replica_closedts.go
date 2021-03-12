@@ -84,8 +84,7 @@ func (r *Replica) BumpSideTransportClosed(
 	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	desc := r.descRLocked()
-	res.Desc = desc
+	res.Desc = r.descRLocked()
 
 	// This method can be called even after a Replica is destroyed and removed
 	// from the Store's replicas map, because unlinkReplicaByRangeIDLocked does
