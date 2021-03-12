@@ -1,0 +1,19 @@
+{
+  "pull_request": {
+    "head": {
+      "ref": "sample-head-ref"
+    },
+    "base": {
+      "ref": "master"
+    },
+    "number": 59776,
+    "title": "release-20.2: delegate: gate estimated_row_count on SHOW TABLES behind cluster setting",
+    "body": "Refs: https://github.com/cockroachdb/cockroach/issues/58189\r\n\r\nRelease note (sql change): None",
+    "created_at": "2021-02-03T20:58:12Z",
+    "updated_at": "2021-02-04T03:10:38Z",
+    "closed_at": "2021-02-04T03:10:19Z",
+    "merged_at": "2021-02-04T03:10:19Z",
+    "merge_commit_sha": "86bd60e023cb14a783f80c7da14b939ef3718d5b",
+    "merged": true
+  }
+}

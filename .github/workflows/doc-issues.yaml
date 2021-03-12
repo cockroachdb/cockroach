@@ -1,0 +1,42 @@
+name:               Create doc issues on PR merge
+
+on:
+  pull_request:
+    branches:
+      - master
+      - 'release-*'
+    types:          [closed]
+
+jobs:
+  create-doc-issue:
+    runs-on:        ubuntu-latest
+    if:             ${{ github.event.pull_request.merged == true }}
+    env:
+      PR_BODY: ${{ github.event.pull_request.body }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REGEX: '[rR]elease [nN]otes? ?(\((\w.+)\):|:) (\w+.*)$'
+    steps:
+      - uses:       actions-ecosystem/action-regex-match@v2
+        id:         regex-match
+        with:
+          text:     ${{ env.PR_BODY }}
+          regex:    ${{ env.REGEX }}
+          flags:    'gm'
+
+      - name: echo regex
+        run: 'echo "regex-match output: ${{ env.REGEX_OUT }}"'
+        env:
+          REGEX_OUT: ${{ steps.regex-match.outputs.match }}
+
+      - uses:       maxkomarychev/oction-create-issue@v0.7.1
+        if:         ${{ startsWith(steps.regex-match.outputs.group3,'None') != true && steps.regex-match.outputs.match != '' }}
+        id:         create-issue
+        with:
+          token:    ${{ secrets.GITHUB_TOKEN }}
+          owner:    cockroachdb
+          repo:     docs
+          title:    ${{ env.PR_TITLE }}
+          body:     |
+            PR:     https://github.com/cockroachdb/cockroach/pull/${{ env.PR_NUMBER }}
+            From release notes: ${{ steps.regex-match.outputs.group3 }}
