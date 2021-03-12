@@ -781,6 +781,20 @@ func (mb *mutationBuilder) roundDecimalValues(colIDs opt.OptionalColList, roundC
 		// Overwrite the input column ID with the new synthesized column ID.
 		colIDs[i] = scopeCol.id
 		mb.roundedDecimalCols.Add(scopeCol.id)
+
+		// When building an UPDATE..FROM expression the projectionScope may have
+		// two columns with different names but the same ID. As a result, the
+		// scope column with the correct name (the name of the target column)
+		// may not be returned from projectionScope.getColumn. We set the name
+		// of the new scope column to the target column name to ensure it is
+		// in-scope when building CHECK constraint and partial index PUT
+		// expressions. See #61520.
+		// TODO(mgartner): Find a less brittle way to manage the scopes of
+		// mutations so that this isn't necessary. Ideally the scope produced by
+		// addUpdateColumns would not include columns in the FROM clause. Those
+		// columns are only in-scope in the RETURNING clause via
+		// mb.extraAccessibleCols.
+		scopeCol.name = mb.tab.Column(i).ColName()
 	}
 
 	if projectionsScope != nil {
