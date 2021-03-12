@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -46,7 +47,12 @@ type batchInfoCollector struct {
 	colexecop.NonExplainable
 	componentID execinfrapb.ComponentID
 
-	numBatches, numTuples uint64
+	mu struct {
+		// We need a mutex because finish() and Next() might be called from
+		// different goroutines.
+		syncutil.Mutex
+		numBatches, numTuples uint64
+	}
 
 	// stopwatch keeps track of the amount of time the wrapped operator spent
 	// doing work. Note that this will include all of the time that the operator's
@@ -83,11 +89,13 @@ func (bic *batchInfoCollector) Next(ctx context.Context) coldata.Batch {
 	var batch coldata.Batch
 	bic.stopwatch.Start()
 	batch = bic.Operator.Next(ctx)
-	if batch.Length() > 0 {
-		bic.numBatches++
-		bic.numTuples += uint64(batch.Length())
-	}
 	bic.stopwatch.Stop()
+	if batch.Length() > 0 {
+		bic.mu.Lock()
+		bic.mu.numBatches++
+		bic.mu.numTuples += uint64(batch.Length())
+		bic.mu.Unlock()
+	}
 	return batch
 }
 
@@ -100,7 +108,9 @@ func (bic *batchInfoCollector) finish() (numBatches, numTuples uint64, time time
 	for _, statsCollectors := range bic.childStatsCollectors {
 		tm -= statsCollectors.getElapsedTime()
 	}
-	return bic.numBatches, bic.numTuples, tm
+	bic.mu.Lock()
+	defer bic.mu.Unlock()
+	return bic.mu.numBatches, bic.mu.numTuples, tm
 }
 
 // getElapsedTime implements the childStatsCollector interface.
