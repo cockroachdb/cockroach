@@ -1753,6 +1753,19 @@ func TestChangefeedRetryableError(t *testing.T) {
 			return nil
 		})
 
+		// Verify job progress contains retryable error status.
+		jobID := foo.(*cdctest.TableFeed).JobID
+		job, err := registry.LoadJob(context.Background(), jobID)
+		require.NoError(t, err)
+		require.Contains(t, job.Progress().RunningStatus, "synthetic retryable error")
+
+		// Verify `SHOW JOBS` also shows this information.
+		var runningStatus string
+		sqlDB.QueryRow(t,
+			`SELECT running_status FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
+		).Scan(&runningStatus)
+		require.Contains(t, runningStatus, "synthetic retryable error")
+
 		// Fix the sink and insert another row. Check that nothing funky happened.
 		atomic.StoreInt64(&failSink, 0)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
