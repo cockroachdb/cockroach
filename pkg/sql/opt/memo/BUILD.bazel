@@ -60,9 +60,9 @@ go_test(
     ],
     data = glob(["testdata/**"]) + [
         "@cockroach//c-deps:libgeos",
+        "//pkg/sql/opt/testutils/opttester:testfixtures",
     ],
     embed = [":memo"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/settings/cluster",
         "//pkg/sql/inverted",
