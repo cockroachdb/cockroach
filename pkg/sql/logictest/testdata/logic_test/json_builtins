@@ -615,6 +615,11 @@ SELECT json_extract_path('{"a": {"b": 2}}', 'a', 'b', 'c')
 NULL
 
 query T
+SELECT json_extract_path('null')
+----
+null
+
+query T
 SELECT json_extract_path_text('{"a": 1}', 'a')
 ----
 1
@@ -646,6 +651,11 @@ SELECT jsonb_extract_path_text('{"a": {"b": 2}}', 'a', 'b')
 
 query T
 SELECT json_extract_path_text('{"a": {"b": 2}}', 'a', 'b', 'c')
+----
+NULL
+
+query T
+SELECT json_extract_path_text('null')
 ----
 NULL
 
