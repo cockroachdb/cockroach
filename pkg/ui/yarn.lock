@@ -1813,10 +1813,10 @@
     lodash "^4.17.13"
     to-fast-properties "^2.0.0"
 
-"@cockroachlabs/cluster-ui@^0.2.14":
-  version "0.2.14"
-  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.14.tgz#d07a562aa81768e2a71dcc823fb446e0f9a88e3f"
-  integrity sha512-KLHI2ZOYJGtZvE4zs2a7WGD5PdaSMU1wzaa3HE4NrEyLlHvUE3sYkBOHJlcSPWJt0oxSt97L4J5Kp61EGpNkwg==
+"@cockroachlabs/cluster-ui@^0.2.15":
+  version "0.2.15"
+  resolved "https://registry.yarnpkg.com/@cockroachlabs/cluster-ui/-/cluster-ui-0.2.15.tgz#4411c126c0d6c8e453e5841d10cebb5604606b2a"
+  integrity sha512-nGsYLA5m2WT5WHMTn5fWJJMuuy3idru6kxtyJ/BqyN97PHZbisQDjMcX1wuLHYhPaQbhXBmfEefyehcn93CpWg==
   dependencies:
     "@babel/runtime" "^7.12.13"
     "@cockroachlabs/crdb-protobuf-client" "^0.0.7"
