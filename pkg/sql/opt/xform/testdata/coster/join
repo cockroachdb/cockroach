@@ -235,20 +235,20 @@ limit
  ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  ├── cardinality: [0 - 6000]
  ├── stats: [rows=6000]
- ├── cost: 47214.55
+ ├── cost: 47174.55
  ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  │    ├── key columns: [7] = [1]
  │    ├── lookup columns are key
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(7)=1000, null(7)=0]
- │    ├── cost: 47154.54
+ │    ├── cost: 47114.54
  │    ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  │    ├── limit hint: 6000.00
  │    ├── select
  │    │    ├── columns: x:6!null z:7!null
  │    │    ├── stats: [rows=10000, distinct(6)=1000, null(6)=0, distinct(7)=1000, null(7)=0]
- │    │    ├── cost: 10614.53
+ │    │    ├── cost: 10574.53
  │    │    ├── limit hint: 6000.00
  │    │    ├── scan b
  │    │    │    ├── columns: x:6 z:7!null
@@ -270,20 +270,20 @@ limit
  ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  ├── cardinality: [0 - 5950]
  ├── stats: [rows=5950]
- ├── cost: 47214.05
+ ├── cost: 47174.05
  ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  │    ├── key columns: [7] = [1]
  │    ├── lookup columns are key
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(7)=1000, null(7)=0]
- │    ├── cost: 47154.54
+ │    ├── cost: 47114.54
  │    ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  │    ├── limit hint: 5950.00
  │    ├── select
  │    │    ├── columns: x:6!null z:7!null
  │    │    ├── stats: [rows=10000, distinct(6)=1000, null(6)=0, distinct(7)=1000, null(7)=0]
- │    │    ├── cost: 10614.53
+ │    │    ├── cost: 10574.53
  │    │    ├── limit hint: 6000.00
  │    │    ├── scan b
  │    │    │    ├── columns: x:6 z:7!null
