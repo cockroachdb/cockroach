@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
@@ -37,6 +38,27 @@ import (
 )
 
 const cockroachDB = "github.com/cockroachdb/cockroach"
+
+func init() {
+	if bazel.BuiltWithBazel() {
+		// We need to explicitly include all the libraries in LDFLAGS.
+		runfiles, err := bazel.RunfilesPath()
+		if err != nil {
+			panic(err)
+		}
+		ldflags := ""
+		for _, dir := range []string{
+			"c-deps/libgeos/lib",
+			"c-deps/libproj/lib",
+			"c-deps/libroach/lib",
+			"external/com_github_knz_go_libedit/unix",
+		} {
+			ldflags = ldflags + " -L" + filepath.Join(runfiles, dir)
+		}
+		os.Setenv("CGO_LDFLAGS", ldflags)
+		os.Setenv("LDFLAGS", ldflags)
+	}
+}
 
 func dirCmd(
 	dir string, name string, args ...string,
@@ -1912,6 +1934,7 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestGCAssert", func(t *testing.T) {
 		skip.UnderShort(t)
+		skip.UnderBazelWithIssue(t, 65485, "Doesn't work in Bazel -- not really sure why yet")
 
 		t.Parallel()
 		var buf strings.Builder
@@ -1972,6 +1995,7 @@ func TestLint(t *testing.T) {
 	// See pkg/cmd/roachvet.
 	t.Run("TestRoachVet", func(t *testing.T) {
 		skip.UnderShort(t)
+		skip.UnderBazelWithIssue(t, 65517, "Some weird linkage issue")
 		// The -printfuncs functionality is interesting and
 		// under-documented. It checks two things:
 		//
