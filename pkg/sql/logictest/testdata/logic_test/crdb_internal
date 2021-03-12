@@ -24,6 +24,7 @@ crdb_internal  cluster_settings             table  NULL  NULL  NULL
 crdb_internal  cluster_transactions         table  NULL  NULL  NULL
 crdb_internal  create_statements            table  NULL  NULL  NULL
 crdb_internal  create_type_statements       table  NULL  NULL  NULL
+crdb_internal  cross_db_references          table  NULL  NULL  NULL
 crdb_internal  databases                    table  NULL  NULL  NULL
 crdb_internal  feature_usage                table  NULL  NULL  NULL
 crdb_internal  forward_dependencies         table  NULL  NULL  NULL
@@ -32,6 +33,7 @@ crdb_internal  gossip_liveness              table  NULL  NULL  NULL
 crdb_internal  gossip_network               table  NULL  NULL  NULL
 crdb_internal  gossip_nodes                 table  NULL  NULL  NULL
 crdb_internal  index_columns                table  NULL  NULL  NULL
+crdb_internal  interleaved                  table  NULL  NULL  NULL
 crdb_internal  invalid_objects              table  NULL  NULL  NULL
 crdb_internal  jobs                         table  NULL  NULL  NULL
 crdb_internal  kv_node_status               table  NULL  NULL  NULL
