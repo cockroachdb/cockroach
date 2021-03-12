@@ -1978,7 +1978,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			`\[\]types.T`,
+			`\[\]types.T\b`,
 			"--",
 		)
 		if err != nil {

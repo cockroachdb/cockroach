@@ -11,16 +11,23 @@
 package aws
 
 import (
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
-	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/flagstub"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -37,33 +44,9 @@ const ProviderName = "aws"
 // init will inject the AWS provider into vm.Providers, but only
 // if the aws tool is available on the local path.
 func init() {
-	// aws-cli version 1 automatically base64 encodes the string passed as --public-key-material.
-	// Version 2 supports file:// and fileb:// prefixes for text and binary files.
-	// The latter prefix will base64-encode the file contents. See
-	// https://docs.aws.amazon.//com/cli/latest/userguide/cliv2-migration.html#cliv2-migration-binaryparam
-	const unsupportedAwsCliVersionPrefix = "aws-cli/1."
-	const unimplemented = "please install the AWS CLI utilities version 2+ " +
-		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
 	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
 
 	var p vm.Provider = &Provider{}
-
-	haveRequiredVersion := func() bool {
-		cmd := exec.Command("aws", "--version")
-		output, err := cmd.Output()
-		if err != nil {
-			return false
-		}
-		if strings.HasPrefix(string(output), unsupportedAwsCliVersionPrefix) {
-			return false
-		}
-		return true
-	}
-	if !haveRequiredVersion() {
-		p = flagstub.New(p, unimplemented)
-		vm.Providers[ProviderName] = p
-		return
-	}
 
 	// NB: This is a bit hacky, but using something like `aws iam get-user` is
 	// slow and not something we want to do at startup.
@@ -105,6 +88,15 @@ type ebsVolume struct {
 
 const ebsDefaultVolumeSizeGB = 500
 const defaultEBSVolumeType = "gp3"
+
+// getEC2Client returns an aws client instance for a region
+func getEC2Client(region string) (*ec2.Client, error) {
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot create EC2 client from default config")
+	}
+	return ec2.NewFromConfig(cfg), nil
+}
 
 // Set implements flag Value interface.
 func (d *ebsDisk) Set(s string) error {
@@ -285,7 +277,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 		" rate limit (per second) for instance creation. This is used to avoid hitting the request"+
 		" limits from aws, which can vary based on the region, and the size of the cluster being"+
 		" created. Try lowering this limit when hitting 'Request limit exceeded' errors.")
-	flags.StringVar(&o.IAMProfile, ProviderName+"-	iam-profile", "roachprod-testing",
+	flags.StringVar(&o.IAMProfile, ProviderName+"-iam-profile", "roachprod-testing",
 		"the IAM instance profile to associate with created VMs if non-empty")
 
 }
@@ -459,23 +451,16 @@ func (p *Provider) Delete(vms vm.List) error {
 	}
 	g := errgroup.Group{}
 	for region, list := range byRegion {
-		args := []string{
-			"ec2", "terminate-instances",
-			"--region", region,
-			"--instance-ids",
+		client, err := getEC2Client(region)
+		if err != nil {
+			return err
 		}
-		args = append(args, list.ProviderIDs()...)
 		g.Go(func() error {
-			var data struct {
-				TerminatingInstances []struct {
-					InstanceID string `json:"InstanceId"`
-				}
+			terminateParams := ec2.TerminateInstancesInput{
+				InstanceIds: list.ProviderIDs(),
 			}
-			_ = data.TerminatingInstances // silence unused warning
-			if len(data.TerminatingInstances) > 0 {
-				_ = data.TerminatingInstances[0].InstanceID // silence unused warning
-			}
-			return p.runJSONCommand(args, &data)
+			_, err := client.TerminateInstances(context.TODO(), &terminateParams)
+			return err
 		})
 	}
 	return g.Wait()
@@ -495,17 +480,21 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 	}
 	g := errgroup.Group{}
 	for region, list := range byRegion {
-		// Capture loop vars here
-		args := []string{
-			"ec2", "create-tags",
-			"--region", region,
-			"--tags", "Key=Lifetime,Value=" + lifetime.String(),
-			"--resources",
+		client, err := getEC2Client(region)
+		if err != nil {
+			return err
 		}
-		args = append(args, list.ProviderIDs()...)
-
+		tagsInput := ec2.CreateTagsInput{
+			Resources: list.ProviderIDs(),
+			Tags: []types.Tag{
+				{
+					Key:   aws.String("Lifetime"),
+					Value: aws.String(lifetime.String()),
+				},
+			},
+		}
 		g.Go(func() error {
-			_, err := p.runCommand(args)
+			_, err := client.CreateTags(context.TODO(), &tagsInput)
 			return err
 		})
 	}
@@ -540,34 +529,31 @@ func (p *Provider) FindActiveAccount() (string, error) {
 
 // iamGetUser returns the identity of an IAM user.
 func (p *Provider) iamGetUser() (string, error) {
-	var userInfo struct {
-		User struct {
-			UserName string
-		}
-	}
-	args := []string{"iam", "get-user"}
-	err := p.runJSONCommand(args, &userInfo)
+	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "cannot load default config for IAM")
 	}
-	if userInfo.User.UserName == "" {
-		return "", errors.Errorf("username not configured. run 'aws iam get-user'")
+	client := iam.NewFromConfig(cfg)
+	user, err := client.GetUser(context.TODO(), nil)
+	if err != nil {
+		return "", errors.Wrap(err, "cannot get IAM user")
 	}
-	return userInfo.User.UserName, nil
+	return *user.User.UserName, nil
 }
 
 // stsGetCallerIdentity returns the identity of a user assuming a role
 // into the account.
 func (p *Provider) stsGetCallerIdentity() (string, error) {
-	var userInfo struct {
-		Arn string
-	}
-	args := []string{"sts", "get-caller-identity"}
-	err := p.runJSONCommand(args, &userInfo)
+	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "cannot load default config for STS")
 	}
-	s := strings.Split(userInfo.Arn, "/")
+	client := sts.NewFromConfig(cfg)
+	userInfo, err := client.GetCallerIdentity(context.TODO(), nil)
+	if err != nil {
+		return "", errors.Wrap(err, "cannot get caller identity")
+	}
+	s := strings.Split(*userInfo.Arn, "/")
 	if len(s) < 2 {
 		return "", errors.Errorf("Could not parse caller identity ARN '%s'", userInfo.Arn)
 	}
@@ -659,55 +645,33 @@ func (p *Provider) regionZones(region string, allZones []string) (zones []string
 // listRegion extracts the roachprod-managed instances in the
 // given region.
 func (p *Provider) listRegion(region string) (vm.List, error) {
-	var data struct {
-		Reservations []struct {
-			Instances []struct {
-				InstanceID string `json:"InstanceId"`
-				LaunchTime string
-				Placement  struct {
-					AvailabilityZone string
-				}
-				PrivateDNSName   string `json:"PrivateDnsName"`
-				PrivateIPAddress string `json:"PrivateIpAddress"`
-				PublicDNSName    string `json:"PublicDnsName"`
-				PublicIPAddress  string `json:"PublicIpAddress"`
-				State            struct {
-					Code int
-					Name string
-				}
-				Tags []struct {
-					Key   string
-					Value string
-				}
-				VpcID        string `json:"VpcId"`
-				InstanceType string
-			}
-		}
-	}
-	args := []string{
-		"ec2", "describe-instances",
-		"--region", region,
-	}
-	err := p.runJSONCommand(args, &data)
+	var ret vm.List
+	client, err := getEC2Client(region)
 	if err != nil {
-		return nil, err
+		return ret, err
+	}
+	// Take into account only running and pending instances. Unfortunately
+	// filtering using tags (Roachprod: true) doesn't work.
+	input := &ec2.DescribeInstancesInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("instance-state-name"),
+				Values: []string{"running", "pending"},
+			},
+		},
+	}
+	result, err := client.DescribeInstances(context.TODO(), input)
+	if err != nil {
+		return ret, err
 	}
 
-	var ret vm.List
-	for _, res := range data.Reservations {
+	for _, res := range result.Reservations {
 	in:
 		for _, in := range res.Instances {
-			// Ignore any instances that are not pending or running
-			if in.State.Name != "pending" && in.State.Name != "running" {
-				continue in
-			}
-			_ = in.PublicDNSName // silence unused warning
-			_ = in.State.Code    // silence unused warning
-
 			// Convert the tag map into a more useful representation
 			tagMap := make(map[string]string, len(in.Tags))
 			for _, entry := range in.Tags {
-				tagMap[entry.Key] = entry.Value
+				tagMap[*entry.Key] = *entry.Value
 			}
 			// Ignore any instances that we didn't create
 			if tagMap["Roachprod"] != "true" {
@@ -715,10 +679,6 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 			}
 
 			var errs []error
-			createdAt, err := time.Parse(time.RFC3339, in.LaunchTime)
-			if err != nil {
-				errs = append(errs, vm.ErrNoExpiration)
-			}
 
 			var lifetime time.Duration
 			if lifeText, ok := tagMap["Lifetime"]; ok {
@@ -730,20 +690,27 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 				errs = append(errs, vm.ErrNoExpiration)
 			}
 
+			// aws uses nil pointers for values like PublicIpAddress. Let's wrap them to avoid SIGSEGVs.
+			withDefault := func(value *string) string {
+				if value != nil {
+					return *value
+				}
+				return ""
+			}
 			m := vm.VM{
-				CreatedAt:   createdAt,
-				DNS:         in.PrivateDNSName,
+				CreatedAt:   *in.LaunchTime,
+				DNS:         withDefault(in.PrivateDnsName),
 				Name:        tagMap["Name"],
 				Errors:      errs,
 				Lifetime:    lifetime,
-				PrivateIP:   in.PrivateIPAddress,
+				PrivateIP:   withDefault(in.PrivateIpAddress),
 				Provider:    ProviderName,
-				ProviderID:  in.InstanceID,
-				PublicIP:    in.PublicIPAddress,
+				ProviderID:  withDefault(in.InstanceId),
 				RemoteUser:  p.opts.RemoteUserName,
-				VPC:         in.VpcID,
-				MachineType: in.InstanceType,
-				Zone:        in.Placement.AvailabilityZone,
+				PublicIP:    withDefault(in.PublicIpAddress),
+				VPC:         withDefault(in.VpcId),
+				MachineType: string(in.InstanceType),
+				Zone:        withDefault(in.Placement.AvailabilityZone),
 			}
 			ret = append(ret, m)
 		}
@@ -792,85 +759,21 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		machineType = p.opts.MachineType
 	}
 
-	cpuOptions := p.opts.CPUOptions
-
-	// We avoid the need to make a second call to set the tags by jamming
-	// all of our metadata into the TagSpec.
-	tagSpecs := fmt.Sprintf(
-		"ResourceType=instance,Tags=["+
-			"{Key=Lifetime,Value=%s},"+
-			"{Key=Name,Value=%s},"+
-			"{Key=Roachprod,Value=true},"+
-			"]", opts.Lifetime, name)
-
-	var data struct {
-		Instances []struct {
-			InstanceID string `json:"InstanceId"`
-		}
-	}
-	_ = data.Instances // silence unused warning
-	if len(data.Instances) > 0 {
-		_ = data.Instances[0].InstanceID // silence unused warning
-	}
-
-	// Create AWS startup script file.
-	extraMountOpts := ""
-	// Dynamic args.
-	if opts.SSDOpts.UseLocalSSD {
-		if opts.SSDOpts.NoExt4Barrier {
-			extraMountOpts = "nobarrier"
-		}
-	}
-	filename, err := writeStartupScript(extraMountOpts, p.opts.UseMultipleDisks)
-	if err != nil {
-		return errors.Wrapf(err, "could not write AWS startup script to temp file")
-	}
-	defer func() {
-		_ = os.Remove(filename)
-	}()
-
-	withFlagOverride := func(cfg string, fl *string) string {
-		if *fl == "" {
-			return cfg
-		}
-		return *fl
-	}
-
-	args := []string{
-		"ec2", "run-instances",
-		"--associate-public-ip-address",
-		"--count", "1",
-		"--instance-type", machineType,
-		"--image-id", withFlagOverride(az.region.AMI, &p.opts.ImageAMI),
-		"--key-name", keyName,
-		"--region", az.region.Name,
-		"--security-group-ids", az.region.SecurityGroup,
-		"--subnet-id", az.subnetID,
-		"--tag-specifications", tagSpecs,
-		"--user-data", "file://" + filename,
-	}
-
-	if cpuOptions != "" {
-		args = append(args, "--cpu-options", cpuOptions)
-	}
-
-	if p.opts.IAMProfile != "" {
-		args = append(args, "--iam-instance-profile", "Name="+p.opts.IAMProfile)
-	}
-
-	// The local NVMe devices are automatically mapped.  Otherwise, we need to map an EBS data volume.
+	// Make a local copy of p.opts.EBSVolumes to prevent data races
+	ebsVolumes := p.opts.EBSVolumes
+	// The local NVMe devices are automatically mapped. Otherwise, we need to map an EBS data volume.
 	if !opts.SSDOpts.UseLocalSSD {
-		if len(p.opts.EBSVolumes) == 0 && p.opts.DefaultEBSVolume.Disk.VolumeType == "" {
+		if len(ebsVolumes) == 0 && p.opts.DefaultEBSVolume.Disk.VolumeType == "" {
 			p.opts.DefaultEBSVolume.Disk.VolumeType = defaultEBSVolumeType
 			p.opts.DefaultEBSVolume.Disk.DeleteOnTermination = true
 		}
 
 		if p.opts.DefaultEBSVolume.Disk.VolumeType != "" {
 			// Add default volume to the list of volumes we'll setup.
-			v := p.opts.EBSVolumes.newVolume()
+			v := ebsVolumes.newVolume()
 			v.Disk = p.opts.DefaultEBSVolume.Disk
 			v.Disk.DeleteOnTermination = true
-			p.opts.EBSVolumes = append(p.opts.EBSVolumes, v)
+			ebsVolumes = append(ebsVolumes, v)
 		}
 	}
 
@@ -882,28 +785,119 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			DeleteOnTermination: true,
 		},
 	}
+	ebsVolumes = append(ebsVolumes, osDiskVolume)
 
-	p.opts.EBSVolumes = append(p.opts.EBSVolumes, osDiskVolume)
+	var deviceMapping []types.BlockDeviceMapping
+	for _, vol := range ebsVolumes {
+		ebs := &types.EbsBlockDevice{
+			VolumeType:          types.VolumeType(vol.Disk.VolumeType),
+			VolumeSize:          aws.Int32(int32(vol.Disk.VolumeSize)),
+			DeleteOnTermination: aws.Bool(vol.Disk.DeleteOnTermination),
+		}
+		if vol.Disk.IOPs != 0 {
+			ebs.Iops = aws.Int32(int32(vol.Disk.IOPs))
+		}
+		if vol.Disk.Throughput != 0 {
+			ebs.Throughput = aws.Int32(int32(vol.Disk.Throughput))
+		}
+		deviceMapping = append(deviceMapping, types.BlockDeviceMapping{
+			DeviceName: aws.String(vol.DeviceName),
+			Ebs:        ebs,
+		})
+	}
 
-	mapping, err := json.Marshal(p.opts.EBSVolumes)
+	// Create AWS startup script file.
+	extraMountOpts := ""
+	// Dynamic args.
+	if opts.SSDOpts.UseLocalSSD && opts.SSDOpts.NoExt4Barrier {
+		extraMountOpts = "nobarrier"
+	}
+	userData, err := getStartupScript(extraMountOpts, p.opts.UseMultipleDisks)
 	if err != nil {
 		return err
 	}
+	userData = base64.StdEncoding.EncodeToString([]byte(userData))
 
-	deviceMapping, err := ioutil.TempFile("", "aws-block-device-mapping")
+	tagSpecs := []types.TagSpecification{
+		{
+			ResourceType: types.ResourceType("instance"),
+			Tags: []types.Tag{
+				{Key: aws.String("Lifetime"), Value: aws.String(opts.Lifetime.String())},
+				{Key: aws.String("Name"), Value: aws.String(name)},
+				{Key: aws.String("Roachprod"), Value: aws.String("true")},
+			},
+		},
+	}
+	interfaces := []types.InstanceNetworkInterfaceSpecification{
+		{
+			DeviceIndex:              aws.Int32(0),
+			AssociatePublicIpAddress: aws.Bool(true),
+			DeleteOnTermination:      aws.Bool(true),
+			Groups:                   []string{az.region.SecurityGroup},
+			SubnetId:                 aws.String(az.subnetID),
+		},
+	}
+	withDefault := func(value, defaultValue string) string {
+		if value == "" {
+			return defaultValue
+		}
+		return value
+	}
+	runParams := ec2.RunInstancesInput{
+		BlockDeviceMappings: deviceMapping,
+		ImageId:             aws.String(withDefault(p.opts.ImageAMI, az.region.AMI)),
+		InstanceType:        types.InstanceType(machineType),
+		KeyName:             aws.String(keyName),
+		MaxCount:            aws.Int32(1),
+		MinCount:            aws.Int32(1),
+		NetworkInterfaces:   interfaces,
+		TagSpecifications:   tagSpecs,
+		UserData:            aws.String(userData),
+	}
+	if p.opts.CPUOptions != "" {
+		cpuOpts, err := parseCPUOptions(p.opts.CPUOptions)
+		if err != nil {
+			return err
+		}
+		runParams.CpuOptions = &cpuOpts
+	}
+	if p.opts.IAMProfile != "" {
+		runParams.IamInstanceProfile = &types.IamInstanceProfileSpecification{
+			Name: aws.String(p.opts.IAMProfile),
+		}
+	}
+	client, err := getEC2Client(az.region.Name)
 	if err != nil {
 		return err
 	}
-	defer deviceMapping.Close()
-	if _, err := deviceMapping.Write(mapping); err != nil {
-		return err
-	}
-	args = append(args,
-		"--block-device-mapping",
-		"file://"+deviceMapping.Name(),
-	)
+	_, err = client.RunInstances(context.TODO(), &runParams)
+	return err
+}
 
-	return p.runJSONCommand(args, &data)
+// parseCPUOptions parses `CoreCount=integer,ThreadsPerCore=integer` style formatted
+// string into CpuOptionsRequest struct
+func parseCPUOptions(input string) (types.CpuOptionsRequest, error) {
+	var ret types.CpuOptionsRequest
+	parts := strings.Split(input, ",")
+	for _, part := range parts {
+		opts := strings.Split(part, "=")
+		if len(opts) != 2 {
+			return types.CpuOptionsRequest{}, fmt.Errorf("wrong CPU options format: '%s'", input)
+		}
+		val, err := strconv.Atoi(opts[1])
+		if err != nil {
+			return types.CpuOptionsRequest{}, errors.Wrap(err, "cannot parse integer")
+		}
+		switch opts[0] {
+		case "CoreCount":
+			ret.CoreCount = aws.Int32(int32(val))
+		case "ThreadsPerCore":
+			ret.ThreadsPerCore = aws.Int32(int32(val))
+		default:
+			return types.CpuOptionsRequest{}, errors.Wrapf(err, "unknown CPU option: %s", part)
+		}
+	}
+	return ret, nil
 }
 
 // Active is part of the vm.Provider interface.

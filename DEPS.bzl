@@ -197,6 +197,84 @@ def go_deps():
         version = "v1.38.69",
     )
     go_repository(
+        name = "com_github_aws_aws_sdk_go_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2",
+        sum = "h1:GcFgQl7MsBygmeeqXyV1ivrTEmsVz/rdFJaTcltG9ag=",
+        version = "v1.8.1",
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_config",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/config",
+        sum = "h1:qrZINaORyr78syO1zfD4l7r4tZjy0Z1l0sy4jiysyOM=",
+        version = "v1.6.1",
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_credentials",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/credentials",
+        sum = "h1:A13QPatmUl41SqUfnuT3V0E3XiNGL6qNTOINbE8cZL4=",
+        version = "v1.3.3",
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_feature_ec2_imds",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/feature/ec2/imds",
+        sum = "h1:rc+fRGvlKbeSd9IFhFS1KWBs0XjTkq0CfK5xqyLgIp0=",
+        version = "v1.4.1",
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_internal_ini",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/internal/ini",
+        sum = "h1:IkqRRUZTKaS16P2vpX+FNc2jq3JWa3c478gykQp4ow4=",
+        version = "v1.2.1",
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_service_ec2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/service/ec2",
+        sum = "h1:amBnPTRG9rrvfk1OEUJq3HpaB4wC+E0KWsZWIsvVvjM=",
+        version = "v1.14.0",
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_service_iam",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/service/iam",
+        sum = "h1:BmBI3WE3zQYAKafyNhtgvOh7w2KT6pG2WXvGhV5J0IY=",
+        version = "v1.8.1",
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_service_internal_presigned_url",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/service/internal/presigned-url",
+        sum = "h1:VxFCgxsqWe7OThOwJ5IpFX3xrObtuIH9Hg/NW7oot1Y=",
+        version = "v1.2.3",
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_service_sso",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/service/sso",
+        sum = "h1:K2gCnGvAASpz+jqP9iyr+F/KNjmTYf8aWOtTQzhmZ5w=",
+        version = "v1.3.3",
+    )
+    go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_service_sts",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/service/sts",
+        sum = "h1:l504GWCoQi1Pk68vSUFGLmDIEMzRfVGNgLakDK+Uj58=",
+        version = "v1.6.2",
+    )
+    go_repository(
+        name = "com_github_aws_smithy_go",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/smithy-go",
+        sum = "h1:+cLHMRrDZvQ4wk+KuQ9yH6eEg6KZEJ9RI2IkDqnygCg=",
+        version = "v1.7.0",
+    )
+
+    go_repository(
         name = "com_github_axiomhq_hyperloglog",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/axiomhq/hyperloglog",

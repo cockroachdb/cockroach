@@ -12,15 +12,9 @@ package aws
 
 import (
 	"bytes"
-	"encoding/json"
-	"io/ioutil"
-	"log"
-	"os/exec"
-	"strings"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
-	"github.com/cockroachdb/errors"
 )
 
 // Both M5 and I3 machines expose their EBS or local SSD volumes as NVMe block
@@ -36,8 +30,8 @@ const awsStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a AWS machine for roachprod use.
 
 set -x
-sudo apt-get update
-sudo apt-get install -qy --no-install-recommends mdadm
+apt-get update
+apt-get install -qy --no-install-recommends mdadm
 
 mount_opts="defaults"
 {{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
@@ -88,12 +82,12 @@ else
   echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
 fi
 
-sudo apt-get install -qy chrony
+apt-get install -qy chrony
 
 # Override the chrony config. In particular,
 # log aggressively when clock is adjusted (0.01s)
 # and exclusively use a single time server.
-sudo cat <<EOF > /etc/chrony/chrony.conf
+cat <<EOF > /etc/chrony/chrony.conf
 keyfile /etc/chrony/chrony.keys
 commandkey 1
 driftfile /var/lib/chrony/chrony.drift
@@ -109,24 +103,24 @@ server 169.254.169.123 prefer iburst
 makestep 0.1 3
 EOF
 
-sudo /etc/init.d/chrony restart
-sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
+/etc/init.d/chrony restart
+chronyc -a waitsync 30 0.01 | tee -a /root/chrony.log
 
 # sshguard can prevent frequent ssh connections to the same host. Disable it.
-sudo service sshguard stop
+service sshguard stop
 # increase the number of concurrent unauthenticated connections to the sshd
 # daemon. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Load_Balancing.
 # By default, only 10 unauthenticated connections are permitted before sshd
 # starts randomly dropping connections.
-sudo sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
+sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
 # Crank up the logging for issues such as:
 # https://github.com/cockroachdb/cockroach/issues/36929
-sudo sed -i'' 's/LogLevel.*$/LogLevel DEBUG3/' /etc/ssh/sshd_config
-sudo service sshd restart
+sed -i'' 's/LogLevel.*$/LogLevel DEBUG3/' /etc/ssh/sshd_config
+service sshd restart
 # increase the default maximum number of open file descriptors for
 # root and non-root users. Load generators running a lot of concurrent
 # workers bump into this often.
-sudo sh -c 'echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf'
+echo "root - nofile 1048576\n* - nofile 1048576" > /etc/security/limits.d/10-roachprod-nofiles.conf
 
 # Enable core dumps
 cat <<EOF > /etc/security/limits.d/core_unlimited.conf
@@ -146,69 +140,25 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 
 sysctl --system  # reload sysctl settings
 
-sudo touch /mnt/data1/.roachprod-initialized
+touch /mnt/data1/.roachprod-initialized
 `
 
-// writeStartupScript writes the startup script to a temp file.
-// Returns the path to the file.
-// After use, the caller should delete the temp file.
+// getStartupScript generates the startup script.
 //
 // extraMountOpts, if not empty, is appended to the default mount options. It is
 // a comma-separated list of options for the "mount -o" flag.
-func writeStartupScript(extraMountOpts string, useMultiple bool) (string, error) {
+func getStartupScript(extraMountOpts string, useMultiple bool) (string, error) {
 	type tmplParams struct {
 		ExtraMountOpts   string
 		UseMultipleDisks bool
 	}
-
 	args := tmplParams{ExtraMountOpts: extraMountOpts, UseMultipleDisks: useMultiple}
-
-	tmpfile, err := ioutil.TempFile("", "aws-startup-script")
-	if err != nil {
-		return "", err
-	}
-	defer tmpfile.Close()
-
+	var ret bytes.Buffer
 	t := template.Must(template.New("start").Parse(awsStartupScriptTemplate))
-	if err := t.Execute(tmpfile, args); err != nil {
+	if err := t.Execute(&ret, args); err != nil {
 		return "", err
 	}
-	return tmpfile.Name(), nil
-}
-
-// runCommand is used to invoke an AWS command.
-func (p *Provider) runCommand(args []string) ([]byte, error) {
-
-	if p.opts.Profile != "" {
-		args = append(args[:len(args):len(args)], "--profile", p.opts.Profile)
-	}
-	var stderrBuf bytes.Buffer
-	cmd := exec.Command("aws", args...)
-	cmd.Stderr = &stderrBuf
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr := (*exec.ExitError)(nil); errors.As(err, &exitErr) {
-			log.Println(string(exitErr.Stderr))
-		}
-		return nil, errors.Wrapf(err, "failed to run: aws %s: stderr: %v",
-			strings.Join(args, " "), stderrBuf.String())
-	}
-	return output, nil
-}
-
-// runJSONCommand invokes an aws command and parses the json output.
-func (p *Provider) runJSONCommand(args []string, parsed interface{}) error {
-	// Force json output in case the user has overridden the default behavior.
-	args = append(args[:len(args):len(args)], "--output", "json")
-	rawJSON, err := p.runCommand(args)
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(rawJSON, &parsed); err != nil {
-		return errors.Wrapf(err, "failed to parse json %s", rawJSON)
-	}
-
-	return nil
+	return ret.String(), nil
 }
 
 // regionMap collates VM instances by their region.

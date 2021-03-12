@@ -28,6 +28,11 @@ require (
 	github.com/apache/thrift v0.0.0-20181211084444-2b7365c54f82 // indirect
 	github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e
 	github.com/aws/aws-sdk-go v1.38.69
+	github.com/aws/aws-sdk-go-v2 v1.8.1
+	github.com/aws/aws-sdk-go-v2/config v1.6.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.14.0
+	github.com/aws/aws-sdk-go-v2/service/iam v1.8.1
+	github.com/aws/aws-sdk-go-v2/service/sts v1.6.2
 	github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e
 	github.com/bazelbuild/rules_go v0.26.0
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8

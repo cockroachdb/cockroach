@@ -11,6 +11,7 @@
 package aws
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
@@ -18,6 +19,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -26,49 +29,42 @@ const sshPublicKeyFile = "${HOME}/.ssh/id_rsa.pub"
 
 // sshKeyExists checks to see if there is a an SSH key with the given name in the given region.
 func (p *Provider) sshKeyExists(keyName string, region string) (bool, error) {
-	var data struct {
-		KeyPairs []struct {
-			KeyName string
-		}
-	}
-	args := []string{
-		"ec2", "describe-key-pairs",
-		"--region", region,
-	}
-	err := p.runJSONCommand(args, &data)
+	client, err := getEC2Client(region)
 	if err != nil {
 		return false, err
 	}
-	for _, keyPair := range data.KeyPairs {
-		if keyPair.KeyName == keyName {
-			return true, nil
-		}
+	keyOpts := ec2.DescribeKeyPairsInput{
+		KeyNames: []string{keyName},
 	}
-	return false, nil
+	keys, err := client.DescribeKeyPairs(context.TODO(), &keyOpts)
+	if err != nil {
+		return false, err
+	}
+	return len(keys.KeyPairs) > 0, nil
 }
 
 // sshKeyImport takes the user's local, public SSH key and imports it into the ec2 region so that
 // we can create new hosts with it.
 func (p *Provider) sshKeyImport(keyName string, region string) error {
-	_, err := os.Stat(os.ExpandEnv(sshPublicKeyFile))
+	keyMaterial, err := ioutil.ReadFile(os.ExpandEnv(sshPublicKeyFile))
 	if err != nil {
 		if oserror.IsNotExist(err) {
 			return errors.Wrapf(err, "please run ssh-keygen externally to create your %s file", sshPublicKeyFile)
 		}
 		return err
 	}
+	var keyMaterialBase64 []byte
+	base64.StdEncoding.Encode(keyMaterialBase64, keyMaterial)
 
-	var data struct {
-		KeyName string
+	client, err := getEC2Client(region)
+	if err != nil {
+		return err
 	}
-	_ = data.KeyName // silence unused warning
-	args := []string{
-		"ec2", "import-key-pair",
-		"--region", region,
-		"--key-name", keyName,
-		"--public-key-material", fmt.Sprintf("fileb://%s", sshPublicKeyFile),
+	keyOpts := ec2.ImportKeyPairInput{
+		KeyName:           aws.String(keyName),
+		PublicKeyMaterial: keyMaterialBase64,
 	}
-	err = p.runJSONCommand(args, &data)
+	_, err = client.ImportKeyPair(context.TODO(), &keyOpts)
 	// If two roachprod instances run at the same time with the same key, they may
 	// race to upload the key pair.
 	if err == nil || strings.Contains(err.Error(), "InvalidKeyPair.Duplicate") {
