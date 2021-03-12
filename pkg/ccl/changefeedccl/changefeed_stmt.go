@@ -579,6 +579,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 				// Instead, we want to make sure that the changefeed job is not marked failed
 				// due to a transient, retryable error.
 				err = jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
+				setJobRunningStatus(ctx, b.job, "retryable flow error: %s", err)
 			}
 
 			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
@@ -586,6 +587,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 		}
 
 		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
+		setJobRunningStatus(ctx, b.job, "retryable error: %s", err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			metrics.ErrorRetries.Inc(1)
 		}

@@ -10,8 +10,10 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -91,4 +93,15 @@ func initialScanFromOptions(opts map[string]string) bool {
 	_, initialScan := opts[changefeedbase.OptInitialScan]
 	_, noInitialScan := opts[changefeedbase.OptNoInitialScan]
 	return (cursor && initialScan) || (!cursor && !noInitialScan)
+}
+
+func setJobRunningStatus(ctx context.Context, j *jobs.Job, fmtOrMsg string, args ...interface{}) {
+	status := jobs.RunningStatus(fmt.Sprintf(fmtOrMsg, args...))
+	if err := j.RunningStatus(ctx, nil,
+		func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return status, nil
+		},
+	); err != nil {
+		log.Warningf(ctx, "failed to set running status: %v", err)
+	}
 }
