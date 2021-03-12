@@ -545,6 +545,19 @@ func generateChangefeedSessionID() string {
 	return string(buf)
 }
 
+func (b *changefeedResumer) setJobRunningStatus(
+	ctx context.Context, fmtOrMsg string, args ...interface{},
+) {
+	status := jobs.RunningStatus(fmt.Sprintf(fmtOrMsg, args...))
+	if err := b.job.RunningStatus(ctx, nil,
+		func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return status, nil
+		},
+	); err != nil {
+		log.Warningf(ctx, "failed to set running status: %v", err)
+	}
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	jobExec := execCtx.(sql.JobExecContext)
@@ -586,6 +599,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 				// Instead, we want to make sure that the changefeed job is not marked failed
 				// due to a transient, retryable error.
 				err = jobs.NewRetryJobError(fmt.Sprintf("retryable flow error: %+v", err))
+				b.setJobRunningStatus(ctx, "retryable flow error: %s", err)
 			}
 
 			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
@@ -593,6 +607,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 		}
 
 		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
+		b.setJobRunningStatus(ctx, "retryable error: %s", err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			metrics.ErrorRetries.Inc(1)
 		}
