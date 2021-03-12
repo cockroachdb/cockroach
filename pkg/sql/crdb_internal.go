@@ -2619,6 +2619,8 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	index_name,
 	replicas,
 	replica_localities,
+	voting_replicas,
+	non_voting_replicas,
 	learner_replicas,
 	split_enforced_until,
 	crdb_internal.lease_holder(start_key) AS lease_holder,
@@ -2639,6 +2641,8 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
 		{Name: "replica_localities", Typ: types.StringArray},
+		{Name: "voting_replicas", Typ: types.Int2Vector},
+		{Name: "non_voting_replicas", Typ: types.Int2Vector},
 		{Name: "learner_replicas", Typ: types.Int2Vector},
 		{Name: "split_enforced_until", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
@@ -2652,6 +2656,9 @@ FROM crdb_internal.ranges_no_leases
 // TODO(tbg): prefix with kv_.
 var crdbInternalRangesNoLeasesTable = virtualSchemaTable{
 	comment: `range metadata without leaseholder details (KV join; expensive!)`,
+	// NB 1: The `replicas` column is the union of `voting_replicas` and
+	// `non_voting_replicas` and does not include `learner_replicas`.
+	// NB 2: All the values in the `*replicas` columns correspond to store IDs.
 	schema: `
 CREATE TABLE crdb_internal.ranges_no_leases (
   range_id             INT NOT NULL,
@@ -2666,8 +2673,10 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   index_name           STRING NOT NULL,
   replicas             INT[] NOT NULL,
   replica_localities   STRING[] NOT NULL,
-	learner_replicas     INT[] NOT NULL,
-	split_enforced_until TIMESTAMP
+  voting_replicas      INT[] NOT NULL,
+  non_voting_replicas  INT[] NOT NULL,
+  learner_replicas     INT[] NOT NULL,
+  split_enforced_until TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -2736,18 +2745,31 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				return nil, err
 			}
 
-			voterReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().VoterDescriptors()...)
+			votersAndNonVoters := append([]roachpb.ReplicaDescriptor(nil),
+				desc.Replicas().VoterAndNonVoterDescriptors()...)
 			var learnerReplicaStoreIDs []int
 			for _, rd := range desc.Replicas().LearnerDescriptors() {
 				learnerReplicaStoreIDs = append(learnerReplicaStoreIDs, int(rd.StoreID))
 			}
-			sort.Slice(voterReplicas, func(i, j int) bool {
-				return voterReplicas[i].StoreID < voterReplicas[j].StoreID
+			sort.Slice(votersAndNonVoters, func(i, j int) bool {
+				return votersAndNonVoters[i].StoreID < votersAndNonVoters[j].StoreID
 			})
 			sort.Ints(learnerReplicaStoreIDs)
+			votersAndNonVotersArr := tree.NewDArray(types.Int)
+			for _, replica := range votersAndNonVoters {
+				if err := votersAndNonVotersArr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
+					return nil, err
+				}
+			}
 			votersArr := tree.NewDArray(types.Int)
-			for _, replica := range voterReplicas {
+			for _, replica := range desc.Replicas().VoterDescriptors() {
 				if err := votersArr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
+					return nil, err
+				}
+			}
+			nonVotersArr := tree.NewDArray(types.Int)
+			for _, replica := range desc.Replicas().NonVoterDescriptors() {
+				if err := nonVotersArr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
 					return nil, err
 				}
 			}
@@ -2759,7 +2781,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			replicaLocalityArr := tree.NewDArray(types.String)
-			for _, replica := range voterReplicas {
+			for _, replica := range votersAndNonVoters {
 				replicaLocality := nodeIDToLocality[replica.NodeID].String()
 				if err := replicaLocalityArr.Append(tree.NewDString(replicaLocality)); err != nil {
 					return nil, err
@@ -2806,8 +2828,10 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(schemaName),
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
-				votersArr,
+				votersAndNonVotersArr,
 				replicaLocalityArr,
+				votersArr,
+				nonVotersArr,
 				learnersArr,
 				splitEnforcedUntil,
 			}, nil

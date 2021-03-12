@@ -291,14 +291,24 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 }
 
 func scanAndGetNumNonVoters(
-	t *testing.T, tc *testcluster.TestCluster, store *kvserver.Store, scratchKey roachpb.Key,
-) int {
+	ctx context.Context,
+	t *testing.T,
+	tc *testcluster.TestCluster,
+	store *kvserver.Store,
+	scratchKey roachpb.Key,
+) (numNonVoters int) {
 	// Nudge the replicateQueue to up/down-replicate our scratch range.
 	if err := store.ForceReplicationScanAndProcess(); err != nil {
 		t.Fatal(err)
 	}
 	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
-	return len(scratchRange.Replicas().NonVoterDescriptors())
+	row := tc.ServerConn(0).QueryRow(
+		`SELECT array_length(non_voting_replicas, 1) FROM crdb_internal.ranges_no_leases WHERE range_id=$1`,
+		scratchRange.GetRangeID())
+	err := row.Scan(&numNonVoters)
+	log.Warningf(ctx, "error while retrieving the number of non-voters: %s", err)
+
+	return numNonVoters
 }
 
 // TestReplicateQueueUpAndDownReplicateNonVoters is an end-to-end test ensuring
@@ -309,6 +319,7 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 	skip.UnderRace(t)
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
 	)
@@ -336,7 +347,7 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 
 	var expectedNonVoterCount = 2
 	testutils.SucceedsSoon(t, func() error {
-		if found := scanAndGetNumNonVoters(t, tc, store, scratchKey); found != expectedNonVoterCount {
+		if found := scanAndGetNumNonVoters(ctx, t, tc, store, scratchKey); found != expectedNonVoterCount {
 			return errors.Errorf("expected upreplication to %d non-voters; found %d",
 				expectedNonVoterCount, found)
 		}
@@ -349,7 +360,7 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 	require.NoError(t, err)
 	expectedNonVoterCount = 0
 	testutils.SucceedsSoon(t, func() error {
-		if found := scanAndGetNumNonVoters(t, tc, store, scratchKey); found != expectedNonVoterCount {
+		if found := scanAndGetNumNonVoters(ctx, t, tc, store, scratchKey); found != expectedNonVoterCount {
 			return errors.Errorf("expected downreplication to %d non-voters; found %d",
 				expectedNonVoterCount, found)
 		}
