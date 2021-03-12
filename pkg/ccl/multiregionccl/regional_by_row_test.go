@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -549,4 +551,177 @@ COMMIT;`)
 	COMMIT;`)
 		return err
 	})
+}
+
+// TestIndexCleanupAfterAlterFromRegionalByRow ensures that old indexes for
+// REGIONAL BY ROW transitions get cleaned up correctly.
+func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// TODO(ajstorm): Enable once #61944 goes in.
+	skip.UnderRace(t, `This test is too heavyweight to be stressed under race`)
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+	)
+	defer cleanup()
+
+	_, err := sqlDB.Exec(
+		`CREATE DATABASE "mr-zone-configs" WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE "mr-zone-configs";
+CREATE TABLE regional_by_row (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i),
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY ROW`)
+	require.NoError(t, err)
+
+	// Alter the table to REGIONAL BY TABLE, and then back to REGIONAL BY ROW, to
+	// create some indexes that need cleaning up.
+	_, err = sqlDB.Exec(`ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE;
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW`)
+	require.NoError(t, err)
+
+	// Validate that the indexes requiring cleanup exist.
+	type row struct {
+		status  string
+		details string
+	}
+
+	for {
+		// First confirm that the schema change job has completed
+		res := sqlDB.QueryRow(`WITH jobs AS (
+      SELECT status, crdb_internal.pb_to_json(
+			'cockroach.sql.jobs.jobspb.Payload',
+			payload,
+			false
+		) AS job
+		FROM system.jobs
+		)
+    SELECT count(*)
+    FROM jobs
+    WHERE (job->>'schemaChange') IS NOT NULL AND status = 'running'`)
+		require.NoError(t, res.Err())
+
+		numJobs := 0
+		err = res.Scan(&numJobs)
+		require.NoError(t, err)
+		if numJobs == 0 {
+			break
+		}
+	}
+
+	// Now check that we have the right number of index GC jobs pending.
+	res, err := sqlDB.Query(`WITH jobs AS (
+      SELECT status, crdb_internal.pb_to_json(
+			'cockroach.sql.jobs.jobspb.Payload',
+			payload,
+			false
+		) AS job
+		FROM system.jobs
+		)
+    SELECT status, job->'schemaChangeGC' as details
+    FROM jobs
+    WHERE (job->>'schemaChangeGC') IS NOT NULL AND status = 'running'`)
+	require.NoError(t, err)
+
+	rows := []row{}
+	for res.Next() {
+		r := row{}
+		err = res.Scan(&r.status, &r.details)
+		require.NoError(t, err)
+		rows = append(rows, r)
+	}
+
+	if len(rows) != 4 {
+		t.Error(fmt.Sprintf("expected 4 jobs to be running, found %d. Jobs found:\n %v", len(rows), rows))
+	}
+
+	res, err = sqlDB.Query(`WITH jobs AS (
+		SELECT status, crdb_internal.pb_to_json(
+		'cockroach.sql.jobs.jobspb.Payload',
+		payload,
+		false
+	) AS job
+	FROM system.jobs
+	)
+	SELECT status, job->'schemaChangeGC' as details
+	FROM jobs
+	WHERE (job->>'schemaChangeGC') IS NOT NULL AND status = 'succeeded'`)
+	require.NoError(t, err)
+
+	rows = rows[:0]
+	for res.Next() {
+		r := row{}
+		err = res.Scan(&r.status, &r.details)
+		require.NoError(t, err)
+		rows = append(rows, r)
+	}
+
+	if len(rows) != 0 {
+		t.Error(fmt.Sprintf("expected 0 jobs to have succeeded, found %d. Jobs found: %v", len(rows), rows))
+	}
+
+	// Change gc.ttlseconds to speed up the cleanup.
+	_, err = sqlDB.Exec(`ALTER TABLE regional_by_row CONFIGURE ZONE USING gc.ttlseconds = 1`)
+	require.NoError(t, err)
+
+	// Wait.
+	time.Sleep(time.Second * 2)
+
+	// Validate that indexes are cleaned up.
+	res, err = sqlDB.Query(`WITH jobs AS (
+		SELECT status, crdb_internal.pb_to_json(
+		'cockroach.sql.jobs.jobspb.Payload',
+		payload,
+		false
+	) AS job
+	FROM system.jobs
+	)
+	SELECT status, job->'schemaChangeGC' as details
+	FROM jobs
+	WHERE (job->>'schemaChangeGC') IS NOT NULL AND status = 'running'`)
+	require.NoError(t, err)
+
+	rows = rows[:0]
+	for res.Next() {
+		r := row{}
+		err = res.Scan(&r.status, &r.details)
+		require.NoError(t, err)
+		rows = append(rows, r)
+	}
+
+	if len(rows) != 0 {
+		t.Error(fmt.Sprintf("expected 0 jobs to be running, found %d. Jobs found: %v", len(rows), rows))
+	}
+
+	res, err = sqlDB.Query(`WITH jobs AS (
+		SELECT status, crdb_internal.pb_to_json(
+		'cockroach.sql.jobs.jobspb.Payload',
+		payload,
+		false
+	) AS job
+	FROM system.jobs
+	)
+	SELECT status, job->'schemaChangeGC' as details
+	FROM jobs
+	WHERE (job->>'schemaChangeGC') IS NOT NULL AND status = 'succeeded'`)
+	require.NoError(t, err)
+
+	rows = rows[:0]
+	for res.Next() {
+		r := row{}
+		err = res.Scan(&r.status, &r.details)
+		require.NoError(t, err)
+		rows = append(rows, r)
+	}
+
+	if len(rows) != 4 {
+		t.Error(fmt.Sprintf("expected 4 jobs to have succeeded, found %d. Jobs found: %v", len(rows), rows))
+	}
 }
