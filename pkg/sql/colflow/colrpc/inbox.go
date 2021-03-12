@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/logtags"
 )
@@ -103,17 +104,23 @@ type Inbox struct {
 	// regardless of whether or not Next is called.
 	flowCtx context.Context
 
-	// rowsRead contains the total number of rows Inbox has read so far.
-	rowsRead int64
-
-	// bytesRead contains the number of bytes sent to the Inbox.
-	bytesRead int64
-
-	// numMessages contains the number of messages received by the Inbox.
-	numMessages int64
+	// statsMu protects the execution statistics from concurrent accesses. This
+	// is necessary since Get*() methods can be called from different goroutine
+	// than Next().
+	statsMu struct {
+		syncutil.Mutex
+		// rowsRead contains the total number of rows Inbox has read so far.
+		rowsRead int64
+		// bytesRead contains the number of bytes sent to the Inbox.
+		bytesRead int64
+		// numMessages contains the number of messages received by the Inbox.
+		numMessages int64
+	}
 
 	// deserializationStopWatch records the time Inbox spends deserializing
-	// batches.
+	// batches. Note that the stop watch is safe for concurrent use, so it
+	// doesn't have to be protected by the mutex like other stats-related fields
+	// above.
 	deserializationStopWatch *timeutil.StopWatch
 
 	scratch struct {
@@ -283,7 +290,9 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		i.deserializationStopWatch.Stop()
 		m, err := i.stream.Recv()
 		i.deserializationStopWatch.Start()
-		i.numMessages++
+		i.statsMu.Lock()
+		i.statsMu.numMessages++
+		i.statsMu.Unlock()
 		if err != nil {
 			if err == io.EOF {
 				// Done.
@@ -320,7 +329,9 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 			// Protect against Deserialization panics by skipping empty messages.
 			continue
 		}
-		i.bytesRead += int64(len(m.Data.RawBytes))
+		i.statsMu.Lock()
+		i.statsMu.bytesRead += int64(len(m.Data.RawBytes))
+		i.statsMu.Unlock()
 		i.scratch.data = i.scratch.data[:0]
 		batchLength, err := i.serializer.Deserialize(&i.scratch.data, m.Data.RawBytes)
 		if err != nil {
@@ -333,19 +344,25 @@ func (i *Inbox) Next(ctx context.Context) coldata.Batch {
 		if err := i.converter.ArrowToBatch(i.scratch.data, batchLength, i.scratch.b); err != nil {
 			colexecerror.InternalError(err)
 		}
-		i.rowsRead += int64(i.scratch.b.Length())
+		i.statsMu.Lock()
+		i.statsMu.rowsRead += int64(i.scratch.b.Length())
+		i.statsMu.Unlock()
 		return i.scratch.b
 	}
 }
 
 // GetBytesRead returns the number of bytes received by the Inbox.
 func (i *Inbox) GetBytesRead() int64 {
-	return i.bytesRead
+	i.statsMu.Lock()
+	defer i.statsMu.Unlock()
+	return i.statsMu.bytesRead
 }
 
 // GetRowsRead returns the number of rows received by the Inbox.
 func (i *Inbox) GetRowsRead() int64 {
-	return i.rowsRead
+	i.statsMu.Lock()
+	defer i.statsMu.Unlock()
+	return i.statsMu.rowsRead
 }
 
 // GetDeserializationTime returns the amount of time the Inbox spent
@@ -356,7 +373,9 @@ func (i *Inbox) GetDeserializationTime() time.Duration {
 
 // GetNumMessages returns the number of messages received by the Inbox.
 func (i *Inbox) GetNumMessages() int64 {
-	return i.numMessages
+	i.statsMu.Lock()
+	defer i.statsMu.Unlock()
+	return i.statsMu.numMessages
 }
 
 func (i *Inbox) sendDrainSignal(ctx context.Context) error {

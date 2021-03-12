@@ -68,11 +68,13 @@ type DrainableOperator interface {
 // KVReader is an operator that performs KV reads.
 type KVReader interface {
 	// GetBytesRead returns the number of bytes read from KV by this operator.
+	// It must be safe for concurrent use.
 	GetBytesRead() int64
 	// GetRowsRead returns the number of rows read from KV by this operator.
+	// It must be safe for concurrent use.
 	GetRowsRead() int64
 	// GetCumulativeContentionTime returns the amount of time KV reads spent
-	// contending.
+	// contending. It must be safe for concurrent use.
 	GetCumulativeContentionTime() time.Duration
 }
 
