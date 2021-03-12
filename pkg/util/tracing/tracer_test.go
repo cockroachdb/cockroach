@@ -331,6 +331,8 @@ func TestShadowTracer(t *testing.T) {
 	zipTr, err := zipkin.NewTracer(zipRec)
 	require.NoError(t, err)
 
+	ddMgr, ddTr := createDataDogTracer("dummyaddr", "dummyproject")
+
 	for _, tc := range []struct {
 		mgr   shadowTracerManager
 		str   opentracing.Tracer
@@ -363,6 +365,10 @@ func TestShadowTracer(t *testing.T) {
 				require.Equal(t, log.String("event", "hello"), rs[0].Logs[0].Fields[0])
 			},
 		},
+		{
+			mgr: ddMgr,
+			str: ddTr,
+		},
 	} {
 		t.Run(tc.mgr.Name(), func(t *testing.T) {
 			tr := NewTracer()
@@ -391,7 +397,7 @@ func TestShadowTracer(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// ExtractMetaFrom also extracts the embedded lightstep context.
+			// ExtractMetaFrom also extracts the embedded shadow context.
 			wireSpanMeta, err := tr.ExtractMetaFrom(carrier)
 			if err != nil {
 				t.Fatal(err)
@@ -401,7 +407,7 @@ func TestShadowTracer(t *testing.T) {
 			s2Ctx := s2.i.ot.shadowSpan.Context()
 
 			// Verify that the baggage is correct in both the tracer context and in the
-			// lightstep context.
+			// shadow's context.
 			shadowBaggage := make(map[string]string)
 			s2Ctx.ForeachBaggageItem(func(k, v string) bool {
 				shadowBaggage[k] = v
