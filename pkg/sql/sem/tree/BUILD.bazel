@@ -1,6 +1,12 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//pkg/sql/sem/tree/eval_test:__subpackages__"],
+)
+
 go_library(
     name = "tree",
     srcs = [

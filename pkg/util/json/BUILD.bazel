@@ -39,8 +39,8 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":json"],
-    tags = ["broken_in_bazel"],
     deps = [
+        "//pkg/build/bazel",
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util/encoding",

@@ -75,7 +75,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":pgwire"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/security",

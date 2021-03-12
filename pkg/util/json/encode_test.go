@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -67,6 +68,13 @@ func TestFilesEncode(t *testing.T) {
 		t.Fatal("couldn't get directory")
 	}
 	dir := filepath.Join(filepath.Dir(fname), "testdata", "raw")
+	if bazel.BuiltWithBazel() {
+		runfile, err := bazel.Runfile(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir = runfile
+	}
 	dirContents, err := ioutil.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -118,6 +126,13 @@ func TestFilesEncode(t *testing.T) {
 					"testdata", "encoded",
 					tc.Name()+".bytes",
 				)
+				if bazel.BuiltWithBazel() {
+					runfile, err := bazel.Runfile(fixtureFilename)
+					if err != nil {
+						t.Fatal(err)
+					}
+					fixtureFilename = runfile
+				}
 
 				if *rewriteResultsInTestfiles {
 					err := ioutil.WriteFile(fixtureFilename, []byte(stringifiedEncoding), 0644)
