@@ -66,7 +66,7 @@ type ColBatchScan struct {
 	ResultTypes []*types.T
 }
 
-var _ execinfra.KVReader = &ColBatchScan{}
+var _ colexecop.KVReader = &ColBatchScan{}
 var _ execinfra.Releasable = &ColBatchScan{}
 var _ colexecop.Closer = &ColBatchScan{}
 var _ colexecop.Operator = &ColBatchScan{}
@@ -151,17 +151,17 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	return trailingMeta
 }
 
-// GetBytesRead is part of the execinfra.KVReader interface.
+// GetBytesRead is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetBytesRead() int64 {
 	return s.rf.fetcher.GetBytesRead()
 }
 
-// GetRowsRead is part of the execinfra.KVReader interface.
+// GetRowsRead is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetRowsRead() int64 {
 	return s.rowsRead
 }
 
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
+// GetCumulativeContentionTime is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
 	if s.ctx == nil {
 		// Next was never called, so there was no contention events.
