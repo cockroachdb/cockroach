@@ -112,7 +112,7 @@ CREATE TABLE db.t (
    i INT PRIMARY KEY 
 )`)
 
-		tn := tree.MakeTableName("db", "t")
+		tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "t")
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
@@ -226,7 +226,7 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
-			tn := tree.MakeTableName("db", "foo")
+			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
 			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
 			id = fooTable.GetID()
@@ -362,7 +362,7 @@ func TestSchemaChanger(t *testing.T) {
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
-			tn := tree.MakeTableName("db", "foo")
+			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
 			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
 			require.NoError(t, err)
 			id = fooTable.GetID()

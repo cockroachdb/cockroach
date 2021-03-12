@@ -237,7 +237,7 @@ func RoleExists(
 	return row != nil, nil
 }
 
-var roleMembersTableName = tree.MakeTableName("system", "role_members")
+var roleMembersTableName = tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, "role_members")
 
 // BumpRoleMembershipTableVersion increases the table version for the
 // role membership table.
