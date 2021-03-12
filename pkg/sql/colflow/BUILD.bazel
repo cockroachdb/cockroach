@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "colflow",
     srcs = [
+        "explain_vec.go",
         "panic_injector.go",
         "routers.go",
         "stats.go",
@@ -14,6 +15,7 @@ go_library(
         "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
+        "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/colcontainer",
@@ -40,6 +42,7 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_marusama_semaphore//:semaphore",
