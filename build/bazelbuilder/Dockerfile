@@ -13,6 +13,7 @@ RUN apt-get update \
     git \
     gnupg2 \
     libncurses-dev \
+    libtinfo-dev \
     make \
     python3 \
     unzip \
