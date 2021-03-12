@@ -95,7 +95,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 	txnStateMon.Start(tc.ctx, tc.mon, mon.BoundAccount{})
 
 	ts := txnState{
-		Ctx:           ctx,
+		ctxHolder:     ctxHolder{primaryCtx: ctx},
 		connCtx:       tc.ctx,
 		cancel:        cancel,
 		sqlTimestamp:  timeutil.Now(),
@@ -120,7 +120,7 @@ func (tc *testContext) createAbortedState() (fsm.State, *txnState) {
 func (tc *testContext) createCommitWaitState() (fsm.State, *txnState, error) {
 	_, ts := tc.createOpenState(explicitTxn)
 	// Commit the KV txn, simulating what the execution layer is doing.
-	if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
+	if err := ts.mu.txn.Commit(ts.ctxHolder.ctx()); err != nil {
 		return nil, nil, err
 	}
 	s := stateCommitWait{}
@@ -319,7 +319,7 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createOpenState(implicitTxn)
 				// We commit the KV transaction, as that's done by the layer below
 				// txnState.
-				if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
+				if err := ts.mu.txn.Commit(ts.ctxHolder.ctx()); err != nil {
 					return nil, nil, err
 				}
 				return s, ts, nil
@@ -340,7 +340,7 @@ func TestTransitions(t *testing.T) {
 				s, ts := testCon.createOpenState(explicitTxn)
 				// We commit the KV transaction, as that's done by the layer below
 				// txnState.
-				if err := ts.mu.txn.Commit(ts.Ctx); err != nil {
+				if err := ts.mu.txn.Commit(ts.ctxHolder.ctx()); err != nil {
 					return nil, nil, err
 				}
 				return s, ts, nil
@@ -512,7 +512,7 @@ func TestTransitions(t *testing.T) {
 			init: func() (fsm.State, *txnState, error) {
 				s, ts := testCon.createOpenState(explicitTxn)
 				// Simulate what execution does before generating this event.
-				err := ts.mu.txn.Commit(ts.Ctx)
+				err := ts.mu.txn.Commit(ts.ctxHolder.ctx())
 				return s, ts, err
 			},
 			ev:       eventTxnReleased{},

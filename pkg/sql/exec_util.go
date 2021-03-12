@@ -1645,7 +1645,7 @@ func (st *SessionTracing) StartTracing(
 	// If we're inside a transaction, hijack the txn's ctx with one that has a
 	// recording span.
 	if _, ok := st.ex.machine.CurState().(stateNoTxn); !ok {
-		txnCtx := st.ex.state.Ctx
+		txnCtx := st.ex.state.ctxHolder.primaryCtx
 		if sp := tracing.SpanFromContext(txnCtx); sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
@@ -1653,7 +1653,7 @@ func (st *SessionTracing) StartTracing(
 		newTxnCtx, sp := tracing.EnsureChildSpan(txnCtx, st.ex.server.cfg.AmbientCtx.Tracer,
 			"session tracing", tracing.WithForceRealSpan())
 		sp.SetVerbose(true)
-		st.ex.state.Ctx = newTxnCtx
+		st.ex.state.ctxHolder.hijack(newTxnCtx)
 		st.firstTxnSpan = sp
 	}
 
@@ -1664,7 +1664,7 @@ func (st *SessionTracing) StartTracing(
 
 	// Now hijack the conn's ctx with one that has a recording span.
 
-	connCtx := st.ex.ctxHolder.connCtx
+	connCtx := st.ex.ctxHolder.primaryCtx
 	opName := "session recording"
 	newConnCtx, sp := tracing.EnsureChildSpan(
 		connCtx,
@@ -1705,6 +1705,7 @@ func (st *SessionTracing) StopTracing() error {
 	// is not inherited by children. If we are inside of a txn, that span will
 	// continue recording, even though nobody will collect its recording again.
 	st.connSpan.SetVerbose(false)
+	st.ex.state.ctxHolder.unhijack()
 	st.ex.ctxHolder.unhijack()
 
 	var err error

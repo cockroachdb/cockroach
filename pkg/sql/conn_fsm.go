@@ -469,7 +469,7 @@ func (ts *txnState) finishTxn(ev txnEvent) error {
 // cleanupAndFinishOnError rolls back the KV txn and finishes the SQL txn.
 func cleanupAndFinishOnError(args fsm.Args) error {
 	ts := args.Extended.(*txnState)
-	ts.mu.txn.CleanupOnError(ts.Ctx, args.Payload.(payloadWithError).errorCause())
+	ts.mu.txn.CleanupOnError(ts.ctxHolder.ctx(), args.Payload.(payloadWithError).errorCause())
 	ts.finishSQLTxn()
 	ts.setAdvanceInfo(skipBatch, noRewind, txnRollback)
 	return nil

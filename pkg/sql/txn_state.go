@@ -56,16 +56,17 @@ type txnState struct {
 		stmtCount int
 	}
 
-	// connCtx is the connection's context. This is the parent of Ctx.
+	// connCtx is the connection's context. This is the parent of
+	// ctxHolder.ctx().
 	connCtx context.Context
 
-	// Ctx is the context for everything running in this SQL txn.
+	// ctxHolder contains the context for everything running in this SQL txn.
 	// This is only set while the session's state is not stateNoTxn.
 	//
 	// It also embeds the tracing span associated with the SQL txn. These are
 	// often root spans, as SQL txns are frequently the level at which we do
 	// tracing. This context is hijacked when session tracing is enabled.
-	Ctx context.Context
+	ctxHolder ctxHolder
 
 	// recordingThreshold, is not zero, indicates that sp is recording and that
 	// the recording should be dumped to the log if execution of the transaction
@@ -73,9 +74,9 @@ type txnState struct {
 	recordingThreshold time.Duration
 	recordingStart     time.Time
 
-	// cancel is Ctx's cancellation function. Called upon COMMIT/ROLLBACK of the
-	// transaction to release resources associated with the context. nil when no
-	// txn is in progress.
+	// cancel is ctxHolder.ctx()'s cancellation function. Called upon
+	// COMMIT/ROLLBACK of the transaction to release resources associated with
+	// the context. nil when no txn is in progress.
 	cancel context.CancelFunc
 
 	// The timestamp to report for current_timestamp(), now() etc.
@@ -178,12 +179,12 @@ func (ts *txnState) resetForNewSQLTxn(
 		ts.recordingStart = timeutil.Now()
 	}
 
-	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
-	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
+	ts.ctxHolder.primaryCtx, ts.cancel = contextutil.WithCancel(txnCtx)
+	ts.mon.Start(ts.ctxHolder.ctx(), tranCtx.connMon, mon.BoundAccount{} /* reserved */)
 	ts.mu.Lock()
 	ts.mu.stmtCount = 0
 	if txn == nil {
-		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero)
+		ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.ctxHolder.ctx(), tranCtx.db, tranCtx.nodeIDOrZero)
 		ts.mu.txn.SetDebugName(opName)
 		if err := ts.setPriorityLocked(priority); err != nil {
 			panic(err)
@@ -197,7 +198,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	ts.mu.txnStart = timeutil.Now()
 	ts.mu.Unlock()
 	if historicalTimestamp != nil {
-		ts.setHistoricalTimestamp(ts.Ctx, *historicalTimestamp)
+		ts.setHistoricalTimestamp(ts.ctxHolder.ctx(), *historicalTimestamp)
 	}
 	if err := ts.setReadOnlyMode(readOnly); err != nil {
 		panic(err)
@@ -208,22 +209,22 @@ func (ts *txnState) resetForNewSQLTxn(
 // the current SQL txn. This needs to be called before resetForNewSQLTxn() is
 // called for starting another SQL txn.
 func (ts *txnState) finishSQLTxn() {
-	ts.mon.Stop(ts.Ctx)
+	ts.mon.Stop(ts.ctxHolder.ctx())
 	if ts.cancel != nil {
 		ts.cancel()
 		ts.cancel = nil
 	}
-	sp := tracing.SpanFromContext(ts.Ctx)
+	sp := tracing.SpanFromContext(ts.ctxHolder.ctx())
 	if sp == nil {
 		panic(errors.AssertionFailedf("No span in context? Was resetForNewSQLTxn() called previously?"))
 	}
 
 	if ts.recordingThreshold > 0 {
-		logTraceAboveThreshold(ts.Ctx, sp.GetRecording(), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
+		logTraceAboveThreshold(ts.ctxHolder.ctx(), sp.GetRecording(), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
 	}
 
 	sp.Finish()
-	ts.Ctx = nil
+	ts.ctxHolder.primaryCtx = nil
 	ts.mu.Lock()
 	ts.mu.txn = nil
 	ts.mu.txnStart = time.Time{}
@@ -236,22 +237,22 @@ func (ts *txnState) finishSQLTxn() {
 // InternalExecutor). These guys don't want to mess with the transaction per-se,
 // but still want to clean up other stuff.
 func (ts *txnState) finishExternalTxn() {
-	if ts.Ctx == nil {
+	if ts.ctxHolder.ctx() == nil {
 		ts.mon.Stop(ts.connCtx)
 	} else {
-		ts.mon.Stop(ts.Ctx)
+		ts.mon.Stop(ts.ctxHolder.ctx())
 	}
 	if ts.cancel != nil {
 		ts.cancel()
 		ts.cancel = nil
 	}
 
-	if ts.Ctx != nil {
-		if sp := tracing.SpanFromContext(ts.Ctx); sp != nil {
+	if ts.ctxHolder.ctx() != nil {
+		if sp := tracing.SpanFromContext(ts.ctxHolder.ctx()); sp != nil {
 			sp.Finish()
 		}
 	}
-	ts.Ctx = nil
+	ts.ctxHolder.primaryCtx = nil
 	ts.mu.Lock()
 	ts.mu.txn = nil
 	ts.mu.Unlock()

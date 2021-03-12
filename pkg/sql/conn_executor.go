@@ -227,7 +227,7 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 // At the highest level, there's connExecutor.run() that takes a context. That
 // context is supposed to represent "the connection's context": its lifetime is
 // the client connection's lifetime and it is assigned to
-// connEx.ctxHolder.connCtx. Below that, every SQL transaction has its own
+// connEx.ctxHolder.primaryCtx. Below that, every SQL transaction has its own
 // derived context because that's the level at which we trace operations. The
 // lifetime of SQL transactions is determined by the txnState: the state machine
 // decides when transactions start and end in txnState.performStateTransition().
@@ -594,7 +594,7 @@ func (s *Server) newConnExecutor(
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
-		ctxHolder:                 ctxHolder{connCtx: ctx},
+		ctxHolder:                 ctxHolder{primaryCtx: ctx},
 		rng:                       rand.New(rand.NewSource(timeutil.Now().UnixNano())),
 		executorType:              executorTypeExec,
 		hasCreatedTemporarySchema: false,
@@ -835,7 +835,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 				panic(errors.AssertionFailedf("unexpected state in conn executor after ApplyWithPayload %T", t))
 			}
 		}
-		if util.CrdbTestBuild && ex.state.Ctx != nil {
+		if util.CrdbTestBuild && ex.state.ctxHolder.ctx() != nil {
 			panic(errors.AssertionFailedf("txn span not closed in state %s", ex.machine.CurState()))
 		}
 	} else if closeType == externalTxnClose {
@@ -1191,33 +1191,20 @@ type connExecutor struct {
 	stmtDiagnosticsRecorder *stmtdiagnostics.Registry
 }
 
-// ctxHolder contains a connection's context and, while session tracing is
-// enabled, a derived context with a recording span. The connExecutor should use
-// the latter while session tracing is active, or the former otherwise; that's
-// what the ctx() method returns.
+// ctxHolder contains a primary context (this is typically the txn's or the
+// conn's ctx) and, while session tracing is enabled, a derived context with a
+// recording span. The connExecutor should use the latter while session tracing
+// is active, or the former otherwise; that's what the ctx() method returns.
 type ctxHolder struct {
-	connCtx           context.Context
+	primaryCtx        context.Context
 	sessionTracingCtx context.Context
-}
-
-// timeout wraps a Timer returned by time.AfterFunc. This interface
-// allows us to call Stop() on the Timer without having to check if
-// the timer is nil.
-type timeout struct {
-	timeout *time.Timer
-}
-
-func (t timeout) Stop() {
-	if t.timeout != nil {
-		t.timeout.Stop()
-	}
 }
 
 func (ch *ctxHolder) ctx() context.Context {
 	if ch.sessionTracingCtx != nil {
 		return ch.sessionTracingCtx
 	}
-	return ch.connCtx
+	return ch.primaryCtx
 }
 
 func (ch *ctxHolder) hijack(sessionTracingCtx context.Context) {
@@ -1232,6 +1219,19 @@ func (ch *ctxHolder) unhijack() {
 		panic("hijack not in effect")
 	}
 	ch.sessionTracingCtx = nil
+}
+
+// timeout wraps a Timer returned by time.AfterFunc. This interface
+// allows us to call Stop() on the Timer without having to check if
+// the timer is nil.
+type timeout struct {
+	timeout *time.Timer
+}
+
+func (t timeout) Stop() {
+	if t.timeout != nil {
+		t.timeout.Stop()
+	}
 }
 
 type prepStmtNamespace struct {
@@ -1330,7 +1330,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) err
 // Ctx returns the transaction's ctx, if we're inside a transaction, or the
 // session's context otherwise.
 func (ex *connExecutor) Ctx() context.Context {
-	ctx := ex.state.Ctx
+	ctx := ex.state.ctxHolder.ctx()
 	if _, ok := ex.machine.CurState().(stateNoTxn); ok {
 		ctx = ex.ctxHolder.ctx()
 	}
@@ -1419,7 +1419,7 @@ func (ex *connExecutor) run(
 	if !ex.activated {
 		ex.activate(ctx, parentMon, reserved)
 	}
-	ex.ctxHolder.connCtx = ctx
+	ex.ctxHolder.primaryCtx = ctx
 	ex.onCancelSession = onCancel
 
 	ex.sessionID = ex.generateID()
@@ -2376,7 +2376,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
 
 		if err := ex.server.cfg.JobRegistry.Run(
-			ex.ctxHolder.connCtx,
+			ex.ctxHolder.primaryCtx,
 			ex.server.cfg.InternalExecutor,
 			ex.extraTxnState.jobs); err != nil {
 			handleErr(err)
