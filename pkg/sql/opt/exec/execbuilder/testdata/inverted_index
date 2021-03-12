@@ -939,7 +939,7 @@ inner-join (lookup geo_table)
  ├── lookup columns are key
  ├── immutable
  ├── stats: [rows=9801]
- ├── cost: 112684.05
+ ├── cost: 112694.84
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── prune: (1,5)
@@ -948,13 +948,13 @@ inner-join (lookup geo_table)
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
  │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(11)=999.956829, null(11)=0]
- │    ├── cost: 41784.03
+ │    ├── cost: 41794.82
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
- │    │    ├── cost: 1084.02
+ │    │    ├── cost: 1094.81
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── prune: (1,2)
@@ -1029,7 +1029,7 @@ left-join (lookup geo_table)
  ├── second join in paired joiner
  ├── immutable
  ├── stats: [rows=10000]
- ├── cost: 112884.05
+ ├── cost: 112894.84
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6)
  ├── prune: (1,5)
@@ -1039,13 +1039,13 @@ left-join (lookup geo_table)
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]
- │    ├── cost: 41984.03
+ │    ├── cost: 41994.82
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    │    ├── cost: 1084.02
+ │    │    ├── cost: 1094.81
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── prune: (1,2)
@@ -1065,7 +1065,7 @@ semi-join (lookup geo_table)
  ├── second join in paired joiner
  ├── immutable
  ├── stats: [rows=10]
- ├── cost: 112684.05
+ ├── cost: 112694.84
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (1)
@@ -1075,13 +1075,13 @@ semi-join (lookup geo_table)
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
  │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, distinct(11)=999.956829, null(11)=0]
- │    ├── cost: 41984.03
+ │    ├── cost: 41994.82
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
- │    │    ├── cost: 1084.02
+ │    │    ├── cost: 1094.81
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── prune: (1,2)
@@ -1102,7 +1102,7 @@ anti-join (lookup geo_table)
  ├── second join in paired joiner
  ├── immutable
  ├── stats: [rows=990]
- ├── cost: 112684.05
+ ├── cost: 112694.84
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (1)
@@ -1112,13 +1112,13 @@ anti-join (lookup geo_table)
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(11)=999.956829, null(11)=0]
- │    ├── cost: 41984.03
+ │    ├── cost: 41994.82
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
  │    ├── scan geo_table2
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    │    ├── cost: 1084.02
+ │    │    ├── cost: 1094.81
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── prune: (1,2)
