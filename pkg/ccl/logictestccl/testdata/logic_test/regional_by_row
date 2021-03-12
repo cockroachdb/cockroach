@@ -267,7 +267,7 @@ TABLE regional_by_row_table
  ├── tableoid oid [hidden] [system]
  ├── j_inverted_key bytes not null [virtual-inverted]
  ├── FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
- ├── CHECK (crdb_region IN (b'\x40':::@100054, b'\x80':::@100054, b'\xc0':::@100054))
+ ├── CHECK (crdb_region IN (x'40':::@100054, x'80':::@100054, x'c0':::@100054))
  ├── PRIMARY INDEX primary
  │    ├── crdb_region crdb_internal_region not null default (default_to_database_primary_region(gateway_region())::@100054) [hidden] (implicit)
  │    ├── pk int not null
