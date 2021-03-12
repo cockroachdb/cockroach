@@ -52,6 +52,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/sequence",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/unique",
         "//pkg/util/uuid",

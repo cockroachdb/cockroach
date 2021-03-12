@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // KVFetcher wraps kvBatchFetcher, providing a NextKV interface that returns the
@@ -33,7 +34,10 @@ type KVFetcher struct {
 	newSpan       bool
 
 	// Observability fields.
-	bytesRead int64
+	mu struct {
+		syncutil.Mutex
+		bytesRead int64
+	}
 }
 
 // NewKVFetcher creates a new KVFetcher.
@@ -63,12 +67,15 @@ func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
 	return ret
 }
 
-// GetBytesRead returns the number of bytes read by this fetcher.
+// GetBytesRead returns the number of bytes read by this fetcher. It is safe for
+// concurrent use and is able to handle a case of uninitialized fetcher.
 func (f *KVFetcher) GetBytesRead() int64 {
 	if f == nil {
 		return 0
 	}
-	return f.bytesRead
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mu.bytesRead
 }
 
 // MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
@@ -127,7 +134,9 @@ func (f *KVFetcher) NextKV(
 			return false, kv, false, nil
 		}
 		f.newSpan = true
-		f.bytesRead += int64(len(f.batchResponse))
+		f.mu.Lock()
+		f.mu.bytesRead += int64(len(f.batchResponse))
+		f.mu.Unlock()
 	}
 }
 
