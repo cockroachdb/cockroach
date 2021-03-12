@@ -459,30 +459,30 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		// Test a simple UDT as the default value.
 		{
 			"x greeting DEFAULT ('hello')",
-			`b'\x80':::@100053`,
+			`x'80':::@100053`,
 			getDefault,
 		},
 		{
 			"x greeting DEFAULT ('hello':::greeting)",
-			`b'\x80':::@100053`,
+			`x'80':::@100053`,
 			getDefault,
 		},
 		// Test when a UDT is used in a default value, but isn't the
 		// final type of the column.
 		{
 			"x INT DEFAULT (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END)",
-			`CASE WHEN b'\x80':::@100053 = b'\x80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN x'80':::@100053 = x'80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getDefault,
 		},
 		{
 			"x BOOL DEFAULT ('hello'::greeting IS OF (greeting, greeting))",
-			`b'\x80':::@100053 IS OF (@100053, @100053)`,
+			`x'80':::@100053 IS OF (@100053, @100053)`,
 			getDefault,
 		},
 		// Test check constraints.
 		{
 			"x greeting, CHECK (x = 'hello')",
-			`x = b'\x80':::@100053`,
+			`x = x'80':::@100053`,
 			getCheck,
 		},
 		{
@@ -493,12 +493,12 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		// Test a computed column in the same cases as above.
 		{
 			"x greeting AS ('hello') STORED",
-			`b'\x80':::@100053`,
+			`x'80':::@100053`,
 			getComputed,
 		},
 		{
 			"x INT AS (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END) STORED",
-			`CASE WHEN b'\x80':::@100053 = b'\x80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN x'80':::@100053 = x'80':::@100053 THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getComputed,
 		},
 	}

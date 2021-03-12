@@ -345,8 +345,11 @@ func TestFormatExpr2(t *testing.T) {
 			// enum related code in tree expects that the length of
 			// PhysicalRepresentations is equal to the length of
 			// LogicalRepresentations.
-			PhysicalRepresentations: make([][]byte, len(enumMembers)),
-			IsMemberReadOnly:        make([]bool, len(enumMembers)),
+			PhysicalRepresentations: [][]byte{
+				{0x42, 0x1},
+				{0x42},
+			},
+			IsMemberReadOnly: make([]bool, len(enumMembers)),
 		},
 	}
 	enumHi, err := tree.MakeDEnumFromLogicalRepresentation(enumType, enumMembers[0])
@@ -409,13 +412,13 @@ func TestFormatExpr2(t *testing.T) {
 			types.MakeTuple([]*types.T{enumType, enumType}),
 			enumHi, enumHello),
 			tree.FmtSerializable,
-			`(b'\x':::@100500, b'\x':::@100500)`,
+			`(x'4201':::@100500, x'42':::@100500)`,
 		},
 		{tree.NewDTuple(
 			types.MakeTuple([]*types.T{enumType, enumType}),
 			tree.DNull, enumHi),
 			tree.FmtSerializable,
-			`(NULL:::@100500, b'\x':::@100500)`,
+			`(NULL:::@100500, x'4201':::@100500)`,
 		},
 	}
 
