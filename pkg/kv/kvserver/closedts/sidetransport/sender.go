@@ -63,6 +63,9 @@ type Sender struct {
 	trackedMu struct {
 		syncutil.Mutex
 		streamState
+		// closingFailures buckets the failures to advance the closed timestamps of
+		// ranges for the last publishing cycle.
+		closingFailures [MaxReason]int
 	}
 
 	leaseholdersMu struct {
@@ -143,8 +146,39 @@ type Replica interface {
 		ctx context.Context,
 		now hlc.ClockTimestamp,
 		targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
-	) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy, *roachpb.RangeDescriptor)
+	) BumpSideTransportClosedResult
 }
+
+// BumpSideTransportClosedResult represents the retval of BumpSideTransportClosed.
+type BumpSideTransportClosedResult struct {
+	// ok is set if the desired timestamp can be closed. If not set, FailReason is
+	// set.
+	OK         bool
+	FailReason CantCloseReason
+
+	// Desc is set regardless of ok.
+	Desc *roachpb.RangeDescriptor
+
+	// Fields only set when ok.
+
+	// The range's current LAI, to be associated with the closed timestamp.
+	LAI ctpb.LAI
+	// The range's current policy.
+	Policy roachpb.RangeClosedTimestampPolicy
+}
+
+type CantCloseReason int
+
+const (
+	ReasonUnknown CantCloseReason = iota
+	ReplicaDestroyed
+	InvalidLease
+	TargetOverLeaseExpiration
+	MergeInProgress
+	ProposalsInFlight
+	RequestsEvaluatingBelowTarget
+	MaxReason
+)
 
 // NewSender creates a Sender. Run must be called on it afterwards to get it to
 // start publishing closed timestamps.
@@ -268,6 +302,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
 	log.VEventf(ctx, 4, "side-transport generating a new message")
+	s.trackedMu.closingFailures = [MaxReason]int{}
 
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
@@ -337,19 +372,20 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 		lastMsg, tracked := s.trackedMu.tracked[lhRangeID]
 
 		// Check whether the desired timestamp can be closed on this range.
-		canClose, lai, policy, desc := lh.BumpSideTransportClosed(ctx, now, s.trackedMu.lastClosed)
+		closeRes := lh.BumpSideTransportClosed(ctx, now, s.trackedMu.lastClosed)
 
 		// Ensure that we're communicating with all of the range's followers. Note
 		// that we're including this range's followers before deciding below if the
 		// current message will include this range; we don't want dynamic conditions
 		// about the activity of this range to dictate the opening and closing of
 		// connections to the other nodes.
-		repls := desc.Replicas().Descriptors()
+		repls := closeRes.Desc.Replicas().Descriptors()
 		for i := range repls {
 			nodesWithFollowers.Add(int(repls[i].NodeID))
 		}
 
-		if !canClose {
+		if !closeRes.OK {
+			s.trackedMu.closingFailures[closeRes.FailReason]++
 			// We can't close the desired timestamp. If this range was tracked, we
 			// need to un-track it.
 			if tracked {
@@ -366,11 +402,11 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 			// If the range was not included in the last message, we need to include
 			// it now to start "tracking" it in the side-transport.
 			needExplicit = true
-		} else if lastMsg.lai < lai {
+		} else if lastMsg.lai < closeRes.LAI {
 			// If the range's LAI has changed, we need to explicitly publish the new
 			// LAI.
 			needExplicit = true
-		} else if lastMsg.policy != policy {
+		} else if lastMsg.policy != closeRes.Policy {
 			// If the policy changed, we need to explicitly publish that; the
 			// receiver will updates its bookkeeping to indicate that this range is
 			// updated through implicit updates for the new policy.
@@ -379,10 +415,10 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 		if needExplicit {
 			msg.AddedOrUpdated = append(msg.AddedOrUpdated, ctpb.Update_RangeUpdate{
 				RangeID: lhRangeID,
-				LAI:     lai,
-				Policy:  policy,
+				LAI:     closeRes.LAI,
+				Policy:  closeRes.Policy,
 			})
-			s.trackedMu.tracked[lhRangeID] = trackedRange{lai: lai, policy: policy}
+			s.trackedMu.tracked[lhRangeID] = trackedRange{lai: closeRes.LAI, policy: closeRes.Policy}
 		}
 	}
 
