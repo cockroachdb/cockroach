@@ -35,6 +35,11 @@ func NewFlowSpec(flowID execinfrapb.FlowID, gateway roachpb.NodeID) *execinfrapb
 // ReleaseFlowSpec returns this FlowSpec back to the pool of FlowSpecs. It may
 // not be used again after this call.
 func ReleaseFlowSpec(spec *execinfrapb.FlowSpec) {
+	for i := range spec.Processors {
+		if tr := spec.Processors[i].Core.TableReader; tr != nil {
+			releaseTableReaderSpec(tr)
+		}
+	}
 	*spec = execinfrapb.FlowSpec{
 		Processors: spec.Processors[:0],
 	}
@@ -52,25 +57,11 @@ func NewTableReaderSpec() *execinfrapb.TableReaderSpec {
 	return trSpecPool.Get().(*execinfrapb.TableReaderSpec)
 }
 
-// ReleaseTableReaderSpec puts this TableReaderSpec back into its sync pool. It
+// releaseTableReaderSpec puts this TableReaderSpec back into its sync pool. It
 // may not be used again after Release returns.
-func ReleaseTableReaderSpec(s *execinfrapb.TableReaderSpec) {
+func releaseTableReaderSpec(s *execinfrapb.TableReaderSpec) {
 	*s = execinfrapb.TableReaderSpec{
 		Spans: s.Spans[:0],
 	}
 	trSpecPool.Put(s)
-}
-
-// ReleaseSetupFlowRequest releases the resources of this SetupFlowRequest,
-// putting them back into their respective object pools.
-func ReleaseSetupFlowRequest(s *execinfrapb.SetupFlowRequest) {
-	if s == nil {
-		return
-	}
-	for i := range s.Flow.Processors {
-		if tr := s.Flow.Processors[i].Core.TableReader; tr != nil {
-			ReleaseTableReaderSpec(tr)
-		}
-	}
-	ReleaseFlowSpec(&s.Flow)
 }
