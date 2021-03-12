@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -245,6 +246,11 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			mut.SetDrainingNames([]descpb.NameInfo{{
 				Name: "db",
 			}})
+
+			b := &kv.Batch{}
+			b.CPut(catalogkeys.NewDatabaseKey(mut.Name).Key(lm.Codec()), mut.GetID(), nil)
+			err = txn.Run(ctx, b)
+			require.NoError(t, err)
 
 			// Try to get the database descriptor by the old name and fail.
 			_, failedToResolve, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)

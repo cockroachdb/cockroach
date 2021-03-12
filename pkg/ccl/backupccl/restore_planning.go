@@ -872,14 +872,14 @@ func resolveTargetDB(
 func maybeUpgradeTableDescsInBackupManifests(
 	ctx context.Context, backupManifests []BackupManifest, skipFKsWithNoMatchingTable bool,
 ) error {
-	descGetter := catalog.MapDescGetter{}
+	descGetter := catalog.MakeMapDescGetter()
 
 	// Populate the descGetter with all table descriptors in all backup
 	// descriptors so that they can be looked up.
 	for _, backupManifest := range backupManifests {
 		for _, desc := range backupManifest.Descriptors {
 			if table, _, _, _ := descpb.FromDescriptor(&desc); table != nil {
-				descGetter[table.ID] = tabledesc.NewBuilder(table).BuildImmutable()
+				descGetter.Descriptors[table.ID] = tabledesc.NewBuilder(table).BuildImmutable()
 			}
 		}
 	}

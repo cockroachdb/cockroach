@@ -291,9 +291,11 @@ func GetAllDescriptors(
 	if err != nil {
 		return nil, err
 	}
-	dg := make(catalog.MapDescGetter, len(descs))
+	dg := catalog.MapDescGetter{
+		Descriptors: make(map[descpb.ID]catalog.Descriptor, len(descs)),
+	}
 	for _, desc := range descs {
-		dg[desc.GetID()] = desc
+		dg.Descriptors[desc.GetID()] = desc
 	}
 	if err := catalog.ValidateSelfAndCrossReferences(ctx, dg, descs...); err != nil {
 		return nil, err
@@ -414,7 +416,7 @@ func getDescriptorByID(
 		return nil, err
 	}
 	dg := NewOneLevelUncachedDescGetter(txn, codec)
-	const level = catalog.ValidationLevelSelfAndCrossReferences
+	const level = catalog.ValidationLevelCrossReferences
 	return descriptorFromKeyValue(ctx, codec, r, mutable, expectedType, required, dg, level)
 }
 
@@ -570,7 +572,7 @@ func getDescriptorsFromIDs(
 			catalog.Any,
 			bestEffort,
 			dg,
-			catalog.ValidationLevelSelfAndCrossReferences,
+			catalog.ValidationLevelCrossReferences,
 		)
 		if err != nil {
 			return nil, err

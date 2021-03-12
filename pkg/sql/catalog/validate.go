@@ -35,6 +35,15 @@ func Validate(
 ) ValidationErrors {
 	// Check internal descriptor consistency.
 	var vea validationErrorAccumulator
+	handleDescGetterError := func(descGetterErr error, errPrefix string) {
+		// Contrary to errors collected during Validate via vea.Report(),
+		// the descGetterErr may be a transaction error, which may trigger retries.
+		// It's therefore important that the combined error produced by the
+		// returned ValidationErrors interface unwraps to descGetterErr. For this
+		// reason we place it at the head of the errors slice.
+		vea.errors = append(make([]error, 1, 1+len(vea.errors)), vea.errors...)
+		vea.errors[0] = errors.Wrapf(descGetterErr, "%s", errPrefix)
+	}
 	if level == NoValidation {
 		return &vea
 	}
@@ -53,24 +62,34 @@ func Validate(
 	// special cases those neighbors' immediate neighbors also.
 	vdg, descGetterErr := collectDescriptorsForValidation(ctx, maybeBatchDescGetter, descriptors)
 	if descGetterErr != nil {
-		// Contrary to all other errors collected during Validate via vea.Report(),
-		// the descGetterErr may be a transaction error, which may trigger retries.
-		// It's therefore important that the combined error produced by the
-		// returned ValidationErrors interface unwraps to descGetterErr. For this
-		// reason we place it at the head of the errors slice.
-		vea.errors = append(make([]error, 1, 1+len(vea.errors)), vea.errors...)
-		vea.errors[0] = errors.Wrap(descGetterErr, "collecting referenced descriptors")
+		handleDescGetterError(descGetterErr, "collecting referenced descriptors")
 		return &vea
 	}
 	// Perform cross-reference checks.
 	for _, desc := range descriptors {
-		if level&ValidationLevelSelfAndCrossReferences == 0 || desc.Dropped() {
+		if level&ValidationLevelCrossReferences == 0 || desc.Dropped() {
 			continue
 		}
 		vea.setPrefix(desc)
 		desc.ValidateCrossReferences(&vea, vdg)
 	}
-	if level <= ValidationLevelSelfAndCrossReferences {
+	if level <= ValidationLevelCrossReferences {
+		return &vea
+	}
+	if level&ValidationLevelNamespace != 0 {
+		// Collect descriptor namespace table entries.
+		descGetterErr = vdg.addNamespaceEntries(ctx, descriptors, maybeBatchDescGetter)
+		if descGetterErr != nil {
+			handleDescGetterError(descGetterErr, "collecting namespace table entries")
+			return &vea
+		}
+		// Perform Namespace checks
+		for _, desc := range descriptors {
+			vea.setPrefix(desc)
+			validateNamespace(desc, &vea, vdg.Namespace)
+		}
+	}
+	if level <= ValidationLevelNamespace {
 		return &vea
 	}
 	// Perform pre-txn-commit checks.
@@ -92,9 +111,12 @@ const (
 	NoValidation ValidationLevel = 0
 	// ValidationLevelSelfOnly means only validate internal descriptor consistency.
 	ValidationLevelSelfOnly = 1<<(iota+1) - 1
-	// ValidationLevelSelfAndCrossReferences means do the above and also check
+	// ValidationLevelCrossReferences means do the above and also check
 	// cross-references.
-	ValidationLevelSelfAndCrossReferences
+	ValidationLevelCrossReferences
+	// ValidationLevelNamespace means do the above and also check namespace
+	// table records.
+	ValidationLevelNamespace
 	// ValidationLevelAllPreTxnCommit means do the above and also perform
 	// pre-txn-commit checks.
 	ValidationLevelAllPreTxnCommit
@@ -107,11 +129,11 @@ func ValidateSelf(descriptors ...Descriptor) error {
 }
 
 // ValidateSelfAndCrossReferences is a convenience function for Validate called at the
-// ValidationLevelSelfAndCrossReferences level and combining the resulting errors.
+// ValidationLevelCrossReferences level and combining the resulting errors.
 func ValidateSelfAndCrossReferences(
 	ctx context.Context, maybeBatchDescGetter DescGetter, descriptors ...Descriptor,
 ) error {
-	return Validate(ctx, maybeBatchDescGetter, ValidationLevelSelfAndCrossReferences, descriptors...).CombinedError()
+	return Validate(ctx, maybeBatchDescGetter, ValidationLevelCrossReferences, descriptors...).CombinedError()
 }
 
 // ValidationErrorAccumulator is used by the validation methods on Descriptor
@@ -211,16 +233,16 @@ type ValidationDescGetter interface {
 
 type validationDescGetterImpl MapDescGetter
 
-var _ ValidationDescGetter = validationDescGetterImpl{}
+var _ ValidationDescGetter = (*validationDescGetterImpl)(nil)
 
 // sealed implements the ValidationDescGetter interface.
-func (validationDescGetterImpl) sealed() {}
+func (*validationDescGetterImpl) sealed() {}
 
 // GetDatabaseDescriptor implements the ValidationDescGetter interface.
-func (vdg validationDescGetterImpl) GetDatabaseDescriptor(
+func (vdg *validationDescGetterImpl) GetDatabaseDescriptor(
 	id descpb.ID,
 ) (DatabaseDescriptor, error) {
-	desc, found := vdg[id]
+	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
 		return nil, WrapDatabaseDescRefErr(id, ErrDescriptorNotFound)
 	}
@@ -228,8 +250,8 @@ func (vdg validationDescGetterImpl) GetDatabaseDescriptor(
 }
 
 // GetSchemaDescriptor implements the ValidationDescGetter interface.
-func (vdg validationDescGetterImpl) GetSchemaDescriptor(id descpb.ID) (SchemaDescriptor, error) {
-	desc, found := vdg[id]
+func (vdg *validationDescGetterImpl) GetSchemaDescriptor(id descpb.ID) (SchemaDescriptor, error) {
+	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
 		return nil, WrapSchemaDescRefErr(id, ErrDescriptorNotFound)
 	}
@@ -237,8 +259,8 @@ func (vdg validationDescGetterImpl) GetSchemaDescriptor(id descpb.ID) (SchemaDes
 }
 
 // GetTableDescriptor implements the ValidationDescGetter interface.
-func (vdg validationDescGetterImpl) GetTableDescriptor(id descpb.ID) (TableDescriptor, error) {
-	desc, found := vdg[id]
+func (vdg *validationDescGetterImpl) GetTableDescriptor(id descpb.ID) (TableDescriptor, error) {
+	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
 		return nil, WrapTableDescRefErr(id, ErrDescriptorNotFound)
 	}
@@ -246,34 +268,67 @@ func (vdg validationDescGetterImpl) GetTableDescriptor(id descpb.ID) (TableDescr
 }
 
 // GetTypeDescriptor implements the ValidationDescGetter interface.
-func (vdg validationDescGetterImpl) GetTypeDescriptor(id descpb.ID) (TypeDescriptor, error) {
-	desc, found := vdg[id]
+func (vdg *validationDescGetterImpl) GetTypeDescriptor(id descpb.ID) (TypeDescriptor, error) {
+	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
 		return nil, WrapTypeDescRefErr(id, ErrDescriptorNotFound)
 	}
 	return AsTypeDescriptor(desc)
 }
 
+func (vdg *validationDescGetterImpl) addNamespaceEntries(
+	ctx context.Context, descriptors []Descriptor, maybeBatchDescGetter DescGetter,
+) (err error) {
+	reqs := make([]descpb.NameInfo, 0, len(descriptors))
+	for _, desc := range descriptors {
+		reqs = append(reqs, descpb.NameInfo{
+			ParentID:       desc.GetParentID(),
+			ParentSchemaID: desc.GetParentSchemaID(),
+			Name:           desc.GetName(),
+		})
+		reqs = append(reqs, desc.GetDrainingNames()...)
+	}
+
+	if bdg, ok := maybeBatchDescGetter.(BatchDescGetter); ok {
+		ids, err := bdg.GetNamespaceEntries(ctx, reqs)
+		if err != nil {
+			return err
+		}
+		for i, r := range reqs {
+			vdg.Namespace[r] = ids[i]
+		}
+		return nil
+	}
+
+	for _, r := range reqs {
+		vdg.Namespace[r], err = maybeBatchDescGetter.GetNamespaceEntry(ctx, r.ParentID, r.ParentSchemaID, r.Name)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // collectorState is used by collectDescriptorsForValidation
 type collectorState struct {
-	descs        validationDescGetterImpl
+	vdg          validationDescGetterImpl
 	referencedBy DescriptorIDSet
 }
 
 // addDirectReferences adds all immediate neighbors of desc to the state.
 func (cs *collectorState) addDirectReferences(desc Descriptor) {
-	cs.descs[desc.GetID()] = desc
+	cs.vdg.Descriptors[desc.GetID()] = desc
 	desc.GetReferencedDescIDs().ForEach(cs.referencedBy.Add)
 }
 
-// getMissingDescs fetches the descs which have corresponding IDs in the state
-// but which are otherwise missing.
+// getMissingDescs fetches the descriptors which have corresponding IDs in the
+// state but which are otherwise missing.
 func (cs *collectorState) getMissingDescs(
 	ctx context.Context, maybeBatchDescGetter DescGetter,
 ) (resps []Descriptor, err error) {
 	reqs := make([]descpb.ID, 0, cs.referencedBy.Len())
 	for _, id := range cs.referencedBy.Ordered() {
-		if _, exists := cs.descs[id]; !exists {
+		if _, exists := cs.vdg.Descriptors[id]; !exists {
 			reqs = append(reqs, id)
 		}
 	}
@@ -296,7 +351,7 @@ func (cs *collectorState) getMissingDescs(
 	}
 	for _, desc := range resps {
 		if desc != nil {
-			cs.descs[desc.GetID()] = desc
+			cs.vdg.Descriptors[desc.GetID()] = desc
 		}
 	}
 	return resps, nil
@@ -306,9 +361,12 @@ func (cs *collectorState) getMissingDescs(
 // possible descriptors required for validation.
 func collectDescriptorsForValidation(
 	ctx context.Context, maybeBatchDescGetter DescGetter, descriptors []Descriptor,
-) (ValidationDescGetter, error) {
+) (*validationDescGetterImpl, error) {
 	cs := collectorState{
-		descs:        make(map[descpb.ID]Descriptor, len(descriptors)),
+		vdg: validationDescGetterImpl{
+			Descriptors: make(map[descpb.ID]Descriptor, len(descriptors)),
+			Namespace:   make(map[descpb.NameInfo]descpb.ID, len(descriptors)),
+		},
 		referencedBy: MakeDescriptorIDSet(),
 	}
 	for _, desc := range descriptors {
@@ -331,5 +389,47 @@ func collectDescriptorsForValidation(
 	if err != nil {
 		return nil, err
 	}
-	return cs.descs, nil
+	return &cs.vdg, nil
+}
+
+const (
+	namespaceTableID  = 2
+	namespace2TableID = 30
+)
+
+// validateNamespace checks that the namespace entries associated with a
+// descriptor are sane.
+func validateNamespace(
+	desc Descriptor, vea ValidationErrorAccumulator, namespace map[descpb.NameInfo]descpb.ID,
+) {
+	if desc.GetID() == namespaceTableID || desc.GetID() == namespace2TableID {
+		return
+	}
+
+	id := namespace[descpb.NameInfo{
+		ParentID:       desc.GetParentID(),
+		ParentSchemaID: desc.GetParentSchemaID(),
+		Name:           desc.GetName(),
+	}]
+	// Check that correct entry for descriptor exists and has correct value,
+	// unless if the descriptor is dropped.
+	if !desc.Dropped() {
+		if id == descpb.InvalidID {
+			vea.Report(errors.Errorf("expected matching namespace entry, found none"))
+		} else if id != desc.GetID() {
+			vea.Report(errors.Errorf("expected matching namespace entry value, instead found %d", id))
+		}
+	}
+
+	// Check that all draining name entries exist and are correct.
+	for _, dn := range desc.GetDrainingNames() {
+		id := namespace[dn]
+		if id == descpb.InvalidID {
+			vea.Report(errors.Errorf("expected matching namespace entry for draining name (%d, %d, %s), found none",
+				dn.ParentID, dn.ParentSchemaID, dn.Name))
+		} else if id != desc.GetID() {
+			vea.Report(errors.Errorf("expected matching namespace entry value for draining name (%d, %d, %s), instead found %d",
+				dn.ParentID, dn.ParentSchemaID, dn.Name, id))
+		}
+	}
 }

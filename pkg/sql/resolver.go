@@ -840,10 +840,11 @@ type internalLookupCtx struct {
 	typDescs    map[descpb.ID]*typedesc.Immutable
 	typIDs      []descpb.ID
 
-	// fallback is utilized in GetDesc
+	// fallback is utilized in GetDesc and GetNamespaceEntry.
 	fallback catalog.DescGetter
 }
 
+// GetDesc implements the catalog.DescGetter interface.
 func (l *internalLookupCtx) GetDesc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
 	if desc, ok := l.dbDescs[id]; ok {
 		return desc, nil
@@ -861,6 +862,16 @@ func (l *internalLookupCtx) GetDesc(ctx context.Context, id descpb.ID) (catalog.
 		return l.fallback.GetDesc(ctx, id)
 	}
 	return nil, nil
+}
+
+// GetNamespaceEntry implements the catalog.DescGetter interface.
+func (l *internalLookupCtx) GetNamespaceEntry(
+	ctx context.Context, parentID, parentSchemaID descpb.ID, name string,
+) (descpb.ID, error) {
+	if l.fallback != nil {
+		return l.fallback.GetNamespaceEntry(ctx, parentID, parentSchemaID, name)
+	}
+	return descpb.InvalidID, nil
 }
 
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding

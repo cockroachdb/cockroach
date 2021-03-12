@@ -102,6 +102,12 @@ func (o oneLevelMapDescGetter) GetDesc(
 	)
 }
 
+func (o oneLevelMapDescGetter) GetNamespaceEntry(
+	_ context.Context, _, _ descpb.ID, _ string,
+) (descpb.ID, error) {
+	panic("not implemented")
+}
+
 func decodeDescriptorDSV(t *testing.T, descriptorCSVPath string) oneLevelMapDescGetter {
 	f, err := os.Open(descriptorCSVPath)
 	require.NoError(t, err)

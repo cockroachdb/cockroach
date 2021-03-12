@@ -255,16 +255,17 @@ func TestDescriptorRepair(t *testing.T) {
 		typ  string
 		info string
 	}
-	for _, tc := range []struct {
+	for caseIdx, tc := range []struct {
 		before             []string
 		op                 string
 		expErrRE           string
 		expEventLogEntries []eventLogPattern
 		after              []string
 	}{
-		{
+		{ // 1
 			before: []string{
 				`CREATE DATABASE test`,
+				`SELECT crdb_internal.unsafe_upsert_namespace_entry(52, 29, 'foo', 59, true)`,
 			},
 			op: upsertRepair,
 			expEventLogEntries: []eventLogPattern{
@@ -294,9 +295,10 @@ func TestDescriptorRepair(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ // 2
 			before: []string{
 				`CREATE DATABASE test`,
+				`SELECT crdb_internal.unsafe_upsert_namespace_entry(52, 29, 'foo', 59, true)`,
 				upsertRepair,
 			},
 			op: upsertUpdatePrivileges,
@@ -315,7 +317,7 @@ func TestDescriptorRepair(t *testing.T) {
 				},
 			},
 		},
-		{
+		{ // 3
 			before: []string{
 				`CREATE SCHEMA foo`,
 			},
@@ -325,7 +327,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 `,
 			expErrRE: `crdb_internal.unsafe_delete_namespace_entry\(\): refusing to delete namespace entry for non-dropped descriptor`,
 		},
-		{
+		{ // 4
 			// Upsert a descriptor which is invalid, then try to upsert a namespace
 			// entry for it and show that it fails.
 			before: []string{
@@ -334,7 +336,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			op:       `SELECT crdb_internal.unsafe_upsert_namespace_entry(50, 29, 'foo', 52);`,
 			expErrRE: `relation "foo" \(52\): duplicate column name: "i"`,
 		},
-		{
+		{ // 5
 			// Upsert a descriptor which is invalid, then try to upsert a namespace
 			// entry for it and show that it succeeds with the force flag.
 			before: []string{
@@ -348,7 +350,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				},
 			},
 		},
-		{
+		{ // 6
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
 			// then show that deleting the descriptor fails without the force flag.
 			before: []string{
@@ -358,7 +360,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			op:       `SELECT crdb_internal.unsafe_delete_descriptor(52);`,
 			expErrRE: `pq: crdb_internal.unsafe_delete_descriptor\(\): relation "foo" \(52\): duplicate column name: "i"`,
 		},
-		{
+		{ // 7
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
 			// then show that deleting the descriptor succeeds with the force flag.
 			before: []string{
@@ -373,7 +375,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				},
 			},
 		},
-		{
+		{ // 8
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
 			// then show that updating the descriptor fails without the force flag.
 			before: []string{
@@ -383,7 +385,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			op:       updateInvalidateDuplicateColumnDescriptorNoForce,
 			expErrRE: `pq: crdb_internal.unsafe_upsert_descriptor\(\): relation "foo" \(52\): duplicate column name: "i"`,
 		},
-		{
+		{ // 9
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
 			// then show that updating the descriptor succeeds the force flag.
 			before: []string{
@@ -402,7 +404,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`INSERT INTO [52 as t] VALUES (1), (2)`,
 			},
 		},
-		{
+		{ // 10
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
 			// then show that deleting the namespace entry fails without the force flag.
 			before: []string{
@@ -412,7 +414,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			op:       `SELECT crdb_internal.unsafe_delete_namespace_entry(50, 29, 'foo', 52);`,
 			expErrRE: `pq: crdb_internal.unsafe_delete_namespace_entry\(\): failed to retrieve descriptor 52: relation "foo" \(52\): duplicate column name: "i"`,
 		},
-		{
+		{ // 11
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
 			// then show that deleting the namespace entry succeeds with the force flag.
 			before: []string{
@@ -428,7 +430,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			},
 		},
 	} {
-		t.Run(tc.op, func(t *testing.T) {
+		t.Run(fmt.Sprintf("case #%d: %s", caseIdx+1, tc.op), func(t *testing.T) {
 			s, db, cleanup := setup(t)
 			now := s.Clock().Now().GoTime()
 			defer cleanup()
