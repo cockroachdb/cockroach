@@ -13,6 +13,8 @@ package version
 import (
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetters(t *testing.T) {
@@ -173,5 +175,31 @@ func TestCompare(t *testing.T) {
 		if cmp := b.Compare(a); cmp != -tc.cmp {
 			t.Errorf("'%s' vs '%s': expected %d, got %d", tc.b, tc.a, -tc.cmp, cmp)
 		}
+	}
+}
+
+func TestUpgradeType(t *testing.T) {
+	testCases := []struct {
+		Current string
+		To      string
+		Expect  UpgradeType
+	}{
+		{Current: "v20.1.0", To: "v20.1.1", Expect: MinorUpgrade},
+		{Current: "v20.1.0", To: "v20.1.9999", Expect: MinorUpgrade},
+		{Current: "v20.1.2", To: "v20.1.1", Expect: MinorDowngrade},
+		{Current: "v20.1.9999", To: "v20.1.1", Expect: MinorDowngrade},
+		{Current: "v20.1.10", To: "v20.2.1", Expect: MajorUpgrade},
+		{Current: "v20.2.10", To: "v21.1.1", Expect: MajorUpgrade},
+		{Current: "v20.2.5", To: "v20.1.12", Expect: MajorRollback},
+		{Current: "v21.1.10", To: "v20.2.1", Expect: MajorRollback},
+		{Current: "v20.1.10", To: "v21.1.2", Expect: Unsupported},
+		{Current: "v20.1.10", To: "v20.1.10", Expect: None},
+	}
+
+	for _, tc := range testCases {
+		to := MustParse(tc.To)
+		current := MustParse(tc.Current)
+
+		assert.Equalf(t, tc.Expect, current.UpgradeType(to), "%s -> %s", current, to)
 	}
 }

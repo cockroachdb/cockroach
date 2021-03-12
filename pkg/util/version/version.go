@@ -19,6 +19,29 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// UpgradeType represents a type of version change between two Version. Each
+// distinct type may have certain rules or limitations to it.
+type UpgradeType string
+
+const (
+	// MinorUpgrade is a trivial version adjustment to a newly released version.
+	MinorUpgrade UpgradeType = "MinorUpgrade"
+	// MinorDowngrade is a trivial version adjustment to a previously released version.
+	MinorDowngrade UpgradeType = "MinorDowngrade"
+	// MajorUpgrade is an UpgradeType that may require preparation and
+	// result in backwards incompatible changes to externally facing APIs.
+	MajorUpgrade UpgradeType = "MajorUpgrade"
+	// MajorRollback is the opposite of a MajorUpgrade. It may only be
+	// possible if certain steps where taken when performing the
+	// MajorUpgrade.
+	MajorRollback UpgradeType = "MajorRollback"
+	// Unsupported indicates that an upgrade is not possible or valid.
+	// Performing such an upgrade would result in an inoperable product.
+	Unsupported UpgradeType = "Unsupported"
+	// None indicates that no version change is happening.
+	None UpgradeType = "None"
+)
+
 // Version represents a semantic version; see
 // https://semver.org/spec/v2.0.0.html.
 type Version struct {
@@ -231,4 +254,42 @@ func (v *Version) Compare(w *Version) int {
 // AtLeast returns true if v >= w.
 func (v *Version) AtLeast(w *Version) bool {
 	return v.Compare(w) >= 0
+}
+
+// UpgradeType returns the version change type that will happen when moving
+// between two version of CockroachDB.
+func (v *Version) UpgradeType(to *Version) UpgradeType {
+	if v.major == to.major && v.minor == to.minor {
+		switch v.Compare(to) {
+		case 1:
+			return MinorDowngrade
+		case -1:
+			return MinorUpgrade
+		default:
+			return None
+		}
+	}
+
+	switch v.minor {
+	case 1:
+		// 20.1.x ->  20.2.x
+		if to.major == v.major && to.minor == 2 {
+			return MajorUpgrade
+		}
+		// 20.1.x ->  19.2.x
+		if to.major == v.major-1 && to.minor == 2 {
+			return MajorRollback
+		}
+	case 2:
+		// 20.2.x ->  20.1.x
+		if to.major == v.major && to.minor == 1 {
+			return MajorRollback
+		}
+		// 20.2.x ->  21.1.x
+		if to.major == v.major+1 && to.minor == 1 {
+			return MajorUpgrade
+		}
+	}
+
+	return Unsupported
 }
