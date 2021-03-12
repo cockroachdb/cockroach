@@ -2932,6 +2932,7 @@ CREATE TABLE crdb_internal.zones (
   target               STRING,
   range_name           STRING,
   database_name        STRING,
+  schema_name          STRING,
   table_name           STRING,
   index_name           STRING,
   partition_name       STRING,
