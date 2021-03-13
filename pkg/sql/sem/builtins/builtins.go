@@ -3634,7 +3634,12 @@ may increase either contention or retry errors, or both.`,
 				if sp == nil {
 					return tree.DNull, nil
 				}
-				return tree.NewDInt(tree.DInt(sp.GetRecording()[0].TraceID)), nil
+
+				traceID := sp.TraceID()
+				if traceID == 0 {
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(tree.DInt(traceID)), nil
 			},
 			Info: "Returns the current trace ID or an error if no trace is open.",
 			// NB: possibly this is or could be made stable, but it's not worth it.

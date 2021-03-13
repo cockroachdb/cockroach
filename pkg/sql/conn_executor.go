@@ -835,7 +835,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 				panic(errors.AssertionFailedf("unexpected state in conn executor after ApplyWithPayload %T", t))
 			}
 		}
-		if util.CrdbTestBuild && ex.state.sp != nil {
+		if util.CrdbTestBuild && ex.state.Ctx != nil {
 			panic(errors.AssertionFailedf("txn span not closed in state %s", ex.machine.CurState()))
 		}
 	} else if closeType == externalTxnClose {
