@@ -309,6 +309,34 @@ SHOW statement_timeout
 ----
 0
 
+statement ok
+SET idle_in_session_timeout = 10000
+
+query T
+SHOW idle_in_session_timeout
+----
+10000
+
+statement ok
+SET idle_in_session_timeout = 10000
+
+query T
+SHOW idle_in_session_timeout
+----
+10000
+
+statement ok
+SET idle_in_session_timeout = 0;
+SET idle_in_transaction_session_timeout = 123456
+
+query T
+SHOW idle_in_transaction_session_timeout
+----
+123456
+
+statement ok
+SET idle_in_transaction_session_timeout = 0
+
 # Test that composite variable names get rejected properly, especially
 # when "tracing" is used as prefix.
 
