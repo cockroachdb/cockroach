@@ -241,6 +241,7 @@ func (rq *replicateQueue) shouldQueue(
 		return true, priority
 	}
 	voterReplicas := desc.Replicas().VoterDescriptors()
+	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 
 	if action == AllocatorNoop {
 		log.VEventf(ctx, 2, "no action to take")
@@ -252,9 +253,30 @@ func (rq *replicateQueue) shouldQueue(
 
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 		rangeUsageInfo := rangeUsageInfoForRepl(repl)
-		_, _, _, ok := rq.allocator.RebalanceVoter(ctx, zone, repl.RaftStatus(), voterReplicas, nil, rangeUsageInfo, storeFilterThrottled)
+		_, _, _, ok := rq.allocator.RebalanceVoter(
+			ctx,
+			zone,
+			repl.RaftStatus(),
+			voterReplicas,
+			nonVoterReplicas,
+			rangeUsageInfo,
+			storeFilterThrottled,
+		)
 		if ok {
-			log.VEventf(ctx, 2, "rebalance target found, enqueuing")
+			log.VEventf(ctx, 2, "rebalance target found for voter, enqueuing")
+			return true, 0
+		}
+		_, _, _, ok = rq.allocator.RebalanceNonVoter(
+			ctx,
+			zone,
+			repl.RaftStatus(),
+			voterReplicas,
+			nonVoterReplicas,
+			rangeUsageInfo,
+			storeFilterThrottled,
+		)
+		if ok {
+			log.VEventf(ctx, 2, "rebalance target found for non-voter, enqueuing")
 			return true, 0
 		}
 		log.VEventf(ctx, 2, "no rebalance target found, not enqueuing")
