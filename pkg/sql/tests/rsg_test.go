@@ -271,8 +271,11 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					continue
 				}
 				switch lower {
-				case
-					"pg_sleep":
+				case "pg_sleep":
+					continue
+				case "st_frechetdistance":
+					// Calculating the Frechet distance is slow and testing it here
+					// is not worth it.
 					continue
 				}
 				_, variations := builtins.GetBuiltinProperties(name)
