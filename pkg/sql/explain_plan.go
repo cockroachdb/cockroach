@@ -82,8 +82,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		// cause an error or panic, so swallow the error. See #40677 for example.
 		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
 		flows := physicalPlan.GenerateFlowSpecs()
-		flowCtx := newFlowCtxForExplainPurposes(planCtx, params)
-		flowCtx.Cfg.ClusterID = &distSQLPlanner.rpcCtx.ClusterID
+		flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p, &distSQLPlanner.rpcCtx.ClusterID)
 
 		ctxSessionData := flowCtx.EvalCtx.SessionData
 		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
