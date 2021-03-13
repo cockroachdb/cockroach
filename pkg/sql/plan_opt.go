@@ -598,8 +598,6 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 	planTop.planComponents = *result
 	planTop.explainPlan = explainPlan
-	planTop.mem = mem
-	planTop.catalog = &opc.catalog
 	planTop.codec = codec
 	planTop.stmt = stmt
 	planTop.flags = opc.flags
@@ -611,6 +609,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if containsFullIndexScan {
 		planTop.flags.Set(planFlagContainsFullIndexScan)
+	}
+	if planTop.savePlanString || planTop.savePlanForStats {
+		planTop.mem = mem
+		planTop.catalog = &opc.catalog
 	}
 	return nil
 }
