@@ -1,0 +1,4 @@
+# gazelle:ignore
+
+# Prevent bazel from including this directory. It is complicated
+# to support since this has it's own independent go.mod.

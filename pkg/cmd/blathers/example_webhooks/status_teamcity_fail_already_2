@@ -1,0 +1,214 @@
+{
+  "id": 9289079095,
+  "sha": "beac4a53e0e2e2236eb5957f67abc1bf476ad1b6",
+  "name": "cockroachdb/cockroach",
+  "target_url": "https://teamcity.cockroachdb.com/viewLog.html?buildId=1854431&buildTypeId=Cockroach_UnitTests",
+  "avatar_url": "https://avatars0.githubusercontent.com/u/20559710?v=4",
+  "context": "GitHub CI (Cockroach)",
+  "description": "TeamCity build failed",
+  "state": "failure",
+  "commit": {
+    "sha": "beac4a53e0e2e2236eb5957f67abc1bf476ad1b6",
+    "node_id": "MDY6Q29tbWl0MTY1NjM1ODc6YmVhYzRhNTNlMGUyZTIyMzZlYjU5NTdmNjdhYmMxYmY0NzZhZDFiNg==",
+    "commit": {
+      "author": {
+        "name": "craig[bot]",
+        "email": "bors@cockroachlabs.com",
+        "date": "2020-04-05T20:23:56Z"
+      },
+      "committer": {
+        "name": "craig[bot]",
+        "email": "bors@cockroachlabs.com",
+        "date": "2020-04-05T20:23:56Z"
+      },
+      "message": "Merge #47048\n\n47048: sql: pass stopper.ShouldQuiesce() to retryFunc for TemporaryObjectCleaner r=RaduBerinde a=otan\n\nResolves https://github.com/cockroachdb/cockroach/issues/47047.\r\n\r\nThis fixes a bug where the temporary object cleaner can hang during\r\nobject shutdown by not obeying stopper.ShouldQuiesce(). I've run\r\n`TestChartCatalogGen` 10 times and confirmed it all takes the same\r\namount of time.\r\n\r\nRelease note: None\n\nCo-authored-by: Oliver Tan <otan@cockroachlabs.com>",
+      "tree": {
+        "sha": "e43f71d4ef6451456c1dfbe5853a81b31f718842",
+        "url": "https://api.github.com/repos/cockroachdb/cockroach/git/trees/e43f71d4ef6451456c1dfbe5853a81b31f718842"
+      },
+      "url": "https://api.github.com/repos/cockroachdb/cockroach/git/commits/beac4a53e0e2e2236eb5957f67abc1bf476ad1b6",
+      "comment_count": 0,
+      "verification": {
+        "verified": false,
+        "reason": "unsigned",
+        "signature": null,
+        "payload": null
+      }
+    },
+    "url": "https://api.github.com/repos/cockroachdb/cockroach/commits/beac4a53e0e2e2236eb5957f67abc1bf476ad1b6",
+    "html_url": "https://github.com/cockroachdb/cockroach/commit/beac4a53e0e2e2236eb5957f67abc1bf476ad1b6",
+    "comments_url": "https://api.github.com/repos/cockroachdb/cockroach/commits/beac4a53e0e2e2236eb5957f67abc1bf476ad1b6/comments",
+    "author": null,
+    "committer": null,
+    "parents": [
+      {
+        "sha": "704b094e5f795fb9af8ecc753339f5f7b400a9b2",
+        "url": "https://api.github.com/repos/cockroachdb/cockroach/commits/704b094e5f795fb9af8ecc753339f5f7b400a9b2",
+        "html_url": "https://github.com/cockroachdb/cockroach/commit/704b094e5f795fb9af8ecc753339f5f7b400a9b2"
+      },
+      {
+        "sha": "6dd156237e8ab85d805388949551af6d0a47aa80",
+        "url": "https://api.github.com/repos/cockroachdb/cockroach/commits/6dd156237e8ab85d805388949551af6d0a47aa80",
+        "html_url": "https://github.com/cockroachdb/cockroach/commit/6dd156237e8ab85d805388949551af6d0a47aa80"
+      }
+    ]
+  },
+  "branches": [
+    {
+      "name": "master",
+      "commit": {
+        "sha": "beac4a53e0e2e2236eb5957f67abc1bf476ad1b6",
+        "url": "https://api.github.com/repos/cockroachdb/cockroach/commits/beac4a53e0e2e2236eb5957f67abc1bf476ad1b6"
+      },
+      "protected": true
+    },
+    {
+      "name": "staging",
+      "commit": {
+        "sha": "beac4a53e0e2e2236eb5957f67abc1bf476ad1b6",
+        "url": "https://api.github.com/repos/cockroachdb/cockroach/commits/beac4a53e0e2e2236eb5957f67abc1bf476ad1b6"
+      },
+      "protected": false
+    }
+  ],
+  "created_at": "2020-04-05T22:51:28+00:00",
+  "updated_at": "2020-04-05T22:51:28+00:00",
+  "repository": {
+    "id": 16563587,
+    "node_id": "MDEwOlJlcG9zaXRvcnkxNjU2MzU4Nw==",
+    "name": "cockroach",
+    "full_name": "cockroachdb/cockroach",
+    "private": false,
+    "owner": {
+      "login": "cockroachdb",
+      "id": 6748139,
+      "node_id": "MDEyOk9yZ2FuaXphdGlvbjY3NDgxMzk=",
+      "avatar_url": "https://avatars3.githubusercontent.com/u/6748139?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/cockroachdb",
+      "html_url": "https://github.com/cockroachdb",
+      "followers_url": "https://api.github.com/users/cockroachdb/followers",
+      "following_url": "https://api.github.com/users/cockroachdb/following{/other_user}",
+      "gists_url": "https://api.github.com/users/cockroachdb/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/cockroachdb/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/cockroachdb/subscriptions",
+      "organizations_url": "https://api.github.com/users/cockroachdb/orgs",
+      "repos_url": "https://api.github.com/users/cockroachdb/repos",
+      "events_url": "https://api.github.com/users/cockroachdb/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/cockroachdb/received_events",
+      "type": "Organization",
+      "site_admin": false
+    },
+    "html_url": "https://github.com/cockroachdb/cockroach",
+    "description": "CockroachDB - the open source, cloud-native SQL database.",
+    "fork": false,
+    "url": "https://api.github.com/repos/cockroachdb/cockroach",
+    "forks_url": "https://api.github.com/repos/cockroachdb/cockroach/forks",
+    "keys_url": "https://api.github.com/repos/cockroachdb/cockroach/keys{/key_id}",
+    "collaborators_url": "https://api.github.com/repos/cockroachdb/cockroach/collaborators{/collaborator}",
+    "teams_url": "https://api.github.com/repos/cockroachdb/cockroach/teams",
+    "hooks_url": "https://api.github.com/repos/cockroachdb/cockroach/hooks",
+    "issue_events_url": "https://api.github.com/repos/cockroachdb/cockroach/issues/events{/number}",
+    "events_url": "https://api.github.com/repos/cockroachdb/cockroach/events",
+    "assignees_url": "https://api.github.com/repos/cockroachdb/cockroach/assignees{/user}",
+    "branches_url": "https://api.github.com/repos/cockroachdb/cockroach/branches{/branch}",
+    "tags_url": "https://api.github.com/repos/cockroachdb/cockroach/tags",
+    "blobs_url": "https://api.github.com/repos/cockroachdb/cockroach/git/blobs{/sha}",
+    "git_tags_url": "https://api.github.com/repos/cockroachdb/cockroach/git/tags{/sha}",
+    "git_refs_url": "https://api.github.com/repos/cockroachdb/cockroach/git/refs{/sha}",
+    "trees_url": "https://api.github.com/repos/cockroachdb/cockroach/git/trees{/sha}",
+    "statuses_url": "https://api.github.com/repos/cockroachdb/cockroach/statuses/{sha}",
+    "languages_url": "https://api.github.com/repos/cockroachdb/cockroach/languages",
+    "stargazers_url": "https://api.github.com/repos/cockroachdb/cockroach/stargazers",
+    "contributors_url": "https://api.github.com/repos/cockroachdb/cockroach/contributors",
+    "subscribers_url": "https://api.github.com/repos/cockroachdb/cockroach/subscribers",
+    "subscription_url": "https://api.github.com/repos/cockroachdb/cockroach/subscription",
+    "commits_url": "https://api.github.com/repos/cockroachdb/cockroach/commits{/sha}",
+    "git_commits_url": "https://api.github.com/repos/cockroachdb/cockroach/git/commits{/sha}",
+    "comments_url": "https://api.github.com/repos/cockroachdb/cockroach/comments{/number}",
+    "issue_comment_url": "https://api.github.com/repos/cockroachdb/cockroach/issues/comments{/number}",
+    "contents_url": "https://api.github.com/repos/cockroachdb/cockroach/contents/{+path}",
+    "compare_url": "https://api.github.com/repos/cockroachdb/cockroach/compare/{base}...{head}",
+    "merges_url": "https://api.github.com/repos/cockroachdb/cockroach/merges",
+    "archive_url": "https://api.github.com/repos/cockroachdb/cockroach/{archive_format}{/ref}",
+    "downloads_url": "https://api.github.com/repos/cockroachdb/cockroach/downloads",
+    "issues_url": "https://api.github.com/repos/cockroachdb/cockroach/issues{/number}",
+    "pulls_url": "https://api.github.com/repos/cockroachdb/cockroach/pulls{/number}",
+    "milestones_url": "https://api.github.com/repos/cockroachdb/cockroach/milestones{/number}",
+    "notifications_url": "https://api.github.com/repos/cockroachdb/cockroach/notifications{?since,all,participating}",
+    "labels_url": "https://api.github.com/repos/cockroachdb/cockroach/labels{/name}",
+    "releases_url": "https://api.github.com/repos/cockroachdb/cockroach/releases{/id}",
+    "deployments_url": "https://api.github.com/repos/cockroachdb/cockroach/deployments",
+    "created_at": "2014-02-06T00:18:47Z",
+    "updated_at": "2020-04-05T21:11:32Z",
+    "pushed_at": "2020-04-05T22:31:39Z",
+    "git_url": "git://github.com/cockroachdb/cockroach.git",
+    "ssh_url": "git@github.com:cockroachdb/cockroach.git",
+    "clone_url": "https://github.com/cockroachdb/cockroach.git",
+    "svn_url": "https://github.com/cockroachdb/cockroach",
+    "homepage": "https://www.cockroachlabs.com",
+    "size": 1194852,
+    "stargazers_count": 17999,
+    "watchers_count": 17999,
+    "language": "Go",
+    "has_issues": true,
+    "has_projects": true,
+    "has_downloads": true,
+    "has_wiki": true,
+    "has_pages": false,
+    "forks_count": 2137,
+    "mirror_url": null,
+    "archived": false,
+    "disabled": false,
+    "open_issues_count": 3183,
+    "license": {
+      "key": "other",
+      "name": "Other",
+      "spdx_id": "NOASSERTION",
+      "url": null,
+      "node_id": "MDc6TGljZW5zZTA="
+    },
+    "forks": 2137,
+    "open_issues": 3183,
+    "watchers": 17999,
+    "default_branch": "master"
+  },
+  "organization": {
+    "login": "cockroachdb",
+    "id": 6748139,
+    "node_id": "MDEyOk9yZ2FuaXphdGlvbjY3NDgxMzk=",
+    "url": "https://api.github.com/orgs/cockroachdb",
+    "repos_url": "https://api.github.com/orgs/cockroachdb/repos",
+    "events_url": "https://api.github.com/orgs/cockroachdb/events",
+    "hooks_url": "https://api.github.com/orgs/cockroachdb/hooks",
+    "issues_url": "https://api.github.com/orgs/cockroachdb/issues",
+    "members_url": "https://api.github.com/orgs/cockroachdb/members{/member}",
+    "public_members_url": "https://api.github.com/orgs/cockroachdb/public_members{/member}",
+    "avatar_url": "https://avatars3.githubusercontent.com/u/6748139?v=4",
+    "description": "the scalable, survivable, SQL database"
+  },
+  "sender": {
+    "login": "cockroach-teamcity",
+    "id": 20559710,
+    "node_id": "MDQ6VXNlcjIwNTU5NzEw",
+    "avatar_url": "https://avatars0.githubusercontent.com/u/20559710?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/cockroach-teamcity",
+    "html_url": "https://github.com/cockroach-teamcity",
+    "followers_url": "https://api.github.com/users/cockroach-teamcity/followers",
+    "following_url": "https://api.github.com/users/cockroach-teamcity/following{/other_user}",
+    "gists_url": "https://api.github.com/users/cockroach-teamcity/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/cockroach-teamcity/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/cockroach-teamcity/subscriptions",
+    "organizations_url": "https://api.github.com/users/cockroach-teamcity/orgs",
+    "repos_url": "https://api.github.com/users/cockroach-teamcity/repos",
+    "events_url": "https://api.github.com/users/cockroach-teamcity/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/cockroach-teamcity/received_events",
+    "type": "User",
+    "site_admin": false
+  },
+  "installation": {
+    "id": 7754752,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uNzc1NDc1Mg=="
+  }
+}
