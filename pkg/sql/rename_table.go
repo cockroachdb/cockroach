@@ -188,6 +188,15 @@ func (n *renameTableNode) startExec(params runParams) error {
 		}
 	}
 
+	// Special checks for tables, view and sequences to determine if cross
+	// DB references would occur.
+	if oldTn.Catalog() != newTn.Catalog() {
+		err := n.checkForCrossDbReferences(ctx, p, targetDbDesc)
+		if err != nil {
+			return err
+		}
+	}
+
 	// oldTn and newTn are already normalized, so we can compare directly here.
 	if oldTn.Catalog() == newTn.Catalog() &&
 		oldTn.Schema() == newTn.Schema() &&
@@ -279,6 +288,175 @@ func (p *planner) dependentViewError(
 		sqlerrors.NewDependentObjectErrorf("cannot %s %s %q because view %q depends on it",
 			op, typeName, objName, viewName),
 		"you can drop %s instead.", viewName)
+}
+
+// checkForCrossDbReferences validates if any cross DB references
+// will exist after any rename operation.
+func (n *renameTableNode) checkForCrossDbReferences(
+	ctx context.Context, p *planner, targetDbDesc catalog.DatabaseDescriptor,
+) error {
+	tableDesc := n.tableDesc
+
+	// Checks inbound / outbound foreign key references for cross DB references.
+	// The refTableID flag determines if the reference or origin field are checked.
+	checkFkForCrossDbDep := func(fk *descpb.ForeignKeyConstraint, refTableID bool) error {
+		tableID := fk.ReferencedTableID
+		if !refTableID {
+			tableID = fk.OriginTableID
+		}
+
+		referencedTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:    true,
+					AvoidCached: true,
+				},
+			})
+		if err != nil {
+			return err
+		}
+		// No cross DB reference
+		if referencedTable.GetParentID() == targetDbDesc.GetID() {
+			return nil
+		}
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"a foreign key constraint %q will exist between databases after rename "+
+					"(see the '%s' cluster setting)",
+				fk.Name,
+				allowCrossDatabaseFKsSetting),
+			crossDBReferenceDeprecationHint(),
+		)
+	}
+	// Validates if a given dependency on a relation will
+	// lead to a cross DB reference, and an appropriate
+	// error is generated.
+	checkDepForCrossDbRef := func(depID descpb.ID) error {
+		dependentObject, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, depID,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:    true,
+					AvoidCached: true,
+				}})
+		if err != nil {
+			return err
+		}
+		// No cross DB reference detected
+		if dependentObject.GetParentID() == targetDbDesc.GetID() {
+			return nil
+		}
+		// For tables return an error based on if we are depending
+		// on a view or sequence.
+		if tableDesc.IsTable() {
+			if dependentObject.IsView() {
+				return errors.WithHintf(
+					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"a view %q reference to this table will refer to another databases after rename "+
+							"(see the '%s' cluster setting)",
+						dependentObject.GetName(),
+						allowCrossDatabaseViewsSetting),
+					crossDBReferenceDeprecationHint(),
+				)
+			} else if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) &&
+				dependentObject.IsSequence() {
+				return errors.WithHintf(
+					pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"a sequence %q will be OWNED BY a table in a different database after rename "+
+							"(see the '%s' cluster setting)",
+						dependentObject.GetName(),
+						allowCrossDatabaseSeqOwnerSetting),
+					crossDBReferenceDeprecationHint(),
+				)
+			}
+		} else if tableDesc.IsView() {
+			// For views it can only be a relation.
+			return errors.WithHintf(
+				pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"this view will reference a table %q in another databases after rename "+
+						"(see the '%s' cluster setting)",
+					dependentObject.GetName(),
+					allowCrossDatabaseViewsSetting),
+				crossDBReferenceDeprecationHint(),
+			)
+		} else if tableDesc.IsSequence() {
+			return errors.WithHintf(
+				pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"this sequence will be OWNED BY a table %q in a different database after rename "+
+						"(see the '%s' cluster setting)",
+					dependentObject.GetName(),
+					allowCrossDatabaseSeqOwnerSetting),
+				crossDBReferenceDeprecationHint(),
+			)
+		}
+		return nil
+	}
+
+	// For tables check if any outbound or inbound foreign key references would
+	// be impacted.
+	if tableDesc.IsTable() {
+		if !allowCrossDatabaseFKs.Get(&p.execCfg.Settings.SV) {
+			err := tableDesc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+				return checkFkForCrossDbDep(fk, true)
+			})
+			if err != nil {
+				return err
+			}
+
+			err = tableDesc.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
+				return checkFkForCrossDbDep(fk, false)
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		// If cross database sequence owners are not allowed, then
+		// check if any column owns a sequence.
+		if !allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
+			for _, columnDesc := range tableDesc.Columns {
+				for _, ownsSequenceID := range columnDesc.OwnsSequenceIds {
+					err := checkDepForCrossDbRef(ownsSequenceID)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		// Check if any views depend on this table, while
+		// DependsOnBy contains sequences these are only
+		// once that are in use.
+		if !allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
+			err := tableDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+				return checkDepForCrossDbRef(dep.ID)
+			})
+			if err != nil {
+				return err
+			}
+		}
+	} else if tableDesc.IsView() &&
+		!allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
+		// For views check if we depend on tables in a different database.
+		dependsOn := tableDesc.GetDependsOn()
+		for _, dependency := range dependsOn {
+			err := checkDepForCrossDbRef(dependency)
+			if err != nil {
+				return err
+			}
+		}
+	} else if tableDesc.IsSequence() &&
+		!allowCrossDatabaseSeqOwner.Get(&p.execCfg.Settings.SV) {
+		// For sequences check if the sequence is owned by
+		// a different database.
+		sequenceOpts := tableDesc.GetSequenceOpts()
+		if sequenceOpts.SequenceOwner.OwnerTableID != descpb.InvalidID {
+			err := checkDepForCrossDbRef(sequenceOpts.SequenceOwner.OwnerTableID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // writeNameKey writes a name key to a batch and runs the batch.
