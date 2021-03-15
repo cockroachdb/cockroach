@@ -181,3 +181,21 @@ SET experimental_use_new_schema_changer = 'on'
 
 statement ok
 DROP TABLE foo, bar
+
+subtest failed_column_backfill
+
+statement ok
+CREATE TABLE foo (i INT PRIMARY KEY)
+
+statement ok
+INSERT INTO foo VALUES (0);
+
+statement error pgcode 22012 failed to construct index entries during backfill: division by zero
+ALTER TABLE foo ADD COLUMN j INT AS (1//i) STORED
+
+# Ensure that later schema changes on the table still work.
+statement ok
+ALTER TABLE foo ADD COLUMN j INT AS (i) STORED
+
+statement ok
+DROP TABLE foo

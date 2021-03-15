@@ -19,4 +19,8 @@ import (
 type SchemaChangerState struct {
 	mode  sessiondata.NewSchemaChangerMode
 	nodes []*scpb.Node
+	// stmts contains the SQL statements involved in the schema change. This is
+	// the bare minimum of statement information we need for testing, but in the
+	// future we may want sql.Statement or something.
+	stmts []string
 }

@@ -123,6 +123,7 @@ var validationMap = []struct {
 			"Temporary":                     {status: thisFieldReferencesNoObjects},
 			"LocalityConfig":                {status: iSolemnlySwearThisFieldIsValidated},
 			"PartitionAllBy":                {status: iSolemnlySwearThisFieldIsValidated},
+			"NewSchemaChangeJobID":          {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{

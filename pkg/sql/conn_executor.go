@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -2042,7 +2043,8 @@ func isCommit(stmt tree.Statement) bool {
 }
 
 func errIsRetriable(err error) bool {
-	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil))
+	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) ||
+		errors.HasType(err, (*scbuild.ConcurrentSchemaChangeError)(nil))
 }
 
 // makeErrEvent takes an error and returns either an eventRetriableErr or an
@@ -2316,6 +2318,17 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		ex.extraTxnState.autoRetryCounter++
 	}
 
+	// If we had an error from DDL statement execution due to the presence of
+	// other concurrent schema changes when attempting a schema change, wait for
+	// the completion of those schema changes first.
+	if p, ok := payload.(payloadWithError); ok {
+		if cscErr := (*scbuild.ConcurrentSchemaChangeError)(nil); errors.As(p.errorCause(), &cscErr) {
+			if err := ex.handleWaitingForConcurrentSchemaChanges(cscErr.DescriptorID()); err != nil {
+				return advanceInfo{}, err
+			}
+		}
+	}
+
 	// Handle transaction events which cause updates to txnState.
 	switch advInfo.txnEvent {
 	case noEvent:
@@ -2393,6 +2406,20 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	}
 
 	return advInfo, nil
+}
+
+func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(descID descpb.ID) error {
+	if err := ex.planner.WaitForDescriptorSchemaChanges(
+		ex.Ctx(), descID, ex.extraTxnState.schemaChangerState,
+	); err != nil {
+		return err
+	}
+	// Restart the transaction at a higher timestamp after waiting.
+	ex.state.mu.Lock()
+	defer ex.state.mu.Unlock()
+	userPriority := ex.state.mu.txn.UserPriority()
+	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ex.Ctx(), ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
+	return ex.state.mu.txn.SetUserPriority(userPriority)
 }
 
 // initStatementResult initializes res according to a query.
@@ -2576,44 +2603,71 @@ func (ex *connExecutor) notifyStatsRefresherOfNewTables(ctx context.Context) {
 // runPreCommitStages is part of the new schema changer infrastructure to
 // mutate descriptors prior to committing a SQL transaction.
 func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
-	if len(ex.extraTxnState.schemaChangerState.nodes) == 0 {
+	scs := &ex.extraTxnState.schemaChangerState
+	if len(scs.nodes) == 0 {
 		return nil
 	}
 	executor := scexec.NewExecutor(
 		ex.planner.txn, &ex.extraTxnState.descCollection, ex.server.cfg.Codec,
-		nil /* backfiller */, nil, /* jobTracker */
+		nil /* backfiller */, nil /* jobTracker */, ex.server.cfg.NewSchemaChangerTestingKnobs,
 	)
 	after, err := runNewSchemaChanger(
-		ctx, scplan.PreCommitPhase,
+		ctx,
+		scplan.PreCommitPhase,
 		ex.extraTxnState.schemaChangerState.nodes,
 		executor,
+		scs.stmts,
 	)
 	if err != nil {
 		return err
 	}
-	scs := &ex.extraTxnState.schemaChangerState
 	scs.nodes = after
 	targetSlice := make([]*scpb.Target, len(scs.nodes))
 	states := make([]scpb.State, len(scs.nodes))
+	// TODO(ajwerner): It may be better in the future to have the builder be
+	// responsible for determining this set of descriptors. As of the time of
+	// writing, the descriptors to be "locked," descriptors that need schema
+	// change jobs, and descriptors with schema change mutations all coincide. But
+	// there are future schema changes to be implemented in the new schema changer
+	// (e.g., RENAME TABLE) for which this may no longer be true.
+	descIDSet := catalog.MakeDescriptorIDSet()
 	for i := range scs.nodes {
 		targetSlice[i] = scs.nodes[i].Target
 		states[i] = scs.nodes[i].State
+		descIDSet.Add(scs.nodes[i].Element().DescriptorID())
 	}
-	_, err = ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
+	descIDs := descIDSet.Ordered()
+	job, err := ex.planner.extendedEvalCtx.QueueJob(ctx, jobs.Record{
 		Description:   "Schema change job", // TODO(ajwerner): use const
-		Statement:     "",                  // TODO(ajwerner): combine all of the DDL statements together
+		Statement:     strings.Join(scs.stmts, "; "),
 		Username:      ex.planner.User(),
-		DescriptorIDs: nil, // TODO(ajwerner): populate
-		Details:       jobspb.NewSchemaChangeDetails{Targets: targetSlice},
+		DescriptorIDs: descIDs,
+		Details: jobspb.NewSchemaChangeDetails{
+			Targets: targetSlice,
+		},
 		Progress:      jobspb.NewSchemaChangeProgress{States: states},
 		RunningStatus: "",
 		NonCancelable: false,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// Write the job ID to the affected descriptors.
+	if err := scexec.UpdateDescriptorJobIDs(
+		ctx, ex.planner.Txn(), &ex.extraTxnState.descCollection, descIDs, jobspb.InvalidJobID, job.ID(),
+	); err != nil {
+		return err
+	}
+	log.Infof(ctx, "queued new schema change job %d using the new schema changer", job.ID())
+	return nil
 }
 
 func runNewSchemaChanger(
-	ctx context.Context, phase scplan.Phase, nodes []*scpb.Node, executor *scexec.Executor,
+	ctx context.Context,
+	phase scplan.Phase,
+	nodes []*scpb.Node,
+	executor *scexec.Executor,
+	stmts []string,
 ) (after []*scpb.Node, _ error) {
 	sc, err := scplan.MakePlan(nodes, scplan.Params{
 		ExecutionPhase: phase,
@@ -2624,7 +2678,11 @@ func runNewSchemaChanger(
 	}
 	after = nodes
 	for _, s := range sc.Stages {
-		if err := executor.ExecuteOps(ctx, s.Ops); err != nil {
+		if err := executor.ExecuteOps(ctx, s.Ops,
+			scexec.TestingKnobMetadata{
+				Statements: stmts,
+				Phase:      phase,
+			}); err != nil {
 			return nil, err
 		}
 		after = s.After
