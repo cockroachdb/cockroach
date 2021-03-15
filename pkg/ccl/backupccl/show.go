@@ -185,7 +185,7 @@ func showBackupPlanHook(
 		}
 
 		manifests := make([]BackupManifest, len(incPaths)+1)
-		manifests[0], err = readBackupManifestFromStore(ctx, store, encryption)
+		manifests[0], err = ReadBackupManifestFromStore(ctx, store, encryption)
 		if err != nil {
 			return err
 		}
@@ -532,12 +532,12 @@ func showBackupsInCollectionPlanHook(
 			return errors.Wrapf(err, "connect to external storage")
 		}
 		defer store.Close()
-		res, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName)
+		res, err := ListFullBackupsInCollection(ctx, store)
 		if err != nil {
 			return err
 		}
 		for _, i := range res {
-			resultsCh <- tree.Datums{tree.NewDString(strings.TrimSuffix(i, "/"+backupManifestName))}
+			resultsCh <- tree.Datums{tree.NewDString(i)}
 		}
 		return nil
 	}

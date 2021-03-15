@@ -1623,11 +1623,7 @@ func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
 
 // GetBytesRead returns total number of bytes read by the underlying KVFetcher.
 func (rf *Fetcher) GetBytesRead() int64 {
-	if f := rf.kvFetcher; f != nil {
-		return f.bytesRead
-	}
-	// Not yet initialized.
-	return 0
+	return rf.kvFetcher.GetBytesRead()
 }
 
 // Only unique secondary indexes have extra columns to decode (namely the

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -51,29 +52,36 @@ type ColBatchScan struct {
 	rf          *cFetcher
 	limitHint   int64
 	parallelize bool
-	ctx         context.Context
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
 	tracingSpan *tracing.Span
-	// rowsRead contains the number of total rows this ColBatchScan has returned
-	// so far.
-	rowsRead int64
-	// init is true after Init() has been called.
-	init bool
+	mu          struct {
+		syncutil.Mutex
+		ctx context.Context
+		// init is true after Init() has been called.
+		init bool
+		// rowsRead contains the number of total rows this ColBatchScan has
+		// returned so far.
+		rowsRead int64
+	}
 	// ResultTypes is the slice of resulting column types from this operator.
 	// It should be used rather than the slice of column types from the scanned
 	// table because the scan might synthesize additional implicit system columns.
 	ResultTypes []*types.T
 }
 
-var _ execinfra.KVReader = &ColBatchScan{}
+var _ colexecop.KVReader = &ColBatchScan{}
 var _ execinfra.Releasable = &ColBatchScan{}
 var _ colexecop.Closer = &ColBatchScan{}
 var _ colexecop.Operator = &ColBatchScan{}
 
 // Init initializes a ColBatchScan.
 func (s *ColBatchScan) Init() {
-	s.init = true
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Note that we're intentionally holding the lock until the cFetcher is
+	// properly initialized.
+	s.mu.init = true
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
 		s.flowCtx.Txn, s.spans, limitBatches, s.limitHint, s.flowCtx.TraceKV,
@@ -85,33 +93,44 @@ func (s *ColBatchScan) Init() {
 
 // Next is part of the Operator interface.
 func (s *ColBatchScan) Next(ctx context.Context) coldata.Batch {
-	if s.ctx == nil {
+	s.mu.Lock()
+	if s.mu.ctx == nil {
 		// This is the first call to Next(), so we will capture the context and
 		// possibly replace it with a child below.
-		s.ctx = ctx
-		if execinfra.ShouldCollectStats(s.ctx, s.flowCtx) {
+		s.mu.ctx = ctx
+		if execinfra.ShouldCollectStats(s.mu.ctx, s.flowCtx) {
 			// We need to start a child span so that the only contention events
 			// present in the recording would be because of this cFetcher.
-			s.ctx, s.tracingSpan = execinfra.ProcessorSpan(s.ctx, "colbatchscan")
+			s.mu.ctx, s.tracingSpan = execinfra.ProcessorSpan(s.mu.ctx, "colbatchscan")
 		}
 	}
-	bat, err := s.rf.NextBatch(s.ctx)
+	ctx = s.mu.ctx
+	s.mu.Unlock()
+	bat, err := s.rf.NextBatch(ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
 	if bat.Selection() != nil {
 		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly a selection vector is set on the batch coming from CFetcher"))
 	}
-	s.rowsRead += int64(bat.Length())
+	s.mu.Lock()
+	s.mu.rowsRead += int64(bat.Length())
+	s.mu.Unlock()
 	return bat
 }
 
 // DrainMeta is part of the MetadataSource interface.
 func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	if !s.init {
+	s.mu.Lock()
+	initialized := s.mu.init
+	s.mu.Unlock()
+	if !initialized {
 		// In some pathological queries like `SELECT 1 FROM t HAVING true`, Init()
 		// and Next() may never get called. Return early to avoid using an
 		// uninitialized fetcher.
+		// TODO(yuzefovich): we probably don't need this anymore given that we
+		// call Init() on fixedNumTuplesNoInputOp and we have the invariants
+		// checker ensuring that Init() is called before DrainMeta().
 		return nil
 	}
 	var trailingMeta []execinfrapb.ProducerMetadata
@@ -144,30 +163,43 @@ func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 		// TODO(yuzefovich): this is temporary hack that will be fixed by adding
 		// context.Context argument to Init() and removing it from Next() and
 		// DrainMeta().
-		if trace := execinfra.GetTraceData(s.ctx); trace != nil {
+		s.mu.Lock()
+		traceCtx := s.mu.ctx
+		s.mu.Unlock()
+		if trace := execinfra.GetTraceData(traceCtx); trace != nil {
 			trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 		}
 	}
 	return trailingMeta
 }
 
-// GetBytesRead is part of the execinfra.KVReader interface.
+// GetBytesRead is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetBytesRead() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Note that if Init() was never called, s.rf.fetcher will remain nil, and
+	// GetBytesRead() will return 0. We are also holding the mutex, so a
+	// concurrent call to Init() will have to wait, and the fetcher will remain
+	// uninitialized until we return.
 	return s.rf.fetcher.GetBytesRead()
 }
 
-// GetRowsRead is part of the execinfra.KVReader interface.
+// GetRowsRead is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetRowsRead() int64 {
-	return s.rowsRead
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.rowsRead
 }
 
-// GetCumulativeContentionTime is part of the execinfra.KVReader interface.
+// GetCumulativeContentionTime is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
-	if s.ctx == nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mu.ctx == nil {
 		// Next was never called, so there was no contention events.
 		return 0
 	}
-	return execinfra.GetCumulativeContentionTime(s.ctx)
+	return execinfra.GetCumulativeContentionTime(s.mu.ctx)
 }
 
 var colBatchScanPool = sync.Pool{
