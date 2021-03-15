@@ -135,3 +135,8 @@ export const selectStatement = createSelector(
     };
   },
 );
+
+export const selectStatementDetailsUiConfig = createSelector(
+  (state: AppState) => state.adminUI.uiConfig.pages.statementDetails,
+  statementDetailsUiConfig => statementDetailsUiConfig,
+);

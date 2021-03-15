@@ -45,6 +45,7 @@ import sortedTableStyles from "src/sortedtable/sortedtable.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import styles from "./statementDetails.module.scss";
 import { NodeSummaryStats } from "../nodes";
+import { UIConfigState } from "../store/uiConfig";
 
 const { TabPane } = Tabs;
 
@@ -124,6 +125,7 @@ export interface StatementDetailsStateProps {
   statementsError: Error | null;
   nodeNames: { [nodeId: string]: string };
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
+  uiConfig: UIConfigState["pages"]["statementDetails"];
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -593,6 +595,9 @@ export class StatementDetails extends React.Component<
             hasData={hasDiagnosticReports}
             statementFingerprint={statement}
             onDownloadDiagnosticBundleClick={onDiagnosticBundleDownload}
+            showDiagnosticsViewLink={
+              this.props.uiConfig.showStatementDiagnosticsLink
+            }
           />
         </TabPane>
         <TabPane tab="Logical Plan" key="logical-plan">
