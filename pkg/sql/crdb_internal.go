@@ -810,6 +810,24 @@ func (t txnList) Less(i, j int) bool {
 	return t[i] < t[j]
 }
 
+// execStatAvg is a helper for execution stats shown in virtual tables. Returns
+// NULL when the count is 0, or the mean of the given NumericStat.
+func execStatAvg(count int64, n roachpb.NumericStat) tree.Datum {
+	if count == 0 {
+		return tree.DNull
+	}
+	return tree.NewDFloat(tree.DFloat(n.Mean))
+}
+
+// execStatVar is a helper for execution stats shown in virtual tables. Returns
+// NULL when the count is 0, or the variance of the given NumericStat.
+func execStatVar(count int64, n roachpb.NumericStat) tree.Datum {
+	if count == 0 {
+		return tree.DNull
+	}
+	return tree.NewDFloat(tree.DFloat(n.GetVariance(count)))
+}
+
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
@@ -840,6 +858,16 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   bytes_read_var      FLOAT NOT NULL,
   rows_read_avg       FLOAT NOT NULL,
   rows_read_var       FLOAT NOT NULL,
+  network_bytes_avg   FLOAT,
+  network_bytes_var   FLOAT,
+  max_mem_usage_avg   FLOAT,
+  max_mem_usage_var   FLOAT,
+  contention_time_avg FLOAT, 
+  contention_time_var FLOAT,
+  network_msgs_avg    FLOAT,
+  network_msgs_var    FLOAT,
+  max_disk_usage_avg  FLOAT,
+  max_disk_usage_var  FLOAT,
   implicit_txn        BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -933,6 +961,16 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					tree.NewDFloat(tree.DFloat(s.mu.data.BytesRead.GetVariance(s.mu.data.Count))),
 					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.Mean)),
 					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.GetVariance(s.mu.data.Count))),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),
 					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),
 				)
 				s.mu.Unlock()
@@ -953,20 +991,30 @@ var crdbInternalTransactionStatisticsTable = virtualSchemaTable{
 		`This table is wiped periodically (by default, at least every two hours)`,
 	schema: `
 CREATE TABLE crdb_internal.node_transaction_statistics (
-  node_id           INT NOT NULL,
-  application_name  STRING NOT NULL,
-  key               STRING,
-  statement_ids     STRING[],
-  count             INT,
-  max_retries       INT,
-  service_lat_avg   FLOAT NOT NULL,
-  service_lat_var   FLOAT NOT NULL,
-  retry_lat_avg     FLOAT NOT NULL,
-  retry_lat_var     FLOAT NOT NULL,
-  commit_lat_avg    FLOAT NOT NULL,
-  commit_lat_var    FLOAT NOT NULL,
-  rows_read_avg     FLOAT NOT NULL,
-  rows_read_var     FLOAT NOT NULL
+  node_id             INT NOT NULL,
+  application_name    STRING NOT NULL,
+  key                 STRING,
+  statement_ids       STRING[],
+  count               INT,
+  max_retries         INT,
+  service_lat_avg     FLOAT NOT NULL,
+  service_lat_var     FLOAT NOT NULL,
+  retry_lat_avg       FLOAT NOT NULL,
+  retry_lat_var       FLOAT NOT NULL,
+  commit_lat_avg      FLOAT NOT NULL,
+  commit_lat_var      FLOAT NOT NULL,
+  rows_read_avg       FLOAT NOT NULL,
+  rows_read_var       FLOAT NOT NULL,
+  network_bytes_avg   FLOAT,
+  network_bytes_var   FLOAT,
+  max_mem_usage_avg   FLOAT,
+  max_mem_usage_var   FLOAT,
+  contention_time_avg FLOAT, 
+  contention_time_var FLOAT,
+  network_msgs_avg    FLOAT,
+  network_msgs_var    FLOAT,
+  max_disk_usage_avg  FLOAT,
+  max_disk_usage_var  FLOAT
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -1046,6 +1094,16 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 					tree.NewDFloat(tree.DFloat(s.mu.data.CommitLat.GetVariance(s.mu.data.Count))),
 					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),
 					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),
 				)
 
 				s.mu.Unlock()
