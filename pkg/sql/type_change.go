@@ -500,6 +500,7 @@ func repartitionRegionalByRowTables(
 		tableDesc, err := localPlanner.Descriptors().GetMutableTableByID(
 			ctx, txn, tbID, tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
+					AvoidCached:    true,
 					Required:       true,
 					IncludeDropped: true,
 				},
