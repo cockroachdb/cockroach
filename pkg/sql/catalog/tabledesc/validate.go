@@ -1207,9 +1207,8 @@ func (desc *wrapper) validatePartitioning() error {
 func (desc *wrapper) validateTableLocalityConfig(
 	db catalog.DatabaseDescriptor, vdg catalog.ValidationDescGetter,
 ) error {
-
 	if desc.LocalityConfig == nil {
-		if db.IsMultiRegion() {
+		if db.IsMultiRegion() && desc.IsTable() {
 			return pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"database %s is multi-region enabled, but table %s has no locality set",
@@ -1221,15 +1220,26 @@ func (desc *wrapper) validateTableLocalityConfig(
 		return nil
 	}
 
+	s := tree.NewFmtCtx(tree.FmtSimple)
+	var locality string
+	// Formatting the table locality config should never fail; if it does, the
+	// error message is more clear if we construct a dummy locality here.
+	if err := FormatTableLocalityConfig(desc.LocalityConfig, s); err != nil {
+		locality = "INVALID LOCALITY"
+	}
+	locality = s.String()
+
+	// Descriptors which are not tables should never have locality set.
+	if !desc.IsTable() {
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"object %s has locality %s set",
+			desc.GetName(),
+			locality,
+		)
+	}
+
 	if !db.IsMultiRegion() {
-		s := tree.NewFmtCtx(tree.FmtSimple)
-		var locality string
-		// Formatting the table locality config should never fail; if it does, the
-		// error message is more clear if we construct a dummy locality here.
-		if err := FormatTableLocalityConfig(desc.LocalityConfig, s); err != nil {
-			locality = "INVALID LOCALITY"
-		}
-		locality = s.String()
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
 			"database %s is not multi-region enabled, but table %s has locality %s set",

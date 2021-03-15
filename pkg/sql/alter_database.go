@@ -581,6 +581,11 @@ func addDefaultLocalityConfigToAllTables(
 	b := p.Txn().NewBatch()
 	if err := forEachTableDesc(ctx, p, dbDesc, hideVirtual,
 		func(immutable *dbdesc.Immutable, _ string, desc catalog.TableDescriptor) error {
+			// Only set the locality for tables.
+			if !desc.IsTable() {
+				return nil
+			}
+
 			mutDesc, err := p.Descriptors().GetMutableTableByID(
 				ctx, p.txn, desc.GetID(), tree.ObjectLookupFlags{},
 			)
