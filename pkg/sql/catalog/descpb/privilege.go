@@ -448,6 +448,7 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 	keys.ScheduledJobsTableID:                 privilege.ReadWriteData,
 	keys.SqllivenessID:                        privilege.ReadWriteData,
 	keys.MigrationsID:                         privilege.ReadWriteData,
+	keys.JoinTokensTableID:                    privilege.ReadWriteData,
 }
 
 // SetOwner sets the owner of the privilege descriptor to the provided string.
