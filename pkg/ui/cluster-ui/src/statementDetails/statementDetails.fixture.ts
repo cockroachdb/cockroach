@@ -185,4 +185,7 @@ export const getStatementDetailsPropsFixture = (): StatementDetailsProps => ({
   diagnosticsReports: [],
   dismissStatementDiagnosticsAlertMessage: noop,
   createStatementDiagnosticsReport: noop,
+  uiConfig: {
+    showStatementDiagnosticsLink: true,
+  },
 });
