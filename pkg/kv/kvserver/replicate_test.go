@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -35,6 +34,10 @@ func TestEagerReplication(t *testing.T) {
 
 	ctx := context.Background()
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Need to trick the server to think it's part of a cluster, otherwise it
+		// will set the default zone config to require 1 replica and the split
+		// bellow will not trigger a replication attempt.
+		PartOfCluster: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				// Disable the replica scanner so that we rely on the eager replication code
@@ -48,6 +51,10 @@ func TestEagerReplication(t *testing.T) {
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
+	// Make sure everything goes through the replicate queue, so the start count
+	// is accurate.
+	require.NoError(t, store.ForceReplicationScanAndProcess())
+
 	// After bootstrap, all of the system ranges should be present in replicate
 	// queue purgatory (because we only have a single store in the test and thus
 	// replication cannot succeed).
@@ -55,20 +62,15 @@ func TestEagerReplication(t *testing.T) {
 
 	t.Logf("purgatory start count is %d", purgatoryStartCount)
 	// Perform a split and check that there's one more range in the purgatory.
-
-	key := roachpb.Key("a")
-	args := adminSplitArgs(key)
-	_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, _, err = s.SplitRange(roachpb.Key("a"))
+	require.NoError(t, err)
 
 	// The addition of replicas to the replicateQueue after a split
 	// occurs happens after the update of the descriptors in meta2
 	// leaving a tiny window of time in which the newly split replicas
 	// will not have been added to purgatory. Thus we loop.
 	testutils.SucceedsSoon(t, func() error {
-		expected := purgatoryStartCount + 2
+		expected := purgatoryStartCount + 1
 		if n := store.ReplicateQueuePurgatoryLength(); expected != n {
 			return errors.Errorf("expected %d replicas in purgatory, but found %d", expected, n)
 		}
