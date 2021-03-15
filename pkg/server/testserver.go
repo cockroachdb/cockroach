@@ -636,10 +636,6 @@ func makeSQLServerArgs(
 		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
-		sqlStatusServer: newTenantStatusServer(
-			baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: circularInternalExecutor},
-			sessionRegistry, contentionRegistry, baseCfg.Settings,
-		),
 	}, nil
 }
 

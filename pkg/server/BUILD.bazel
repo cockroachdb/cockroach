@@ -36,6 +36,7 @@ go_library(
         "server_systemlog_gc.go",
         "settings_cache.go",
         "settingsworker.go",
+        "sql_stats.go",
         "statement_diagnostics_requests.go",
         "statements.go",
         "status.go",
