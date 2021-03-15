@@ -12,6 +12,7 @@ package bench
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"strings"
 	"sync"
 	"testing"
@@ -40,6 +41,8 @@ type RoundTripBenchTestCase struct {
 // RunRoundTripBenchmark sets up a db run the RoundTripBenchTestCase test cases
 // and counts how many round trips the stmt specified by the test case performs.
 func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
+	skip.UnderMetamorphic(b, "changes the RTTs")
+
 	expData := readExpectationsFile(b)
 	for _, tc := range tests {
 		b.Run(tc.name, func(b *testing.B) {
