@@ -314,7 +314,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // must have already been wrapped).
 func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	op colexecop.Operator,
-	kvReader execinfra.KVReader,
+	kvReader colexecop.KVReader,
 	inputs []colexecop.Operator,
 	component execinfrapb.ComponentID,
 	monitors []*mon.BytesMonitor,

@@ -24,7 +24,7 @@ import (
 //
 // For example, if there is a file testdata/a.txt, you can get a path to that
 // file using TestDataPath(t, "a.txt").
-func TestDataPath(t *testing.T, relative ...string) string {
+func TestDataPath(t testing.TB, relative ...string) string {
 	relative = append([]string{"testdata"}, relative...)
 	if bazel.BuiltWithBazel() {
 		runfiles, err := bazel.RunfilesPath()

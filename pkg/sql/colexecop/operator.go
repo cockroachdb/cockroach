@@ -12,6 +12,7 @@ package colexecop
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -62,6 +63,21 @@ type Operator interface {
 type DrainableOperator interface {
 	Operator
 	execinfrapb.MetadataSource
+}
+
+// KVReader is an operator that performs KV reads.
+// TODO(yuzefovich): consider changing the contract to remove the mention of
+// concurrency safety once stats are only retrieved from Next goroutines.
+type KVReader interface {
+	// GetBytesRead returns the number of bytes read from KV by this operator.
+	// It must be safe for concurrent use.
+	GetBytesRead() int64
+	// GetRowsRead returns the number of rows read from KV by this operator.
+	// It must be safe for concurrent use.
+	GetRowsRead() int64
+	// GetCumulativeContentionTime returns the amount of time KV reads spent
+	// contending. It must be safe for concurrent use.
+	GetCumulativeContentionTime() time.Duration
 }
 
 // ZeroInputNode is an execinfra.OpNode with no inputs.

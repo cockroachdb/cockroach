@@ -72,8 +72,14 @@ const (
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 
-	dateBasedIncFolderName  = "/20060102/150405.00"
-	dateBasedIntoFolderName = "/2006/01/02-150405.00"
+	// DateBasedIncFolderName is the date format used when creating sub-directories
+	// storing incremental backups for auto-appendable backups.
+	// It is exported for testing backup inspection tooling.
+	DateBasedIncFolderName = "/20060102/150405.00"
+	// DateBasedIntoFolderName is the date format used when creating sub-directories
+	// for storing backups in a collection.
+	// Also exported for testing backup inspection tooling.
+	DateBasedIntoFolderName = "/2006/01/02-150405.00"
 	latestFileName          = "LATEST"
 )
 
@@ -104,7 +110,7 @@ func (r BackupFileDescriptors) Less(i, j int) bool {
 }
 
 // ReadBackupManifestFromURI creates an export store from the given URI, then
-// reads and unmarshals a BackupManifest at the standard location in the
+// reads and unmarshalls a BackupManifest at the standard location in the
 // export storage.
 func ReadBackupManifestFromURI(
 	ctx context.Context,
@@ -119,10 +125,12 @@ func ReadBackupManifestFromURI(
 		return BackupManifest{}, err
 	}
 	defer exportStore.Close()
-	return readBackupManifestFromStore(ctx, exportStore, encryption)
+	return ReadBackupManifestFromStore(ctx, exportStore, encryption)
 }
 
-func readBackupManifestFromStore(
+// ReadBackupManifestFromStore reads and unmarshalls a BackupManifest
+// from an export store.
+func ReadBackupManifestFromStore(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -592,12 +600,12 @@ func findPriorBackupNames(ctx context.Context, store cloud.ExternalStorage) ([]s
 	return prev, nil
 }
 
-// findPriorBackupLocations finds "appended" incremental backups by searching
+// FindPriorBackupLocations finds "appended" incremental backups by searching
 // for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
 // Using file-system searching rather than keeping an explicit list allows
 // layers to be manually moved/removed/etc without needing to update/maintain
 // said list.
-func findPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
+func FindPriorBackupLocations(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
 	backupManifestSuffix := backupManifestName
 	prev, err := store.ListFiles(ctx, incBackupSubdirGlob+backupManifestSuffix)
 	if err != nil {
@@ -641,7 +649,7 @@ func resolveBackupManifests(
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	_ error,
 ) {
-	baseManifest, err := readBackupManifestFromStore(ctx, baseStores[0], encryption)
+	baseManifest, err := ReadBackupManifestFromStore(ctx, baseStores[0], encryption)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -666,7 +674,7 @@ func resolveBackupManifests(
 				defer stores[j].Close()
 			}
 
-			mainBackupManifests[i], err = readBackupManifestFromStore(ctx, stores[0], encryption)
+			mainBackupManifests[i], err = ReadBackupManifestFromStore(ctx, stores[0], encryption)
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -996,4 +1004,19 @@ func checkForPreviousBackup(
 // tempCheckpointFileNameForJob returns temporary filename for backup manifest checkpoint.
 func tempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 	return fmt.Sprintf("%s-%d", backupManifestCheckpointName, jobID)
+}
+
+// ListFullBackupsInCollection lists full backup paths in the collection
+// of an export store
+func ListFullBackupsInCollection(
+	ctx context.Context, store cloud.ExternalStorage,
+) ([]string, error) {
+	backupPaths, err := store.ListFiles(ctx, "/*/*/*/"+backupManifestName)
+	if err != nil {
+		return nil, err
+	}
+	for i, backupPath := range backupPaths {
+		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupManifestName)
+	}
+	return backupPaths, nil
 }

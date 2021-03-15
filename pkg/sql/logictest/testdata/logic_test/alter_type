@@ -492,3 +492,81 @@ SELECT ARRAY['c']::_ab_58710;
 
 statement error invalid input value for enum ab_58710: "a"
 SELECT ARRAY['a']::_ab_58710
+
+subtest regression_60004_basic
+
+statement ok
+CREATE TYPE enum_60004 AS ENUM ('a', 'b', 'c')
+
+statement ok
+CREATE TABLE t_60004 (k INT PRIMARY KEY, v enum_60004[])
+
+statement ok
+INSERT INTO t_60004 VALUES (1, ARRAY['a'])
+
+statement error could not remove enum value "a" as it is being used by table "test.public.t_60004"
+ALTER TYPE enum_60004 DROP VALUE 'a'
+
+# Not used in a row, so this DROP should be fine.
+statement ok
+ALTER TYPE enum_60004 DROP VALUE 'b'
+
+statement ok
+CREATE VIEW v_60004 AS SELECT ARRAY['c']:::_enum_60004 AS v;
+
+statement error count-array-type-value-usage: enum value "c" is not yet public
+ALTER TYPE enum_60004 DROP VALUE 'c'
+
+subtest regression_60004_complex
+# Setup
+statement ok
+CREATE TYPE alphabets_60004 AS ENUM ('a', 'b', 'c', 'd')
+
+statement ok
+CREATE TABLE using_alphabets_60004(k INT PRIMARY KEY, v1 alphabets_60004[], v2 alphabets_60004[])
+
+statement ok
+INSERT INTO using_alphabets_60004 VALUES (1, ARRAY['a', 'b', 'c'], ARRAY['a','b']), (2, ARRAY['a', 'b', 'c'], ARRAY['a','d'])
+
+statement ok
+CREATE TABLE using_alphabets2_60004(k INT PRIMARY KEY, v1 alphabets_60004, v2 alphabets_60004[])
+
+statement ok
+INSERT INTO using_alphabets2_60004 VALUES (1, 'a', ARRAY['b', 'a'])
+
+statement error could not remove enum value "d" as it is being used by table "test.public.using_alphabets_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'd'
+
+# Remove the row that uses 'd' in it and then try dropping.
+statement ok
+DELETE FROM using_alphabets_60004 WHERE k = 2
+
+statement ok
+ALTER TYPE alphabets_60004 DROP VALUE 'd'
+
+statement error could not remove enum value "c" as it is being used by table "test.public.using_alphabets_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'c'
+
+statement error could not remove enum value "b" as it is being used by table "test.public.using_alphabets_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'b'
+
+statement ok
+TRUNCATE using_alphabets_60004
+
+statement ok
+ALTER TYPE alphabets_60004 DROP VALUE 'c'
+
+statement error could not remove enum value "a" as it is being used by "using_alphabets2_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'a'
+
+statement error could not remove enum value "b" as it is being used by table "test.public.using_alphabets2_60004"
+ALTER TYPE alphabets_60004 DROP VALUE 'b'
+
+statement ok
+TRUNCATE using_alphabets2_60004
+
+statement ok
+ALTER TYPE alphabets_60004 DROP VALUE 'a'
+
+statement ok
+ALTER TYPE alphabets_60004 DROP VALUE 'b'

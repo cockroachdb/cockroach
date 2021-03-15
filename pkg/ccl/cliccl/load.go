@@ -11,8 +11,11 @@ package cliccl
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -48,6 +51,22 @@ func init() {
 		RunE:  cli.MaybeDecorateGRPCError(runLoadShowSummary),
 	}
 
+	loadShowBackupsCmd := &cobra.Command{
+		Use:   "backups <backup_path>",
+		Short: "show backups in collections",
+		Long:  "Shows full backups in a backup collections.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  cli.MaybeDecorateGRPCError(runLoadShowBackups),
+	}
+
+	loadShowIncrementalCmd := &cobra.Command{
+		Use:   "incremental <backup_path>",
+		Short: "show incremental backups",
+		Long:  "Shows incremental chain of a SQL backup.",
+		Args:  cobra.ExactArgs(1),
+		RunE:  cli.MaybeDecorateGRPCError(runLoadShowIncremental),
+	}
+
 	loadShowCmds := &cobra.Command{
 		Use:   "show [command]",
 		Short: "show backups",
@@ -77,8 +96,14 @@ func init() {
 
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadShowCmds)
-	loadShowCmds.AddCommand(loadShowSummaryCmd)
+	loadShowCmds.AddCommand([]*cobra.Command{
+		loadShowSummaryCmd,
+		loadShowBackupsCmd,
+		loadShowIncrementalCmd,
+	}...)
 	loadShowSummaryCmd.Flags().AddFlagSet(loadFlags)
+	loadShowBackupsCmd.Flags().AddFlagSet(loadFlags)
+	loadShowIncrementalCmd.Flags().AddFlagSet(loadFlags)
 }
 
 func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClient, error) {
@@ -118,6 +143,97 @@ func runLoadShowSummary(cmd *cobra.Command, args []string) error {
 	showSpans(desc)
 	showFiles(desc)
 	showDescriptors(desc)
+	return nil
+}
+
+func runLoadShowBackups(cmd *cobra.Command, args []string) error {
+
+	path := args[0]
+	if !strings.Contains(path, "://") {
+		path = cloudimpl.MakeLocalStorageURI(path)
+	}
+	ctx := context.Background()
+	store, err := cloudimpl.ExternalStorageFromURI(ctx, path, base.ExternalIODirConfig{},
+		cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+	if err != nil {
+		return errors.Wrapf(err, "connect to external storage")
+	}
+	defer store.Close()
+
+	backupPaths, err := backupccl.ListFullBackupsInCollection(ctx, store)
+	if err != nil {
+		return errors.Wrapf(err, "list full backups in collection")
+	}
+
+	if len(backupPaths) == 0 {
+		fmt.Println("no backups found.")
+	}
+
+	for _, backupPath := range backupPaths {
+		fmt.Println("./" + backupPath)
+	}
+
+	return nil
+}
+
+func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
+
+	path := args[0]
+	if !strings.Contains(path, "://") {
+		path = cloudimpl.MakeLocalStorageURI(path)
+	}
+
+	uri, err := url.Parse(path)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	store, err := cloudimpl.ExternalStorageFromURI(ctx, uri.String(), base.ExternalIODirConfig{},
+		cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+	if err != nil {
+		return errors.Wrapf(err, "connect to external storage")
+	}
+	defer store.Close()
+
+	incPaths, err := backupccl.FindPriorBackupLocations(ctx, store)
+	if err != nil {
+		return err
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 28, 1, 2, ' ', 0)
+	basepath := uri.Path
+	manifestPaths := append([]string{""}, incPaths...)
+	stores := make([]cloud.ExternalStorage, len(manifestPaths))
+	stores[0] = store
+
+	for i := range manifestPaths {
+
+		if i > 0 {
+			uri.Path = filepath.Join(basepath, manifestPaths[i])
+			stores[i], err = cloudimpl.ExternalStorageFromURI(ctx, uri.String(), base.ExternalIODirConfig{},
+				cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+			if err != nil {
+				return errors.Wrapf(err, "connect to external storage")
+			}
+			defer stores[i].Close()
+		}
+
+		manifest, err := backupccl.ReadBackupManifestFromStore(ctx, stores[i], nil)
+		if err != nil {
+			return err
+		}
+		startTime := manifest.StartTime.GoTime().Format(time.RFC3339)
+		endTime := manifest.EndTime.GoTime().Format(time.RFC3339)
+		if i == 0 {
+			startTime = "-"
+		}
+		fmt.Fprintf(w, "%s	%s	%s\n", uri.Path, startTime, endTime)
+	}
+
+	if err := w.Flush(); err != nil {
+		return err
+	}
 	return nil
 }
 
