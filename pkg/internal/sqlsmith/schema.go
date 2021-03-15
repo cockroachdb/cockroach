@@ -117,8 +117,8 @@ func (s *Smither) getRandTableIndex(
 	for _, col := range idx.Columns {
 		ref := s.columns[table][col.Column]
 		if ref == nil {
-			// TODO (rohany): There are some cases here where colRef is nil, but we
-			//  aren't yet sure why. Rather than panicking, just return.
+			// TODO(yuzefovich): there are some cases here where colRef is nil,
+			// but we aren't yet sure why. Rather than panicking, just return.
 			return nil, nil, nil, false
 		}
 		refs = append(refs, &colRef{
