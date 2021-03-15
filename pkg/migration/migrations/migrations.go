@@ -57,6 +57,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.ForeignKeyRepresentationMigration),
 		foreignKeyRepresentationUpgrade,
 	),
+	migration.NewKVMigration(
+		"fix system.protected_ts_meta privileges",
+		toCV(clusterversion.ProtectedTsMetaPrivilegesMigration),
+		protectedTsMetaPrivilegesMigration,
+	),
 }
 
 func init() {
