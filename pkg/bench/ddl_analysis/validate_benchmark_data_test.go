@@ -98,9 +98,7 @@ func TestBenchmarkExpectation(t *testing.T) {
 
 	var g sync.WaitGroup
 	run := func(b string) {
-		g.Add(1)
-		go t.Run(b, func(t *testing.T) {
-			defer g.Done()
+		tf := func(t *testing.T) {
 			flags := []string{
 				"--test.run=^$",
 				"--test.bench=" + b,
@@ -125,7 +123,12 @@ func TestBenchmarkExpectation(t *testing.T) {
 						r.name, exp.min, exp.max, r.result)
 				}
 			}
-		})
+		}
+		g.Add(1)
+		go func() {
+			defer g.Done()
+			t.Run(b, tf)
+		}()
 	}
 	benchmarks := getBenchmarks(t)
 	for _, b := range benchmarks {
