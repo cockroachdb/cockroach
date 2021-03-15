@@ -66,6 +66,9 @@ func (oi *offsetInjector) deploy(ctx context.Context) error {
 	if err := oi.c.RunL(ctx, oi.c.l,
 		oi.c.All(),
 		"curl",
+		"--retry", "3",
+		"--fail",
+		"--show-error",
 		"-kO",
 		"https://raw.githubusercontent.com/cockroachdb/jepsen/master/cockroachdb/resources/bumptime.c",
 	); err != nil {
