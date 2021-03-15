@@ -633,10 +633,6 @@ func makeSQLServerArgs(
 		circularJobRegistry:      &jobs.Registry{},
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
-		sqlStatusServer: newTenantStatusServer(
-			baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: circularInternalExecutor},
-			sessionRegistry, contentionRegistry, baseCfg.Settings,
-		),
 	}, nil
 }
 
@@ -762,6 +758,11 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
+
+	s.execCfg.SQLStatusServer = newTenantStatusServer(
+		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
+		args.sessionRegistry, args.contentionRegistry, baseCfg.Settings, s,
+	)
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
