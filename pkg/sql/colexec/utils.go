@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
@@ -289,4 +290,17 @@ func maybeAllocateLimitedBoolArray(array []bool, length int) []bool {
 	array = array[:length]
 	copy(array, zeroBoolColumn)
 	return array
+}
+
+// handleErrorFromDiskQueue takes in non-nil error emitted by colcontainer.Queue
+// or colcontainer.PartitionedDiskQueue implementations and propagates it
+// throughout the vectorized engine.
+func handleErrorFromDiskQueue(err error) {
+	if sqlerrors.IsDiskFullError(err) {
+		// We don't want to annotate the disk full error, so we propagate it
+		// as expected one.
+		colexecerror.ExpectedError(err)
+	} else {
+		colexecerror.InternalError(err)
+	}
 }

@@ -218,6 +218,11 @@ func IsOutOfMemoryError(err error) bool {
 	return errHasCode(err, pgcode.OutOfMemory)
 }
 
+// IsDiskFullError checks whether this is a disk full error.
+func IsDiskFullError(err error) bool {
+	return errHasCode(err, pgcode.DiskFull)
+}
+
 // IsUndefinedColumnError checks whether this is an undefined column error.
 func IsUndefinedColumnError(err error) bool {
 	return errHasCode(err, pgcode.UndefinedColumn)

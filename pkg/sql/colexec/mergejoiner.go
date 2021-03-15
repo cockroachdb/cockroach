@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecbase/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -622,9 +621,7 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 	})
 	scratchBatch.SetSelection(false)
 	scratchBatch.SetLength(groupLength)
-	if err := bufferedGroup.enqueue(ctx, scratchBatch); err != nil {
-		colexecerror.InternalError(err)
-	}
+	bufferedGroup.enqueue(ctx, scratchBatch)
 }
 
 // setBuilderSourceToBatch sets the builder state to use groups from the

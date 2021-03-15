@@ -461,7 +461,7 @@ func (hj *externalHashJoiner) partitionBatch(
 				scratchBatch.SetLength(len(sel))
 			})
 			if err := partitioner.Enqueue(ctx, partitionIdx, scratchBatch); err != nil {
-				colexecerror.InternalError(err)
+				handleErrorFromDiskQueue(err)
 			}
 			partitionInfo, ok := hj.partitionsToJoinUsingInMemHash[partitionIdx]
 			if !ok {
