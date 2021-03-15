@@ -600,7 +600,7 @@ message ListSessionsResponse {
   repeated ListSessionsError errors = 2 [ (gogoproto.nullable) = false ];
 }
 
-// Request object for issing a query cancel request.
+// Request object for issuing a query cancel request.
 message CancelQueryRequest {
   // ID of gateway node for the query to be canceled.
   //
@@ -1010,6 +1010,15 @@ message JobStatusResponse {
   cockroach.sql.jobs.jobspb.Job job = 1;
 }
 
+// Request object for issuing a SQL stats reset request.
+message ResetSQLStatsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+// Response object returned by ResetSQLStats.
+message ResetSQLStatsResponse {
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -1293,6 +1302,13 @@ service Status {
   rpc JobStatus(JobStatusRequest) returns (JobStatusResponse) {
     option (google.api.http) = {
       get : "/_status/job/{job_id}"
+    };
+  }
+
+  rpc ResetSQLStats(ResetSQLStatsRequest) returns (ResetSQLStatsResponse) {
+    option (google.api.http) = {
+      post: "/_status/resetsqlstats"
+      body: "*"
     };
   }
 }
