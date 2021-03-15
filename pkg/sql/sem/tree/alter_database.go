@@ -32,7 +32,6 @@ func (node *AlterDatabaseOwner) Format(ctx *FmtCtx) {
 type AlterDatabaseAddRegion struct {
 	Name   Name
 	Region Name
-	Force  bool
 }
 
 var _ Statement = &AlterDatabaseAddRegion{}
@@ -43,16 +42,12 @@ func (node *AlterDatabaseAddRegion) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ADD REGION ")
 	ctx.FormatNode(&node.Region)
-	if node.Force {
-		ctx.WriteString(" FORCE")
-	}
 }
 
 // AlterDatabaseDropRegion represents a ALTER DATABASE DROP REGION statement.
 type AlterDatabaseDropRegion struct {
 	Name   Name
 	Region Name
-	Force  bool
 }
 
 var _ Statement = &AlterDatabaseDropRegion{}
@@ -63,16 +58,12 @@ func (node *AlterDatabaseDropRegion) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" DROP REGION ")
 	ctx.FormatNode(&node.Region)
-	if node.Force {
-		ctx.WriteString(" FORCE")
-	}
 }
 
 // AlterDatabasePrimaryRegion represents a ALTER DATABASE PRIMARY REGION ... statement.
 type AlterDatabasePrimaryRegion struct {
 	Name          Name
 	PrimaryRegion Name
-	Force         bool
 }
 
 var _ Statement = &AlterDatabasePrimaryRegion{}
@@ -83,16 +74,12 @@ func (node *AlterDatabasePrimaryRegion) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" PRIMARY REGION ")
 	node.PrimaryRegion.Format(ctx)
-	if node.Force {
-		ctx.WriteString(" FORCE")
-	}
 }
 
 // AlterDatabaseSurvivalGoal represents a ALTER DATABASE SURVIVE ... statement.
 type AlterDatabaseSurvivalGoal struct {
 	Name         Name
 	SurvivalGoal SurvivalGoal
-	Force        bool
 }
 
 var _ Statement = &AlterDatabaseSurvivalGoal{}
@@ -103,7 +90,4 @@ func (node *AlterDatabaseSurvivalGoal) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ")
 	node.SurvivalGoal.Format(ctx)
-	if node.Force {
-		ctx.WriteString(" FORCE")
-	}
 }
