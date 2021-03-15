@@ -256,10 +256,11 @@ var varGen = map[string]sessionVar{
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			s = strings.ToLower(s)
 			parts := strings.Split(s, ",")
-			if strings.TrimSpace(parts[0]) != "iso" ||
-				(len(parts) == 2 && strings.TrimSpace(parts[1]) != "mdy") ||
-				len(parts) > 2 {
-				err := newVarValueError("DateStyle", s, "ISO", "ISO, MDY")
+			isOnlyISO := len(parts) == 1 && strings.TrimSpace(parts[0]) == "iso"
+			isISOMDY := len(parts) == 2 && strings.TrimSpace(parts[0]) == "iso" && strings.TrimSpace(parts[1]) == "mdy"
+			isMDYISO := len(parts) == 2 && strings.TrimSpace(parts[0]) == "mdy" && strings.TrimSpace(parts[1]) == "iso"
+			if !(isOnlyISO || isISOMDY || isMDYISO) {
+				err := newVarValueError("DateStyle", s, "ISO", "ISO, MDY", "MDY, ISO")
 				err = errors.WithDetail(err, compatErrMsg)
 				return err
 			}
