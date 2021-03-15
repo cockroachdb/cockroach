@@ -453,6 +453,26 @@ func applyZoneConfigForMultiRegionTableOptionNewIndexes(
 	}
 }
 
+// dropZoneConfigsForMultiRegionIndexes drops the zone configs for all
+// the indexes defined on a multi-region table. This function is used to clean
+// up zone configs when transitioning from REGIONAL BY ROW.
+func dropZoneConfigsForMultiRegionIndexes(
+	indexIDs ...descpb.IndexID,
+) applyZoneConfigForMultiRegionTableOption {
+	return func(
+		zoneConfig zonepb.ZoneConfig,
+		regionConfig descpb.DatabaseDescriptor_RegionConfig,
+		table catalog.TableDescriptor,
+	) (hasNewSubzones bool, newZoneConfig zonepb.ZoneConfig, err error) {
+		for _, indexID := range indexIDs {
+			for _, region := range regionConfig.Regions {
+				zoneConfig.DeleteSubzone(uint32(indexID), string(region.Name))
+			}
+		}
+		return false, zoneConfig, nil
+	}
+}
+
 // isPlaceholderZoneConfigForMultiRegion returns whether a given zone config
 // should be marked as a placeholder config for a multi-region object.
 // See zonepb.IsSubzonePlaceholder for why this is necessary.
@@ -534,19 +554,19 @@ func ApplyZoneConfigForMultiRegionTable(
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) error {
 	tableID := table.GetID()
-	zoneRaw, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
+	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
 	if err != nil {
 		return err
 	}
-	zoneConfig := *zonepb.NewZoneConfig()
-	if zoneRaw != nil {
-		zoneConfig = *zoneRaw
+	newZoneConfig := *zonepb.NewZoneConfig()
+	if currentZoneConfig != nil {
+		newZoneConfig = *currentZoneConfig
 	}
 
 	var hasNewSubzones bool
 	for _, opt := range opts {
-		newHasNewSubzones, newZoneConfig, err := opt(
-			zoneConfig,
+		newHasNewSubzones, modifiedNewZoneConfig, err := opt(
+			newZoneConfig,
 			regionConfig,
 			table,
 		)
@@ -554,26 +574,44 @@ func ApplyZoneConfigForMultiRegionTable(
 			return err
 		}
 		hasNewSubzones = newHasNewSubzones || hasNewSubzones
-		zoneConfig = newZoneConfig
+		newZoneConfig = modifiedNewZoneConfig
 	}
 
 	// Mark the NumReplicas as 0 if we have subzones but no other features
 	// in the zone config. This signifies a placeholder.
 	// Note we do not use hasNewSubzones here as there may be existing subzones
 	// on the zone config which may still be a placeholder.
-	if len(zoneConfig.Subzones) > 0 && isPlaceholderZoneConfigForMultiRegion(zoneConfig) {
-		zoneConfig.NumReplicas = proto.Int32(0)
+	if len(newZoneConfig.Subzones) > 0 && isPlaceholderZoneConfigForMultiRegion(newZoneConfig) {
+		newZoneConfig.NumReplicas = proto.Int32(0)
 	}
 
-	if !zoneConfig.Equal(zonepb.NewZoneConfig()) {
-		if err := zoneConfig.Validate(); err != nil {
+	// Determine if we're rewriting or deleting the zone configuration.
+	newZoneConfigIsEmpty := newZoneConfig.Equal(zonepb.NewZoneConfig())
+	currentZoneConfigIsEmpty := currentZoneConfig.Equal(zonepb.NewZoneConfig())
+	rewriteZoneConfig := !newZoneConfigIsEmpty
+	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
+
+	// It's possible at this point that we'll have an empty zone configuration
+	// that doesn't look like an empty zone configuration (i.e. it's a placeholder
+	// zone config - NumReplicas = 0 - with no subzones set). This can happen if
+	// we're ALTERing from REGIONAL BY ROW and dropping all of the subzones for
+	// the partitions. If we encounter this, instead of re-writing the zone
+	// configuration, we want to delete it.
+	numReplicasIsZero := newZoneConfig.NumReplicas != nil && *newZoneConfig.NumReplicas == 0
+	if len(newZoneConfig.Subzones) == 0 && numReplicasIsZero {
+		rewriteZoneConfig = false
+		deleteZoneConfig = true
+	}
+
+	if rewriteZoneConfig {
+		if err := newZoneConfig.Validate(); err != nil {
 			return pgerror.Newf(
 				pgcode.CheckViolation,
 				"could not validate zone config: %v",
 				err,
 			)
 		}
-		if err := zoneConfig.ValidateTandemFields(); err != nil {
+		if err := newZoneConfig.ValidateTandemFields(); err != nil {
 			return pgerror.Newf(
 				pgcode.CheckViolation,
 				"could not validate zone config: %v",
@@ -588,13 +626,13 @@ func ApplyZoneConfigForMultiRegionTable(
 			txn,
 			tableID,
 			table,
-			&zoneConfig,
+			&newZoneConfig,
 			execCfg,
 			hasNewSubzones,
 		); err != nil {
 			return err
 		}
-	} else if zoneRaw != nil {
+	} else if deleteZoneConfig {
 		// Delete the zone configuration if it exists but the new zone config is blank.
 		if _, err = execCfg.InternalExecutor.Exec(
 			ctx,
