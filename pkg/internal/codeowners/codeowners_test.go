@@ -11,12 +11,30 @@
 package codeowners
 
 import (
+	"log"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/stretchr/testify/require"
 )
+
+func init() {
+	if bazel.BuiltWithBazel() {
+		codeOwnersFile, err := bazel.Runfile(".github/CODEOWNERS")
+		if err != nil {
+			log.Fatal(err)
+		}
+		DefaultCodeOwnersLocation = codeOwnersFile
+
+		teamFile, err := bazel.Runfile("TEAMS.yaml")
+		if err != nil {
+			log.Fatal(err)
+		}
+		team.DefaultTeamsYAMLLocation = teamFile
+	}
+}
 
 func TestMatch(t *testing.T) {
 	owners := `
