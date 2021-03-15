@@ -15,9 +15,10 @@ go_test(
     name = "goroutineui_test",
     size = "small",
     srcs = ["dump_test.go"],
+    data = ["@go_sdk//:files"],
     embed = [":goroutineui"],
-    tags = ["broken_in_bazel"],
     deps = [
+        "//pkg/build/bazel",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//assert",
     ],
