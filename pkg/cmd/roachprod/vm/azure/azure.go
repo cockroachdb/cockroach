@@ -1266,7 +1266,8 @@ func (p *Provider) getSubscription(
 		return
 	}
 
-	if page, err := sc.List(ctx); err == nil {
+	page, err := sc.List(ctx)
+	if err == nil {
 		if len(page.Values()) == 0 {
 			err = errors.New("did not find Azure subscription")
 			return sub, err
