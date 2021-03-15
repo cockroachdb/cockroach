@@ -12,10 +12,22 @@ package team
 
 import (
 	"bytes"
+	"log"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/stretchr/testify/require"
 )
+
+func init() {
+	if bazel.BuiltWithBazel() {
+		teamFile, err := bazel.Runfile("TEAMS.yaml")
+		if err != nil {
+			log.Fatal(err)
+		}
+		DefaultTeamsYAMLLocation = teamFile
+	}
+}
 
 func TestLoadTeams(t *testing.T) {
 	yamlFile := []byte(`
