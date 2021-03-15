@@ -1385,13 +1385,9 @@ func TestParse(t *testing.T) {
 
 		{`ALTER DATABASE a RENAME TO b`},
 		{`ALTER DATABASE a ADD REGION "us-west-1"`},
-		{`ALTER DATABASE a ADD REGION "us-west-1 FORCE"`},
 		{`ALTER DATABASE a DROP REGION "us-west-1"`},
-		{`ALTER DATABASE a DROP REGION "us-west-1 FORCE"`},
 		{`ALTER DATABASE a SURVIVE REGION FAILURE`},
-		{`ALTER DATABASE a SURVIVE REGION FAILURE FORCE`},
 		{`ALTER DATABASE a PRIMARY REGION "us-west-3"`},
-		{`ALTER DATABASE a PRIMARY REGION "us-west-3 FORCE"`},
 		{`EXPLAIN ALTER DATABASE a RENAME TO b`},
 
 		{`ALTER DATABASE a OWNER TO foo`},
@@ -1544,7 +1540,6 @@ func TestParse(t *testing.T) {
 		{`ALTER RANGE meta CONFIGURE ZONE = 'foo'`},
 
 		{`ALTER DATABASE db CONFIGURE ZONE = 'foo'`},
-		{`ALTER DATABASE db CONFIGURE ZONE = 'foo' FORCE`},
 		{`EXPLAIN ALTER DATABASE db CONFIGURE ZONE = 'foo'`},
 
 		{`ALTER TABLE db.t CONFIGURE ZONE = 'foo'`},
@@ -1570,7 +1565,6 @@ func TestParse(t *testing.T) {
 		{`ALTER RANGE default CONFIGURE ZONE USING foo = bar, baz = yay`},
 		{`ALTER RANGE meta CONFIGURE ZONE USING foo = bar, baz = yay`},
 		{`ALTER DATABASE db CONFIGURE ZONE USING foo = bar, baz = yay`},
-		{`ALTER DATABASE db CONFIGURE ZONE USING foo = bar, baz = yay FORCE`},
 		{`ALTER TABLE db.t CONFIGURE ZONE USING foo = bar, baz = yay`},
 		{`ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE USING foo = bar, baz = yay`},
 		{`ALTER TABLE t CONFIGURE ZONE USING foo = bar, baz = yay`},
@@ -2466,8 +2460,6 @@ $function$`,
 			`ALTER RANGE meta CONFIGURE ZONE USING "foo.bar" = yay`},
 		{`ALTER DATABASE db CONFIGURE ZONE USING foo.bar = yay`,
 			`ALTER DATABASE db CONFIGURE ZONE USING "foo.bar" = yay`},
-		{`ALTER DATABASE db CONFIGURE ZONE USING foo.bar = yay FORCE`,
-			`ALTER DATABASE db CONFIGURE ZONE USING "foo.bar" = yay FORCE`},
 		{`ALTER TABLE db.t CONFIGURE ZONE USING foo.bar = yay`,
 			`ALTER TABLE db.t CONFIGURE ZONE USING "foo.bar" = yay`},
 		{`ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE USING foo.bar = yay`,

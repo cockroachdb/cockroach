@@ -876,16 +876,8 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 				err := errors.Newf("attempting to modify protected field %q of a multi-region zone configuration",
 					string(opt.Key),
 				)
-				// TODO(ajstorm): This branching is temporary until we convert database
-				//  operations over to the override_multi_region_zone_config session
-				//  variable.
-				if zs.Database != "" {
-					return errors.WithHint(err, "to override this error, specify the FORCE option")
-				} else {
-					return errors.WithHint(err, "to override this error, "+
-						"SET override_multi_region_zone_config = true and reissue the command")
-
-				}
+				return errors.WithHint(err, "to override this error, "+
+					"SET override_multi_region_zone_config = true and reissue the command")
 			}
 		}
 	}
@@ -904,11 +896,11 @@ func validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 	dbName string,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	force bool,
+	override bool,
 	regionConfig descpb.DatabaseDescriptor_RegionConfig,
 ) error {
-	// If the user is forcing, our work here is done.
-	if force {
+	// If the user is overriding, our work here is done.
+	if override {
 		return nil
 	}
 
@@ -957,7 +949,7 @@ func validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	override bool,
 	opts ...applyZoneConfigForMultiRegionTableOption,
 ) error {
-	// If the user is forcing, or this is not a multi-region table our work here
+	// If the user is overriding, or this is not a multi-region table our work here
 	// is done.
 	if override || desc.GetLocalityConfig() == nil {
 		return nil

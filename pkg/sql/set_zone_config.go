@@ -130,20 +130,11 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
 	}
 
-	var override bool
-	// TODO(ajstorm): This branching is temporary until we remove the FORCE option
-	// from database commands
-	if n.Database != "" {
-		override = n.Force
-	} else {
-		override = p.SessionData().OverrideMultiRegionZoneConfigEnabled
-	}
-
 	if err := p.CheckZoneConfigChangePermittedForMultiRegion(
 		ctx,
 		n.ZoneSpecifier,
 		n.Options,
-		override,
+		p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 	); err != nil {
 		return nil, err
 	}
