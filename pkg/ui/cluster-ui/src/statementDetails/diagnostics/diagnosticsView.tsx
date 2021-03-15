@@ -26,6 +26,7 @@ type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosti
 export interface DiagnosticsViewStateProps {
   hasData: boolean;
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
+  showDiagnosticsViewLink?: boolean;
 }
 
 export interface DiagnosticsViewDispatchProps {
@@ -54,6 +55,9 @@ export class DiagnosticsView extends React.Component<
   DiagnosticsViewProps,
   DiagnosticsViewState
 > {
+  static defaultProps: Partial<DiagnosticsViewProps> = {
+    showDiagnosticsViewLink: true,
+  };
   columns: ColumnsConfig<IStatementDiagnosticsReport> = [
     {
       key: "activatedOn",
@@ -133,7 +137,7 @@ export class DiagnosticsView extends React.Component<
   }
 
   render() {
-    const { diagnosticsReports } = this.props;
+    const { diagnosticsReports, showDiagnosticsViewLink } = this.props;
 
     const canRequestDiagnostics = diagnosticsReports.every(
       diagnostic => diagnostic.completed,
@@ -187,11 +191,13 @@ export class DiagnosticsView extends React.Component<
           dataSource={dataSource}
           columns={this.columns}
         />
-        <div className={cx("crl-statements-diagnostics-view__footer")}>
-          <Link to="/reports/statements/diagnosticshistory">
-            All statement diagnostics
-          </Link>
-        </div>
+        {showDiagnosticsViewLink && (
+          <div className={cx("crl-statements-diagnostics-view__footer")}>
+            <Link to="/reports/statements/diagnosticshistory">
+              All statement diagnostics
+            </Link>
+          </div>
+        )}
       </SummaryCard>
     );
   }

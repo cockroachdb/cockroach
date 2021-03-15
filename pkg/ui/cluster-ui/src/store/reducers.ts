@@ -12,6 +12,7 @@ import {
   TerminateQueryState,
   reducer as terminateQuery,
 } from "./terminateQuery";
+import { UIConfigState, reducer as uiConfig } from "./uiConfig";
 
 export type AdminUiState = {
   statements: StatementsState;
@@ -21,6 +22,7 @@ export type AdminUiState = {
   liveness: LivenessState;
   sessions: SessionsState;
   terminateQuery: TerminateQueryState;
+  uiConfig: UIConfigState;
 };
 
 export type AppState = {
@@ -35,4 +37,5 @@ export const rootReducer = combineReducers<AdminUiState>({
   liveness,
   sessions,
   terminateQuery,
+  uiConfig,
 });
