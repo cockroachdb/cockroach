@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html"
 	"io"
 	"math/rand"
 	"net"
@@ -1107,7 +1108,7 @@ func (r *testRunner) serveHTTP(wr http.ResponseWriter, req *http.Request) {
 		name := fmt.Sprintf("%s (run %d)", t.test, t.run)
 		status := "PASS"
 		if !t.pass {
-			status = "FAIL " + t.failure
+			status = "FAIL " + strings.ReplaceAll(html.EscapeString(t.failure), "\n", "<br>")
 		}
 		duration := fmt.Sprintf("%s (%s - %s)", t.end.Sub(t.start), t.start, t.end)
 		fmt.Fprintf(wr, "<tr><td>%s</td><td>%s</td><td>%s</td><tr/>", name, status, duration)
