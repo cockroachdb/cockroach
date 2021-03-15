@@ -37,6 +37,7 @@ func newTenantStatusServer(
 	sessionRegistry *sql.SessionRegistry,
 	contentionRegistry *contention.Registry,
 	st *cluster.Settings,
+	sqlServer *SQLServer,
 ) *tenantStatusServer {
 	ambient.AddLogTag("tenant-status", nil)
 	return &tenantStatusServer{
@@ -46,6 +47,7 @@ func newTenantStatusServer(
 			sessionRegistry:    sessionRegistry,
 			contentionRegistry: contentionRegistry,
 			st:                 st,
+			sqlServer:          sqlServer,
 		},
 	}
 }
@@ -108,4 +110,15 @@ func (t *tenantStatusServer) ListLocalContentionEvents(
 		return nil, err
 	}
 	return &serverpb.ListContentionEventsResponse{Events: events}, nil
+}
+
+func (t *tenantStatusServer) SQLStatisticsReset(
+	ctx context.Context, _ *serverpb.SQLStatisticsResetRequest,
+) (*serverpb.SQLStatisticsResetResponse, error) {
+	// TODO(azhng): Currently a tenant status server only reset its local SQL stats,
+	// 	this needs to be updated once the pod-to-pod communication is implemented.
+	t.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
+	return &serverpb.SQLStatisticsResetResponse{
+		NumOfNodesResetted: 1,
+	}, nil
 }

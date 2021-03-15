@@ -12,10 +12,13 @@ package server
 
 import (
 	"context"
+	gosql "database/sql"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -242,5 +245,96 @@ func TestSQLStatCollection(t *testing.T) {
 
 	if !foundStat {
 		t.Fatal("expected to find stats for insert query in reported pool, but didn't")
+	}
+}
+
+func populateStats(t *testing.T, sqlDB *gosql.DB) {
+	if _, err := sqlDB.Exec(`
+	CREATE DATABASE t;
+	CREATE TABLE t.test (x INT PRIMARY KEY);
+	INSERT INTO t.test VALUES (1);
+	INSERT INTO t.test VALUES (2);
+	INSERT INTO t.test VALUES (3);
+`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func resetClusterStats(ctx context.Context, cluster serverutils.TestClusterInterface) {
+	// Flush stats at the beginning of the test.
+	for i := 0; i < cluster.NumServers(); i++ {
+		sqlServer := cluster.Server(i).(*TestServer).PGServer().SQLServer
+		sqlServer.ResetSQLStats(ctx)
+		sqlServer.ResetReportedStats(ctx)
+	}
+
+}
+
+func TestClusterSQLStatsReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Insecure: true,
+		},
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	// Flush stats at the beginning of the test.
+	resetClusterStats(ctx, testCluster)
+
+	gatewayServer := testCluster.Server(1 /* idx */).(*TestServer)
+	status := gatewayServer.status
+
+	sqlDB := serverutils.OpenDBConn(
+		t, gatewayServer.ServingSQLAddr(), "" /* useDatabase */, true, /* insecure */
+		gatewayServer.Stopper())
+
+	populateStats(t, sqlDB)
+
+	statsPreReset, err := status.Statements(ctx, &serverpb.StatementsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if statsCount := len(statsPreReset.Statements); statsCount == 0 {
+		t.Fatal("expected to find stats for at least one statement, but found:", statsCount)
+	}
+
+	resp, err := status.SQLStatisticsReset(ctx, &serverpb.SQLStatisticsResetRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.NumOfNodesResetted != 3 {
+		t.Fatal("expected all 3 nodes to reset stats, but found", resp.NumOfNodesResetted)
+	}
+
+	statsPostReset, err := status.Statements(ctx, &serverpb.StatementsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !statsPostReset.LastReset.After(statsPreReset.LastReset) {
+		t.Fatal("expected to find stats last reset value changed, but didn't")
+	}
+
+	for _, txn := range statsPostReset.Transactions {
+		for _, previousTxn := range statsPreReset.Transactions {
+			if reflect.DeepEqual(txn, previousTxn) {
+				t.Fatal("expected to have reset SQL stats, but still found transaction", txn)
+			}
+		}
+	}
+
+	for _, stmt := range statsPostReset.Statements {
+		for _, previousStmt := range statsPreReset.Statements {
+			if reflect.DeepEqual(stmt, previousStmt) {
+				t.Fatal("expected to have reset SQL stats, but still found statement", stmt)
+			}
+		}
 	}
 }
