@@ -15,6 +15,7 @@ RUN apt-get update \
     libncurses-dev \
     libtinfo-dev \
     make \
+    netbase \
     python3 \
     unzip \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
