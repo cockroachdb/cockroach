@@ -188,3 +188,7 @@ gazelle(
     name = "gazelle",
     prefix = "github.com/cockroachdb/cockroach",
 )
+
+exports_files([
+    "TEAMS.yaml",
+])
