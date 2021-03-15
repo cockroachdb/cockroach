@@ -211,6 +211,8 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 func (p *planner) IsTableVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID int64,
 ) (isVisible, exists bool, err error) {
+	// TODO(ajwerner): look at this error and only no-op if it is
+	// ErrDescriptorNotFound or something like it.
 	tableDesc, err := p.LookupTableByID(ctx, descpb.ID(tableID))
 	if err != nil {
 		// If an error happened here, it means the table doesn't exist, so we

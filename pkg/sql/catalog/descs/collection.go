@@ -183,7 +183,7 @@ type Collection struct {
 	//
 	// TODO(ajwerner): This cache may be problematic in clusters with very large
 	// numbers of descriptors.
-	allDescriptors []catalog.Descriptor
+	allDescriptors allDescriptors
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
@@ -221,6 +221,41 @@ type Collection struct {
 	// skipValidationOnWrite should only be set to true during forced descriptor
 	// repairs.
 	skipValidationOnWrite bool
+}
+
+// allDescriptors is an abstraction to capture the complete set of descriptors
+// read from the store. It is used to accelerate repeated invocations of virtual
+// tables which utilize descriptors. It tends to get used to build a
+// sql.internalLookupCtx.
+//
+// TODO(ajwerner): Memory monitoring.
+// TODO(ajwerner): Unify this struct with the uncommittedDescriptors set.
+// TODO(ajwerner): Unify the sql.internalLookupCtx with the descs.Collection.
+type allDescriptors struct {
+	descs []catalog.Descriptor
+	byID  map[descpb.ID]int
+}
+
+func (d *allDescriptors) init(descriptors []catalog.Descriptor) {
+	d.descs = descriptors
+	d.byID = make(map[descpb.ID]int, len(descriptors))
+	for i, desc := range descriptors {
+		d.byID[desc.GetID()] = i
+	}
+}
+
+func (d *allDescriptors) clear() {
+	d.descs = nil
+	d.byID = nil
+}
+
+func (d *allDescriptors) isEmpty() bool {
+	return d.descs == nil
+}
+
+func (d *allDescriptors) contains(id descpb.ID) bool {
+	_, exists := d.byID[id]
+	return exists
 }
 
 // getLeasedDescriptorByName return a leased descriptor valid for the
@@ -1022,6 +1057,15 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			return readFromStore()
 		}
 
+		// If we have already read all of the descriptor, use it as a negative
+		// cache to short-circuit a lookup we know will be doomed to fail.
+		//
+		// TODO(ajwerner): More generally leverage this set of read descriptors on
+		// the resolution path.
+		if !tc.allDescriptors.isEmpty() && !tc.allDescriptors.contains(id) {
+			return nil, catalog.ErrDescriptorNotFound
+		}
+
 		desc, err := tc.getLeasedDescriptorByID(ctx, txn, id, setTxnDeadline)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) || catalog.HasInactiveDescriptorError(err) {
@@ -1666,7 +1710,7 @@ func (tc *Collection) getUncommittedDescriptorByID(id descpb.ID) *uncommittedDes
 func (tc *Collection) GetAllDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.Descriptor, error) {
-	if tc.allDescriptors == nil {
+	if tc.allDescriptors.isEmpty() {
 		descs, err := catalogkv.GetAllDescriptors(ctx, txn, tc.codec())
 		if err != nil {
 			return nil, err
@@ -1680,9 +1724,9 @@ func (tc *Collection) GetAllDescriptors(
 			log.Errorf(ctx, "%s", err.Error())
 		}
 
-		tc.allDescriptors = descs
+		tc.allDescriptors.init(descs)
 	}
-	return tc.allDescriptors, nil
+	return tc.allDescriptors.descs, nil
 }
 
 // HydrateGivenDescriptors installs type metadata in the types present for all
@@ -1902,7 +1946,7 @@ func (tc *Collection) GetObjectNames(
 // releaseAllDescriptors releases the cached slice of all descriptors
 // held by Collection.
 func (tc *Collection) releaseAllDescriptors() {
-	tc.allDescriptors = nil
+	tc.allDescriptors.clear()
 	tc.allDatabaseDescriptors = nil
 	tc.allSchemasForDatabase = nil
 }
