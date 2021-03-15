@@ -1369,7 +1369,7 @@ Support status: [reserved](#support-status)
 
 
 
-Request object for issing a query cancel request.
+Request object for issuing a query cancel request.
 
 
 | Field | Type | Label | Description | Support status |
@@ -2827,6 +2827,50 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | job | [cockroach.sql.jobs.jobspb.Job](#cockroach.server.serverpb.JobStatusResponse-cockroach.sql.jobs.jobspb.Job) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+## ResetSQLStats
+
+`POST /_status/resetsqlstats`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for issuing a SQL stats reset request.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.ResetSQLStatsRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object returned by ResetSQLStats.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| num_of_nodes_reset | [int64](#cockroach.server.serverpb.ResetSQLStatsResponse-int64) |  | Number of nodes that have reset their SQL stats. | [reserved](#support-status) |
 
 
 

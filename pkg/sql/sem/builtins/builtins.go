@@ -5062,6 +5062,29 @@ table's zone configuration this will return NULL.`,
 			tree.VolatilityStable,
 		),
 	),
+
+	"crdb_internal.reset_sql_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.SQLStatsResetter == nil {
+					return nil, errors.AssertionFailedf("sql stats resetter not set")
+				}
+				ctx := evalCtx.Ctx()
+				numOfNodesReset, err := evalCtx.SQLStatsResetter.ResetClusterSQLStats(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(numOfNodesReset)), nil
+			},
+			Info:       `This function is used to clear the collected SQL statistics.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
