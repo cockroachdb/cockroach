@@ -5593,6 +5593,9 @@ var jsonExtractPathTextImpl = tree.Overload{
 		if err != nil {
 			return nil, err
 		}
+		if text == nil {
+			return tree.DNull, nil
+		}
 		return tree.NewDString(*text), nil
 	},
 	Info:       "Returns the JSON value as text pointed to by the variadic arguments.",
