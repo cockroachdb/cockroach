@@ -78,7 +78,9 @@ func ZoneSpecifierFromID(
 	}
 	return tree.ZoneSpecifier{
 		TableOrIndex: tree.TableIndexName{
-			Table: tree.MakeTableName(tree.Name(db), tree.Name(name)),
+			// TODO(#61728): This should show the correct schema name instead of
+			// always hardcoding `public`. Test in TestZoneSpecifiers.
+			Table: tree.MakeTableNameWithSchema(tree.Name(db), tree.PublicSchemaName, tree.Name(name)),
 		},
 	}, nil
 }
