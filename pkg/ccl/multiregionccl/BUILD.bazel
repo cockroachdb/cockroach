@@ -27,9 +27,9 @@ go_test(
         "regional_by_row_test.go",
         "show_test.go",
     ],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
         "//pkg/ccl/partitionccl",
         "//pkg/ccl/testutilsccl",
