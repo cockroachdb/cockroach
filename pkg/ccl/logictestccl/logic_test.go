@@ -9,19 +9,20 @@
 package logictestccl
 
 import (
+	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-const testdataGlob = "testdata/logic_test/[^.]*"
-const logictestPkg = "../../sql/logictest/"
+const logictestGlob = "logic_test/[^.]*"
 
 func TestCCLLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	logictest.RunLogicTest(t, logictest.TestServerArgs{}, testdataGlob)
+	logictest.RunLogicTest(t, logictest.TestServerArgs{}, filepath.Join("testdata/", logictestGlob))
 }
 
 // TestTenantLogic runs all non-CCL logic test files under the 3node-tenant
@@ -30,7 +31,19 @@ func TestCCLLogic(t *testing.T) {
 // configuration (i.e. "# LogicTest: !3node-tenant") are not run.
 func TestTenantLogic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	logictest.RunLogicTestWithDefaultConfig(t, logictest.TestServerArgs{}, "3node-tenant", true /* runCCLConfigs */, logictestPkg+testdataGlob)
+
+	testdataDir := "../../sql/logictest/testdata/"
+	if bazel.BuiltWithBazel() {
+		runfile, err := bazel.Runfile("pkg/sql/logictest/testdata/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		testdataDir = runfile
+	}
+
+	logictest.RunLogicTestWithDefaultConfig(
+		t, logictest.TestServerArgs{}, "3node-tenant", true, /* runCCLConfigs */
+		filepath.Join(testdataDir, logictestGlob))
 }
 
 func TestTenantSQLLiteLogic(t *testing.T) {
