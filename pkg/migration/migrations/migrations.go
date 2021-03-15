@@ -57,6 +57,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.ForeignKeyRepresentationMigration),
 		foreignKeyRepresentationUpgrade,
 	),
+	migration.NewSQLMigration(
+		"fix system.protected_ts_meta privileges",
+		toCV(clusterversion.ProtectedTsMetaPrivilegesMigration),
+		protectedTsMetaPrivilegesMigration,
+	),
 }
 
 func init() {
