@@ -285,7 +285,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":kvserver"],
     shard_count = 16,
-    tags = ["broken_in_bazel"],
+    tags = ["flaky"],
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",
