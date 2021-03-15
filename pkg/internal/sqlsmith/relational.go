@@ -289,6 +289,12 @@ func makeMergeJoinExpr(s *Smither, _ colRefs, forJoin bool) (tree.TableExpr, col
 					if rightColElem.Direction != leftColElem.Direction {
 						break
 					}
+					if leftCol == nil || rightCol == nil {
+						// TODO(yuzefovich): there are some cases here where
+						// column references are nil, but we aren't yet sure
+						// why. Rather than panicking, just break.
+						break
+					}
 					if !tree.MustBeStaticallyKnownType(rightCol.Type).Equivalent(tree.MustBeStaticallyKnownType(leftCol.Type)) {
 						break
 					}
