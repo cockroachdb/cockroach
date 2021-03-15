@@ -18,6 +18,7 @@ import (
 	"hash/crc32"
 	"io/ioutil"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -29,6 +30,10 @@ import (
 const (
 	// Length of the join token shared secret.
 	joinTokenSecretLen = 16
+
+	// JoinTokenExpiration is the default expiration time of newly created join
+	// tokens.
+	JoinTokenExpiration = 30 * time.Minute
 )
 
 // JoinToken is a container for a TokenID and associated SharedSecret for use

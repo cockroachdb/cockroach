@@ -12,13 +12,16 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // FeatureTLSAutoJoinEnabled is used to enable and disable the TLS auto-join
@@ -32,17 +35,31 @@ var FeatureTLSAutoJoinEnabled = settings.RegisterBoolSetting(
 type createJoinTokenNode struct {
 	optColumnsSlot
 
-	status serverpb.NodesStatusServer
+	cm     *security.CertificateManager
 	token  string
 	nexted bool
 }
 
 func (c *createJoinTokenNode) startExec(params runParams) error {
-	token, err := c.status.GenerateJoinToken(params.ctx)
+	jt, err := security.GenerateJoinToken(c.cm)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "error when generating join token")
 	}
-	c.token = token
+	token, err := jt.MarshalText()
+	if err != nil {
+		return errors.Wrap(err, "error when marshaling join token")
+	}
+	expiration := timeutil.Now().Add(security.JoinTokenExpiration)
+	_, err = params.p.ExecCfg().InternalExecutor.Exec(
+		params.ctx, "insert-join-token", params.p.Txn(),
+		"insert into system.join_tokens(id, secret, expiration) "+
+			"values($1, $2, $3)",
+		jt.TokenID.String(), jt.SharedSecret, expiration.Format(time.RFC3339),
+	)
+	if err != nil {
+		return errors.Wrap(err, "could not persist join token in system table")
+	}
+	c.token = string(token)
 	return nil
 }
 
@@ -82,13 +99,9 @@ func (p *planner) CreateJoinToken(ctx context.Context, _ *tree.CreateJoinToken) 
 			err.Error(),
 		)
 	}
-	if n, err := p.extendedEvalCtx.NodesStatusServer.OptionalNodesStatusServer(47900); err == nil && n != nil {
-		return &createJoinTokenNode{
-			status: n,
-		}, nil
+	cm, err := p.ExecCfg().RPCContext.SecurityContext.GetCertificateManager()
+	if err != nil {
+		return nil, errors.Wrap(err, "error when getting certificate manager")
 	}
-	return nil, pgerror.New(
-		pgcode.FeatureNotSupported,
-		"unsupported statement",
-	)
+	return &createJoinTokenNode{cm: cm}, nil
 }
