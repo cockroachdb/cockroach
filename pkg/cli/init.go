@@ -24,6 +24,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+var defaultGRPCOpTimeout = time.Second * 5
+
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "initialize a cluster",
@@ -55,6 +57,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if initCtx.readyWait {
+		if initCtx.readyWaitTimeout > 0 {
+			err = contextutil.RunWithTimeout(ctx, "wait-for-ready", initCtx.readyWaitTimeout,
+				func(ctx context.Context) error {
+					return waitForOperationalServer(ctx, conn)
+				})
+		} else {
+			err = waitForOperationalServer(ctx, conn)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
 	fmt.Fprintln(os.Stdout, "Cluster successfully initialized")
 	return nil
 }
@@ -80,7 +96,7 @@ func waitForClientReadinessAndGetClientGRPCConn(
 
 	retryOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second}
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if err = contextutil.RunWithTimeout(ctx, "init-open-conn", 5*time.Second,
+		if err = contextutil.RunWithTimeout(ctx, "init-open-conn", defaultGRPCOpTimeout,
 			func(ctx context.Context) error {
 				// (Attempt to) establish the gRPC connection. If that fails,
 				// it may be that the server hasn't started to listen yet, in
@@ -116,4 +132,28 @@ func waitForClientReadinessAndGetClientGRPCConn(
 	}
 	err = errors.New("maximum number of retries exceeded")
 	return
+}
+
+// waitForOperationalServer uses the /health endpoint to determine
+// when the server is ready to receive traffic.
+func waitForOperationalServer(ctx context.Context, conn *grpc.ClientConn) error {
+	retryOpts := retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     time.Second,
+	}
+	ac := serverpb.NewAdminClient(conn)
+
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		err := contextutil.RunWithTimeout(ctx, "wait-for-operational", defaultGRPCOpTimeout,
+			func(ctx context.Context) error {
+				_, err := ac.Health(ctx, &serverpb.HealthRequest{Ready: true})
+				return err
+			})
+		if err != nil {
+			fmt.Fprintln(stderr, "node not ready to receive traffic: ", err, "(retrying)")
+			continue
+		}
+		return nil
+	}
+	return errors.New("maximum number of retries exceeded")
 }

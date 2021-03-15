@@ -474,6 +474,18 @@ var quitCtx struct {
 	drainWait time.Duration
 }
 
+// initCtx captures the command-line parameters of the `init` command.
+// See below for defaults.
+var initCtx struct {
+	// readyWait indicates whether the init command should wait
+	// until the server is ready to accept requests.
+	readyWait bool
+	// readyWaitTimeout is the amount of time that the init
+	// command should wait for the server to be ready to accept
+	// requests.
+	readyWaitTimeout time.Duration
+}
+
 // setQuitContextDefaults set the default values in quitCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.

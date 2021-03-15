@@ -1026,6 +1026,12 @@ If zero, the command waits until the last client has disconnected and
 all range leases have been migrated away.`,
 	}
 
+	ReadyWait = FlagInfo{
+		Name: "ready-wait",
+		Description: `
+Specifies whether to wait until the server is ready to accept requests.`,
+	}
+
 	Wait = FlagInfo{
 		Name: "wait",
 		Description: `

@@ -807,6 +807,13 @@ func init() {
 		stringFlag(t, &importCtx.ignoreUnsupportedLog, cliflags.ImportLogIgnoredStatements)
 	}
 
+	// init command.
+	{
+		i := initCmd.Flags()
+		boolFlag(i, &initCtx.readyWait, cliflags.ReadyWait)
+		durationFlag(i, &initCtx.readyWaitTimeout, cliflags.Timeout)
+	}
+
 	// sqlfmt command.
 	{
 		f := sqlfmtCmd.Flags()
