@@ -50,6 +50,14 @@ storiesOf("StatementDetails", module)
     ]).toString();
     return <StatementDetails {...props} />;
   })
+  .add("Diagnostics tab with hidden Statement Diagnostics link", () => {
+    const props = getStatementDetailsPropsFixture();
+    props.history.location.search = new URLSearchParams([
+      ["tab", "diagnostics"],
+    ]).toString();
+    props.uiConfig.showStatementDiagnosticsLink = false;
+    return <StatementDetails {...props} />;
+  })
   .add("Logical Plan tab", () => {
     const props = getStatementDetailsPropsFixture();
     props.history.location.search = new URLSearchParams([

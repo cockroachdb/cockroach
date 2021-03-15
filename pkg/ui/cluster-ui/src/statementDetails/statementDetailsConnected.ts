@@ -7,7 +7,10 @@ import {
   StatementDetailsStateProps,
 } from "./statementDetails";
 import { AppState } from "../store";
-import { selectStatement } from "./statementDetails.selectors";
+import {
+  selectStatement,
+  selectStatementDetailsUiConfig,
+} from "./statementDetails.selectors";
 import { nodeDisplayNameByIDSelector } from "../store/nodes";
 import { actions as statementActions } from "src/store/statements";
 import {
@@ -33,6 +36,7 @@ const mapStateToProps = (
       state,
       statementFingerprint,
     ),
+    uiConfig: selectStatementDetailsUiConfig(state),
   };
 };
 
