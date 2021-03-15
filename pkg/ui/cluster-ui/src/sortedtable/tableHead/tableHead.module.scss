@@ -4,7 +4,7 @@
 .head-wrapper {
   @include table-base;
 
-  &__cell--header {
+  .__cell--header {
     border-right: 1px solid $colors--neutral-2;
     width: 250px;
   }
@@ -26,6 +26,14 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        > span {
+          font-family: $font-family--semi-bold;
+          font-size: $font-size--medium;
+          line-height: $line-height--medium;
+          letter-spacing: 0.1px;
+          color: $colors--neutral-7;
+          text-transform: capitalize;
+        }
         .sortable__actions {
           position: relative;
           margin: 0 14px 0 30px;

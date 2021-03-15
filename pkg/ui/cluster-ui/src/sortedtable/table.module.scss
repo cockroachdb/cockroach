@@ -15,7 +15,7 @@ $stats-table-tr--bg: $colors--neutral-0;
   vertical-align: top;
   color: $colors--neutral-7;
 
-  &__cell--header {
+  .__cell--header {
     border-right: 1px solid $colors--neutral-2;
     width: 250px;
   }
@@ -61,7 +61,6 @@ $stats-table-tr--bg: $colors--neutral-0;
   &__cell {
     padding: 15px 22px 15px 11px;
     border: none;
-    font-weight: inherit;
     font-family: $font-family--base;
     font-style: normal;
     font-weight: $font-weight--light;
@@ -73,6 +72,7 @@ $stats-table-tr--bg: $colors--neutral-0;
       color: $adminui-grey-1;
       text-decoration: none;
       cursor: pointer;
+      line-height: $line-height--small;
 
       &:hover {
         color: $colors--link;
