@@ -85,18 +85,18 @@ const (
 // CodeError is combines an error with one of the above codes to ease
 // the processing of the errors.
 type CodeError struct {
-	code ErrorCode
+	Code ErrorCode
 	err  error
 }
 
 func (e *CodeError) Error() string {
-	return fmt.Sprintf("%s: %s", e.code, e.err)
+	return fmt.Sprintf("%s: %s", e.Code, e.err)
 }
 
 // NewErrorf returns a new CodeError out of the supplied args.
 func NewErrorf(code ErrorCode, format string, args ...interface{}) error {
 	return &CodeError{
-		code: code,
+		Code: code,
 		err:  errors.Errorf(format, args...),
 	}
 }

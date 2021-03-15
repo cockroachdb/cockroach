@@ -8,6 +8,7 @@ go_library(
         "dir.go",
         "error.go",
         "files.go",
+        "hook.go",
         "keys.go",
         "net.go",
         "pprof.go",

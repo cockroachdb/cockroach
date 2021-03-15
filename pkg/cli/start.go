@@ -105,7 +105,7 @@ var serverCmds = append(StartCmds, mtStartSQLCmd)
 
 // customLoggingSetupCmds lists the commands that call setupLogging()
 // after other types of configuration.
-var customLoggingSetupCmds = append(serverCmds, debugCheckLogConfigCmd, demoCmd)
+var customLoggingSetupCmds = append(serverCmds, debugCheckLogConfigCmd, demoCmd, mtStartSQLProxyCmd, mtTestDirectorySvr)
 
 func initBlockProfile() {
 	// Enable the block profile for a sample of mutex and channel operations.

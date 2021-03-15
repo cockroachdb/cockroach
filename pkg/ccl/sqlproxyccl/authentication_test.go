@@ -33,7 +33,7 @@ func TestAuthenticateOK(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ReadyForQuery{})
 	}()
 
-	require.NoError(t, authenticate(srv, cli))
+	require.NoError(t, Authenticate(srv, cli))
 }
 
 func TestAuthenticateClearText(t *testing.T) {
@@ -75,7 +75,7 @@ func TestAuthenticateClearText(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ReadyForQuery{})
 	}()
 
-	require.NoError(t, authenticate(srv, cli))
+	require.NoError(t, Authenticate(srv, cli))
 }
 
 func TestAuthenticateError(t *testing.T) {
@@ -93,11 +93,11 @@ func TestAuthenticateError(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.ErrorResponse{Severity: "FATAL", Code: "foo"})
 	}()
 
-	err := authenticate(srv, cli)
+	err := Authenticate(srv, cli)
 	require.Error(t, err)
 	codeErr := (*CodeError)(nil)
 	require.True(t, errors.As(err, &codeErr))
-	require.Equal(t, CodeAuthFailed, codeErr.code)
+	require.Equal(t, CodeAuthFailed, codeErr.Code)
 }
 
 func TestAuthenticateUnexpectedMessage(t *testing.T) {
@@ -115,9 +115,9 @@ func TestAuthenticateUnexpectedMessage(t *testing.T) {
 		require.Equal(t, beMsg, &pgproto3.BindComplete{})
 	}()
 
-	err := authenticate(srv, cli)
+	err := Authenticate(srv, cli)
 	require.Error(t, err)
 	codeErr := (*CodeError)(nil)
 	require.True(t, errors.As(err, &codeErr))
-	require.Equal(t, CodeBackendDisconnected, codeErr.code)
+	require.Equal(t, CodeBackendDisconnected, codeErr.Code)
 }

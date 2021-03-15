@@ -1,0 +1,55 @@
+syntax = "proto3";
+package cockroach.ccl.sqlproxyccl.directory;
+option go_package="directory";
+
+import "gogoproto/gogo.proto";
+
+message EventReq {}
+
+enum EventType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  ADDED = 0;
+  MODIFIED = 1;
+  DELETED = 2;
+}
+
+message EventResp {
+  EventType typ = 1;
+  string ip = 2;
+  uint64 tenant_id = 3;
+}
+
+message TenantReq {
+  uint64 tenant_id = 1;
+}
+
+message SetPodsCountReq {
+  uint64 tenant_id = 1;
+  int32 count = 2;
+}
+
+message SetPodsCountResp {
+}
+
+enum Phase {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  RUNNING = 0;
+  NOT_RUNNING = 1;
+}
+
+message Pod {
+  string ip = 1;
+  Phase phase = 2;
+}
+
+message ListResp {
+  repeated Pod pods = 1;
+}
+
+service Directory {
+  rpc List(TenantReq) returns (ListResp);
+  rpc WaitEvent(EventReq) returns (stream EventResp);
+  rpc SetPodsCount(SetPodsCountReq) returns (SetPodsCountResp);
+}

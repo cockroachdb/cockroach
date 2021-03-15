@@ -70,6 +70,7 @@ require (
 	github.com/golang-commonmark/mdurl v0.0.0-20180910110917-8d018c6567d6 // indirect
 	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
+	github.com/golang/mock v1.3.1
 	github.com/golang/protobuf v1.4.2
 	github.com/golang/snappy v0.0.3
 	github.com/google/btree v1.0.0
@@ -139,6 +140,7 @@ require (
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
+	github.com/spf13/viper v1.3.2
 	github.com/stretchr/testify v1.6.1
 	github.com/twpayne/go-geom v1.3.7-0.20210228220813-9d9885b50d3e
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad

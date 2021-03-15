@@ -12,6 +12,7 @@ go_library(
         "fast_int_set.go",
         "fast_int_set_str.go",
         "hash.go",
+        "jitter.go",
         "nocopy.go",
         "pluralize.go",
         "race_off.go",

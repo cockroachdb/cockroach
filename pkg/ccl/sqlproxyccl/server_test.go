@@ -9,6 +9,7 @@
 package sqlproxyccl
 
 import (
+	"context"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +21,11 @@ import (
 
 func TestHandleHealth(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	proxyServer := NewServer(Options{})
+	handler, err := NewProxyHandler(context.Background(), ProxyOptions{})
+	require.NoError(t, err)
+	proxyServer := NewServer(func(ctx context.Context, metrics *Metrics, proxyConn *Conn) error {
+		return handler.Handle(ctx, metrics, proxyConn)
+	})
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/_status/healthz/", nil)
@@ -36,7 +41,11 @@ func TestHandleHealth(t *testing.T) {
 
 func TestHandleVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	proxyServer := NewServer(Options{})
+	handler, err := NewProxyHandler(context.Background(), ProxyOptions{})
+	require.NoError(t, err)
+	proxyServer := NewServer(func(ctx context.Context, metrics *Metrics, proxyConn *Conn) error {
+		return handler.Handle(ctx, metrics, proxyConn)
+	})
 
 	rw := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/_status/vars/", nil)

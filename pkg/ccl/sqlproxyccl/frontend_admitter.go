@@ -18,7 +18,10 @@ import (
 // FrontendAdmit is the default implementation of a frontend admitter. It can
 // upgrade to an optional SSL connection, and will handle and verify
 // the startup message received from the PG SQL client.
-func FrontendAdmit(
+// The connection returned should never be nil in case of error. Depending
+// on whether the error happened before the connection was upgraded to TLS or not
+// it will either be the original or the TLS connection.
+var FrontendAdmit = func(
 	conn net.Conn, incomingTLSConfig *tls.Config,
 ) (net.Conn, *pgproto3.StartupMessage, error) {
 	// `conn` could be replaced by `conn` embedded in a `tls.Conn` connection,
@@ -30,7 +33,7 @@ func FrontendAdmit(
 	if incomingTLSConfig != nil {
 		m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 		if err != nil {
-			return nil, nil, NewErrorf(CodeClientReadFailed, "while receiving startup message")
+			return conn, nil, NewErrorf(CodeClientReadFailed, "while receiving startup message")
 		}
 		switch m.(type) {
 		case *pgproto3.SSLRequest:
@@ -38,15 +41,15 @@ func FrontendAdmit(
 			// Ignore CancelRequest explicitly. We don't need to do this but it makes
 			// testing easier by avoiding a call to sendErrToClient on this path
 			// (which would confuse assertCtx).
-			return nil, nil, nil
+			return conn, nil, nil
 		default:
 			code := CodeUnexpectedInsecureStartupMessage
-			return nil, nil, NewErrorf(code, "unsupported startup message: %T", m)
+			return conn, nil, NewErrorf(code, "unsupported startup message: %T", m)
 		}
 
 		_, err = conn.Write([]byte{pgAcceptSSLRequest})
 		if err != nil {
-			return nil, nil, NewErrorf(CodeClientWriteFailed, "acking SSLRequest: %v", err)
+			return conn, nil, NewErrorf(CodeClientWriteFailed, "acking SSLRequest: %v", err)
 		}
 
 		cfg := incomingTLSConfig.Clone()
@@ -60,11 +63,11 @@ func FrontendAdmit(
 
 	m, err := pgproto3.NewBackend(pgproto3.NewChunkReader(conn), conn).ReceiveStartupMessage()
 	if err != nil {
-		return nil, nil, NewErrorf(CodeClientReadFailed, "receiving post-TLS startup message: %v", err)
+		return conn, nil, NewErrorf(CodeClientReadFailed, "receiving post-TLS startup message: %v", err)
 	}
 	msg, ok := m.(*pgproto3.StartupMessage)
 	if !ok {
-		return nil, nil, NewErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
+		return conn, nil, NewErrorf(CodeUnexpectedStartupMessage, "unsupported post-TLS startup message: %T", m)
 	}
 
 	// Add the sniServerName (if used) as parameter

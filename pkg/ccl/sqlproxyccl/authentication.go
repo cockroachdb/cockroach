@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgproto3/v2"
 )
 
-func authenticate(clientConn, crdbConn net.Conn) error {
+var Authenticate = func(clientConn, crdbConn net.Conn) error {
 	fe := pgproto3.NewBackend(pgproto3.NewChunkReader(clientConn), clientConn)
 	be := pgproto3.NewFrontend(pgproto3.NewChunkReader(crdbConn), crdbConn)
 
