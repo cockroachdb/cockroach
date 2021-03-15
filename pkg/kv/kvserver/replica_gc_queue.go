@@ -152,7 +152,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 	// 10 days before removing the node. Finally we consider replicas which are
 	// VOTER_INCOMING as suspect because no replica should stay in that state for
 	// too long and being conservative here doesn't seem worthwhile.
-	isSuspect := replDesc.GetType() != roachpb.VOTER_FULL
+	isSuspect := replDesc.GetType() != roachpb.VOTER_FULL && replDesc.GetType() != roachpb.NON_VOTER
 	if raftStatus := repl.RaftStatus(); raftStatus != nil {
 		isSuspect = isSuspect ||
 			(raftStatus.SoftState.RaftState == raft.StateCandidate ||
