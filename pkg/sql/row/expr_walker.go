@@ -28,46 +28,91 @@ import (
 // tune this parameter.
 const reseedRandEveryN = 1000
 
-type importRand struct {
-	*rand.Rand
-	pos int64
-}
+// importRandPosition uniquely identifies an instance to a call to a random
+// function during an import.
+type importRandPosition int64
 
-func newImportRand(pos int64) *importRand {
-	adjPos := (pos / reseedRandEveryN) * reseedRandEveryN
-	rnd := rand.New(rand.NewSource(adjPos))
-	for i := int(pos % reseedRandEveryN); i > 0; i-- {
-		_ = rnd.Float64()
+func (pos importRandPosition) distance(o importRandPosition) int64 {
+	diff := int64(pos) - int64(o)
+	if diff < 0 {
+		return -diff
 	}
-	return &importRand{rnd, pos}
+	return diff
 }
 
-func (r *importRand) advancePos() {
-	r.pos++
-	if r.pos%reseedRandEveryN == 0 {
-		// Time to reseed.
-		r.Rand = rand.New(rand.NewSource(r.pos))
-	}
-}
-
-func (r *importRand) Float64() float64 {
-	randNum := r.Rand.Float64()
-	r.advancePos()
-	return randNum
-}
-
-func (r *importRand) Int63() int64 {
-	randNum := r.Rand.Int63()
-	r.advancePos()
-	return randNum
-}
-
-func getSeedForImportRand(rowID int64, sourceID int32, numInstances int) int64 {
+// getPosForRandImport gives the importRandPosition for the first instance of a
+// call to a random function when generating a given row from a given source.
+// numInstances refers to the number of random function invocations per row.
+func getPosForRandImport(rowID int64, sourceID int32, numInstances int) importRandPosition {
 	// We expect r.pos to increment by numInstances for each row.
 	// Therefore, assuming that rowID increments by 1 for every row,
 	// we will initialize the position as rowID * numInstances + sourceID << rowIDBits.
 	rowIDWithMultiplier := int64(numInstances) * rowID
-	return (int64(sourceID) << rowIDBits) ^ rowIDWithMultiplier
+	pos := (int64(sourceID) << rowIDBits) ^ rowIDWithMultiplier
+	return importRandPosition(pos)
+}
+
+// randomSource is only exposed through an interface to ensure that caller's
+// don't access underlying field.
+type randomSource interface {
+	// Float64 returns, as a float64, a pseudo-random number in [0.0,1.0).
+	Float64(c *cellInfoAnnotation) float64
+	// Int63 returns a non-negative pseudo-random 63-bit integer as an int64.
+	Int63(c *cellInfoAnnotation) int64
+}
+
+var _ randomSource = (*importRand)(nil)
+
+type importRand struct {
+	*rand.Rand
+	pos importRandPosition
+}
+
+func (r *importRand) reseed(pos importRandPosition) {
+	adjPos := (pos / reseedRandEveryN) * reseedRandEveryN
+	rnd := rand.New(rand.NewSource(int64(adjPos)))
+	for i := int(pos % reseedRandEveryN); i > 0; i-- {
+		_ = rnd.Float64()
+	}
+
+	r.Rand = rnd
+	r.pos = pos
+}
+
+func (r *importRand) maybeReseed(c *cellInfoAnnotation) {
+	// newRowPos is the position of the first random function invocation of the
+	// row we're currently processing. If this is more than c.randInstancePerRow
+	// away, that means that we've skipped a batch of rows. importRand assumes
+	// that it operates on a contiguous set of rows when it increments its
+	// position, so if we skip some rows we need to reseed.
+	// We may skip rows because a single row converter may be responsible for
+	// converting several non-contiguous batches of KVs.
+	newRowPos := getPosForRandImport(c.rowID, c.sourceID, c.randInstancePerRow)
+	rowsSkipped := newRowPos.distance(r.pos) > int64(c.randInstancePerRow)
+	if rowsSkipped {
+		// Reseed at the new position, since our internally tracked r.pos is now out
+		// of sync.
+		r.reseed(newRowPos)
+	}
+	if r.pos%reseedRandEveryN == 0 {
+		r.reseed(r.pos)
+	}
+}
+
+// Float64 implements the randomSource interface.
+func (r *importRand) Float64(c *cellInfoAnnotation) float64 {
+	r.maybeReseed(c)
+	randNum := r.Rand.Float64()
+	r.pos++
+	return randNum
+}
+
+// Int63 implements the randomSource interface.
+func (r *importRand) Int63(c *cellInfoAnnotation) int64 {
+	r.maybeReseed(c)
+	randNum := r.Rand.Int63()
+	r.pos++
+	return randNum
 }
 
 // For some functions (specifically the volatile ones), we do
@@ -102,8 +147,11 @@ type cellInfoAnnotation struct {
 	rowID               int64
 	uniqueRowIDInstance int
 	uniqueRowIDTotal    int
-	randSource          *importRand
-	randInstancePerRow  int
+
+	// Annotations for rand() and gen_random_uuid().
+	// randSource should not be used directly, but through getImportRand() instead.
+	randSource         randomSource
+	randInstancePerRow int
 }
 
 func getCellInfoAnnotation(t *tree.Annotations) *cellInfoAnnotation {
@@ -114,6 +162,13 @@ func (c *cellInfoAnnotation) Reset(sourceID int32, rowID int64) {
 	c.sourceID = sourceID
 	c.rowID = rowID
 	c.uniqueRowIDInstance = 0
+}
+
+func makeImportRand(c *cellInfoAnnotation) randomSource {
+	pos := getPosForRandImport(c.rowID, c.sourceID, c.randInstancePerRow)
+	randSource := &importRand{}
+	randSource.reseed(pos)
+	return randSource
 }
 
 // We don't want to call unique_rowid() for columns with such default expressions
@@ -164,19 +219,17 @@ func importUniqueRowID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum,
 func importRandom(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	if c.randSource == nil {
-		c.randSource = newImportRand(getSeedForImportRand(
-			c.rowID, c.sourceID, c.randInstancePerRow))
+		c.randSource = makeImportRand(c)
 	}
-	return tree.NewDFloat(tree.DFloat(c.randSource.Float64())), nil
+	return tree.NewDFloat(tree.DFloat(c.randSource.Float64(c))), nil
 }
 
 func importGenUUID(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 	c := getCellInfoAnnotation(evalCtx.Annotations)
 	if c.randSource == nil {
-		c.randSource = newImportRand(getSeedForImportRand(
-			c.rowID, c.sourceID, c.randInstancePerRow))
+		c.randSource = makeImportRand(c)
 	}
-	gen := c.randSource.Int63()
+	gen := c.randSource.Int63(c)
 	id := uuid.MakeV4()
 	id.DeterministicV4(uint64(gen), uint64(1<<63))
 	return tree.NewDUuid(tree.DUuid{UUID: id}), nil
