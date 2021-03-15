@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -94,6 +95,8 @@ type PlanHookState interface {
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allDescs []sqlbase.Descriptor, desc *sqlbase.TableDescriptor, displayOptions ShowCreateDisplayOptions,
 	) (string, error)
+	CreateSchemaWithID(ctx context.Context, schemaNameKey roachpb.Key,
+		schemaID sqlbase.ID) error
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

@@ -81,12 +81,18 @@ var (
 	}
 )
 
+// TemporarySchemaNameForRestorePrefix is the prefix name of the schema we
+// synthesize during a full cluster restore. All temporary objects being
+// restored are remapped to belong to this schema allowing the reconciliation
+// job to gracefully clean up these objects when it runs.
+const TemporarySchemaNameForRestorePrefix string = "pg_temp_0_"
+
 func createTempSchema(params runParams, sKey sqlbase.DescriptorKey) (sqlbase.ID, error) {
 	id, err := GenerateUniqueDescID(params.ctx, params.extendedEvalCtx.ExecCfg.DB)
 	if err != nil {
 		return sqlbase.InvalidID, err
 	}
-	if err := params.p.createSchemaWithID(params.ctx, sKey.Key(), id); err != nil {
+	if err := params.p.CreateSchemaWithID(params.ctx, sKey.Key(), id); err != nil {
 		return sqlbase.InvalidID, err
 	}
 
@@ -94,7 +100,7 @@ func createTempSchema(params runParams, sKey sqlbase.DescriptorKey) (sqlbase.ID,
 	return id, nil
 }
 
-func (p *planner) createSchemaWithID(
+func (p *planner) CreateSchemaWithID(
 	ctx context.Context, schemaNameKey roachpb.Key, schemaID sqlbase.ID,
 ) error {
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {

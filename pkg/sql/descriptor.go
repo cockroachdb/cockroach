@@ -105,7 +105,8 @@ func (p *planner) createDatabase(
 	// be created in every database in >= 20.2.
 	if shouldCreatePublicSchema {
 		// Every database must be initialized with the public schema.
-		if err := p.createSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(), keys.PublicSchemaID); err != nil {
+		if err := p.CreateSchemaWithID(ctx, sqlbase.NewPublicSchemaKey(id).Key(),
+			keys.PublicSchemaID); err != nil {
 			return true, err
 		}
 	}
@@ -168,9 +169,9 @@ func (p *planner) createDescriptorWithID(
 	return nil
 }
 
-// getDescriptorID looks up the ID for plainKey.
+// GetDescriptorID looks up the ID for plainKey.
 // InvalidID is returned if the name cannot be resolved.
-func getDescriptorID(
+func GetDescriptorID(
 	ctx context.Context, txn *kv.Txn, plainKey sqlbase.DescriptorKey,
 ) (sqlbase.ID, error) {
 	key := plainKey.Key()
@@ -196,7 +197,7 @@ func resolveSchemaID(
 	}
 
 	sKey := sqlbase.NewSchemaKey(dbID, scName)
-	schemaID, err := getDescriptorID(ctx, txn, sKey)
+	schemaID, err := GetDescriptorID(ctx, txn, sKey)
 	if err != nil || schemaID == sqlbase.InvalidID {
 		return false, sqlbase.InvalidID, err
 	}
