@@ -3831,8 +3831,11 @@ may increase either contention or retry errors, or both.`,
 			Types: tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				// TODO(bilal): Implement this.
-				return nil, nil
+				token, err := ctx.JoinTokenCreator.CreateJoinToken(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(token), nil
 			},
 			Info:       "Creates a join token for use when adding a new node to a secure cluster.",
 			Volatility: tree.VolatilityVolatile,
