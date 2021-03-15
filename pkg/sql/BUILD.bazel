@@ -438,6 +438,7 @@ go_test(
         "indexbackfiller_test.go",
         "instrumentation_test.go",
         "internal_test.go",
+        "join_token_test.go",
         "main_test.go",
         "materialized_view_test.go",
         "metric_test.go",
