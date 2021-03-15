@@ -8,6 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+// TODO(azhng): The implementation for tenantStatusServer here will need to be updated
+//  once we have pod-to-pod communication implemented. After all dependencies that are
+//  unavailable to tenants have been removed, we can likely remove tenant status server
+//  entirely and use the normal status server.
+
 package server
 
 import (
@@ -37,6 +42,7 @@ func newTenantStatusServer(
 	sessionRegistry *sql.SessionRegistry,
 	contentionRegistry *contention.Registry,
 	st *cluster.Settings,
+	sqlServer *SQLServer,
 ) *tenantStatusServer {
 	ambient.AddLogTag("tenant-status", nil)
 	return &tenantStatusServer{
@@ -46,6 +52,7 @@ func newTenantStatusServer(
 			sessionRegistry:    sessionRegistry,
 			contentionRegistry: contentionRegistry,
 			st:                 st,
+			sqlServer:          sqlServer,
 		},
 	}
 }
@@ -108,4 +115,11 @@ func (t *tenantStatusServer) ListLocalContentionEvents(
 		return nil, err
 	}
 	return &serverpb.ListContentionEventsResponse{Events: events}, nil
+}
+
+func (t *tenantStatusServer) ResetSQLStats(
+	ctx context.Context, _ *serverpb.ResetSQLStatsRequest,
+) (*serverpb.ResetSQLStatsResponse, error) {
+	t.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
+	return &serverpb.ResetSQLStatsResponse{}, nil
 }

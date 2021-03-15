@@ -142,6 +142,7 @@ type baseStatusServer struct {
 	sessionRegistry    *sql.SessionRegistry
 	contentionRegistry *contention.Registry
 	st                 *cluster.Settings
+	sqlServer          *SQLServer
 }
 
 // getLocalSessions returns a list of local sessions on this node. Note that the
