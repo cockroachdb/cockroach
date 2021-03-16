@@ -1537,7 +1537,7 @@ project
  │    │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  │    │    │    │    │    ├── key: ()
- │    │    │    │    │    ├── fd: ()-->(7,13)
+ │    │    │    │    │    ├── fd: ()-->(7,13), (13)==(7), (7)==(13)
  │    │    │    │    │    ├── select
  │    │    │    │    │    │    ├── columns: b.k:7!null
  │    │    │    │    │    │    ├── outer: (1)

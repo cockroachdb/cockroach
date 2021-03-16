@@ -37,14 +37,14 @@ inner-join (lookup cy)
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1-4,6,7,9,10)
+ ├── fd: ()-->(1-4,6,7,9,10), (2)==(6), (3)==(9), (9)==(3), (6)==(2)
  ├── inner-join (lookup bx)
  │    ├── columns: a:1!null abc.b:2!null abc.c:3 d:4 bx.b:6!null x:7
  │    ├── key columns: [2] = [6]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1-4,6,7)
+ │    ├── fd: ()-->(1-4,6,7), (6)==(2), (2)==(6)
  │    ├── scan abc
  │    │    ├── columns: a:1!null abc.b:2 abc.c:3 d:4
  │    │    ├── constraint: /1: [/1 - /1]
@@ -63,14 +63,14 @@ inner-join (lookup bx)
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1,2,4-7,9,10)
+ ├── fd: ()-->(1,2,4-7,9,10), (6)==(9), (1)==(5), (5)==(1), (9)==(6)
  ├── inner-join (lookup cy)
  │    ├── columns: a:4!null abc.b:5 abc.c:6!null d:7 cy.c:9!null y:10
  │    ├── key columns: [6] = [9]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(4-7,9,10)
+ │    ├── fd: ()-->(4-7,9,10), (9)==(6), (6)==(9)
  │    ├── scan abc
  │    │    ├── columns: a:4!null abc.b:5 abc.c:6 d:7
  │    │    ├── constraint: /4: [/1 - /1]
@@ -89,14 +89,14 @@ inner-join (lookup bx)
  ├── lookup columns are key
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(1,2,4,5,7-10)
+ ├── fd: ()-->(1,2,4,5,7-10), (4)==(9), (1)==(8), (8)==(1), (9)==(4)
  ├── inner-join (lookup cy)
  │    ├── columns: cy.c:4!null y:5 a:7!null abc.b:8 abc.c:9!null d:10
  │    ├── key columns: [9] = [4]
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(4,5,7-10)
+ │    ├── fd: ()-->(4,5,7-10), (9)==(4), (4)==(9)
  │    ├── scan abc
  │    │    ├── columns: a:7!null abc.b:8 abc.c:9 d:10
  │    │    ├── constraint: /7: [/1 - /1]
@@ -182,7 +182,7 @@ Source expression:
    └── filters
         └── abc.b = bx.b
 
-New expression 1 of 4:
+New expression 1 of 6:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -197,7 +197,7 @@ New expression 1 of 4:
    └── filters
         └── abc.b = bx.b
 
-New expression 2 of 4:
+New expression 2 of 6:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -212,7 +212,39 @@ New expression 2 of 4:
    └── filters
         └── abc.b = bx.b
 
-New expression 3 of 4:
+New expression 3 of 6:
+  inner-join (hash)
+   ├── scan bx
+   ├── inner-join (hash)
+   │    ├── scan dz
+   │    ├── inner-join (hash)
+   │    │    ├── scan cy
+   │    │    ├── scan abc
+   │    │    │    └── constraint: /10: [/1 - /1]
+   │    │    └── filters
+   │    │         └── cy.c = abc.c
+   │    └── filters
+   │         └── dz.d = abc.c
+   └── filters
+        └── abc.b = bx.b
+
+New expression 4 of 6:
+  inner-join (hash)
+   ├── scan bx
+   ├── inner-join (hash)
+   │    ├── inner-join (hash)
+   │    │    ├── scan cy
+   │    │    ├── scan abc
+   │    │    │    └── constraint: /10: [/1 - /1]
+   │    │    └── filters
+   │    │         └── cy.c = abc.c
+   │    ├── scan dz
+   │    └── filters
+   │         └── dz.d = abc.c
+   └── filters
+        └── abc.b = bx.b
+
+New expression 5 of 6:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -228,7 +260,7 @@ New expression 3 of 4:
    └── filters
         └── abc.b = bx.b
 
-New expression 4 of 4:
+New expression 6 of 6:
   inner-join (hash)
    ├── scan bx
    ├── inner-join (hash)
@@ -1091,8 +1123,8 @@ D AB    refs [BD] [inner]
 C D    refs [CD] [inner]
 D C    refs [CD] [inner]
 ----Joining BCD----
-B CD    refs [BCD] [inner]
-CD B    refs [BCD] [inner]
+B CD    refs [BC] [inner]
+CD B    refs [BC] [inner]
 C BD    refs [BC] [inner]
 BD C    refs [BC] [inner]
 BC D    refs [CD] [inner]
@@ -1100,8 +1132,8 @@ D BC    refs [CD] [inner]
 ----Joining ABCD----
 A BCD    refs [AB] [inner]
 BCD A    refs [AB] [inner]
-AB CD    refs [BCD] [inner]
-CD AB    refs [BCD] [inner]
+AB CD    refs [BC] [inner]
+CD AB    refs [BC] [inner]
 C ABD    refs [BC] [inner]
 ABD C    refs [BC] [inner]
 ABC D    refs [CD] [inner]
@@ -1123,8 +1155,7 @@ inner-join (lookup bx)
  │    │    │              └── z
  │    │    └── filters (true)
  │    └── filters
- │         ├── y = max
- │         └── y = a
+ │         └── y = max
  └── filters (true)
 --------------------------------------------------------------------------------
 ----

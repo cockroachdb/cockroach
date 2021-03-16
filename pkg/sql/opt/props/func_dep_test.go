@@ -389,6 +389,30 @@ func TestFuncDeps_MakeMax1Row(t *testing.T) {
 	abcde.MakeMax1Row(opt.ColSet{})
 	verifyFD(t, abcde, "key()")
 	testColsAreStrictKey(t, abcde, c(), true)
+
+	// Retain equivalencies.
+	abcde = makeAbcdeFD(t)
+	abcde.AddEquivalency(1, 2)
+	abcde.AddEquivalency(3, 4)
+	abcde.MakeMax1Row(c(1, 2, 3))
+	verifyFD(t, abcde, "key(); ()-->(1-3), (2)==(1), (1)==(2)")
+	testColsAreStrictKey(t, abcde, c(), true)
+
+	// Retain partial equivalencies. (1)==(2) is extracted from (1)==(2,4).
+	abcde = makeAbcdeFD(t)
+	abcde.AddEquivalency(1, 2)
+	abcde.AddEquivalency(1, 4)
+	abcde.MakeMax1Row(c(1, 2, 3))
+	verifyFD(t, abcde, "key(); ()-->(1-3), (2)==(1), (1)==(2)")
+	testColsAreStrictKey(t, abcde, c(), true)
+
+	// No columns with equivalencies.
+	abcde = makeAbcdeFD(t)
+	abcde.AddEquivalency(1, 2)
+	abcde.AddEquivalency(3, 4)
+	abcde.MakeMax1Row(opt.ColSet{})
+	verifyFD(t, abcde, "key()")
+	testColsAreStrictKey(t, abcde, c(), true)
 }
 
 func TestFuncDeps_MakeNotNull(t *testing.T) {
