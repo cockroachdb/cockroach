@@ -53,16 +53,25 @@ func (p *pebbleResults) put(key []byte, value []byte) {
 
 	// We maintain a list of buffers, always encoding into the last one (a.k.a.
 	// pebbleResults.repr). The size of the buffers is exponentially increasing,
-	// capped at maxSize.
+	// capped at maxSize. The exponential increase allows us to amortize the
+	// cost of the allocation over multiple put calls. If this (key, value) pair
+	// needs capacity greater than maxSize, we allocate exactly the size needed.
 	lenKey := len(key)
 	lenToAdd := kvLenSize + lenKey + len(value)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
 		newSize := 2 * cap(p.repr)
-		if newSize == 0 {
+		if newSize == 0 || newSize > maxSize {
+			// If the previous buffer exceeded maxSize, we don't double its capacity
+			// for next allocation, and instead reset the exponential increase, in
+			// case we had a stray huge key-value.
 			newSize = minSize
 		}
-		for newSize < lenToAdd && newSize < maxSize {
-			newSize *= 2
+		if lenToAdd >= maxSize {
+			newSize = lenToAdd
+		} else {
+			for newSize < lenToAdd && newSize < maxSize {
+				newSize *= 2
+			}
 		}
 		if len(p.repr) > 0 {
 			p.bufs = append(p.bufs, p.repr)
