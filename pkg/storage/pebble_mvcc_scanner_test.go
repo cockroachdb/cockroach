@@ -11,12 +11,14 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -113,4 +115,55 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		expectedKVs[i].v = []byte("2")
 	}
 	require.Equal(t, expectedKVs, kvs)
+}
+
+func TestMVCCScanWithLargeKeyValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "takes >1min under race")
+
+	eng := createTestPebbleEngine()
+	defer eng.Close()
+
+	keys := []roachpb.Key{roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c"), roachpb.Key("d")}
+	largeValue := bytes.Repeat([]byte("l"), 150<<20)
+	// Alternate small and large values.
+	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[0], Timestamp: hlc.Timestamp{WallTime: 1}},
+		[]byte("a")))
+	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[1], Timestamp: hlc.Timestamp{WallTime: 1}},
+		largeValue))
+	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[2], Timestamp: hlc.Timestamp{WallTime: 1}},
+		[]byte("c")))
+	require.NoError(t, eng.PutMVCC(MVCCKey{Key: keys[3], Timestamp: hlc.Timestamp{WallTime: 1}},
+		largeValue))
+
+	reader := eng.NewReadOnly()
+	defer reader.Close()
+	iter := reader.NewMVCCIterator(
+		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
+	defer iter.Close()
+
+	ts := hlc.Timestamp{WallTime: 2}
+	mvccScanner := pebbleMVCCScanner{
+		parent:  iter,
+		reverse: false,
+		start:   keys[0],
+		end:     roachpb.Key("e"),
+		ts:      ts,
+	}
+	mvccScanner.init(nil /* txn */, hlc.Timestamp{})
+	_, err := mvccScanner.scan()
+	require.NoError(t, err)
+
+	kvData := mvccScanner.results.finish()
+	numKeys := mvccScanner.results.count
+	require.Equal(t, 4, int(numKeys))
+	require.Equal(t, 4, len(kvData))
+	require.Equal(t, 20, len(kvData[0]))
+	require.Equal(t, 32, cap(kvData[0]))
+	require.Equal(t, 157286419, len(kvData[1]))
+	require.Equal(t, 157286419, cap(kvData[1]))
+	require.Equal(t, 20, len(kvData[2]))
+	require.Equal(t, 32, cap(kvData[2]))
+	require.Equal(t, 157286419, len(kvData[3]))
+	require.Equal(t, 157286419, cap(kvData[3]))
 }
