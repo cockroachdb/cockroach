@@ -65,16 +65,16 @@ CREATE TABLE crdb_internal.builtin_functions (
    details STRING NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_contention_events (
-   table_id INT8 NOT NULL,
-   index_id INT8 NOT NULL,
+   table_id INT8 NULL,
+   index_id INT8 NULL,
    num_contention_events INT8 NOT NULL,
    cumulative_contention_time INTERVAL NOT NULL,
    key BYTES NOT NULL,
    txn_id UUID NOT NULL,
    count INT8 NOT NULL
 )  CREATE TABLE crdb_internal.cluster_contention_events (
-   table_id INT8 NOT NULL,
-   index_id INT8 NOT NULL,
+   table_id INT8 NULL,
+   index_id INT8 NULL,
    num_contention_events INT8 NOT NULL,
    cumulative_contention_time INTERVAL NOT NULL,
    key BYTES NOT NULL,
@@ -511,16 +511,16 @@ CREATE TABLE crdb_internal.node_build_info (
    value STRING NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_contention_events (
-   table_id INT8 NOT NULL,
-   index_id INT8 NOT NULL,
+   table_id INT8 NULL,
+   index_id INT8 NULL,
    num_contention_events INT8 NOT NULL,
    cumulative_contention_time INTERVAL NOT NULL,
    key BYTES NOT NULL,
    txn_id UUID NOT NULL,
    count INT8 NOT NULL
 )  CREATE TABLE crdb_internal.node_contention_events (
-   table_id INT8 NOT NULL,
-   index_id INT8 NOT NULL,
+   table_id INT8 NULL,
+   index_id INT8 NULL,
    num_contention_events INT8 NOT NULL,
    cumulative_contention_time INTERVAL NOT NULL,
    key BYTES NOT NULL,
