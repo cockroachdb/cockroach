@@ -190,6 +190,15 @@ var traceSessionEventLogEnabled = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+// debugForceRealSpans can be used to force the use of real tracing spans for
+// every statement. It's used primarily to measure the tracing overhead in
+// BenchmarkTracing.
+var debugForceRealSpans = settings.RegisterBoolSetting(
+	"sql.trace.debug_force_real_spans.enabled",
+	"set to true to force the use of real tracing spans for every statement",
+	false,
+)
+
 // ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
 // the maximum number of joins to reorder.
 const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"

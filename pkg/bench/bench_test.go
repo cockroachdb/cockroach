@@ -437,12 +437,8 @@ func BenchmarkSampling(b *testing.B) {
 	}
 }
 
-// BenchmarkTracing measures the overhead of always-on tracing. It also reports
-// the memory utilization.
-//
-// TODO(irfansharif): This benchmark is only useful while we transition between
-// the legacy trace.mode, and the "always-on" mode introduced in 21.1. We can
-// remove it in 21.2.
+// BenchmarkTracing measures the overhead of tracing. It also
+// reports the memory utilization.
 func BenchmarkTracing(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
@@ -456,15 +452,11 @@ func BenchmarkTracing(b *testing.B) {
 
 		b.Run(dbName, func(b *testing.B) {
 			dbFn(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-				for _, tracingEnabled := range []bool{true, false} {
-					var tracingMode string
-					if tracingEnabled {
-						tracingMode = "background"
-					} else {
-						tracingMode = "legacy"
-					}
-					db.Exec(b, fmt.Sprintf("SET CLUSTER SETTING trace.mode = %s", tracingMode))
-					b.Run(fmt.Sprintf("tracing=%s", tracingMode[:1]), func(b *testing.B) {
+				for _, tracingEnabled := range []bool{false, true} {
+					// Disable statement sampling to de-noise this benchmark.
+					db.Exec(b, "SET CLUSTER SETTING sql.txn_stats.sample_rate = 0.0")
+					db.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.trace.debug_force_real_spans.enabled = %t", tracingEnabled))
+					b.Run(fmt.Sprintf("tracing=%s", fmt.Sprintf("%t", tracingEnabled)[:1]), func(b *testing.B) {
 						for _, runFn := range []func(*testing.B, *sqlutils.SQLRunner, int){
 							runBenchmarkScan1,
 							runBenchmarkInsert,

@@ -157,10 +157,11 @@ func (ts *txnState) resetForNewSQLTxn(
 	// (automatic or user-directed) retries. The span is closed by finishSQLTxn().
 	opName := sqlTxnName
 	alreadyRecording := tranCtx.sessionTracing.Enabled()
+	debugForceRealSpan := debugForceRealSpans.Get(&tranCtx.settings.SV)
 
 	var txnCtx context.Context
 	var sp *tracing.Span
-	if alreadyRecording {
+	if alreadyRecording || debugForceRealSpan {
 		// WithForceRealSpan is used to support the use of session tracing,
 		// which will start recording on this span.
 		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer, tracing.WithForceRealSpan())
