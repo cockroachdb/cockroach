@@ -1084,14 +1084,16 @@ txn_database_drop_regions  ca-central-1    true     {ca-az1,ca-az2,ca-az3}
 txn_database_drop_regions  ap-southeast-2  false    {ap-az1,ap-az2,ap-az3}
 txn_database_drop_regions  us-east-1       false    {us-az1,us-az2,us-az3}
 
-# Adding a FORCE to this second statement until we get a fix for #60620. When
-# that fix is ready, we can construct the view of the zone config as it was at
-# the beginning of the transaction, and the checks for FORCE should work again,
-# and we won't require the explicit force here.
+# Overriding this operation until we get a fix for #60620. When that fix is
+# ready, we can construct the view of the zone config as it was at the
+# beginning of the transaction, and the checks for override should work
+# again, and we won't require an explicit override here.
 statement ok
 BEGIN;
+SET override_multi_region_zone_config = true;
 ALTER DATABASE txn_database_drop_regions DROP REGION "us-east-1";
-ALTER DATABASE txn_database_drop_regions DROP REGION "ap-southeast-2" FORCE;
+ALTER DATABASE txn_database_drop_regions DROP REGION "ap-southeast-2";
+SET override_multi_region_zone_config = false;
 COMMIT;
 
 query TTBT colnames

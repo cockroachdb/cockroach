@@ -177,7 +177,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		n.desc.Name,
 		params.p.txn,
 		params.ExecCfg().Codec,
-		n.n.Force,
+		params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 		*n.desc.RegionConfig,
 	); err != nil {
 		return err
@@ -294,7 +294,7 @@ func (p *planner) AlterDatabaseDropRegion(
 		dbDesc.Name,
 		p.txn,
 		p.ExecCfg().Codec,
-		n.Force,
+		p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 		*dbDesc.RegionConfig,
 	); err != nil {
 		return nil, err
@@ -722,7 +722,7 @@ func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
 			n.desc.Name,
 			params.p.txn,
 			params.ExecCfg().Codec,
-			n.n.Force,
+			params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 			*n.desc.RegionConfig,
 		); err != nil {
 			return err
@@ -801,7 +801,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		n.desc.Name,
 		params.p.txn,
 		params.ExecCfg().Codec,
-		n.n.Force,
+		params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 		*n.desc.RegionConfig,
 	); err != nil {
 		return err

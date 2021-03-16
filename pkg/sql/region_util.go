@@ -12,7 +12,9 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -822,42 +824,60 @@ func (p *planner) CurrentDatabaseRegionConfig() (tree.DatabaseRegionConfig, erro
 	return dbDesc.GetRegionConfig(), nil
 }
 
-// CheckZoneConfigChangePermittedForMultiRegionDatabase checks if a zone config
-// change is permitted for a multi-region database. The change is permitted iff
-// it is not modifying a protested multi-region field of the zone configs (as
-// defined by zonepb.MultiRegionZoneConfigFields).
-func (p *planner) CheckZoneConfigChangePermittedForMultiRegionDatabase(
-	ctx context.Context, dbName tree.Name, options tree.KVOptions, force bool,
+// CheckZoneConfigChangePermittedForMultiRegion checks if a zone config
+// change is permitted for a multi-region database, table, index or partition.
+// The change is permitted iff it is not modifying a protected multi-region
+// field of the zone configs (as defined by zonepb.MultiRegionZoneConfigFields).
+func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
+	ctx context.Context, zs tree.ZoneSpecifier, options tree.KVOptions, force bool,
 ) error {
 	// If the user has specified the FORCE option, the world is their oyster.
 	if force {
 		return nil
 	}
 
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
-		ctx,
-		p.txn,
-		string(dbName),
-		tree.DatabaseLookupFlags{Required: true},
-	)
-	if err != nil {
-		return err
+	// Check if what we're altering is a multi-region entity.
+	if zs.Database != "" {
+		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+			ctx,
+			p.txn,
+			string(zs.Database),
+			tree.DatabaseLookupFlags{Required: true},
+		)
+		if err != nil {
+			return err
+		}
+		if dbDesc.RegionConfig == nil {
+			// Not a multi-region database, we're done here.
+			return nil
+		}
+	} else {
+		// We're dealing with a table, index, or partition zone configuration
+		// change.  Get the table descriptor so we can determine if this is a
+		// multi-region table/index/partition.
+		table, err := p.resolveTableForZone(ctx, &zs)
+		if err != nil {
+			return err
+		}
+		if table == nil || table.GetLocalityConfig() == nil {
+			// Not a multi-region table, we're done here.
+			return nil
+		}
 	}
 
-	if dbDesc.RegionConfig != nil {
-		// This is clearly an n^2 operation, but since there are only a single
-		// digit number of zone config keys, it's likely faster to do it this way
-		// than incur the memory allocation of creating a map.
-		for _, opt := range options {
-			for _, cfg := range zonepb.MultiRegionZoneConfigFields {
-				if opt.Key == cfg {
-					// User is trying to update a zone config value that's protected for
-					// multi-region databases. Return the constructed error.
-					err := errors.Newf("attempting to modify protected field %q of a multi-region database zone configuration",
-						string(opt.Key),
-					)
-					return errors.WithHint(err, "to override this error, specify the FORCE option")
-				}
+	// This is clearly an n^2 operation, but since there are only a single
+	// digit number of zone config keys, it's likely faster to do it this way
+	// than incur the memory allocation of creating a map.
+	for _, opt := range options {
+		for _, cfg := range zonepb.MultiRegionZoneConfigFields {
+			if opt.Key == cfg {
+				// User is trying to update a zone config value that's protected for
+				// multi-region databases. Return the constructed error.
+				err := errors.Newf("attempting to modify protected field %q of a multi-region zone configuration",
+					string(opt.Key),
+				)
+				return errors.WithHint(err, "to override this error, "+
+					"SET override_multi_region_zone_config = true and reissue the command")
 			}
 		}
 	}
@@ -876,11 +896,11 @@ func validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 	dbName string,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
-	force bool,
+	override bool,
 	regionConfig descpb.DatabaseDescriptor_RegionConfig,
 ) error {
-	// If the user is forcing, our work here is done.
-	if force {
+	// If the user is overriding, our work here is done.
+	if override {
 		return nil
 	}
 
@@ -908,6 +928,121 @@ func validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 			"a user modified field")
 		return errors.WithHint(err, "to override this error and proceed with "+
 			"the overwrite, specify \"FORCE\" at the end of the statement")
+	}
+
+	return nil
+}
+
+// validateZoneConfigForMultiRegionTableWasNotModifiedByUser validates that
+// the table's zone configuration was not modified by the user. The function is
+// intended to be called in cases where a multi-region operation will overwrite
+// the table's (or index's/partition's) zone configuration and we wish to warn
+// the user about that before it occurs (and require the
+// override_multi_region_zone_config session variable to be set).
+func validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
+	ctx context.Context,
+	txn *kv.Txn,
+	execCfg *ExecutorConfig,
+	regionConfig descpb.DatabaseDescriptor_RegionConfig,
+	desc *tabledesc.Mutable,
+	toRegionalByRow bool,
+	override bool,
+	opts ...applyZoneConfigForMultiRegionTableOption,
+) error {
+	// If the user is overriding, or this is not a multi-region table our work here
+	// is done.
+	if override || desc.GetLocalityConfig() == nil {
+		return nil
+	}
+
+	hint := "to proceed with the override, SET override_multi_region_zone_config = true, and reissue the statement"
+
+	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, desc.GetID())
+	if err != nil {
+		return err
+	}
+	if currentZoneConfig == nil {
+		currentZoneConfig = zonepb.NewZoneConfig()
+	}
+
+	// The expected zone config starts from the same base config as the current
+	// zone config, so copy it over to be used down below.
+	expectedZoneConfig := currentZoneConfig
+
+	if toRegionalByRow {
+		// We're going to REGIONAL BY ROW. Check to see if the to be applied zone
+		// configurations will override any existing zone configurations on the
+		// table's indexes. We say "override" here, and not "overwrite" because
+		// REGIONAL BY ROW tables will not write zone configs at the index level,
+		// but instead, at the index partition level. That being said, application
+		// of a partition-level zone config will override any applied index-level
+		// zone config, so it's important that we warn the user of that.
+		for _, s := range currentZoneConfig.Subzones {
+			if s.PartitionName == "" {
+				// Found a zone config on an index. Check to see if any of its
+				// multi-region fields are set.
+				if isSet, str := s.Config.IsAnyMultiRegionFieldSet(); isSet {
+					// Find the name of the offending index to use in the message below.
+					// In the case where we can't find the name, do our best and return
+					// the ID.
+					indexName := fmt.Sprintf("unknown with ID = %s",
+						strconv.FormatUint(uint64(s.IndexID), 10))
+					for _, i := range desc.ActiveIndexes() {
+						if uint32(i.GetID()) == s.IndexID {
+							indexName = i.GetName()
+						}
+					}
+					err := errors.Newf(
+						"attempting to update zone configuration for table %q which "+
+							"contains a zone configuration on index %q with multi-region field %q set",
+						desc.GetName(),
+						indexName,
+						str,
+					)
+					err = errors.WithDetail(err, "the attempted operation will override "+
+						"the index zone configuration field")
+					return errors.WithHint(err, hint)
+				}
+			}
+		}
+	}
+
+	// Fill in the expectedZoneConfig using the specified option.
+	for _, opt := range opts {
+		_, newZoneConfig, err := opt(
+			*expectedZoneConfig,
+			regionConfig,
+			desc,
+		)
+		if err != nil {
+			return err
+		}
+		expectedZoneConfig = &newZoneConfig
+	}
+
+	// Mark the NumReplicas as 0 if we have subzones but no other features
+	// in the zone config. This signifies a placeholder.
+	if len(expectedZoneConfig.Subzones) > 0 && isPlaceholderZoneConfigForMultiRegion(*expectedZoneConfig) {
+		expectedZoneConfig.NumReplicas = proto.Int32(0)
+	}
+
+	// Compare the two zone configs to see if anything is amiss.
+	same, field, err := currentZoneConfig.DiffWithZone(
+		*expectedZoneConfig,
+		zonepb.MultiRegionZoneConfigFields,
+	)
+	if err != nil {
+		return err
+	}
+	if !same {
+		err := errors.Newf(
+			"attempting to update zone configuration for table %q which contains modified field %q ",
+			desc.GetName(),
+			field,
+		)
+		err = errors.WithDetail(err, "the attempted operation will overwrite "+
+			"a user modified field")
+		return errors.WithHint(err, hint)
 	}
 
 	return nil

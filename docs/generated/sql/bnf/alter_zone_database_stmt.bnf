@@ -1,4 +1,4 @@
 alter_zone_database_stmt ::=
-	'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )* opt_force
-	| 'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )* opt_force
-	| 'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'DISCARD' opt_force
+	'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'DISCARD'

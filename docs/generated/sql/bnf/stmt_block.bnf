@@ -1729,7 +1729,7 @@ alter_rename_database_stmt ::=
 	'ALTER' 'DATABASE' database_name 'RENAME' 'TO' database_name
 
 alter_zone_database_stmt ::=
-	'ALTER' 'DATABASE' database_name set_zone_config opt_force
+	'ALTER' 'DATABASE' database_name set_zone_config
 
 alter_database_owner ::=
 	'ALTER' 'DATABASE' database_name 'OWNER' 'TO' role_spec
@@ -1738,16 +1738,16 @@ alter_database_to_schema_stmt ::=
 	'ALTER' 'DATABASE' database_name 'CONVERT' 'TO' 'SCHEMA' 'WITH' 'PARENT' database_name
 
 alter_database_add_region_stmt ::=
-	'ALTER' 'DATABASE' database_name 'ADD' 'REGION' region_name opt_force
+	'ALTER' 'DATABASE' database_name 'ADD' 'REGION' region_name
 
 alter_database_drop_region_stmt ::=
-	'ALTER' 'DATABASE' database_name 'DROP' 'REGION' region_name opt_force
+	'ALTER' 'DATABASE' database_name 'DROP' 'REGION' region_name
 
 alter_database_survival_goal_stmt ::=
-	'ALTER' 'DATABASE' database_name survival_goal_clause opt_force
+	'ALTER' 'DATABASE' database_name survival_goal_clause
 
 alter_database_primary_region_stmt ::=
-	'ALTER' 'DATABASE' database_name primary_region_clause opt_force
+	'ALTER' 'DATABASE' database_name primary_region_clause
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' zone_name set_zone_config
@@ -2237,10 +2237,6 @@ alter_index_cmds ::=
 
 sequence_option_list ::=
 	( sequence_option_elem ) ( ( sequence_option_elem ) )*
-
-opt_force ::=
-	'FORCE'
-	| 
 
 region_name ::=
 	name

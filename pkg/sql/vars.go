@@ -1162,6 +1162,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`override_multi_region_zone_config`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`override_multi_region_zone_config`),
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("override_multi_region_zone_config", s)
+			if err != nil {
+				return err
+			}
+			m.SetOverrideMultiRegionZoneConfigEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.OverrideMultiRegionZoneConfigEnabled)
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(overrideMultiRegionZoneConfigClusterMode.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_enable_hash_sharded_indexes`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`experimental_enable_hash_sharded_indexes`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {

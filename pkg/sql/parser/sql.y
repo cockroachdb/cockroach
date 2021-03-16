@@ -1079,8 +1079,6 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
 %type <bool> opt_index_access_method
 
-%type <bool> opt_force
-
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
 %type <tree.Expr> select_fetch_first_value
 %type <empty> row_or_rows
@@ -1510,51 +1508,46 @@ alter_database_owner:
   }
 
 alter_database_add_region_stmt:
-  ALTER DATABASE database_name ADD REGION region_name opt_force
+  ALTER DATABASE database_name ADD REGION region_name
   {
     $$.val = &tree.AlterDatabaseAddRegion{
       Name: tree.Name($3),
       Region: tree.Name($6),
-      Force: $7.bool(),
     }
   }
 
 alter_database_drop_region_stmt:
-  ALTER DATABASE database_name DROP REGION region_name opt_force
+  ALTER DATABASE database_name DROP REGION region_name
   {
     $$.val = &tree.AlterDatabaseDropRegion{
       Name: tree.Name($3),
       Region: tree.Name($6),
-      Force: $7.bool(),
     }
   }
 
 alter_database_survival_goal_stmt:
-  ALTER DATABASE database_name survival_goal_clause opt_force
+  ALTER DATABASE database_name survival_goal_clause
   {
     $$.val = &tree.AlterDatabaseSurvivalGoal{
       Name: tree.Name($3),
       SurvivalGoal: $4.survivalGoal(),
-      Force: $5.bool(),
     }
   }
 
 alter_database_primary_region_stmt:
-  ALTER DATABASE database_name primary_region_clause opt_force
+  ALTER DATABASE database_name primary_region_clause
   {
     $$.val = &tree.AlterDatabasePrimaryRegion{
       Name: tree.Name($3),
       PrimaryRegion: tree.Name($4),
-      Force: $5.bool(),
     }
   }
-| ALTER DATABASE database_name SET primary_region_clause opt_force
+| ALTER DATABASE database_name SET primary_region_clause
   {
     /* SKIP DOC */
     $$.val = &tree.AlterDatabasePrimaryRegion{
       Name: tree.Name($3),
       PrimaryRegion: tree.Name($5),
-      Force: $6.bool(),
     }
   }
 
@@ -1757,11 +1750,10 @@ set_zone_config:
   }
 
 alter_zone_database_stmt:
-  ALTER DATABASE database_name set_zone_config opt_force
+  ALTER DATABASE database_name set_zone_config
   {
      s := $4.setZoneConfig()
      s.ZoneSpecifier = tree.ZoneSpecifier{Database: tree.Name($3)}
-     s.Force = $5.bool()
      $$.val = s
   }
 
@@ -1829,17 +1821,6 @@ alter_zone_partition_stmt:
     err = errors.WithHint(err, "try ALTER PARTITION <partition> OF INDEX <tablename>@*")
     return setErr(sqllex, err)
   }
-
-opt_force:
-  FORCE
-  {
-    $$.val = true
-  }
-| /* EMPTY */
-  {
-    $$.val = false
-  }
-
 
 var_set_list:
   var_name '=' COPY FROM PARENT
