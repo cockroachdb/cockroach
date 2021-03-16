@@ -211,9 +211,9 @@ func TestChangefeedFullTableName(t *testing.T) {
 			assertPayloads(t, foo, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
 		})
 	}
-	//TODO(zinger): Plumb this option through to all encoders so it works in sinkless mode
-	//t.Run(`sinkless`, sinklessTest(testFn))
+
 	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`sinkless`, sinklessTest(testFn))
 }
 
 func TestChangefeedMultiTable(t *testing.T) {
@@ -238,6 +238,43 @@ func TestChangefeedMultiTable(t *testing.T) {
 
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestChangefeedMultiTablesSameName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	createFeed := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) (cdctest.TestFeed, error) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `
+CREATE TABLE foo (a INT PRIMARY KEY, b STRING);
+INSERT INTO foo VALUES (1, 'a');
+CREATE DATABASE db;
+USE db;
+CREATE TABLE foo (a INT PRIMARY KEY, b STRING);
+INSERT INTO foo VALUES (1, 'a');
+USE d;
+`)
+		return f.Feed(`CREATE CHANGEFEED FOR foo,db.foo`)
+	}
+
+	t.Run(`sinkless`, sinklessTest(
+		func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+			feed, err := createFeed(t, db, f)
+			// Sinkless feed doesn't see the error right away; we need to
+			// read the next message to see an error.
+			require.NoError(t, err)
+			_, err = feed.Next()
+			require.True(t, testutils.IsError(err, "cannot target different tables with the same name"), err)
+			require.NoError(t, feed.Close())
+		}))
+
+	t.Run(`enterprise`, enterpriseTest(
+		func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+			_, err := createFeed(t, db, f)
+			require.True(t, testutils.IsError(err, "cannot target different tables with the same name"), err)
+		}))
+
 }
 
 func TestChangefeedCursor(t *testing.T) {

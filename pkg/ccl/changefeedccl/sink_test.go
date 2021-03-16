@@ -50,8 +50,11 @@ func (p asyncProducerMock) Close() error {
 	return nil
 }
 
-func topic(name string) tableDescriptorTopic {
-	return tableDescriptorTopic{tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()}
+func topic(name string) *tableDescriptorTopic {
+	return &tableDescriptorTopic{
+		TableDescriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable(),
+		name:            name,
+	}
 }
 
 func TestKafkaSink(t *testing.T) {
@@ -183,10 +186,12 @@ func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	topic := func(name string) tableDescriptorTopic {
+	topic := func(name string) *tableDescriptorTopic {
 		id, _ := strconv.ParseUint(name, 36, 64)
-		return tableDescriptorTopic{
-			tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()}
+		return &tableDescriptorTopic{
+			TableDescriptor: tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable(),
+			name:            name,
+		}
 	}
 
 	ctx := context.Background()

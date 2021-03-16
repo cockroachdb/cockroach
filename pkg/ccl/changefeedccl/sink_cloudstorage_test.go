@@ -39,9 +39,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func makeTopic(name string) tableDescriptorTopic {
+func makeTopic(name string) *tableDescriptorTopic {
 	desc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()
-	return tableDescriptorTopic{desc}
+	return &tableDescriptorTopic{TableDescriptor: desc, name: name}
 }
 
 func TestCloudStorageSink(t *testing.T) {

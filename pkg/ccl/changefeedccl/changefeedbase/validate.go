@@ -23,6 +23,16 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 		return errors.Errorf(`unwatched table: %s`, tableDesc.GetName())
 	}
 
+	// Verify the table name we're watching does not collide with another
+	// table with the same name.
+	for id, other := range targets {
+		if id != tableDesc.GetID() && t.StatementTimeName == other.StatementTimeName {
+			return errors.WithHintf(
+				errors.Newf("CHANGEFEED cannot target different tables with the same name"),
+				"consider using full_table_name option")
+		}
+	}
+
 	// Technically, the only non-user table known not to work is system.jobs
 	// (which creates a cycle since the resolved timestamp high-water mark is
 	// saved in it), but there are subtle differences in the way many of them

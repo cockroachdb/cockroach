@@ -566,9 +566,27 @@ func newKVEventToRowConsumer(
 
 type tableDescriptorTopic struct {
 	catalog.TableDescriptor
+	name string
 }
 
 var _ TopicDescriptor = &tableDescriptorTopic{}
+
+func newTableDescriptorTopic(
+	targets jobspb.ChangefeedTargets, descr catalog.TableDescriptor,
+) (*tableDescriptorTopic, error) {
+	target, ok := targets[descr.GetID()]
+	if !ok {
+		return nil, errors.Newf("unknown changefeed target (id=%d name=%s)", descr.GetID(), descr.GetName())
+	}
+	return &tableDescriptorTopic{
+		TableDescriptor: descr,
+		name:            target.StatementTimeName,
+	}, nil
+}
+
+func (t *tableDescriptorTopic) GetName() string {
+	return t.name
+}
 
 // ConsumeEvent implements kvEventConsumer interface
 func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Event) error {
@@ -610,9 +628,11 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Ev
 			return err
 		}
 	}
-	if err := c.sink.EmitRow(
-		ctx, tableDescriptorTopic{r.tableDesc}, keyCopy, valueCopy, r.updated,
-	); err != nil {
+	topic, err := newTableDescriptorTopic(c.details.Targets, r.tableDesc)
+	if err != nil {
+		return err
+	}
+	if err := c.sink.EmitRow(ctx, topic, keyCopy, valueCopy, r.updated); err != nil {
 		return err
 	}
 	if log.V(3) {
