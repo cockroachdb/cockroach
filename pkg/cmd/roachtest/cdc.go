@@ -232,7 +232,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		// runner, so kafka needs to advertise the external address. Better
 		// would be a binary we could run on one of the roachprod machines.
 		c.Run(ctx, kafka.nodes, `echo "advertised.listeners=PLAINTEXT://`+kafka.consumerURL(ctx)+`" >> `+
-			kafka.basePath()+`/confluent-4.0.0/etc/kafka/server.properties`)
+			filepath.Join(kafka.configDir(), "server.properties"))
 	}
 	kafka.start(ctx)
 	defer kafka.stop(ctx)
@@ -421,10 +421,12 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 		t.Fatal(err)
 	}
 
-	folder := kafka.basePath()
 	output, err := c.RunWithBuffer(ctx, t.l, kafkaNode,
-		`CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/kafka-avro-console-consumer `+
-			`--from-beginning --topic=foo --max-messages=14 --bootstrap-server=localhost:9092`)
+		kafka.exec("kafka-avro-console-consumer",
+			"--from-beginning",
+			"--topic=foo",
+			"--max-messages=14",
+			"--bootstrap-server=localhost:9092"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -866,17 +868,24 @@ func randomSerial() (*big.Int, error) {
 }
 
 const (
-	conluentDownloadURL = "https://storage.googleapis.com/cockroach-fixtures/tools/confluent-oss-4.0.0-2.11.tar.gz"
-	confluentSHA256     = "5cfa68b4368f28bd9231786bb710431394dc14a2b37eecf360e820271ee84f43"
+	confluentDownloadURL = "https://storage.googleapis.com/cockroach-fixtures/tools/confluent-community-6.1.0.tar.gz"
+	confluentInstallBase = "confluent-6.1.0"
+	confluentSHA256      = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
+)
 
-	// TODO(ssd): Perhaps something like this could be a roachprod command?
-	confluentDownloadScript = `#!/usr/bin/env bash
+// TODO(ssd): Perhaps something like this could be a roachprod command?
+//
+// TODO(ssd): Cache the confluent-cli download as well once we confirm
+// that the license allows for it.
+var confluentDownloadScript = fmt.Sprintf(`#!/usr/bin/env bash
 set -euo pipefail
 
-CONFLUENT_URL="$1"
-CONFLUENT_SHA256="$2"
+CONFLUENT_URL="%s"
+CONFLUENT_SHA256="%s"
+CONFLUENT_INSTALL_BASE="%s"
 CONFLUENT_TAR_PATH=/tmp/confluent.tar.gz
-CONFLUENT_DIR="$3"
+
+CONFLUENT_DIR="$1"
 
 checkFile() {
   local file_name="${1}"
@@ -907,8 +916,14 @@ if ! [[ -f "$CONFLUENT_TAR_PATH" ]] || ! checkFile "$CONFLUENT_TAR_PATH" "$CONFL
     sleep 15;
   done
 fi
+
 tar xvf /tmp/confluent.tar.gz -C "$CONFLUENT_DIR"
-`
+
+cd "${CONFLUENT_DIR}/${CONFLUENT_INSTALL_BASE}"
+curl --retry 3 --fail --show-error -L --http1.1 https://cnfl.io/cli | sh -s -- -b bin/
+`, confluentDownloadURL, confluentSHA256, confluentInstallBase)
+
+const (
 	// kafkaJAASConfig is a JAAS configuration file that creats a
 	// user called "plain" with password "plain-secret" that can
 	// authenticate via SASL/PLAIN.
@@ -990,16 +1005,24 @@ func (k kafkaManager) basePath() string {
 	return `/mnt/data1/confluent`
 }
 
+func (k kafkaManager) confluentHome() string {
+	return filepath.Join(k.basePath(), confluentInstallBase)
+}
+
 func (k kafkaManager) configDir() string {
-	return k.basePath() + `/confluent-4.0.0/etc/kafka/`
+	return filepath.Join(k.basePath(), confluentInstallBase, "etc/kafka")
 }
 
 func (k kafkaManager) binDir() string {
-	return k.basePath() + `/confluent-4.0.0/bin/`
+	return filepath.Join(k.basePath(), confluentInstallBase, "bin")
+}
+
+func (k kafkaManager) confluentBin() string {
+	return filepath.Join(k.binDir(), "confluent")
 }
 
 func (k kafkaManager) serverJAASConfig() string {
-	return k.configDir() + `server_jaas.conf`
+	return filepath.Join(k.configDir(), "server_jaas.conf")
 }
 
 func (k kafkaManager) install(ctx context.Context) {
@@ -1008,12 +1031,12 @@ func (k kafkaManager) install(ctx context.Context) {
 
 	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
 
-	downloadScriptPath := filepath.Join(folder, "/install.sh")
+	downloadScriptPath := filepath.Join(folder, "install.sh")
 	err := k.c.PutString(ctx, confluentDownloadScript, downloadScriptPath, 0700, k.nodes)
 	if err != nil {
 		k.c.t.Fatal(err)
 	}
-	k.c.Run(ctx, k.nodes, downloadScriptPath, conluentDownloadURL, confluentSHA256, folder)
+	k.c.Run(ctx, k.nodes, downloadScriptPath, folder)
 	if !k.c.isLocal() {
 		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
 		k.c.Run(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
@@ -1041,7 +1064,7 @@ func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 	keystorePath := filepath.Join(configDir, "kafka.keystore.jks")
 
 	caKeyPath := filepath.Join(configDir, "ca.key")
-	caCertPath := filepath.Join(configDir + "ca.crt")
+	caCertPath := filepath.Join(configDir, "ca.crt")
 
 	kafkaKeyPath := filepath.Join(configDir, "kafka.key")
 	kafkaCertPath := filepath.Join(configDir, "kafka.crt")
@@ -1122,15 +1145,12 @@ func (k kafkaManager) addSCRAMUsers(ctx context.Context) {
 }
 
 func (k kafkaManager) start(ctx context.Context, services ...string) {
-	folder := k.basePath()
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
-	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent destroy || true`)
+	k.c.Run(ctx, k.nodes, k.exec("confluent", "local destroy || true"))
 	k.restart(ctx, services...)
 }
 
 func (k kafkaManager) restart(ctx context.Context, services ...string) {
-	folder := k.basePath()
-
 	var startArgs string
 	if len(services) == 0 {
 		startArgs = "schema-registry"
@@ -1141,18 +1161,26 @@ func (k kafkaManager) restart(ctx context.Context, services ...string) {
 	k.c.Run(ctx, k.nodes, "touch", k.serverJAASConfig())
 
 	startCmd := fmt.Sprintf(
-		"CONFLUENT_CURRENT=%s KAFKA_OPTS=-Djava.security.auth.login.config=%s %s start %s",
-		folder,
+		"CONFLUENT_CURRENT=%s CONFLUENT_HOME=%s KAFKA_OPTS=-Djava.security.auth.login.config=%s %s local services %s start",
+		k.basePath(),
+		k.confluentHome(),
 		k.serverJAASConfig(),
-		folder+"/confluent-4.0.0/bin/confluent",
+		k.confluentBin(),
 		startArgs)
 	k.c.Run(ctx, k.nodes, startCmd)
 }
 
+func (k kafkaManager) exec(exe string, args ...string) string {
+	cmdPath := filepath.Join(k.binDir(), exe)
+	return fmt.Sprintf("CONFLUENT_CURRENT=%s CONFLUENT_HOME=%s %s %s",
+		k.basePath(),
+		k.confluentHome(),
+		cmdPath, strings.Join(args, " "))
+}
+
 func (k kafkaManager) stop(ctx context.Context) {
-	folder := k.basePath()
 	k.c.Run(ctx, k.nodes, fmt.Sprintf("rm -f %s", k.serverJAASConfig()))
-	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent stop`)
+	k.c.Run(ctx, k.nodes, k.exec("confluent", "local services stop"))
 }
 
 func (k kafkaManager) chaosLoop(
