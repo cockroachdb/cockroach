@@ -69,6 +69,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
 			Columns:      p,
 			Deps:         b.viewDeps,
+			TypeDeps:     b.viewTypeDeps,
 		},
 	)
 	return outScope
