@@ -400,6 +400,43 @@ func BenchmarkSQL(b *testing.B) {
 	})
 }
 
+// BenchmarkSampling measures the overhead of sampled statements. It also
+// reports the memory utilization.
+func BenchmarkSampling(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	for _, dbFn := range []func(*testing.B, BenchmarkFn){
+		benchmarkCockroach,
+		benchmarkMultinodeCockroach,
+	} {
+		dbName := runtime.FuncForPC(reflect.ValueOf(dbFn).Pointer()).Name()
+		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/bench.benchmark")
+
+		b.Run(dbName, func(b *testing.B) {
+			dbFn(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+				for _, sampleRate := range []string{"1.0", "0.0"} {
+					db.Exec(b, fmt.Sprintf("SET CLUSTER SETTING sql.txn_stats.sample_rate = %s", sampleRate))
+					b.Run(fmt.Sprintf("sample_rate=%s", sampleRate), func(b *testing.B) {
+						for _, runFn := range []func(*testing.B, *sqlutils.SQLRunner, int){
+							runBenchmarkScan1,
+							runBenchmarkInsert,
+						} {
+							fnName := runtime.FuncForPC(reflect.ValueOf(runFn).Pointer()).Name()
+							fnName = strings.TrimPrefix(fnName, "github.com/cockroachdb/cockroach/pkg/bench.runBenchmark")
+							b.Run(fnName, func(b *testing.B) {
+								b.ReportAllocs()
+
+								runFn(b, db, 1 /* count */)
+							})
+						}
+					})
+				}
+			})
+		})
+	}
+}
+
 // BenchmarkTracing measures the overhead of always-on tracing. It also reports
 // the memory utilization.
 //
