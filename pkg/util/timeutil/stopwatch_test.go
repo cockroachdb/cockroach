@@ -8,20 +8,25 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package timeutil
+package timeutil_test
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 // TestStopWatchStart makes sure that consequent calls to Start do not reset
 // the internal startedAt time.
 func TestStopWatchStart(t *testing.T) {
-	timeSource := NewTestTimeSource()
-	w := newStopWatch(timeSource.Now)
+	timeSource := timeutil.NewTestTimeSource()
+	w := timeutil.NewTestStopWatch(timeSource.Now)
 
 	w.Start()
 	timeSource.Advance()
@@ -36,8 +41,8 @@ func TestStopWatchStart(t *testing.T) {
 // TestStopWatchStop makes sure that only the first call to Stop changes the
 // state of the stop watch.
 func TestStopWatchStop(t *testing.T) {
-	timeSource := NewTestTimeSource()
-	w := newStopWatch(timeSource.Now)
+	timeSource := timeutil.NewTestTimeSource()
+	w := timeutil.NewTestStopWatch(timeSource.Now)
 
 	w.Start()
 	timeSource.Advance()
@@ -54,8 +59,8 @@ func TestStopWatchStop(t *testing.T) {
 // TestStopWatchElapsed makes sure that the stop watch records the elapsed time
 // correctly.
 func TestStopWatchElapsed(t *testing.T) {
-	timeSource := NewTestTimeSource()
-	w := newStopWatch(timeSource.Now)
+	timeSource := timeutil.NewTestTimeSource()
+	w := timeutil.NewTestStopWatch(timeSource.Now)
 	expected := time.Duration(10)
 
 	w.Start()
@@ -65,4 +70,53 @@ func TestStopWatchElapsed(t *testing.T) {
 	w.Stop()
 
 	require.Equal(t, expected, w.Elapsed())
+}
+
+// TestStopWatchConcurrentUsage makes sure that the stop watch is safe for
+// concurrent usage.
+func TestStopWatchConcurrentUsage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const testDuration = time.Second
+	const maxSleepTime = testDuration / 100
+	const numGoroutines = 10
+
+	// All operations that we can do on the stop watch.
+	const (
+		start int = iota
+		stop
+		elapsed
+		numOperations
+	)
+
+	w := timeutil.NewStopWatch()
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		// Spin up multiple goroutines that will be using the stop watch
+		// concurrently.
+		go func() {
+			defer wg.Done()
+			rng, _ := randutil.NewPseudoRand()
+			var timeSpent time.Duration
+			for timeSpent < testDuration {
+				// Sleep some random time, up to maxSleepTime.
+				toSleep := time.Duration(float64(maxSleepTime) * rng.Float64())
+				time.Sleep(toSleep)
+				timeSpent += toSleep
+				// Pick the operation randomly.
+				switch operation := rng.Intn(numOperations); operation {
+				case start:
+					w.Start()
+				case stop:
+					w.Stop()
+				case elapsed:
+					_ = w.Elapsed()
+				default:
+					panic(fmt.Sprintf("unexpected operation %d", operation))
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
