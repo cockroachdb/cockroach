@@ -1986,7 +1986,6 @@ information about the resources on a node used by that table.
 | id | [int64](#cockroach.server.serverpb.StatementDiagnosticsResponse-int64) |  |  |
 | statement_fingerprint | [string](#cockroach.server.serverpb.StatementDiagnosticsResponse-string) |  |  |
 | collected_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDiagnosticsResponse-google.protobuf.Timestamp) |  |  |
-| trace | [string](#cockroach.server.serverpb.StatementDiagnosticsResponse-string) |  |  |
 
 
 

@@ -11,7 +11,6 @@
 import React from "react";
 import { connect } from "react-redux";
 import moment from "moment";
-import Long from "long";
 import emptyTracingBackground from "assets/statementsPage/emptyTracingBackground.svg";
 import classnames from "classnames/bind";
 
@@ -26,7 +25,6 @@ import {
   Link,
 } from "src/components";
 import { AdminUIState } from "src/redux/state";
-import { getStatementDiagnostics } from "src/util/api";
 import { SummaryCard } from "src/views/shared/components/summaryCard";
 import {
   selectDiagnosticsReportsByStatementFingerprint,
@@ -40,7 +38,6 @@ import DownloadIcon from "!!raw-loader!assets/download.svg";
 import styles from "./diagnosticsView.module.styl";
 import { cockroach } from "src/js/protos";
 import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
-import StatementDiagnosticsRequest = cockroach.server.serverpb.StatementDiagnosticsRequest;
 import { getDiagnosticsStatus, sortByCompletedField, sortByRequestedAtField } from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
@@ -122,13 +119,6 @@ export class DiagnosticsView extends React.Component<DiagnosticsViewProps, Diagn
   ];
 
   downloadRef = React.createRef<DownloadFileRef>();
-
-  getStatementDiagnostics = async (diagnosticsId: Long) => {
-    const request = new StatementDiagnosticsRequest({ statement_diagnostics_id: diagnosticsId });
-    const response = await getStatementDiagnostics(request);
-    const trace = response.diagnostics?.trace;
-    this.downloadRef.current?.download("statement-diagnostics.json", "application/json", trace);
-  }
 
   onActivateButtonClick = () => {
     const { activate, statementFingerprint } = this.props;

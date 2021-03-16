@@ -942,7 +942,7 @@ message StatementDiagnostics {
   string statement_fingerprint = 2;
   google.protobuf.Timestamp collected_at = 3
     [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
-  string trace = 4;
+  reserved 4;
 }
 
 message StatementDiagnosticsRequest {
