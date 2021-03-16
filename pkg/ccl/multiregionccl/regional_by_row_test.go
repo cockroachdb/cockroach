@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -561,9 +560,6 @@ COMMIT;`)
 func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// TODO(ajstorm): Enable once #61944 goes in.
-	skip.UnderRace(t, `This test is too heavyweight to be stressed under race`)
 
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer sqltestutils.SetTestJobsAdoptInterval()()
