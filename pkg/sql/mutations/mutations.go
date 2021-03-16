@@ -585,6 +585,11 @@ var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts
 						def.Unique.WithoutIndex = false
 						changed = true
 					}
+					if def.IsVirtual() {
+						def.Computed.Virtual = false
+						def.Computed.Computed = true
+						changed = true
+					}
 				case *tree.UniqueConstraintTableDef:
 					if def.Interleave != nil {
 						def.Interleave = nil
