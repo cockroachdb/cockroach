@@ -32,8 +32,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-const minNumRegionsForSurviveRegionGoal = 3
-
 // LiveClusterRegions is a set representing regions that are live in
 // a given cluster.
 type LiveClusterRegions map[descpb.RegionName]struct{}
