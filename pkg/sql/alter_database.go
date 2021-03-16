@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -348,6 +349,41 @@ func (p *planner) AlterDatabaseDropRegion(
 				return nil, errors.Wrapf(
 					err, "error removing primary region from database %s", dbDesc.Name)
 			}
+		}
+	}
+
+	if dbDesc.RegionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		typeID, err := dbDesc.MultiRegionEnumID()
+		if err != nil {
+			return nil, err
+		}
+		typeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+		if err != nil {
+			return nil, err
+		}
+		regionNames, err := typeDesc.RegionNames()
+		if err != nil {
+			return nil, err
+		}
+		if len(regionNames) < multiregion.MinNumRegionsForSurviveRegionGoal {
+			return nil, errors.AssertionFailedf(
+				"database %s has < %d regions left, but has SURVIVE REGION FAILURE",
+				dbDesc.Name,
+				multiregion.MinNumRegionsForSurviveRegionGoal,
+			)
+		}
+		if len(regionNames) == multiregion.MinNumRegionsForSurviveRegionGoal {
+			return nil, errors.WithHintf(
+				pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot DROP REGION on database %s as databases with SURVIVE REGION FAILURE must have at least %d regions",
+					dbDesc.Name,
+					multiregion.MinNumRegionsForSurviveRegionGoal,
+				),
+				"you must first add another region, or configure the database to SURVIVE ZONE FAILURE "+
+					"using ALTER DATABASE %s SURVIVE ZONE FAILURE",
+				dbDesc.Name,
+			)
 		}
 	}
 
@@ -820,11 +856,11 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if len(regions) < minNumRegionsForSurviveRegionGoal {
+		if len(regions) < multiregion.MinNumRegionsForSurviveRegionGoal {
 			return errors.WithHintf(
 				pgerror.Newf(pgcode.InvalidName,
 					"at least %d regions are required for surviving a region failure",
-					minNumRegionsForSurviveRegionGoal,
+					multiregion.MinNumRegionsForSurviveRegionGoal,
 				),
 				"you must add additional regions to the database using "+
 					"ALTER DATABASE %s ADD REGION <region_name>",
