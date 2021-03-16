@@ -150,6 +150,12 @@ SET escape_string_warning = 'off'
 statement ok
 SET datestyle = 'ISO'
 
+statement ok
+SET datestyle = 'ISO, MDY'
+
+statement ok
+SET datestyle = 'mdy, iso'
+
 statement error invalid value for parameter "DateStyle": "other"
 SET datestyle = 'other'
 
