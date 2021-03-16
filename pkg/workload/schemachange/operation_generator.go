@@ -56,9 +56,9 @@ type operationGenerator struct {
 	// are added to expectedCommitErrors.
 	candidateExpectedCommitErrors errorCodeSet
 
-	// opsInTxn is a list of previous ops in the current transaction implemented
-	// as a map for fast lookups.
-	opsInTxn map[opType]bool
+	// opsInTxn is a list of previous ops in the current transaction to check
+	// for DDLs after writes.
+	opsInTxn []opType
 }
 
 func makeOperationGenerator(params *operationGeneratorParams) *operationGenerator {
@@ -67,7 +67,6 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 		expectedExecErrors:            makeExpectedErrorSet(),
 		expectedCommitErrors:          makeExpectedErrorSet(),
 		candidateExpectedCommitErrors: makeExpectedErrorSet(),
-		opsInTxn:                      map[opType]bool{},
 	}
 }
 
@@ -80,14 +79,17 @@ func (og *operationGenerator) resetOpState() {
 // Reset internal state used per transaction
 func (og *operationGenerator) resetTxnState() {
 	og.expectedCommitErrors.reset()
-
-	for k := range og.opsInTxn {
-		delete(og.opsInTxn, k)
-	}
+	og.opsInTxn = nil
 }
 
 //go:generate stringer -type=opType
 type opType int
+
+// isDDL returns true if the operation mutates the system config span and thus
+// cannot follow a write elsewhere.
+func (ot opType) isDDL() bool {
+	return ot != insertRow && ot != validate
+}
 
 const (
 	addColumn               opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
@@ -175,8 +177,8 @@ func init() {
 var opWeights = []int{
 	addColumn:               1,
 	addConstraint:           0, // TODO(spaskob): unimplemented
-	addForeignKeyConstraint: 1,
-	addUniqueConstraint:     1,
+	addForeignKeyConstraint: 0,
+	addUniqueConstraint:     0,
 	createIndex:             1,
 	createSequence:          1,
 	createTable:             1,
@@ -184,7 +186,7 @@ var opWeights = []int{
 	createView:              1,
 	createEnum:              1,
 	createSchema:            1,
-	dropColumn:              1,
+	dropColumn:              0,
 	dropColumnDefault:       1,
 	dropColumnNotNull:       1,
 	dropColumnStored:        1,
@@ -202,7 +204,7 @@ var opWeights = []int{
 	setColumnDefault:        1,
 	setColumnNotNull:        1,
 	setColumnType:           1,
-	insertRow:               1,
+	insertRow:               0,
 	validate:                2, // validate twice more often
 }
 
@@ -211,52 +213,47 @@ var opWeights = []int{
 // change constructed. Constructing a random schema change may require a few
 // stochastic attempts and if verbosity is >= 2 the unsuccessful attempts are
 // recorded in `log` to help with debugging of the workload.
-func (og *operationGenerator) randOp(tx *pgx.Tx) (stmt string, noops []string, err error) {
-	savepointCount := 0
+func (og *operationGenerator) randOp(tx *pgx.Tx) (stmt string, err error) {
+
 	for {
 		op := opType(og.params.ops.Int())
 		og.resetOpState()
-
-		// Savepoints are used to prevent an infinite loop from occurring as a result of the transaction
-		// becoming aborted by an op function. If a transaction becomes aborted, no op function will be able
-		// to complete without error because all op functions rely on the passed transaction to introspect the database.
-		// With sufficient verbosity, any failed op functions will be logged as NOOPs below for debugging purposes.
-		//
-		// For example, functions such as getTableColumns() can abort the transaction if called with
-		// a non existing table. getTableColumns() is used by op functions such as createIndex().
-		// Op functions normally ensure that a table exists by checking system tables before passing the
-		// table to getTableColumns(). However, due to bugs such as #57494, system tables
-		// may be inaccurate and can cause getTableColumns() to be called with a non-existing table. This
-		// will result in an aborted transaction. Wrapping calls to op functions with savepoints will protect
-		// the transaction from being aborted by spurious errors such as in the above example.
-		savepointCount++
-		if _, err := tx.Exec(fmt.Sprintf(`SAVEPOINT s%d`, savepointCount)); err != nil {
-			return "", noops, err
-		}
-
-		stmt, err := opFuncs[op](og, tx)
-
-		if err == nil {
-			// Screen for schema change after write in the same transaction.
-			if op != insertRow && op != validate {
-				if _, previous := og.opsInTxn[insertRow]; previous {
-					og.expectedExecErrors.add(pgcode.FeatureNotSupported)
-				}
+		stmt, err = opFuncs[op](og, tx)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
 			}
 
-			// Add candidateExpectedCommitErrors to expectedCommitErrors
-			og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
-
-			og.opsInTxn[op] = true
-
-			return stmt, noops, err
+			return "", err
 		}
-		if _, err := tx.Exec(fmt.Sprintf(`ROLLBACK TO SAVEPOINT s%d`, savepointCount)); err != nil {
-			return "", noops, err
-		}
+		// Screen for schema change after write in the same transaction.
+		og.checkIfOpViolatesDDLAfterWrite(op)
 
-		noops = append(noops, fmt.Sprintf("NOOP: %s -> %v", op, err))
+		// Add candidateExpectedCommitErrors to expectedCommitErrors
+		og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
+		break
 	}
+
+	return stmt, err
+}
+
+func (og *operationGenerator) checkIfOpViolatesDDLAfterWrite(ot opType) {
+	if ot.isDDL() && og.haveInsertBeforeAnyDDLs() {
+		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
+	og.opsInTxn = append(og.opsInTxn, ot)
+}
+
+func (og *operationGenerator) haveInsertBeforeAnyDDLs() bool {
+	for _, ot := range og.opsInTxn {
+		if ot.isDDL() {
+			break
+		}
+		if ot == insertRow {
+			return true
+		}
+	}
+	return false
 }
 
 func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
@@ -299,15 +296,18 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tableHasRows, err := tableHasRows(tx, tableName)
-	if err != nil {
-		return "", err
+	var hasRows bool
+	if tableExists {
+		hasRows, err = tableHasRows(tx, tableName)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	codesWithConditions{
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
 		{code: pgcode.UndefinedObject, condition: !typeExists},
-		{code: pgcode.NotNullViolation, condition: tableHasRows && def.Nullable.Nullability == tree.NotNull},
+		{code: pgcode.NotNullViolation, condition: hasRows && def.Nullable.Nullability == tree.NotNull},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
@@ -501,7 +501,11 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 		def.Columns[i].Direction = tree.Direction(og.randIntn(1 + int(tree.Descending)))
 
 		if def.Inverted {
-			if !colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ) {
+			// We can have an inverted index on a set of columns if the last column
+			// is an inverted indexable type and the preceding columns are not.
+			invertedIndexableType := colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ)
+			if (invertedIndexableType && i < len(def.Columns)-1) ||
+				(!invertedIndexableType && i == len(def.Columns)-1) {
 				nonIndexableType = true
 			}
 		} else {
@@ -514,11 +518,22 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 	// If there are extra columns not used in the index, randomly use them
 	// as stored columns.
 	duplicateStore := false
+	virtualComputedStored := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
 		def.Storing = make(tree.NameList, og.randIntn(1+n))
 		for i := range def.Storing {
 			def.Storing[i] = tree.Name(columnNames[i].name)
+			// Virtual computed columns are not allowed to be indexed
+			if columnNames[i].generated && !virtualComputedStored {
+				isStored, err := columnIsStoredComputed(tx, tableName, columnNames[i].name)
+				if err != nil {
+					return "", err
+				}
+				if !isStored {
+					virtualComputedStored = true
+				}
+			}
 		}
 
 		// If the column is already used in the primary key, then attempting to store
@@ -552,8 +567,6 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 			{code: pgcode.DuplicateRelation, condition: indexExists},
 			// Inverted indexes do not support stored columns.
 			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Inverted},
-			// Inverted indexes do not support indexing more than one column.
-			{code: pgcode.InvalidSQLStatementName, condition: len(def.Columns) > 1 && def.Inverted},
 			// Inverted indexes cannot be unique.
 			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Inverted},
 			// If there is data in the table such that a unique index cannot be created,
@@ -563,6 +576,7 @@ func (og *operationGenerator) createIndex(tx *pgx.Tx) (string, error) {
 			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
 			{code: pgcode.DuplicateColumn, condition: duplicateStore},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
+			{code: pgcode.Uncategorized, condition: virtualComputedStored},
 		}.add(og.expectedExecErrors)
 	}
 
@@ -617,7 +631,9 @@ func (og *operationGenerator) createSequence(tx *pgx.Tx) (string, error) {
 					Name:          tree.SeqOptOwnedBy,
 					ColumnItemVal: &tree.ColumnItem{TableName: table.ToUnresolvedObjectName(), ColumnName: "IrrelevantColumnName"}},
 			)
-			og.expectedExecErrors.add(pgcode.UndefinedTable)
+			if !(sequenceExists && ifNotExists) { // IF NOT EXISTS prevents the error
+				og.expectedExecErrors.add(pgcode.UndefinedTable)
+			}
 		} else {
 			column, err := og.randColumn(tx, *table, og.pctExisting(true))
 			if err != nil {
@@ -974,8 +990,13 @@ func (og *operationGenerator) dropColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	columnIsInDroppingIndex, err := columnIsInDroppingIndex(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
 
 	codesWithConditions{
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey},
 		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn},
@@ -1070,13 +1091,13 @@ func (og *operationGenerator) dropColumnStored(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	columnIsComputed, err := columnIsComputed(tx, tableName, columnName)
+	columnIsStored, err := columnIsStoredComputed(tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
 
 	codesWithConditions{
-		{code: pgcode.InvalidColumnDefinition, condition: !columnIsComputed},
+		{code: pgcode.InvalidColumnDefinition, condition: !columnIsStored},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 	}.add(og.expectedExecErrors)
 
@@ -1122,6 +1143,14 @@ func (og *operationGenerator) dropConstraint(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 	if constraintIsUnique {
+		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
+
+	constraintBeingDropped, err := constraintInDroppingState(tx, tableName, constraintName)
+	if err != nil {
+		return "", err
+	}
+	if constraintBeingDropped {
 		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
@@ -1558,6 +1587,13 @@ func (og *operationGenerator) setColumnNotNull(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	constraintBeingAdded, err := columnNotNullConstraintInMutation(tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+	if constraintBeingAdded {
+		og.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+	}
 
 	if !columnExists {
 		og.expectedExecErrors.add(pgcode.UndefinedColumn)
@@ -1660,6 +1696,17 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting table columns for insert row")
 	}
+
+	// Filter out computed columns.
+	{
+		truncated := cols[:0]
+		for _, c := range cols {
+			if !c.generated {
+				truncated = append(truncated, c)
+			}
+		}
+		cols = truncated
+	}
 	colNames := []string{}
 	rows := [][]string{}
 	for _, col := range cols {
@@ -1689,6 +1736,11 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// TODO(ajwerner): Errors can occur if computed columns are referenced. It's
+	// hard to classify all the ways this can cause problems. One source of
+	// problems is that the expression may overflow the width of a computed column
+	// that has a smaller width than the inputs.
 
 	codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: uniqueConstraintViolation},
@@ -1740,21 +1792,25 @@ func (og *operationGenerator) validate(tx *pgx.Tx) (string, error) {
 }
 
 type column struct {
-	name     string
-	typ      *types.T
-	nullable bool
+	name      string
+	typ       *types.T
+	nullable  bool
+	generated bool
 }
 
 func (og *operationGenerator) getTableColumns(
 	tx *pgx.Tx, tableName string, shuffle bool,
 ) ([]column, error) {
 	q := fmt.Sprintf(`
-  SELECT column_name, data_type, is_nullable
-    FROM [SHOW COLUMNS FROM %s]
+SELECT column_name,
+       data_type,
+       is_nullable,
+       generation_expression != '' AS is_generated
+  FROM [SHOW COLUMNS FROM %s];
 `, tableName)
 	rows, err := tx.Query(q)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "getting table columns from %s", tableName)
 	}
 	defer rows.Close()
 	var typNames []string
@@ -1762,7 +1818,7 @@ func (og *operationGenerator) getTableColumns(
 	for rows.Next() {
 		var c column
 		var typName string
-		err := rows.Scan(&c.name, &typName, &c.nullable)
+		err := rows.Scan(&c.name, &typName, &c.nullable, &c.generated)
 		if err != nil {
 			return nil, err
 		}
@@ -1841,7 +1897,7 @@ ORDER BY random()
 	var col column
 	var typ string
 	if err := tx.QueryRow(q).Scan(&col.name, &typ, &col.nullable); err != nil {
-		return column{}, err
+		return column{}, errors.Wrapf(err, "randColumnWithMeta: %q", q)
 	}
 
 	var err error
@@ -2190,7 +2246,7 @@ func (og *operationGenerator) randView(
 		}
 
 		q := fmt.Sprintf(`
-		  SELECT schema_name, table_name
+		  SELECT table_name
 		    FROM [SHOW TABLES]
 		   WHERE table_name LIKE 'view%%'
 				 AND schema_name = '%s'
@@ -2344,9 +2400,14 @@ func (og *operationGenerator) dropSchema(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	crossReferences, err := schemaContainsTypesWithCrossSchemaReferences(tx, schemaName)
+	if err != nil {
+		return "", err
+	}
 	codesWithConditions{
 		{pgcode.UndefinedSchema, !schemaExists},
 		{pgcode.InvalidSchemaName, schemaName == tree.PublicSchema},
+		{pgcode.FeatureNotSupported, crossReferences},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`DROP SCHEMA "%s" CASCADE`, schemaName), nil
@@ -2386,7 +2447,7 @@ func (og *operationGenerator) newUniqueSeqNum() int64 {
 func (og *operationGenerator) typeFromTypeName(tx *pgx.Tx, typeName string) (*types.T, error) {
 	stmt, err := parser.ParseOne(fmt.Sprintf("SELECT 'placeholder'::%s", typeName))
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "typeFromTypeName: %s", typeName)
 	}
 	typ, err := tree.ResolveType(
 		context.Background(),
@@ -2394,7 +2455,7 @@ func (og *operationGenerator) typeFromTypeName(tx *pgx.Tx, typeName string) (*ty
 		&txTypeResolver{tx: tx},
 	)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "ResolveType: %v", typeName)
 	}
 	return typ, nil
 }
