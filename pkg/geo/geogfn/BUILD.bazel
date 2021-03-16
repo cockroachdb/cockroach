@@ -47,8 +47,8 @@ go_test(
         "topology_operations_test.go",
         "unary_operators_test.go",
     ],
+    data = ["@cockroach//c-deps:libgeos"],
     embed = [":geogfn"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geoprojbase",

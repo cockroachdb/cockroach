@@ -57,6 +57,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/geo/geos",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/build/bazel",
         "//pkg/docs",
         "//pkg/geo/geopb",
         "@com_github_cockroachdb_errors//:errors",
@@ -67,8 +68,8 @@ go_test(
     name = "geos_test",
     size = "small",
     srcs = ["geos_test.go"],
+    data = ["@cockroach//c-deps:libgeos"],
     embed = [":geos"],
-    tags = ["broken_in_bazel"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
