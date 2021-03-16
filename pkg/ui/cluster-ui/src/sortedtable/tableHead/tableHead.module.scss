@@ -1,38 +1,38 @@
 @import '../../core/index.module.scss';
 @import '../table.module.scss';
 
+@mixin table-header-text {
+  @include text--heading-6;
+  color: $colors--neutral-6;
+  font-weight: 600;
+  font-family: $font-family--semi-bold;
+  letter-spacing: 1.5px;
+}
+
 .head-wrapper {
   @include table-base;
 
-  .__cell--header {
+  .cell-header {
     border-right: 1px solid $colors--neutral-2;
     width: 250px;
   }
   &__row--header {
     border-bottom: 1px solid $colors--neutral-3;
-    height: 48px;
+    height: $line-height--large;
+    padding: $spacing-medium-small;
+    background-color: $colors--neutral-1;
     // Display the sort direction arrow in header cells.
     .sorted__cell {
-      padding: 12.55px 10px 11.55px;
+      padding: $spacing-base $spacing-base $spacing-base $spacing-small;
       position: relative;
-      font-family: $font-family--semi-bold;
-      font-size: $font-size--medium;
-      line-height: $line-height--medium;
-      letter-spacing: 0.1px;
-      color: $colors--neutral-7;
-      text-transform: capitalize;
+      @include table-header-text;
       cursor: pointer;
       .inner-content-wrapper {
         display: flex;
         justify-content: space-between;
         align-items: center;
         > span {
-          font-family: $font-family--semi-bold;
-          font-size: $font-size--medium;
-          line-height: $line-height--medium;
-          letter-spacing: 0.1px;
-          color: $colors--neutral-7;
-          text-transform: capitalize;
+          @include table-header-text;
         }
         .sortable__actions {
           position: relative;

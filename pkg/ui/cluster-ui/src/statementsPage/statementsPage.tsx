@@ -281,7 +281,10 @@ export class StatementsPage extends React.Component<
                 defaultChecked={this.state.fullScan}
                 onChange={this.fullScanChange}
               />
-              <label htmlFor="full-table-scan-toggle">
+              <label
+                htmlFor="full-table-scan-toggle"
+                className={cx("full-table-scan-label")}
+              >
                 {"  "} Only show statements that contain queries with full table
                 scans
               </label>

@@ -1,9 +1,9 @@
 @import "src/core/index.module";
 
-$max-window-width: 1350px;
-
 .app-name {
   white-space: nowrap;
+  line-height: $line-height--medium;
+  font-weight: $font-weight--bold;
 
   &__unset {
     color: $tooltip-color;
@@ -14,7 +14,6 @@ $max-window-width: 1350px;
 .section {
   flex: 0 0 auto;
   padding: 12px 24px;
-  max-width: $max-window-width;
 
   &--heading {
     padding-top: 0;
@@ -106,13 +105,12 @@ h2.base-heading {
     width: 36px;
     height: 16px;
     display: inline-block;
-
-
     text-transform: none;
     font-weight: normal;
     white-space: normal;
     letter-spacing: normal;
     font-size: 14px;
+    vertical-align: middle;
   }
 
   &__tooltip-hover-area {
@@ -149,4 +147,9 @@ h2.base-heading {
   h5 {
     color: $colors--neutral-7;
   }
+}
+
+.root {
+  flex-grow: 0;
+  width: 100%;
 }

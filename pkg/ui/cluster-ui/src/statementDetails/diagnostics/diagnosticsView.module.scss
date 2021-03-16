@@ -58,6 +58,10 @@
   }
 }
 
+.anchor {
+  @include text--body;
+}
+
 .summary--card__empty-state {
   background-color: $colors--white;
   background-image: url("./emptyTracingBackground.svg");
