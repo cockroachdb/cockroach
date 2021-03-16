@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -40,6 +41,8 @@ type RoundTripBenchTestCase struct {
 // RunRoundTripBenchmark sets up a db run the RoundTripBenchTestCase test cases
 // and counts how many round trips the stmt specified by the test case performs.
 func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
+	skip.UnderMetamorphic(b, "changes the RTTs")
+
 	expData := readExpectationsFile(b)
 	for _, tc := range tests {
 		b.Run(tc.name, func(b *testing.B) {
