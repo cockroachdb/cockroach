@@ -1104,3 +1104,158 @@ SELECT words FROM cb@w WHERE words <@ ARRAY[NULL, 'rat']
 ----
 {}
 {rat}
+
+subtest contained_by_json
+
+statement ok
+CREATE TABLE cb2 (
+  k INT PRIMARY KEY,
+  j JSON,
+  INVERTED INDEX i (j)
+)
+
+statement ok
+INSERT INTO cb2 VALUES
+  (0, '{}'),
+  (1, '[]'),
+  (2, '1'),
+  (3, '"a"'),
+  (4, 'true'),
+  (5, 'null'),
+  (6, '{"a": "b"}'),
+  (7, '{"a": {"b": "c", "d": "e"}}'),
+  (8, '{"a": {"b": "c"}, "d": "e"}'),
+  (9, '{"a": {"b": [1, 2]}}'),
+  (10, '{"a": {"b": {"c": [1, 2, 3]}}}'),
+  (11, '{"a": {"b": {"c": {"d": "e"}}}}'),
+  (12, '{"a": {"b": {"d": 2}}}}'),
+  (13, '{"a": [{"b": {"c": [1, 2]}}]}'),
+  (14, '{"b": {"c": [1, 2]}}'),
+  (15, '{"a": []}'),
+  (16, '{"a": {}}}'),
+  (17, '{"a": [[2]]}'),
+  (18, '[[2]]'),
+  (19, '[1, 2]'),
+  (20, '[1, 2, 3]'),
+  (21, '[{}]'),
+  (22, '[{"a": "b"}]'),
+  (23, '[{"a": "b", "c": ["d", "e"]}]'),
+  (24, '[[1], [2]]'),
+  (25, '[[1, 2]]'),
+  (26, '["a", "b", "b"]'),
+  (27, '[1, 2, {"b": "c"}]'),
+  (28, '[{"a": {"b": "c"}}, "d", "e"]'),
+  (29, '{"a": {"d": null}}'),
+  (30, '{"d": null}'),
+  (31, '[null]'),
+  (32, '[[], null]'),
+  (33, '[null, []]'),
+  (34, '[null, {}]'),
+  (35, '[[null]]'),
+  (36, '[1, 2, null]')
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '{}' ORDER BY k
+----
+{}
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[]' ORDER BY k
+----
+[]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '1' ORDER BY k
+----
+1
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '"a"' ORDER BY k
+----
+"a"
+
+query T
+SELECT j FROM cb2@i WHERE j <@ 'null' ORDER BY k
+----
+null
+
+query T
+SELECT j FROM cb2@i WHERE j <@ 'true' ORDER BY k
+----
+true
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '{"a": "b"}' ORDER BY k
+----
+{}
+{"a": "b"}
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '{"a": [1]}' ORDER BY k
+----
+{}
+{"a": []}
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[null, 1, 2, 3, "d"]' ORDER BY k
+----
+[]
+1
+null
+[1, 2]
+[1, 2, 3]
+[null]
+[1, 2, null]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[[1, 2], null]' ORDER BY k
+----
+[]
+null
+[[2]]
+[[1], [2]]
+[[1, 2]]
+[null]
+[[], null]
+[null, []]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '{"a": {"b": [1, 2], "d": null}}' ORDER BY k
+----
+{}
+{"a": {"b": [1, 2]}}
+{"a": {}}
+{"a": {"d": null}}
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[[1, 2, {"hello": 3}], {"a": "b"}]' ORDER BY k
+----
+[]
+[[2]]
+[{}]
+[{"a": "b"}]
+[[1], [2]]
+[[1, 2]]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[{}, []]' ORDER BY k
+----
+[]
+[{}]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[{"a": "b"}, [1, 2]]' ORDER BY k
+----
+[]
+[[2]]
+[{}]
+[{"a": "b"}]
+[[1], [2]]
+[[1, 2]]
+
+query T
+SELECT j FROM cb2@i WHERE j <@ '[[1], [2]]' ORDER BY k
+----
+[]
+[[2]]
+[[1], [2]]

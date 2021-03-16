@@ -864,11 +864,11 @@ func EncodeContainingInvertedIndexSpans(
 
 // EncodeContainedInvertedIndexSpans returns the spans that must be scanned in
 // the inverted index to evaluate a contained by (<@) predicate with the given
-// datum, which should be a container (currently only Arrays, not JSON). These
-// spans should be used to find the objects in the index that could be
-// contained by the given json or array. In other words, if we have a predicate
-// x <@ y, this function should use the value of y to find the spans to scan in
-// an inverted index on x.
+// datum, which should be a container (either an Array or JSON). These spans
+// should be used to find the objects in the index that could be contained by
+// the given json or array. In other words, if we have a predicate x <@ y, this
+// function should use the value of y to find the spans to scan in an inverted
+// index on x.
 //
 // The spans are returned in an inverted.SpanExpression, which represents the
 // set operations that must be applied on the spans read during execution. The
@@ -885,7 +885,7 @@ func EncodeContainedInvertedIndexSpans(
 	case types.ArrayFamily:
 		return encodeContainedArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
 	case types.JsonFamily:
-		return inverted.NonInvertedColExpression{}, nil
+		return json.EncodeContainedInvertedIndexSpans(nil /* inKey */, val.(*tree.DJSON).JSON)
 	default:
 		return nil, errors.AssertionFailedf(
 			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
