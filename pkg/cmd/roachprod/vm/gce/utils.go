@@ -117,6 +117,13 @@ echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
 
 sysctl --system  # reload sysctl settings
 
+sudo apt-get update -q
+sudo apt-get install -qy chrony
+echo -e "\nserver metadata.google.internal prefer iburst" | sudo tee -a /etc/chrony/chrony.conf
+echo -e "\nmakestep 0.1 3" | sudo tee -a /etc/chrony/chrony.conf
+sudo /etc/init.d/chrony restart
+sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
+
 sudo touch /mnt/data1/.roachprod-initialized
 `
 
