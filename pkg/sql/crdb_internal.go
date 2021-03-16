@@ -132,7 +132,8 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalZonesTableID:                     crdbInternalZonesTable,
 		catconstants.CrdbInternalInvalidDescriptorsTableID:        crdbInternalInvalidDescriptorsTable,
 		catconstants.CrdbInternalClusterDatabasePrivilegesTableID: crdbInternalClusterDatabasePrivilegesTable,
-		catconstants.CrdbInternalInterleaved:                      crdbInternalInterleaved,
+		catconstants.CrdbInternalInterleavedIndexes:               crdbInternalInterleavedIndexes,
+		catconstants.CrdbInternalInterleavedTables:                crdbInternalInterleavedTables,
 		catconstants.CrdbInternalCrossDbRefrences:                 crdbInternalCrossDbReferences,
 	},
 	validWithNoDatabaseContext: true,
@@ -4132,10 +4133,10 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 	},
 }
 
-var crdbInternalInterleaved = virtualSchemaTable{
-	comment: `virtual table with interleaved table information`,
+var crdbInternalInterleavedIndexes = virtualSchemaTable{
+	comment: `virtual table with interleaved index information`,
 	schema: `
-CREATE TABLE crdb_internal.interleaved (
+CREATE TABLE crdb_internal.interleaved_indexes (
 	database_name
 		STRING NOT NULL,
 	schema_name
@@ -4155,7 +4156,8 @@ CREATE TABLE crdb_internal.interleaved (
 				}
 				indexes := table.NonDropIndexes()
 				for _, index := range indexes {
-					if index.NumInterleaveAncestors() == 0 {
+					if index.NumInterleaveAncestors() == 0 ||
+						table.GetPrimaryIndexID() == index.GetID() {
 						continue
 					}
 
@@ -4184,6 +4186,54 @@ CREATE TABLE crdb_internal.interleaved (
 						tree.NewDString(parentIndex.GetName())); err != nil {
 						return err
 					}
+				}
+				return nil
+			})
+	},
+}
+
+var crdbInternalInterleavedTables = virtualSchemaTable{
+	comment: `virtual table with interleaved table information`,
+	schema: `
+CREATE TABLE crdb_internal.interleaved_tables (
+	database_name
+		STRING NOT NULL,
+	schema_name
+		STRING NOT NULL,
+	table_name
+		STRING NOT NULL,
+	parent_table_name
+		STRING NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		return forEachTableDescAllWithTableLookup(ctx, p, dbContext, hideVirtual,
+			func(db *dbdesc.Immutable, schemaName string, table catalog.TableDescriptor, lookupFn tableLookupFn) error {
+				if !table.IsInterleaved() {
+					return nil
+				}
+				primaryIndex := table.GetPrimaryIndex()
+				if primaryIndex.NumInterleaveAncestors() == 0 {
+					return nil
+				}
+				ancestor := primaryIndex.GetInterleaveAncestor(primaryIndex.NumInterleaveAncestors() - 1)
+				parentTable, err := lookupFn.getTableByID(ancestor.TableID)
+				if err != nil {
+					return err
+				}
+				parentSchemaName, err := lookupFn.getSchemaNameByID(parentTable.GetParentSchemaID())
+				if err != nil {
+					return err
+				}
+				database, err := lookupFn.getDatabaseByID(parentTable.GetParentID())
+				if err != nil {
+					return err
+				}
+
+				if err := addRow(tree.NewDString(database.GetName()),
+					tree.NewDString(parentSchemaName),
+					tree.NewDString(table.GetName()),
+					tree.NewDString(parentTable.GetName())); err != nil {
+					return err
 				}
 				return nil
 			})
