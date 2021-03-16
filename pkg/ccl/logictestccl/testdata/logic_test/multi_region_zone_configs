@@ -138,6 +138,9 @@ ALTER DATABASE "mr-zone-configs" SURVIVE REGION FAILURE
 statement ok
 ALTER DATABASE "mr-zone-configs" SURVIVE REGION FAILURE FORCE
 
+statement ok
+ALTER DATABASE "mr-zone-configs" SURVIVE ZONE FAILURE FORCE
+
 statement error attempting to modify protected field "constraints" of a multi-region database zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING constraints = '{+region=us-east-1: 3}'
 
@@ -163,8 +166,8 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             range_min_bytes = 134217728,
                             range_max_bytes = 536870912,
                             gc.ttlseconds = 90000,
-                            num_replicas = 5,
-                            num_voters = 5,
+                            num_replicas = 4,
+                            num_voters = 3,
                             constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1}',
                             voter_constraints = '[+region=ap-southeast-2]',
                             lease_preferences = '[[+region=us-east-1]]'
@@ -182,10 +185,10 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             range_min_bytes = 134217728,
                             range_max_bytes = 536870912,
                             gc.ttlseconds = 90000,
-                            num_replicas = 5,
-                            num_voters = 5,
+                            num_replicas = 3,
+                            num_voters = 3,
                             constraints = '{+region=us-east-1: 1}',
-                            voter_constraints = '{+region=us-east-1: 2}',
+                            voter_constraints = '[+region=us-east-1]',
                             lease_preferences = '[[+region=us-east-1]]'
 
 statement error attempting to modify protected field "lease_preferences" of a multi-region database zone configuration
@@ -201,10 +204,10 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             range_min_bytes = 134217728,
                             range_max_bytes = 536870912,
                             gc.ttlseconds = 90000,
-                            num_replicas = 5,
-                            num_voters = 5,
+                            num_replicas = 3,
+                            num_voters = 3,
                             constraints = '{+region=us-east-1: 1}',
-                            voter_constraints = '{+region=us-east-1: 2}',
+                            voter_constraints = '[+region=us-east-1]',
                             lease_preferences = '[[+region=ap-southeast-2]]'
 
 statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "lease_preferences"
@@ -220,10 +223,10 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             range_min_bytes = 134217728,
                             range_max_bytes = 536870912,
                             gc.ttlseconds = 90000,
-                            num_replicas = 5,
-                            num_voters = 5,
+                            num_replicas = 3,
+                            num_voters = 3,
                             constraints = '{+region=us-east-1: 1}',
-                            voter_constraints = '{+region=us-east-1: 2}',
+                            voter_constraints = '[+region=us-east-1]',
                             lease_preferences = '[[+region=ap-southeast-2]]'
 
 query TTTTT colnames

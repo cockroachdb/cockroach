@@ -351,6 +351,33 @@ func (p *planner) AlterDatabaseDropRegion(
 		}
 	}
 
+	if dbDesc.RegionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		typeID, err := dbDesc.MultiRegionEnumID()
+		if err != nil {
+			return nil, err
+		}
+		typeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+		if err != nil {
+			return nil, err
+		}
+		regionNames, err := typeDesc.RegionNames()
+		if err != nil {
+			return nil, err
+		}
+		if len(regionNames) <= 3 {
+			return nil, errors.WithHintf(
+				pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot DROP REGION on database %s as databases with SURVIVE REGION FAILURE must have at least 3 regions",
+					dbDesc.Name,
+				),
+				"you must first add another region, or configure the database to SURVIVE ZONE FAILURE "+
+					"using ALTER DATABASE %s SURVIVE ZONE FAILURE",
+				dbDesc.Name,
+			)
+		}
+	}
+
 	return &alterDatabaseDropRegionNode{
 		n,
 		dbDesc,
