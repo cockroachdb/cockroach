@@ -106,6 +106,10 @@ type txnState struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
+
+	// testingForceRealTracingSpans is a test-only knob that forces the use of
+	// real (i.e. not no-op) tracing spans for every statement.
+	testingForceRealTracingSpans bool
 }
 
 // txnType represents the type of a SQL transaction.
@@ -160,7 +164,7 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	var txnCtx context.Context
 	var sp *tracing.Span
-	if alreadyRecording {
+	if alreadyRecording || ts.testingForceRealTracingSpans {
 		// WithForceRealSpan is used to support the use of session tracing,
 		// which will start recording on this span.
 		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer, tracing.WithForceRealSpan())

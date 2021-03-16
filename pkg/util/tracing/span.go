@@ -255,8 +255,7 @@ func (sm *SpanMeta) String() string {
 }
 
 // Structured is an opaque protobuf that can be attached to a trace via
-// `Span.RecordStructured`. This is the only kind of data a Span carries when
-// `trace.mode = background`.
+// `Span.RecordStructured`.
 type Structured interface {
 	protoutil.Message
 }
