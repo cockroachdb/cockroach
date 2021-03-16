@@ -55,9 +55,51 @@ cmake_external(
     visibility = ["//visibility:public"],
 )
 
-# TODO(irfansharif): libgeos has not been worked out yet. We'll need to
-# similarly ensure the lib/libgeos.so and lib/libegeos_c.so are in the right
-# place.
+# Define the targets for libgeos.
+cmake_external(
+    name = "libgeos",
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "-fPIC",
+        "CMAKE_CXX_FLAGS": "-fPIC",
+    },
+    lib_source = "@geos//:all",
+    make_commands = [
+        "mkdir -p libgeos/lib",
+        "make --no-print-directory geos_c",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "cp -L $BUILD_TMPDIR/lib/libgeos.dylib libgeos/lib",
+            "cp -L $BUILD_TMPDIR/lib/libgeos_c.dylib libgeos/lib",
+            # TODO(#bazel): install_name_tool is also required here for release.
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            # NOTE: Windows ends up in bin/ on the BUILD_TMPDIR.
+            "cp -L $BUILD_TMPDIR/bin/libgeos.dll libgeos/lib",
+            "cp -L $BUILD_TMPDIR/bin/libgeos_c.dll libgeos/lib",
+        ],
+        "//conditions:default": [
+            "cp -L $BUILD_TMPDIR/lib/libgeos.so libgeos/lib",
+            "cp -L $BUILD_TMPDIR/lib/libgeos_c.so libgeos/lib",
+            # TODO(#bazel): patchelf is also required here for release.
+        ],
+    }),
+    shared_libraries = select({
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "libgeos_c.dylib",
+            "libgeos.dylib",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "libgeos_c.dll",
+            "libgeos.dll",
+        ],
+        "//conditions:default": [
+            "libgeos_c.so",
+            "libgeos.so",
+        ],
+    }),
+    visibility = ["//visibility:public"],
+)
 
 # Define the build target for libroach.
 #
