@@ -1339,8 +1339,13 @@ This can be used to check schema and data correctness without running the entire
 	}
 
 	Log = FlagInfo{
-		Name:        "log",
-		Description: `Logging configuration. See the documentation for details.`,
+		Name: "log",
+		Description: `Logging configuration, expressed using YAML syntax.
+See the documentation for details.
+
+To preview how the log configuration is applied, you can use the
+'cockroach debug check-log-config' sub-command.
+`,
 	}
 
 	DeprecatedStderrThreshold = FlagInfo{
