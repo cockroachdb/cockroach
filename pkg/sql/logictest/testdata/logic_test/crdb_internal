@@ -63,7 +63,7 @@ CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
 query TIT
 SELECT t.name, t.version, t.state FROM crdb_internal.tables AS t JOIN system.namespace AS n ON (n.id = t.parent_id and n.name = 'testdb');
 ----
-foo 1 PUBLIC
+foo  1  PUBLIC
 
 # Ensure there is a lease taken on foo.
 query I
@@ -112,7 +112,7 @@ query T
 SELECT NAME from crdb_internal.tables WHERE DATABASE_NAME = 'testdb'
 ----
 foo
-"\'
+ "\'
 
 query TT colnames
 SELECT field, value FROM crdb_internal.node_build_info WHERE field ILIKE 'name'
@@ -259,10 +259,14 @@ SELECT * FROM crdb_internal.ranges_no_leases WHERE range_id < 0
 range_id  start_key  start_pretty  end_key  end_pretty  database_name  table_name  index_name  replicas  replica_localities learner_replicas  split_enforced_until
 
 statement ok
+CREATE SCHEMA schema; CREATE TABLE schema.bar (y INT PRIMARY KEY)
+
+statement ok
 INSERT INTO system.zones (id, config) VALUES
   (18, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
   (53, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
-  (54, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
+  (54, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (57, (SELECT raw_config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
@@ -277,6 +281,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 27  TABLE system.public.replication_stats
 53  DATABASE testdb
 54  TABLE testdb.public.foo
+57  TABLE test.schema.bar
 
 query T
 SELECT quote_literal(raw_config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
@@ -376,13 +381,13 @@ query TTT colnames
 SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty   end_pretty  split_enforced_until
-/Table/56/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/58/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
 
 query TTT colnames
 SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
 ----
 start_pretty   end_pretty  split_enforced_until
-/Table/56/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
+/Table/58/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
 
 statement ok
 ALTER TABLE foo UNSPLIT AT VALUES(2)
@@ -404,13 +409,13 @@ query TTT colnames
 SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
 ----
 start_pretty   end_pretty  split_enforced_until
-/Table/56/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
+/Table/58/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
 
 query TTT colnames
 SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
 ----
 start_pretty   end_pretty  split_enforced_until
-/Table/56/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
+/Table/58/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
 
 statement ok
 ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
@@ -536,12 +541,12 @@ query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty   end_pretty
-/Table/56/1/1  /Table/56/1/2
-/Table/56/1/2  /Table/56/1/3
-/Table/56/1/3  /Table/56/2/1
-/Table/56/2/1  /Table/56/2/2
-/Table/56/2/2  /Table/56/2/3
-/Table/56/2/3  /Max
+/Table/58/1/1  /Table/58/1/2
+/Table/58/1/2  /Table/58/1/3
+/Table/58/1/3  /Table/58/2/1
+/Table/58/2/1  /Table/58/2/2
+/Table/58/2/2  /Table/58/2/3
+/Table/58/2/3  /Max
 
 statement ok
 TRUNCATE TABLE foo
@@ -561,12 +566,12 @@ query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty   end_pretty
-/Table/56/3/1  /Table/56/3/2
-/Table/56/3/2  /Table/56/3/3
-/Table/56/3/3  /Table/56/4/1
-/Table/56/4/1  /Table/56/4/2
-/Table/56/4/2  /Table/56/4/3
-/Table/56/4/3  /Max
+/Table/58/3/1  /Table/58/3/2
+/Table/58/3/2  /Table/58/3/3
+/Table/58/3/3  /Table/58/4/1
+/Table/58/4/1  /Table/58/4/2
+/Table/58/4/2  /Table/58/4/3
+/Table/58/4/3  /Max
 
 statement ok
 DROP TABLE foo
@@ -589,12 +594,12 @@ query TT colnames
 SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty   end_pretty
-/Table/58/1/1  /Table/58/1/2
-/Table/58/1/2  /Table/58/1/3
-/Table/58/1/3  /Table/58/2/1
-/Table/58/2/1  /Table/58/2/2
-/Table/58/2/2  /Table/58/2/3
-/Table/58/2/3  /Max
+/Table/60/1/1  /Table/60/1/2
+/Table/60/1/2  /Table/60/1/3
+/Table/60/1/3  /Table/60/2/1
+/Table/60/2/1  /Table/60/2/2
+/Table/60/2/2  /Table/60/2/3
+/Table/60/2/3  /Max
 
 statement ok
 DROP INDEX foo@idx
@@ -605,9 +610,9 @@ query T colnames
 SELECT start_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
 start_pretty
-/Table/58/1/1
-/Table/58/1/2
-/Table/58/1/3
+/Table/60/1/1
+/Table/60/1/2
+/Table/60/1/3
 
 query T
 SELECT crdb_internal.cluster_name()
@@ -656,8 +661,8 @@ CREATE TYPE enum2 AS ENUM ()
 query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements
 ----
-52  test  public  60  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi') {hello,hi}
-52  test  public  62  enum2  CREATE TYPE public.enum2 AS ENUM ()              {}
+52  test  public  62  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
+52  test  public  64  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
 
 # Test the virtual index as well.
 

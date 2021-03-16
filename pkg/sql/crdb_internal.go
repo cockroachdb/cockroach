@@ -2681,11 +2681,14 @@ CREATE TABLE crdb_internal.zones (
 		if err != nil {
 			return err
 		}
-		resolveID := func(id uint32) (parentID uint32, name string, err error) {
-			if entry, ok := namespace[descpb.ID(id)]; ok {
-				return uint32(entry.ParentID), entry.Name, nil
+		resolveID := func(id uint32) (parentID, parentSchemaID uint32, name string, err error) {
+			if id == keys.PublicSchemaID {
+				return 0, 0, string(tree.PublicSchemaName), nil
 			}
-			return 0, "", errors.AssertionFailedf(
+			if entry, ok := namespace[descpb.ID(id)]; ok {
+				return uint32(entry.ParentID), uint32(entry.ParentSchemaID), entry.Name, nil
+			}
+			return 0, 0, "", errors.AssertionFailedf(
 				"object with ID %d does not exist", errors.Safe(id))
 		}
 
