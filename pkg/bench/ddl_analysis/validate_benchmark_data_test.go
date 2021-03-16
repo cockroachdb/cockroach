@@ -84,8 +84,9 @@ func TestBenchmarkExpectation(t *testing.T) {
 
 	expecations := readExpectationsFile(t)
 
+	benchmarks := getBenchmarks(t)
 	if *rewriteFlag != "" {
-		rewriteBenchmarkExpecations(t)
+		rewriteBenchmarkExpecations(t, benchmarks)
 		return
 	}
 
@@ -129,7 +130,6 @@ func TestBenchmarkExpectation(t *testing.T) {
 			t.Run(b, tf)
 		}()
 	}
-	benchmarks := getBenchmarks(t)
 	for _, b := range benchmarks {
 		run(b)
 	}
@@ -188,23 +188,55 @@ func readBenchmarkResults(t *testing.T, benchmarkOutput io.Reader) []benchmarkRe
 
 // rewriteBenchmarkExpectations re-runs the specified benchmarks and throws out
 // the existing values in the results file. All other values are preserved.
-func rewriteBenchmarkExpecations(t *testing.T) {
+func rewriteBenchmarkExpecations(t *testing.T, benchmarks []string) {
+
+	// Split off the filter so as to avoid spinning off unnecessary subprocesses.
+	slashIdx := strings.Index(*rewriteFlag, "/")
+	var afterSlash string
+	if slashIdx == -1 {
+		slashIdx = len(*rewriteFlag)
+	} else {
+		afterSlash = (*rewriteFlag)[slashIdx+1:]
+	}
+	benchmarkFilter, err := regexp.Compile((*rewriteFlag)[:slashIdx])
+	require.NoError(t, err)
+
+	var g errgroup.Group
+	resChan := make(chan []benchmarkResult)
+	run := func(b string) {
+		if !benchmarkFilter.MatchString(b) {
+			return
+		}
+		g.Go(func() error {
+			t.Run(b, func(t *testing.T) {
+				flags := []string{
+					"--test.run", "^$",
+					"--test.benchtime", "1x",
+					"--test.bench", b + "/" + afterSlash,
+					"--rewrite", *rewriteFlag,
+					"--test.count", strconv.Itoa(*rewriteIterations),
+				}
+				if testing.Verbose() {
+					flags = append(flags, "--test.v")
+				}
+				resChan <- runBenchmarks(t, flags...)
+			})
+			return nil
+		})
+	}
+	for _, b := range benchmarks {
+		run(b)
+	}
+	go func() { _ = g.Wait(); close(resChan) }()
+	var results []benchmarkResult
+	for res := range resChan {
+		results = append(results, res...)
+	}
+
 	rewritePattern, err := regexp.Compile(*rewriteFlag)
 	require.NoError(t, err)
 	expectations := readExpectationsFile(t)
-
 	expectations = removeMatching(expectations, rewritePattern)
-	flags := []string{
-		"--test.run", "^$",
-		"--test.benchtime", "1x",
-		"--test.bench", *rewriteFlag,
-		"--rewrite", *rewriteFlag,
-		"--test.count", strconv.Itoa(*rewriteIterations),
-	}
-	if testing.Verbose() {
-		flags = append(flags, "--test.v")
-	}
-	results := runBenchmarks(t, flags...)
 	expectations = append(removeMatching(expectations, rewritePattern),
 		resultsToExpectations(results)...)
 	sort.Sort(expectations)
