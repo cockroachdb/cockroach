@@ -94,7 +94,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster, buildVersion ve
 		// The version to create/update the fixture for. Must be released (i.e.
 		// can download it from the homepage); if that is not the case use the
 		// empty string which uses the local cockroach binary.
-		newV := "20.2.5"
+		newV := "20.2.6"
 		predV, err := PredecessorVersion(*version.MustParse("v" + newV))
 		if err != nil {
 			t.Fatal(err)
