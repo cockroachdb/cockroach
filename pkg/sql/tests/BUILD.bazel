@@ -28,6 +28,7 @@ go_test(
     size = "medium",
     srcs = [
         "bank_test.go",
+        "enum_test.go",
         "hash_sharded_test.go",
         "impure_builtin_test.go",
         "inverted_index_test.go",
@@ -95,6 +96,7 @@ go_test(
         "@com_github_cockroachdb_cockroach_go//crdb",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_google_btree//:btree",
         "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
