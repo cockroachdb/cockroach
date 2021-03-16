@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -600,8 +599,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
 		customRestoreSystemTables := make([]string, 0)
-		for table, config := range backupbase.SystemTableBackupConfiguration {
-			if config.CustomRestoreFunc != nil {
+		for table, config := range systemTableBackupConfiguration {
+			if config.customRestoreFunc != nil {
 				customRestoreSystemTables = append(customRestoreSystemTables, table)
 			}
 		}
