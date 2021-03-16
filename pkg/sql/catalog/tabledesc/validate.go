@@ -95,6 +95,9 @@ func (desc *wrapper) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	for _, id := range desc.GetDependsOn() {
 		ids.Add(id)
 	}
+	for _, id := range desc.GetDependsOnTypes() {
+		ids.Add(id)
+	}
 	for _, ref := range desc.GetDependedOnBy() {
 		ids.Add(ref.ID)
 	}

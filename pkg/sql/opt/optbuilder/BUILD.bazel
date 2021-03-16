@@ -50,6 +50,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/schemaexpr",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/delegate",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
