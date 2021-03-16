@@ -35,6 +35,7 @@ var showZoneConfigColumns = colinfo.ResultColumns{
 	{Name: "target", Typ: types.String},
 	{Name: "range_name", Typ: types.String, Hidden: true},
 	{Name: "database_name", Typ: types.String, Hidden: true},
+	{Name: "schema_name", Typ: types.String, Hidden: true},
 	{Name: "table_name", Typ: types.String, Hidden: true},
 	{Name: "index_name", Typ: types.String, Hidden: true},
 	{Name: "partition_name", Typ: types.String, Hidden: true},
@@ -52,6 +53,7 @@ const (
 	targetCol
 	rangeNameCol
 	databaseNameCol
+	schemaNameCol
 	tableNameCol
 	indexNameCol
 	partitionNameCol
@@ -267,6 +269,7 @@ func generateZoneConfigIntrospectionValues(
 	values[targetCol] = tree.DNull
 	values[rangeNameCol] = tree.DNull
 	values[databaseNameCol] = tree.DNull
+	values[schemaNameCol] = tree.DNull
 	values[tableNameCol] = tree.DNull
 	values[indexNameCol] = tree.DNull
 	values[partitionNameCol] = tree.DNull
@@ -280,6 +283,7 @@ func generateZoneConfigIntrospectionValues(
 		}
 		if zs.TableOrIndex.Table.ObjectName != "" {
 			values[databaseNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.CatalogName))
+			values[schemaNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.SchemaName))
 			values[tableNameCol] = tree.NewDString(string(zs.TableOrIndex.Table.ObjectName))
 		}
 		if zs.TableOrIndex.Index != "" {
