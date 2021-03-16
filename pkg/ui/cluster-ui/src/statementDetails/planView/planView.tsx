@@ -325,7 +325,7 @@ export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
     return (
       <table className={cx("plan-view-table")}>
         <thead>
-          <tr className={cx("plan-view-table__row--header")}>
+          <tr>
             <th className={cx("plan-view-table__cell")}>
               <h2 className={cx("base-heading", "summary--card__title")}>
                 {this.props.title}

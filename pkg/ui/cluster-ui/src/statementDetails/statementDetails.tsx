@@ -319,7 +319,7 @@ export class StatementDetails extends React.Component<
   render() {
     const app = getMatchParamByName(this.props.match, appAttr);
     return (
-      <div>
+      <div className={cx("root")}>
         <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
         <div className={cx("section", "page--header")}>
           <Button

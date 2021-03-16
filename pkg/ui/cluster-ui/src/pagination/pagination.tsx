@@ -39,6 +39,7 @@ export const Pagination: React.FC<PaginationProps> = props => {
       size="small"
       itemRender={itemRenderer}
       hideOnSinglePage
+      className={cx("root")}
     />
   );
 };
