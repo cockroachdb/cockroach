@@ -605,7 +605,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 // below; search this file for "Keyword category lists".
 
 // Ordinary key words in alphabetical order.
-%token <str> ABORT ACCESS ACTION ADD ADMIN AFFINITY AFTER AGGREGATE
+%token <str> ABORT ACCESS ACTION ADD ADMIN AFTER AGGREGATE
 %token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str> ASYMMETRIC AT ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
@@ -671,7 +671,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
-%token <str> PARENT PARTIAL PARTITION PARTITIONED PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
+%token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIORITY PRIVILEGES
 %token <str> PROCEDURAL PUBLIC PUBLICATION
@@ -7402,6 +7402,12 @@ locality:
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
+| LOCALITY REGIONAL BY TABLE
+  {
+    $$.val = &tree.Locality{
+      LocalityLevel: tree.LocalityLevelTable,
+    }
+  }
 | LOCALITY REGIONAL IN region_name
   {
     $$.val = &tree.Locality{
@@ -7421,12 +7427,6 @@ locality:
       LocalityLevel: tree.LocalityLevelTable,
     }
   }
-| LOCALITY REGIONAL BY TABLE
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
 | LOCALITY REGIONAL BY ROW
   {
     $$.val = &tree.Locality{
@@ -7434,128 +7434,6 @@ locality:
     }
   }
 | LOCALITY REGIONAL BY ROW AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($6),
-    }
-  }
-| LOCALITY REGIONAL PARTITIONED
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-| LOCALITY REGIONAL PARTITIONED AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($5),
-    }
-  }
-| LOCALITY PARTITIONED REGIONAL
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-| LOCALITY PARTITIONED REGIONAL AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($5),
-    }
-  }
-| REGIONAL AFFINITY TO NONE
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelGlobal,
-    }
-  }
-| REGIONAL AFFINITY TO region_name
-  {
-    $$.val = &tree.Locality{
-      TableRegion: tree.Name($4),
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| REGIONAL AFFINITY TO PRIMARY REGION
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| REGIONAL AFFINITY AT ROW LEVEL
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-|  REGIONAL AFFINITY AT ROW LEVEL AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($7),
-    }
-  }
-| REGIONAL AFFINITY NONE
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelGlobal,
-    }
-  }
-| REGIONAL AFFINITY region_name
-  {
-    $$.val = &tree.Locality{
-      TableRegion: tree.Name($3),
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| REGIONAL AFFINITY PRIMARY REGION
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| REGIONAL AFFINITY ROW LEVEL
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-| REGIONAL AFFINITY ROW LEVEL AS name
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-      RegionalByRowColumn: tree.Name($6),
-    }
-  }
-| NO REGIONAL AFFINITY
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelGlobal,
-    }
-  }
-| TABLE LEVEL REGIONAL AFFINITY TO region_name
-  {
-    $$.val = &tree.Locality{
-      TableRegion: tree.Name($6),
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| TABLE LEVEL REGIONAL AFFINITY TO PRIMARY REGION
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelTable,
-    }
-  }
-| ROW LEVEL REGIONAL AFFINITY
-  {
-    $$.val = &tree.Locality{
-      LocalityLevel: tree.LocalityLevelRow,
-    }
-  }
-| ROW LEVEL REGIONAL AFFINITY AS name
   {
     $$.val = &tree.Locality{
       LocalityLevel: tree.LocalityLevelRow,
@@ -12377,7 +12255,6 @@ unreserved_keyword:
 | ACCESS
 | ADD
 | ADMIN
-| AFFINITY
 | AFTER
 | AGGREGATE
 | ALTER
@@ -12579,7 +12456,6 @@ unreserved_keyword:
 | PARENT
 | PARTIAL
 | PARTITION
-| PARTITIONED
 | PARTITIONS
 | PASSWORD
 | PAUSE
