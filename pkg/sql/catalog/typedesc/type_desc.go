@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -619,6 +620,22 @@ func (desc *Immutable) validateMultiRegion(
 	if dbPrimaryRegion != primaryRegion {
 		vea.Report(errors.AssertionFailedf("unexpected primary region on db desc: %q expected %q",
 			dbPrimaryRegion, primaryRegion))
+	}
+
+	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		regionNames, err := desc.RegionNames()
+		if err != nil {
+			vea.Report(err)
+		}
+		if len(regionNames) < 3 {
+			vea.Report(
+				errors.AssertionFailedf(
+					"expected >= 3 regions, got %d: %s",
+					len(regionNames),
+					strings.Join(regionNames.ToStrings(), ","),
+				),
+			)
+		}
 	}
 }
 
