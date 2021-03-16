@@ -87,7 +87,7 @@ export const TableRow: React.FC<TableRowProps> = ({
         {columns.map((c: SortableColumn, colIndex: number) => {
           const cellClasses = cx(
             "row-wrapper__cell",
-            { "__cell--header": firstCellBordered && colIndex === 0 },
+            { "cell-header": firstCellBordered && colIndex === 0 },
             c.className,
           );
           return (
