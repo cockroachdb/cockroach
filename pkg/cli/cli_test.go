@@ -1098,7 +1098,10 @@ Available Commands:
 Flags:
   -h, --help                 help for cockroach
       --log <string>         
-                                     Logging configuration. See the documentation for details.
+                                     Logging configuration, expressed using YAML syntax. See the
+                                     documentation for details.  To preview how the log configuration
+                                     is applied, or preview the default configuration, you can use the
+                                     'cockroach debug check-log-config' sub-command.
                                     
       --version              version for cockroach
 
