@@ -2148,6 +2148,248 @@ index-join b
       │    └── spans: ["7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01", "7a\x00\x02\x00\x03\x00\x03b\x00\x02c\x00\x02\x00\x03d\x00\x01\x12e\x00\x01"]
       └── key: (1)
 
+# Query using the contained by operator.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM b WHERE j <@ '1'
+----
+select
+ ├── columns: k:1!null u:2 v:3 j:4
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── scan b@j_inv_idx
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /6/1
+ │         │    └── spans: ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │         └── key: (1)
+ └── filters
+      └── '1' @> j:4 [outer=(4), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM b WHERE j <@ '{}'
+----
+select
+ ├── columns: k:1!null u:2 v:3 j:4
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── scan b@j_inv_idx
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /6/1
+ │         │    └── spans: ["7\x00\x019", "7\x00\x019"]
+ │         └── key: (1)
+ └── filters
+      └── '{}' @> j:4 [outer=(4), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM b WHERE j <@ '[]'
+----
+select
+ ├── columns: k:1!null u:2 v:3 j:4
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── scan b@j_inv_idx
+ │         ├── columns: k:1!null
+ │         ├── inverted constraint: /6/1
+ │         │    └── spans: ["7\x00\x018", "7\x00\x018"]
+ │         └── key: (1)
+ └── filters
+      └── '[]' @> j:4 [outer=(4), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM b WHERE j <@ '{"a": []}'
+----
+select
+ ├── columns: k:1!null u:2 v:3 j:4
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x019", "7\x00\x019"]
+ │         │         └── ["7a\x00\x018", "7a\x00\x018"]
+ │         ├── key: (1)
+ │         └── scan b@j_inv_idx
+ │              ├── columns: k:1!null j_inverted_key:6!null
+ │              ├── inverted constraint: /6/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x019", "7\x00\x019"]
+ │              │         └── ["7a\x00\x018", "7a\x00\x018"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(6)
+ └── filters
+      └── '{"a": []}' @> j:4 [outer=(4), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM b WHERE j <@ '[{"a": {"d": true}}, 1, "b"]'
+----
+select
+ ├── columns: k:1!null u:2 v:3 j:4
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
+ │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │         │         ├── ["7\x00\x018", "7\x00\x018"]
+ │         │         ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
+ │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+ │         │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
+ │         │         ├── ["7\x00\x03a\x00\x019", "7\x00\x03a\x00\x019"]
+ │         │         ├── ["7\x00\x03a\x00\x02\x00\x019", "7\x00\x03a\x00\x02\x00\x019"]
+ │         │         └── ["7\x00\x03a\x00\x02d\x00\x01\n", "7\x00\x03a\x00\x02d\x00\x01\n"]
+ │         ├── key: (1)
+ │         └── scan b@j_inv_idx
+ │              ├── columns: k:1!null j_inverted_key:6!null
+ │              ├── inverted constraint: /6/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x01\x12b\x00\x01", "7\x00\x01\x12b\x00\x01"]
+ │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │              │         ├── ["7\x00\x018", "7\x00\x018"]
+ │              │         ├── ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
+ │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+ │              │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
+ │              │         ├── ["7\x00\x03a\x00\x019", "7\x00\x03a\x00\x019"]
+ │              │         ├── ["7\x00\x03a\x00\x02\x00\x019", "7\x00\x03a\x00\x02\x00\x019"]
+ │              │         └── ["7\x00\x03a\x00\x02d\x00\x01\n", "7\x00\x03a\x00\x02d\x00\x01\n"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(6)
+ └── filters
+      └── '[{"a": {"d": true}}, 1, "b"]' @> j:4 [outer=(4), immutable]
+
+# Disjunction using the contained by operator.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM b WHERE j <@ '{"a": [3]}' OR j <@ '[1, 2, 3]'
+----
+select
+ ├── columns: k:1!null u:2 v:3 j:4
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │         │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │         │         ├── ["7\x00\x018", "7\x00\x01:")
+ │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+ │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │         │         ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
+ │         │         ├── ["7a\x00\x02\x00\x018", "7a\x00\x02\x00\x018"]
+ │         │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+ │         ├── key: (1)
+ │         └── scan b@j_inv_idx
+ │              ├── columns: k:1!null j_inverted_key:6!null
+ │              ├── inverted constraint: /6/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │              │         ├── ["7\x00\x018", "7\x00\x01:")
+ │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+ │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │              │         ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │              │         ├── ["7a\x00\x018", "7a\x00\x018"]
+ │              │         ├── ["7a\x00\x02\x00\x018", "7a\x00\x02\x00\x018"]
+ │              │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(6)
+ └── filters
+      └── ('{"a": [3]}' @> j:4) OR ('[1, 2, 3]' @> j:4) [outer=(4), immutable]
+
+# Conjunction using the contained by operator.
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM b WHERE j <@ '{"a": [3]}' AND j <@ '[1, 2, 3]'
+----
+select
+ ├── columns: k:1!null u:2 v:3 j:4
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ ├── index-join b
+ │    ├── columns: k:1!null u:2 v:3 j:4
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3)~~>(1,2,4)
+ │    └── inverted-filter
+ │         ├── columns: k:1!null
+ │         ├── inverted expression: /6
+ │         │    ├── tight: false, unique: false
+ │         │    ├── union spans: empty
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: false, unique: false
+ │         │         │    └── union spans
+ │         │         │         ├── ["7\x00\x019", "7\x00\x019"]
+ │         │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
+ │         │         │         ├── ["7a\x00\x02\x00\x018", "7a\x00\x02\x00\x018"]
+ │         │         │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+ │         │         └── span expression
+ │         │              ├── tight: false, unique: false
+ │         │              └── union spans
+ │         │                   ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │         │                   ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │         │                   ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │         │                   ├── ["7\x00\x018", "7\x00\x018"]
+ │         │                   ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+ │         │                   ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │         │                   └── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │         ├── key: (1)
+ │         └── scan b@j_inv_idx
+ │              ├── columns: k:1!null j_inverted_key:6!null
+ │              ├── inverted constraint: /6/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+ │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+ │              │         ├── ["7\x00\x01*\x06\x00", "7\x00\x01*\x06\x00"]
+ │              │         ├── ["7\x00\x018", "7\x00\x01:")
+ │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+ │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+ │              │         ├── ["7\x00\x03\x00\x01*\x06\x00", "7\x00\x03\x00\x01*\x06\x00"]
+ │              │         ├── ["7a\x00\x018", "7a\x00\x018"]
+ │              │         ├── ["7a\x00\x02\x00\x018", "7a\x00\x02\x00\x018"]
+ │              │         └── ["7a\x00\x02\x00\x03\x00\x01*\x06\x00", "7a\x00\x02\x00\x03\x00\x01*\x06\x00"]
+ │              ├── key: (1)
+ │              └── fd: (1)-->(6)
+ └── filters
+      ├── '{"a": [3]}' @> j:4 [outer=(4), immutable]
+      └── '[1, 2, 3]' @> j:4 [outer=(4), immutable]
+
 # Query using the fetch val and equality operators.
 opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->'a' = '"b"'

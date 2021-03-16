@@ -744,6 +744,16 @@ func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
 	return decoded.encodeContainingInvertedIndexSpans(b, isRoot, isObjectValue)
 }
 
+func (j *jsonEncoded) encodeContainedInvertedIndexSpans(
+	b []byte, isRoot bool,
+) (inverted.Expression, error) {
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, err
+	}
+	return decoded.encodeContainedInvertedIndexSpans(b, isRoot)
+}
+
 // numInvertedIndexEntries implements the JSON interface.
 func (j *jsonEncoded) numInvertedIndexEntries() (int, error) {
 	if j.isScalar() || j.containerLen == 0 {
