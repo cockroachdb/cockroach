@@ -56,11 +56,31 @@ func TestParseDatadriven(t *testing.T) {
 				var buf bytes.Buffer
 				fmt.Fprintf(&buf, "%s%s\n", ref, note)
 				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAlwaysGroupExprs), "-- fully parenthetized")
-				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtHideConstants), "-- literals removed")
+				constantsHidden := stmts.StringWithFlags(tree.FmtHideConstants)
+				fmt.Fprintln(&buf, constantsHidden, "-- literals removed")
+
+				// As of this writing, the SQL statement stats proceed as follows:
+				// first the literals are removed from statement to form a stat key,
+				// then the stat key is re-parsed, to undergo the anonymization stage.
+				// We also want to check the re-parsing is fine.
+				//
+				// TODO(knz,rafiss): Turn the following two cases into proper test
+				// errors once the bugs are fixed.
+				reparsedStmts, err := parser.Parse(constantsHidden)
+				if err != nil {
+					fmt.Fprintln(&buf, "REPARSE WITHOUT LITERALS FAILS:", err)
+				} else {
+					reparsedStmtsS := reparsedStmts.String()
+					if reparsedStmtsS != constantsHidden {
+						fmt.Fprintln(&buf, reparsedStmtsS, "-- UNEXPECTED REPARSED AST WITHOUT LITERALS")
+					}
+				}
+
 				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAnonymize), "-- identifiers removed")
 				if strings.Contains(ref, tree.PasswordSubstitution) {
 					fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtShowPasswords), "-- passwords exposed")
 				}
+
 				return buf.String()
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)

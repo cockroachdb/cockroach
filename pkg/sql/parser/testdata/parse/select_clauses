@@ -1016,6 +1016,7 @@ SELECT a FROM t WHERE a IS true
 SELECT a FROM t WHERE a IS true
 SELECT (a) FROM t WHERE ((a) IS (true)) -- fully parenthetized
 SELECT a FROM t WHERE a IS _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
 SELECT _ FROM _ WHERE _ IS true -- identifiers removed
 
 parse
@@ -1024,6 +1025,7 @@ SELECT a FROM t WHERE a IS NOT true
 SELECT a FROM t WHERE a IS NOT true
 SELECT (a) FROM t WHERE ((a) IS NOT (true)) -- fully parenthetized
 SELECT a FROM t WHERE a IS NOT _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
 SELECT _ FROM _ WHERE _ IS NOT true -- identifiers removed
 
 parse
@@ -1032,6 +1034,7 @@ SELECT a FROM t WHERE a IS false
 SELECT a FROM t WHERE a IS false
 SELECT (a) FROM t WHERE ((a) IS (false)) -- fully parenthetized
 SELECT a FROM t WHERE a IS _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
 SELECT _ FROM _ WHERE _ IS false -- identifiers removed
 
 parse
@@ -1040,6 +1043,7 @@ SELECT a FROM t WHERE a IS NOT false
 SELECT a FROM t WHERE a IS NOT false
 SELECT (a) FROM t WHERE ((a) IS NOT (false)) -- fully parenthetized
 SELECT a FROM t WHERE a IS NOT _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
 SELECT _ FROM _ WHERE _ IS NOT false -- identifiers removed
 
 parse
