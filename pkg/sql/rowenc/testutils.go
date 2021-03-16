@@ -824,6 +824,12 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 func RandColumnType(rng *rand.Rand) *types.T {
 	for {
 		typ := RandType(rng)
+		switch typ.Oid() {
+		case oid.T_int2vector, oid.T_oidvector:
+			// OIDVECTOR and INT2VECTOR are not valid column types for
+			// user-created tables.
+			continue
+		}
 		if err := colinfo.ValidateColumnDefType(typ); err == nil {
 			return typ
 		}
@@ -1220,8 +1226,8 @@ func RandCreateTableWithInterleave(
 
 		// Make a random primary key with high likelihood.
 		if rng.Intn(8) != 0 {
-			indexDef := randIndexTableDefFromCols(rng, columnDefs)
-			if len(indexDef.Columns) > 0 {
+			indexDef, ok := randIndexTableDefFromCols(rng, columnDefs)
+			if ok && !indexDef.Inverted {
 				defs = append(defs, &tree.UniqueConstraintTableDef{
 					PrimaryKey:    true,
 					IndexTableDef: indexDef,
@@ -1252,11 +1258,13 @@ func RandCreateTableWithInterleave(
 	// Make indexes.
 	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef := randIndexTableDefFromCols(rng, columnDefs)
-		if len(indexDef.Columns) == 0 {
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs)
+		if !ok {
 			continue
 		}
-		unique := rng.Intn(2) == 0
+		// Make forward indexes unique 50% of the time. Inverted indexes cannot
+		// be unique.
+		unique := !indexDef.Inverted && rng.Intn(2) == 0
 		if unique {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				IndexTableDef: indexDef,
@@ -1515,7 +1523,7 @@ func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnT
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
 		Name: tree.Name(fmt.Sprintf("col%d_%d", tableIdx, colIdx)),
-		Type: RandSortingType(rand),
+		Type: RandColumnType(rand),
 	}
 	columnDef.Nullable.Nullability = tree.Nullability(rand.Intn(int(tree.SilentNull) + 1))
 	return columnDef
@@ -1626,11 +1634,12 @@ func randComputedColumnTableDef(
 	return newDef
 }
 
-// randIndexTableDefFromCols creates an IndexTableDef with a random subset of
-// the given columns and a random direction.
+// randIndexTableDefFromCols attempts to create an IndexTableDef with a random
+// subset of the given columns and a random direction. If unsuccessful, ok=false
+// is returned.
 func randIndexTableDefFromCols(
 	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef,
-) tree.IndexTableDef {
+) (def tree.IndexTableDef, ok bool) {
 	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
 	copy(cpy, columnTableDefs)
 	rng.Shuffle(len(cpy), func(i, j int) { cpy[i], cpy[j] = cpy[j], cpy[i] })
@@ -1638,18 +1647,28 @@ func randIndexTableDefFromCols(
 
 	cols := cpy[:nCols]
 
-	indexElemList := make(tree.IndexElemList, 0, len(cols))
+	def.Columns = make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
 		semType := tree.MustBeStaticallyKnownType(cols[i].Type)
-		if !colinfo.ColumnTypeIsIndexable(semType) {
-			continue
+
+		// The non-terminal index columns must be indexable.
+		if isLastCol := i == len(cols)-1; !isLastCol && !colinfo.ColumnTypeIsIndexable(semType) {
+			return tree.IndexTableDef{}, false
 		}
-		indexElemList = append(indexElemList, tree.IndexElem{
+
+		// The last index column can be inverted-indexable, which makes the
+		// index an inverted index.
+		if colinfo.ColumnTypeIsInvertedIndexable(semType) {
+			def.Inverted = true
+		}
+
+		def.Columns = append(def.Columns, tree.IndexElem{
 			Column:    cols[i].Name,
 			Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
 		})
 	}
-	return tree.IndexTableDef{Columns: indexElemList}
+
+	return def, true
 }
 
 // randPartialIndexPredicateFromCols creates a partial index expression with a
