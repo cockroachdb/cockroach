@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -47,7 +47,12 @@ type batchInfoCollector struct {
 	colexecop.NonExplainable
 	componentID execinfrapb.ComponentID
 
-	numBatches, numTuples uint64
+	mu struct {
+		// We need a mutex because finish() and Next() might be called from
+		// different goroutines.
+		syncutil.Mutex
+		numBatches, numTuples uint64
+	}
 
 	// stopwatch keeps track of the amount of time the wrapped operator spent
 	// doing work. Note that this will include all of the time that the operator's
@@ -84,11 +89,13 @@ func (bic *batchInfoCollector) Next(ctx context.Context) coldata.Batch {
 	var batch coldata.Batch
 	bic.stopwatch.Start()
 	batch = bic.Operator.Next(ctx)
-	if batch.Length() > 0 {
-		bic.numBatches++
-		bic.numTuples += uint64(batch.Length())
-	}
 	bic.stopwatch.Stop()
+	if batch.Length() > 0 {
+		bic.mu.Lock()
+		bic.mu.numBatches++
+		bic.mu.numTuples += uint64(batch.Length())
+		bic.mu.Unlock()
+	}
 	return batch
 }
 
@@ -101,7 +108,9 @@ func (bic *batchInfoCollector) finish() (numBatches, numTuples uint64, time time
 	for _, statsCollectors := range bic.childStatsCollectors {
 		tm -= statsCollectors.getElapsedTime()
 	}
-	return bic.numBatches, bic.numTuples, tm
+	bic.mu.Lock()
+	defer bic.mu.Unlock()
+	return bic.mu.numBatches, bic.mu.numTuples, tm
 }
 
 // getElapsedTime implements the childStatsCollector interface.
@@ -116,7 +125,7 @@ func (bic *batchInfoCollector) getElapsedTime() time.Duration {
 // present in the chain of operators rooted at 'op'.
 func newVectorizedStatsCollector(
 	op colexecop.Operator,
-	kvReader execinfra.KVReader,
+	kvReader colexecop.KVReader,
 	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
 	memMonitors []*mon.BytesMonitor,
@@ -138,7 +147,7 @@ func newVectorizedStatsCollector(
 type vectorizedStatsCollectorImpl struct {
 	batchInfoCollector
 
-	kvReader     execinfra.KVReader
+	kvReader     colexecop.KVReader
 	memMonitors  []*mon.BytesMonitor
 	diskMonitors []*mon.BytesMonitor
 }
@@ -156,27 +165,16 @@ func (vsc *vectorizedStatsCollectorImpl) getStats() *execinfrapb.ComponentStats 
 		s.Exec.MaxAllocatedDisk.Add(diskMon.MaximumBytes())
 	}
 
-	// Depending on kvReader, the accumulated time spent by the wrapped operator
-	// inside Next() is reported as either execution time or KV time.
-	kvTime := false
 	if vsc.kvReader != nil {
-		kvTime = true
-		if _, isProcessor := vsc.kvReader.(execinfra.Processor); isProcessor {
-			// We have a wrapped processor that performs KV reads. Most likely
-			// it is a rowexec.joinReader, so we want to display "execution
-			// time" and not "KV time". In the less likely case that it is a
-			// wrapped rowexec.tableReader showing "execution time" is also
-			// acceptable.
-			kvTime = false
-		}
-	}
-
-	if kvTime {
+		// Note that kvReader is non-nil only for ColBatchScans, and this is the
+		// only case when we want to add the number of rows read, bytes read,
+		// and the contention time (because the wrapped row-execution KV reading
+		// processors - joinReaders, tableReaders, zigzagJoiners, and
+		// invertedJoiners - will add these statistics themselves). Similarly,
+		// for those wrapped processors it is ok to show the time as "execution
+		// time" since "KV time" would only make sense for tableReaders, and
+		// they are less likely to be wrapped than others.
 		s.KV.KVTime.Set(time)
-		// Note that kvTime is true only for ColBatchScans, and this is the
-		// only case when we want to add the number of rows read (because the
-		// wrapped joinReaders and tableReaders will add that statistic
-		// themselves).
 		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
 		s.KV.BytesRead.Set(uint64(vsc.kvReader.GetBytesRead()))
 		s.KV.ContentionTime.Set(vsc.kvReader.GetCumulativeContentionTime())
