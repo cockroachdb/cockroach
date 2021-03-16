@@ -3300,7 +3300,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	replicaDesc, ok := rep.Desc().GetReplicaDescriptor(tc.Target(2).StoreID)
 	require.True(t, ok)
 
-	go func() {
+	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "send-req", func(ctx context.Context) {
 		incArgs := incrementArgs(key, 23)
 		startWG.Done()
 		defer finishWG.Done()
@@ -3312,11 +3312,18 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 				Timestamp: tc.Servers[2].Clock().Now(),
 			}, incArgs,
 		)
-		if _, ok := pErr.GetDetail().(*roachpb.RangeNotFoundError); !ok {
-			// We're on a goroutine, so cannot fatal.
+		detail := pErr.GetDetail()
+		switch detail.(type) {
+		case *roachpb.RangeNotFoundError:
+			// The typical case.
+		case *roachpb.NotLeaseHolderError:
+			// The atypical case - the lease may have expired and the
+			// lease acquisition may be refused.
+		default:
+			// NB: cannot fatal on a goroutine.
 			t.Errorf("unexpected error: %v", pErr)
 		}
-	}()
+	}))
 	startWG.Wait()
 	if t.Failed() {
 		t.FailNow()
