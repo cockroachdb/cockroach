@@ -25,7 +25,6 @@
 .section {
   flex: 0 0 auto;
   padding: 12px 24px;
-  max-width: 1350px;
 
   &--heading {
     padding-top: 0;
@@ -68,4 +67,11 @@ h2.base-heading {
   */
   max-width: 80ch;
   @include text-overflow;
+}
+
+.full-table-scan-label {
+  @include text--body;
+  display: inline;
+  font-size: 14px;
+  color: $colors--title;
 }

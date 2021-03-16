@@ -196,7 +196,10 @@ export class DiagnosticsView extends React.Component<
         <Table dataSource={dataSource} columns={this.columns} />
         {showDiagnosticsViewLink && (
           <div className={cx("crl-statements-diagnostics-view__footer")}>
-            <Link to="/reports/statements/diagnosticshistory">
+            <Link
+              to="/reports/statements/diagnosticshistory"
+              className={cx("anchor")}
+            >
               All statement diagnostics
             </Link>
           </div>

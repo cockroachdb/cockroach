@@ -65,9 +65,9 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
           <Button
             onClick={this.onClear}
             type="default"
-            className={cx("_clear-search")}
+            className={cx("clear-search")}
           >
-            <CancelIcon className={cx("_suffix-icon")} />
+            <CancelIcon className={cx("suffix-icon")} />
           </Button>
         );
       }
@@ -75,7 +75,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
         <Button
           type="default"
           htmlType="submit"
-          className={cx("_submit-search")}
+          className={cx("submit-search")}
         >
           Enter
         </Button>
@@ -87,16 +87,16 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
   render() {
     const { value, submitted } = this.state;
     const { onClear, ...inputProps } = this.props;
-    const className = submitted ? cx("_submitted") : "";
+    const className = submitted ? cx("submitted") : "";
 
     return (
-      <Form onSubmit={this.onSubmit} className={cx("_search-form")}>
+      <Form onSubmit={this.onSubmit} className={cx("search-form")}>
         <Form.Item>
           <Input
             className={className}
             placeholder="Search Statement"
             onChange={this.onChange}
-            prefix={<SearchIcon className={cx("_prefix-icon")} />}
+            prefix={<SearchIcon className={cx("prefix-icon")} />}
             suffix={this.renderSuffix()}
             value={value}
             {...inputProps}
