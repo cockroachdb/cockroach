@@ -80,6 +80,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	return doCreateSequence(
 		params, n.n.String(), n.dbDesc, schemaID, &n.n.Name, n.n.Persistence, n.n.Options,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
+		n.dbDesc.IsMultiRegion(),
 	)
 }
 
@@ -94,6 +95,7 @@ func doCreateSequence(
 	persistence tree.Persistence,
 	opts tree.SequenceOptions,
 	jobDesc string,
+	isMultiRegion bool,
 ) error {
 	id, err := catalogkv.GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB, params.p.ExecCfg().Codec)
 	if err != nil {
@@ -123,6 +125,7 @@ func doCreateSequence(
 		privs,
 		persistence,
 		&params,
+		isMultiRegion,
 	)
 	if err != nil {
 		return err
@@ -181,6 +184,7 @@ func NewSequenceTableDesc(
 	privileges *descpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
 	params *runParams,
+	isMultiRegion bool,
 ) (*tabledesc.Mutable, error) {
 	desc := tabledesc.InitTableDescriptor(
 		id,
@@ -230,6 +234,10 @@ func NewSequenceTableDesc(
 	// A sequence doesn't have dependencies and thus can be made public
 	// immediately.
 	desc.State = descpb.DescriptorState_PUBLIC
+
+	if isMultiRegion {
+		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+	}
 
 	if err := catalog.ValidateSelf(&desc); err != nil {
 		return nil, err

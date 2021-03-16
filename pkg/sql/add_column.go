@@ -62,6 +62,7 @@ func (p *planner) addColumnImpl(
 			n.tableDesc.Persistence(),
 			seqOpts,
 			tree.AsStringWithFQNames(n.n, params.Ann()),
+			seqDbDesc.IsMultiRegion(),
 		); err != nil {
 			return err
 		}

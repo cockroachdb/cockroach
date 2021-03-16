@@ -253,6 +253,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		nil, /* semaCtx */
 		nil, /* evalCtx */
 		tree.PersistencePermanent,
+		false, /* isMultiRegion */
 	)
 	return mutDesc.TableDescriptor, err
 }
