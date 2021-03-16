@@ -391,6 +391,30 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		return nil
 	}
 
+	checkTypeDepForCrossDbRef := func(depID descpb.ID) error {
+		dependentObject, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, depID,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:    true,
+					AvoidCached: true,
+				}})
+		if err != nil {
+			return err
+		}
+		// No cross DB reference detected
+		if dependentObject.GetParentID() == targetDbDesc.GetID() {
+			return nil
+		}
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"this view will reference a type %q in another databases after rename "+
+					"(see the '%s' cluster setting)",
+				dependentObject.GetName(),
+				allowCrossDatabaseViewsSetting),
+			crossDBReferenceDeprecationHint(),
+		)
+	}
+
 	// For tables check if any outbound or inbound foreign key references would
 	// be impacted.
 	if tableDesc.IsTable() {
@@ -440,6 +464,14 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		dependsOn := tableDesc.GetDependsOn()
 		for _, dependency := range dependsOn {
 			err := checkDepForCrossDbRef(dependency)
+			if err != nil {
+				return err
+			}
+		}
+		// Check if we depend on types in a different database.
+		dependsOnTypes := tableDesc.GetDependsOnTypes()
+		for _, dependency := range dependsOnTypes {
+			err := checkTypeDepForCrossDbRef(dependency)
 			if err != nil {
 				return err
 			}

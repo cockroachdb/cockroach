@@ -307,6 +307,7 @@ type TableDescriptor interface {
 
 	ForeachDependedOnBy(f func(dep *descpb.TableDescriptor_Reference) error) error
 	GetDependsOn() []descpb.ID
+	GetDependsOnTypes() []descpb.ID
 	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
 	ForeachOutboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
 	GetChecks() []*descpb.TableDescriptor_CheckConstraint

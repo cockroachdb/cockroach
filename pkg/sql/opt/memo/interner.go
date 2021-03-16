@@ -570,6 +570,15 @@ func (h *hasher) HashViewDeps(val opt.ViewDeps) {
 	}
 }
 
+func (h *hasher) HashViewTypeDeps(val opt.ViewTypeDeps) {
+	hash := h.hash
+	for id := range val {
+		hash ^= internHash(int64(id))
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
 func (h *hasher) HashWindowFrame(val WindowFrame) {
 	h.HashInt(int(val.StartBoundType))
 	h.HashInt(int(val.EndBoundType))
@@ -970,6 +979,18 @@ func (h *hasher) IsViewDepsEqual(l, r opt.ViewDeps) bool {
 		return false
 	}
 	return len(l) == 0 || &l[0] == &r[0]
+}
+
+func (h *hasher) IsViewTypeDepsEqual(l, r opt.ViewTypeDeps) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for id := range r {
+		if _, ok := r[id]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *hasher) IsWindowFrameEqual(l, r WindowFrame) bool {

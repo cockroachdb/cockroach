@@ -13,6 +13,8 @@ package optbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -116,6 +118,7 @@ type Builder struct {
 	// trackViewDeps would be false inside that inner view).
 	trackViewDeps bool
 	viewDeps      opt.ViewDeps
+	viewTypeDeps  opt.ViewTypeDeps
 
 	// If set, the data source names in the AST are rewritten to the fully
 	// qualified version (after resolution). Used to construct the strings for
@@ -140,12 +143,13 @@ func New(
 	stmt tree.Statement,
 ) *Builder {
 	return &Builder{
-		factory: factory,
-		stmt:    stmt,
-		ctx:     ctx,
-		semaCtx: semaCtx,
-		evalCtx: evalCtx,
-		catalog: catalog,
+		factory:      factory,
+		stmt:         stmt,
+		ctx:          ctx,
+		semaCtx:      semaCtx,
+		evalCtx:      evalCtx,
+		catalog:      catalog,
+		viewTypeDeps: make(map[descpb.ID]struct{}),
 	}
 }
 
@@ -400,6 +404,15 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 					DataSource: ds,
 				})
 			}
+		}
+	}
+}
+
+func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
+	if b.trackViewDeps {
+		if texpr.ResolvedType().UserDefined() {
+			id := typedesc.GetTypeDescID(texpr.ResolvedType())
+			b.viewTypeDeps[id] = struct{}{}
 		}
 	}
 }

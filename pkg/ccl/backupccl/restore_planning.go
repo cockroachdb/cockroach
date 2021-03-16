@@ -161,7 +161,9 @@ func rewriteSequencesInExpr(expr string, rewrites DescRewriteMap) (string, error
 // skipMissingViews option is not set, an error is returned if any
 // unrestorable views are found.
 func maybeFilterMissingViews(
-	tablesByID map[descpb.ID]*tabledesc.Mutable, skipMissingViews bool,
+	tablesByID map[descpb.ID]*tabledesc.Mutable,
+	typesByID map[descpb.ID]*typedesc.Mutable,
+	skipMissingViews bool,
 ) (map[descpb.ID]*tabledesc.Mutable, error) {
 	// Function that recursively determines whether a given table, if it is a
 	// view, has valid dependencies. Dependencies are looked up in tablesByID.
@@ -171,7 +173,12 @@ func maybeFilterMissingViews(
 			return true
 		}
 		for _, id := range desc.DependsOn {
-			if desc, ok := tablesByID[id]; !ok || !hasValidViewDependencies(desc) {
+			if depDesc, ok := tablesByID[id]; !ok || !hasValidViewDependencies(depDesc) {
+				return false
+			}
+		}
+		for _, id := range desc.DependsOnTypes {
+			if _, ok := typesByID[id]; !ok {
 				return false
 			}
 		}
@@ -1153,6 +1160,17 @@ func RewriteTableDescs(
 					table.Name, dest)
 			}
 		}
+		for i, dest := range table.DependsOnTypes {
+			if depRewrite, ok := descriptorRewrites[dest]; ok {
+				table.DependsOnTypes[i] = depRewrite.ID
+			} else {
+				// Views with missing dependencies should have been filtered out
+				// or have caused an error in maybeFilterMissingViews().
+				return errors.AssertionFailedf(
+					"cannot restore %q because referenced type %d was not found",
+					table.Name, dest)
+			}
+		}
 		origRefs := table.DependedOnBy
 		table.DependedOnBy = nil
 		for _, ref := range origRefs {
@@ -1675,7 +1693,9 @@ func doRestorePlan(
 			typesByID[desc.ID] = desc
 		}
 	}
-	filteredTablesByID, err := maybeFilterMissingViews(tablesByID,
+	filteredTablesByID, err := maybeFilterMissingViews(
+		tablesByID,
+		typesByID,
 		restoreStmt.Options.SkipMissingViews)
 	if err != nil {
 		return err

@@ -616,7 +616,8 @@ func (p *planner) alterTableDescLocalityToRegionalByTable(
 	ctx context.Context, region tree.Name, tableDesc *tabledesc.Mutable, regionEnumID descpb.ID,
 ) error {
 	if tableDesc.GetMultiRegionEnumDependencyIfExists() {
-		if err := p.removeTypeBackReference(ctx, regionEnumID, tableDesc.GetID(),
+		typesDependedOn := append([]descpb.ID(nil), regionEnumID)
+		if err := p.removeTypeBackReferences(ctx, typesDependedOn, tableDesc.GetID(),
 			fmt.Sprintf("remove back ref on mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
 		); err != nil {
 			return err
@@ -639,7 +640,8 @@ func (p *planner) alterTableDescLocalityToGlobal(
 	ctx context.Context, tableDesc *tabledesc.Mutable, regionEnumID descpb.ID,
 ) error {
 	if tableDesc.GetMultiRegionEnumDependencyIfExists() {
-		if err := p.removeTypeBackReference(ctx, regionEnumID, tableDesc.GetID(),
+		typesDependedOn := append([]descpb.ID(nil), regionEnumID)
+		if err := p.removeTypeBackReferences(ctx, typesDependedOn, tableDesc.GetID(),
 			fmt.Sprintf("remove back ref no mr-enum %d for table %d", regionEnumID, tableDesc.GetID()),
 		); err != nil {
 			return err

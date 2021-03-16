@@ -13,6 +13,7 @@ package opt
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -40,6 +41,10 @@ type ViewDep struct {
 	SpecificIndex bool
 	Index         cat.IndexOrdinal
 }
+
+// ViewTypeDeps contains a set of the IDs of types that
+// this view depends on.
+type ViewTypeDeps map[descpb.ID]struct{}
 
 // GetColumnNames returns a sorted list of the names of the column dependencies
 // and a boolean to determine if the dependency was a table.
