@@ -160,7 +160,8 @@ type Tracer struct {
 	// to a function that returns `true`.
 	TracingVerbosityIndependentSemanticsIsActive func() bool
 
-	includeAsyncSpansInRecordings bool // see TestingIncludeAsyncSpansInRecordings
+	testingMu               syncutil.Mutex // protects testingRecordAsyncSpans
+	testingRecordAsyncSpans bool           // see TestingRecordAsyncSpans
 
 	testing *testingKnob
 }
@@ -713,11 +714,24 @@ func (t *Tracer) VisitSpans(visitor func(*Span) error) error {
 	return nil
 }
 
-// TestingIncludeAsyncSpansInRecordings is a test-only helper that configures
+// TestingRecordAsyncSpans is a test-only helper that configures
 // the tracer to include recordings from forked/async child spans, when
 // retrieving the recording for a parent span.
-func (t *Tracer) TestingIncludeAsyncSpansInRecordings() {
-	t.includeAsyncSpansInRecordings = true
+func (t *Tracer) TestingRecordAsyncSpans() {
+	t.testingMu.Lock()
+	defer t.testingMu.Unlock()
+
+	t.testingRecordAsyncSpans = true
+}
+
+// ShouldRecordAsyncSpans returns whether or not we should include recordings
+// from async child spans in the parent span. See TestingRecordAsyncSpans, this
+// mode is only used in tests.
+func (t *Tracer) ShouldRecordAsyncSpans() bool {
+	t.testingMu.Lock()
+	defer t.testingMu.Unlock()
+
+	return t.testingRecordAsyncSpans
 }
 
 // ForkSpan forks the current span, if any[1]. Forked spans "follow from" the
@@ -734,14 +748,14 @@ func (t *Tracer) TestingIncludeAsyncSpansInRecordings() {
 //
 // [1]: Looking towards the provided context to see if one exists.
 // [2]: Unless configured differently by tests, see
-//      TestingIncludeAsyncSpansInRecordings.
+//      TestingRecordAsyncSpans.
 func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
 	if sp == nil {
 		return ctx, nil
 	}
 	collectionOpt := WithParentAndManualCollection(sp.Meta())
-	if sp.Tracer().includeAsyncSpansInRecordings {
+	if sp.Tracer().ShouldRecordAsyncSpans() {
 		// Using auto collection here ensures that recordings from async spans
 		// also show up at the parent.
 		collectionOpt = WithParentAndAutoCollection(sp)
