@@ -299,37 +299,37 @@ func init() {
 		// TODO(knz): Remove this.
 		varFlag(pf, &cliCtx.deprecatedLogOverrides.stderrThreshold, cliflags.DeprecatedStderrThreshold)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedStderrThreshold.Name,
-			"use --"+cliflags.Log.Name+" instead to specify sinks.stderr.filter.")
+			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {stderr: {filter: ...}}'.")
 		// This flag can also be specified without an explicit argument.
 		pf.Lookup(cliflags.DeprecatedStderrThreshold.Name).NoOptDefVal = "DEFAULT"
 
 		varFlag(pf, &cliCtx.deprecatedLogOverrides.stderrNoColor, cliflags.DeprecatedStderrNoColor)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedStderrNoColor.Name,
-			"use --"+cliflags.Log.Name+" instead to specify sinks.stderr.no-color.")
+			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {stderr: {no-color: true}}'")
 
 		varFlag(pf, &cliCtx.deprecatedLogOverrides.logDir, cliflags.DeprecatedLogDir)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedLogDir.Name,
-			"use --"+cliflags.Log.Name+" instead to specify file-defaults.dir.")
+			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {dir: ...}'")
 
 		varFlag(pf, cliCtx.deprecatedLogOverrides.fileMaxSizeVal, cliflags.DeprecatedLogFileMaxSize)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedLogFileMaxSize.Name,
-			"use --"+cliflags.Log.Name+" instead to specify file-defaults.max-file-size.")
+			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {max-file-size: ...}'")
 
 		varFlag(pf, cliCtx.deprecatedLogOverrides.maxGroupSizeVal, cliflags.DeprecatedLogGroupMaxSize)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedLogGroupMaxSize.Name,
-			"use --"+cliflags.Log.Name+" instead to specify file-defaults.max-group-size.")
+			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {max-group-size: ...}'")
 
 		varFlag(pf, &cliCtx.deprecatedLogOverrides.fileThreshold, cliflags.DeprecatedFileThreshold)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedFileThreshold.Name,
-			"use --"+cliflags.Log.Name+" instead to specify file-defaults.filter.")
+			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {filter: ...}'")
 
 		varFlag(pf, &cliCtx.deprecatedLogOverrides.redactableLogs, cliflags.DeprecatedRedactableLogs)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedRedactableLogs.Name,
-			"use --"+cliflags.Log.Name+" instead to specify file-defaults:redactable-logs.")
+			"use --"+cliflags.Log.Name+" instead to specify 'file-defaults: {redactable: ...}")
 
 		varFlag(pf, &cliCtx.deprecatedLogOverrides.sqlAuditLogDir, cliflags.DeprecatedSQLAuditLogDir)
 		_ = pf.MarkDeprecated(cliflags.DeprecatedSQLAuditLogDir.Name,
-			"use --"+cliflags.Log.Name+" instead to specify sinks:file-groups:sql-audit.")
+			"use --"+cliflags.Log.Name+" instead to specify 'sinks: {file-groups: {sql-audit: {channels: SENSITIVE_ACCESS, dir: ...}}}")
 	}
 
 	// Remember we are starting in the background as the `start` command will
