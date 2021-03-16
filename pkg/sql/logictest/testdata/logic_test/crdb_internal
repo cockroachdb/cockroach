@@ -33,7 +33,8 @@ crdb_internal  gossip_liveness              table  NULL  NULL  NULL
 crdb_internal  gossip_network               table  NULL  NULL  NULL
 crdb_internal  gossip_nodes                 table  NULL  NULL  NULL
 crdb_internal  index_columns                table  NULL  NULL  NULL
-crdb_internal  interleaved                  table  NULL  NULL  NULL
+crdb_internal  interleaved_indexes          table  NULL  NULL  NULL
+crdb_internal  interleaved_tables           table  NULL  NULL  NULL
 crdb_internal  invalid_objects              table  NULL  NULL  NULL
 crdb_internal  jobs                         table  NULL  NULL  NULL
 crdb_internal  kv_node_status               table  NULL  NULL  NULL
