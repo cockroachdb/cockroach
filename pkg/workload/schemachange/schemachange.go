@@ -340,22 +340,18 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
 			break
 		}
 
-		op, noops, err := w.opGen.randOp(tx)
-		if w.logger.verbose >= 2 {
-			for _, noop := range noops {
-				w.logger.writeLog(noop)
-			}
-		}
+		op, err := w.opGen.randOp(tx)
 
-		w.logger.addExpectedErrors(w.opGen.expectedExecErrors, w.opGen.expectedCommitErrors)
-
-		if err != nil {
+		if pgErr := (pgx.PgError{}); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+			return errors.Mark(err, errRunInTxnRbkSentinel)
+		} else if err != nil {
 			return errors.Mark(
 				errors.Wrap(err, "***UNEXPECTED ERROR; Failed to generate a random operation"),
 				errRunInTxnFatalSentinel,
 			)
 		}
 
+		w.logger.addExpectedErrors(w.opGen.expectedExecErrors, w.opGen.expectedCommitErrors)
 		w.logger.writeLog(op)
 		if !w.dryRun {
 			start := timeutil.Now()
@@ -412,7 +408,7 @@ func (w *schemaChangeWorker) run(_ context.Context) error {
 	}
 
 	// Release log entry locks if holding all.
-	w.releaseLocksIfHeld()
+	defer w.releaseLocksIfHeld()
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	start := timeutil.Now()
