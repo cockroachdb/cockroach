@@ -130,9 +130,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 5,
                             num_replicas = 5,
                             num_voters = 3,
                             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
@@ -189,9 +189,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 100000,
                             num_replicas = 4,
                             num_voters = 3,
                             constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1}',
@@ -210,9 +210,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 100000,
                             num_replicas = 3,
                             num_voters = 3,
                             constraints = '{+region=us-east-1: 1}',
@@ -231,9 +231,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 100000,
                             num_replicas = 3,
                             num_voters = 3,
                             constraints = '{+region=us-east-1: 1}',
@@ -252,14 +252,12 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 100000,
                             num_replicas = 3,
-                            num_voters = 3,
-                            constraints = '{+region=us-east-1: 1}',
-                            voter_constraints = '[+region=us-east-1]',
-                            lease_preferences = '[[+region=ap-southeast-2]]'
+                            constraints = '[]',
+                            lease_preferences = '[]'
 
 query TTTTT colnames
 SHOW DATABASES
@@ -322,8 +320,8 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
-                       range_min_bytes = 134217728,
-                       range_max_bytes = 536870912,
+                       range_min_bytes = 1000,
+                       range_max_bytes = 100000,
                        gc.ttlseconds = 10,
                        num_replicas = 10,
                        num_voters = 3,
@@ -383,8 +381,8 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX regional_by_row@primary
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
-                       range_min_bytes = 134217728,
-                       range_max_bytes = 536870912,
+                       range_min_bytes = 1000,
+                       range_max_bytes = 100000,
                        gc.ttlseconds = 10,
                        num_replicas = 5,
                        num_voters = 3,
@@ -396,8 +394,8 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX regional_by_row@regional_by_row_i_idx
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
-                       range_min_bytes = 134217728,
-                       range_max_bytes = 536870912,
+                       range_min_bytes = 1000,
+                       range_max_bytes = 100000,
                        gc.ttlseconds = 10,
                        num_replicas = 5,
                        num_voters = 3,
@@ -409,8 +407,8 @@ query TT
 SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
 ----
 TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
-                       range_min_bytes = 134217728,
-                       range_max_bytes = 536870912,
+                       range_min_bytes = 1000,
+                       range_max_bytes = 100000,
                        gc.ttlseconds = 10,
                        num_replicas = 5,
                        num_voters = 3,
@@ -458,9 +456,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@primary
 ----
 INDEX regional_by_row_as@primary  ALTER INDEX regional_by_row_as@primary CONFIGURE ZONE USING
-                                  range_min_bytes = 134217728,
-                                  range_max_bytes = 536870912,
-                                  gc.ttlseconds = 90000,
+                                  range_min_bytes = 1000,
+                                  range_max_bytes = 100000,
+                                  gc.ttlseconds = 100000,
                                   num_replicas = 10,
                                   num_voters = 3,
                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
@@ -479,9 +477,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@primary
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 100000,
                             num_replicas = 5,
                             num_voters = 3,
                             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',

@@ -450,6 +450,14 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		}
 
 		n.desc.UnsetMultiRegionConfig()
+		if err := discardMultiRegionFieldsForDatabaseZoneConfig(
+			params.ctx,
+			n.desc.ID,
+			params.p.txn,
+			params.p.execCfg,
+		); err != nil {
+			return err
+		}
 	} else {
 		telemetry.Inc(sqltelemetry.AlterDatabaseDropRegionCounter)
 		// dropEnumValue tries to remove the region value from the multi-region type
