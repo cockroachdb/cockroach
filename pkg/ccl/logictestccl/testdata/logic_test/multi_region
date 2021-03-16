@@ -1182,6 +1182,17 @@ DROP TABLE drop_primary_regions_db.east
 statement ok
 ALTER DATABASE drop_primary_regions_db DROP REGION "us-east-1"
 
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE drop_primary_regions_db
+----
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 90000,
+               num_replicas = 3,
+               constraints = '[]',
+               lease_preferences = '[]'
+
 # Accessing the table should work without an issue even after the database is
 # no longer multi-region.
 statement ok
@@ -1250,6 +1261,20 @@ DATABASE gc_ttl_predefined_db  ALTER DATABASE gc_ttl_predefined_db CONFIGURE ZON
                                constraints = '{+region=ca-central-1: 1}',
                                voter_constraints = '[+region=ca-central-1]',
                                lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+ALTER DATABASE gc_ttl_predefined_db DROP REGION "ca-central-1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE gc_ttl_predefined_db
+----
+DATABASE gc_ttl_predefined_db  ALTER DATABASE gc_ttl_predefined_db CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 10,
+                               num_replicas = 3,
+                               constraints = '[]',
+                               lease_preferences = '[]'
 
 statement ok
 CREATE DATABASE zone_config_drop_region PRIMARY REGION "ca-central-1" REGIONS "us-east-1", "ap-southeast-2"

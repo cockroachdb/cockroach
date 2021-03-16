@@ -606,7 +606,7 @@ func ApplyZoneConfigForMultiRegionTable(
 		// Delete the zone configuration if it exists but the new zone config is blank.
 		if _, err = execCfg.InternalExecutor.Exec(
 			ctx,
-			"delete-zone",
+			"delete-zone-multiregion-table",
 			txn,
 			"DELETE FROM system.zones WHERE id = $1",
 			tableID,
@@ -640,6 +640,21 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	)
 }
 
+// discardMultiRegionFieldsForDatabaseZoneConfig resets the multi-region zone
+// config fields for a multi-region database.
+func discardMultiRegionFieldsForDatabaseZoneConfig(
+	ctx context.Context, dbID descpb.ID, txn *kv.Txn, execConfig *ExecutorConfig,
+) error {
+	// Merge with an empty zone config.
+	return applyZoneConfigForMultiRegionDatabase(
+		ctx,
+		dbID,
+		zonepb.NewZoneConfig(),
+		txn,
+		execConfig,
+	)
+}
+
 func applyZoneConfigForMultiRegionDatabase(
 	ctx context.Context,
 	dbID descpb.ID,
@@ -659,7 +674,17 @@ func applyZoneConfigForMultiRegionDatabase(
 		*mergeZoneConfig,
 		zonepb.MultiRegionZoneConfigFields,
 	)
-
+	// If the new zone config is the same as a blank zone config, delete it.
+	if newZoneConfig.Equal(zonepb.NewZoneConfig()) {
+		_, err = execConfig.InternalExecutor.Exec(
+			ctx,
+			"delete-zone-multiregion-database",
+			txn,
+			"DELETE FROM system.zones WHERE id = $1",
+			dbID,
+		)
+		return err
+	}
 	if _, err := writeZoneConfig(
 		ctx,
 		txn,
