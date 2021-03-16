@@ -1,6 +1,6 @@
 @import "../core/index.module";
 
-._search-form {
+.search-form {
   width: 280px;
   height: 40px;
   :global(.ant-input-affix-wrapper) {
@@ -20,23 +20,24 @@
     border: none;
     font-size: 14px;
   }
-  ._prefix-icon {
+  .prefix-icon {
     color: $colors--neutral-6;
     width: 12px;
     &:hover {
       color: $colors--neutral-6;
     }
   }
-  ._suffix-icon {
+  .suffix-icon {
     width: 10px;
+    vertical-align: middle;
   }
-  ._clear-search {
+  .clear-search {
     color: $colors--neutral-7;
     &:hover {
       color: $colors--neutral-7;
     }
   }
-  ._submit-search {
+  .submit-search {
     font-family: $font-family--base;
     font-size: 14px;
     color: $colors--neutral-6;
@@ -60,7 +61,7 @@
       padding-right: 60px;
     }
   }
-  ._submitted {
+  .submitted {
     :global(.ant-input) {
       &:not(:first-child) {
         padding-right: 40px;

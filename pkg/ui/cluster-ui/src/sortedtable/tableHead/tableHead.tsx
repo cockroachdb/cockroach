@@ -59,7 +59,7 @@ export const TableHead: React.FC<TableHeadProps> = ({
             sortable && "sorted__cell--sortable",
             sortSetting.ascending && picked && "sorted__cell--ascending",
             !sortSetting.ascending && picked && "sorted__cell--descending",
-            firstCellBordered && idx === 0 && "__cell--header",
+            firstCellBordered && idx === 0 && "cell-header",
           );
 
           return (

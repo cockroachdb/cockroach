@@ -15,7 +15,7 @@ $stats-table-tr--bg: $colors--neutral-0;
   vertical-align: top;
   color: $colors--neutral-7;
 
-  .__cell--header {
+  .cell-header {
     border-right: 1px solid $colors--neutral-2;
     width: 250px;
   }
@@ -30,13 +30,20 @@ $stats-table-tr--bg: $colors--neutral-0;
     }
 
     &--header {
-      padding: 20px;
-      font-size: $font-size--medium;
-      font-weight: bold;
-      letter-spacing: 2px;
       text-align: left;
       white-space: nowrap;
-      background-color: $stats-table-th--bg;
+      @include text--heading-6;
+      color: $colors--neutral-6;
+      background-color: $colors--neutral-1;
+      font-weight: 600;
+      font-family: $font-family--semi-bold;
+      letter-spacing: 1.5px;
+
+      tr, th {
+        padding: $spacing-base $spacing-base $spacing-base $spacing-small;
+        height: $line-height--large;
+        background-color: $colors--neutral-1;
+      }
     }
 
     &--summary {
@@ -59,7 +66,7 @@ $stats-table-tr--bg: $colors--neutral-0;
   }
 
   &__cell {
-    padding: 15px 22px 15px 11px;
+    padding: $spacing-small;
     border: none;
     font-family: $font-family--base;
     font-style: normal;

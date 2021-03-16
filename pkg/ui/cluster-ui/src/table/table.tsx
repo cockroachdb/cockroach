@@ -33,7 +33,7 @@ export function Table<T>(props: TableProps<T>) {
   return (
     <ConfigProvider renderEmpty={customizeRenderEmpty(noDataMessage)}>
       <AntTable<T>
-        className={cx(`crl-table-wrapper ${className}`, {
+        className={cx("crl-table-wrapper", className, {
           "crl-table-wrapper__empty": dataSource.length === 0,
         })}
         columns={columns}
