@@ -22,8 +22,12 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	_ "github.com/go-sql-driver/mysql"
@@ -437,34 +441,65 @@ func BenchmarkSampling(b *testing.B) {
 	}
 }
 
-// BenchmarkTracing measures the overhead of always-on tracing. It also reports
-// the memory utilization.
-//
-// TODO(irfansharif): This benchmark is only useful while we transition between
-// the legacy trace.mode, and the "always-on" mode introduced in 21.1. We can
-// remove it in 21.2.
+func benchmarkCockroachWithRealSpans(b *testing.B, realSpans bool, f BenchmarkFn) {
+	s, db, _ := serverutils.StartServer(
+		b, base.TestServerArgs{
+			UseDatabase: "bench",
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					ForceRealTracingSpans: realSpans,
+				},
+			},
+		})
+	defer s.Stopper().Stop(context.Background())
+
+	if _, err := db.Exec(`CREATE DATABASE bench`); err != nil {
+		b.Fatal(err)
+	}
+
+	f(b, sqlutils.MakeSQLRunner(db))
+}
+
+func benchmarkMultinodeCockroachWithRealSpans(b *testing.B, realSpans bool, f BenchmarkFn) {
+	tc := testcluster.StartTestCluster(b, 3,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "bench",
+				Knobs: base.TestingKnobs{
+					SQLExecutor: &sql.ExecutorTestingKnobs{
+						ForceRealTracingSpans: realSpans,
+					},
+				},
+			},
+		})
+	if _, err := tc.Conns[0].Exec(`CREATE DATABASE bench`); err != nil {
+		b.Fatal(err)
+	}
+	defer tc.Stopper().Stop(context.Background())
+
+	f(b, sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2]))
+}
+
+// BenchmarkTracing measures the overhead of tracing. It also reports the memory
+// utilization.
 func BenchmarkTracing(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
 
-	for _, dbFn := range []func(*testing.B, BenchmarkFn){
-		benchmarkCockroach,
-		benchmarkMultinodeCockroach,
+	for _, dbFn := range []func(*testing.B, bool, BenchmarkFn){
+		benchmarkCockroachWithRealSpans,
+		benchmarkMultinodeCockroachWithRealSpans,
 	} {
 		dbName := runtime.FuncForPC(reflect.ValueOf(dbFn).Pointer()).Name()
 		dbName = strings.TrimPrefix(dbName, "github.com/cockroachdb/cockroach/pkg/bench.benchmark")
-
+		dbName = strings.TrimSuffix(dbName, "WithRealSpans")
 		b.Run(dbName, func(b *testing.B) {
-			dbFn(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-				for _, tracingEnabled := range []bool{true, false} {
-					var tracingMode string
-					if tracingEnabled {
-						tracingMode = "background"
-					} else {
-						tracingMode = "legacy"
-					}
-					db.Exec(b, fmt.Sprintf("SET CLUSTER SETTING trace.mode = %s", tracingMode))
-					b.Run(fmt.Sprintf("tracing=%s", tracingMode[:1]), func(b *testing.B) {
+			for _, tracingEnabled := range []bool{false, true} {
+				dbFn(b, tracingEnabled, func(b *testing.B, db *sqlutils.SQLRunner) {
+					// Disable statement sampling to de-noise this benchmark.
+					db.Exec(b, "SET CLUSTER SETTING sql.txn_stats.sample_rate = 0.0")
+					b.Run(fmt.Sprintf("tracing=%s", fmt.Sprintf("%t", tracingEnabled)[:1]), func(b *testing.B) {
 						for _, runFn := range []func(*testing.B, *sqlutils.SQLRunner, int){
 							runBenchmarkScan1,
 							runBenchmarkInsert,
@@ -478,8 +513,8 @@ func BenchmarkTracing(b *testing.B) {
 							})
 						}
 					})
-				}
-			})
+				})
+			}
 		})
 	}
 }

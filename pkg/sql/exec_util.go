@@ -961,6 +961,10 @@ type ExecutorTestingKnobs struct {
 	// exact control of the redaction flags (and have each test set it as
 	// necessary).
 	DeterministicExplain bool
+
+	// ForceRealTracingSpans, if set, forces the use of real (i.e. not no-op)
+	// tracing spans for every statement.
+	ForceRealTracingSpans bool
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
