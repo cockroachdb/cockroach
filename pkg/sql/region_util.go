@@ -640,6 +640,26 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	)
 }
 
+// discardMultiRegionFieldsForDatabaseZoneConfig resets the multi-region zone
+// config fields for a multi-region database.
+func discardMultiRegionFieldsForDatabaseZoneConfig(
+	ctx context.Context, dbID descpb.ID, txn *kv.Txn, execConfig *ExecutorConfig,
+) error {
+	// Create a placeholder ZoneConfig.
+	// This will correctly drop the zone config in applyZoneConfigForMultiRegionDatabase
+	// if there are no non-multi-region zone config fields set.
+	mergeZoneConfig := zonepb.NewZoneConfig()
+	mergeZoneConfig.NumReplicas = proto.Int32(0)
+
+	return applyZoneConfigForMultiRegionDatabase(
+		ctx,
+		dbID,
+		mergeZoneConfig,
+		txn,
+		execConfig,
+	)
+}
+
 func applyZoneConfigForMultiRegionDatabase(
 	ctx context.Context,
 	dbID descpb.ID,

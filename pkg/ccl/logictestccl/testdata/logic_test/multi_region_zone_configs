@@ -116,9 +116,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 5,
                             num_replicas = 5,
                             num_voters = 3,
                             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
@@ -160,9 +160,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 100000,
                             num_replicas = 5,
                             num_voters = 5,
                             constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1}',
@@ -179,9 +179,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 100000,
                             num_replicas = 5,
                             num_voters = 5,
                             constraints = '{+region=us-east-1: 1}',
@@ -198,9 +198,9 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
 DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
+                            range_min_bytes = 1000,
+                            range_max_bytes = 100000,
+                            gc.ttlseconds = 100000,
                             num_replicas = 5,
                             num_voters = 5,
                             constraints = '{+region=us-east-1: 1}',
@@ -216,15 +216,13 @@ ALTER DATABASE "mr-zone-configs" DROP REGION "us-east-1" FORCE
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
 ----
-DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
-                            range_min_bytes = 134217728,
-                            range_max_bytes = 536870912,
-                            gc.ttlseconds = 90000,
-                            num_replicas = 5,
-                            num_voters = 5,
-                            constraints = '{+region=us-east-1: 1}',
-                            voter_constraints = '{+region=us-east-1: 2}',
-                            lease_preferences = '[[+region=ap-southeast-2]]'
+RANGE default  ALTER RANGE default CONFIGURE ZONE USING
+               range_min_bytes = 134217728,
+               range_max_bytes = 536870912,
+               gc.ttlseconds = 90000,
+               num_replicas = 3,
+               constraints = '[]',
+               lease_preferences = '[]'
 
 query TTTTT colnames
 SHOW DATABASES
