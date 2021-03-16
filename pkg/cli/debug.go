@@ -874,7 +874,8 @@ var debugUnsafeRemoveDeadReplicasCmd = &cobra.Command{
 This command is UNSAFE and should only be used with the supervision of
 a Cockroach Labs engineer. It is a last-resort option to recover data
 after multiple node failures. The recovered data is not guaranteed to
-be consistent.
+be consistent. If a suitable backup exists, restore it instead of
+using this tool.
 
 The --dead-store-ids flag takes a comma-separated list of dead store
 IDs and scans this store for any ranges whose only live replica is on
@@ -882,11 +883,34 @@ this store. These range descriptors will be edited to forcibly remove
 the dead stores, allowing the range to recover from this single
 replica.
 
+This command will prompt for confirmation before committing its changes.
+
+It is safest to run this command while all nodes are stopped. In some
+circumstances it may be possible to run it while some nodes are still
+running provided all nodes containing replicas of nodes that have lost
+quorum are stopped.
+
+It is recommended to take a filesystem-level backup or snapshot of the
+nodes to be affected before running this command (remember that it is
+not safe to take a filesystem-level backup of a running node, but it is
+possible while the node is stopped)
+
+WARNINGS
+
+This tool will cause previously committed data to be lost. It does not
+preserve atomicity of transactions, so further inconsistencies and
+undefined behavior may result. Before proceeding at the yes/no prompt,
+review the ranges that are affected to consider the possible impact
+of inconsistencies. Further remediation may be necessary after running
+this tool, including dropping and recreating affected indexes, or in the
+worst case creating a new backup or export of this cluster's data for
+restoration into a brand new cluster. Because of the latter possibilities,
+this tool is a slower means of disaster recovery than restoring from
+a backup.
+
 Must only be used when the dead stores are lost and unrecoverable. If
 the dead stores were to rejoin the cluster after this command was
 used, data may be corrupted.
-
-This command will prompt for confirmation before committing its changes.
 
 After this command is used, the node should not be restarted until at
 least 10 seconds have passed since it was stopped. Restarting it too
