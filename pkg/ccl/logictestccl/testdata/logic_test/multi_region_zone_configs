@@ -32,7 +32,7 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             voter_constraints = '[+region=ca-central-1]',
                             lease_preferences = '[[+region=ca-central-1]]'
 
-statement error attempting to modify protected field "num_voters" of a multi-region database zone configuration
+statement error attempting to modify protected field "num_voters" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_voters = 5
 
 query TT
@@ -49,7 +49,9 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             lease_preferences = '[[+region=ca-central-1]]'
 
 statement ok
-ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_voters = 5 FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_voters = 5;
+SET override_multi_region_zone_config = false;
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
@@ -65,52 +67,64 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             lease_preferences = '[[+region=ca-central-1]]'
 
 # Ensure all fields are blocked
-statement error attempting to modify protected field "global_reads" of a multi-region database zone configuration
+statement error attempting to modify protected field "global_reads" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING global_reads = true
 
-statement error attempting to modify protected field "num_replicas" of a multi-region database zone configuration
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7
 
-statement error attempting to modify protected field "constraints" of a multi-region database zone configuration
+statement error attempting to modify protected field "constraints" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING constraints = '{+region=ap-southeast-2: 1}'
 
-statement error attempting to modify protected field "voter_constraints" of a multi-region database zone configuration
+statement error attempting to modify protected field "voter_constraints" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING voter_constraints = '[+region=ap-southeast-2]'
 
-statement error attempting to modify protected field "lease_preferences" of a multi-region database zone configuration
+statement error attempting to modify protected field "lease_preferences" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING lease_preferences = '[[+region=ap-southeast-2]]'
 
-# With above modified zone config, try and drop a region to get warning again
+# With above modified zone config, try and drop a region to get error again
 statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "num_voters"
 ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2"
 
 statement ok
-ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2" FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2";
+SET override_multi_region_zone_config = false;
 
 statement ok
-ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING global_reads = true force
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING global_reads = true;
+SET override_multi_region_zone_config = false;
 
 statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "global_reads"
 ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2"
 
 statement ok
-ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2" force
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2";
+SET override_multi_region_zone_config = false;
 
-# Zone config is unmodified now. We don't need force.
+# Zone config is unmodified now. We don't need to override.
 statement ok
 ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2"
 
 statement ok
-ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2" force
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2";
+SET override_multi_region_zone_config = false;
 
 statement ok
-ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7 force
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7;
+SET override_multi_region_zone_config = false;
 
 statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "num_replicas"
 ALTER DATABASE "mr-zone-configs" SET PRIMARY REGION "us-east-1"
 
 statement ok
-ALTER DATABASE "mr-zone-configs" SET PRIMARY REGION "us-east-1" FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" SET PRIMARY REGION "us-east-1";
+SET override_multi_region_zone_config = false;
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
@@ -126,35 +140,45 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             lease_preferences = '[[+region=us-east-1]]'
 
 # Alter with one protected field and one unprotected field.
-statement error attempting to modify protected field "num_replicas" of a multi-region database zone configuration
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 100000
 
 statement ok
-ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 100000 force
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 100000;
+SET override_multi_region_zone_config = false;
 
 statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "num_replicas"
 ALTER DATABASE "mr-zone-configs" SURVIVE REGION FAILURE
 
 statement ok
-ALTER DATABASE "mr-zone-configs" SURVIVE REGION FAILURE FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" SURVIVE REGION FAILURE;
+SET override_multi_region_zone_config = false;
 
-statement error attempting to modify protected field "constraints" of a multi-region database zone configuration
+statement error attempting to modify protected field "constraints" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING constraints = '{+region=us-east-1: 3}'
 
 statement ok
-ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING constraints = '{+region=us-east-1: 3}' FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING constraints = '{+region=us-east-1: 3}';
+SET override_multi_region_zone_config = false;
 
 statement error attempting to update zone configuration for database "mr-zone-configs" which contains modified field "constraints"
 ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2"
 
 statement ok
-ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2" FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" DROP REGION "ap-southeast-2";
+SET override_multi_region_zone_config = false;
 
-statement error attempting to modify protected field "voter_constraints" of a multi-region database zone configuration
+statement error attempting to modify protected field "voter_constraints" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING voter_constraints = '[+region=ap-southeast-2]'
 
 statement ok
-ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING voter_constraints = '[+region=ap-southeast-2]' FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING voter_constraints = '[+region=ap-southeast-2]';
+SET override_multi_region_zone_config = false;
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
@@ -173,7 +197,9 @@ statement error attempting to update zone configuration for database "mr-zone-co
 ALTER DATABASE "mr-zone-configs" DROP REGION "ca-central-1"
 
 statement ok
-ALTER DATABASE "mr-zone-configs" DROP REGION "ca-central-1" FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" DROP REGION "ca-central-1";
+SET override_multi_region_zone_config = false;
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
@@ -188,11 +214,13 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             voter_constraints = '{+region=us-east-1: 2}',
                             lease_preferences = '[[+region=us-east-1]]'
 
-statement error attempting to modify protected field "lease_preferences" of a multi-region database zone configuration
+statement error attempting to modify protected field "lease_preferences" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING lease_preferences = '[[+region=ap-southeast-2]]'
 
 statement ok
-ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING lease_preferences = '[[+region=ap-southeast-2]]' FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING lease_preferences = '[[+region=ap-southeast-2]]';
+SET override_multi_region_zone_config = false;
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
@@ -211,7 +239,9 @@ statement error attempting to update zone configuration for database "mr-zone-co
 ALTER DATABASE "mr-zone-configs" DROP REGION "us-east-1"
 
 statement ok
-ALTER DATABASE "mr-zone-configs" DROP REGION "us-east-1" FORCE
+SET override_multi_region_zone_config = true;
+ALTER DATABASE "mr-zone-configs" DROP REGION "us-east-1";
+SET override_multi_region_zone_config = false;
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
@@ -236,6 +266,255 @@ postgres         root   NULL            {}       NULL
 system           node   NULL            {}       NULL
 test             root   NULL            {}       NULL
 
-# FIXME: Write some more testcases here which test constraints which are longer to ensure
-# that slice checking is working (e.g. a constraints list which is much longer than what
-# the MR zone config would generate).
+statement ok
+ALTER DATABASE "mr-zone-configs" SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" ADD REGION "ca-central-1"
+
+statement ok
+ALTER DATABASE "mr-zone-configs" ADD REGION "ap-southeast-2"
+
+query TTTTT colnames
+SHOW DATABASES
+----
+database_name    owner  primary_region  regions                                  survival_goal
+defaultdb        root   NULL            {}                                       NULL
+mr-zone-configs  root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
+postgres         root   NULL            {}                                       NULL
+system           node   NULL            {}                                       NULL
+test             root   NULL            {}                                       NULL
+
+# Ensure that changes to the table-level zone config also require overriding.
+statement ok
+CREATE TABLE regional_by_row (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i),
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE regional_by_table (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX(i),
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY TABLE
+
+statement ok
+ALTER table regional_by_row CONFIGURE ZONE USING gc.ttlseconds = 10
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER table regional_by_row CONFIGURE ZONE USING num_replicas = 10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER table regional_by_row CONFIGURE ZONE USING num_replicas = 10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
+----
+TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 10,
+                       num_voters = 3,
+                       constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER partition "us-east-1" of index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER partition "us-east-1" of index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10;
+SET override_multi_region_zone_config = false
+
+query TTT
+SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
+ORDER BY partition_name, index_name
+----
+num_voters = 3,
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@primary  ap-southeast-2
+num_voters = 3,
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row@regional_by_row_i_idx  ap-southeast-2
+num_voters = 3,
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@primary  ca-central-1
+num_voters = 3,
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row@regional_by_row_i_idx  ca-central-1
+num_replicas = 10,
+num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row@primary  us-east-1
+num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
+
+statement error attempting to update zone configuration for table "regional_by_row" which contains modified field "num_replicas"
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE;
+SET override_multi_region_zone_config = false
+
+statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
+ALTER index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10
+
+query TTT
+SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row]
+ORDER BY partition_name, index_name
+----
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX regional_by_row@primary
+----
+TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 5,
+                       num_voters = 3,
+                       constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX regional_by_row@regional_by_row_i_idx
+----
+TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 5,
+                       num_voters = 3,
+                       constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
+----
+TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
+                       range_min_bytes = 134217728,
+                       range_max_bytes = 536870912,
+                       gc.ttlseconds = 10,
+                       num_replicas = 5,
+                       num_voters = 3,
+                       constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE regional_by_row SET LOCALITY GLOBAL
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10;
+SET override_multi_region_zone_config = false
+
+statement ok
+ALTER TABLE regional_by_row SET LOCALITY GLOBAL
+
+statement error attempting to update zone configuration for table "regional_by_row" which contains a zone configuration on index "primary"
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW;
+SET override_multi_region_zone_config = false
+
+statement ok
+CREATE TABLE regional_by_row_as (
+  pk INT PRIMARY KEY,
+  i INT,
+  cr crdb_internal_region NOT NULL DEFAULT 'ca-central-1',
+  INDEX(i),
+  FAMILY (cr, pk, i)
+) LOCALITY REGIONAL BY ROW AS "cr";
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER index regional_by_row_as@primary CONFIGURE ZONE USING num_replicas = 10;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@primary
+----
+INDEX regional_by_row_as@primary  ALTER INDEX regional_by_row_as@primary CONFIGURE ZONE USING
+                                  range_min_bytes = 134217728,
+                                  range_max_bytes = 536870912,
+                                  gc.ttlseconds = 90000,
+                                  num_replicas = 10,
+                                  num_voters = 3,
+                                  constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                                  voter_constraints = '[+region=us-east-1]',
+                                  lease_preferences = '[[+region=us-east-1]]'
+
+statement error attempting to update zone configuration for table "regional_by_row_as" which contains a zone configuration on index "primary" with multi-region field "num_replicas" set
+ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX regional_by_row_as@primary
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                            range_min_bytes = 134217728,
+                            range_max_bytes = 536870912,
+                            gc.ttlseconds = 90000,
+                            num_replicas = 5,
+                            num_voters = 3,
+                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                            voter_constraints = '[+region=us-east-1]',
+                            lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW CREATE TABLE regional_by_row_as
+----
+regional_by_row_as          CREATE TABLE public.regional_by_row_as (
+                            pk INT8 NOT NULL,
+                            i INT8 NULL,
+                            cr public.crdb_internal_region NOT NULL DEFAULT 'ca-central-1':::public.crdb_internal_region,
+                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+                            CONSTRAINT "primary" PRIMARY KEY (pk ASC),
+                            INDEX regional_by_row_as_i_idx (i ASC),
+                            FAMILY fam_0_cr_pk_i (cr, pk, i, crdb_region)
+) LOCALITY REGIONAL BY ROW
+
+query TTT
+SELECT ZONE_config, index_name, partition_name FROM [SHOW PARTITIONS FROM TABLE regional_by_row_as]
+ORDER BY partition_name, index_name
+----
+num_voters = 3,
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_as@primary  ap-southeast-2
+num_voters = 3,
+voter_constraints = '[+region=ap-southeast-2]',
+lease_preferences = '[[+region=ap-southeast-2]]'  regional_by_row_as@regional_by_row_as_i_idx  ap-southeast-2
+num_voters = 3,
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_as@primary  ca-central-1
+num_voters = 3,
+voter_constraints = '[+region=ca-central-1]',
+lease_preferences = '[[+region=ca-central-1]]'  regional_by_row_as@regional_by_row_as_i_idx  ca-central-1
+num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row_as@primary  us-east-1
+num_voters = 3,
+voter_constraints = '[+region=us-east-1]',
+lease_preferences = '[[+region=us-east-1]]'  regional_by_row_as@regional_by_row_as_i_idx  us-east-1

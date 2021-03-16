@@ -236,6 +236,13 @@ var dropEnumValueEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.override_multi_region_zone_config.enabled",
+	"default value for override_multi_region_zone_config; "+
+		"allows for overriding the zone configs of a multi-region table or database",
+	false,
+)
+
 var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_hash_sharded_indexes.enabled",
 	"default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default",
@@ -2316,6 +2323,10 @@ func (m *sessionDataMutator) SetImplicitColumnPartitioningEnabled(val bool) {
 
 func (m *sessionDataMutator) SetDropEnumValueEnabled(val bool) {
 	m.data.DropEnumValueEnabled = val
+}
+
+func (m *sessionDataMutator) SetOverrideMultiRegionZoneConfigEnabled(val bool) {
+	m.data.OverrideMultiRegionZoneConfigEnabled = val
 }
 
 func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {
