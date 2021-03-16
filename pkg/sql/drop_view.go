@@ -211,8 +211,26 @@ func (p *planner) dropViewImpl(
 		); err != nil {
 			return cascadeDroppedViews, err
 		}
+
 	}
 	viewDesc.DependsOn = nil
+
+	// Remove back-references from the types this view depends on.
+	typesDependedOn := append([]descpb.ID(nil), viewDesc.DependsOnTypes...)
+	for _, typeID := range typesDependedOn {
+		typeDesc, err := p.Descriptors().GetMutableTypeByID(ctx, p.txn, typeID, tree.ObjectLookupFlags{})
+		if err != nil {
+			return cascadeDroppedViews,
+				errors.Wrapf(err, "error resolving dependency type ID %d", typeID)
+		}
+		if typeDesc.Dropped() {
+			continue
+		}
+		backRefJobDesc := fmt.Sprintf("updating type back reference %d for table %d", typeID, viewDesc.ID)
+		if err := p.removeTypeBackReference(ctx, typeID, viewDesc.ID, backRefJobDesc); err != nil {
+			return cascadeDroppedViews, err
+		}
+	}
 
 	if behavior == tree.DropCascade {
 		dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)

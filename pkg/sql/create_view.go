@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -54,6 +55,11 @@ type createViewNode struct {
 	// depends on. This is collected during the construction of
 	// the view query's logical plan.
 	planDeps planDependencies
+
+	// typeDeps tracks which types the view being created
+	// depends on. This is collected during the construction of
+	// the view query's logical plan.
+	typeDeps opt.ViewTypeDeps
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -214,6 +220,11 @@ func (n *createViewNode) startExec(params runParams) error {
 			desc.DependsOn = append(desc.DependsOn, backrefID)
 		}
 
+		// Collect all types this view depends on.
+		for backrefID := range n.typeDeps {
+			desc.DependsOnTypes = append(desc.DependsOnTypes, backrefID)
+		}
+
 		// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
 		// do some basic string formatting (not accurate in the general case).
 		if err = params.p.createDescriptorWithID(
@@ -256,9 +267,17 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	// Install back references to types used by this view.
-	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, newDesc); err != nil {
-		return err
+	for id := range n.typeDeps {
+		// In case that we are replacing a view that already depends on
+		// this table, remove all existing type references so that we don't leave
+		// any out of date references. Then, add the new references.
+		jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, newDesc.ID)
+		if err := params.p.removeTypeBackReference(params.ctx, id, newDesc.ID, jobDesc); err != nil {
+			return err
+		}
+		if err := params.p.addTypeBackReference(params.ctx, id, newDesc.ID, jobDesc); err != nil {
+			return err
+		}
 	}
 
 	if err := validateDescriptor(params.ctx, params.p, newDesc); err != nil {

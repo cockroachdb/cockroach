@@ -1668,6 +1668,7 @@ func (ef *execFactory) ConstructCreateView(
 	viewQuery string,
 	columns colinfo.ResultColumns,
 	deps opt.ViewDeps,
+	typeDeps opt.ViewTypeDeps,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
@@ -1711,6 +1712,7 @@ func (ef *execFactory) ConstructCreateView(
 		dbDesc:       schema.(*optSchema).database,
 		columns:      columns,
 		planDeps:     planDeps,
+		typeDeps:     typeDeps,
 	}, nil
 }
 
