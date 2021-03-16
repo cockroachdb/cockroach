@@ -924,7 +924,9 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData.StmtTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10)
 		},
-		GlobalDefault: func(sv *settings.Values) string { return "0" },
+		GlobalDefault: func(sv *settings.Values) string {
+			return clusterStatementTimeout.String(sv)
+		},
 	},
 
 	`idle_in_session_timeout`: {
@@ -946,7 +948,9 @@ var varGen = map[string]sessionVar{
 			ms := evalCtx.SessionData.IdleInTransactionSessionTimeout.Nanoseconds() / int64(time.Millisecond)
 			return strconv.FormatInt(ms, 10)
 		},
-		GlobalDefault: func(sv *settings.Values) string { return "0" },
+		GlobalDefault: func(sv *settings.Values) string {
+			return clusterIdleInTransactionSessionTimeout.String(sv)
+		},
 	},
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-TIMEZONE
