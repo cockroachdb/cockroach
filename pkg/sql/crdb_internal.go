@@ -2542,6 +2542,20 @@ CREATE TABLE crdb_internal.backward_dependencies (
 					return err
 				}
 			}
+			for _, tIdx := range table.GetDependsOnTypes() {
+				if err := addRow(
+					tableID, tableName,
+					tree.DNull,
+					tree.DNull,
+					tree.NewDInt(tree.DInt(tIdx)),
+					viewDep,
+					tree.DNull,
+					tree.DNull,
+					tree.DNull,
+				); err != nil {
+					return err
+				}
+			}
 
 			// Record sequence dependencies.
 			for _, col := range table.PublicColumns() {
@@ -4304,6 +4318,34 @@ CREATE TABLE crdb_internal.cross_db_references (
 							}
 						}
 					}
+
+					// For views check if we depend on types in a different database.
+					dependsOnTypes := table.GetDependsOnTypes()
+					for _, dependency := range dependsOnTypes {
+						dependentType, err := lookupFn.getTypeByID(dependency)
+						if err != nil {
+							return err
+						}
+						if dependentType.GetParentID() != table.GetParentID() {
+							objectDatabaseName := lookupFn.getDatabaseName(table)
+							refSchemaName, err := lookupFn.getSchemaNameByID(dependentType.GetParentSchemaID())
+							if err != nil {
+								return err
+							}
+							refDatabaseName := lookupFn.getDatabaseName(dependentType)
+
+							if err := addRow(tree.NewDString(objectDatabaseName),
+								tree.NewDString(schemaName),
+								tree.NewDString(table.GetName()),
+								tree.NewDString(refDatabaseName),
+								tree.NewDString(refSchemaName),
+								tree.NewDString(dependentType.GetName()),
+								tree.NewDString("view references type")); err != nil {
+								return err
+							}
+						}
+					}
+
 				} else if table.IsSequence() {
 					// For sequences check if the sequence is owned by
 					// a different database.

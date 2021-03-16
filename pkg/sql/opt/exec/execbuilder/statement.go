@@ -65,6 +65,7 @@ func (b *Builder) buildCreateView(cv *memo.CreateViewExpr) (execPlan, error) {
 		cv.ViewQuery,
 		cols,
 		cv.Deps,
+		cv.TypeDeps,
 	)
 	return execPlan{root: root}, err
 }

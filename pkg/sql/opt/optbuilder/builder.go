@@ -14,6 +14,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -117,6 +118,7 @@ type Builder struct {
 	// trackViewDeps would be false inside that inner view).
 	trackViewDeps bool
 	viewDeps      opt.ViewDeps
+	viewTypeDeps  opt.ViewTypeDeps
 
 	// If set, the data source names in the AST are rewritten to the fully
 	// qualified version (after resolution). Used to construct the strings for
@@ -412,6 +414,16 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 				b.viewDeps = append(b.viewDeps, opt.ViewDep{
 					DataSource: ds,
 				})
+			}
+		}
+	}
+}
+
+func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
+	if b.trackViewDeps {
+		if texpr.ResolvedType().UserDefined() {
+			for id := range typedesc.GetTypeDescriptorClosure(texpr.ResolvedType()) {
+				b.viewTypeDeps.Add(int(id))
 			}
 		}
 	}

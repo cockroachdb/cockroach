@@ -979,6 +979,15 @@ func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor,
 	return tb, nil
 }
 
+func (l *internalLookupCtx) getTypeByID(id descpb.ID) (catalog.TypeDescriptor, error) {
+	typ, ok := l.typDescs[id]
+	if !ok {
+		return nil, sqlerrors.NewUndefinedRelationError(
+			tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("[%d]", id))))
+	}
+	return typ, nil
+}
+
 func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error) {
 	sc, ok := l.schemaDescs[id]
 	if !ok {
@@ -999,7 +1008,7 @@ func (l *internalLookupCtx) getSchemaNameByID(id descpb.ID) (string, error) {
 	return schema.GetName(), nil
 }
 
-func (l *internalLookupCtx) getDatabaseName(table catalog.TableDescriptor) string {
+func (l *internalLookupCtx) getDatabaseName(table catalog.Descriptor) string {
 	parentName := l.dbNames[table.GetParentID()]
 	if parentName == "" {
 		// The parent database was deleted. This is possible e.g. when

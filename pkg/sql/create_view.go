@@ -58,6 +58,11 @@ type createViewNode struct {
 	// depends on. This is collected during the construction of
 	// the view query's logical plan.
 	planDeps planDependencies
+
+	// typeDeps tracks which types the view being created
+	// depends on. This is collected during the construction of
+	// the view query's logical plan.
+	typeDeps typeDependencies
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -234,6 +239,11 @@ func (n *createViewNode) startExec(params runParams) error {
 			desc.DependsOn = append(desc.DependsOn, backrefID)
 		}
 
+		// Collect all types this view depends on.
+		for backrefID := range n.typeDeps {
+			desc.DependsOnTypes = append(desc.DependsOnTypes, backrefID)
+		}
+
 		// TODO (lucy): I think this needs a NodeFormatter implementation. For now,
 		// do some basic string formatting (not accurate in the general case).
 		if err = params.p.createDescriptorWithID(
@@ -284,9 +294,12 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	// Install back references to types used by this view.
-	if err := params.p.addBackRefsFromAllTypesInTable(params.ctx, newDesc); err != nil {
-		return err
+	// Add back references for the type dependencies.
+	for id := range n.typeDeps {
+		jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, newDesc.ID)
+		if err := params.p.addTypeBackReference(params.ctx, id, newDesc.ID, jobDesc); err != nil {
+			return err
+		}
 	}
 
 	if err := validateDescriptor(params.ctx, params.p, newDesc); err != nil {
@@ -498,11 +511,28 @@ func (p *planner) replaceViewDesc(
 		}
 	}
 
+	// For each old type dependency (i.e. before replacing the view),
+	// see if we still depend on it. If not, then remove the back reference.
+	var outdatedTypeRefs []descpb.ID
+	for _, id := range toReplace.DependsOnTypes {
+		if _, ok := n.typeDeps[id]; !ok {
+			outdatedTypeRefs = append(outdatedTypeRefs, id)
+		}
+	}
+	jobDesc := fmt.Sprintf("updating type back references %d for table %d", outdatedTypeRefs, toReplace.ID)
+	if err := p.removeTypeBackReferences(ctx, outdatedTypeRefs, toReplace.ID, jobDesc); err != nil {
+		return nil, err
+	}
+
 	// Since the view query has been replaced, the dependencies that this
 	// table descriptor had are gone.
 	toReplace.DependsOn = make([]descpb.ID, 0, len(n.planDeps))
 	for backrefID := range n.planDeps {
 		toReplace.DependsOn = append(toReplace.DependsOn, backrefID)
+	}
+	toReplace.DependsOnTypes = make([]descpb.ID, 0, len(n.typeDeps))
+	for backrefID := range n.typeDeps {
+		toReplace.DependsOnTypes = append(toReplace.DependsOnTypes, backrefID)
 	}
 
 	// Since we are replacing an existing view here, we need to write the new

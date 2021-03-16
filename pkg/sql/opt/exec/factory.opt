@@ -555,6 +555,7 @@ define CreateView {
     ViewQuery string
     Columns colinfo.ResultColumns
     deps opt.ViewDeps
+    typeDeps opt.ViewTypeDeps
 }
 
 # SequenceSelect implements a scan of a sequence as a data source.
