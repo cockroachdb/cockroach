@@ -12,7 +12,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -21,7 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -88,7 +90,7 @@ func getRelevantDescChanges(
 	}
 
 	if !startTime.IsEmpty() {
-		starting, err := backupbase.LoadAllDescs(ctx, codec, db, startTime)
+		starting, err := backupresolver.LoadAllDescs(ctx, codec, db, startTime)
 		if err != nil {
 			return nil, err
 		}
@@ -312,7 +314,7 @@ func lookupDatabaseID(
 func fullClusterTargetsRestore(
 	allDescs []catalog.Descriptor, lastBackupManifest BackupManifest,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, []descpb.TenantInfo, error) {
-	fullClusterDescs, fullClusterDBs, err := backupbase.FullClusterTargets(allDescs)
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -333,6 +335,65 @@ func fullClusterTargetsRestore(
 	tenants := lastBackupManifest.Tenants
 
 	return filteredDescs, filteredDBs, tenants, nil
+}
+
+// fullClusterTargets returns all of the tableDescriptors to be included in a
+// full cluster backup, and all the user databases.
+func fullClusterTargets(
+	allDescs []catalog.Descriptor,
+) ([]catalog.Descriptor, []*dbdesc.Immutable, error) {
+	fullClusterDescs := make([]catalog.Descriptor, 0, len(allDescs))
+	fullClusterDBs := make([]*dbdesc.Immutable, 0)
+
+	systemTablesToBackup := GetSystemTablesToIncludeInClusterBackup()
+
+	for _, desc := range allDescs {
+		switch desc := desc.(type) {
+		case catalog.DatabaseDescriptor:
+			dbDesc := dbdesc.NewBuilder(desc.DatabaseDesc()).BuildImmutableDatabase()
+			fullClusterDescs = append(fullClusterDescs, desc)
+			if dbDesc.GetID() != systemschema.SystemDB.GetID() {
+				// The only database that isn't being fully backed up is the system DB.
+				fullClusterDBs = append(fullClusterDBs, dbDesc)
+			}
+		case catalog.TableDescriptor:
+			if desc.GetParentID() == keys.SystemDatabaseID {
+				// Add only the system tables that we plan to include in a full cluster
+				// backup.
+				if _, ok := systemTablesToBackup[desc.GetName()]; ok {
+					fullClusterDescs = append(fullClusterDescs, desc)
+				}
+			} else {
+				// Add all user tables that are not in a DROP state.
+				if desc.GetState() != descpb.DescriptorState_DROP {
+					fullClusterDescs = append(fullClusterDescs, desc)
+				}
+			}
+		case catalog.SchemaDescriptor:
+			fullClusterDescs = append(fullClusterDescs, desc)
+		case catalog.TypeDescriptor:
+			fullClusterDescs = append(fullClusterDescs, desc)
+		}
+	}
+	return fullClusterDescs, fullClusterDBs, nil
+}
+
+// fullClusterTargetsBackup returns the same descriptors referenced in
+// fullClusterTargets, but rather than returning the entire database
+// descriptor as the second argument, it only returns their IDs.
+func fullClusterTargetsBackup(
+	allDescs []catalog.Descriptor,
+) ([]catalog.Descriptor, []descpb.ID, error) {
+	fullClusterDescs, fullClusterDBs, err := fullClusterTargets(allDescs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	fullClusterDBIDs := make([]descpb.ID, 0)
+	for _, desc := range fullClusterDBs {
+		fullClusterDBIDs = append(fullClusterDBIDs, desc.GetID())
+	}
+	return fullClusterDescs, fullClusterDBIDs, nil
 }
 
 func selectTargets(
@@ -360,7 +421,7 @@ func selectTargets(
 		return nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.Tenant.ToUint64())
 	}
 
-	matched, err := backupbase.DescriptorsMatchingTargets(ctx,
+	matched, err := backupresolver.DescriptorsMatchingTargets(ctx,
 		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets)
 	if err != nil {
 		return nil, nil, nil, err
