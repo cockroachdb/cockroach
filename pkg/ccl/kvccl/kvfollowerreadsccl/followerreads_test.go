@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -67,6 +68,19 @@ func TestEvalFollowerReadOffset(t *testing.T) {
 	}
 }
 
+func TestZeroDurationDisablesFollowerReadOffset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	st := cluster.MakeTestingClusterSettings()
+	closedts.TargetDuration.Override(&st.SV, 0)
+	if offset, err := evalFollowerReadOffset(uuid.MakeV4(), st); err != nil {
+		t.Fatal(err)
+	} else if offset != followerInfiniteReadLag {
+		t.Fatalf("expected %v, got %v", followerInfiniteReadLag, offset)
+	}
+}
+
 func TestCanSendToFollower(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	clock := hlc.NewClock(hlc.UnixNano, base.DefaultMaxClockOffset)
@@ -100,6 +114,7 @@ func TestCanSendToFollower(t *testing.T) {
 		disabledEnterprise    bool
 		disabledFollowerReads bool
 		exp                   bool
+		zeroTargetDuration    bool
 	}{
 		{
 			name: "non-txn batch",
@@ -244,6 +259,12 @@ func TestCanSendToFollower(t *testing.T) {
 			disabledFollowerReads: true,
 			exp:                   false,
 		},
+		{
+			name:               "stale read when zero target_duration",
+			ba:                 batch(txn(stale), &roachpb.GetRequest{}),
+			zeroTargetDuration: true,
+			exp:                false,
+		},
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
@@ -252,6 +273,9 @@ func TestCanSendToFollower(t *testing.T) {
 			}
 			st := cluster.MakeTestingClusterSettings()
 			kvserver.FollowerReadsEnabled.Override(&st.SV, !c.disabledFollowerReads)
+			if c.zeroTargetDuration {
+				closedts.TargetDuration.Override(&st.SV, 0)
+			}
 
 			can := canSendToFollower(uuid.MakeV4(), st, clock, c.ctPolicy, c.ba)
 			require.Equal(t, c.exp, can)

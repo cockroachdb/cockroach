@@ -31,6 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+const (
+	followerInfiniteReadLag time.Duration = -1 << 63
+)
+
 // followerReadMultiple is the multiple of kv.closed_timestmap.target_duration
 // which the implementation of the follower read capable replica policy ought
 // to use to determine if a request can be used for reading.
@@ -57,6 +61,9 @@ func getFollowerReadLag(st *cluster.Settings) time.Duration {
 	targetMultiple := followerReadMultiple.Get(&st.SV)
 	targetDuration := closedts.TargetDuration.Get(&st.SV)
 	closeFraction := closedts.CloseFraction.Get(&st.SV)
+	if targetDuration <= 0 {
+		return followerInfiniteReadLag
+	}
 	return -1 * time.Duration(float64(targetDuration)*
 		(1+closeFraction*targetMultiple))
 }
