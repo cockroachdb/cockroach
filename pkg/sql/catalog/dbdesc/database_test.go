@@ -99,45 +99,12 @@ func TestValidateDatabaseDesc(t *testing.T) {
 			},
 		},
 		{
-			`region "us-east-1" seen twice on db 200`,
-			descpb.DatabaseDescriptor{
-				Name: "multi-region-db",
-				ID:   200,
-				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-						{Name: "us-east-1"},
-						{Name: "us-east-1"},
-					},
-					PrimaryRegion: "us-east-1",
-				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
-			},
-		},
-		{
 			`primary region unset on a multi-region db 200`,
 			descpb.DatabaseDescriptor{
-				Name: "multi-region-db",
-				ID:   200,
-				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-						{Name: "us-east-1"},
-					},
-				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
-			},
-		},
-		{
-			`primary region not found in list of regions on db 200`,
-			descpb.DatabaseDescriptor{
-				Name: "multi-region-db",
-				ID:   200,
-				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					Regions: []descpb.DatabaseDescriptor_RegionConfig_Region{
-						{Name: "us-east-1"},
-					},
-					PrimaryRegion: "us-east-2",
-				},
-				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
+				Name:         "multi-region-db",
+				ID:           200,
+				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{},
+				Privileges:   descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 	}

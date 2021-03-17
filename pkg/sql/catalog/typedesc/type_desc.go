@@ -178,10 +178,27 @@ func (desc *Immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	return desc.RegionConfig.PrimaryRegion, nil
 }
 
-// RegionNames returns all the regions on the multi-region enum.
-// This includes regions that are in `READ_ONLY` state as well, if they've just
-// been added or are in the process of being removed (pre-validation).
+// RegionNames returns all `PUBLIC` regions on the multi-region enum. Regions
+// that are in the process of being added/removed (`READ_ONLY`) are omitted.
 func (desc *Immutable) RegionNames() (descpb.RegionNames, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+	var regions descpb.RegionNames
+	for _, member := range desc.EnumMembers {
+		if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY {
+			continue
+		}
+		regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+	}
+	return regions, nil
+}
+
+// RegionNamesIncludingTransitioning returns all the regions on a multi-region
+// enum, including `READ ONLY` regions which are in the process of transitioning.
+func (desc *Immutable) RegionNamesIncludingTransitioning() (descpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region enum %d", desc.ID,
@@ -395,11 +412,6 @@ func (e EnumMembers) Less(i, j int) bool {
 }
 func (e EnumMembers) Swap(i, j int) { e[i], e[j] = e[j], e[i] }
 
-func isBeingDropped(member *descpb.TypeDescriptor_EnumMember) bool {
-	return member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
-		member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE
-}
-
 // ValidateSelf performs validation on the TypeDescriptor.
 func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
@@ -575,45 +587,27 @@ func (desc *Immutable) validateMultiRegion(
 		return
 	}
 
-	dbRegions, err := dbDesc.RegionNames()
+	primaryRegion, err := desc.PrimaryRegionName()
 	if err != nil {
 		vea.Report(err)
-		return
 	}
 
-	// Count the number of regions that aren't being dropped.
-	numRegions := 0
-	for _, member := range desc.EnumMembers {
-		if !isBeingDropped(&member) {
-			numRegions++
+	{
+		found := false
+		for _, member := range desc.EnumMembers {
+			if descpb.RegionName(member.LogicalRepresentation) == primaryRegion {
+				found = true
+			}
 		}
-	}
-	if numRegions != len(dbRegions) {
-		vea.Report(errors.AssertionFailedf(
-			"unexpected number of regions on db desc: %d expected %d",
-			len(dbRegions), len(desc.EnumMembers)))
-	}
-
-	regions := make(map[descpb.RegionName]struct{}, len(dbRegions))
-	for _, region := range dbRegions {
-		regions[region] = struct{}{}
-	}
-
-	for _, member := range desc.EnumMembers {
-		if isBeingDropped(&member) {
-			continue
-		}
-		enumRegion := descpb.RegionName(member.LogicalRepresentation)
-		if _, ok := regions[enumRegion]; !ok {
-			vea.Report(errors.AssertionFailedf("did not find %q region on database descriptor", enumRegion))
+		if !found {
+			vea.Report(
+				errors.AssertionFailedf("primary region %q not found in list of enum members",
+					primaryRegion,
+				))
 		}
 	}
 
 	dbPrimaryRegion, err := dbDesc.PrimaryRegionName()
-	if err != nil {
-		vea.Report(err)
-	}
-	primaryRegion, err := desc.PrimaryRegionName()
 	if err != nil {
 		vea.Report(err)
 	}

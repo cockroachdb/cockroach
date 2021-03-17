@@ -11,6 +11,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/multiregion",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",

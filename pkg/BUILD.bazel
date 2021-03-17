@@ -152,6 +152,7 @@ ALL_TESTS = [
     "//pkg/sql/catalog/descs:descs_test",
     "//pkg/sql/catalog/hydratedtables:hydratedtables_test",
     "//pkg/sql/catalog/lease:lease_test",
+    "//pkg/sql/catalog/multiregion:multiregion_test",
     "//pkg/sql/catalog/schemadesc:schemadesc_test",
     "//pkg/sql/catalog/schemaexpr:schemaexpr_test",
     "//pkg/sql/catalog/systemschema:systemschema_test",
