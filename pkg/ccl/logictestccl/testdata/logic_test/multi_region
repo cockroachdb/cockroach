@@ -1307,3 +1307,55 @@ DATABASE zone_config_drop_region  ALTER DATABASE zone_config_drop_region CONFIGU
                           constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1}',
                           voter_constraints = '[+region=ca-central-1]',
                           lease_preferences = '[[+region=ca-central-1]]'
+
+#
+# Tests with views and sequences.
+#
+
+statement ok
+CREATE DATABASE db_with_views_and_sequences;
+USE db_with_views_and_sequences
+
+statement ok
+CREATE TABLE t (id INT PRIMARY KEY, a INT, b INT);
+INSERT INTO t VALUES (1, 2, 3), (4, 5, 6);
+CREATE SEQUENCE s;
+CREATE VIEW v AS SELECT id, a, b FROM t
+
+statement ok
+ALTER DATABASE db_with_views_and_sequences SET PRIMARY REGION "ap-southeast-2"
+
+query TT colnames
+SELECT table_name, locality FROM [SHOW TABLES]
+----
+table_name  locality
+t           REGIONAL BY TABLE IN PRIMARY REGION
+s           REGIONAL BY TABLE IN PRIMARY REGION
+v           REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+CREATE SEQUENCE s2;
+CREATE VIEW v2 AS SELECT id, a, b FROM t
+
+query TT colnames
+SELECT table_name, locality FROM [SHOW TABLES]
+----
+table_name  locality
+t           REGIONAL BY TABLE IN PRIMARY REGION
+s           REGIONAL BY TABLE IN PRIMARY REGION
+v           REGIONAL BY TABLE IN PRIMARY REGION
+s2          REGIONAL BY TABLE IN PRIMARY REGION
+v2          REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+ALTER DATABASE db_with_views_and_sequences DROP REGION "ap-southeast-2"
+
+query TT colnames
+SELECT table_name, locality FROM [SHOW TABLES]
+----
+table_name  locality
+t           NULL
+s           NULL
+v           NULL
+s2          NULL
+v2          NULL

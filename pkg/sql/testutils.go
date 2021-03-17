@@ -74,7 +74,8 @@ func CreateTestTableDescriptor(
 			hlc.Timestamp{}, /* creationTime */
 			privileges,
 			tree.PersistencePermanent,
-			nil, /* params */
+			nil,   /* params */
+			false, /* isMultiRegion */
 		)
 		return desc, err
 	default:
