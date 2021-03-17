@@ -3038,6 +3038,12 @@ type EvalDatabase interface {
 	IsTableVisible(
 		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
 	) (isVisible bool, exists bool, err error)
+
+	// IsTypeVisible checks if the type with the given ID belongs to a schema
+	// on the given sessiondata.SearchPath.
+	IsTypeVisible(
+		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+	) (isVisible bool, exists bool, err error)
 }
 
 // EvalPlanner is a limited planner that can be used from EvalContext.
