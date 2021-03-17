@@ -23,6 +23,7 @@ go_library(
         "clock_util.go",
         "cluster.go",
         "cluster_init.go",
+        "connection_latency.go",
         "copy.go",
         "decommission.go",
         "decommission_self.go",
