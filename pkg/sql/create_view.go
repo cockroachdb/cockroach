@@ -184,6 +184,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			&params.p.semaCtx,
 			params.p.EvalContext(),
 			n.persistence,
+			n.dbDesc.IsMultiRegion(),
 		)
 		if err != nil {
 			return err
@@ -299,6 +300,7 @@ func makeViewTableDesc(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	persistence tree.Persistence,
+	isMultiRegion bool,
 ) (tabledesc.Mutable, error) {
 	desc := tabledesc.InitTableDescriptor(
 		id,
@@ -310,6 +312,9 @@ func makeViewTableDesc(
 		persistence,
 	)
 	desc.ViewQuery = viewQuery
+	if isMultiRegion {
+		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+	}
 	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
 	}

@@ -2416,6 +2416,16 @@ func newTableDesc(
 		n.Defs = newDefs
 	}
 
+	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, parentID, tree.DatabaseLookupFlags{
+			Required:    true,
+			AvoidCached: true,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	for i, def := range n.Defs {
 		d, ok := def.(*tree.ColumnTableDef)
 		if !ok {
@@ -2429,7 +2439,6 @@ func newTableDesc(
 		if seqName != nil {
 			if err := doCreateSequence(
 				params,
-				n.String(),
 				seqDbDesc,
 				parentSchemaID,
 				seqName,
@@ -2444,13 +2453,6 @@ func newTableDesc(
 			ensureCopy()
 			n.Defs[i] = newDef
 		}
-	}
-
-	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, parentID, tree.DatabaseLookupFlags{},
-	)
-	if err != nil {
-		return nil, err
 	}
 
 	// We need to run NewTableDesc with caching disabled, because
