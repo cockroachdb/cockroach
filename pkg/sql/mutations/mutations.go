@@ -207,58 +207,8 @@ func statisticsMutator(
 			if col == nil {
 				return
 			}
-			n := rng.Intn(10)
-			seen := map[string]bool{}
 			colType := tree.MustBeStaticallyKnownType(col.Type)
-			// The JSON family does not have a key encoding.
-			if colType.Family() == types.JsonFamily {
-				return
-			}
-			h := stats.HistogramData{
-				ColumnType: colType,
-			}
-			for i := 0; i < n; i++ {
-				upper := rowenc.RandDatumWithNullChance(rng, colType, 0)
-				if upper == tree.DNull {
-					continue
-				}
-				enc, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
-				if err != nil {
-					panic(err)
-				}
-				if es := string(enc); seen[es] {
-					continue
-				} else {
-					seen[es] = true
-				}
-				numRange := randNonNegInt(rng)
-				var distinctRange float64
-				// distinctRange should be <= numRange.
-				switch rng.Intn(3) {
-				case 0:
-					// 0
-				case 1:
-					distinctRange = float64(numRange)
-				default:
-					distinctRange = rng.Float64() * float64(numRange)
-				}
-
-				h.Buckets = append(h.Buckets, stats.HistogramData_Bucket{
-					NumEq:         randNonNegInt(rng),
-					NumRange:      numRange,
-					DistinctRange: distinctRange,
-					UpperBound:    enc,
-				})
-			}
-			sort.Slice(h.Buckets, func(i, j int) bool {
-				return bytes.Compare(h.Buckets[i].UpperBound, h.Buckets[j].UpperBound) < 0
-			})
-			// The first bucket must have numrange = 0, and thus
-			// distinctrange = 0 as well.
-			if len(h.Buckets) > 0 {
-				h.Buckets[0].NumRange = 0
-				h.Buckets[0].DistinctRange = 0
-			}
+			h := randHistogram(rng, colType)
 			stat := colStats[col.Name]
 			if err := stat.SetHistogram(&h); err != nil {
 				panic(err)
@@ -287,9 +237,13 @@ func statisticsMutator(
 					makeHistogram(def)
 				}
 			case *tree.IndexTableDef:
+				// TODO(mgartner): We should make a histogram for each indexed
+				// column.
 				makeHistogram(cols[def.Columns[0].Column])
 			case *tree.UniqueConstraintTableDef:
 				if !def.WithoutIndex {
+					// TODO(mgartner): We should make a histogram for each
+					// column in the unique constraint.
 					makeHistogram(cols[def.Columns[0].Column])
 				}
 			}
@@ -316,6 +270,86 @@ func statisticsMutator(
 		}
 	}
 	return stmts, changed
+}
+
+// randHistogram generates a histogram for the given type with random histogram
+// buckets.
+func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
+	h := stats.HistogramData{
+		ColumnType: colType,
+	}
+
+	// TODO(mgartner): Generate histogram buckets for JSON columns.
+	if colType.Family() == types.JsonFamily {
+		return h
+	}
+
+	// Generate random values for histogram bucket upper bounds.
+	var encodedUpperBounds [][]byte
+	for i, numDatums := 0, rng.Intn(10); i < numDatums; i++ {
+		upper := rowenc.RandDatum(rng, colType, false /* nullOk */)
+		enc, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
+		if err != nil {
+			panic(err)
+		}
+		encodedUpperBounds = append(encodedUpperBounds, enc)
+	}
+
+	// Return early if there are no upper-bounds.
+	if len(encodedUpperBounds) == 0 {
+		return h
+	}
+
+	// Sort the encoded upper-bounds.
+	sort.Slice(encodedUpperBounds, func(i, j int) bool {
+		return bytes.Compare(encodedUpperBounds[i], encodedUpperBounds[j]) < 0
+	})
+
+	// Remove duplicates.
+	dedupIdx := 1
+	for i := 1; i < len(encodedUpperBounds); i++ {
+		if !bytes.Equal(encodedUpperBounds[i], encodedUpperBounds[i-1]) {
+			encodedUpperBounds[dedupIdx] = encodedUpperBounds[i]
+			dedupIdx++
+		}
+	}
+	encodedUpperBounds = encodedUpperBounds[:dedupIdx]
+
+	// Create a histogram bucket for each encoded upper-bound.
+	for i := range encodedUpperBounds {
+		// The first bucket must have NumRange = 0, and thus DistinctRange = 0
+		// as well.
+		var numRange int64
+		var distinctRange float64
+		if i > 0 {
+			numRange, distinctRange = randNumRangeAndDistinctRange(rng)
+		}
+
+		h.Buckets = append(h.Buckets, stats.HistogramData_Bucket{
+			NumEq:         randNonNegInt(rng),
+			NumRange:      numRange,
+			DistinctRange: distinctRange,
+			UpperBound:    encodedUpperBounds[i],
+		})
+	}
+
+	return h
+}
+
+// randNumRangeAndDistinctRange returns two random numbers to be used for
+// NumRange and DistinctRange fields of a histogram bucket.
+func randNumRangeAndDistinctRange(rng *rand.Rand) (numRange int64, distinctRange float64) {
+	numRange = randNonNegInt(rng)
+	// distinctRange should be <= numRange.
+	switch rng.Intn(3) {
+	case 0:
+		distinctRange = 0
+	case 1:
+		distinctRange = float64(numRange)
+	default:
+		distinctRange = rng.Float64() * float64(numRange)
+	}
+	return numRange, distinctRange
 }
 
 // foreignKeyMutator is a MultiStatementMutation implementation which adds
