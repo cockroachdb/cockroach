@@ -116,6 +116,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/sem/tree/statementtype_string.go
 # gazelle:exclude pkg/sql/txnevent_string.go
 # gazelle:exclude pkg/sql/txntype_string.go
+# gazelle:exclude pkg/util/encoding/type_string.go
 # gazelle:exclude pkg/util/timeutil/pgdate/field_string.go
 # gazelle:exclude pkg/util/timeutil/pgdate/parsemode_string.go
 # gazelle:exclude pkg/workload/schemachange/optype_string.go
