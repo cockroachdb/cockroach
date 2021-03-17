@@ -213,6 +213,11 @@ func statisticsMutator(
 				ColumnType: colType,
 			}
 			for i := 0; i < n; i++ {
+				// TODO(#35706): DJSON cannot be used as a TableKey.
+				switch colType {
+				case *tree.DJSON:
+					continue
+				}
 				upper := rowenc.RandDatumWithNullChance(rng, colType, 0)
 				if upper == tree.DNull {
 					continue
