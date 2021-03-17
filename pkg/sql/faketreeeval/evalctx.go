@@ -77,6 +77,13 @@ func (so *DummySequenceOperators) IsTableVisible(
 	return false, false, errors.WithStack(errSequenceOperators)
 }
 
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
+}
+
 // IncrementSequence is part of the tree.SequenceOperators interface.
 func (so *DummySequenceOperators) IncrementSequence(
 	ctx context.Context, seqName *tree.TableName,
@@ -194,6 +201,13 @@ func (ep *DummyEvalPlanner) LookupSchema(
 // IsTableVisible is part of the tree.EvalDatabase interface.
 func (ep *DummyEvalPlanner) IsTableVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
+}
+
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errEvalPlanner)
 }
