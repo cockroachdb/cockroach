@@ -308,6 +308,8 @@ func createPostgresSequences(
 			descpb.NewDefaultPrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
 			nil, /* params */
+			// If this is multi-region, this will get added by WriteDescriptors.
+			false, /* isMultiRegion */
 		)
 		if err != nil {
 			return nil, err
@@ -456,8 +458,15 @@ func readPostgresCreateTable(
 			}
 
 			// Construct sequence descriptors.
-			seqs, err := createPostgresSequences(ctx, parentID, schemaObjects.createSeq, fks,
-				walltime, owner, schemaNameToDesc)
+			seqs, err := createPostgresSequences(
+				ctx,
+				parentID,
+				schemaObjects.createSeq,
+				fks,
+				walltime,
+				owner,
+				schemaNameToDesc,
+			)
 			if err != nil {
 				return nil, nil, err
 			}
