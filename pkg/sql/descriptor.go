@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -254,11 +255,11 @@ func validateDatabaseRegionConfig(regionConfig descpb.DatabaseDescriptor_RegionC
 		return errors.AssertionFailedf("expected > 0 number of regions in the region config")
 	}
 	if regionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE &&
-		len(regionConfig.Regions) < minNumRegionsForSurviveRegionGoal {
+		len(regionConfig.Regions) < multiregion.MinNumRegionsForSurviveRegionGoal {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			"at least %d regions are required for surviving a region failure",
-			minNumRegionsForSurviveRegionGoal,
+			multiregion.MinNumRegionsForSurviveRegionGoal,
 		)
 	}
 	return nil
