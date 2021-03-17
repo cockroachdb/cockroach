@@ -18,7 +18,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -207,6 +209,10 @@ func statisticsMutator(
 			if col == nil {
 				return
 			}
+			// Do not create a histogram 20% of the time.
+			if rng.Intn(5) == 0 {
+				return
+			}
 			colType := tree.MustBeStaticallyKnownType(col.Type)
 			h := randHistogram(rng, colType)
 			stat := colStats[col.Name]
@@ -273,26 +279,31 @@ func statisticsMutator(
 }
 
 // randHistogram generates a histogram for the given type with random histogram
-// buckets.
+// buckets. If colType is inverted indexable then the histogram bucket upper
+// bounds are byte-encoded inverted index keys.
 func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
-	h := stats.HistogramData{
-		ColumnType: colType,
+	histogramColType := colType
+	if colinfo.ColumnTypeIsInvertedIndexable(colType) {
+		histogramColType = types.Bytes
 	}
-
-	// TODO(mgartner): Generate histogram buckets for JSON columns.
-	if colType.Family() == types.JsonFamily {
-		return h
+	h := stats.HistogramData{
+		ColumnType: histogramColType,
 	}
 
 	// Generate random values for histogram bucket upper bounds.
 	var encodedUpperBounds [][]byte
 	for i, numDatums := 0, rng.Intn(10); i < numDatums; i++ {
 		upper := rowenc.RandDatum(rng, colType, false /* nullOk */)
-		enc, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
-		if err != nil {
-			panic(err)
+		if colinfo.ColumnTypeIsInvertedIndexable(colType) {
+			encs := encodeInvertedIndexHistogramUpperBounds(colType, upper)
+			encodedUpperBounds = append(encodedUpperBounds, encs...)
+		} else {
+			enc, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
+			if err != nil {
+				panic(err)
+			}
+			encodedUpperBounds = append(encodedUpperBounds, enc)
 		}
-		encodedUpperBounds = append(encodedUpperBounds, enc)
 	}
 
 	// Return early if there are no upper-bounds.
@@ -334,6 +345,43 @@ func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 	}
 
 	return h
+}
+
+// encodeInvertedIndexHistogramUpperBounds returns a slice of byte-encoded
+// inverted index keys that are created from val.
+func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (encs [][]byte) {
+	var keys [][]byte
+	var err error
+	switch colType.Family() {
+	case types.GeometryFamily:
+		tempIdx := descpb.IndexDescriptor{
+			GeoConfig: *geoindex.DefaultGeometryIndexConfig(),
+		}
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, &tempIdx)
+	case types.GeographyFamily:
+		tempIdx := descpb.IndexDescriptor{
+			GeoConfig: *geoindex.DefaultGeographyIndexConfig(),
+		}
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, &tempIdx)
+	default:
+		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.EmptyArraysInInvertedIndexesVersion)
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	var da rowenc.DatumAlloc
+	for i := range keys {
+		// Each key much be a byte-encoded datum so that it can be
+		// decoded in JSONStatistic.SetHistogram.
+		enc, err := rowenc.EncodeTableKey(nil, da.NewDBytes(tree.DBytes(keys[i])), encoding.Ascending)
+		if err != nil {
+			panic(err)
+		}
+		encs = append(encs, enc)
+	}
+	return encs
 }
 
 // randNumRangeAndDistinctRange returns two random numbers to be used for
