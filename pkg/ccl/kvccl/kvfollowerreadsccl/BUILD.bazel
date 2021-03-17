@@ -38,6 +38,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/roachpb",
         "//pkg/rpc",
