@@ -602,7 +602,6 @@ SELECT name, value
 FROM system.settings
 WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret',
   'sql.stats.automatic_collection.enabled', 'sql.defaults.vectorize',
-  'sql.defaults.vectorize_row_count_threshold',
   'sql.defaults.experimental_distsql_planning')
 ORDER BY name
 ----

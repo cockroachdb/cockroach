@@ -116,9 +116,6 @@ type LocalOnlySessionData struct {
 	SaveTablesPrefix string
 	// RemoteAddr is used to generate logging events.
 	RemoteAddr net.Addr
-	// VectorizeRowCountThreshold indicates the row count above which the
-	// vectorized execution engine will be used if possible.
-	VectorizeRowCountThreshold uint64
 	// ExperimentalDistSQLPlanningMode indicates whether the experimental
 	// DistSQL planning driven by the optimizer is enabled.
 	ExperimentalDistSQLPlanningMode ExperimentalDistSQLPlanningMode

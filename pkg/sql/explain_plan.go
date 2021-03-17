@@ -85,11 +85,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p, &distSQLPlanner.rpcCtx.ClusterID)
 
 		ctxSessionData := flowCtx.EvalCtx.SessionData
-		vectorizedThresholdMet := physicalPlan.MaxEstimatedRowCount >= ctxSessionData.VectorizeRowCountThreshold
 		var willVectorize bool
 		if ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOff {
-			willVectorize = false
-		} else if !vectorizedThresholdMet && ctxSessionData.VectorizeMode == sessiondatapb.VectorizeOn {
 			willVectorize = false
 		} else {
 			willVectorize = true
