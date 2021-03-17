@@ -514,6 +514,17 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 	return hasNewSubzones, zc, nil
 }
 
+// applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig signals
+// to remove the global zone configuration for a given table.
+var applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig = func(
+	zc zonepb.ZoneConfig,
+	regionConfig multiregion.RegionConfig,
+	table catalog.TableDescriptor,
+) (bool, zonepb.ZoneConfig, error) {
+	zc.CopyFromZone(*zonepb.NewZoneConfig(), zonepb.MultiRegionZoneConfigFields)
+	return false, zc, nil
+}
+
 // ApplyZoneConfigForMultiRegionTable applies zone config settings based
 // on the options provided.
 func ApplyZoneConfigForMultiRegionTable(

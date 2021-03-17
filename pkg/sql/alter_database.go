@@ -376,6 +376,34 @@ func removeLocalityConfigFromAllTablesInDB(
 			if err != nil {
 				return err
 			}
+			switch t := mutDesc.LocalityConfig.Locality.(type) {
+			case *descpb.TableDescriptor_LocalityConfig_Global_:
+				if err := ApplyZoneConfigForMultiRegionTable(
+					ctx,
+					p.txn,
+					p.ExecCfg(),
+					multiregion.RegionConfig{}, // pass dummy config as it is not used.
+					mutDesc,
+					applyZoneConfigForMultiRegionTableOptionRemoveGlobalZoneConfig,
+				); err != nil {
+					return err
+				}
+			case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
+				if t.RegionalByTable.Region != nil {
+					return errors.AssertionFailedf(
+						"unexpected REGIONAL BY ROW IN <region> on table %s during DROP REGION",
+						mutDesc.Name,
+					)
+				}
+			default:
+				// REGIONAL BY ROW drops should have errored earlier.
+				// Any new localities fall into this default clause.
+				return errors.AssertionFailedf(
+					"unexpected locality %T on table %s during DROP REGION",
+					t,
+					mutDesc.Name,
+				)
+			}
 			mutDesc.LocalityConfig = nil
 			if err := p.writeSchemaChangeToBatch(ctx, mutDesc, b); err != nil {
 				return err
