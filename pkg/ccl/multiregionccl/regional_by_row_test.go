@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -526,27 +525,31 @@ CREATE TABLE db.t(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
 		t.Error(err)
 	}
 
-	// Adding a FORCE to this second statement until we get a fix for #60620. When
-	// that fix is ready, we can construct the view of the zone config as it was at
-	// the beginning of the transaction, and the checks for FORCE should work again,
-	// and we won't require the explicit force here.
+	// Overriding this operation until we get a fix for #60620. When that fix is
+	// ready, we can construct the view of the zone config as it was at the
+	// beginning of the transaction, and the checks for override should work
+	// again, and we won't require an explicit override here.
 	_, err = sqlDB.Exec(`BEGIN;
+SET override_multi_region_zone_config = true;
 ALTER DATABASE db ADD REGION "us-east3";
-ALTER DATABASE db DROP REGION "us-east2" FORCE;
+ALTER DATABASE db DROP REGION "us-east2";
+SET override_multi_region_zone_config = false;
 COMMIT;`)
 	require.Error(t, err, "boom")
 
 	// The cleanup job should kick in and revert the changes that happened to the
 	// type descriptor in the user txn. We should eventually be able to add
 	// "us-east3" and remove "us-east2".
-	// Adding a FORCE to this second statement until we get a fix for #60620. When
-	// that fix is ready, we can construct the view of the zone config as it was at
-	// the beginning of the transaction, and the checks for FORCE should work again,
-	// and we won't require the explicit force here.
+	// Overriding this operation until we get a fix for #60620. When that fix is
+	// ready, we can construct the view of the zone config as it was at the
+	// beginning of the transaction, and the checks for override should work
+	// again, and we won't require an explicit override here.
 	testutils.SucceedsSoon(t, func() error {
 		_, err = sqlDB.Exec(`BEGIN;
+	SET override_multi_region_zone_config = true;
 	ALTER DATABASE db ADD REGION "us-east3";
-	ALTER DATABASE db DROP REGION "us-east2" FORCE;
+	ALTER DATABASE db DROP REGION "us-east2";
+	SET override_multi_region_zone_config = false;
 	COMMIT;`)
 		return err
 	})
@@ -557,9 +560,6 @@ COMMIT;`)
 func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// TODO(ajstorm): Enable once #61944 goes in.
-	skip.UnderRace(t, `This test is too heavyweight to be stressed under race`)
 
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer sqltestutils.SetTestJobsAdoptInterval()()
