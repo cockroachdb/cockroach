@@ -8,7 +8,7 @@ go_library(
         "decimal.go",
         "encoding.go",
         "float.go",
-        "type_string.go",
+        ":gen-type-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/encoding",
     visibility = ["//visibility:public"],
@@ -60,33 +60,35 @@ go_test(
     ],
 )
 
-# TODO (alanmas): Solve stringer issue "stringer: can't handle non-integer constant type Type"
-# Seems that we need to include pkg/util/encoding/encodingtype somehow.
-# We already tried to copy the source files over so bazel source now are enconding and encodingtype
-# but it is still failing due to the same error.
-
-# genrule(
-#     name = "gen-type-stringer",
-#     srcs = [
-#         "//pkg/util/encoding/encodingtype:encoding_type.go",
-#         "encoding.go",
-#     ],
-#     outs = ["type_string.go"],
-#
-#     # golang.org/x/tools executes commands via
-#     # golang.org/x/sys/execabs which requires all PATH lookups to
-#     # result in absolute paths. To account for this, we resolve the
-#     # relative path returned by location to an absolute path.
-#     cmd = """
-#        cp $(location encoding.go) `dirname $(location //pkg/util/encoding/encodingtype:encoding_type.go)`/encoding.go
-#        GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
-#        GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
-#        env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
-#        $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ \
-#        -type=Type `dirname $(location //pkg/util/encoding/encodingtype:encoding_type.go)`/encoding.go $(location //pkg/util/encoding/encodingtype:encoding_type.go)
-#     """,
-#     tools = [
-#         "@go_sdk//:bin/go",
-#         "@org_golang_x_tools//cmd/stringer",
-#     ],
-# )
+genrule(
+    name = "gen-type-stringer",
+    srcs = [
+        "encoding.go",
+    ],
+    outs = ["type_string.go"],
+    # golang.org/x/tools executes commands via
+    # golang.org/x/sys/execabs which requires all PATH lookups to
+    # result in absolute paths. To account for this, we resolve the
+    # relative path returned by location to an absolute path.
+    #
+    # We do an additional hack here, replacing `type Type encodingtype.T`
+    # with `type Type int`, as stringer in a bazel environment does not
+    # enjoy encodingtype being a separate package. All our attempts
+    # ended up in the error `stringer: no values defined for type Type`,
+    # which is due to some weird stringer interaction with the packages.Load.
+    #
+    # This has caused a long day of headache for @otan / weeks for @alan-mas.
+    # Try and fix this at the risk of banging your head against 100 watermelons
+    # in Guinness World Record time.
+    cmd = """
+       GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
+       GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
+       sed -e 's/type Type encodingtype.T/type Type int/' $(location encoding.go) > encoding_tmp.go && \
+       env PATH=$$GO_ABS_PATH HOME=$(GENDIR) \
+         $(location @org_golang_x_tools//cmd/stringer:stringer) -output=$@ -type=Type encoding_tmp.go
+    """,
+    tools = [
+        "@go_sdk//:bin/go",
+        "@org_golang_x_tools//cmd/stringer",
+    ],
+)
