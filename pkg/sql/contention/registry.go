@@ -241,6 +241,8 @@ func NewRegistry() *Registry {
 
 // AddContentionEvent adds a new ContentionEvent to the Registry.
 func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) {
+	r.globalLock.Lock()
+	defer r.globalLock.Unlock()
 	_, rawTableID, rawIndexID, err := keys.DecodeTableIDIndexID(c.Key)
 	if err != nil {
 		// The key is not a valid SQL key, so we store it in a separate cache.
@@ -254,8 +256,6 @@ func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) {
 	}
 	tableID := descpb.ID(rawTableID)
 	indexID := descpb.IndexID(rawIndexID)
-	r.globalLock.Lock()
-	defer r.globalLock.Unlock()
 	if v, ok := r.indexMap.get(tableID, indexID); !ok {
 		// This is the first contention event seen for the given tableID/indexID
 		// pair.
