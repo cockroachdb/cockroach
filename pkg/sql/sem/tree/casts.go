@@ -1295,12 +1295,12 @@ func performIntToOidCast(ctx *EvalContext, t *types.T, v DInt) (Datum, error) {
 		return &DOid{semanticType: t, DInt: v}, nil
 	case oid.T_regtype:
 		// Mapping an oid to a regtype is easy: we have a hardcoded map.
-		typ, ok := types.OidToType[oid.Oid(v)]
 		ret := &DOid{semanticType: t, DInt: v}
-		if !ok {
-			return ret, nil
+		if typ, ok := types.OidToType[oid.Oid(v)]; ok {
+			ret.name = typ.PGName()
+		} else if typ, err := ctx.Planner.ResolveTypeByOID(ctx.Context, oid.Oid(v)); err == nil {
+			ret.name = typ.PGName()
 		}
-		ret.name = typ.PGName()
 		return ret, nil
 
 	case oid.T_regproc, oid.T_regprocedure:
