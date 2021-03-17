@@ -209,7 +209,7 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 
 // IsTableVisible is part of the tree.EvalDatabase interface.
 func (p *planner) IsTableVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID int64,
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
 ) (isVisible, exists bool, err error) {
 	// TODO(ajwerner): look at this error and only no-op if it is
 	// ErrDescriptorNotFound or something like it.
