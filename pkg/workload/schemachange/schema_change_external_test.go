@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/schemachange"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
