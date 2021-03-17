@@ -11,11 +11,13 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -715,7 +717,7 @@ type Engine interface {
 	// IsSeparatedIntentsEnabledForTesting is a test only method used in tests
 	// that know that this enabled setting is not changing and need the value to
 	// adjust their expectations.
-	IsSeparatedIntentsEnabledForTesting() bool
+	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
 }
 
 // Batch is the interface for batch specific operations.
@@ -859,6 +861,53 @@ func Scan(reader Reader, start, end roachpb.Key, max int64) ([]MVCCKeyValue, err
 		return nil
 	})
 	return kvs, err
+}
+
+// ScanSeparatedIntents scans intents using only the separated intents lock
+// table. It does not take interleaved intents into account at all.
+//
+// TODO(erikgrinaker): When we are fully migrated to separated intents, this
+// should be renamed ScanIntents.
+func ScanSeparatedIntents(
+	reader Reader, start, end roachpb.Key, max int64, targetBytes int64,
+) ([]roachpb.Intent, error) {
+	if bytes.Compare(start, end) >= 0 {
+		return []roachpb.Intent{}, nil
+	}
+
+	ltStart, _ := keys.LockTableSingleKey(start, nil)
+	ltEnd, _ := keys.LockTableSingleKey(end, nil)
+	iter := reader.NewEngineIterator(IterOptions{LowerBound: ltStart, UpperBound: ltEnd})
+	defer iter.Close()
+
+	var (
+		intents     = []roachpb.Intent{}
+		intentBytes int64
+		meta        enginepb.MVCCMetadata
+	)
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: ltStart})
+	for ; valid; valid, err = iter.NextEngineKey() {
+		if max != 0 && int64(len(intents)) >= max {
+			break
+		}
+		key, err := iter.EngineKey()
+		if err != nil {
+			return nil, err
+		}
+		lockedKey, err := keys.DecodeLockTableSingleKey(key.Key)
+		if err != nil {
+			return nil, err
+		}
+		if err = protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
+			return nil, err
+		}
+		intents = append(intents, roachpb.MakeIntent(meta.Txn, lockedKey))
+		intentBytes += int64(len(lockedKey)) + int64(len(iter.Value()))
+		if (max > 0 && int64(len(intents)) >= max) || (targetBytes > 0 && intentBytes >= targetBytes) {
+			break
+		}
+	}
+	return intents, err
 }
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.
