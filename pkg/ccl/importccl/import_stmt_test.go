@@ -6477,7 +6477,7 @@ func TestImportMultiRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	baseDir := filepath.Join("testdata", "avro")
+	baseDir := filepath.Join("testdata")
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 1 /* numServers */, base.TestingKnobs{}, &baseDir,
 	)
@@ -6493,95 +6493,152 @@ func TestImportMultiRegion(t *testing.T) {
 	_, err = sqlDB.Exec(`CREATE DATABASE multi_region PRIMARY REGION "us-east1"`)
 	require.NoError(t, err)
 
-	simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
+	simpleOcf := fmt.Sprintf("nodelocal://0/avro/%s", "simple.ocf")
 
 	// Table schemas for USING
-	tableSchemaMR := fmt.Sprintf("nodelocal://0/%s", "simple-schema-multi-region.sql")
-	tableSchemaMRRegionalByRow := fmt.Sprintf("nodelocal://0/%s",
+	tableSchemaMR := fmt.Sprintf("nodelocal://0/avro/%s", "simple-schema-multi-region.sql")
+	tableSchemaMRRegionalByRow := fmt.Sprintf("nodelocal://0/avro/%s",
 		"simple-schema-multi-region-regional-by-row.sql")
 
-	tests := []struct {
-		name      string
-		db        string
-		table     string
-		sql       string
-		create    string
-		args      []interface{}
-		errString string
+	viewsAndSequencesTestCases := []struct {
+		desc      string
+		importSQL string
+		expected  map[string]string
 	}{
 		{
-			name:      "import-create-using-multi-region-to-non-multi-region-database",
-			db:        "foo",
-			table:     "simple",
-			sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
-			args:      []interface{}{tableSchemaMR, simpleOcf},
-			errString: "cannot write descriptor for multi-region table",
+			desc:      "pgdump",
+			importSQL: `IMPORT PGDUMP 'nodelocal://0/pgdump/views_and_sequences.sql' WITH ignore_unsupported_statements`,
+			expected: map[string]string{
+				"tbl": "REGIONAL BY TABLE IN PRIMARY REGION",
+				"s":   "REGIONAL BY TABLE IN PRIMARY REGION",
+				// views are ignored.
+			},
 		},
 		{
-			name:  "import-create-using-multi-region-regional-by-table-to-multi-region-database",
-			db:    "multi_region",
-			table: "simple",
-			sql:   "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
-			args:  []interface{}{tableSchemaMR, simpleOcf},
-		},
-		{
-			name:      "import-create-using-multi-region-regional-by-row-to-multi-region-database",
-			db:        "multi_region",
-			table:     "simple",
-			sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
-			args:      []interface{}{tableSchemaMRRegionalByRow, simpleOcf},
-			errString: "IMPORT to REGIONAL BY ROW table not supported",
-		},
-		{
-			name:      "import-into-multi-region-regional-by-row-to-multi-region-database",
-			db:        "multi_region",
-			table:     "mr_regional_by_row",
-			create:    "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
-			sql:       "IMPORT INTO mr_regional_by_row AVRO DATA ($1)",
-			args:      []interface{}{simpleOcf},
-			errString: "IMPORT into REGIONAL BY ROW table not supported",
-		},
-		{
-			name:   "import-into-using-multi-region-global-to-multi-region-database",
-			db:     "multi_region",
-			table:  "mr_global",
-			create: "CREATE TABLE mr_global (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY GLOBAL",
-			sql:    "IMPORT INTO mr_global AVRO DATA ($1)",
-			args:   []interface{}{simpleOcf},
+			desc:      "mysqldump",
+			importSQL: `IMPORT MYSQLDUMP 'nodelocal://0/mysqldump/views_and_sequences.sql'`,
+			expected: map[string]string{
+				"tbl":          "REGIONAL BY TABLE IN PRIMARY REGION",
+				"tbl_auto_inc": "REGIONAL BY TABLE IN PRIMARY REGION",
+				// views are ignored.
+			},
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			_, err = sqlDB.Exec(fmt.Sprintf(`SET DATABASE = %q`, test.db))
+	for _, tc := range viewsAndSequencesTestCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			_, err = sqlDB.Exec(`USE multi_region`)
+			require.NoError(t, err)
+			defer func() {
+				_, err := sqlDB.Exec(`
+DROP TABLE IF EXISTS tbl;
+DROP SEQUENCE IF EXISTS s;
+DROP SEQUENCE IF EXISTS table_auto_inc;
+DROP VIEW IF EXISTS v`,
+				)
+				require.NoError(t, err)
+			}()
+
+			_, err = sqlDB.Exec(tc.importSQL)
+			require.NoError(t, err)
+			rows, err := sqlDB.Query("SELECT table_name, locality FROM [SHOW TABLES] ORDER BY table_name")
 			require.NoError(t, err)
 
-			_, err = sqlDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
-			require.NoError(t, err)
-
-			if test.create != "" {
-				_, err = sqlDB.Exec(test.create)
-				require.NoError(t, err)
+			results := make(map[string]string)
+			for rows.Next() {
+				require.NoError(t, rows.Err())
+				var tableName, locality string
+				require.NoError(t, rows.Scan(&tableName, &locality))
+				results[tableName] = locality
 			}
-
-			_, err = sqlDB.ExecContext(context.Background(), test.sql, test.args...)
-			if test.errString != "" {
-				testutils.IsError(err, test.errString)
-			} else {
-				require.NoError(t, err)
-				res := sqlDB.QueryRow(fmt.Sprintf("SELECT count(*) FROM %q", test.table))
-				require.NoError(t, res.Err())
-
-				var numRows int
-				err = res.Scan(&numRows)
-				require.NoError(t, err)
-
-				if numRows == 0 {
-					t.Error("expected some rows after import")
-				}
-			}
+			require.Equal(t, tc.expected, results)
 		})
 	}
+
+	t.Run("avro", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			db        string
+			table     string
+			sql       string
+			create    string
+			args      []interface{}
+			errString string
+		}{
+			{
+				name:      "import-create-using-multi-region-to-non-multi-region-database",
+				db:        "foo",
+				table:     "simple",
+				sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
+				args:      []interface{}{tableSchemaMR, simpleOcf},
+				errString: "cannot write descriptor for multi-region table",
+			},
+			{
+				name:  "import-create-using-multi-region-regional-by-table-to-multi-region-database",
+				db:    "multi_region",
+				table: "simple",
+				sql:   "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
+				args:  []interface{}{tableSchemaMR, simpleOcf},
+			},
+			{
+				name:      "import-create-using-multi-region-regional-by-row-to-multi-region-database",
+				db:        "multi_region",
+				table:     "simple",
+				sql:       "IMPORT TABLE simple CREATE USING $1 AVRO DATA ($2)",
+				args:      []interface{}{tableSchemaMRRegionalByRow, simpleOcf},
+				errString: "IMPORT to REGIONAL BY ROW table not supported",
+			},
+			{
+				name:      "import-into-multi-region-regional-by-row-to-multi-region-database",
+				db:        "multi_region",
+				table:     "mr_regional_by_row",
+				create:    "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
+				sql:       "IMPORT INTO mr_regional_by_row AVRO DATA ($1)",
+				args:      []interface{}{simpleOcf},
+				errString: "IMPORT into REGIONAL BY ROW table not supported",
+			},
+			{
+				name:   "import-into-using-multi-region-global-to-multi-region-database",
+				db:     "multi_region",
+				table:  "mr_global",
+				create: "CREATE TABLE mr_global (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY GLOBAL",
+				sql:    "IMPORT INTO mr_global AVRO DATA ($1)",
+				args:   []interface{}{simpleOcf},
+			},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				_, err = sqlDB.Exec(fmt.Sprintf(`SET DATABASE = %q`, test.db))
+				require.NoError(t, err)
+
+				_, err = sqlDB.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %q CASCADE", test.table))
+				require.NoError(t, err)
+
+				if test.create != "" {
+					_, err = sqlDB.Exec(test.create)
+					require.NoError(t, err)
+				}
+
+				_, err = sqlDB.ExecContext(context.Background(), test.sql, test.args...)
+				if test.errString != "" {
+					testutils.IsError(err, test.errString)
+				} else {
+					require.NoError(t, err)
+					res := sqlDB.QueryRow(fmt.Sprintf("SELECT count(*) FROM %q", test.table))
+					require.NoError(t, res.Err())
+
+					var numRows int
+					err = res.Scan(&numRows)
+					require.NoError(t, err)
+
+					if numRows == 0 {
+						t.Error("expected some rows after import")
+					}
+				}
+			})
+		}
+	})
 }
 
 // TestImportClientDisconnect ensures that an import job can complete even if

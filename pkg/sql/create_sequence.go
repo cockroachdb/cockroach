@@ -78,7 +78,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	}
 
 	return doCreateSequence(
-		params, n.n.String(), n.dbDesc, schemaID, &n.n.Name, n.n.Persistence, n.n.Options,
+		params, n.dbDesc, schemaID, &n.n.Name, n.n.Persistence, n.n.Options,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 }
@@ -87,7 +87,6 @@ func (n *createSequenceNode) startExec(params runParams) error {
 // context argument is a string to use in the event log.
 func doCreateSequence(
 	params runParams,
-	context string,
 	dbDesc catalog.DatabaseDescriptor,
 	schemaID descpb.ID,
 	name *tree.TableName,
@@ -123,6 +122,7 @@ func doCreateSequence(
 		privs,
 		persistence,
 		&params,
+		dbDesc.IsMultiRegion(),
 	)
 	if err != nil {
 		return err
@@ -181,6 +181,7 @@ func NewSequenceTableDesc(
 	privileges *descpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
 	params *runParams,
+	isMultiRegion bool,
 ) (*tabledesc.Mutable, error) {
 	desc := tabledesc.InitTableDescriptor(
 		id,
@@ -230,6 +231,10 @@ func NewSequenceTableDesc(
 	// A sequence doesn't have dependencies and thus can be made public
 	// immediately.
 	desc.State = descpb.DescriptorState_PUBLIC
+
+	if isMultiRegion {
+		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+	}
 
 	if err := catalog.ValidateSelf(&desc); err != nil {
 		return nil, err
