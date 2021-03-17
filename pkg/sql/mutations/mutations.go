@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -207,6 +208,10 @@ func statisticsMutator(
 			if col == nil {
 				return
 			}
+			// Do not create a histogram 20% of the time.
+			if rng.Intn(5) == 0 {
+				return
+			}
 			colType := tree.MustBeStaticallyKnownType(col.Type)
 			h := randHistogram(rng, colType)
 			stat := colStats[col.Name]
@@ -273,26 +278,43 @@ func statisticsMutator(
 }
 
 // randHistogram generates a histogram for the given type with random histogram
-// buckets.
+// buckets. If colType is JSON then the histogram bucket upper bounds are
+// byte-encoded inverted index keys.
 func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
-	h := stats.HistogramData{
-		ColumnType: colType,
+	histogramColType := colType
+	if histogramColType.Family() == types.JsonFamily {
+		histogramColType = types.Bytes
 	}
-
-	// TODO(mgartner): Generate histogram buckets for JSON columns.
-	if colType.Family() == types.JsonFamily {
-		return h
+	h := stats.HistogramData{
+		ColumnType: histogramColType,
 	}
 
 	// Generate random values for histogram bucket upper bounds.
 	var encodedUpperBounds [][]byte
 	for i, numDatums := 0, rng.Intn(10); i < numDatums; i++ {
 		upper := rowenc.RandDatum(rng, colType, false /* nullOk */)
-		enc, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
-		if err != nil {
-			panic(err)
+		if colType.Family() == types.JsonFamily {
+			encs, err := rowenc.EncodeInvertedIndexTableKeys(upper, nil, descpb.EmptyArraysInInvertedIndexesVersion)
+			if err != nil {
+				panic(err)
+			}
+			var da rowenc.DatumAlloc
+			for i := range encs {
+				// Each key much be a byte-encoded datum so that it can be
+				// decoded in JSONStatistic.SetHistogram.
+				enc, err := rowenc.EncodeTableKey(nil, da.NewDBytes(tree.DBytes(encs[i])), encoding.Ascending)
+				if err != nil {
+					panic(err)
+				}
+				encodedUpperBounds = append(encodedUpperBounds, enc)
+			}
+		} else {
+			enc, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
+			if err != nil {
+				panic(err)
+			}
+			encodedUpperBounds = append(encodedUpperBounds, enc)
 		}
-		encodedUpperBounds = append(encodedUpperBounds, enc)
 	}
 
 	// Return early if there are no upper-bounds.
