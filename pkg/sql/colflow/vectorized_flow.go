@@ -722,10 +722,18 @@ func (s *vectorizedFlowCreator) setupRouter(
 		s.accounts = append(s.accounts, &acc)
 	}
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
+	var getStats func() []*execinfrapb.ComponentStats
+	if s.recordingStats && len(s.vectorizedStatsCollectorsQueue) > 0 {
+		vscs := append([]vectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+		s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
+		getStats = func() []*execinfrapb.ComponentStats {
+			return finishVectorizedStatsCollectors(vscs)
+		}
+	}
 	router, outputs := NewHashRouter(
 		allocators, input, outputTyps, output.HashColumns,
 		execinfra.GetWorkMemLimit(flowCtx.Cfg), s.diskQueueCfg, s.fdSemaphore,
-		diskAccounts, metadataSourcesQueue, toClose,
+		diskAccounts, metadataSourcesQueue, getStats, toClose,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(logtags.AddTag(ctx, "hashRouterID", strings.Join(streamIDs, ",")))
