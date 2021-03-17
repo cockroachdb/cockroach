@@ -254,6 +254,13 @@ func (so *importSequenceOperators) IsTableVisible(
 	return false, false, errors.WithStack(errSequenceOperators)
 }
 
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (so *importSequenceOperators) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errSequenceOperators)
+}
+
 // Implements the tree.SequenceOperators interface.
 func (so *importSequenceOperators) IncrementSequence(
 	ctx context.Context, seqName *tree.TableName,
