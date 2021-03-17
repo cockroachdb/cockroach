@@ -16,7 +16,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -53,8 +52,6 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
-
-	skip.UnderRace(t, "#61163")
 
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
