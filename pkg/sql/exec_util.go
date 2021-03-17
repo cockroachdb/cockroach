@@ -331,14 +331,34 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var clusterStatementTimeout = settings.RegisterDurationSetting(
+	"sql.defaults.statement_timeout",
+	"default value for the statement_timeout; "+
+		"default value for the statement_timeout session setting; controls the "+
+		"duration a query is permitted to run before it is canceled; if set to 0, "+
+		"there is no timeout",
+	0,
+	settings.NonNegativeDuration,
+).WithPublic()
+
 var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 	"sql.defaults.idle_in_session_timeout",
 	"default value for the idle_in_session_timeout; "+
-		"enables automatically killing sessions that exceed the "+
-		"idle_in_session_timeout threshold",
+		"default value for the idle_in_session_timeout session setting; controls the "+
+		"duration a session is permitted to idle before the session is terminated; "+
+		"if set to 0, there is no timeout",
 	0,
 	settings.NonNegativeDuration,
-)
+).WithPublic()
+
+var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
+	"sql.defaults.idle_in_transaction_session_timeout",
+	"default value for the idle_in_transaction_session_timeout; controls the "+
+		"duration a session is permitted to idle in a transaction before the "+
+		"session is terminated; if set to 0, there is no timeout",
+	0,
+	settings.NonNegativeDuration,
+).WithPublic()
 
 // TODO(rytaft): remove this once unique without index constraints are fully
 // supported.
