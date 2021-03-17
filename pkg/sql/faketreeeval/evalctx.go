@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -58,6 +59,13 @@ func (so *DummySequenceOperators) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (bool, tree.SchemaMeta, error) {
 	return false, nil, errors.WithStack(errSequenceOperators)
+}
+
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
 }
 
 // IncrementSequence is part of the tree.SequenceOperators interface.
@@ -136,6 +144,13 @@ func (ep *DummyEvalPlanner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (bool, tree.SchemaMeta, error) {
 	return false, nil, errors.WithStack(errEvalPlanner)
+}
+
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
 }
 
 // ResolveTableName is part of the tree.EvalDatabase interface.

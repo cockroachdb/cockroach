@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 const (
@@ -226,6 +227,13 @@ func (so *importSequenceOperators) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (bool, tree.SchemaMeta, error) {
 	return false, nil, errSequenceOperators
+}
+
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (so *importSequenceOperators) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errSequenceOperators)
 }
 
 // Implements the tree.SequenceOperators interface.

@@ -2973,6 +2973,12 @@ type EvalDatabase interface {
 	// LookupSchema looks up the schema with the given name in the given
 	// database.
 	LookupSchema(ctx context.Context, dbName, scName string) (found bool, scMeta SchemaMeta, err error)
+
+	// IsTypeVisible checks if the type with the given ID belongs to a schema
+	// on the given sessiondata.SearchPath.
+	IsTypeVisible(
+		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+	) (isVisible bool, exists bool, err error)
 }
 
 // EvalPlanner is a limited planner that can be used from EvalContext.
