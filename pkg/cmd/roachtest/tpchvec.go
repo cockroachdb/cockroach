@@ -617,7 +617,6 @@ func runTPCHVec(
 
 	conn := c.Conn(ctx, 1)
 	disableAutoStats(t, conn)
-	disableVectorizeRowCountThresholdHeuristic(t, conn)
 	t.Status("restoring TPCH dataset for Scale Factor 1")
 	if err := loadTPCHDataset(ctx, t, c, 1 /* sf */, newMonitor(ctx, c), c.All()); err != nil {
 		t.Fatal(err)

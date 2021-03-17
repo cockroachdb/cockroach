@@ -3668,7 +3668,6 @@ transaction_isolation                                 serializable
 transaction_priority                                  normal
 transaction_read_only                                 off
 transaction_status                                    NoTxn
-vectorize_row_count_threshold                         0
 
 # information_schema can be used with the anonymous database.
 # It should show information across all databases.

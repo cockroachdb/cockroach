@@ -10,12 +10,6 @@
 
 package colexec
 
-// DefaultVectorizeRowCountThreshold denotes the default row count threshold.
-// When it is met, the vectorized execution engine will be used if possible.
-// TODO(yuzefovich): remove this together with vectorize_row_count_threshold
-// setting.
-const DefaultVectorizeRowCountThreshold = 0
-
 // VecMaxOpenFDsLimit specifies the maximum number of open file descriptors
 // that the vectorized engine can have (globally) for use of the temporary
 // storage.

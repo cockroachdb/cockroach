@@ -35,12 +35,8 @@ func BenchmarkFlowSetup(b *testing.B) {
 	defer logScope.Close(b)
 	ctx := context.Background()
 
-	st := cluster.MakeTestingClusterSettings()
-	// Set the threshold to 0 so that we can control which engine is used for
-	// the query execution via the vectorize mode.
-	sql.VectorizeRowCountThresholdClusterValue.Override(&st.SV, 0 /* v */)
 	s, conn, _ := serverutils.StartServer(b, base.TestServerArgs{
-		Settings: st,
+		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	defer s.Stopper().Stop(ctx)
 
