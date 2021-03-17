@@ -55,7 +55,6 @@ func (p *planner) addColumnImpl(
 	if seqName != nil {
 		if err := doCreateSequence(
 			params,
-			n.n.String(),
 			seqDbDesc,
 			n.tableDesc.GetParentSchemaID(),
 			seqName,
