@@ -249,7 +249,7 @@ func (so *importSequenceOperators) LookupSchema(
 
 // IsTableVisible is part of the tree.EvalDatabase interface.
 func (so *importSequenceOperators) IsTableVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID int64,
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
 ) (bool, bool, error) {
 	return false, false, errors.WithStack(errSequenceOperators)
 }
