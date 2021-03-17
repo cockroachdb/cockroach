@@ -226,7 +226,7 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := sqlDB.Exec("SET vectorize = on; SET vectorize_row_count_threshold=0"); err != nil {
+				if _, err := sqlDB.Exec("SET vectorize = on"); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {

@@ -1520,14 +1520,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs) {
 			}
 		}
 
-		// Always override the vectorize row count threshold. This runs all supported
-		// queries (relative to the mode) through the vectorized execution engine.
-		if _, err := conn.Exec(
-			"SET CLUSTER SETTING sql.defaults.vectorize_row_count_threshold = 0",
-		); err != nil {
-			t.Fatal(err)
-		}
-
 		if cfg.overrideAutoStats != "" {
 			if _, err := conn.Exec(
 				"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,

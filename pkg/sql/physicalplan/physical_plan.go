@@ -138,11 +138,6 @@ type PhysicalPlan struct {
 	// want to pay this cost if we don't have multiple streams to merge.
 	MergeOrdering execinfrapb.Ordering
 
-	// MaxEstimatedRowCount tracks the maximum estimated row count that a table
-	// reader in this plan will output. This information is used to decide
-	// whether to use the vectorized execution engine.
-	// TODO(radu): move this field to PlanInfrastructure.
-	MaxEstimatedRowCount uint64
 	// TotalEstimatedScannedRows is the sum of the row count estimate of all the
 	// table readers in the plan.
 	// TODO(radu): move this field to PlanInfrastructure.
@@ -943,10 +938,6 @@ func (p *PhysicalPlan) GenerateFlowSpecs() map[roachpb.NodeID]*execinfrapb.FlowS
 // plans.
 func (p *PhysicalPlan) SetRowEstimates(left, right *PhysicalPlan) {
 	p.TotalEstimatedScannedRows = left.TotalEstimatedScannedRows + right.TotalEstimatedScannedRows
-	p.MaxEstimatedRowCount = left.MaxEstimatedRowCount
-	if right.MaxEstimatedRowCount > p.MaxEstimatedRowCount {
-		p.MaxEstimatedRowCount = right.MaxEstimatedRowCount
-	}
 }
 
 // MergePlans is used when merging two plans into a new plan. All plans must
