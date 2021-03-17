@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"runtime/trace"
 	"sort"
@@ -57,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -2832,9 +2834,16 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			// To find the coltype for the given result, mod the result number
 			// by the number of coltypes.
 			colT := query.colTypes[i%len(query.colTypes)]
-			if !resultMatches && colT == 'F' {
+			if !resultMatches {
 				var err error
-				resultMatches, err = floatsMatch(expected, actual)
+				// On s390x, check that values for both float ('F') and decimal
+				// ('R') coltypes are approximately equal to take into account
+				// platform differences in floating point calculations.
+				if runtime.GOARCH == "s390x" && (colT == 'F' || colT == 'R') {
+					resultMatches, err = floatsMatchApprox(expected, actual)
+				} else if colT == 'F' {
+					resultMatches, err = floatsMatch(expected, actual)
+				}
 				if err != nil {
 					return errors.CombineErrors(makeError(), err)
 				}
@@ -2892,17 +2901,37 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	return nil
 }
 
+// parseExpectedAndActualFloats converts the strings expectedString and
+// actualString to float64 values.
+func parseExpectedAndActualFloats(expectedString, actualString string) (float64, float64, error) {
+	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing expected")
+	}
+	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
+	if err != nil {
+		return 0, 0, errors.Wrap(err, "when parsing actual")
+	}
+	return expected, actual, nil
+}
+
+// floatsMatchApprox returns whether two floating point represented as
+// strings are equal within a tolerance.
+func floatsMatchApprox(expectedString, actualString string) (bool, error) {
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
+	if err != nil {
+		return false, err
+	}
+	return floatcmp.EqualApprox(expected, actual, floatcmp.CloseFraction, floatcmp.CloseMargin), nil
+}
+
 // floatsMatch returns whether two floating point numbers represented as
 // strings have matching 15 significant decimal digits (this is the precision
 // that Postgres supports for 'double precision' type).
 func floatsMatch(expectedString, actualString string) (bool, error) {
-	expected, err := strconv.ParseFloat(expectedString, 64 /* bitSize */)
+	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
 	if err != nil {
-		return false, errors.Wrap(err, "when parsing expected")
-	}
-	actual, err := strconv.ParseFloat(actualString, 64 /* bitSize */)
-	if err != nil {
-		return false, errors.Wrap(err, "when parsing actual")
+		return false, err
 	}
 	// Check special values - NaN, +Inf, -Inf, 0.
 	if math.IsNaN(expected) || math.IsNaN(actual) {
