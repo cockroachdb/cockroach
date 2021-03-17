@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "connectionlatency",
+    srcs = [
+        "connectionlatency.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/workload/connectionlatency",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/workload",
+    ],
+)
