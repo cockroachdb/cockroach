@@ -422,7 +422,7 @@ func getPGXConnAndCleanupFunc(t *testing.T, servingSQLAddr string) (*pgx.Conn, f
 	require.NoError(t, err)
 	defaultConn, err := pgx.Connect(pgxConfig)
 	require.NoError(t, err)
-	_, err = defaultConn.Exec("set distsql='always'; set vectorize_row_count_threshold=0")
+	_, err = defaultConn.Exec("set distsql='always'")
 	require.NoError(t, err)
 	return defaultConn, cleanup
 }
@@ -561,7 +561,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 				vectorizeMode = "on"
 			}
 
-			if _, err := defaultConn.Exec(fmt.Sprintf("set vectorize='%s'; set vectorize_row_count_threshold=0", vectorizeMode)); err != nil {
+			if _, err := defaultConn.Exec(fmt.Sprintf("set vectorize='%s'", vectorizeMode)); err != nil {
 				t.Fatal(err)
 			}
 

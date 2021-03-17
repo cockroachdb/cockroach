@@ -126,7 +126,6 @@ func (dsp *DistSQLPlanner) setupFlows(
 	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
-	vectorizeThresholdMet bool,
 	collectStats bool,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.gatewayNodeID
@@ -155,26 +154,18 @@ func (dsp *DistSQLPlanner) setupFlows(
 	}
 
 	if vectorizeMode := evalCtx.SessionData.VectorizeMode; vectorizeMode != sessiondatapb.VectorizeOff {
-		if !vectorizeThresholdMet && vectorizeMode == sessiondatapb.VectorizeOn {
-			// Vectorization is not justified for this flow because the expected
-			// amount of data is too small and the overhead of pre-allocating data
-			// structures needed for the vectorized engine is expected to dominate
-			// the execution time.
-			setupReq.EvalContext.SessionData.VectorizeMode = sessiondatapb.VectorizeOff
-		} else {
-			// Now we determine whether the vectorized engine supports the flow
-			// specs.
-			for _, spec := range flows {
-				if err := colflow.IsSupported(vectorizeMode, spec); err != nil {
-					log.VEventf(ctx, 1, "failed to vectorize: %s", err)
-					if vectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
-						return nil, nil, err
-					}
-					// Vectorization is not supported for this flow, so we override the
-					// setting.
-					setupReq.EvalContext.SessionData.VectorizeMode = sessiondatapb.VectorizeOff
-					break
+		// Now we determine whether the vectorized engine supports the flow
+		// specs.
+		for _, spec := range flows {
+			if err := colflow.IsSupported(vectorizeMode, spec); err != nil {
+				log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+				if vectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
+					return nil, nil, err
 				}
+				// Vectorization is not supported for this flow, so we override the
+				// setting.
+				setupReq.EvalContext.SessionData.VectorizeMode = sessiondatapb.VectorizeOff
+				break
 			}
 		}
 	}
@@ -325,8 +316,6 @@ func (dsp *DistSQLPlanner) Run(
 	recv.outputTypes = plan.GetResultTypes()
 	recv.contendedQueryMetric = dsp.distSQLSrv.Metrics.ContendedQueriesCount
 
-	vectorizedThresholdMet := plan.MaxEstimatedRowCount >= evalCtx.SessionData.VectorizeRowCountThreshold
-
 	if len(flows) == 1 {
 		// We ended up planning everything locally, regardless of whether we
 		// intended to distribute or not.
@@ -334,7 +323,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	ctx, flow, err := dsp.setupFlows(
-		ctx, evalCtx, leafInputState, flows, recv, localState, vectorizedThresholdMet, planCtx.collectExecStats,
+		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats,
 	)
 	if err != nil {
 		recv.SetError(err)
