@@ -32,8 +32,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 )
 
-const minNumRegionsForSurviveRegionGoal = 3
-
 // LiveClusterRegions is a set representing regions that are live in
 // a given cluster.
 type LiveClusterRegions map[descpb.RegionName]struct{}
@@ -390,36 +388,6 @@ func zoneConfigForMultiRegionTable(
 	return ret, nil
 }
 
-// This removes the requirement to only call this function after writeSchemaChange
-// is called on creation of tables, and potentially removes the need for ReadingOwnWrites
-// for some subcommands.
-// Requires some logic to "inherit" from parents.
-func applyZoneConfigForMultiRegion(
-	ctx context.Context,
-	zc *zonepb.ZoneConfig,
-	targetID descpb.ID,
-	table catalog.TableDescriptor,
-	txn *kv.Txn,
-	execConfig *ExecutorConfig,
-) error {
-	// TODO (multiregion): Much like applyZoneConfigForMultiRegionTable we need to
-	// merge the zone config that we're writing with anything previously existing
-	// in there.
-	if _, err := writeZoneConfig(
-		ctx,
-		txn,
-		targetID,
-		table,
-		zc,
-		execConfig,
-		true, /* hasNewSubzones */
-	); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // applyZoneConfigForMultiRegionTableOption is an option that can be passed into
 // applyZoneConfigForMultiRegionTable.
 type applyZoneConfigForMultiRegionTableOption func(
@@ -638,7 +606,7 @@ func ApplyZoneConfigForMultiRegionTable(
 		// Delete the zone configuration if it exists but the new zone config is blank.
 		if _, err = execCfg.InternalExecutor.Exec(
 			ctx,
-			"delete-zone",
+			"delete-zone-multiregion-table",
 			txn,
 			"DELETE FROM system.zones WHERE id = $1",
 			tableID,
@@ -663,14 +631,72 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	if err != nil {
 		return err
 	}
-	return applyZoneConfigForMultiRegion(
+	return applyZoneConfigForMultiRegionDatabase(
 		ctx,
-		dbZoneConfig,
 		dbID,
-		nil,
+		dbZoneConfig,
 		txn,
 		execConfig,
 	)
+}
+
+// discardMultiRegionFieldsForDatabaseZoneConfig resets the multi-region zone
+// config fields for a multi-region database.
+func discardMultiRegionFieldsForDatabaseZoneConfig(
+	ctx context.Context, dbID descpb.ID, txn *kv.Txn, execConfig *ExecutorConfig,
+) error {
+	// Merge with an empty zone config.
+	return applyZoneConfigForMultiRegionDatabase(
+		ctx,
+		dbID,
+		zonepb.NewZoneConfig(),
+		txn,
+		execConfig,
+	)
+}
+
+func applyZoneConfigForMultiRegionDatabase(
+	ctx context.Context,
+	dbID descpb.ID,
+	mergeZoneConfig *zonepb.ZoneConfig,
+	txn *kv.Txn,
+	execConfig *ExecutorConfig,
+) error {
+	currentZoneConfig, err := getZoneConfigRaw(ctx, txn, execConfig.Codec, dbID)
+	if err != nil {
+		return err
+	}
+	newZoneConfig := *zonepb.NewZoneConfig()
+	if currentZoneConfig != nil {
+		newZoneConfig = *currentZoneConfig
+	}
+	newZoneConfig.CopyFromZone(
+		*mergeZoneConfig,
+		zonepb.MultiRegionZoneConfigFields,
+	)
+	// If the new zone config is the same as a blank zone config, delete it.
+	if newZoneConfig.Equal(zonepb.NewZoneConfig()) {
+		_, err = execConfig.InternalExecutor.Exec(
+			ctx,
+			"delete-zone-multiregion-database",
+			txn,
+			"DELETE FROM system.zones WHERE id = $1",
+			dbID,
+		)
+		return err
+	}
+	if _, err := writeZoneConfig(
+		ctx,
+		txn,
+		dbID,
+		nil, /* table */
+		&newZoneConfig,
+		execConfig,
+		false, /* hasNewSubzones */
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 // forEachTableWithLocalityConfigInDatabase loops through each schema and table
