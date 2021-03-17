@@ -61,8 +61,7 @@ func wrapRowSources(
 	flowCtx *execinfra.FlowCtx,
 	inputs []colexecop.Operator,
 	inputTypes [][]*types.T,
-	acc *mon.BoundAccount,
-	processorID int32,
+	args *colexecargs.NewColOperatorArgs,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 	factory coldata.ColumnFactory,
 ) (*colexec.Columnarizer, error) {
@@ -88,11 +87,11 @@ func wrapRowSources(
 			// when the main planNode tree is being closed.
 			toWrapInput, err := colexec.NewMaterializer(
 				flowCtx,
-				processorID,
+				args.Spec.ProcessorID,
 				input,
 				inputTypes[i],
 				nil, /* output */
-				nil, /* metadataSourcesQueue */
+				args.MetadataSources,
 				nil, /* toClose */
 				nil, /* getStats */
 				nil, /* cancelFlow */
@@ -100,6 +99,9 @@ func wrapRowSources(
 			if err != nil {
 				return nil, err
 			}
+			// We have passed on the responsibility of draining metadata sources
+			// to this materializer.
+			args.MetadataSources = nil
 			toWrapInputs = append(toWrapInputs, toWrapInput)
 		}
 	}
@@ -111,11 +113,11 @@ func wrapRowSources(
 
 	if _, mustBeStreaming := toWrap.(execinfra.StreamingProcessor); mustBeStreaming {
 		return colexec.NewStreamingColumnarizer(
-			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+			ctx, colmem.NewAllocator(ctx, args.StreamingMemAccount, factory), flowCtx, args.Spec.ProcessorID, toWrap,
 		)
 	}
 	return colexec.NewBufferingColumnarizer(
-		ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+		ctx, colmem.NewAllocator(ctx, args.StreamingMemAccount, factory), flowCtx, args.Spec.ProcessorID, toWrap,
 	)
 }
 
@@ -561,8 +563,7 @@ func (r opResult) createAndWrapRowSource(
 		flowCtx,
 		inputs,
 		inputTypes,
-		args.StreamingMemAccount,
-		spec.ProcessorID,
+		args,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
 			// We provide a slice with a single nil as 'outputs' parameter
 			// because all processors expect a single output. Passing nil is ok
@@ -1345,6 +1346,10 @@ func NewColOperator(
 	if args.TestingKnobs.PlanInvariantsCheckers {
 		r.Op = colexec.NewInvariantsChecker(r.Op)
 	}
+	// Handle the metadata sources from the input trees. Note that it is
+	// possible that we have created a materializer which took over draining
+	// the sources given to us by the caller.
+	r.MetadataSources = append(r.MetadataSources, args.MetadataSources...)
 	return r, err
 }
 

@@ -1115,6 +1115,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
 				ProcessorConstructor: rowexec.NewProcessor,
 				LocalProcessors:      localProcessors,
+				MetadataSources:      metadataSourcesQueue,
 				DiskQueueCfg:         s.diskQueueCfg,
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,
@@ -1138,7 +1139,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
 				result.Op = newPanicInjector(result.Op)
 			}
-			metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
+			metadataSourcesQueue = result.MetadataSources
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
 				for _, closer := range result.ToClose {
 					func(c colexecop.Closer) {
