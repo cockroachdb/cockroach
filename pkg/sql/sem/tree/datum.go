@@ -4309,7 +4309,7 @@ func ParseDOid(ctx *EvalContext, s string, t *types.T) (*DOid, error) {
 		// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 		s = pgSignatureRegexp.ReplaceAllString(s, "$1")
 
-		dOid, missingTypeErr := queryOid(ctx, t, NewDString(s))
+		dOid, missingTypeErr := queryOid(ctx, t, NewDString(Name(s).Normalize()))
 		if missingTypeErr == nil {
 			return dOid, missingTypeErr
 		}
