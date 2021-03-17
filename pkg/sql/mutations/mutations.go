@@ -210,6 +210,10 @@ func statisticsMutator(
 			n := rng.Intn(10)
 			seen := map[string]bool{}
 			colType := tree.MustBeStaticallyKnownType(col.Type)
+			// The JSON family does not have a key encoding.
+			if colType.Family() == types.JsonFamily {
+				return
+			}
 			h := stats.HistogramData{
 				ColumnType: colType,
 			}
