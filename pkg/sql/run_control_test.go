@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -342,7 +341,6 @@ GRANT admin TO has_admin2;
 
 func TestCancelQueryPermissions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 53791, "data race")
 	defer log.Scope(t).Close(t)
 
 	// getQueryIDs retrieves the IDs of any currently running queries for the
@@ -408,7 +406,7 @@ GRANT admin TO has_admin2;
 		{"non-admins with CANCELQUERY can cancel non-admins", "has_cancelquery", "no_perms", true,
 			""},
 		{"non-admins cannot cancel admins", "has_cancelquery", "has_admin", false,
-			"permission denied to cancel admin query"},
+			"permission denied to cancel admin session"},
 		{"unpermissioned users cannot cancel other users", "no_perms", "has_cancelquery", false,
 			"this operation requires CANCELQUERY privilege"},
 	}

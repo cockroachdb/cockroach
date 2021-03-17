@@ -891,6 +891,20 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 		}
 	}
 
+	hint := "to override this error, SET override_multi_region_zone_config = true and reissue the command"
+
+	// The request is to discard the zone configuration. Error in all discard
+	// cases.
+	if options == nil {
+		// User is trying to update a zone config value that's protected for
+		// multi-region databases. Return the constructed error.
+		err := errors.WithDetail(errors.Newf(
+			"attempting to discard the zone configuration of a multi-region entity"),
+			"discarding a multi-region zone configuration may result in sub-optimal performance or behavior",
+		)
+		return errors.WithHint(err, hint)
+	}
+
 	// This is clearly an n^2 operation, but since there are only a single
 	// digit number of zone config keys, it's likely faster to do it this way
 	// than incur the memory allocation of creating a map.
@@ -902,8 +916,7 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 				err := errors.Newf("attempting to modify protected field %q of a multi-region zone configuration",
 					string(opt.Key),
 				)
-				return errors.WithHint(err, "to override this error, "+
-					"SET override_multi_region_zone_config = true and reissue the command")
+				return errors.WithHint(err, hint)
 			}
 		}
 	}
