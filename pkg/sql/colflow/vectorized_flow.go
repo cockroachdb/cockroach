@@ -629,6 +629,14 @@ func (s *vectorizedFlowCreator) newStreamingMemAccount(
 	return &streamingMemAccount
 }
 
+// getStatsCollectorsAndResetQueue makes a copy of the queue of the vectorized
+// stats collectors accumulated so far and resets the queue for reuse.
+func (s *vectorizedFlowCreator) getStatsCollectorsAndResetQueue() []vectorizedStatsCollector {
+	vscs := append([]vectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+	s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
+	return vscs
+}
+
 // setupRemoteOutputStream sets up an Outbox that will operate according to
 // the given StreamEndpointSpec. It will also drain all MetadataSources in the
 // metadataSourcesQueue.
@@ -722,10 +730,17 @@ func (s *vectorizedFlowCreator) setupRouter(
 		s.accounts = append(s.accounts, &acc)
 	}
 	diskMon, diskAccounts := s.createDiskAccounts(ctx, flowCtx, mmName, len(output.Streams))
+	var getStats func() []*execinfrapb.ComponentStats
+	if s.recordingStats {
+		statsCollectors := s.getStatsCollectorsAndResetQueue()
+		getStats = func() []*execinfrapb.ComponentStats {
+			return finishVectorizedStatsCollectors(statsCollectors)
+		}
+	}
 	router, outputs := NewHashRouter(
 		allocators, input, outputTyps, output.HashColumns,
 		execinfra.GetWorkMemLimit(flowCtx.Cfg), s.diskQueueCfg, s.fdSemaphore,
-		diskAccounts, metadataSourcesQueue, toClose,
+		diskAccounts, metadataSourcesQueue, getStats, toClose,
 	)
 	runRouter := func(ctx context.Context, _ context.CancelFunc) {
 		router.Run(logtags.AddTag(ctx, "hashRouterID", strings.Join(streamIDs, ",")))
@@ -967,10 +982,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if s.recordingStats {
 			// If recording stats, we add a metadata source that will generate all
 			// stats data as metadata for the stats collectors created so far.
-			vscs := append([]vectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
-			s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
+			statsCollectors := s.getStatsCollectorsAndResetQueue()
 			getStats = func() []*execinfrapb.ComponentStats {
-				result := finishVectorizedStatsCollectors(vscs)
+				result := finishVectorizedStatsCollectors(statsCollectors)
 				if atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode {
 					// At the last outbox, we can accurately retrieve stats for
 					// the whole flow from parent monitors. These stats are
@@ -999,11 +1013,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 		// Make the materializer, which will write to the given receiver.
 		var getStats func() []*execinfrapb.ComponentStats
 		if s.recordingStats {
-			// Make a copy given that vectorizedStatsCollectorsQueue is reset and
-			// appended to.
-			vscq := append([]vectorizedStatsCollector(nil), s.vectorizedStatsCollectorsQueue...)
+			statsCollectors := s.getStatsCollectorsAndResetQueue()
 			getStats = func() []*execinfrapb.ComponentStats {
-				return finishVectorizedStatsCollectors(vscq)
+				return finishVectorizedStatsCollectors(statsCollectors)
 			}
 		}
 		proc, err := colexec.NewMaterializer(
@@ -1020,7 +1032,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if err != nil {
 			return err
 		}
-		s.vectorizedStatsCollectorsQueue = s.vectorizedStatsCollectorsQueue[:0]
 		// A materializer is a leaf.
 		s.leaves = append(s.leaves, proc)
 		s.addMaterializer(proc)

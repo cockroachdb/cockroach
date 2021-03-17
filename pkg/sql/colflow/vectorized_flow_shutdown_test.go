@@ -203,6 +203,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
 					toDrain,
+					nil, /* getStats */
 					nil, /* toClose */
 				)
 				for i := 0; i < numInboxes; i++ {
