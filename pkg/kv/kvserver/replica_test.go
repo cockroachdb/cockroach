@@ -6245,6 +6245,7 @@ func TestRangeStatsComputation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	tc.Start(t, stopper)
+	ctx := context.Background()
 
 	baseStats := initialStats()
 	// The initial stats contain an empty lease and no prior read summary, but
@@ -6311,7 +6312,7 @@ func TestRangeStatsComputation(t *testing.T) {
 		// Account for TxnDidNotUpdateMeta
 		expMS.LiveBytes += 2
 		expMS.ValBytes += 2
-		if tc.engine.IsSeparatedIntentsEnabledForTesting() {
+		if tc.engine.IsSeparatedIntentsEnabledForTesting(ctx) {
 			expMS.SeparatedIntentCount++
 		}
 	}

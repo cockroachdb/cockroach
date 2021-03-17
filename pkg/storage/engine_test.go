@@ -1589,3 +1589,67 @@ func TestFS(t *testing.T) {
 		})
 	}
 }
+
+func TestScanSeparatedIntents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	maxKey := keys.MaxKey
+
+	keys := []roachpb.Key{
+		roachpb.Key("a"),
+		roachpb.Key("b"),
+		roachpb.Key("c"),
+	}
+	testcases := map[string]struct {
+		from          roachpb.Key
+		to            roachpb.Key
+		max           int64
+		targetBytes   int64
+		expectIntents []roachpb.Key
+	}{
+		"no keys":         {keys[0], keys[0], 0, 0, keys[:0]},
+		"one key":         {keys[0], keys[1], 0, 0, keys[0:1]},
+		"two keys":        {keys[0], keys[2], 0, 0, keys[0:2]},
+		"all keys":        {keys[0], maxKey, 0, 0, keys},
+		"offset mid":      {keys[1], keys[2], 0, 0, keys[1:2]},
+		"offset last":     {keys[2], maxKey, 0, 0, keys[2:]},
+		"offset post":     {roachpb.Key("x"), maxKey, 0, 0, []roachpb.Key{}},
+		"nil end":         {keys[0], nil, 0, 0, []roachpb.Key{}},
+		"limit keys":      {keys[0], maxKey, 2, 0, keys[0:2]},
+		"one byte":        {keys[0], maxKey, 0, 1, keys[0:1]},
+		"80 bytes":        {keys[0], maxKey, 0, 80, keys[0:2]},
+		"80 bytes or one": {keys[0], maxKey, 1, 80, keys[0:1]},
+		"1000 bytes":      {keys[0], maxKey, 0, 1000, keys},
+	}
+
+	for name, enableSeparatedIntents := range map[string]bool{"interleaved": false, "separated": true} {
+		t.Run(name, func(t *testing.T) {
+			settings := makeSettingsForSeparatedIntents(false, enableSeparatedIntents)
+			eng := newPebbleInMem(ctx, roachpb.Attributes{}, 1<<20, settings)
+			defer eng.Close()
+
+			for _, key := range keys {
+				err := MVCCPut(ctx, eng, nil, key, txn1.ReadTimestamp, roachpb.Value{RawBytes: key}, txn1)
+				require.NoError(t, err)
+			}
+
+			for name, tc := range testcases {
+				tc := tc
+				t.Run(name, func(t *testing.T) {
+					intents, err := ScanSeparatedIntents(eng, tc.from, tc.to, tc.max, tc.targetBytes)
+					require.NoError(t, err)
+					if enableSeparatedIntents {
+						require.Len(t, intents, len(tc.expectIntents), "unexpected number of separated intents")
+						for i, intent := range intents {
+							require.Equal(t, tc.expectIntents[i], intent.Key)
+						}
+					} else {
+						require.Empty(t, intents)
+					}
+				})
+			}
+		})
+	}
+}
