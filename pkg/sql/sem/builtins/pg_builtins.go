@@ -1085,9 +1085,9 @@ SELECT description
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				oid := tree.MustBeDOid(args[0])
+				oidArg := tree.MustBeDOid(args[0])
 				isVisible, exists, err := ctx.Planner.IsTableVisible(
-					ctx.Context, ctx.SessionData.Database, ctx.SessionData.SearchPath, int64(oid.DInt),
+					ctx.Context, ctx.SessionData.Database, ctx.SessionData.SearchPath, oid.Oid(oidArg.DInt),
 				)
 				if err != nil {
 					return nil, err
