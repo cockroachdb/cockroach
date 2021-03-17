@@ -12,6 +12,7 @@ package kvfollowerreadsccl
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -57,6 +58,12 @@ func getFollowerReadDuration(st *cluster.Settings) time.Duration {
 	targetMultiple := followerReadMultiple.Get(&st.SV)
 	targetDuration := closedts.TargetDuration.Get(&st.SV)
 	closeFraction := closedts.CloseFraction.Get(&st.SV)
+	// Zero targetDuration means follower reads are disabled.
+	if targetDuration == 0 {
+		// Returning an infinitely large negative value would push safe
+		// request timestamp into the distant past thus disabling follower reads.
+		return math.MinInt64
+	}
 	return -1 * time.Duration(float64(targetDuration)*
 		(1+closeFraction*targetMultiple))
 }
