@@ -61,8 +61,7 @@ func wrapRowSources(
 	flowCtx *execinfra.FlowCtx,
 	inputs []colexecop.Operator,
 	inputTypes [][]*types.T,
-	acc *mon.BoundAccount,
-	processorID int32,
+	args *colexecargs.NewColOperatorArgs,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
 	factory coldata.ColumnFactory,
 ) (*colexec.Columnarizer, error) {
@@ -78,6 +77,17 @@ func wrapRowSources(
 			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
+			var metadataSources execinfrapb.MetadataSources
+			if len(args.MetadataSources) > i {
+				// In some testing paths, MetadataSources might be left unset,
+				// so we check whether the slice has ith element. In the
+				// production setting though the length of Inputs is always the
+				// same as the length of MetadataSources.
+				metadataSources = args.MetadataSources[i]
+				// We pass on the responsibility of draining metadata sources to
+				// the materializer.
+				args.MetadataSources[i] = nil
+			}
 			// Note that this materializer is *not* added to the set of
 			// releasables because in some cases it could be released before
 			// being closed. Namely, this would occur if we have a subquery
@@ -88,11 +98,11 @@ func wrapRowSources(
 			// when the main planNode tree is being closed.
 			toWrapInput, err := colexec.NewMaterializer(
 				flowCtx,
-				processorID,
+				args.Spec.ProcessorID,
 				input,
 				inputTypes[i],
 				nil, /* output */
-				nil, /* metadataSourcesQueue */
+				metadataSources,
 				nil, /* toClose */
 				nil, /* getStats */
 				nil, /* cancelFlow */
@@ -111,11 +121,11 @@ func wrapRowSources(
 
 	if _, mustBeStreaming := toWrap.(execinfra.StreamingProcessor); mustBeStreaming {
 		return colexec.NewStreamingColumnarizer(
-			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+			ctx, colmem.NewAllocator(ctx, args.StreamingMemAccount, factory), flowCtx, args.Spec.ProcessorID, toWrap,
 		)
 	}
 	return colexec.NewBufferingColumnarizer(
-		ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+		ctx, colmem.NewAllocator(ctx, args.StreamingMemAccount, factory), flowCtx, args.Spec.ProcessorID, toWrap,
 	)
 }
 
@@ -561,8 +571,7 @@ func (r opResult) createAndWrapRowSource(
 		flowCtx,
 		inputs,
 		inputTypes,
-		args.StreamingMemAccount,
-		spec.ProcessorID,
+		args,
 		func(inputs []execinfra.RowSource) (execinfra.RowSource, error) {
 			// We provide a slice with a single nil as 'outputs' parameter
 			// because all processors expect a single output. Passing nil is ok
@@ -1344,6 +1353,12 @@ func NewColOperator(
 	r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, projection)
 	if args.TestingKnobs.PlanInvariantsCheckers {
 		r.Op = colexec.NewInvariantsChecker(r.Op)
+	}
+	// Handle the metadata sources from the input trees. Note that it is
+	// possible that we have created a materializer which took over draining
+	// the sources given to us by the caller.
+	for i := range args.MetadataSources {
+		r.MetadataSources = append(r.MetadataSources, args.MetadataSources[i]...)
 	}
 	return r, err
 }
