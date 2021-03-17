@@ -51,6 +51,7 @@ go_test(
         "schema_change_external_test.go",
     ],
     deps = [
+        ":schemachange",
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/security",
