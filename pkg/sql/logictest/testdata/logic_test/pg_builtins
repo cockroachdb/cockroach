@@ -33,3 +33,44 @@ query T
 SELECT format_type(152100, 0)
 ----
 unknown (OID=152100)
+
+statement ok
+CREATE TYPE visible_type AS ENUM('a');
+CREATE SCHEMA other;
+CREATE TYPE other.not_visible_type AS ENUM('b');
+CREATE DATABASE db2;
+SET DATABASE = db2;
+CREATE TYPE type_in_db2 AS ENUM('c');
+
+let $type_in_db2_id
+SELECT t.oid FROM pg_type t WHERE t.typname = 'type_in_db2';
+
+statement ok
+SET DATABASE = test;
+
+query TB rowsort
+SELECT t.typname, pg_type_is_visible(t.oid)
+FROM pg_type t
+WHERE t.typname IN ('int8', '_date', 'visible_type', 'not_visible_type')
+----
+int8              true
+_date             true
+visible_type      true
+not_visible_type  false
+
+# Looking up a table in a different database should return NULL.
+query B
+SELECT pg_type_is_visible($type_in_db2_id)
+----
+NULL
+
+# Looking up a non-existent OID should return NULL.
+query B
+SELECT pg_type_is_visible(1010101010)
+----
+NULL
+
+query B
+SELECT pg_type_is_visible(NULL)
+----
+NULL

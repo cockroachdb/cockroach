@@ -60,6 +60,13 @@ func (so *DummySequenceOperators) LookupSchema(
 	return false, nil, errors.WithStack(errSequenceOperators)
 }
 
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
+}
+
 // IncrementSequence is part of the tree.SequenceOperators interface.
 func (so *DummySequenceOperators) IncrementSequence(
 	ctx context.Context, seqName *tree.TableName,
@@ -138,6 +145,31 @@ func (ep *DummyEvalPlanner) LookupSchema(
 	return false, nil, errors.WithStack(errEvalPlanner)
 }
 
+<<<<<<< HEAD
+||||||| parent of b07c1eed2d... sql: fix pg_type_is_visible for UDTs
+// IsTableVisible is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) IsTableVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
+}
+
+=======
+// IsTableVisible is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) IsTableVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
+}
+
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+) (bool, bool, error) {
+	return false, false, errors.WithStack(errEvalPlanner)
+}
+
+>>>>>>> b07c1eed2d... sql: fix pg_type_is_visible for UDTs
 // ResolveTableName is part of the tree.EvalDatabase interface.
 func (ep *DummyEvalPlanner) ResolveTableName(
 	ctx context.Context, tn *tree.TableName,
