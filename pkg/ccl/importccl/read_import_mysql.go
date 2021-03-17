@@ -432,6 +432,8 @@ func mysqlTableToCockroach(
 				priv,
 				tree.PersistencePermanent,
 				nil, /* params */
+				// If this is multi-region, this will get added by WriteDescriptors.
+				false, /* isMultiRegion */
 			)
 		} else {
 			priv := descpb.NewDefaultPrivilegeDescriptor(owner)
@@ -446,6 +448,8 @@ func mysqlTableToCockroach(
 				priv,
 				tree.PersistencePermanent,
 				nil, /* params */
+				// If this is multi-region, this will get added by WriteDescriptors.
+				false, /* isMultiRegion */
 			)
 		}
 		if err != nil {
