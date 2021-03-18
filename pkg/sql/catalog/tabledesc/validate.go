@@ -1248,6 +1248,33 @@ func (desc *wrapper) validateTableLocalityConfig(
 		return errors.Wrapf(err, "multi-region enum with ID %d does not exist", regionsEnumID)
 	}
 
+	// Check non-table items have a correctly set locality.
+	if desc.IsSequence() {
+		if !desc.IsLocalityRegionalByTable() {
+			return errors.AssertionFailedf(
+				"expected sequence %s to have locality REGIONAL BY TABLE",
+				desc.Name,
+			)
+		}
+	}
+	if desc.IsView() {
+		if desc.MaterializedView() {
+			if !desc.IsLocalityGlobal() {
+				return errors.AssertionFailedf(
+					"expected materialized view %s to have locality GLOBAL",
+					desc.Name,
+				)
+			}
+		} else {
+			if !desc.IsLocalityRegionalByTable() {
+				return errors.AssertionFailedf(
+					"expected view %s to have locality REGIONAL BY TABLE",
+					desc.Name,
+				)
+			}
+		}
+	}
+
 	// REGIONAL BY TABLE tables homed in the primary region should include a
 	// reference to the multi-region type descriptor and a corresponding
 	// backreference. All other patterns should only contain a reference if there
