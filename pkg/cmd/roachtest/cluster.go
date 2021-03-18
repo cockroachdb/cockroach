@@ -1698,7 +1698,7 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 	for rows.Next() {
 		var rangeID int32
 		var prettyKey, status, detail string
-		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); err != nil {
+		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); scanErr != nil {
 			return scanErr
 		}
 		finalErr = errors.CombineErrors(finalErr,
