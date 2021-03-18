@@ -191,7 +191,7 @@ func RandomPolygon(
 	// TODO(otan): generate random holes inside the Polygon.
 	// Ideas:
 	// * We can do something like use 4 arbitrary points in the LinearRing to generate a BoundingBox,
-	//   and re-use "PointInLinearRing" to generate N random points inside the 4 points to form
+	//   and re-use "PointIntersectsLinearRing" to generate N random points inside the 4 points to form
 	//   a "sub" linear ring inside.
 	// * Generate a random set of polygons, see which ones they fully cover and use that.
 	return geom.NewPolygon(layout).MustSetCoords([][]geom.Coord{
