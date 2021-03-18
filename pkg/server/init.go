@@ -272,13 +272,11 @@ func (s *initServer) ServeAndWait(
 					return nil, false, err
 				}
 
-				if err != nil {
-					// We expect the join RPC to blindly retry on all
-					// "connection" errors save for one above. If we're
-					// here, we failed to initialize our first store after a
-					// successful join attempt.
-					return nil, false, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error: %v", err)
-				}
+				// We expect the join RPC to blindly retry on all
+				// "connection" errors save for one above. If we're
+				// here, we failed to initialize our first store after a
+				// successful join attempt.
+				return nil, false, errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error: %v", err)
 			}
 
 			state := result.state

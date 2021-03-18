@@ -1200,7 +1200,7 @@ func (r *Registry) stepThroughStateMachine(
 		jm.ResumeFailed.Inc(1)
 		if sErr := (*InvalidStatusError)(nil); errors.As(err, &sErr) {
 			if sErr.status != StatusCancelRequested && sErr.status != StatusPauseRequested {
-				return errors.NewAssertionErrorWithWrappedErrf(jobErr,
+				return errors.NewAssertionErrorWithWrappedErrf(sErr,
 					"job %d: unexpected status %s provided for a running job", job.ID(), sErr.status)
 			}
 			return sErr
@@ -1281,8 +1281,7 @@ func (r *Registry) stepThroughStateMachine(
 			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", job.ID()))
 	case StatusFailed:
 		if jobErr == nil {
-			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
-				"job %d: has StatusFailed but no error was provided", job.ID())
+			return errors.AssertionFailedf("job %d: has StatusFailed but no error was provided", job.ID())
 		}
 		if err := job.failed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be

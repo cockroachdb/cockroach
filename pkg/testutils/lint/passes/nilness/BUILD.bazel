@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "nilness",
+    srcs = ["nilness.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nilness",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@org_golang_x_tools//go/analysis",
+        "@org_golang_x_tools//go/analysis/passes/buildssa",
+        "@org_golang_x_tools//go/ssa",
+    ],
+)
+
+go_test(
+    name = "nilness_test",
+    srcs = ["nilness_test.go"],
+    data = glob(["testdata/**"]),
+    tags = ["broken_in_bazel"],
+    deps = [
+        ":nilness",
+        "@org_golang_x_tools//go/analysis/analysistest",
+    ],
+)
