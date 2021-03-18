@@ -209,15 +209,19 @@ func (p *planner) CommonLookupFlags(required bool) tree.CommonLookupFlags {
 
 // IsTableVisible is part of the tree.EvalDatabase interface.
 func (p *planner) IsTableVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID int64,
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
 ) (isVisible, exists bool, err error) {
-	// TODO(ajwerner): look at this error and only no-op if it is
-	// ErrDescriptorNotFound or something like it.
 	tableDesc, err := p.LookupTableByID(ctx, descpb.ID(tableID))
 	if err != nil {
-		// If an error happened here, it means the table doesn't exist, so we
-		// return "not exists" rather than the error.
-		return false, false, nil //nolint:returnerrcheck
+		// If a "not found" error happened here, we return "not exists" rather than
+		// the error.
+		if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+			errors.Is(err, catalog.ErrDescriptorDropped) ||
+			pgerror.GetPGCode(err) == pgcode.UndefinedTable ||
+			pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+			return false, false, nil //nolint:returnerrcheck
+		}
+		return false, false, err
 	}
 	schemaID := tableDesc.GetParentSchemaID()
 	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), schemaID,
@@ -245,6 +249,39 @@ func (p *planner) IsTableVisible(
 	iter := searchPath.Iter()
 	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		if schemaDesc.Name == scName {
+			return true, true, nil
+		}
+	}
+	return false, true, nil
+}
+
+// IsTypeVisible is part of the tree.EvalDatabase interface.
+func (p *planner) IsTypeVisible(
+	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+) (isVisible bool, exists bool, err error) {
+	// Check builtin types first. They are always globally visible.
+	if _, ok := types.OidToType[typeID]; ok {
+		return true, true, nil
+	}
+	typName, _, err := p.GetTypeDescriptor(ctx, typedesc.UserDefinedTypeOIDToID(typeID))
+	if err != nil {
+		// If a "not found" error happened here, we return "not exists" rather than
+		// the error.
+		if errors.Is(err, catalog.ErrDescriptorNotFound) ||
+			errors.Is(err, catalog.ErrDescriptorDropped) ||
+			pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+			return false, false, nil //nolint:returnerrcheck
+		}
+		return false, false, err
+	}
+	if typName.CatalogName.String() != curDB {
+		// If the type is in a different database, then it's considered to be
+		// "not existing" instead of just "not visible"; this matches PostgreSQL.
+		return false, false, nil
+	}
+	iter := searchPath.Iter()
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+		if typName.SchemaName.String() == scName {
 			return true, true, nil
 		}
 	}

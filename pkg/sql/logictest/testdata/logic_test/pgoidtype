@@ -173,25 +173,56 @@ pg_constraint  0
 ## Test visibility of pg_* via oid casts.
 
 statement ok
-CREATE TABLE a (id INT PRIMARY KEY)
+CREATE TABLE a (id INT PRIMARY KEY);
+CREATE TYPE typ AS ENUM ('a')
+
+let $table_oid
+SELECT c.oid FROM pg_class c WHERE c.relname = 'a';
+
+query O
+SELECT $table_oid::oid::regclass
+----
+a
+
+let $type_oid
+SELECT t.oid FROM pg_type t WHERE t.typname = 'typ';
+
+query O
+SELECT $type_oid::oid::regtype
+----
+typ
 
 query T
 SELECT relname from pg_class where oid='a'::regclass
 ----
 a
 
+query T
+SELECT typname from pg_type where oid='typ'::regtype
+----
+typ
+
 ## Regression for #16767 - ensure regclass casts use normalized table names
 
 statement ok
-CREATE TABLE hasCase (id INT PRIMARY KEY)
+CREATE TABLE hasCase (id INT PRIMARY KEY);
+CREATE TYPE typHasCase AS ENUM ('a')
 
 query T
 SELECT relname from pg_class where oid='hasCase'::regclass
 ----
 hascase
 
+query T
+SELECT typname from pg_type where oid='typHasCase'::regtype
+----
+typhascase
+
 statement ok
 CREATE TABLE "quotedCase" (id INT PRIMARY KEY)
+
+statement ok
+CREATE TYPE "typQuotedCase" AS ENUM ('a')
 
 query error pgcode 42P01 relation "quotedcase" does not exist
 SELECT relname from pg_class where oid='quotedCase'::regclass
@@ -201,8 +232,16 @@ SELECT relname from pg_class where oid='"quotedCase"'::regclass
 ----
 quotedCase
 
-# a non-root user with sufficient permissions can get the OID of a table from
-# the current database
+query error pgcode 42704 type 'typquotedcase' does not exist
+SELECT typname from pg_type where oid='typQuotedCase'::regtype
+
+query T
+SELECT typname from pg_type where oid='"typQuotedCase"'::regtype
+----
+typQuotedCase
+
+# a non-root user with sufficient permissions can get the OID of a table or
+# type from the current database
 
 statement ok
 GRANT ALL ON DATABASE test TO testuser
@@ -217,12 +256,17 @@ SELECT relname from pg_class where oid='a'::regclass
 ----
 a
 
+query T
+SELECT typname from pg_type where oid='typ'::regtype
+----
+typ
+
 user root
 
 statement ok
 CREATE DATABASE otherdb
 
-## a non-root user can't get the OID of a table from a different database
+## a non-root user can't get the OID of a table or type from a different database
 
 user testuser
 
@@ -232,25 +276,38 @@ SET DATABASE = otherdb
 query error pgcode 42P01 relation "a" does not exist
 SELECT 'a'::regclass
 
+query error pgcode 42704 type 'typ' does not exist
+SELECT 'typ'::regtype
+
 user root
 
 statement ok
 SET DATABASE = otherdb
 
 statement ok
-CREATE TABLE a (id INT PRIMARY KEY, foo STRING)
+CREATE TABLE a (id INT PRIMARY KEY, foo STRING);
+CREATE TYPE typ AS ENUM ('a', 'b')
 
 ## There is now a table named 'a' in both the database 'otherdb' and the
 ## database 'test'. The following query shows that the root user can still
 ## determine the OID of the table 'a' by using a regclass cast, despite the
 ## fact that the root user has visibility into both of the tables. The 'a' that
 ## gets selected should be the 'a' that exists in the current database.
+## The same exact reasoning applies to the type named 'typ'.
 ## See https://github.com/cockroachdb/cockroach/issues/13695
 
 query OI
 SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
 ----
 a  2
+
+query OI
+SELECT t.typname, count(*) FROM pg_type t
+LEFT JOIN pg_enum e ON t.oid = e.enumtypid
+WHERE t.oid = 'typ'::regtype
+GROUP BY t.typname;
+----
+typ  2
 
 statement ok
 SET DATABASE = test
@@ -259,6 +316,14 @@ query OI
 SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
 ----
 a  1
+
+query OI
+SELECT t.typname, count(*) FROM pg_type t
+LEFT JOIN pg_enum e ON t.oid = e.enumtypid
+WHERE t.oid = 'typ'::regtype
+GROUP BY t.typname;
+----
+typ  1
 
 statement ok
 CREATE DATABASE thirddb
@@ -272,6 +337,12 @@ SET DATABASE = thirddb
 
 query error pgcode 42P01 relation "a" does not exist
 SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
+
+query error pgcode 42704 type 'typ' does not exist
+SELECT t.typname, count(*) FROM pg_type t
+LEFT JOIN pg_enum e ON t.oid = e.enumtypid
+WHERE t.oid = 'typ'::regtype
+GROUP BY t.typname;
 
 statement ok
 CREATE TABLE o (a OID PRIMARY KEY)
