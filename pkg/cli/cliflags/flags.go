@@ -230,10 +230,10 @@ What to dump. "schema" dumps the schema only. "data" dumps the data only.
 "both" (default) dumps the schema then the data.`,
 	}
 
-	DumpTime = FlagInfo{
+	ReadTime = FlagInfo{
 		Name: "as-of",
 		Description: `
-Dumps the data as of the specified timestamp. Formats supported are the same
+Reads the data as of the specified timestamp. Formats supported are the same
 as the timestamp type.`,
 	}
 
