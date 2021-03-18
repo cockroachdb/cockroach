@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -61,11 +60,8 @@ func (p *planner) AlterTableLocality(
 		return newZeroNode(nil /* columns */), nil
 	}
 
-	// This check for CREATE privilege is kept for backwards compatibility.
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"must be owner of table %s or have CREATE privilege on table %s",
-			tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, tableDesc); err != nil {
+		return nil, err
 	}
 
 	// Ensure that the database is multi-region enabled.
