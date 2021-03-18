@@ -51,13 +51,13 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
 	orders := DeriveInterestingOrderings(left).Copy()
-	orders.RestrictToCols(leftEq.ToSet())
+	orders.RestrictToCols(leftEq.ToSet(), nil /* equivCols */)
 
 	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData.ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
 		rightOrders := DeriveInterestingOrderings(right).Copy()
-		rightOrders.RestrictToCols(leftEq.ToSet())
+		rightOrders.RestrictToCols(leftEq.ToSet(), nil /* equivCols */)
 		orders = append(orders, rightOrders...)
 
 		// If we don't allow hash join, we must do our best to generate a merge

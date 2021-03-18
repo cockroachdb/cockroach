@@ -145,6 +145,72 @@ func (o Ordering) Equals(rhs Ordering) bool {
 	return true
 }
 
+// restrictToCols returns an ordering that refers only to columns in the given
+// set. The equivCols argument allows ordering columns that are not in the given
+// set to be remapped to equivalent columns that are in the given set. A column
+// is only remapped if:
+//
+//   1. It does not exist in cols.
+//   2. And equivCols returns at least one column that:
+//     A. Exists in cols.
+//     B. And does not exist in any preceding columns of the ordering.
+//
+// Note that a new ordering is allocated if one or more of its columns are
+// remapped in order to prevent mutating the original ordering. If no columns
+// are remapped, the returned ordering is a slice of the original.
+func (o Ordering) restrictToCols(cols ColSet, equivCols func(ColumnID) ColSet) Ordering {
+	// Find the longest prefix of the ordering that contains only columns in
+	// the set.
+	newOrd, isCopy := o, false
+	for i, c := range o {
+		if cols.Contains(c.ID()) {
+			// If a new ordering was created in a previous iteration of the
+			// loop and it already contains the current column, do not
+			// duplicate it in the ordering.
+			// TODO(mgartner): If we ignore this column and shift the remaining
+			// columns to the left and continue rather than returning early,
+			// then longer orderings can be generated in some cases.
+			if isCopy && newOrd[:i].ColSet().Contains(c.ID()) {
+				return newOrd[:i]
+			}
+
+			// Otherwise, continue to the next column in the ordering.
+			continue
+		}
+
+		// If the current column does not exist in cols, check if there is
+		// an equivalent column in cols if equivCols was provided.
+		if equivCols == nil {
+			return newOrd[:i]
+		}
+
+		// Get all the equivalent columns.
+		eqCols := equivCols(c.ID())
+		if eqCols.Empty() {
+			return newOrd[:i]
+		}
+
+		// Find the first column equivalent to c that is not already in the
+		// ordering.
+		currCols := newOrd[:i].ColSet()
+		eqCol, ok := eqCols.Difference(currCols).Intersection(cols).Next(0)
+		if !ok {
+			return newOrd[:i]
+		}
+
+		// Copy the ordering to avoid mutating the original.
+		if !isCopy {
+			newOrd = make(Ordering, len(o))
+			copy(newOrd, o)
+			isCopy = true
+		}
+
+		// Replace the i-th column with the equivalent column.
+		newOrd[i] = MakeOrderingColumn(eqCol, c.Descending())
+	}
+	return newOrd
+}
+
 // OrderingSet is a set of orderings, with the restriction that no ordering
 // is a prefix of another ordering in the set.
 type OrderingSet []Ordering
@@ -190,24 +256,31 @@ func (os *OrderingSet) RestrictToPrefix(required Ordering) {
 }
 
 // RestrictToCols keeps only the orderings (or prefixes of them) that refer to
-// columns in the given set.
-func (os *OrderingSet) RestrictToCols(cols ColSet) {
+// columns in the given set. The equivCols argument allows ordering columns that
+// are not in the given set to be remapped to equivalent columns that are in the
+// given set. A column is only remapped if:
+//
+//   1. It does not exist in cols.
+//   2. And equivCols returns at least one column that:
+//     A. Exists in cols.
+//     B. And does not exist in any preceding columns of the ordering.
+//
+// For example, if cols is (1,3) and equivCols(2) returns (3), the ordering set
+// (+1,-2) (+1,+2) would be remapped to (+1,-3) (+1,+3). However the ordering
+// set (-2,+3) (+2,+3) would be be remapped and restricted to (-3) (+3), instead
+// of the nonsensical ordering set (-3,+3) (+3,+3).
+//
+// Note that a new ordering is allocated if one or more of its columns are
+// remapped in order to prevent mutating ordering sets that os was copied from.
+func (os *OrderingSet) RestrictToCols(cols ColSet, equivCols func(ColumnID) ColSet) {
 	old := *os
 	*os = old[:0]
 	for _, o := range old {
-		// Find the longest prefix of the ordering that contains
-		// only columns in the set.
-		prefix := 0
-		for _, c := range o {
-			if !cols.Contains(c.ID()) {
-				break
-			}
-			prefix++
-		}
-		if prefix > 0 {
-			// This function appends at most one element; it is ok to operate on the
-			// same slice.
-			os.Add(o[:prefix])
+		newOrd := o.restrictToCols(cols, equivCols)
+		if len(newOrd) > 0 {
+			// This function appends at most one element; it is ok to operate on
+			// the same slice.
+			os.Add(newOrd)
 		}
 	}
 }
