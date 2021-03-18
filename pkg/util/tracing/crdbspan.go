@@ -174,6 +174,12 @@ func (s *crdbSpan) disableRecording() {
 	}
 }
 
+// XXX: Could we "collapse" recordings? If things are empty, why even send them
+// over? It's pretty sizable: StartTime, Duration, GoroutineID, Operation,
+// Finished, {Trace,Span,ParentSpan}ID. If we had a root span type, we could've
+// marked it (atomically) that something non trivial was recorded. So that when
+// we materialize a recording, if that marker isn't present, we can just not
+// ship back anything. Or ship a collapsed form.
 func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 	if s == nil {
 		return nil // noop span
@@ -197,11 +203,11 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 
 	// The capacity here is approximate since we don't know how many grandchildren
 	// there are.
-	result := make(Recording, 0, 1+len(s.mu.recording.children)+len(s.mu.recording.remoteSpans))
-	// Shallow-copy the children so we can process them without the lock.
-	children := s.mu.recording.children
+	result := make(Recording, 0, 1+len(s.mu.recording.remoteSpans)+len(s.mu.recording.children))
 	result = append(result, s.getRecordingLocked(wantTags))
 	result = append(result, s.mu.recording.remoteSpans...)
+	// Shallow-copy the children so we can process them without the lock.
+	children := s.mu.recording.children
 	s.mu.Unlock()
 
 	for _, child := range children {
@@ -330,16 +336,7 @@ func (s *crdbSpan) getRecordingLocked(wantTags bool) tracingpb.RecordedSpan {
 		Duration:     s.mu.duration,
 	}
 
-	if rs.Duration == -1 {
-		// -1 indicates an unfinished Span. For a recording it's better to put some
-		// duration in it, otherwise tools get confused. For example, we export
-		// recordings to Jaeger, and spans with a zero duration don't look nice.
-		rs.Duration = timeutil.Now().Sub(rs.StartTime)
-		rs.Finished = false
-	} else {
-		rs.Finished = true
-	}
-
+	rs.Finished = rs.Duration != -1 // -1 indicates an unfinished Span
 	addTag := func(k, v string) {
 		if rs.Tags == nil {
 			rs.Tags = make(map[string]string)

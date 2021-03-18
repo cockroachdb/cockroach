@@ -86,7 +86,19 @@ func (s *spanInner) GetRecording() Recording {
 	// If the span is not verbose, optimize by avoiding the tags.
 	// This span is likely only used to carry payloads around.
 	wantTags := s.crdb.recordingType() == RecordingVerbose
-	return s.crdb.getRecording(s.tracer.TracingVerbosityIndependentSemanticsIsActive(), wantTags)
+	recording := s.crdb.getRecording(s.tracer.TracingVerbosityIndependentSemanticsIsActive(), wantTags)
+	if s.tracer.HasExternalSink() {
+		now := timeutil.Now()
+		for i := range recording {
+			// For unfinished recordings it's better to put some duration in it,
+			// otherwise tools get confused. For example, we export recordings
+			// to Jaeger, and spans with a zero duration don't look nice.
+			if !recording[i].Finished {
+				recording[i].Duration = now.Sub(recording[i].StartTime)
+			}
+		}
+	}
+	return recording
 }
 
 func (s *spanInner) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
@@ -100,8 +112,7 @@ func (s *spanInner) Finish() {
 	if s.isNoop() {
 		return
 	}
-	finishTime := timeutil.Now()
-	duration := finishTime.Sub(s.crdb.startTime)
+	duration := timeutil.Since(s.crdb.startTime)
 	if duration == 0 {
 		duration = time.Nanosecond
 	}
