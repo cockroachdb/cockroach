@@ -1,0 +1,60 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+user root
+
+statement ok
+CREATE DATABASE db;
+CREATE TABLE db.t();
+GRANT CREATE ON DATABASE db TO testuser;
+CREATE TABLE db.t2();
+ALTER USER testuser CREATEDB;
+
+user testuser
+
+statement error user testuser does not have CREATE or ZONECONFIG privilege on t
+ALTER DATABASE db SET PRIMARY REGION "us-east-1"
+
+user root
+
+statement ok
+GRANT ZONECONFIG ON TABLE db.t TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE  db SET PRIMARY REGION "us-east-1"
+
+user root
+
+statement ok
+REVOKE ZONECONFIG ON TABLE db.t FROM testuser
+
+user testuser
+
+statement error user testuser does not have CREATE or ZONECONFIG privilege on t
+ALTER DATABASE db DROP REGION "us-east-1"
+
+user root
+
+statement ok
+GRANT ZONECONFIG ON TABLE db.t TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE db DROP REGION "us-east-1"
+
+# Now the same thing, except this time we grant the CREATE privilege to testuser.
+user root
+
+statement ok
+REVOKE ZONECONFIG ON TABLE db.t FROM testuser;
+GRANT CREATE ON TABLE db.t TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE  db SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE db DROP REGION "us-east-1"

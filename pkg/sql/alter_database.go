@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -358,6 +360,24 @@ func (p *planner) AlterDatabaseDropRegion(
 	}, nil
 }
 
+// ensureCorrectMultiRegionPrivileges ensures the current user has the required
+// privileges to alter the locality configuration of the given table descriptor.
+// Currently, this entails that the user must have either CREATE or ZONECONFIG
+// privilege on the table descriptor.
+// TODO(arul): This ought to be unified with `ALTER TABLE LOCALITY` as well.
+func ensureCorrectMultiRegionPrivileges(
+	ctx context.Context, p *planner, tableDesc catalog.TableDescriptor,
+) error {
+	zoneConfigPrivErr := p.CheckPrivilege(ctx, tableDesc, privilege.ZONECONFIG)
+	createPrivErr := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE)
+	if zoneConfigPrivErr != nil && createPrivErr != nil {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s does not have %s or %s privilege on %s",
+			p.SessionData().User(), privilege.CREATE, privilege.ZONECONFIG, tableDesc.GetName())
+	}
+	return nil
+}
+
 // removeLocalityConfigFromAllTablesInDB removes the locality config from all
 // tables under the supplied database.
 func removeLocalityConfigFromAllTablesInDB(
@@ -369,19 +389,25 @@ func removeLocalityConfigFromAllTablesInDB(
 			desc.GetID(),
 		)
 	}
+	hasAdminRole, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
 	b := p.Txn().NewBatch()
-	if err := forEachTableDesc(ctx, p, desc, hideVirtual,
-		func(immutable *dbdesc.Immutable, _ string, desc catalog.TableDescriptor) error {
-			mutDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, desc.GetID(), tree.ObjectLookupFlags{})
-			if err != nil {
+	if err := p.forEachTableInMultiRegionDatabase(ctx, desc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		// The user must either be an admin or have the requisite privileges.
+		if !hasAdminRole {
+			if err := ensureCorrectMultiRegionPrivileges(ctx, p, tbDesc); err != nil {
 				return err
 			}
-			mutDesc.LocalityConfig = nil
-			if err := p.writeSchemaChangeToBatch(ctx, mutDesc, b); err != nil {
-				return err
-			}
-			return nil
-		}); err != nil {
+		}
+
+		tbDesc.LocalityConfig = nil
+		if err := p.writeSchemaChangeToBatch(ctx, tbDesc, b); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 	return p.Txn().Run(ctx, b)
@@ -574,39 +600,41 @@ func addDefaultLocalityConfigToAllTables(
 			dbDesc.GetID(),
 		)
 	}
+	hasAdminRole, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
 	b := p.Txn().NewBatch()
-	if err := forEachTableDesc(ctx, p, dbDesc, hideVirtual,
-		func(immutable *dbdesc.Immutable, _ string, desc catalog.TableDescriptor) error {
-			mutDesc, err := p.Descriptors().GetMutableTableByID(
-				ctx, p.txn, desc.GetID(), tree.ObjectLookupFlags{},
-			)
-			if err != nil {
+	if err := p.forEachTableInMultiRegionDatabase(ctx, dbDesc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+		// The user must either be an admin or have the requisite privileges.
+		if !hasAdminRole {
+			if err := ensureCorrectMultiRegionPrivileges(ctx, p, tbDesc); err != nil {
 				return err
 			}
+		}
 
-			if err := checkCanConvertTableToMultiRegion(dbDesc, mutDesc); err != nil {
+		if err := checkCanConvertTableToMultiRegion(dbDesc, tbDesc); err != nil {
+			return err
+		}
+
+		if tbDesc.MaterializedView() {
+			if err := p.alterTableDescLocalityToGlobal(
+				ctx, tbDesc, regionEnumID,
+			); err != nil {
 				return err
 			}
-
-			if mutDesc.MaterializedView() {
-				if err := p.alterTableDescLocalityToGlobal(
-					ctx, mutDesc, regionEnumID,
-				); err != nil {
-					return err
-				}
-			} else {
-				if err := p.alterTableDescLocalityToRegionalByTable(
-					ctx, tree.PrimaryRegionNotSpecifiedName, mutDesc, regionEnumID,
-				); err != nil {
-					return err
-				}
-			}
-
-			if err := p.writeSchemaChangeToBatch(ctx, mutDesc, b); err != nil {
+		} else {
+			if err := p.alterTableDescLocalityToRegionalByTable(
+				ctx, tree.PrimaryRegionNotSpecifiedName, tbDesc, regionEnumID,
+			); err != nil {
 				return err
 			}
-			return nil
-		}); err != nil {
+		}
+		if err := p.writeSchemaChangeToBatch(ctx, tbDesc, b); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 	return p.Txn().Run(ctx, b)
