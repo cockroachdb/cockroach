@@ -13,8 +13,10 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -447,6 +449,60 @@ func WriteDescriptors(
 		return nil
 	}()
 	return errors.Wrapf(err, "restoring table desc and namespace entries")
+}
+
+// MakeEntryForTableName looks up the descriptor of fullyQualifiedTableName
+// from backupManifests and returns an execinfrapb.RestoreSpanEntry
+// of the primary index span of the table.
+// exported to cliccl for exporting data directly from backup sst.
+// Note that we reuse execinfrapb.RestoreSpanEntry as the return entry though
+// ProgressIdx field will never be used.
+func MakeEntryForTableName(
+	ctx context.Context,
+	fullyQualifiedTableName string,
+	backupManifests []BackupManifest,
+	endTime hlc.Timestamp,
+) (execinfrapb.RestoreSpanEntry, error) {
+	var descName []string
+	if descName = strings.Split(fullyQualifiedTableName, "."); len(descName) != 3 {
+		return execinfrapb.RestoreSpanEntry{}, errors.Newf("table name should be specified in format databaseName.schemaName.tableName\n")
+	}
+
+	allDescs, _ := loadSQLDescsFromBackupsAtTime(backupManifests, endTime)
+	resolver, err := backupresolver.NewDescriptorResolver(allDescs)
+	if err != nil {
+		return execinfrapb.RestoreSpanEntry{}, errors.Wrapf(err, "creating a new resolver for all descriptors\n")
+	}
+
+	found, _, err := resolver.LookupObject(ctx, tree.ObjectLookupFlags{}, descName[0], descName[1], descName[2])
+	if err != nil {
+		return execinfrapb.RestoreSpanEntry{}, errors.Wrapf(err, "looking up table %s\n", fullyQualifiedTableName)
+	}
+	if !found {
+		return execinfrapb.RestoreSpanEntry{}, errors.Newf("table %s not found\n", fullyQualifiedTableName)
+	}
+
+	tbID := resolver.ObjsByName[resolver.DbsByName[descName[0]]][descName[1]][descName[2]]
+	tbDesc, err := catalog.AsTableDescriptor(resolver.DescByID[tbID])
+	if err != nil {
+		return execinfrapb.RestoreSpanEntry{}, errors.Wrapf(err, "fetching table %s descriptor \n", fullyQualifiedTableName)
+	}
+
+	backupCodec := keys.SystemSQLCodec
+	span := tbDesc.PrimaryIndexSpan(backupCodec)
+
+	entry, _, err := makeImportSpans(
+		[]roachpb.Span{span},
+		backupManifests,
+		/*backupLocalityInfo*/ nil,
+		roachpb.Key{},
+		security.RootUserName(),
+		errOnMissingRange)
+	if err != nil {
+		return execinfrapb.RestoreSpanEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
+	}
+
+	return entry[0], nil
 }
 
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
