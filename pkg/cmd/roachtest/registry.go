@@ -89,6 +89,7 @@ func registerTests(r *testRegistry) {
 	registerSecondaryIndexesMultiVersionCluster(r)
 	registerSQLAlchemy(r)
 	registerSQLSmith(r)
+	registerStreaming(r)
 	registerSyncTest(r)
 	registerSysbench(r)
 	registerTPCC(r)

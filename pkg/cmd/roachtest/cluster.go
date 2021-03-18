@@ -2178,9 +2178,35 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	return execCmd(ctx, c.l, args...)
 }
 
+// InitE inits cockroach nodes on a subset of the cluster. The nodes parameter
+// can either be a specific node, empty (to indicate all nodes), or a pair of
+// nodes indicating a range.
+func (c *cluster) InitE(ctx context.Context, clusterName string) error {
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.InitE")
+	}
+	// If the test failed (indicated by a canceled ctx), short-circuit.
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	c.status("initing cluster")
+	defer c.status()
+	args := []string{
+		roachprod,
+		"init",
+	}
+	args = append(args, clusterName)
+	return execCmd(ctx, c.l, args...)
+}
+
 // Start is like StartE() except it takes a test and, on error, calls t.Fatal().
 func (c *cluster) Start(ctx context.Context, t *test, opts ...option) {
 	FatalIfErr(t, c.StartE(ctx, opts...))
+}
+
+// Init is like InitE() except it takes a test and, on error, calls t.Fatal().
+func (c *cluster) Init(ctx context.Context, t *test, clusterName string) {
+	FatalIfErr(t, c.InitE(ctx, clusterName))
 }
 
 func argExists(args []string, target string) bool {
