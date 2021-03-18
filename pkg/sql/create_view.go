@@ -150,6 +150,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User())
 
 	var newDesc *tabledesc.Mutable
+	applyGlobalMultiRegionZoneConfig := false
 
 	// If replacingDesc != nil, we found an existing view while resolving
 	// the name for our view. So instead of creating a new view, replace
@@ -208,6 +209,11 @@ func (n *createViewNode) startExec(params runParams) error {
 			if err := desc.AllocateIDs(params.ctx); err != nil {
 				return err
 			}
+			// For multi-region databases, we want this descriptor to be GLOBAL instead.
+			if n.dbDesc.IsMultiRegion() {
+				desc.SetTableLocalityGlobal()
+				applyGlobalMultiRegionZoneConfig = true
+			}
 		}
 
 		// Collect all the tables/views this view depends on.
@@ -264,6 +270,25 @@ func (n *createViewNode) startExec(params runParams) error {
 
 	if err := validateDescriptor(params.ctx, params.p, newDesc); err != nil {
 		return err
+	}
+
+	if applyGlobalMultiRegionZoneConfig {
+		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.dbDesc.ID, params.p.Descriptors())
+		if err != nil {
+			return err
+		}
+		if err := ApplyZoneConfigForMultiRegionTable(
+			params.ctx,
+			params.p.txn,
+			params.p.ExecCfg(),
+			regionConfig,
+			newDesc,
+			applyZoneConfigForMultiRegionTableOptionTableNewConfig(
+				tabledesc.LocalityConfigGlobal(),
+			),
+		); err != nil {
+			return err
+		}
 	}
 
 	// Log Create View event. This is an auditable log event and is
