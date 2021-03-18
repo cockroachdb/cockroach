@@ -549,6 +549,12 @@ func TestClosedTimestampInactiveAfterSubsumption(t *testing.T) {
 							return nil
 						},
 						DisableMergeQueue: true,
+						// A subtest wants to force a lease change by stopping the liveness
+						// heartbeats on the old leaseholder and sending a request to
+						// another replica. If we didn't use this knob, we'd have to
+						// architect a Raft leadership change too in order to let the
+						// replica get the lease.
+						AllowLeaseRequestProposalsWhenNotLeader: true,
 					},
 				},
 			},
@@ -699,7 +705,7 @@ func forceLeaseTransferOnSubsumedRange(
 	})
 	restartHeartbeats := oldLeaseholderStore.NodeLiveness().PauseAllHeartbeatsForTest()
 	defer restartHeartbeats()
-	log.Infof(ctx, "paused RHS rightLeaseholder's liveness heartbeats")
+	log.Infof(ctx, "test: paused RHS rightLeaseholder's liveness heartbeats")
 	time.Sleep(oldLeaseholderStore.NodeLiveness().GetLivenessThreshold())
 
 	// Send a read request from one of the followers of RHS so that it notices
@@ -710,7 +716,8 @@ func forceLeaseTransferOnSubsumedRange(
 		log.Infof(ctx,
 			"sending a read request from a follower of RHS (store %d) in order to trigger lease acquisition",
 			newRightLeaseholder.StoreID())
-		newRightLeaseholder.Send(ctx, leaseAcquisitionRequest)
+		_, pErr := newRightLeaseholder.Send(ctx, leaseAcquisitionRequest)
+		log.Infof(ctx, "test: RHS read returned err: %v", pErr)
 		// After the merge commits, the RHS will cease to exist and this read
 		// request will return a RangeNotFoundError. But we cannot guarantee that
 		// the merge will always successfully commit on its first attempt
