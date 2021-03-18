@@ -117,8 +117,8 @@ type DistanceCalculator interface {
 	// the edge to compare against, and the start point to be the start of the first
 	// edge to compare against.
 	NewEdgeCrosser(edge Edge, startPoint Point) EdgeCrosser
-	// PointInLinearRing returns whether the point is inside the given linearRing.
-	PointInLinearRing(point Point, linearRing LinearRing) bool
+	// PointIntersectsLinearRing returns whether the point intersects the given linearRing.
+	PointIntersectsLinearRing(point Point, linearRing LinearRing) bool
 	// ClosestPointToEdge returns the closest point to the infinite line denoted by
 	// the edge, and a bool on whether this point lies on the edge segment.
 	ClosestPointToEdge(edge Edge, point Point) (Point, bool)
@@ -222,7 +222,7 @@ func onPointToPolygon(c DistanceCalculator, a Point, b Polygon) bool {
 	//     Say vertex V is the vertex of the exterior of the polygon that is
 	//     furthest away from point P (among all the exterior vertices).
 	//   - One can prove that any vertex of the holes will be closer to point P than vertex V.
-	//     Similarly we can prove that any point in the interior of the polygin is closer to P than vertex V.
+	//     Similarly we can prove that any point in the interior of the polygon is closer to P than vertex V.
 	//     Therefore we only need to compare with the exterior.
 	//   - The point P is contained in the exterior and inside a hole of polygon G.
 	//     One can again prove that the furthest point in the polygon from P is one of the vertices of the exterior.
@@ -232,14 +232,15 @@ func onPointToPolygon(c DistanceCalculator, a Point, b Polygon) bool {
 	//   the exterior ring.
 	// BoundingBoxIntersects: if the bounding box of the shape being calculated does not intersect,
 	//   then we only need to compare the outer loop.
-	if c.DistanceUpdater().IsMaxDistance() || !c.BoundingBoxIntersects() || !c.PointInLinearRing(a, b.LinearRing(0)) {
+	if c.DistanceUpdater().IsMaxDistance() || !c.BoundingBoxIntersects() ||
+		!c.PointIntersectsLinearRing(a, b.LinearRing(0)) {
 		return onPointToEdgesExceptFirstEdgeStart(c, a, b.LinearRing(0))
 	}
 	// At this point it may be inside a hole.
 	// If it is in a hole, return the distance to the hole.
 	for ringIdx := 1; ringIdx < b.NumLinearRings(); ringIdx++ {
 		ring := b.LinearRing(ringIdx)
-		if c.PointInLinearRing(a, ring) {
+		if c.PointIntersectsLinearRing(a, ring) {
 			return onPointToEdgesExceptFirstEdgeStart(c, a, ring)
 		}
 	}
@@ -330,7 +331,7 @@ func onLineStringToPolygon(c DistanceCalculator, a LineString, b Polygon) bool {
 	//   then the distance is always from the LineString to the exterior ring.
 	if c.DistanceUpdater().IsMaxDistance() ||
 		!c.BoundingBoxIntersects() ||
-		!c.PointInLinearRing(a.Vertex(0), b.LinearRing(0)) {
+		!c.PointIntersectsLinearRing(a.Vertex(0), b.LinearRing(0)) {
 		return onShapeEdgesToShapeEdges(c, a, b.LinearRing(0))
 	}
 
@@ -352,7 +353,7 @@ func onLineStringToPolygon(c DistanceCalculator, a LineString, b Polygon) bool {
 			return true
 		}
 		for pointIdx := 0; pointIdx < a.NumVertexes(); pointIdx++ {
-			if c.PointInLinearRing(a.Vertex(pointIdx), hole) {
+			if c.PointIntersectsLinearRing(a.Vertex(pointIdx), hole) {
 				return false
 			}
 		}
@@ -393,7 +394,8 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	//   then the distance is always between the two exterior rings.
 	if c.DistanceUpdater().IsMaxDistance() ||
 		!c.BoundingBoxIntersects() ||
-		!c.PointInLinearRing(bFirstPoint, a.LinearRing(0)) && !c.PointInLinearRing(aFirstPoint, b.LinearRing(0)) {
+		(!c.PointIntersectsLinearRing(bFirstPoint, a.LinearRing(0)) &&
+			!c.PointIntersectsLinearRing(aFirstPoint, b.LinearRing(0))) {
 		return onShapeEdgesToShapeEdges(c, a.LinearRing(0), b.LinearRing(0))
 	}
 
@@ -405,7 +407,7 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	// In this case, we only need to compare the holes of B to contain a single point A.
 	for ringIdx := 1; ringIdx < b.NumLinearRings(); ringIdx++ {
 		bHole := b.LinearRing(ringIdx)
-		if c.PointInLinearRing(aFirstPoint, bHole) {
+		if c.PointIntersectsLinearRing(aFirstPoint, bHole) {
 			return onShapeEdgesToShapeEdges(c, a.LinearRing(0), bHole)
 		}
 	}
@@ -416,14 +418,14 @@ func onPolygonToPolygon(c DistanceCalculator, a Polygon, b Polygon) bool {
 	defer c.DistanceUpdater().FlipGeometries()
 	for ringIdx := 1; ringIdx < a.NumLinearRings(); ringIdx++ {
 		aHole := a.LinearRing(ringIdx)
-		if c.PointInLinearRing(bFirstPoint, aHole) {
+		if c.PointIntersectsLinearRing(bFirstPoint, aHole) {
 			return onShapeEdgesToShapeEdges(c, b.LinearRing(0), aHole)
 		}
 	}
 
 	// Now we know either a point of the exterior ring A is definitely inside polygon B
 	// or vice versa. This is an intersection.
-	if c.PointInLinearRing(aFirstPoint, b.LinearRing(0)) {
+	if c.PointIntersectsLinearRing(aFirstPoint, b.LinearRing(0)) {
 		return c.DistanceUpdater().OnIntersects(aFirstPoint)
 	}
 	return c.DistanceUpdater().OnIntersects(bFirstPoint)

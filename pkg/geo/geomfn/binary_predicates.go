@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
@@ -47,6 +48,19 @@ func Contains(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
 		return false, nil
 	}
+
+	// Optimization for point in polygon calculations.
+	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
+	if pointPolygonPair {
+		// A point cannot contain a polygon.
+		if pointKind == &a {
+			return false, nil
+		}
+		// Computing whether a polygon contains a point is the same
+		// as computing whether a point is within the polygon.
+		return PointKindRelatesToPolygonKind(*pointKind, *polygonKind, PointPolygonWithin)
+	}
+
 	return geos.Contains(a.EWKB(), b.EWKB())
 }
 
@@ -105,6 +119,13 @@ func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
 		return false, nil
 	}
+
+	// Optimization for point in polygon calculations.
+	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
+	if pointPolygonPair {
+		return PointKindRelatesToPolygonKind(*pointKind, *polygonKind, PointPolygonIntersects)
+	}
+
 	return geos.Intersects(a.EWKB(), b.EWKB())
 }
 
@@ -225,6 +246,26 @@ func Overlaps(a geo.Geometry, b geo.Geometry) (bool, error) {
 	return geos.Overlaps(a.EWKB(), b.EWKB())
 }
 
+// PointKindAndPolygonKind returns whether a pair of geometries contains
+// a (multi)point and a (multi)polygon. It is used to determine if the
+// point in polygon optimization can be applied.
+func PointKindAndPolygonKind(
+	a geo.Geometry, b geo.Geometry,
+) (validPair bool, pointKind *geo.Geometry, polygonKind *geo.Geometry) {
+	for _, geomPtr := range []*geo.Geometry{&a, &b} {
+		switch geomPtr.ShapeType2D() {
+		case geopb.ShapeType_Point, geopb.ShapeType_MultiPoint:
+			pointKind = geomPtr
+		case geopb.ShapeType_Polygon, geopb.ShapeType_MultiPolygon:
+			polygonKind = geomPtr
+		}
+	}
+	if pointKind != nil && polygonKind != nil {
+		validPair = true
+	}
+	return
+}
+
 // Touches returns whether geometry A touches geometry B.
 func Touches(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if a.SRID() != b.SRID() {
@@ -244,5 +285,16 @@ func Within(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if !b.CartesianBoundingBox().Covers(a.CartesianBoundingBox()) {
 		return false, nil
 	}
+
+	// Optimization for point in polygon calculations.
+	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
+	if pointPolygonPair {
+		// A polygon cannot be within a point.
+		if pointKind == &b {
+			return false, nil
+		}
+		return PointKindRelatesToPolygonKind(*pointKind, *polygonKind, PointPolygonWithin)
+	}
+
 	return geos.Within(a.EWKB(), b.EWKB())
 }
