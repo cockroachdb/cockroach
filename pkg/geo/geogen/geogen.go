@@ -208,7 +208,12 @@ func RandomMultiPoint(
 	// 10% chance to generate an empty multipoint (when num is 0).
 	num := rng.Intn(10)
 	for i := 0; i < num; i++ {
-		if err := ret.Push(RandomPoint(rng, randomBounds, srid, layout)); err != nil {
+		// TODO(#62184): permit EMPTY collection item once GEOS is patched
+		var point *geom.Point
+		for point == nil || point.Empty() {
+			point = RandomPoint(rng, randomBounds, srid, layout)
+		}
+		if err := ret.Push(point); err != nil {
 			panic(err)
 		}
 	}
@@ -224,7 +229,12 @@ func RandomMultiLineString(
 	// 10% chance to generate an empty multilinestring (when num is 0).
 	num := rng.Intn(10)
 	for i := 0; i < num; i++ {
-		if err := ret.Push(RandomLineString(rng, randomBounds, srid, layout)); err != nil {
+		// TODO(#62184): permit EMPTY collection item once GEOS is patched
+		var lineString *geom.LineString
+		for lineString == nil || lineString.Empty() {
+			lineString = RandomLineString(rng, randomBounds, srid, layout)
+		}
+		if err := ret.Push(lineString); err != nil {
 			panic(err)
 		}
 	}
@@ -240,7 +250,12 @@ func RandomMultiPolygon(
 	// 10% chance to generate an empty multipolygon (when num is 0).
 	num := rng.Intn(10)
 	for i := 0; i < num; i++ {
-		if err := ret.Push(RandomPolygon(rng, randomBounds, srid, layout)); err != nil {
+		// TODO(#62184): permit EMPTY collection item once GEOS is patched
+		var polygon *geom.Polygon
+		for polygon == nil || polygon.Empty() {
+			polygon = RandomPolygon(rng, randomBounds, srid, layout)
+		}
+		if err := ret.Push(polygon); err != nil {
 			panic(err)
 		}
 	}
@@ -265,6 +280,10 @@ func RandomGeometryCollection(
 		for needShape {
 			shape = RandomGeomT(rng, randomBounds, srid, layout)
 			_, needShape = shape.(*geom.GeometryCollection)
+			// TODO(#62184): permit EMPTY collection item once GEOS is patched
+			if shape.Empty() {
+				needShape = true
+			}
 		}
 		if err := ret.Push(shape); err != nil {
 			panic(err)
