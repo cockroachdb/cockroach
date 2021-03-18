@@ -34,6 +34,7 @@ type crdbSpan struct {
 	parentSpanID uint64
 	goroutineID  uint64
 	rootSpan     bool // XXX: Should be its own type.
+	recorded     bool // XXX: Something interesting is present, and only then is it included in recordings.
 
 	operation string
 	startTime time.Time
@@ -201,6 +202,14 @@ func (s *crdbSpan) getRecording(everyoneIsV211 bool, wantTags bool) Recording {
 		}
 	}
 
+	if !s.recorded {
+		s.mu.Unlock()
+		// XXX: Nothing interesting happened. This probably only really works
+		// for root span centered storage, where "something interesting" applies
+		// transitively to all children.
+		return nil
+	}
+
 	// The capacity here is approximate since we don't know how many grandchildren
 	// there are.
 	result := make(Recording, 0, 1+len(s.mu.recording.remoteSpans)+len(s.mu.recording.children))
@@ -276,6 +285,7 @@ type sizable interface {
 func (s *crdbSpan) recordInternal(payload sizable, buffer *sizeLimitedBuffer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.recorded = true
 
 	size := int64(payload.Size())
 	if size > buffer.limit {
