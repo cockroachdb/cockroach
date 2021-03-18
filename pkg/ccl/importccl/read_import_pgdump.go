@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -309,6 +308,8 @@ func createPostgresSequences(
 			descpb.NewDefaultPrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
 			nil, /* params */
+			// If this is multi-region, this will get added by WriteDescriptors.
+			false, /* isMultiRegion */
 		)
 		if err != nil {
 			return nil, err
@@ -457,8 +458,15 @@ func readPostgresCreateTable(
 			}
 
 			// Construct sequence descriptors.
-			seqs, err := createPostgresSequences(ctx, parentID, schemaObjects.createSeq, fks,
-				walltime, owner, schemaNameToDesc)
+			seqs, err := createPostgresSequences(
+				ctx,
+				parentID,
+				schemaObjects.createSeq,
+				fks,
+				walltime,
+				owner,
+				schemaNameToDesc,
+			)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -751,13 +759,13 @@ func readPostgresStmt(
 		for _, name := range names {
 			tableName := name.ToUnresolvedObjectName().String()
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				err := backupccl.CheckObjectExists(
+				err := catalogkv.CheckObjectCollision(
 					ctx,
 					txn,
 					p.ExecCfg().Codec,
 					parentID,
 					keys.PublicSchemaID,
-					tableName,
+					tree.NewUnqualifiedTableName(tree.Name(tableName)),
 				)
 				if err != nil {
 					return errors.Wrapf(err, `drop table "%s" and then retry the import`, tableName)
@@ -857,7 +865,7 @@ func newPgDumpReader(
 	colMap := make(map[*row.DatumRowConverter](map[string]int))
 	for name, table := range descs {
 		if table.Desc.IsTable() {
-			tableDesc := tabledesc.NewImmutable(*table.Desc)
+			tableDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 			colSubMap := make(map[string]int, len(table.TargetCols))
 			targetCols := make(tree.NameList, len(table.TargetCols))
 			for i, colName := range table.TargetCols {
@@ -875,7 +883,7 @@ func newPgDumpReader(
 			colMap[conv] = colSubMap
 			tableDescs[name] = tableDesc
 		} else if table.Desc.IsSequence() {
-			seqDesc := tabledesc.NewImmutable(*table.Desc)
+			seqDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 			tableDescs[name] = seqDesc
 		}
 	}

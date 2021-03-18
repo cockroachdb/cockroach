@@ -201,15 +201,18 @@ func getTableCreateParams(
 		return nil, 0, err
 	}
 
-	exists, id, err := catalogkv.LookupObjectID(
-		params.ctx, params.p.txn, params.ExecCfg().Codec, dbID, schemaID, tableName.Table())
-	if err == nil && exists {
-		// Try and see what kind of object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(params.ctx, params.p.txn, params.ExecCfg().Codec, id, catalogkv.Immutable)
-		if err != nil {
-			return nil, 0, sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-
+	desc, err := catalogkv.GetDescriptorCollidingWithObject(
+		params.ctx,
+		params.p.txn,
+		params.ExecCfg().Codec,
+		dbID,
+		schemaID,
+		tableName.Table(),
+	)
+	if err != nil {
+		return nil, descpb.InvalidID, err
+	}
+	if desc != nil {
 		// Ensure that the descriptor that does exist has the appropriate type.
 		{
 			mismatchedType := true
@@ -229,7 +232,7 @@ func getTableCreateParams(
 			// Only complain about mismatched types for
 			// if not exists clauses.
 			if mismatchedType && ifNotExists {
-				return nil, 0, pgerror.Newf(pgcode.WrongObjectType,
+				return nil, descpb.InvalidID, pgerror.Newf(pgcode.WrongObjectType,
 					"%q is not a %s",
 					tableName.Table(),
 					kind)
@@ -238,16 +241,14 @@ func getTableCreateParams(
 
 		// Check if the object already exists in a dropped state
 		if desc.Dropped() {
-			return nil, 0, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			return nil, descpb.InvalidID, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"%s %q is being dropped, try again later",
 				kind,
 				tableName.Table())
 		}
 
 		// Still return data in this case.
-		return tKey, schemaID, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.Table())
-	} else if err != nil {
-		return nil, 0, err
+		return tKey, schemaID, sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), tableName.FQString())
 	}
 
 	return tKey, schemaID, nil
@@ -617,12 +618,10 @@ func (p *planner) MaybeUpgradeDependentOldForeignKeyVersionTables(
 	maybeUpgradeFKRepresentation := func(id descpb.ID) error {
 		// Read the referenced table and see if the foreign key representation has changed. If it has, write
 		// the upgraded descriptor back to disk.
-		desc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, id,
-			catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
+		tbl, err := catalogkv.MustGetMutableTableDescByID(ctx, p.txn, p.ExecCfg().Codec, id)
 		if err != nil {
 			return err
 		}
-		tbl := desc.(*tabledesc.Mutable)
 		changes := tbl.GetPostDeserializationChanges()
 		if changes.UpgradedForeignKeyRepresentation {
 			err := p.writeSchemaChange(ctx, tbl, descpb.InvalidMutationID,
@@ -1877,36 +1876,38 @@ func NewTableDesc(
 		}
 	}
 
-	setupShardedIndexForNewTable := func(d *tree.IndexTableDef, idx *descpb.IndexDescriptor) error {
+	setupShardedIndexForNewTable := func(
+		d tree.IndexTableDef, idx *descpb.IndexDescriptor,
+	) (columns tree.IndexElemList, _ error) {
 		if n.PartitionByTable.ContainsPartitions() {
-			return pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
+			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 		}
-		shardCol, newColumn, err := setupShardedIndex(
+		shardCol, newColumns, newColumn, err := setupShardedIndex(
 			ctx,
 			evalCtx,
 			semaCtx,
 			sessionData.HashShardedIndexesEnabled,
-			&d.Columns,
+			d.Columns,
 			d.Sharded.ShardBuckets,
 			&desc,
 			idx,
 			true /* isNewTable */)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if newColumn {
 			buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.Sharded.ShardBuckets)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			checkConstraint, err := makeShardCheckConstraintDef(&desc, int(buckets), shardCol)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			n.Defs = append(n.Defs, checkConstraint)
 			columnDefaultExprs = append(columnDefaultExprs, nil)
 		}
-		return nil
+		return newColumns, nil
 	}
 
 	idxValidator := schemaexpr.MakeIndexPredicateValidator(ctx, n.Table, &desc, semaCtx)
@@ -1929,6 +1930,7 @@ func NewTableDesc(
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
 			}
+			columns := d.Columns
 			if d.Sharded != nil {
 				if d.Interleave != nil {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
@@ -1936,11 +1938,13 @@ func NewTableDesc(
 				if isRegionalByRow {
 					return nil, hashShardedIndexesOnRegionalByRowError()
 				}
-				if err := setupShardedIndexForNewTable(d, &idx); err != nil {
+				var err error
+				columns, err = setupShardedIndexForNewTable(*d, &idx)
+				if err != nil {
 					return nil, err
 				}
 			}
-			if err := idx.FillColumns(d.Columns); err != nil {
+			if err := idx.FillColumns(columns); err != nil {
 				return nil, err
 			}
 			if d.Inverted {
@@ -2024,6 +2028,7 @@ func NewTableDesc(
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
 			}
+			columns := d.Columns
 			if d.Sharded != nil {
 				if n.Interleave != nil && d.PrimaryKey {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
@@ -2031,11 +2036,13 @@ func NewTableDesc(
 				if isRegionalByRow {
 					return nil, hashShardedIndexesOnRegionalByRowError()
 				}
-				if err := setupShardedIndexForNewTable(&d.IndexTableDef, &idx); err != nil {
+				var err error
+				columns, err = setupShardedIndexForNewTable(d.IndexTableDef, &idx)
+				if err != nil {
 					return nil, err
 				}
 			}
-			if err := idx.FillColumns(d.Columns); err != nil {
+			if err := idx.FillColumns(columns); err != nil {
 				return nil, err
 			}
 			// Specifying a partitioning on a PRIMARY KEY constraint should be disallowed by the
@@ -2096,7 +2103,7 @@ func NewTableDesc(
 						"interleave not supported in primary key constraint definition",
 					)
 				}
-				for _, c := range d.Columns {
+				for _, c := range columns {
 					primaryIndexColumnSet[string(c.Column)] = struct{}{}
 				}
 			}
@@ -2409,6 +2416,16 @@ func newTableDesc(
 		n.Defs = newDefs
 	}
 
+	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		params.ctx, params.p.txn, parentID, tree.DatabaseLookupFlags{
+			Required:    true,
+			AvoidCached: true,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	for i, def := range n.Defs {
 		d, ok := def.(*tree.ColumnTableDef)
 		if !ok {
@@ -2422,7 +2439,6 @@ func newTableDesc(
 		if seqName != nil {
 			if err := doCreateSequence(
 				params,
-				n.String(),
 				seqDbDesc,
 				parentSchemaID,
 				seqName,
@@ -2437,13 +2453,6 @@ func newTableDesc(
 			ensureCopy()
 			n.Defs[i] = newDef
 		}
-	}
-
-	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, parentID, tree.DatabaseLookupFlags{},
-	)
-	if err != nil {
-		return nil, err
 	}
 
 	// We need to run NewTableDesc with caching disabled, because

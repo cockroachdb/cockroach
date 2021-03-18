@@ -180,7 +180,7 @@ func TestSpillingQueue(t *testing.T) {
 
 			for {
 				b = op.Next(ctx)
-				require.NoError(t, q.Enqueue(ctx, b))
+				q.Enqueue(ctx, b)
 				if b.Length() == 0 {
 					break
 				}
@@ -299,7 +299,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 
 	for {
 		b := op.Next(ctx)
-		require.NoError(t, q.Enqueue(ctx, b))
+		q.Enqueue(ctx, b)
 		b, err := q.Dequeue(ctx)
 		require.NoError(t, err)
 		if b.Length() == 0 {
@@ -388,7 +388,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 				return int64(batchesAccountedFor) * batchSize
 			}
 			for numEnqueuedBatches := 1; numEnqueuedBatches <= numInputBatches; numEnqueuedBatches++ {
-				require.NoError(t, q.Enqueue(ctx, batch))
+				q.Enqueue(ctx, batch)
 				if rng.Float64() < dequeueProbability {
 					b, err := q.Dequeue(ctx)
 					require.NoError(t, err)
@@ -397,7 +397,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 				}
 				require.Equal(t, getExpectedMemUsage(numEnqueuedBatches), q.unlimitedAllocator.Used())
 			}
-			require.NoError(t, q.Enqueue(ctx, coldata.ZeroBatch))
+			q.Enqueue(ctx, coldata.ZeroBatch)
 			for {
 				b, err := q.Dequeue(ctx)
 				require.NoError(t, err)
@@ -476,7 +476,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 			sequenceValue := rng.Int63()
 			batch.ColVec(0).Int64()[0] = sequenceValue
 			expectedBatchSequence = append(expectedBatchSequence, sequenceValue)
-			require.NoError(t, q.Enqueue(ctx, batch))
+			q.Enqueue(ctx, batch)
 		}
 		// All enqueued batches should fit under the memory limit (to be
 		// precise, the last enqueued batch has just crossed the limit, but
@@ -488,7 +488,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 			sequenceValue := rng.Int63()
 			batch.ColVec(0).Int64()[0] = sequenceValue
 			expectedBatchSequence = append(expectedBatchSequence, sequenceValue)
-			require.NoError(t, q.Enqueue(ctx, batch))
+			q.Enqueue(ctx, batch)
 			numExtraInputBatches = 1
 		} else {
 			require.NoError(t, q.maybeSpillToDisk(ctx))
@@ -501,7 +501,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 		require.Equal(t, int64(0), q.unlimitedAllocator.Used())
 		require.Equal(t, numInputBatches+numExtraInputBatches, q.numOnDiskItems)
 
-		require.NoError(t, q.Enqueue(ctx, coldata.ZeroBatch))
+		q.Enqueue(ctx, coldata.ZeroBatch)
 
 		// Now check that all the batches are in the correct order.
 		batchCount := 0

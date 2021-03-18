@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -177,7 +178,7 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		n.desc.Name,
 		params.p.txn,
 		params.ExecCfg().Codec,
-		n.n.Force,
+		params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 		*n.desc.RegionConfig,
 	); err != nil {
 		return err
@@ -294,7 +295,7 @@ func (p *planner) AlterDatabaseDropRegion(
 		dbDesc.Name,
 		p.txn,
 		p.ExecCfg().Codec,
-		n.Force,
+		p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 		*dbDesc.RegionConfig,
 	); err != nil {
 		return nil, err
@@ -348,6 +349,41 @@ func (p *planner) AlterDatabaseDropRegion(
 				return nil, errors.Wrapf(
 					err, "error removing primary region from database %s", dbDesc.Name)
 			}
+		}
+	}
+
+	if dbDesc.RegionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		typeID, err := dbDesc.MultiRegionEnumID()
+		if err != nil {
+			return nil, err
+		}
+		typeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
+		if err != nil {
+			return nil, err
+		}
+		regionNames, err := typeDesc.RegionNames()
+		if err != nil {
+			return nil, err
+		}
+		if len(regionNames) < multiregion.MinNumRegionsForSurviveRegionGoal {
+			return nil, errors.AssertionFailedf(
+				"database %s has < %d regions left, but has SURVIVE REGION FAILURE",
+				dbDesc.Name,
+				multiregion.MinNumRegionsForSurviveRegionGoal,
+			)
+		}
+		if len(regionNames) == multiregion.MinNumRegionsForSurviveRegionGoal {
+			return nil, errors.WithHintf(
+				pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"cannot DROP REGION on database %s as databases with SURVIVE REGION FAILURE must have at least %d regions",
+					dbDesc.Name,
+					multiregion.MinNumRegionsForSurviveRegionGoal,
+				),
+				"you must first add another region, or configure the database to SURVIVE ZONE FAILURE "+
+					"using ALTER DATABASE %s SURVIVE ZONE FAILURE",
+				dbDesc.Name,
+			)
 		}
 	}
 
@@ -414,6 +450,14 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		}
 
 		n.desc.UnsetMultiRegionConfig()
+		if err := discardMultiRegionFieldsForDatabaseZoneConfig(
+			params.ctx,
+			n.desc.ID,
+			params.p.txn,
+			params.p.execCfg,
+		); err != nil {
+			return err
+		}
 	} else {
 		telemetry.Inc(sqltelemetry.AlterDatabaseDropRegionCounter)
 		// dropEnumValue tries to remove the region value from the multi-region type
@@ -525,6 +569,15 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		)
 	}
 
+	// Get the type descriptor for the multi-region enum.
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
+		params.ctx,
+		params.p.txn,
+		n.desc.RegionConfig.RegionEnumID)
+	if err != nil {
+		return err
+	}
+
 	// To update the primary region we need to modify the database descriptor, update the multi-region
 	// enum, and write a new zone configuration.
 	n.desc.RegionConfig.PrimaryRegion = descpb.RegionName(n.n.PrimaryRegion)
@@ -533,15 +586,6 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		n.desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
-		return err
-	}
-
-	// Get the type descriptor for the multi-region enum.
-	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-		params.ctx,
-		params.p.txn,
-		n.desc.RegionConfig.RegionEnumID)
-	if err != nil {
 		return err
 	}
 
@@ -722,7 +766,7 @@ func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
 			n.desc.Name,
 			params.p.txn,
 			params.ExecCfg().Codec,
-			n.n.Force,
+			params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 			*n.desc.RegionConfig,
 		); err != nil {
 			return err
@@ -801,7 +845,7 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		n.desc.Name,
 		params.p.txn,
 		params.ExecCfg().Codec,
-		n.n.Force,
+		params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
 		*n.desc.RegionConfig,
 	); err != nil {
 		return err
@@ -820,11 +864,11 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if len(regions) < minNumRegionsForSurviveRegionGoal {
+		if len(regions) < multiregion.MinNumRegionsForSurviveRegionGoal {
 			return errors.WithHintf(
 				pgerror.Newf(pgcode.InvalidName,
 					"at least %d regions are required for surviving a region failure",
-					minNumRegionsForSurviveRegionGoal,
+					multiregion.MinNumRegionsForSurviveRegionGoal,
 				),
 				"you must add additional regions to the database using "+
 					"ALTER DATABASE %s ADD REGION <region_name>",

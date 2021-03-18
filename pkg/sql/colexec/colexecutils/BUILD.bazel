@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
+        "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/cancelchecker",

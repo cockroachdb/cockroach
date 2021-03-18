@@ -211,6 +211,9 @@ type LocalOnlySessionData struct {
 	ImplicitColumnPartitioningEnabled bool
 	// DropEnumValueEnabled indicates whether enum values can be dropped.
 	DropEnumValueEnabled bool
+	// OverrideMultiRegionZoneConfigEnabled indicates whether zone configurations can be
+	// modified for multi-region databases and tables/indexes/partitions.
+	OverrideMultiRegionZoneConfigEnabled bool
 	// HashShardedIndexesEnabled indicates whether hash sharded indexes can be created.
 	HashShardedIndexesEnabled bool
 	// DisallowFullTableScans indicates whether queries that plan full table scans

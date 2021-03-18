@@ -816,6 +816,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><a name="json_extract_path"></a><code>json_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
 </span></td></tr>
+<tr><td><a name="json_extract_path_text"></a><code>json_extract_path_text(jsonb, <a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the JSON value as text pointed to by the variadic arguments.</p>
+</span></td></tr>
 <tr><td><a name="json_object"></a><code>json_object(keys: <a href="string.html">string</a>[], values: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This form of json_object takes keys and values pairwise from two separate arrays. In all other respects it is identical to the one-argument form.</p>
 </span></td></tr>
 <tr><td><a name="json_object"></a><code>json_object(texts: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON or JSONB object out of a text array. The array must have exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs.</p>
@@ -839,6 +841,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><a name="jsonb_exists_any"></a><code>jsonb_exists_any(json: jsonb, array: <a href="string.html">string</a>[]) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether any of the strings in the text array exist as top-level keys or array elements</p>
 </span></td></tr>
 <tr><td><a name="jsonb_extract_path"></a><code>jsonb_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
+</span></td></tr>
+<tr><td><a name="jsonb_extract_path_text"></a><code>jsonb_extract_path_text(jsonb, <a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the JSON value as text pointed to by the variadic arguments.</p>
 </span></td></tr>
 <tr><td><a name="jsonb_insert"></a><code>jsonb_insert(target: jsonb, path: <a href="string.html">string</a>[], new_val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. <code>new_val</code> will be inserted before path target.</p>
 </span></td></tr>
@@ -2223,9 +2227,11 @@ The paths themselves are given in the direction of the first geometry.</p>
 Tolerance is used to control where snapping is performed. The result geometry is the input geometry with the vertices snapped.
 If no snapping occurs then the input geometry is returned unchanged.</p>
 </span></td></tr>
+<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, origin: geometry, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>, size_z: <a href="float.html">float</a>, size_m: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid defined by the given origin and X, Y, Z, and M cell sizes. Any dimension with a 0 cell size will not be snapped.</p>
+</span></td></tr>
 <tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, origin_x: <a href="float.html">float</a>, origin_y: <a href="float.html">float</a>, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y based on an origin of (origin_x, origin_y).</p>
 </span></td></tr>
-<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of the given size.</p>
+<tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of the given size. The specified size is only used to snap X and Y coordinates.</p>
 </span></td></tr>
 <tr><td><a name="st_snaptogrid"></a><code>st_snaptogrid(geometry: geometry, size_x: <a href="float.html">float</a>, size_y: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Snap a geometry to a grid of with X coordinates snapped to size_x and Y coordinates snapped to size_y.</p>
 </span></td></tr>

@@ -885,14 +885,9 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
-	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := catalogkv.GetDescriptorByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID,
-			catalogkv.Mutable, catalogkv.TableDescriptorKind, true /* required */)
-		if err != nil {
-			return err
-		}
-		tableDesc = desc.(*tabledesc.Mutable)
-		return nil
+	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		tableDesc, err = catalogkv.MustGetMutableTableDescByID(ctx, txn, keys.SystemSQLCodec, tableDesc.ID)
+		return err
 	}); err != nil {
 		t.Fatal(err)
 	}

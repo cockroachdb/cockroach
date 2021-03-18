@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -722,7 +723,7 @@ func (p *planner) getTableAndIndex(
 		return nil, nil, err
 	}
 	optIdx := idx.(*optIndex)
-	return tabledesc.NewExistingMutable(*optIdx.tab.desc.TableDesc()), optIdx.desc, nil
+	return tabledesc.NewBuilder(optIdx.tab.desc.TableDesc()).BuildExistingMutableTable(), optIdx.desc, nil
 }
 
 // expandTableGlob expands pattern into a list of objects represented
@@ -829,17 +830,7 @@ func newInternalLookupCtxFromDescriptors(
 ) (*internalLookupCtx, error) {
 	descriptors := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
-		desc := &rawDescs[i]
-		switch t := desc.Union.(type) {
-		case *descpb.Descriptor_Database:
-			descriptors[i] = dbdesc.NewImmutable(*t.Database)
-		case *descpb.Descriptor_Table:
-			descriptors[i] = tabledesc.NewImmutable(*t.Table)
-		case *descpb.Descriptor_Type:
-			descriptors[i] = typedesc.NewImmutable(*t.Type)
-		case *descpb.Descriptor_Schema:
-			descriptors[i] = schemadesc.NewImmutable(*t.Schema)
-		}
+		descriptors[i] = catalogkv.NewBuilder(&rawDescs[i]).BuildImmutable()
 	}
 	lCtx := newInternalLookupCtx(ctx, descriptors, prefix, nil /* fallback */)
 	if err := descs.HydrateGivenDescriptors(ctx, descriptors); err != nil {
@@ -939,16 +930,28 @@ func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (*schemadesc.Immutable, 
 	return sc, nil
 }
 
-func (l *internalLookupCtx) getParentName(table catalog.TableDescriptor) string {
+func (l *internalLookupCtx) getDatabaseName(table catalog.TableDescriptor) string {
 	parentName := l.dbNames[table.GetParentID()]
 	if parentName == "" {
 		// The parent database was deleted. This is possible e.g. when
 		// a database is dropped with CASCADE, and someone queries
-		// this virtual table before the dropped table descriptors are
+		// this table before the dropped table descriptors are
 		// effectively deleted.
 		parentName = fmt.Sprintf("[%d]", table.GetParentID())
 	}
 	return parentName
+}
+
+func (l *internalLookupCtx) getSchemaName(table catalog.TableDescriptor) string {
+	schemaName := l.schemaNames[table.GetParentSchemaID()]
+	if schemaName == "" {
+		// The parent schema was deleted. This is possible e.g. when
+		// a schema is dropped with CASCADE, and someone queries
+		// this table before the dropped table descriptors are
+		// effectively deleted.
+		schemaName = fmt.Sprintf("[%d]", table.GetParentSchemaID())
+	}
+	return schemaName
 }
 
 // getParentAsTableName returns a TreeTable object of the parent table for a

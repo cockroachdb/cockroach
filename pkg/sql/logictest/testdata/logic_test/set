@@ -50,7 +50,7 @@ SHOW TABLES FROM foo
 public  bar  table  root  0  NULL
 
 # SET statement succeeds, CREATE TABLE fails.
-statement error pgcode 42P07 relation \"bar\" already exists
+statement error pgcode 42P07 relation \"foo.public.bar\" already exists
 SET database = foo; CREATE TABLE bar (k INT PRIMARY KEY)
 
 query T colnames
@@ -149,6 +149,12 @@ SET escape_string_warning = 'off'
 
 statement ok
 SET datestyle = 'ISO'
+
+statement ok
+SET datestyle = 'ISO, MDY'
+
+statement ok
+SET datestyle = 'mdy, iso'
 
 statement error invalid value for parameter "DateStyle": "other"
 SET datestyle = 'other'
@@ -311,6 +317,26 @@ query T
 SHOW statement_timeout
 ----
 0
+
+statement ok
+SET idle_in_session_timeout = 10000
+
+query T
+SHOW idle_in_session_timeout
+----
+10000
+
+statement ok
+SET idle_in_session_timeout = 0;
+SET idle_in_transaction_session_timeout = 123456
+
+query T
+SHOW idle_in_transaction_session_timeout
+----
+123456
+
+statement ok
+SET idle_in_transaction_session_timeout = 0
 
 # Test that composite variable names get rejected properly, especially
 # when "tracing" is used as prefix.

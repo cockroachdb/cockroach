@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -77,8 +78,7 @@ func (p *planner) createDatabase(
 	if exists, databaseID, err := catalogkv.LookupDatabaseID(ctx, p.txn, p.ExecCfg().Codec, dbName); err == nil && exists {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			desc, err := catalogkv.GetDescriptorByID(ctx, p.txn, p.ExecCfg().Codec, databaseID, catalogkv.Immutable,
-				catalogkv.DatabaseDescriptorKind, true)
+			desc, err := catalogkv.MustGetDatabaseDescByID(ctx, p.txn, p.ExecCfg().Codec, databaseID)
 			if err != nil {
 				return nil, false, err
 			}
@@ -255,11 +255,11 @@ func validateDatabaseRegionConfig(regionConfig descpb.DatabaseDescriptor_RegionC
 		return errors.AssertionFailedf("expected > 0 number of regions in the region config")
 	}
 	if regionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE &&
-		len(regionConfig.Regions) < minNumRegionsForSurviveRegionGoal {
+		len(regionConfig.Regions) < multiregion.MinNumRegionsForSurviveRegionGoal {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			"at least %d regions are required for surviving a region failure",
-			minNumRegionsForSurviveRegionGoal,
+			multiregion.MinNumRegionsForSurviveRegionGoal,
 		)
 	}
 	return nil

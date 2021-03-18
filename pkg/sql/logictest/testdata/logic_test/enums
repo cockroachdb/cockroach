@@ -6,16 +6,16 @@ CREATE TYPE t AS ENUM ()
 statement error pq: relation "t" does not exist
 SELECT * FROM t
 
-statement error pq: type "t" already exists
+statement error pq: type "test.public.t" already exists
 CREATE TABLE t (x INT)
 
-statement error pq: type "t" already exists
+statement error pq: type "test.public.t" already exists
 CREATE TYPE t AS ENUM ()
 
 statement ok
 CREATE TABLE torename (x INT)
 
-statement error pq: type "t" already exists
+statement error pq: type "test.public.t" already exists
 ALTER TABLE torename RENAME TO t
 
 statement ok
@@ -1300,7 +1300,7 @@ subtest if_not_exists
 statement ok
 CREATE TYPE ifne AS ENUM ('hi')
 
-statement error pq: type "ifne" already exists
+statement error pq: type "test_57196.public.ifne" already exists
 CREATE TYPE ifne AS ENUM ('hi')
 
 statement ok
@@ -1309,7 +1309,7 @@ CREATE TYPE IF NOT EXISTS ifne AS ENUM ('hi')
 statement ok
 CREATE TABLE table_ifne (x INT)
 
-statement error pq: relation "table_ifne" already exists
+statement error pq: relation "test_57196.public.table_ifne" already exists
 CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
 
 # Regression test for incorrectly serializing NULL expression type annotation in

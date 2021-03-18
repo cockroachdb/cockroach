@@ -164,12 +164,18 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.savePlanForStats = appStats.shouldSaveLogicalPlanDescription(fingerprint, implicitTxn)
 
-	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.IsVerbose() {
-		// If verbose tracing was enabled at a higher level, stats collection is
-		// enabled so that stats are shown in the traces, but no extra work is
-		// needed by the instrumentationHelper.
-		ih.collectExecStats = true
-		return ctx, false
+	if sp := tracing.SpanFromContext(ctx); sp != nil {
+		if sp.IsVerbose() {
+			// If verbose tracing was enabled at a higher level, stats
+			// collection is enabled so that stats are shown in the traces, but
+			// no extra work is needed by the instrumentationHelper.
+			ih.collectExecStats = true
+			return ctx, false
+		}
+	} else {
+		if util.CrdbTestBuild {
+			panic(errors.AssertionFailedf("the context doesn't have a tracing span"))
+		}
 	}
 
 	ih.collectExecStats = collectExecStats
@@ -179,7 +185,7 @@ func (ih *instrumentationHelper) Setup(
 			// If we need to collect stats, create a non-verbose child span. Stats
 			// will be added as structured metadata and processed in Finish.
 			ih.origCtx = ctx
-			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement")
+			newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithForceRealSpan())
 			return newCtx, true
 		}
 		return ctx, false
@@ -204,15 +210,14 @@ func (ih *instrumentationHelper) Finish(
 	res RestrictedCommandResult,
 	retErr error,
 ) error {
+	ctx := ih.origCtx
 	if ih.sp == nil {
 		return retErr
 	}
+	ih.sp.Finish()
 
 	// Record the statement information that we've collected.
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
-	ih.sp.Finish()
-	ctx := ih.origCtx
-
 	trace := ih.sp.GetRecording()
 
 	if ih.withStatementTrace != nil {
@@ -335,6 +340,11 @@ func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
 // statistics.
 func (ih *instrumentationHelper) ShouldCollectExecStats() bool {
 	return ih.collectExecStats
+}
+
+// ShouldSaveMemo returns true if we should save the memo and catalog in planTop.
+func (ih *instrumentationHelper) ShouldSaveMemo() bool {
+	return ih.ShouldBuildExplainPlan()
 }
 
 // RecordExplainPlan records the explain.Plan for this query.

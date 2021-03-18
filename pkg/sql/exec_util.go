@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -237,6 +236,13 @@ var dropEnumValueEnabledClusterMode = settings.RegisterBoolSetting(
 	false,
 )
 
+var overrideMultiRegionZoneConfigClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.override_multi_region_zone_config.enabled",
+	"default value for override_multi_region_zone_config; "+
+		"allows for overriding the zone configs of a multi-region table or database",
+	false,
+)
+
 var hashShardedIndexesEnabledClusterMode = settings.RegisterBoolSetting(
 	"sql.defaults.experimental_hash_sharded_indexes.enabled",
 	"default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default",
@@ -391,8 +397,9 @@ var VectorizeClusterMode = settings.RegisterEnumSetting(
 	"default vectorize mode",
 	"on",
 	map[int64]string{
-		int64(sessiondatapb.VectorizeOff): "off",
-		int64(sessiondatapb.VectorizeOn):  "on",
+		int64(sessiondatapb.VectorizeOff):               "off",
+		int64(sessiondatapb.DeprecatedVectorize201Auto): "on",
+		int64(sessiondatapb.VectorizeOn):                "on",
 	},
 )
 
@@ -1010,16 +1017,6 @@ var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*BackupRestoreTestingKnobs) ModuleTestingKnobs() {}
-
-// StreamIngestionTestingKnobs contains knobs for stream ingestion behavior.
-type StreamIngestionTestingKnobs struct {
-	Interceptors []func(event streamingccl.Event, pa streamingccl.PartitionAddress)
-}
-
-var _ base.ModuleTestingKnobs = &StreamIngestionTestingKnobs{}
-
-// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
-func (*StreamIngestionTestingKnobs) ModuleTestingKnobs() {}
 
 func shouldDistributeGivenRecAndMode(
 	rec distRecommendation, mode sessiondata.DistSQLExecMode,
@@ -1653,16 +1650,18 @@ func (st *SessionTracing) StartTracing(
 		return nil
 	}
 
-	// If we're inside a transaction, start recording on the txn span.
+	// If we're inside a transaction, hijack the txn's ctx with one that has a
+	// recording span.
 	if _, ok := st.ex.machine.CurState().(stateNoTxn); !ok {
-		sp := tracing.SpanFromContext(st.ex.state.Ctx)
-		if sp == nil {
+		txnCtx := st.ex.state.Ctx
+		if sp := tracing.SpanFromContext(txnCtx); sp == nil {
 			return errors.Errorf("no txn span for SessionTracing")
 		}
-		// We want to clear out any existing recordings so they don't show up in
-		// future traces.
-		sp.ResetRecording()
+
+		newTxnCtx, sp := tracing.EnsureChildSpan(txnCtx, st.ex.server.cfg.AmbientCtx.Tracer,
+			"session tracing", tracing.WithForceRealSpan())
 		sp.SetVerbose(true)
+		st.ex.state.Ctx = newTxnCtx
 		st.firstTxnSpan = sp
 	}
 
@@ -2318,6 +2317,10 @@ func (m *sessionDataMutator) SetImplicitColumnPartitioningEnabled(val bool) {
 
 func (m *sessionDataMutator) SetDropEnumValueEnabled(val bool) {
 	m.data.DropEnumValueEnabled = val
+}
+
+func (m *sessionDataMutator) SetOverrideMultiRegionZoneConfigEnabled(val bool) {
+	m.data.OverrideMultiRegionZoneConfigEnabled = val
 }
 
 func (m *sessionDataMutator) SetHashShardedIndexesEnabled(val bool) {

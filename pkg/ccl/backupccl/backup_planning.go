@@ -332,9 +332,9 @@ func spansForAllTableIndexes(
 		// entire interval. DROPPED tables should never later become PUBLIC.
 		// TODO(pbardea): Consider and test the interaction between revision_history
 		// backups and OFFLINE tables.
-		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
+		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
-			tbl := tabledesc.NewImmutable(*rawTbl)
+			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			revSpans, err := getLogicallyMergedTableSpans(tbl, added, execCfg.Codec, rev.Time,
 				checkForKVInBounds)
 			if err != nil {
@@ -996,7 +996,7 @@ func backupPlanHook(
 			dbsInPrev := make(map[descpb.ID]struct{})
 			rawDescs := prevBackups[len(prevBackups)-1].Descriptors
 			for i := range rawDescs {
-				if t := descpb.TableFromDescriptor(&rawDescs[i], hlc.Timestamp{}); t != nil {
+				if t, _, _, _ := descpb.FromDescriptor(&rawDescs[i]); t != nil {
 					tablesInPrev[t.ID] = struct{}{}
 				}
 			}

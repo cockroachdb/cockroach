@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -186,7 +185,7 @@ func backup(
 	g := ctxgroup.WithContext(ctx)
 	pkIDs := make(map[uint64]bool)
 	for i := range backupManifest.Descriptors {
-		if t := descpb.TableFromDescriptor(&backupManifest.Descriptors[i], hlc.Timestamp{}); t != nil {
+		if t, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); t != nil {
 			pkIDs[roachpb.BulkOpSummaryID(uint64(t.ID), uint64(t.PrimaryIndex.ID))] = true
 		}
 	}
@@ -327,11 +326,19 @@ func backup(
 	}
 	var tableStatistics []*stats.TableStatisticProto
 	for i := range backupManifest.Descriptors {
-		if tableDesc := descpb.TableFromDescriptor(&backupManifest.Descriptors[i], hlc.Timestamp{}); tableDesc != nil {
+		if tableDesc, _, _, _ := descpb.FromDescriptor(&backupManifest.Descriptors[i]); tableDesc != nil {
 			// Collect all the table stats for this table.
 			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc.GetID())
 			if err != nil {
-				return RowCount{}, err
+				// Successfully backed up data is more valuable than table stats that can
+				// be recomputed after restore, and so if we fail to collect the stats of a
+				// table we do not want to mark the job as failed.
+				// The lack of stats on restore could lead to suboptimal performance when
+				// reading/writing to this table until the stats have been recomputed.
+				log.Warningf(ctx, "failed to collect stats for table: %s, "+
+					"table ID: %d during a backup: %s", tableDesc.GetName(), tableDesc.GetID(),
+					err.Error())
+				continue
 			}
 			for _, stat := range tableStatisticsAcc {
 				tableStatistics = append(tableStatistics, &stat.TableStatisticProto)

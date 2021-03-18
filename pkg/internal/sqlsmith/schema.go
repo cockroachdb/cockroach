@@ -435,6 +435,12 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 		case "pg_sleep":
 			continue
 		}
+		if strings.Contains(def.Name, "stream_ingestion") {
+			// crdb_internal.complete_stream_ingestion_job is a stateful function that
+			// requires a running stream ingestion job. Invoking this against random
+			// parameters is likely to fail and so we skip it.
+			continue
+		}
 		if strings.Contains(def.Name, "crdb_internal.force_") ||
 			strings.Contains(def.Name, "crdb_internal.unsafe_") {
 			continue

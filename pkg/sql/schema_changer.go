@@ -534,17 +534,8 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descri
 func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descriptor, error) {
 	// Retrieve the descriptor that is being changed.
 	var desc catalog.Descriptor
-	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		desc, err = catalogkv.GetDescriptorByID(
-			ctx,
-			txn,
-			sc.execCfg.Codec,
-			sc.descID,
-			catalogkv.Immutable,
-			catalogkv.AnyDescriptorKind,
-			true, /* required */
-		)
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		desc, err = catalogkv.MustGetDescriptorByID(ctx, txn, sc.execCfg.Codec, sc.descID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -2453,8 +2444,20 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 				switch lcSwap.NewLocalityConfig.Locality.(type) {
 				case *descpb.TableDescriptor_LocalityConfig_Global_,
 					*descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
-					// Nothing to do here. The table re-writing the locality config is all
-					// that is required.
+					// The table re-writing the LocalityConfig does most of the work for
+					// us here, but if we're coming from REGIONAL BY ROW, it's also
+					// necessary to drop the zone configurations on the index partitions.
+					if lcSwap.OldLocalityConfig.GetRegionalByRow() != nil {
+						opts = append(
+							opts,
+							dropZoneConfigsForMultiRegionIndexes(
+								append(
+									[]descpb.IndexID{pkSwap.OldPrimaryIndexId},
+									pkSwap.OldIndexes...,
+								)...,
+							),
+						)
+					}
 				case *descpb.TableDescriptor_LocalityConfig_RegionalByRow_:
 					// Apply new zone configurations for all newly partitioned indexes.
 					opts = append(

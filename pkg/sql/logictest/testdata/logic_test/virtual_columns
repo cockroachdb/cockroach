@@ -40,6 +40,9 @@ CREATE TABLE t (
   v INT AS (a+b) VIRTUAL
 )
 
+statement error pgcode 42611 column "v" is not a stored computed column
+ALTER TABLE t ALTER COLUMN v DROP STORED
+
 statement ok
 INSERT INTO t VALUES (1, 1)
 

@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -41,7 +42,9 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
-	r.Exec(t, "CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE)")
+	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
+CREATE SCHEMA s;
+CREATE TABLE s.a (a INT PRIMARY KEY);`)
 
 	base := "statement.txt trace.json trace.txt trace-jaeger.json env.sql"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
@@ -56,8 +59,8 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
-			t, fmt.Sprint(rows),
-			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html",
+			t, fmt.Sprint(rows), "public.abc",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
 
@@ -65,8 +68,16 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	t.Run("subqueries", func(t *testing.T) {
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT EXISTS (SELECT * FROM abc WHERE c=1)")
 		checkBundle(
-			t, fmt.Sprint(rows),
-			base, plans, "stats-defaultdb.public.abc.sql", "distsql-2-main-query.html distsql-1-subquery.html",
+			t, fmt.Sprint(rows), "public.abc",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql-2-main-query.html distsql-1-subquery.html vec-1-subquery-v.txt vec-1-subquery.txt vec-2-main-query-v.txt vec-2-main-query.txt",
+		)
+	})
+
+	t.Run("user-defined schema", func(t *testing.T) {
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM s.a WHERE a=1")
+		checkBundle(
+			t, fmt.Sprint(rows), "s.a",
+			base, plans, "stats-defaultdb.s.a.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
 
@@ -79,7 +90,7 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 		// The bundle url is inside the error detail.
 		var pqErr *pq.Error
 		_ = errors.As(err, &pqErr)
-		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), base)
+		checkBundle(t, fmt.Sprintf("%+v", pqErr.Detail), "", base)
 	})
 
 	// Verify that we can issue the statement with prepare (which can happen
@@ -104,8 +115,8 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 			rowsBuf.WriteByte('\n')
 		}
 		checkBundle(
-			t, rowsBuf.String(),
-			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html",
+			t, rowsBuf.String(), "public.abc",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
 }
@@ -114,7 +125,7 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 // bundle contains the expected files. The expected files are passed as an
 // arbitrary number of strings; each string contains one or more filenames
 // separated by a space.
-func checkBundle(t *testing.T, text string, expectedFiles ...string) {
+func checkBundle(t *testing.T, text, tableName string, expectedFiles ...string) {
 	t.Helper()
 	reg := regexp.MustCompile("http://[a-zA-Z0-9.:]*/_admin/v1/stmtbundle/[0-9]*")
 	url := reg.FindString(text)
@@ -143,6 +154,25 @@ func checkBundle(t *testing.T, text string, expectedFiles ...string) {
 			t.Fatalf("file %s is empty", f.Name)
 		}
 		files = append(files, f.Name)
+
+		if f.Name == "schema.sql" {
+			r, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			contents, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(contents), tableName) {
+				t.Errorf(
+					"expected table name to appear in schema.sql. tableName: %s\nfile contents:\n%s",
+					tableName,
+					string(contents),
+				)
+			}
+		}
 	}
 
 	var expList []string

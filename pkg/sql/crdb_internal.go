@@ -808,6 +808,24 @@ func (t txnList) Less(i, j int) bool {
 	return t[i] < t[j]
 }
 
+// execStatAvg is a helper for execution stats shown in virtual tables. Returns
+// NULL when the count is 0, or the mean of the given NumericStat.
+func execStatAvg(count int64, n roachpb.NumericStat) tree.Datum {
+	if count == 0 {
+		return tree.DNull
+	}
+	return tree.NewDFloat(tree.DFloat(n.Mean))
+}
+
+// execStatVar is a helper for execution stats shown in virtual tables. Returns
+// NULL when the count is 0, or the variance of the given NumericStat.
+func execStatVar(count int64, n roachpb.NumericStat) tree.Datum {
+	if count == 0 {
+		return tree.DNull
+	}
+	return tree.NewDFloat(tree.DFloat(n.GetVariance(count)))
+}
+
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (in-memory, not durable; local node only). ` +
 		`This table is wiped periodically (by default, at least every two hours)`,
@@ -838,6 +856,16 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   bytes_read_var      FLOAT NOT NULL,
   rows_read_avg       FLOAT NOT NULL,
   rows_read_var       FLOAT NOT NULL,
+  network_bytes_avg   FLOAT,
+  network_bytes_var   FLOAT,
+  network_msgs_avg    FLOAT,
+  network_msgs_var    FLOAT,
+  max_mem_usage_avg   FLOAT,
+  max_mem_usage_var   FLOAT,
+  max_disk_usage_avg  FLOAT,
+  max_disk_usage_var  FLOAT,
+  contention_time_avg FLOAT,
+  contention_time_var FLOAT,
   implicit_txn        BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -906,32 +934,42 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					flags = "!" + flags
 				}
 				err := addRow(
-					tree.NewDInt(tree.DInt(nodeID)),
-					tree.NewDString(appName),
-					tree.NewDString(flags),
-					tree.NewDString(stmtKey.anonymizedStmt),
-					anonymized,
-					tree.NewDInt(tree.DInt(s.mu.data.Count)),
-					tree.NewDInt(tree.DInt(s.mu.data.FirstAttemptCount)),
-					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),
-					errString,
-					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.ParseLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.ParseLat.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.PlanLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.PlanLat.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.RunLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.RunLat.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.OverheadLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.OverheadLat.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.BytesRead.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.BytesRead.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.GetVariance(s.mu.data.Count))),
-					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),
+					tree.NewDInt(tree.DInt(nodeID)),                      // node_id
+					tree.NewDString(appName),                             // application_name
+					tree.NewDString(flags),                               // flags
+					tree.NewDString(stmtKey.anonymizedStmt),              // key
+					anonymized,                                           // anonymized
+					tree.NewDInt(tree.DInt(s.mu.data.Count)),             // count
+					tree.NewDInt(tree.DInt(s.mu.data.FirstAttemptCount)), // first_attempt_count
+					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),        // max_retries
+					errString, // last_error
+					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),                             // rows_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),     // rows_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.ParseLat.Mean)),                            // parse_lat_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.ParseLat.GetVariance(s.mu.data.Count))),    // parse_lat_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.PlanLat.Mean)),                             // plan_lat_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.PlanLat.GetVariance(s.mu.data.Count))),     // plan_lat_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.RunLat.Mean)),                              // run_lat_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.RunLat.GetVariance(s.mu.data.Count))),      // run_lat_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.Mean)),                          // service_lat_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.GetVariance(s.mu.data.Count))),  // service_lat_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.OverheadLat.Mean)),                         // overhead_lat_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.OverheadLat.GetVariance(s.mu.data.Count))), // overhead_lat_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.BytesRead.Mean)),                           // bytes_read_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.BytesRead.GetVariance(s.mu.data.Count))),   // bytes_read_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.Mean)),                            // rows_read_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.RowsRead.GetVariance(s.mu.data.Count))),    // rows_read_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),        // network_bytes_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),        // network_bytes_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),     // network_msgs_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),     // network_msgs_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),         // max_mem_usage_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),         // max_mem_usage_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),        // max_disk_usage_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),        // max_disk_usage_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),      // contention_time_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),      // contention_time_var
+					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),                                 // implicit_txn
 				)
 				s.mu.Unlock()
 				if err != nil {
@@ -951,20 +989,30 @@ var crdbInternalTransactionStatisticsTable = virtualSchemaTable{
 		`This table is wiped periodically (by default, at least every two hours)`,
 	schema: `
 CREATE TABLE crdb_internal.node_transaction_statistics (
-  node_id           INT NOT NULL,
-  application_name  STRING NOT NULL,
-  key               STRING,
-  statement_ids     STRING[],
-  count             INT,
-  max_retries       INT,
-  service_lat_avg   FLOAT NOT NULL,
-  service_lat_var   FLOAT NOT NULL,
-  retry_lat_avg     FLOAT NOT NULL,
-  retry_lat_var     FLOAT NOT NULL,
-  commit_lat_avg    FLOAT NOT NULL,
-  commit_lat_var    FLOAT NOT NULL,
-  rows_read_avg     FLOAT NOT NULL,
-  rows_read_var     FLOAT NOT NULL
+  node_id             INT NOT NULL,
+  application_name    STRING NOT NULL,
+  key                 STRING,
+  statement_ids       STRING[],
+  count               INT,
+  max_retries         INT,
+  service_lat_avg     FLOAT NOT NULL,
+  service_lat_var     FLOAT NOT NULL,
+  retry_lat_avg       FLOAT NOT NULL,
+  retry_lat_var       FLOAT NOT NULL,
+  commit_lat_avg      FLOAT NOT NULL,
+  commit_lat_var      FLOAT NOT NULL,
+  rows_read_avg       FLOAT NOT NULL,
+  rows_read_var       FLOAT NOT NULL,
+  network_bytes_avg   FLOAT,
+  network_bytes_var   FLOAT,
+  network_msgs_avg    FLOAT,
+  network_msgs_var    FLOAT,
+  max_mem_usage_avg   FLOAT,
+  max_mem_usage_var   FLOAT,
+  max_disk_usage_avg  FLOAT,
+  max_disk_usage_var  FLOAT,
+  contention_time_avg FLOAT, 
+  contention_time_var FLOAT
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -1030,20 +1078,30 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				s.mu.Lock()
 
 				err := addRow(
-					tree.NewDInt(tree.DInt(nodeID)),
-					tree.NewDString(appName),
-					tree.NewDString(strconv.FormatUint(uint64(txnKey), 10)),
-					stmtIDsDatum,
-					tree.NewDInt(tree.DInt(s.mu.data.Count)),
-					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.RetryLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.RetryLat.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.CommitLat.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.CommitLat.GetVariance(s.mu.data.Count))),
-					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),
-					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),
+					tree.NewDInt(tree.DInt(nodeID)),                         // node_id
+					tree.NewDString(appName),                                // application_name
+					tree.NewDString(strconv.FormatUint(uint64(txnKey), 10)), // key
+					stmtIDsDatum,                                                                   // statement_ids
+					tree.NewDInt(tree.DInt(s.mu.data.Count)),                                       // count
+					tree.NewDInt(tree.DInt(s.mu.data.MaxRetries)),                                  // max_retries
+					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.Mean)),                         // service_lat_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.ServiceLat.GetVariance(s.mu.data.Count))), // service_lat_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.RetryLat.Mean)),                           // retry_lat_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.RetryLat.GetVariance(s.mu.data.Count))),   // retry_lat_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.CommitLat.Mean)),                          // commit_lat_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.CommitLat.GetVariance(s.mu.data.Count))),  // commit_lat_var
+					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.Mean)),                            // rows_read_avg
+					tree.NewDFloat(tree.DFloat(s.mu.data.NumRows.GetVariance(s.mu.data.Count))),    // rows_read_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),       // network_bytes_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkBytes),       // network_bytes_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),    // network_msgs_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.NetworkMessages),    // network_msgs_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),        // max_mem_usage_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxMemUsage),        // max_mem_usage_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),       // max_disk_usage_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.MaxDiskUsage),       // max_disk_usage_var
+					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),     // contention_time_avg
+					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),     // contention_time_var
 				)
 
 				s.mu.Unlock()
@@ -1700,8 +1758,8 @@ func populateSessionsTable(
 
 const contentionEventsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
-  table_id                   INT NOT NULL,
-  index_id                   INT NOT NULL,
+  table_id                   INT,
+  index_id                   INT,
   num_contention_events      INT NOT NULL,
   cumulative_contention_time INTERVAL NOT NULL,
   key                        BYTES NOT NULL,
@@ -1753,7 +1811,7 @@ func populateContentionEventsTable(
 	addRow func(...tree.Datum) error,
 	response *serverpb.ListContentionEventsResponse,
 ) error {
-	for _, ice := range response.Events {
+	for _, ice := range response.Events.IndexContentionEvents {
 		for _, skc := range ice.Events {
 			for _, stc := range skc.Txns {
 				cumulativeContentionTime := tree.NewDInterval(
@@ -1771,6 +1829,25 @@ func populateContentionEventsTable(
 				); err != nil {
 					return err
 				}
+			}
+		}
+	}
+	for _, nkc := range response.Events.NonSQLKeysContention {
+		for _, stc := range nkc.Txns {
+			cumulativeContentionTime := tree.NewDInterval(
+				duration.MakeDuration(nkc.CumulativeContentionTime.Nanoseconds(), 0 /* days */, 0 /* months */),
+				types.DefaultIntervalTypeMetadata,
+			)
+			if err := addRow(
+				tree.DNull, // table_id
+				tree.DNull, // index_id
+				tree.NewDInt(tree.DInt(nkc.NumContentionEvents)), // num_contention_events
+				cumulativeContentionTime,                         // cumulative_contention_time
+				tree.NewDBytes(tree.DBytes(nkc.Key)),             // key
+				tree.NewDUuid(tree.DUuid{UUID: stc.TxnID}),       // txn_id
+				tree.NewDInt(tree.DInt(stc.Count)),               // count
+			); err != nil {
+				return err
 			}
 		}
 	}
@@ -2617,6 +2694,8 @@ CREATE VIEW crdb_internal.ranges AS SELECT
 	index_name,
 	replicas,
 	replica_localities,
+	voting_replicas,
+	non_voting_replicas,
 	learner_replicas,
 	split_enforced_until,
 	crdb_internal.lease_holder(start_key) AS lease_holder,
@@ -2637,6 +2716,8 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "index_name", Typ: types.String},
 		{Name: "replicas", Typ: types.Int2Vector},
 		{Name: "replica_localities", Typ: types.StringArray},
+		{Name: "voting_replicas", Typ: types.Int2Vector},
+		{Name: "non_voting_replicas", Typ: types.Int2Vector},
 		{Name: "learner_replicas", Typ: types.Int2Vector},
 		{Name: "split_enforced_until", Typ: types.Timestamp},
 		{Name: "lease_holder", Typ: types.Int},
@@ -2650,6 +2731,9 @@ FROM crdb_internal.ranges_no_leases
 // TODO(tbg): prefix with kv_.
 var crdbInternalRangesNoLeasesTable = virtualSchemaTable{
 	comment: `range metadata without leaseholder details (KV join; expensive!)`,
+	// NB 1: The `replicas` column is the union of `voting_replicas` and
+	// `non_voting_replicas` and does not include `learner_replicas`.
+	// NB 2: All the values in the `*replicas` columns correspond to store IDs.
 	schema: `
 CREATE TABLE crdb_internal.ranges_no_leases (
   range_id             INT NOT NULL,
@@ -2664,8 +2748,10 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   index_name           STRING NOT NULL,
   replicas             INT[] NOT NULL,
   replica_localities   STRING[] NOT NULL,
-	learner_replicas     INT[] NOT NULL,
-	split_enforced_until TIMESTAMP
+  voting_replicas      INT[] NOT NULL,
+  non_voting_replicas  INT[] NOT NULL,
+  learner_replicas     INT[] NOT NULL,
+  split_enforced_until TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -2734,18 +2820,31 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				return nil, err
 			}
 
-			voterReplicas := append([]roachpb.ReplicaDescriptor(nil), desc.Replicas().VoterDescriptors()...)
+			votersAndNonVoters := append([]roachpb.ReplicaDescriptor(nil),
+				desc.Replicas().VoterAndNonVoterDescriptors()...)
 			var learnerReplicaStoreIDs []int
 			for _, rd := range desc.Replicas().LearnerDescriptors() {
 				learnerReplicaStoreIDs = append(learnerReplicaStoreIDs, int(rd.StoreID))
 			}
-			sort.Slice(voterReplicas, func(i, j int) bool {
-				return voterReplicas[i].StoreID < voterReplicas[j].StoreID
+			sort.Slice(votersAndNonVoters, func(i, j int) bool {
+				return votersAndNonVoters[i].StoreID < votersAndNonVoters[j].StoreID
 			})
 			sort.Ints(learnerReplicaStoreIDs)
+			votersAndNonVotersArr := tree.NewDArray(types.Int)
+			for _, replica := range votersAndNonVoters {
+				if err := votersAndNonVotersArr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
+					return nil, err
+				}
+			}
 			votersArr := tree.NewDArray(types.Int)
-			for _, replica := range voterReplicas {
+			for _, replica := range desc.Replicas().VoterDescriptors() {
 				if err := votersArr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
+					return nil, err
+				}
+			}
+			nonVotersArr := tree.NewDArray(types.Int)
+			for _, replica := range desc.Replicas().NonVoterDescriptors() {
+				if err := nonVotersArr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
 					return nil, err
 				}
 			}
@@ -2757,7 +2856,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			replicaLocalityArr := tree.NewDArray(types.String)
-			for _, replica := range voterReplicas {
+			for _, replica := range votersAndNonVoters {
 				replicaLocality := nodeIDToLocality[replica.NodeID].String()
 				if err := replicaLocalityArr.Append(tree.NewDString(replicaLocality)); err != nil {
 					return nil, err
@@ -2804,8 +2903,10 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				tree.NewDString(schemaName),
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
-				votersArr,
+				votersAndNonVotersArr,
 				replicaLocalityArr,
+				votersArr,
+				nonVotersArr,
 				learnersArr,
 				splitEnforcedUntil,
 			}, nil
@@ -2906,6 +3007,7 @@ CREATE TABLE crdb_internal.zones (
   target               STRING,
   range_name           STRING,
   database_name        STRING,
+  schema_name          STRING,
   table_name           STRING,
   index_name           STRING,
   partition_name       STRING,
@@ -2928,11 +3030,14 @@ CREATE TABLE crdb_internal.zones (
 		if err != nil {
 			return err
 		}
-		resolveID := func(id uint32) (parentID uint32, name string, err error) {
-			if entry, ok := namespace[descpb.ID(id)]; ok {
-				return uint32(entry.ParentID), entry.Name, nil
+		resolveID := func(id uint32) (parentID, parentSchemaID uint32, name string, err error) {
+			if id == keys.PublicSchemaID {
+				return 0, 0, string(tree.PublicSchemaName), nil
 			}
-			return 0, "", errors.AssertionFailedf(
+			if entry, ok := namespace[descpb.ID(id)]; ok {
+				return uint32(entry.ParentID), uint32(entry.ParentSchemaID), entry.Name, nil
+			}
+			return 0, 0, "", errors.AssertionFailedf(
 				"object with ID %d does not exist", errors.Safe(id))
 		}
 

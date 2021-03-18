@@ -73,7 +73,10 @@ func (p *planner) AlterTableLocality(
 		ctx,
 		p.txn,
 		tableDesc.GetParentID(),
-		tree.DatabaseLookupFlags{Required: true},
+		tree.DatabaseLookupFlags{
+			AvoidCached: true,
+			Required:    true,
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -430,7 +433,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	if err := params.p.AlterPrimaryKey(
 		params.ctx,
 		n.tableDesc,
-		&tree.AlterTableAlterPrimaryKey{
+		tree.AlterTableAlterPrimaryKey{
 			Name:    tree.Name(n.tableDesc.PrimaryIndex.Name),
 			Columns: cols,
 		},
@@ -470,6 +473,19 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 			newLocality.TelemetryName(),
 		),
 	)
+
+	toRegionalByRow := newLocality.LocalityLevel == tree.LocalityLevelRow
+	if err := validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
+		params.ctx,
+		params.extendedEvalCtx.Txn,
+		params.ExecCfg(),
+		*n.dbDesc.RegionConfig,
+		n.tableDesc,
+		toRegionalByRow,
+		params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
+		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes); err != nil {
+		return err
+	}
 
 	// Look at the existing locality, and implement any changes required to move to
 	// the new locality.

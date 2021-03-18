@@ -145,7 +145,7 @@ func (p *planner) setupFamilyAndConstraintForShard(
 // is hash sharded. Note that `tableDesc` will be modified when this method is called for
 // a hash sharded index.
 func MakeIndexDescriptor(
-	params runParams, n *tree.CreateIndex, tableDesc *tabledesc.Mutable,
+	params runParams, n tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
 	// Ensure that the columns we want to index exist before trying to create the
 	// index.
@@ -200,7 +200,7 @@ func MakeIndexDescriptor(
 		}
 		telemetry.Inc(sqltelemetry.InvertedIndexCounter)
 	}
-
+	columns := n.Columns
 	if n.Sharded != nil {
 		if n.PartitionByIndex.ContainsPartitions() {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
@@ -211,12 +211,12 @@ func MakeIndexDescriptor(
 		if n.Interleave != nil {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "interleaved indexes cannot also be hash sharded")
 		}
-		shardCol, newColumn, err := setupShardedIndex(
+		shardCol, newColumns, newColumn, err := setupShardedIndex(
 			params.ctx,
 			params.EvalContext(),
 			&params.p.semaCtx,
 			params.SessionData().HashShardedIndexesEnabled,
-			&n.Columns,
+			n.Columns,
 			n.Sharded.ShardBuckets,
 			tableDesc,
 			&indexDesc,
@@ -224,6 +224,7 @@ func MakeIndexDescriptor(
 		if err != nil {
 			return nil, err
 		}
+		columns = newColumns
 		if newColumn {
 			if err := params.p.setupFamilyAndConstraintForShard(params.ctx, tableDesc, shardCol,
 				indexDesc.Sharded.ColumnNames, indexDesc.Sharded.ShardBuckets); err != nil {
@@ -243,7 +244,7 @@ func MakeIndexDescriptor(
 		telemetry.Inc(sqltelemetry.PartialIndexCounter)
 	}
 
-	if err := indexDesc.FillColumns(n.Columns); err != nil {
+	if err := indexDesc.FillColumns(columns); err != nil {
 		return nil, err
 	}
 
@@ -285,46 +286,50 @@ func (n *createIndexNode) ReadingOwnWrites() {}
 var hashShardedIndexesDisabledError = pgerror.Newf(pgcode.FeatureNotSupported,
 	"hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable")
 
+// setupShardedIndex updates the index descriptor with the relevant new column.
+// It also returns the column so it can be added to the table. It returns the
+// new column set for the index. This set must be used regardless of whether or
+// not there is a newly created column.
 func setupShardedIndex(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	semaCtx *tree.SemaContext,
 	shardedIndexEnabled bool,
-	columns *tree.IndexElemList,
+	columns tree.IndexElemList,
 	bucketsExpr tree.Expr,
 	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
 	isNewTable bool,
-) (shard *descpb.ColumnDescriptor, newColumn bool, err error) {
+) (shard *descpb.ColumnDescriptor, newColumns tree.IndexElemList, newColumn bool, err error) {
 	if !shardedIndexEnabled {
-		return nil, false, hashShardedIndexesDisabledError
+		return nil, nil, false, hashShardedIndexesDisabledError
 	}
 
-	colNames := make([]string, 0, len(*columns))
-	for _, c := range *columns {
+	colNames := make([]string, 0, len(columns))
+	for _, c := range columns {
 		colNames = append(colNames, string(c.Column))
 	}
 	buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, bucketsExpr)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	shardCol, newColumn, err := maybeCreateAndAddShardCol(int(buckets), tableDesc,
 		colNames, isNewTable)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	shardIdxElem := tree.IndexElem{
 		Column:    tree.Name(shardCol.Name),
 		Direction: tree.Ascending,
 	}
-	*columns = append(tree.IndexElemList{shardIdxElem}, *columns...)
+	newColumns = append(tree.IndexElemList{shardIdxElem}, columns...)
 	indexDesc.Sharded = descpb.ShardedDescriptor{
 		IsSharded:    true,
 		Name:         shardCol.Name,
 		ShardBuckets: buckets,
 		ColumnNames:  colNames,
 	}
-	return shardCol, newColumn, nil
+	return shardCol, newColumns, newColumn, nil
 }
 
 // maybeCreateAndAddShardCol adds a new hidden computed shard column (or its mutation) to
@@ -437,7 +442,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		}
 	}
 
-	indexDesc, err := MakeIndexDescriptor(params, n.n, n.tableDesc)
+	indexDesc, err := MakeIndexDescriptor(params, *n.n, n.tableDesc)
 	if err != nil {
 		return err
 	}

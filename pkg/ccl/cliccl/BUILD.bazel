@@ -30,7 +30,6 @@ go_library(
         "//pkg/storage/cloudimpl",
         "//pkg/storage/enginepb",
         "//pkg/util/envutil",
-        "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",

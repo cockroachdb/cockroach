@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -139,7 +138,7 @@ func getRelevantDescChanges(
 		if isInterestingID(change.ID) {
 			interestingChanges = append(interestingChanges, change)
 		} else if change.Desc != nil {
-			desc := catalogkv.UnwrapDescriptorRaw(ctx, change.Desc)
+			desc := catalogkv.NewBuilder(change.Desc).BuildExistingMutable()
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
@@ -189,18 +188,16 @@ func getAllDescChanges(
 				if err := rev.GetProto(&desc); err != nil {
 					return nil, err
 				}
+				r.Desc = &desc
 
+				// Collect the prior IDs of table descriptors, as the ID may have been
+				// changed during truncate prior to 20.2.
 				// We update the modification time for the descriptors here with the
 				// timestamp of the KV row so that we can identify the appropriate
 				// descriptors to use during restore.
 				// Note that the modification time of descriptors on disk is usually 0.
 				// See the comment on MaybeSetDescriptorModificationTime... for more.
-				descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(ctx, &desc, rev.Timestamp)
-
-				// Collect the prior IDs of table descriptors, as the ID may have been
-				// changed during truncate.
-				r.Desc = &desc
-				t := descpb.TableFromDescriptor(&desc, rev.Timestamp)
+				t, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(r.Desc, rev.Timestamp)
 				if t != nil && t.ReplacementOf.ID != descpb.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}
@@ -310,31 +307,6 @@ func lookupDatabaseID(
 		return descpb.InvalidID, errors.Errorf("could not find ID for database %s", name)
 	}
 	return id, nil
-}
-
-// CheckObjectExists returns an error if an object already exists with a given
-// parent, parent schema and name.
-func CheckObjectExists(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	parentID descpb.ID,
-	parentSchemaID descpb.ID,
-	name string,
-) error {
-	found, id, err := catalogkv.LookupObjectID(ctx, txn, codec, parentID, parentSchemaID, name)
-	if err != nil {
-		return err
-	}
-	if found {
-		// Find what object we collided with.
-		desc, err := catalogkv.GetAnyDescriptorByID(ctx, txn, codec, id, catalogkv.Immutable)
-		if err != nil {
-			return sqlerrors.WrapErrorWhileConstructingObjectAlreadyExistsErr(err)
-		}
-		return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), name)
-	}
-	return nil
 }
 
 func fullClusterTargetsRestore(

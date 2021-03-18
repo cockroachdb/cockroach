@@ -223,7 +223,7 @@ func (c *Cache) GetHydratedTableDescriptor(
 			if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, &cachedRes); err != nil {
 				return nil, err
 			}
-			hydrated := tabledesc.NewImmutable(*descBase)
+			hydrated := tabledesc.NewBuilder(descBase).BuildImmutableTable()
 
 			// If any of the types resolved as part of hydration are modified, skip
 			// writing this descriptor to the cache.

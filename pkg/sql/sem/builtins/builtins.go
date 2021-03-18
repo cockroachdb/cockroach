@@ -3164,6 +3164,10 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_extract_path": makeBuiltin(jsonProps(), jsonExtractPathImpl),
 
+	"json_extract_path_text": makeBuiltin(jsonProps(), jsonExtractPathTextImpl),
+
+	"jsonb_extract_path_text": makeBuiltin(jsonProps(), jsonExtractPathTextImpl),
+
 	"json_set": makeBuiltin(jsonProps(), jsonSetImpl, jsonSetWithCreateMissingImpl),
 
 	"jsonb_set": makeBuiltin(jsonProps(), jsonSetImpl, jsonSetWithCreateMissingImpl),
@@ -3630,7 +3634,12 @@ may increase either contention or retry errors, or both.`,
 				if sp == nil {
 					return tree.DNull, nil
 				}
-				return tree.NewDInt(tree.DInt(sp.GetRecording()[0].TraceID)), nil
+
+				traceID := sp.TraceID()
+				if traceID == 0 {
+					return tree.DNull, nil
+				}
+				return tree.NewDInt(tree.DInt(traceID)), nil
 			},
 			Info: "Returns the current trace ID or an error if no trace is open.",
 			// NB: possibly this is or could be made stable, but it's not worth it.
@@ -4892,7 +4901,8 @@ may increase either contention or retry errors, or both.`,
 
 	"crdb_internal.complete_stream_ingestion_job": makeBuiltin(
 		tree.FunctionProperties{
-			Category: categoryStreamIngestion,
+			Category:         categoryStreamIngestion,
+			DistsqlBlocklist: true,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -5555,18 +5565,7 @@ var jsonExtractPathImpl = tree.Overload{
 	Types:      tree.VariadicType{FixedTypes: []*types.T{types.Jsonb}, VarType: types.String},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-		j := tree.MustBeDJSON(args[0])
-		path := make([]string, len(args)-1)
-		for i, v := range args {
-			if i == 0 {
-				continue
-			}
-			if v == tree.DNull {
-				return tree.DNull, nil
-			}
-			path[i-1] = string(tree.MustBeDString(v))
-		}
-		result, err := json.FetchPath(j.JSON, path)
+		result, err := jsonExtractPathHelper(args)
 		if err != nil {
 			return nil, err
 		}
@@ -5577,6 +5576,45 @@ var jsonExtractPathImpl = tree.Overload{
 	},
 	Info:       "Returns the JSON value pointed to by the variadic arguments.",
 	Volatility: tree.VolatilityImmutable,
+}
+
+var jsonExtractPathTextImpl = tree.Overload{
+	Types:      tree.VariadicType{FixedTypes: []*types.T{types.Jsonb}, VarType: types.String},
+	ReturnType: tree.FixedReturnType(types.String),
+	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+		result, err := jsonExtractPathHelper(args)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil {
+			return tree.DNull, nil
+		}
+		text, err := result.AsText()
+		if err != nil {
+			return nil, err
+		}
+		if text == nil {
+			return tree.DNull, nil
+		}
+		return tree.NewDString(*text), nil
+	},
+	Info:       "Returns the JSON value as text pointed to by the variadic arguments.",
+	Volatility: tree.VolatilityImmutable,
+}
+
+func jsonExtractPathHelper(args tree.Datums) (json.JSON, error) {
+	j := tree.MustBeDJSON(args[0])
+	path := make([]string, len(args)-1)
+	for i, v := range args {
+		if i == 0 {
+			continue
+		}
+		if v == tree.DNull {
+			return nil, nil
+		}
+		path[i-1] = string(tree.MustBeDString(v))
+	}
+	return json.FetchPath(j.JSON, path)
 }
 
 // darrayToStringSlice converts an array of string datums to a Go array of

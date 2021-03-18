@@ -662,8 +662,9 @@ message ListContentionEventsError {
 
 // Response object for ListContentionEvents and ListLocalContentionEvents.
 message ListContentionEventsResponse {
-  // A list of contention events on this node or cluster.
-  repeated cockroach.sql.contentionpb.IndexContentionEvents events = 1 [ (gogoproto.nullable) = false ];
+  // All available contention information on this node or cluster.
+  cockroach.sql.contentionpb.SerializedRegistry events = 1 [ (gogoproto.nullable) = false ];
+
   // Any errors that occurred during fan-out calls to other nodes.
   repeated ListContentionEventsError errors = 2 [ (gogoproto.nullable) = false ];
 }
@@ -974,7 +975,7 @@ message StatementDiagnostics {
   string statement_fingerprint = 2;
   google.protobuf.Timestamp collected_at = 3
     [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
-  string trace = 4;
+  reserved 4;
 }
 
 message StatementDiagnosticsRequest {
@@ -1116,14 +1117,22 @@ service Status {
   // ListContentionEvents retrieves the contention events across the entire
   // cluster.
   //
-  // On the highest level, all IndexContentionEvents objects are ordered
-  // according to their importance (as defined by the number of contention
-  // events within each object).
-  // On the middle level, all SingleKeyContention objects are ordered by their
-  // keys lexicographically.
-  // On the lowest level, all SingleTxnContention objects are ordered by the
-  // number of times that transaction was observed to contend with other
-  // transactions.
+  // For SQL keys the following orderings are maintained:
+  // - on the highest level, all IndexContentionEvents objects are ordered
+  //   according to their importance (as defined by the number of contention
+  //   events within each object).
+  // - on the middle level, all SingleKeyContention objects are ordered by their
+  //   keys lexicographically.
+  // - on the lowest level, all SingleTxnContention objects are ordered by the
+  //   number of times that transaction was observed to contend with other
+  //   transactions.
+  //
+  // For non-SQL keys the following orderings are maintained:
+  // - on the top level, all SingleNonSQLKeyContention objects are ordered
+  //   by their keys lexicographically.
+  // - on the bottom level, all SingleTxnContention objects are ordered by the
+  //   number of times that transaction was observed to contend with other
+  //   transactions.
   rpc ListContentionEvents(ListContentionEventsRequest) returns (ListContentionEventsResponse) {
     option (google.api.http) = {
       get : "/_status/contention_events"
@@ -1132,14 +1141,22 @@ service Status {
 
   // ListLocalContentionEvents retrieves the contention events on this node.
   //
-  // On the highest level, all IndexContentionEvents objects are ordered
-  // according to their importance (as defined by the number of contention
-  // events within each object).
-  // On the middle level, all SingleKeyContention objects are ordered by their
-  // keys lexicographically.
-  // On the lowest level, all SingleTxnContention objects are ordered by the
-  // number of times that transaction was observed to contend with other
-  // transactions.
+  // For SQL keys the following orderings are maintained:
+  // - on the highest level, all IndexContentionEvents objects are ordered
+  //   according to their importance (as defined by the number of contention
+  //   events within each object).
+  // - on the middle level, all SingleKeyContention objects are ordered by their
+  //   keys lexicographically.
+  // - on the lowest level, all SingleTxnContention objects are ordered by the
+  //   number of times that transaction was observed to contend with other
+  //   transactions.
+  //
+  // For non-SQL keys the following orderings are maintained:
+  // - on the top level, all SingleNonSQLKeyContention objects are ordered
+  //   by their keys lexicographically.
+  // - on the bottom level, all SingleTxnContention objects are ordered by the
+  //   number of times that transaction was observed to contend with other
+  //   transactions.
   rpc ListLocalContentionEvents(ListContentionEventsRequest) returns (ListContentionEventsResponse) {
     option (google.api.http) = {
       get : "/_status/local_contention_events"

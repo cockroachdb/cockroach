@@ -1121,7 +1121,7 @@ func prepareNewTableDescsForIngestion(
 ) ([]*descpb.TableDescriptor, error) {
 	newMutableTableDescriptors := make([]*tabledesc.Mutable, len(importTables))
 	for i := range importTables {
-		newMutableTableDescriptors[i] = tabledesc.NewCreatedMutable(*importTables[i].Desc)
+		newMutableTableDescriptors[i] = tabledesc.NewBuilder(importTables[i].Desc).BuildCreatedMutableTable()
 	}
 
 	// Verification steps have passed, generate a new table ID if we're
@@ -1158,14 +1158,15 @@ func prepareNewTableDescsForIngestion(
 	// collisions with any importing tables.
 	for i := range newMutableTableDescriptors {
 		tbl := newMutableTableDescriptors[i]
-		if err := backupccl.CheckObjectExists(
+		err := catalogkv.CheckObjectCollision(
 			ctx,
 			txn,
 			p.ExecCfg().Codec,
 			tbl.GetParentID(),
 			tbl.GetParentSchemaID(),
-			tbl.GetName(),
-		); err != nil {
+			tree.NewUnqualifiedTableName(tree.Name(tbl.GetName())),
+		)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -1391,7 +1392,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 	mutableSchemaDescs := make([]*schemadesc.Mutable, 0)
 	for _, desc := range details.Schemas {
 		schemaMetadata.oldSchemaIDToName[desc.Desc.GetID()] = desc.Desc.GetName()
-		newMutableSchemaDescriptor := schemadesc.NewCreatedMutable(*desc.Desc)
+		newMutableSchemaDescriptor := schemadesc.NewBuilder(desc.Desc).BuildCreatedMutable().(*schemadesc.Mutable)
 
 		// Verification steps have passed, generate a new schema ID. We do this
 		// last because we want to avoid calling GenerateUniqueDescID if there's
@@ -1943,7 +1944,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// case we can cheaply clear-range instead of revert-range to cleanup.
 		for i := range details.Tables {
 			if !details.Tables[i].IsNew {
-				tblSpan := tabledesc.NewImmutable(*details.Tables[i].Desc).TableSpan(p.ExecCfg().Codec)
+				tblDesc := tabledesc.NewBuilder(details.Tables[i].Desc).BuildImmutableTable()
+				tblSpan := tblDesc.TableSpan(p.ExecCfg().Codec)
 				res, err := p.ExecCfg().DB.Scan(ctx, tblSpan.Key, tblSpan.EndKey, 1 /* maxRows */)
 				if err != nil {
 					return errors.Wrap(err, "checking if existing table is empty")

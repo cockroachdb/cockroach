@@ -12,7 +12,6 @@ package colflow
 
 import (
 	"context"
-	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -315,7 +314,7 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // must have already been wrapped).
 func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	op colexecop.Operator,
-	kvReader execinfra.KVReader,
+	kvReader colexecop.KVReader,
 	inputs []colexecop.Operator,
 	component execinfrapb.ComponentID,
 	monitors []*mon.BytesMonitor,
@@ -348,10 +347,12 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 // wrapWithNetworkVectorizedStatsCollector creates a new
 // colexec.NetworkVectorizedStatsCollector that wraps op.
 func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
-	inbox *colrpc.Inbox, component execinfrapb.ComponentID, latency time.Duration,
+	op colexecop.Operator,
+	inbox *colrpc.Inbox,
+	component execinfrapb.ComponentID,
+	latency time.Duration,
 ) (vectorizedStatsCollector, error) {
 	inputWatch := timeutil.NewStopWatch()
-	op := colexecop.Operator(inbox)
 	nvsc := newNetworkVectorizedStatsCollector(op, component, inputWatch, inbox, latency)
 	s.vectorizedStatsCollectorsQueue = append(s.vectorizedStatsCollectorsQueue, nvsc)
 	return nvsc, nil
@@ -733,6 +734,9 @@ func (s *vectorizedFlowCreator) setupRouter(
 
 	foundLocalOutput := false
 	for i, op := range outputs {
+		if util.CrdbTestBuild {
+			op = colexec.NewInvariantsChecker(op)
+		}
 		stream := &output.Streams[i]
 		switch stream.Type {
 		case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
@@ -837,18 +841,23 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			s.addStreamEndpoint(inputStream.StreamID, inbox, s.waitGroup)
 			op := colexecop.Operator(inbox)
+			ms := execinfrapb.MetadataSource(inbox)
+			if util.CrdbTestBuild {
+				op = colexec.NewInvariantsChecker(op)
+				ms = op.(execinfrapb.MetadataSource)
+			}
 			if s.recordingStats {
 				// Note: we can't use flowCtx.StreamComponentID because the stream does
 				// not originate from this node (we are the target node).
 				compID := execinfrapb.StreamComponentID(
 					base.SQLInstanceID(inputStream.OriginNodeID), flowCtx.ID, inputStream.StreamID,
 				)
-				op, err = s.wrapWithNetworkVectorizedStatsCollector(inbox, compID, latency)
+				op, err = s.wrapWithNetworkVectorizedStatsCollector(op, inbox, compID, latency)
 				if err != nil {
 					return nil, nil, nil, err
 				}
 			}
-			inputStreamOps = append(inputStreamOps, colexec.SynchronizerInput{Op: op, MetadataSources: []execinfrapb.MetadataSource{inbox}})
+			inputStreamOps = append(inputStreamOps, colexec.SynchronizerInput{Op: op, MetadataSources: []execinfrapb.MetadataSource{ms}})
 		default:
 			return nil, nil, nil, errors.Errorf("unsupported input stream type %s", inputStream.Type)
 		}
@@ -890,6 +899,10 @@ func (s *vectorizedFlowCreator) setupInput(
 			// given that they run concurrently. The stall time will be collected
 			// instead.
 			statsInputs = nil
+		}
+		if util.CrdbTestBuild {
+			op = colexec.NewInvariantsChecker(op)
+			metaSources[0] = op.(execinfrapb.MetadataSource)
 		}
 		if s.recordingStats {
 			statsInputsAsOps := make([]colexecop.Operator, len(statsInputs))
@@ -1107,6 +1120,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				ExprHelper:           s.exprHelper,
 				Factory:              factory,
 			}
+			args.TestingKnobs.PlanInvariantsCheckers = util.CrdbTestBuild
 			var result *colexecargs.NewColOperatorResult
 			result, err = colbuilder.NewColOperator(ctx, flowCtx, args)
 			if result != nil {
@@ -1120,9 +1134,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if err != nil {
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
-			}
-			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.EnableVectorizedInvariantsChecker {
-				result.Op = newInvariantsChecker(result.Op)
 			}
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
 				result.Op = newPanicInjector(result.Op)
@@ -1364,50 +1375,4 @@ func IsSupported(mode sessiondatapb.VectorizeExecMode, spec *execinfrapb.FlowSpe
 		}
 	}
 	return nil
-}
-
-// ConvertToVecTree converts the flow to a tree of vectorized operators
-// returning a list of the leap operators or an error if the flow vectorization
-// is not supported. Note that it does so by setting up the full flow without
-// running the components asynchronously, so it is pretty expensive.
-// It also returns a non-nil cleanup function that releases all
-// execinfra.Releasable objects which can *only* be performed once leaves are
-// no longer needed.
-func ConvertToVecTree(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	flow *execinfrapb.FlowSpec,
-	localProcessors []execinfra.LocalProcessor,
-	isPlanLocal bool,
-) (leaves []execinfra.OpNode, cleanup func(), err error) {
-	if !isPlanLocal && len(localProcessors) > 0 {
-		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
-	}
-	fuseOpt := flowinfra.FuseNormally
-	if isPlanLocal {
-		fuseOpt = flowinfra.FuseAggressively
-	}
-	creator := newVectorizedFlowCreator(
-		newNoopFlowCreatorHelper(), vectorizedRemoteComponentCreator{}, false, false,
-		nil, &execinfra.RowChannel{}, nil, execinfrapb.FlowID{}, colcontainer.DiskQueueCfg{},
-		flowCtx.Cfg.VecFDSemaphore, flowCtx.TypeResolverFactory.NewTypeResolver(flowCtx.EvalCtx.Txn),
-	)
-	// We create an unlimited memory account because we're interested whether the
-	// flow is supported via the vectorized engine in general (without paying
-	// attention to the memory since it is node-dependent in the distributed
-	// case).
-	memoryMonitor := mon.NewMonitor(
-		"convert-to-vec-tree",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		flowCtx.Cfg.Settings,
-	)
-	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
-	defer memoryMonitor.Stop(ctx)
-	defer creator.cleanup(ctx)
-	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
-	return leaves, creator.Release, err
 }

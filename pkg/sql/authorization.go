@@ -130,7 +130,7 @@ func (p *planner) CheckPrivilegeForUser(
 	}
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
-		user, privilege, descriptor.TypeName(), descriptor.GetName())
+		user, privilege, descriptor.DescriptorType(), descriptor.GetName())
 }
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
@@ -233,7 +233,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor catalog.Desc
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s has no privileges on %s %s",
-		p.SessionData().User(), descriptor.TypeName(), descriptor.GetName())
+		p.SessionData().User(), descriptor.DescriptorType(), descriptor.GetName())
 }
 
 // UserHasAdminRole implements the AuthorizationAccessor interface.

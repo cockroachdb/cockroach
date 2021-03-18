@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -131,15 +130,13 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 		return nil, errorutil.UnsupportedWithMultiTenancy(multitenancyZoneCfgIssueNo)
 	}
 
-	if n.Database != "" {
-		if err := p.CheckZoneConfigChangePermittedForMultiRegionDatabase(
-			ctx,
-			n.Database,
-			n.Options,
-			n.Force,
-		); err != nil {
-			return nil, err
-		}
+	if err := p.CheckZoneConfigChangePermittedForMultiRegion(
+		ctx,
+		n.ZoneSpecifier,
+		n.Options,
+		p.SessionData().OverrideMultiRegionZoneConfigEnabled,
+	); err != nil {
+		return nil, err
 	}
 
 	var yamlConfig tree.TypedExpr
@@ -247,7 +244,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"user %s does not have %s or %s privilege on %s %s",
-			p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, dbDesc.TypeName(), dbDesc.GetName())
+			p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, dbDesc.DescriptorType(), dbDesc.GetName())
 	}
 	tableDesc, err := p.resolveTableForZone(ctx, &zs)
 	if err != nil {
@@ -270,7 +267,7 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s or %s privilege on %s %s",
-		p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, tableDesc.TypeName(), tableDesc.GetName())
+		p.SessionData().User(), privilege.ZONECONFIG, privilege.CREATE, tableDesc.DescriptorType(), tableDesc.GetName())
 }
 
 // setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
@@ -951,8 +948,9 @@ func getZoneConfigRaw(
 }
 
 // RemoveIndexZoneConfigs removes the zone configurations for some
-// indexs being dropped. It is a no-op if there is no zone
-// configuration or run on behalf of a tenant.
+// indexes being dropped. It is a no-op if there is no zone
+// configuration, there's no index zone configs to be dropped,
+// or it is run on behalf of a tenant.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
@@ -960,21 +958,14 @@ func RemoveIndexZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
-	tableID descpb.ID,
+	tableDesc catalog.TableDescriptor,
 	indexDescs []descpb.IndexDescriptor,
 ) error {
 	if !execCfg.Codec.ForSystemTenant() {
 		// Tenants are agnostic to zone configs.
 		return nil
 	}
-	desc, err := catalogkv.GetDescriptorByID(ctx, txn, execCfg.Codec, tableID,
-		catalogkv.Mutable, catalogkv.TableDescriptorKind, true)
-	if err != nil {
-		return err
-	}
-	tableDesc := desc.(catalog.TableDescriptor)
-
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableID)
+	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, tableDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -983,14 +974,29 @@ func RemoveIndexZoneConfigs(
 		return nil
 	}
 
+	// Look through all of the subzones and determine if we need to remove any
+	// of them. We only want to rewrite the zone config below if there's actual
+	// work to be done here.
+	zcRewriteNecessary := false
 	for _, indexDesc := range indexDescs {
-		zone.DeleteIndexSubzones(uint32(indexDesc.ID))
+		for _, s := range zone.Subzones {
+			if s.IndexID == uint32(indexDesc.ID) {
+				// We've found an subzone that matches the given indexID. Delete all of
+				// this index's subzones and move on to the next index.
+				zone.DeleteIndexSubzones(uint32(indexDesc.ID))
+				zcRewriteNecessary = true
+				break
+			}
+		}
 	}
 
-	// Ignore CCL required error to allow schema change to progress.
-	_, err = writeZoneConfig(ctx, txn, tableID, tableDesc, zone, execCfg, false /* hasNewSubzones */)
-	if err != nil && !sqlerrors.IsCCLRequiredError(err) {
-		return err
+	if zcRewriteNecessary {
+		// Ignore CCL required error to allow schema change to progress.
+		_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, false /* hasNewSubzones */)
+		if err != nil && !sqlerrors.IsCCLRequiredError(err) {
+			return err
+		}
 	}
+
 	return nil
 }
