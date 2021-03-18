@@ -708,7 +708,9 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 			}
 		}
 		// XXX: We're materializing the recording regardless of sample rate. Is that what we want?
-		// What happens if we just don't do anything here?
+		// What happens if we just don't do anything here? Does that disconnect
+		// things? What's in this recording? Why is it so big despite being
+		// empty? Should we collapse recordings?
 		if trace := pb.span.GetRecording(); trace != nil {
 			if len(trace) != 0 {
 				pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})

@@ -283,7 +283,7 @@ func LocalMetaToRemoteProducerMeta(
 				RangeInfo: meta.Ranges,
 			},
 		}
-	} else if meta.TraceData != nil {
+	} else if meta.TraceData != nil && len(meta.TraceData) != 0 {
 		rpm.Value = &RemoteProducerMetadata_TraceData_{
 			TraceData: &RemoteProducerMetadata_TraceData{
 				CollectedSpans: meta.TraceData,
