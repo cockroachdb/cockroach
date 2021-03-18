@@ -69,11 +69,9 @@ func extractSpanMeta(ctx context.Context, tracer *Tracer) (*SpanMeta, error) {
 // of RPCs, deciding for which operations the gRPC opentracing interceptor should
 // create a span.
 func spanInclusionFuncForServer(t *Tracer, spanMeta *SpanMeta) bool {
-	// If there is an incoming trace on the RPC (spanMeta) or the tracer is
-	// configured to always trace, return true. The second part is particularly
-	// useful for calls coming through the HTTP->RPC gateway (i.e. the AdminUI),
-	// where client is never tracing.
-	return spanMeta != nil || t.AlwaysTrace()
+	// If there is an incoming trace on the RPC (spanMeta) or the tracer has an
+	// external sink, return true.
+	return spanMeta != nil || t.HasExternalSink()
 }
 
 // setSpanTags sets one or more tags on the given span according to the

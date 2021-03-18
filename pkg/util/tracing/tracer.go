@@ -265,13 +265,6 @@ func (t *Tracer) StartSpanCtx(
 	return t.startSpanGeneric(ctx, operationName, opts)
 }
 
-// AlwaysTrace returns true if operations should be traced regardless of the
-// context.
-func (t *Tracer) AlwaysTrace() bool {
-	shadowTracer := t.getShadowTracer()
-	return t.useNetTrace() || shadowTracer != nil
-}
-
 // startSpanGeneric is the implementation of StartSpanCtx and StartSpan. In
 // the latter case, ctx == noCtx and the returned Context is the supplied one;
 // otherwise the returned Context embeds the returned Span.
@@ -288,9 +281,9 @@ func (t *Tracer) startSpanGeneric(
 		}
 	}
 
-	// Are we tracing everything, or have a parent, or want a real span? Then
+	// Do we have an external sink, or have a parent, or want a real span? Then
 	// we create a real trace span. In all other cases, a noop span will do.
-	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan) {
+	if !(t.HasExternalSink() || opts.parentTraceID() != 0 || opts.ForceRealSpan) {
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
 
@@ -320,9 +313,7 @@ func (t *Tracer) startSpanGeneric(
 	// which makes it easier to avoid one-offs when populating the tags and baggage
 	// items for the top-level Span.
 	var ot otSpan
-	{
-		shadowTr := t.getShadowTracer()
-
+	if shadowTr := t.getShadowTracer(); shadowTr != nil {
 		// Make sure not to derive spans created using an old
 		// shadow tracer via a new one.
 		typ1, ok1 := opts.shadowTrTyp() // old
@@ -417,7 +408,8 @@ func (t *Tracer) startSpanGeneric(
 		if opts.Parent != nil {
 			p = opts.Parent.i.crdb
 		}
-		s.i.crdb.enableRecording(p, opts.recordingType())
+		recType := opts.recordingType()
+		s.i.crdb.enableRecording(p, recType)
 	}
 
 	// Set initial tags. These will propagate to the crdbSpan, ot, and netTr

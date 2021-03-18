@@ -653,7 +653,7 @@ func (r *DistSQLReceiver) Push(
 		if len(meta.Ranges) > 0 {
 			r.rangeCache.Insert(r.ctx, meta.Ranges...)
 		}
-		if len(meta.TraceData) > 0 {
+		if len(meta.TraceData) > 0 { // XXX: Are we doing this needlessly?
 			if span := tracing.SpanFromContext(r.ctx); span != nil {
 				span.ImportRemoteSpans(meta.TraceData)
 			}

@@ -30,7 +30,7 @@ func TestStartSpanAlwaysTrace(t *testing.T) {
 	// due to optimizations in StartSpan.
 	tr := NewTracer()
 	tr._useNetTrace = 1
-	require.True(t, tr.AlwaysTrace())
+	require.True(t, tr.HasExternalSink())
 	nilMeta := tr.noopSpan.Meta()
 	require.Nil(t, nilMeta)
 	sp := tr.StartSpan("foo", WithParentAndManualCollection(nilMeta))

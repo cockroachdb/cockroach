@@ -12641,7 +12641,6 @@ func TestLaterReproposalsDoNotReuseContext(t *testing.T) {
 	// Set up tracing.
 	tracer := tracing.NewTracer()
 	tracer.Configure(&cfg.Settings.SV)
-	tracer.AlwaysTrace()
 	cfg.AmbientCtx.Tracer = tracer
 	tc.StartWithStoreConfig(t, stopper, cfg)
 	key := roachpb.Key("a")

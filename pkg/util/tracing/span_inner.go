@@ -79,6 +79,10 @@ func (s *spanInner) GetRecording() Recording {
 	if s.isNoop() {
 		return nil
 	}
+
+	// XXX: If recording is empty, can we return nil, so that recordings aren't
+	// sent over the wire?
+
 	// If the span is not verbose, optimize by avoiding the tags.
 	// This span is likely only used to carry payloads around.
 	wantTags := s.crdb.recordingType() == RecordingVerbose
