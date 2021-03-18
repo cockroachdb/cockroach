@@ -190,6 +190,239 @@ func TestLoadShowIncremental(t *testing.T) {
 	checkExpectedOutput(t, buf.String(), out)
 }
 
+func TestLoadShowData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := cli.NewCLITest(cli.TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
+
+	ctx := context.Background()
+	dir, cleanFn := testutils.TempDir(t)
+	defer cleanFn()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE testDB`)
+	sqlDB.Exec(t, `USE testDB`)
+	sqlDB.Exec(t, `CREATE SCHEMA testDB.testschema`)
+	sqlDB.Exec(t, `CREATE TABLE fooTable (id INT PRIMARY KEY, value INT, tag STRING)`)
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (1, 123, 'cat')`)
+	sqlDB.Exec(t, `CREATE TABLE testDB.testschema.fooTable (id INT PRIMARY KEY, value INT, tag STRING)`)
+	sqlDB.Exec(t, `INSERT INTO testDB.testschema.fooTable VALUES (2, 223, 'dog')`)
+
+	const backupPublicSchemaPath = "nodelocal://0/fooFolder/public"
+	sqlDB.Exec(t, `BACKUP TABLE testDB.public.fooTable TO $1 `, backupPublicSchemaPath)
+
+	const backupTestSchemaPath = "nodelocal://0/fooFolder/test"
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE testDB.testschema.fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts.AsOfSystemTime()), backupTestSchemaPath)
+
+	sqlDB.Exec(t, `INSERT INTO testDB.testschema.fooTable VALUES (3, 333, 'mickey mouse')`)
+	ts1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE testDB.testschema.fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts1.AsOfSystemTime()), backupTestSchemaPath)
+
+	testCasesOnError := []struct {
+		name           string
+		tableName      string
+		backupPaths    []string
+		expectedOutput string
+	}{
+		{
+			"show-data-with-not-qualified-name",
+			"fooTable",
+			[]string{backupTestSchemaPath},
+			"ERROR: fetching entry: table name should be specified in format databaseName.schemaName.tableName\n",
+		}, {
+			"show-data-fail-with-not-found-table-of-public-schema",
+			"testDB.public.fooTable",
+			[]string{backupTestSchemaPath},
+			"ERROR: fetching entry: table testdb.public.footable not found\n",
+		}, {
+			"show-data-fail-with-not-found-table-of-user-defined-schema",
+			"testDB.testschema.fooTable",
+			[]string{backupPublicSchemaPath},
+			"ERROR: fetching entry: table testdb.testschema.footable not found\n",
+		},
+	}
+	for _, tc := range testCasesOnError {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --external-io-dir=%s",
+				tc.tableName,
+				strings.Join(tc.backupPaths, " "),
+				dir))
+			require.NoError(t, err)
+			checkExpectedOutput(t, tc.expectedOutput, out)
+		})
+	}
+
+	testCasesDatumOutput := []struct {
+		name           string
+		tableName      string
+		backupPaths    []string
+		expectedDatums string
+	}{
+		{
+			"show-data-with-qualified-table-name-of-user-defined-schema",
+			"testDB.testschema.fooTable",
+			[]string{backupTestSchemaPath},
+			"[2 223 'dog']\n",
+		},
+		{
+			"show-data-with-qualified-table-name-of-public-schema",
+			"testDB.public.fooTable",
+			[]string{backupPublicSchemaPath},
+			"[1 123 'cat']\n",
+		}, {
+			"show-data-of-incremental-backup",
+			"testDB.testschema.fooTable",
+			[]string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			"[2 223 'dog']\n[3 333 'mickey mouse']\n",
+		},
+	}
+
+	for _, tc := range testCasesDatumOutput {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --external-io-dir=%s",
+				tc.tableName,
+				strings.Join(tc.backupPaths, " "),
+				dir))
+			require.NoError(t, err)
+			checkExpectedOutput(t, tc.expectedDatums, out)
+		})
+	}
+}
+
+func TestLoadShowDataAOST(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := cli.NewCLITest(cli.TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
+
+	ctx := context.Background()
+	dir, cleanFn := testutils.TempDir(t)
+	defer cleanFn()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE testDB`)
+	sqlDB.Exec(t, `USE testDB`)
+	sqlDB.Exec(t, `CREATE TABLE fooTable (id INT PRIMARY KEY, value INT, tag STRING)`)
+
+	const backupPublicSchemaPath = "nodelocal://0/fooFolder/public"
+
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (1, 123, 'cat')`)
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (2, 223, 'dog')`)
+	ts1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts1.AsOfSystemTime()), backupPublicSchemaPath)
+
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (3, 323, 'mickey mouse')`)
+	ts2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts2.AsOfSystemTime()), backupPublicSchemaPath)
+
+	sqlDB.Exec(t, `DELETE FROM fooTable WHERE id=3;`)
+	ts3 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts3.AsOfSystemTime()), backupPublicSchemaPath)
+
+	t.Run("show-data-as-of-a-future-timestamp", func(t *testing.T) {
+		out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --as-of=10s --external-io-dir=%s",
+			"testDB.public.fooTable",
+			backupPublicSchemaPath,
+			dir))
+		require.NoError(t, err)
+		expectedError := "ERROR: eval as of timestamp 10s: --as-of: cannot specify timestamp in the future"
+		require.Contains(t, out, expectedError)
+	})
+
+	testCases := []struct {
+		name           string
+		tableName      string
+		backupPaths    []string
+		asof           string
+		expectedDatums string
+	}{
+		{
+			"show-data-without-as-of-time",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+				backupPublicSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupPublicSchemaPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			"", /*asof*/
+			"[1 123 'cat']\n[2 223 'dog']\n",
+		},
+		{
+			"show-data-as-of-time-after-first-insertion-should-work-in-a-single-full-backup",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+			},
+			ts.AsOfSystemTime(),
+			"[1 123 'cat']\n",
+		},
+		{
+			"show-data-as-of-time-after-second-insertion-should-work-in-a-single-full-backup",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+			},
+			ts1.AsOfSystemTime(),
+			"[1 123 'cat']\n[2 223 'dog']\n",
+		},
+		{
+			"show-data-as-of-time-after-first-insertion-should-work-in-a-chain-of-incremental-backups",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+				backupPublicSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupPublicSchemaPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			ts.AsOfSystemTime(),
+			"[1 123 'cat']\n",
+		},
+		{
+			"show-data-as-of-time-after-second-insertion-should-work-in-a-chain-of-incremental-backups",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+				backupPublicSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupPublicSchemaPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			ts1.AsOfSystemTime(),
+			"[1 123 'cat']\n[2 223 'dog']\n",
+		},
+		{
+			"show-data-as-of-time-after-third-insertion-should-work-in-a-chain-of-incremental-backups",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+				backupPublicSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupPublicSchemaPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			ts2.AsOfSystemTime(),
+			"[1 123 'cat']\n[2 223 'dog']\n[3 323 'mickey mouse']\n",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s --as-of=%s --external-io-dir=%s ",
+				tc.tableName,
+				strings.Join(tc.backupPaths, " "),
+				tc.asof,
+				dir))
+			require.NoError(t, err)
+			checkExpectedOutput(t, tc.expectedDatums, out)
+		})
+	}
+}
+
 func checkExpectedOutput(t *testing.T, expected string, out string) {
 	endOfCmd := strings.Index(out, "\n")
 	output := out[endOfCmd+1:]

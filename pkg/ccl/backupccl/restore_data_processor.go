@@ -10,11 +10,17 @@ package backupccl
 
 import (
 	"context"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -22,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -276,4 +283,73 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	}
 
 	return batcher.GetSummary(), nil
+}
+
+// BackupTableEntry wraps information of a table retrieved
+// from backup manifests.
+// exported to cliccl for exporting data directly from backup sst.
+type BackupTableEntry struct {
+	Desc  catalog.TableDescriptor
+	Span  roachpb.Span
+	Files []roachpb.ImportRequest_File
+}
+
+// MakeBackupTableEntry looks up the descriptor of fullyQualifiedTableName
+// from backupManifests and returns a BackupTableEntry, which contains
+// the table descriptor, the primary index span, and the sst files.
+func MakeBackupTableEntry(
+	ctx context.Context,
+	fullyQualifiedTableName string,
+	backupManifests []BackupManifest,
+	endTime hlc.Timestamp,
+	user security.SQLUsername,
+	backupCodec keys.SQLCodec,
+) (BackupTableEntry, error) {
+	var descName []string
+	if descName = strings.Split(fullyQualifiedTableName, "."); len(descName) != 3 {
+		return BackupTableEntry{}, errors.Newf("table name should be specified in format databaseName.schemaName.tableName\n")
+	}
+
+	allDescs, _ := loadSQLDescsFromBackupsAtTime(backupManifests, endTime)
+	resolver, err := backupresolver.NewDescriptorResolver(allDescs)
+	if err != nil {
+		return BackupTableEntry{}, errors.Wrapf(err, "creating a new resolver for all descriptors\n")
+	}
+
+	found, desc, err := resolver.LookupObject(ctx, tree.ObjectLookupFlags{}, descName[0], descName[1], descName[2])
+	if err != nil {
+		return BackupTableEntry{}, errors.Wrapf(err, "looking up table %s\n", fullyQualifiedTableName)
+	}
+	if !found {
+		return BackupTableEntry{}, errors.Newf("table %s not found\n", fullyQualifiedTableName)
+	}
+	tbMutable, ok := desc.(*tabledesc.Mutable)
+	if !ok {
+		return BackupTableEntry{}, errors.Newf("object %s not mutable\n", fullyQualifiedTableName)
+	}
+	tbDesc, err := catalog.AsTableDescriptor(tbMutable)
+	if err != nil {
+		return BackupTableEntry{}, errors.Wrapf(err, "fetching table %s descriptor \n", fullyQualifiedTableName)
+	}
+
+	span := tbDesc.PrimaryIndexSpan(backupCodec)
+
+	entry, _, err := makeImportSpans(
+		[]roachpb.Span{span},
+		backupManifests,
+		nil,           /*backupLocalityInfo*/
+		roachpb.Key{}, /*lowWaterMark*/
+		user,
+		errOnMissingRange)
+	if err != nil {
+		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
+	}
+
+	res := BackupTableEntry{
+		tbDesc,
+		span,
+		entry[0].Files,
+	}
+
+	return res, nil
 }
