@@ -287,6 +287,14 @@ func (t *Tracer) startSpanGeneric(
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
 	}
 
+	// XXX: We're collapsing into a root span. We should instead have dedicated
+	// types.
+	if opts.Parent != nil {
+		atomic.AddInt32(&opts.Parent.refCount, 1)
+		// opts.Parent.SetOperationName(opName)
+		return maybeWrapCtx(ctx, nil /* octx */, opts.Parent)
+	}
+
 	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.i.isNoop() {
 		// If no log tags are specified in the options, use the parent
 		// span's, if any. This behavior is the reason logTags are

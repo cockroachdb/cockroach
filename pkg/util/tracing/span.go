@@ -50,6 +50,7 @@ type Span struct {
 	// Span itself is a very thin wrapper around spanInner whose only job is
 	// to guard spanInner against use-after-Finish.
 	i               spanInner
+	refCount        int32 // atomic
 	numFinishCalled int32 // atomic
 }
 
@@ -76,7 +77,14 @@ func (sp *Span) SetOperationName(operationName string) {
 // Finish idempotently marks the Span as completed (at which point it will
 // silently drop any new data added to it). Finishing a nil *Span is a noop.
 func (sp *Span) Finish() {
-	if sp == nil || atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
+	if sp == nil {
+		return
+	}
+	if atomic.AddInt32(&sp.refCount, -1) != 0 {
+		// TODO this can race
+		return
+	}
+	if atomic.AddInt32(&sp.numFinishCalled, 1) != 1 {
 		return
 	}
 	sp.i.Finish()
