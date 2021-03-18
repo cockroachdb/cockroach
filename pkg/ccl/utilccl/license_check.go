@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -44,23 +45,33 @@ var enterpriseLicense = func() *settings.StringSetting {
 	return s
 }()
 
-var testingEnterpriseEnabled = false
+// testingEnterprise determines whether the cluster is enabled
+// or disabled for the purposes of testing.
+// It should be loaded and stored using atomic as it can race with an
+// in progress kv reader during TestingDisableEnterprise /
+// TestingEnableEnterprise.
+var testingEnterprise int32
+
+const (
+	testingEnterpriseDisabled = 0
+	testingEnterpriseEnabled  = 1
+)
 
 // TestingEnableEnterprise allows overriding the license check in tests.
 func TestingEnableEnterprise() func() {
-	before := testingEnterpriseEnabled
-	testingEnterpriseEnabled = true
+	before := atomic.LoadInt32(&testingEnterprise)
+	atomic.StoreInt32(&testingEnterprise, testingEnterpriseEnabled)
 	return func() {
-		testingEnterpriseEnabled = before
+		atomic.StoreInt32(&testingEnterprise, before)
 	}
 }
 
 // TestingDisableEnterprise allows re-enabling the license check in tests.
 func TestingDisableEnterprise() func() {
-	before := testingEnterpriseEnabled
-	testingEnterpriseEnabled = false
+	before := atomic.LoadInt32(&testingEnterprise)
+	atomic.StoreInt32(&testingEnterprise, testingEnterpriseDisabled)
 	return func() {
-		testingEnterpriseEnabled = before
+		atomic.StoreInt32(&testingEnterprise, before)
 	}
 }
 
@@ -68,7 +79,7 @@ func TestingDisableEnterprise() func() {
 // feature is not enabled, including information or a link explaining how to
 // enable it.
 func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature string) error {
-	if testingEnterpriseEnabled {
+	if atomic.LoadInt32(&testingEnterprise) == testingEnterpriseEnabled {
 		return nil
 	}
 	return checkEnterpriseEnabledAt(st, timeutil.Now(), cluster, org, feature)

@@ -16,7 +16,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -54,22 +53,24 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
-	skip.UnderRace(t, "#61163")
-
 	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
 	)
 	defer cleanup()
 
-	_, err := sqlDB.Exec(`
-CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2";
-USE test;
-CREATE TABLE t1 () LOCALITY GLOBAL;
-CREATE TABLE t2 () LOCALITY REGIONAL BY TABLE;
-CREATE TABLE t3 () LOCALITY REGIONAL BY TABLE IN "us-east2";
-CREATE TABLE t4 () LOCALITY REGIONAL BY ROW
-	`)
-	require.NoError(t, err)
+	for _, setupQuery := range []string{
+		`CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`,
+		`USE test`,
+		`CREATE TABLE t1 () LOCALITY GLOBAL`,
+		`CREATE TABLE t2 () LOCALITY REGIONAL BY TABLE`,
+		`CREATE TABLE t3 () LOCALITY REGIONAL BY TABLE IN "us-east2"`,
+		`CREATE TABLE t4 () LOCALITY REGIONAL BY ROW`,
+	} {
+		t.Run(setupQuery, func(t *testing.T) {
+			_, err := sqlDB.Exec(setupQuery)
+			require.NoError(t, err)
+		})
+	}
 
 	defer utilccl.TestingDisableEnterprise()()
 
