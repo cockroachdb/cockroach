@@ -4103,5 +4103,12 @@
         "expectedDataType": null
       }
     }
+  },
+  "unimplementedTypes": {
+    "13438": "cardinal_number",
+    "13441": "character_data",
+    "13443": "sql_identifier",
+    "13448": "time_stamp",
+    "13450": "yes_or_no"
   }
 }
