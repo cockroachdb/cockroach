@@ -100,7 +100,9 @@ func interestingOrderingsForScan(scan *memo.ScanExpr) opt.OrderingSet {
 func interestingOrderingsForProject(prj *memo.ProjectExpr) opt.OrderingSet {
 	inOrd := DeriveInterestingOrderings(prj.Input)
 	res := inOrd.Copy()
-	res.RestrictToCols(prj.Passthrough)
+	outCols := prj.Relational().OutputCols
+	remapOrderingSetColumns(res, prj.InternalFDs(), outCols)
+	res.RestrictToCols(outCols)
 	return res
 }
 
@@ -153,4 +155,58 @@ func interestingOrderingsForJoin(rel memo.RelExpr) opt.OrderingSet {
 	ord = append(ord, ordLeft...)
 	ord = append(ord, ordRight...)
 	return ord
+}
+
+// remapColumns attempts to remap columns in the ordering set so that it refers
+// to columns in outCols. It only remaps a column in an ordering if:
+//
+//   1. The column is not in outCols.
+//   2. There exists an equivalent column in outCols that does not already exist
+//      in the ordering.
+//
+// For example, if columns 1 and 3 are equivalent and the only columns in
+// outCols, the ordering set (+1,-2) (+1,+2) would be remapped to
+// (+1,-3) (+1,+3). However the ordering set (-2,+3) would be unchanged, rather
+// than being remapped to the nonsensical ordering set (-3,+3).
+func remapOrderingSetColumns(os opt.OrderingSet, fds *props.FuncDepSet, outCols opt.ColSet) {
+	for i := range os {
+		ord := &os[i]
+		origOrdCols := ord.ColSet()
+		var newOrd opt.Ordering
+		for j := range *ord {
+			colID := (*ord)[j].ID()
+
+			// If the column exists in the output columns, do not remap the
+			// ordering column.
+			if outCols.Contains(colID) {
+				// If a new ordering is being created, copy the column ordering
+				// to it.
+				if newOrd != nil {
+					newOrd[j] = os[i][j]
+				}
+				continue
+			}
+
+			// Otherwise, search for an equivalent column in outCols that is not
+			// already part of the ordering.
+			equivCols := fds.ComputeEquivClosure(opt.MakeColSet(colID))
+			equivOutputCol, ok := equivCols.Difference(origOrdCols).Intersection(outCols).Next(0)
+			if !ok {
+				continue
+			}
+
+			// Create a new ordering with all columns before the j-th added.
+			if newOrd == nil {
+				newOrd = make(opt.Ordering, len(os[i]))
+				for k := 0; k < j; k++ {
+					newOrd[k] = (*ord)[k]
+				}
+			}
+
+			newOrd[j] = opt.MakeOrderingColumn(equivOutputCol, (*ord)[j].Descending())
+		}
+		if newOrd != nil {
+			os[i] = newOrd
+		}
+	}
 }
