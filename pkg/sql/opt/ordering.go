@@ -107,6 +107,18 @@ func (o Ordering) ColSet() ColSet {
 	return colSet
 }
 
+// CopyN returns a new ordering containing the first n values from the original
+// ordering. The capacity of the new ordering is the length of the original
+// ordering.
+func (o Ordering) CopyN(n int) Ordering {
+	if n > len(o) {
+		panic(errors.AssertionFailedf("n cannot be greater than the length of o"))
+	}
+	cpy := make(Ordering, n, len(o))
+	copy(cpy, o)
+	return cpy
+}
+
 // Provides returns true if the required ordering is a prefix of this ordering.
 func (o Ordering) Provides(required Ordering) bool {
 	if len(o) < len(required) {
@@ -190,23 +202,91 @@ func (os *OrderingSet) RestrictToPrefix(required Ordering) {
 }
 
 // RestrictToCols keeps only the orderings (or prefixes of them) that refer to
-// columns in the given set.
-func (os *OrderingSet) RestrictToCols(cols ColSet) {
+// columns in the given set. The equivCols argument allows columns that are not
+// in the given set to be remapped to equivalent columns that are in the given
+// set. A column is only remapped if:
+//
+//   1. It does not exist in cols.
+//   2. And equivCols returns at least one column that:
+//     A. Exists in cols.
+//     B. And does not exist in any preceding columns of the ordering.
+//
+// For example, if cols is (1,3) and equivCols(2) returns (3), the ordering set
+// (+1,-2) (+1,+2) would be remapped to (+1,-3) (+1,+3). However the ordering
+// set (-2,+3) (+2,+3) would be be remapped and restricted to (-3) (+3), instead
+// of the nonsensical ordering set (-3,+3) (+3,+3).
+//
+// Note that a new ordering is allocated one or more of its columns are remapped
+// in order to prevent mutating ordering sets that os was copied from.
+func (os *OrderingSet) RestrictToCols(cols ColSet, equivCols func(ColumnID) ColSet) {
 	old := *os
 	*os = old[:0]
 	for _, o := range old {
-		// Find the longest prefix of the ordering that contains
-		// only columns in the set.
+		// Find the longest prefix of the ordering that contains only columns in
+		// the set.
+		var newOrd Ordering
 		prefix := 0
-		for _, c := range o {
-			if !cols.Contains(c.ID()) {
+		for i, c := range o {
+			if cols.Contains(c.ID()) {
+				if newOrd != nil {
+					// If a new ordering was created in a previous iteration of
+					// the loop and it does not contain the current column, add
+					// the column to it.
+					if newOrd.ColSet().Contains(c.ID()) {
+						break
+					}
+					newOrd = append(newOrd, c)
+				} else {
+					// Otherwise, we may be able to slice o an avoid an
+					// allocation, so increment prefix.
+					prefix++
+				}
+				continue
+			}
+
+			// Otherwise, check if there is an equivalent column in cols if
+			// equivCols was provided.
+			if equivCols == nil {
 				break
 			}
-			prefix++
+
+			// Get all the equivalent columns.
+			eqCols := equivCols(c.ID())
+			if eqCols.Empty() {
+				break
+			}
+
+			// Calculate the cols in o once.
+			var currCols ColSet
+			if newOrd == nil {
+				currCols = o[:prefix].ColSet()
+			} else {
+				currCols = newOrd.ColSet()
+			}
+
+			// Find the first column equivalent to c that is not already in the
+			// ordering.
+			eqCol, ok := eqCols.Difference(currCols).Intersection(cols).Next(0)
+			if !ok {
+				break
+			}
+
+			// Create a new ordering with all columns before the i-th added
+			// once.
+			if newOrd == nil {
+				newOrd = o.CopyN(i)
+			}
+
+			// Add the equivalent column to the new ordering.
+			newOrd = append(newOrd, MakeOrderingColumn(eqCol, c.Descending()))
 		}
-		if prefix > 0 {
-			// This function appends at most one element; it is ok to operate on the
-			// same slice.
+		if newOrd != nil {
+			// If a new ordering was created, add it to the ordering set.
+			os.Add(newOrd)
+		} else if prefix > 0 {
+			// if prefix > 0 {
+			// Otherwise, slice the original ordering. This function appends at
+			// most one element; it is ok to operate on the same slice.
 			os.Add(o[:prefix])
 		}
 	}
