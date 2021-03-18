@@ -274,11 +274,29 @@ var experimentalAlterColumnTypeGeneralMode = settings.RegisterBoolSetting(
 	false,
 )
 
-var clusterIdleInSessionTimeout = settings.RegisterNonNegativeDurationSetting(
+var clusterIdleInSessionTimeout = settings.RegisterPublicNonNegativeDurationSetting(
 	"sql.defaults.idle_in_session_timeout",
 	"default value for the idle_in_session_timeout; "+
-		"enables automatically killing sessions that exceed the "+
-		"idle_in_session_timeout threshold",
+		"default value for the idle_in_session_timeout session setting; controls the "+
+		"duration a session is permitted to idle before the session is terminated; "+
+		"if set to 0, there is no timeout",
+	0,
+)
+
+var clusterStatementTimeout = settings.RegisterPublicNonNegativeDurationSetting(
+	"sql.defaults.statement_timeout",
+	"default value for the statement_timeout; "+
+		"default value for the statement_timeout session setting; controls the "+
+		"duration a query is permitted to run before it is canceled; if set to 0, "+
+		"there is no timeout",
+	0,
+)
+
+var clusterIdleInTransactionSessionTimeout = settings.RegisterPublicNonNegativeDurationSetting(
+	"sql.defaults.idle_in_transaction_session_timeout",
+	"default value for the idle_in_transaction_session_timeout; controls the "+
+		"duration a session is permitted to idle in a transaction before the "+
+		"session is terminated; if set to 0, there is no timeout",
 	0,
 )
 
