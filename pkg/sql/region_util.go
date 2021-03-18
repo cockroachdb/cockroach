@@ -898,16 +898,36 @@ func (p *planner) CurrentDatabaseRegionConfig(
 	), nil
 }
 
-// SynthesizeRegionConfig returns a RegionConfig representing the user
-// configured state of a multi-region database by coalescing state from both
-// the database descriptor and multi-region type descriptor. It avoids the cache
-// and is intended for use by DDL statements.
+// SynthesizeRegionConfigOffline is the external method for the synthesizing
+// region configs in cases where the searched for database descriptor may be in
+// the offline state. See synthesizeRegionConfig for more details on what it
+// does under the covers.
+func SynthesizeRegionConfigOffline(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
+) (multiregion.RegionConfig, error) {
+	return synthesizeRegionConfig(ctx, txn, dbID, descsCol, true /* offline */)
+}
+
+// SynthesizeRegionConfig is the external method for the synthesizing region
+// configs in the common case (i.e. not the offline case). See
+// synthesizeRegionConfig for more details on what it does under the covers.
 func SynthesizeRegionConfig(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
 ) (multiregion.RegionConfig, error) {
+	return synthesizeRegionConfig(ctx, txn, dbID, descsCol, false /* offline */)
+}
+
+// synthesizeRegionConfig returns a RegionConfig representing the user
+// configured state of a multi-region database by coalescing state from both
+// the database descriptor and multi-region type descriptor. It avoids the cache
+// and is intended for use by DDL statements.
+func synthesizeRegionConfig(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection, offline bool,
+) (multiregion.RegionConfig, error) {
 	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidCached: true,
-		Required:    true,
+		AvoidCached:    true,
+		Required:       true,
+		IncludeOffline: offline,
 	})
 	if err != nil {
 		return multiregion.RegionConfig{}, err
@@ -924,7 +944,8 @@ func SynthesizeRegionConfig(
 		regionEnumID,
 		tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidCached: true,
+				AvoidCached:    true,
+				IncludeOffline: offline,
 			},
 		},
 	)
