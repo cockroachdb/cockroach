@@ -288,10 +288,6 @@ func (t *Tracer) startSpanGeneric(
 		}
 	}
 
-	if opts.LogTags == nil {
-		opts.LogTags = logtags.FromContext(ctx)
-	}
-
 	// Are we tracing everything, or have a parent, or want a real span? Then
 	// we create a real trace span. In all other cases, a noop span will do.
 	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan) {
@@ -304,6 +300,17 @@ func (t *Tracer) startSpanGeneric(
 		// fundamentally different from tags, which are strictly per span,
 		// for better or worse.
 		opts.LogTags = opts.Parent.i.crdb.logTags
+	}
+
+	if opts.LogTags == nil {
+		// XXX: Can we skip these log tags? Or create an empty buffer? Where is
+		// it being used? Also, why are we creating them when they're nil. This
+		// will make all future non-nil operations redundant. For every child
+		// span we're copying from the incoming. Maybe we should move this
+		// further below. Are log tags going to change much from parent to
+		// child? Only if they straddle RPC boundaries? No, not even then. I
+		// wonder if this works.
+		// opts.LogTags = logtags.FromContext(ctx)
 	}
 
 	startTime := time.Now()
