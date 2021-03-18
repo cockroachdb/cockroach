@@ -641,18 +641,21 @@ func postgresCreateTableMutator(
 			for _, def := range stmt.Defs {
 				switch def := def.(type) {
 				case *tree.IndexTableDef:
-					// Postgres doesn't support
-					// indexes in CREATE TABLE,
-					// so split them out to their
-					// own statement.
-					mutated = append(mutated, &tree.CreateIndex{
-						Name:     def.Name,
-						Table:    stmt.Table,
-						Inverted: def.Inverted,
-						Columns:  def.Columns,
-						Storing:  def.Storing,
-					})
-					changed = true
+					// Postgres doesn't support indexes in CREATE TABLE, so split them out
+					// to their own statement.
+					// TODO(rafi): Postgres supports inverted indexes with a different
+					// syntax than Cockroach. Maybe we could add it later.
+					// The syntax is `CREATE INDEX name ON table USING gin(column`.
+					if !def.Inverted {
+						mutated = append(mutated, &tree.CreateIndex{
+							Name:     def.Name,
+							Table:    stmt.Table,
+							Inverted: def.Inverted,
+							Columns:  def.Columns,
+							Storing:  def.Storing,
+						})
+						changed = true
+					}
 				case *tree.UniqueConstraintTableDef:
 					if def.PrimaryKey {
 						// Postgres doesn't support descending PKs.
