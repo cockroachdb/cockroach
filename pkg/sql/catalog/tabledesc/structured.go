@@ -167,7 +167,9 @@ func buildIndexName(tableDesc *Mutable, index catalog.Index) string {
 
 // AllActiveAndInactiveChecks returns all check constraints, including both
 // "active" ones on the table descriptor which are being enforced for all
-// writes, and "inactive" ones queued in the mutations list.
+// writes, and "inactive" new checks constraints queued in the mutations list.
+// Additionally,  if there are any dropped mutations queued inside the mutation
+// list, those will not cancel any "active" or "inactive" mutations.
 func (desc *wrapper) AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint {
 	// A check constraint could be both on the table descriptor and in the
 	// list of mutations while the constraint is validated for existing rows. In
@@ -188,7 +190,11 @@ func (desc *wrapper) AllActiveAndInactiveChecks() []*descpb.TableDescriptor_Chec
 	}
 	for _, m := range desc.Mutations {
 		if c := m.GetConstraint(); c != nil && c.ConstraintType == descpb.ConstraintToUpdate_CHECK {
-			checks = append(checks, &c.Check)
+			// Any mutations that are dropped should be
+			// excluded to avoid returning duplicates.
+			if m.Direction != descpb.DescriptorMutation_DROP {
+				checks = append(checks, &c.Check)
+			}
 		}
 	}
 	return checks
