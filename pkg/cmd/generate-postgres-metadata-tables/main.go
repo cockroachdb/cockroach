@@ -57,6 +57,10 @@ func main() {
 			panic(err)
 		}
 		pgCatalogFile.PGMetadata.AddColumnMetadata(table, column, dataType, dataTypeOid)
+		columnType := pgCatalogFile.PGMetadata[table][column]
+		if columnType.TypeIsUnimplemented() {
+			pgCatalogFile.AddUnimplementedType(columnType)
+		}
 	}
 
 	pgCatalogFile.Save(os.Stdout)
