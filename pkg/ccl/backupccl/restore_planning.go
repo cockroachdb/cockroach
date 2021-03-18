@@ -1231,7 +1231,8 @@ func RewriteTableDescs(
 	return nil
 }
 
-func errOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
+// ErrOnMissingRange returns error message of span not covered by [start, end)
+func ErrOnMissingRange(span covering.Range, start, end hlc.Timestamp) error {
 	return errors.Errorf(
 		"no backup covers time [%s,%s) for range [%s,%s) (or backups out of order)",
 		start, end, roachpb.Key(span.Start), roachpb.Key(span.End),

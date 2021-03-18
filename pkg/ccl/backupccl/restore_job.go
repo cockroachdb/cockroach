@@ -59,7 +59,7 @@ type intervalSpan roachpb.Span
 
 var _ interval.Interface = intervalSpan{}
 
-// ID is part of `interval.Interface` but unused in makeImportSpans.
+// ID is part of `interval.Interface` but unused in MakeImportSpans.
 func (ie intervalSpan) ID() uintptr { return 0 }
 
 // Range is part of `interval.Interface`.
@@ -88,7 +88,7 @@ type importEntry struct {
 	file BackupManifest_File
 }
 
-// makeImportSpans pivots the backups, which are grouped by time, into
+// MakeImportSpans pivots the backups, which are grouped by time, into
 // spans for import, which are grouped by keyrange.
 //
 // The core logic of this is in OverlapCoveringMerge, which accepts sets of
@@ -117,7 +117,7 @@ type importEntry struct {
 //
 // If a span is not covered, the onMissing function is called with the span and
 // time missing to determine what error, if any, should be returned.
-func makeImportSpans(
+func MakeImportSpans(
 	tableSpans []roachpb.Span,
 	backups []BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
@@ -535,8 +535,8 @@ func restore(
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
-	importSpans, _, err := makeImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityInfo,
-		highWaterMark, user, errOnMissingRange)
+	importSpans, _, err := MakeImportSpans(dataToRestore.getSpans(), backupManifests, backupLocalityInfo,
+		highWaterMark, user, ErrOnMissingRange)
 	if err != nil {
 		return emptyRowCount, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
 	}

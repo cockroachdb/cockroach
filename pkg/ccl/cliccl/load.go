@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,9 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -67,6 +71,14 @@ func init() {
 		RunE:  cli.MaybeDecorateGRPCError(runLoadShowIncremental),
 	}
 
+	loadShowDataCmd := &cobra.Command{
+		Use:   "data <table> <backup_path>",
+		Short: "show data",
+		Long:  "Shows data of a SQL backup.",
+		Args:  cobra.MinimumNArgs(2),
+		RunE:  cli.MaybeDecorateGRPCError(runLoadShowData),
+	}
+
 	loadShowCmds := &cobra.Command{
 		Use:   "show [command]",
 		Short: "show backups",
@@ -96,14 +108,18 @@ func init() {
 
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadShowCmds)
-	loadShowCmds.AddCommand([]*cobra.Command{
+
+	loadShowSubCmds := []*cobra.Command{
 		loadShowSummaryCmd,
 		loadShowBackupsCmd,
 		loadShowIncrementalCmd,
-	}...)
-	loadShowSummaryCmd.Flags().AddFlagSet(loadFlags)
-	loadShowBackupsCmd.Flags().AddFlagSet(loadFlags)
-	loadShowIncrementalCmd.Flags().AddFlagSet(loadFlags)
+		loadShowDataCmd,
+	}
+
+	for _, cmd := range loadShowSubCmds {
+		loadShowCmds.AddCommand(cmd)
+		cmd.Flags().AddFlagSet(loadFlags)
+	}
 }
 
 func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClient, error) {
@@ -116,20 +132,17 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 	return blobs.NewLocalClient(externalIODir)
 }
 
-func runLoadShowSummary(cmd *cobra.Command, args []string) error {
+func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManifest, error) {
 
-	path := args[0]
 	if !strings.Contains(path, "://") {
 		path = cloudimpl.MakeLocalStorageURI(path)
 	}
 
-	ctx := context.Background()
 	externalStorageFromURI := func(ctx context.Context, uri string,
 		user security.SQLUsername) (cloud.ExternalStorage, error) {
 		return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
 			cluster.NoSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
 	}
-
 	// This reads the raw backup descriptor (with table descriptors possibly not
 	// upgraded from the old FK representation, or even older formats). If more
 	// fields are added to the output, the table descriptors may need to be
@@ -137,7 +150,18 @@ func runLoadShowSummary(cmd *cobra.Command, args []string) error {
 	desc, err := backupccl.ReadBackupManifestFromURI(ctx, path, security.RootUserName(),
 		externalStorageFromURI, nil)
 	if err != nil {
-		return err
+		return backupccl.BackupManifest{}, err
+	}
+	return desc, nil
+}
+
+func runLoadShowSummary(cmd *cobra.Command, args []string) error {
+
+	path := args[0]
+	ctx := context.Background()
+	desc, err := getManifestFromURI(ctx, path)
+	if err != nil {
+		return errors.Wrapf(err, "run load show summary")
 	}
 	showMeta(desc)
 	showSpans(desc)
@@ -201,7 +225,7 @@ func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 28 /*minwidth*/, 1 /*tabwidth*/, 2 /*padding*/, ' ' /*padchar*/, 0 /*flags*/)
+	w := tabwriter.NewWriter(os.Stdout, 28 /*minwidth*/, 1 /*tabwidth*/, 2 /*padding*/, ' ' /*padchar*/, 0)
 	basepath := uri.Path
 	manifestPaths := append([]string{""}, incPaths...)
 	stores := make([]cloud.ExternalStorage, len(manifestPaths))
@@ -349,4 +373,149 @@ func showDescriptors(desc backupccl.BackupManifest) {
 		fmt.Printf("	%d: %s\n",
 			id, tableIDToFullyQualifiedName[id])
 	}
+}
+
+func runLoadShowData(cmd *cobra.Command, args []string) error {
+
+	fullyQualifiedTableName := strings.ToLower(args[0])
+	manifestPaths := args[1:]
+
+	ctx := context.Background()
+
+	tbDesc, manifests, err := lookupTable(ctx, fullyQualifiedTableName, manifestPaths)
+	if err != nil {
+		return errors.Wrapf(err, "load show data")
+	}
+
+	span := getTableSpan(tbDesc)
+	entry, _, err := backupccl.MakeImportSpans(
+		[]roachpb.Span{span},
+		manifests,
+		/*backupLocalityInfo*/ nil,
+		roachpb.Key{},
+		security.RootUserName(),
+		backupccl.ErrOnMissingRange)
+	if err != nil {
+		return errors.Wrapf(err, "load show data")
+	}
+
+	e := entry[0]
+	if err := showKV(ctx, e); err != nil {
+		return errors.Wrapf(err, "load show data")
+	}
+	return nil
+}
+
+func getTableSpan(table catalog.TableDescriptor) roachpb.Span {
+	backupCodec := keys.SystemSQLCodec
+	span := table.PrimaryIndexSpan(backupCodec)
+	return span
+}
+
+func lookupTable(
+	ctx context.Context, fullyQualifiedTableName string, manifestPaths []string,
+) (catalog.TableDescriptor, []backupccl.BackupManifest, error) {
+	var descName []string
+	if descName = strings.Split(fullyQualifiedTableName, "."); len(descName) != 3 {
+		return nil, nil, errors.Newf("table name should be specified in format databaseName.schemaName.tableName")
+	}
+
+	var tbDesc catalog.TableDescriptor
+	manifests := make([]backupccl.BackupManifest, 0, len(manifestPaths))
+
+	var dbID, schemaID descpb.ID
+	if descName[1] == sessiondata.PublicSchemaName {
+		schemaID = keys.PublicSchemaID
+	}
+
+	for _, path := range manifestPaths {
+
+		manifest, err := getManifestFromURI(ctx, path)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "look up table")
+		}
+		manifests = append(manifests, manifest)
+
+		for i := range manifest.Descriptors {
+			d := &manifest.Descriptors[i]
+			id := descpb.GetDescriptorID(d)
+			name := descpb.GetDescriptorName(d)
+			tableDesc, databaseDesc, _, schemaDesc := descpb.FromDescriptor(d)
+			if databaseDesc != nil {
+				if name == descName[0] {
+					dbID = id
+				}
+			} else if schemaDesc != nil {
+				if schemaDesc.GetParentID() == dbID && name == descName[1] {
+					schemaID = id
+				}
+			} else if tableDesc != nil {
+				desc := tabledesc.NewBuilder(tableDesc).BuildImmutable()
+				if schemaID == desc.GetParentSchemaID() && dbID == tableDesc.GetParentID() && name == descName[2] {
+					tbDesc = tabledesc.NewBuilder(tableDesc).BuildCreatedMutableTable()
+				}
+			}
+		}
+	}
+
+	if tbDesc == nil {
+		return nil, nil, errors.Newf("table %s not found", fullyQualifiedTableName)
+	}
+
+	return tbDesc, manifests, nil
+}
+
+func showKV(ctx context.Context, entry execinfrapb.RestoreSpanEntry) error {
+
+	iters := make([]storage.SimpleMVCCIterator, len(entry.Files))
+	dirStorage := make([]cloud.ExternalStorage, len(entry.Files))
+	for i, file := range entry.Files {
+		var err error
+		clusterSettings := cluster.MakeClusterSettings()
+		dirStorage[i], err = cloudimpl.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
+			clusterSettings, newBlobFactory, nil /*internal executor*/, nil /*kvDB*/)
+		if err != nil {
+			return errors.Wrapf(err, "show key value of table data")
+		}
+		defer func() {
+			err = dirStorage[i].Close()
+		}()
+
+		iters[i], err = storageccl.ExternalSSTReader(ctx, dirStorage[i], file.Path, nil)
+		if err != nil {
+			return errors.Wrapf(err, "show key value of table data")
+		}
+		defer iters[i].Close()
+	}
+
+	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key},
+		storage.MVCCKey{Key: entry.Span.EndKey}
+	iter := storage.MakeMultiIterator(iters)
+	defer iter.Close()
+
+	var keyScratch, valueScratch []byte
+
+	for iter.SeekGE(startKeyMVCC); ; {
+		ok, err := iter.Valid()
+		if err != nil {
+			return errors.Wrapf(err, "during iter key value of table data")
+		}
+		if !ok || !iter.UnsafeKey().Less(endKeyMVCC) {
+			break
+		}
+		if len(iter.UnsafeValue()) == 0 {
+			// Value is deleted.
+			iter.NextKey()
+			continue
+		}
+
+		keyScratch = append(keyScratch[:0], iter.UnsafeKey().Key...)
+		valueScratch = append(valueScratch[:0], iter.UnsafeValue()...)
+		key := storage.MVCCKey{Key: keyScratch, Timestamp: iter.UnsafeKey().Timestamp}
+		value := roachpb.Value{RawBytes: valueScratch}
+		fmt.Printf("%s @%s -> %s\n", key.Key, key.Timestamp.GoTime().Format(time.ANSIC), value.PrettyPrint())
+
+		iter.NextKey()
+	}
+	return nil
 }

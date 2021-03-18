@@ -190,6 +190,110 @@ func TestLoadShowIncremental(t *testing.T) {
 	checkExpectedOutput(t, buf.String(), out)
 }
 
+func TestLoadShowData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := cli.NewCLITest(cli.TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
+
+	ctx := context.Background()
+	dir, cleanFn := testutils.TempDir(t)
+	defer cleanFn()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE testDB`)
+	sqlDB.Exec(t, `USE testDB`)
+	sqlDB.Exec(t, `CREATE SCHEMA testDB.testschema`)
+	sqlDB.Exec(t, `CREATE TABLE fooTable (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE testDB.testschema.fooTable (a INT PRIMARY KEY)`)
+
+	const backupPublicSchemaPath = "nodelocal://0/fooFolder/public"
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (123)`)
+	sqlDB.Exec(t, `BACKUP TABLE testDB.public.fooTable TO $1 `, backupPublicSchemaPath)
+
+	const backupTestSchemaPath = "nodelocal://0/fooFolder/test"
+	sqlDB.Exec(t, `INSERT INTO testDB.testschema.fooTable VALUES (123)`)
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE testDB.testschema.fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts.AsOfSystemTime()), backupTestSchemaPath)
+
+	sqlDB.Exec(t, `INSERT INTO testDB.testschema.fooTable VALUES (333)`)
+	ts1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE testDB.testschema.fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts1.AsOfSystemTime()), backupTestSchemaPath)
+
+	testCasesOnError := []struct {
+		name           string
+		tableName      string
+		backupPaths    []string
+		expectedOutput string
+	}{
+		{
+			"show-data-with-not-qualified-name",
+			"fooTable",
+			[]string{backupTestSchemaPath},
+			"ERROR: load show data: table name should be specified in format databaseName.schemaName.tableName\n",
+		}, {
+			"show-data-fail-with-not-found-table-of-public-schema",
+			"testDB.public.fooTable",
+			[]string{backupTestSchemaPath},
+			"ERROR: load show data: table testdb.public.footable not found\n",
+		}, {
+			"show-data-fail-with-not-found-table-of-user-defined-schema",
+			"testDB.testschema.fooTable",
+			[]string{backupPublicSchemaPath},
+			"ERROR: load show data: table testdb.testschema.footable not found\n",
+		},
+	}
+	for _, tc := range testCasesOnError {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --external-io-dir=%s",
+				tc.tableName,
+				strings.Join(tc.backupPaths, " "),
+				dir))
+			require.NoError(t, err)
+			checkExpectedOutput(t, tc.expectedOutput, out)
+		})
+	}
+
+	testCasesOnKVOutput := []struct {
+		name        string
+		tableName   string
+		backupPaths []string
+		expectedKV  []struct{ key, value string }
+	}{
+		{
+			"show-data-with-qualified-table-name-of-user-defined-schema",
+			"testDB.testschema.fooTable",
+			[]string{backupTestSchemaPath},
+			[]struct{ key, value string }{{"/Table/55/1/123/0", "/TUPLE/"}},
+		},
+		{
+			"show-data-with-qualified-table-name-of-public-schema",
+			"testDB.public.fooTable",
+			[]string{backupPublicSchemaPath},
+			[]struct{ key, value string }{{"/Table/54/1/123/0", "/TUPLE/"}},
+		}, {
+			"show-data-of-incremental-backup",
+			"testDB.testschema.fooTable",
+			[]string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName)},
+			[]struct{ key, value string }{{"/Table/55/1/123/0", "/TUPLE/"}, {"/Table/55/1/333/0", "/TUPLE/"}},
+		},
+	}
+
+	for _, tc := range testCasesOnKVOutput {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --external-io-dir=%s",
+				tc.tableName,
+				strings.Join(tc.backupPaths, " "),
+				dir))
+			require.NoError(t, err)
+			checkExpectedKV(t, tc.expectedKV, out)
+		})
+	}
+}
+
 func checkExpectedOutput(t *testing.T, expected string, out string) {
 	endOfCmd := strings.Index(out, "\n")
 	output := out[endOfCmd+1:]
@@ -209,4 +313,14 @@ func generateBackupTimestamps(n int) []hlc.Timestamp {
 		time.Sleep(10 * time.Millisecond)
 	}
 	return timestamps
+}
+
+func checkExpectedKV(t *testing.T, expectedKV []struct{ key, value string }, out string) {
+	lines := strings.Split(out, "\n")
+	outkvs := lines[1 : len(lines)-1]
+	require.Equal(t, len(expectedKV), len(outkvs))
+	for i, line := range outkvs {
+		require.True(t, strings.HasPrefix(line, expectedKV[i].key))
+		require.True(t, strings.HasSuffix(line, expectedKV[i].value))
+	}
 }

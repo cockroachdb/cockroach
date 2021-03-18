@@ -1033,7 +1033,7 @@ func backupPlanHook(
 			}
 
 			var err error
-			_, coveredTime, err := makeImportSpans(
+			_, coveredTime, err := MakeImportSpans(
 				spans,
 				prevBackups,
 				nil, /*backupLocalityInfo*/
@@ -1044,7 +1044,7 @@ func backupPlanHook(
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
 						return nil
 					}
-					return errOnMissingRange(span, start, end)
+					return ErrOnMissingRange(span, start, end)
 				},
 			)
 			if err != nil {
@@ -1078,7 +1078,6 @@ func backupPlanHook(
 			IntroducedSpans:     newSpans,
 			FormatVersion:       BackupFormatDescriptorTrackingVersion,
 			BuildInfo:           build.GetInfo(),
-			ClusterVersion:      p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version,
 			ClusterID:           p.ExecCfg().ClusterID(),
 			StatisticsFilenames: statsFiles,
 			DescriptorCoverage:  backupStmt.Coverage(),
@@ -1087,13 +1086,13 @@ func backupPlanHook(
 		// Sanity check: re-run the validation that RESTORE will do, but this time
 		// including this backup, to ensure that the this backup plus any previous
 		// backups does cover the interval expected.
-		if _, coveredEnd, err := makeImportSpans(
+		if _, coveredEnd, err := MakeImportSpans(
 			spans,
 			append(prevBackups, backupManifest),
 			nil, /*backupLocalityInfo*/
 			keys.MinKey,
 			p.User(),
-			errOnMissingRange,
+			ErrOnMissingRange,
 		); err != nil {
 			return err
 		} else if coveredEnd != endTime {
