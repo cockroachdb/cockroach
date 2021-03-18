@@ -601,23 +601,35 @@ func (n *alterTableNode) startExec(params runParams) error {
 			n.tableDesc.UniqueWithoutIndexConstraints = n.tableDesc.UniqueWithoutIndexConstraints[:sliceIdx]
 
 			// Drop check constraints which reference the column.
-			validChecks := n.tableDesc.Checks[:0]
+			constraintsToDrop := make([]string, 0, len(n.tableDesc.Checks))
+			constraintInfo, err := n.tableDesc.GetConstraintInfo()
+			if err != nil {
+				return err
+			}
+
 			for _, check := range n.tableDesc.AllActiveAndInactiveChecks() {
 				if used, err := n.tableDesc.CheckConstraintUsesColumn(check, colToDrop.GetID()); err != nil {
 					return err
 				} else if used {
-					if check.Validity == descpb.ConstraintValidity_Validating {
-						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-							"referencing constraint %q in the middle of being added, try again later", check.Name)
+					if check.Validity == descpb.ConstraintValidity_Dropping {
+						// We don't need to drop this constraint, its already
+						// in the process.
+						continue
 					}
-				} else {
-					validChecks = append(validChecks, check)
+					constraintsToDrop = append(constraintsToDrop, check.Name)
 				}
 			}
 
-			if len(validChecks) != len(n.tableDesc.Checks) {
-				n.tableDesc.Checks = validChecks
-				descriptorChanged = true
+			for _, constraintName := range constraintsToDrop {
+				err := n.tableDesc.DropConstraint(params.ctx, constraintName, constraintInfo[constraintName],
+					func(*tabledesc.Mutable, *descpb.ForeignKeyConstraint) error {
+						return nil
+					},
+					params.extendedEvalCtx.Settings,
+				)
+				if err != nil {
+					return err
+				}
 			}
 
 			if err := params.p.removeColumnComment(params.ctx, n.tableDesc.ID, colToDrop.GetID()); err != nil {

@@ -7064,6 +7064,7 @@ func TestDropColumnAfterMutations(t *testing.T) {
 						jobControlMu.Unlock()
 						lockHeld = false
 						<-channel
+						break
 					}
 				}
 				if lockHeld {
@@ -7297,4 +7298,115 @@ COMMIT;
 
 	close(delayNotify)
 	close(proceedBeforeBackfill)
+}
+
+// TestCheckConstraintDropAndColumn tests for Issue #61749 which uncovered
+// that checks would be incorrectly activated if a drop column occurred, even
+// if they weren't fully validated.
+func TestCheckConstraintDropAndColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+	ctx := context.Background()
+	var jobControlMu syncutil.Mutex
+	var delayJobList []string
+	var delayJobChannels []chan struct{}
+	delayNotify := make(chan struct{})
+	routineResults := make(chan error)
+
+	params, _ := tests.CreateTestServerParams()
+	var s serverutils.TestServerInterface
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				lockHeld := true
+				jobControlMu.Lock()
+				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				pl := scJob.Payload()
+				// Check if we are blocking the correct job
+				for idx, s := range delayJobList {
+					if strings.Contains(pl.Description, s) {
+						delayNotify <- struct{}{}
+						channel := delayJobChannels[idx]
+						jobControlMu.Unlock()
+						lockHeld = false
+						<-channel
+						break
+					}
+				}
+				if lockHeld {
+					jobControlMu.Unlock()
+				}
+				return nil
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	conn1 := sqlutils.MakeSQLRunner(sqlDB)
+	conn2 := sqlutils.MakeSQLRunner(sqlDB)
+
+	conn1.Exec(t, `
+CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+INSERT INTO t VALUES (1, 1);
+`)
+
+	// Issue #61749 uncovered that checks would be incorrectly
+	// activated if a drop column occurred, even if they weren't
+	// fully validate.
+	t.Run("drop-column-and-check-constraint", func(t *testing.T) {
+		jobControlMu.Lock()
+		delayJobList = []string{"ALTER TABLE defaultdb.public.t ADD CHECK (i > 0)",
+			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
+		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
+		jobControlMu.Unlock()
+
+		go func() {
+			_, err := conn2.DB.ExecContext(ctx,
+				`
+ALTER TABLE t ADD CHECK (i > 0);
+`)
+			if err != nil {
+				routineResults <- err
+				return
+			}
+			routineResults <- nil
+		}()
+		<-delayNotify
+
+		go func() {
+			_, err := conn2.DB.ExecContext(ctx,
+				`
+SET sql_safe_updates = false;
+BEGIN;
+ALTER TABLE t DROP COLUMN j;
+INSERT INTO t VALUES(-5);
+DELETE FROM t WHERE i=-5;
+COMMIT;
+`)
+			if err != nil {
+				routineResults <- err
+				return
+			}
+			routineResults <- nil
+		}()
+		<-delayNotify
+
+		// Allow jobs in expected order.
+		delayJobChannels[0] <- struct{}{}
+		delayJobChannels[1] <- struct{}{}
+		close(delayJobChannels[0])
+		close(delayJobChannels[1])
+		// Check for the results from the routines
+		for range delayJobChannels {
+			err := <-routineResults
+			if err != nil {
+				t.Error(err)
+			}
+		}
+	})
+
 }
