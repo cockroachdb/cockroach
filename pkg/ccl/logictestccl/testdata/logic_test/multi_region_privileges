@@ -1,0 +1,61 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+user root
+
+statement ok
+CREATE DATABASE db;
+CREATE TABLE db.t();
+GRANT CREATE ON DATABASE db TO testuser;
+CREATE TABLE db.t2();
+ALTER USER testuser CREATEDB;
+
+user testuser
+
+statement error user testuser must be owner of t or have CREATE privilege on t
+ALTER DATABASE db SET PRIMARY REGION "us-east-1"
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE db.t TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE db SET PRIMARY REGION "us-east-1"
+
+user root
+
+statement ok
+REVOKE CREATE ON TABLE db.t FROM testuser
+
+user testuser
+
+statement error user testuser must be owner of t or have CREATE privilege on t
+ALTER DATABASE db DROP REGION "us-east-1"
+
+user root
+
+statement ok
+GRANT CREATE ON TABLE db.t TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE db DROP REGION "us-east-1"
+
+# Same thing, but this time testuser is the owner of the table (and doesn't have
+# CREATE privileges on it).
+user root
+
+statement ok
+REVOKE CREATE ON TABLE db.t FROM testuser;
+ALTER TABLE db.t OWNER TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE db SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE db DROP REGION "us-east-1"

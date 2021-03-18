@@ -353,6 +353,10 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				return err
 			}
 
+			if err := txn.Run(ctx, b); err != nil {
+				return err
+			}
+
 			// Additional work must be performed once the promotion/demotion of enum
 			// members has been taken care of. In particular, index partitions for
 			// REGIONAL BY ROW tables must be updated to reflect the new region values
@@ -377,7 +381,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				}
 			}
 
-			return txn.Run(ctx, b)
+			return nil
 		}
 		if err := descs.Txn(
 			ctx, t.execCfg.Settings, t.execCfg.LeaseManager,
@@ -486,10 +490,6 @@ func repartitionRegionalByRowTables(
 	defer cleanup()
 	localPlanner := p.(*planner)
 
-	allDescs, err := localPlanner.Descriptors().GetAllDescriptors(ctx, txn)
-	if err != nil {
-		return nil, err
-	}
 	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
 		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{
 			Required: true,
@@ -497,112 +497,105 @@ func repartitionRegionalByRowTables(
 	if err != nil {
 		return nil, err
 	}
-	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
 
 	b := txn.NewBatch()
-	for _, tbID := range lCtx.tbIDs {
-		tableDesc, err := localPlanner.Descriptors().GetMutableTableByID(
-			ctx, txn, tbID, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					AvoidCached:    true,
-					Required:       true,
-					IncludeDropped: true,
-				},
-			})
-		if err != nil {
-			return nil, err
-		}
-
-		if !tableDesc.IsLocalityRegionalByRow() || tableDesc.Dropped() {
-			// We only need to re-partition REGIONAL BY ROW tables. Even then, we
-			// don't need to (can't) repartition a REGIONAL BY ROW table if it has
-			// been dropped.
-			continue
-		}
-
-		colName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
-		if err != nil {
-			return nil, err
-		}
-		partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
-
-		// oldPartitioningDescs saves the old partitioning descriptors for each
-		// index that is repartitioned. This is later used to remove zone
-		// configurations from any partitions that are removed.
-		oldPartitioningDescs := make(map[descpb.IndexID]descpb.PartitioningDescriptor)
-
-		// Update the partitioning on all indexes of the table that aren't being
-		// dropped.
-		for _, index := range tableDesc.NonDropIndexes() {
-			newIdx, err := CreatePartitioning(
-				ctx,
-				localPlanner.extendedEvalCtx.Settings,
-				localPlanner.EvalContext(),
-				tableDesc,
-				*index.IndexDesc(),
-				partitionAllBy,
-				nil,  /* allowedNewColumnName*/
-				true, /* allowImplicitPartitioning */
-			)
-			if err != nil {
-				return nil, err
+	err = localPlanner.forEachTableInMultiRegionDatabase(ctx, dbDesc,
+		func(ctx context.Context, tableDesc *tabledesc.Mutable) error {
+			if !tableDesc.IsLocalityRegionalByRow() || tableDesc.Dropped() {
+				// We only need to re-partition REGIONAL BY ROW tables. Even then, we
+				// don't need to (can't) repartition a REGIONAL BY ROW table if it has
+				// been dropped.
+				return nil
 			}
 
-			oldPartitioningDescs[index.GetID()] = index.IndexDesc().Partitioning
+			colName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+			if err != nil {
+				return err
+			}
+			partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
 
-			// Update the index descriptor proto's partitioning.
-			index.IndexDesc().Partitioning = newIdx.Partitioning
-		}
+			// oldPartitioningDescs saves the old partitioning descriptors for each
+			// index that is repartitioned. This is later used to remove zone
+			// configurations from any partitions that are removed.
+			oldPartitioningDescs := make(map[descpb.IndexID]descpb.PartitioningDescriptor)
 
-		// Remove zone configurations that applied to partitions that were removed
-		// in the previous step. This requires all indexes to have been
-		// repartitioned such that there is no partitioning on the removed enum
-		// value. This is because `deleteRemovedPartitionZoneConfigs` generates
-		// subzone spans for the entire table (all indexes) downstream for each
-		// index. Spans can only be generated if partitioning values are present on
-		// the type descriptor (removed enum values obviously aren't), so we must
-		// remove the partition from all indexes before trying to delete zone
-		// configurations.
-		for _, index := range tableDesc.NonDropIndexes() {
-			oldPartitioning := oldPartitioningDescs[index.GetID()]
+			// Update the partitioning on all indexes of the table that aren't being
+			// dropped.
+			for _, index := range tableDesc.NonDropIndexes() {
+				newIdx, err := CreatePartitioning(
+					ctx,
+					localPlanner.extendedEvalCtx.Settings,
+					localPlanner.EvalContext(),
+					tableDesc,
+					*index.IndexDesc(),
+					partitionAllBy,
+					nil,  /* allowedNewColumnName*/
+					true, /* allowImplicitPartitioning */
+				)
+				if err != nil {
+					return err
+				}
 
-			// Remove zone configurations that reference partition values we removed
-			// in the previous step.
-			if err = deleteRemovedPartitionZoneConfigs(
+				oldPartitioningDescs[index.GetID()] = index.IndexDesc().Partitioning
+
+				// Update the index descriptor proto's partitioning.
+				index.IndexDesc().Partitioning = newIdx.Partitioning
+			}
+
+			// Remove zone configurations that applied to partitions that were removed
+			// in the previous step. This requires all indexes to have been
+			// repartitioned such that there is no partitioning on the removed enum
+			// value. This is because `deleteRemovedPartitionZoneConfigs` generates
+			// subzone spans for the entire table (all indexes) downstream for each
+			// index. Spans can only be generated if partitioning values are present on
+			// the type descriptor (removed enum values obviously aren't), so we must
+			// remove the partition from all indexes before trying to delete zone
+			// configurations.
+			for _, index := range tableDesc.NonDropIndexes() {
+				oldPartitioning := oldPartitioningDescs[index.GetID()]
+
+				// Remove zone configurations that reference partition values we removed
+				// in the previous step.
+				if err = deleteRemovedPartitionZoneConfigs(
+					ctx,
+					txn,
+					tableDesc,
+					index.IndexDesc(),
+					&oldPartitioning,
+					&index.IndexDesc().Partitioning,
+					execCfg,
+				); err != nil {
+					return err
+				}
+			}
+
+			// Update the zone configurations now that the partition's been added.
+			regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.ParentID, descsCol)
+			if err != nil {
+				return err
+			}
+			if err := ApplyZoneConfigForMultiRegionTable(
 				ctx,
 				txn,
+				localPlanner.ExecCfg(),
+				regionConfig,
 				tableDesc,
-				index.IndexDesc(),
-				&oldPartitioning,
-				&index.IndexDesc().Partitioning,
-				execCfg,
+				ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 			); err != nil {
-				return nil, err
+				return err
 			}
-		}
 
-		// Update the zone configurations now that the partition's been added.
-		regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.ParentID, descsCol)
-		if err != nil {
-			return nil, err
-		}
-		if err := ApplyZoneConfigForMultiRegionTable(
-			ctx,
-			txn,
-			localPlanner.ExecCfg(),
-			regionConfig,
-			tableDesc,
-			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
-		); err != nil {
-			return nil, err
-		}
+			if err := localPlanner.Descriptors().WriteDescToBatch(ctx, false /* kvTrace */, tableDesc, b); err != nil {
+				return err
+			}
 
-		if err := localPlanner.Descriptors().WriteDescToBatch(ctx, false /* kvTrace */, tableDesc, b); err != nil {
-			return nil, err
-		}
-
-		repartitionedTableIDs = append(repartitionedTableIDs, tbID)
+			repartitionedTableIDs = append(repartitionedTableIDs, tableDesc.GetID())
+			return nil
+		})
+	if err != nil {
+		return nil, err
 	}
+
 	if err := txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
