@@ -736,42 +736,42 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,4-16,18-20,22-26,28-32,34-36,38-44,46-50,52-54)
+ │    ├── fd: ()-->(1,4-16,18-20,22-26,28-32,34-36,38-44,46-50,52-54), (24)==(28), (28)==(24), (6)==(18), (18)==(6), (31)==(34), (49)==(52), (52)==(49), (44)==(46), (46)==(44), (5)==(38), (38)==(5), (34)==(31)
  │    ├── inner-join (lookup address [as=ca])
  │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:18!null co_st_id:19!null co_name:20!null co_sp_rate:22!null co_ceo:23!null co_ad_id:24!null co_desc:25!null co_open_date:26!null ca.ad_id:28!null ca.ad_line1:29 ca.ad_line2:30 ca.ad_zc_code:31!null ca.ad_ctry:32 ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50 zea.zc_code:52!null zea.zc_town:53!null zea.zc_div:54!null
  │    │    ├── key columns: [24] = [28]
  │    │    ├── lookup columns are key
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,4-16,18-20,22-26,28-32,38-44,46-50,52-54)
+ │    │    ├── fd: ()-->(1,4-16,18-20,22-26,28-32,38-44,46-50,52-54), (46)==(44), (5)==(38), (38)==(5), (49)==(52), (6)==(18), (18)==(6), (52)==(49), (24)==(28), (28)==(24), (44)==(46)
  │    │    ├── inner-join (lookup company)
  │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null co_id:18!null co_st_id:19!null co_name:20!null co_sp_rate:22!null co_ceo:23!null co_ad_id:24!null co_desc:25!null co_open_date:26!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50 zea.zc_code:52!null zea.zc_town:53!null zea.zc_div:54!null
  │    │    │    ├── key columns: [6] = [18]
  │    │    │    ├── lookup columns are key
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(1,4-16,18-20,22-26,38-44,46-50,52-54)
+ │    │    │    ├── fd: ()-->(1,4-16,18-20,22-26,38-44,46-50,52-54), (44)==(46), (46)==(44), (5)==(38), (38)==(5), (49)==(52), (6)==(18), (18)==(6), (52)==(49)
  │    │    │    ├── inner-join (lookup zip_code [as=zea])
  │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50 zea.zc_code:52!null zea.zc_town:53!null zea.zc_div:54!null
  │    │    │    │    ├── key columns: [49] = [52]
  │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,4-16,38-44,46-50,52-54)
+ │    │    │    │    ├── fd: ()-->(1,4-16,38-44,46-50,52-54), (52)==(49), (44)==(46), (46)==(44), (5)==(38), (38)==(5), (49)==(52)
  │    │    │    │    ├── inner-join (lookup address [as=ea])
  │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null ea.ad_id:46!null ea.ad_line1:47 ea.ad_line2:48 ea.ad_zc_code:49!null ea.ad_ctry:50
  │    │    │    │    │    ├── key columns: [44] = [46]
  │    │    │    │    │    ├── lookup columns are key
  │    │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    │    ├── key: ()
- │    │    │    │    │    ├── fd: ()-->(1,4-16,38-44,46-50)
+ │    │    │    │    │    ├── fd: ()-->(1,4-16,38-44,46-50), (46)==(44), (5)==(38), (38)==(5), (44)==(46)
  │    │    │    │    │    ├── inner-join (lookup exchange)
  │    │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null ex_id:38!null ex_name:39!null ex_num_symb:40!null ex_open:41!null ex_close:42!null ex_desc:43 ex_ad_id:44!null
  │    │    │    │    │    │    ├── key columns: [5] = [38]
  │    │    │    │    │    │    ├── lookup columns are key
  │    │    │    │    │    │    ├── cardinality: [0 - 1]
  │    │    │    │    │    │    ├── key: ()
- │    │    │    │    │    │    ├── fd: ()-->(1,4-16,38-44)
+ │    │    │    │    │    │    ├── fd: ()-->(1,4-16,38-44), (38)==(5), (5)==(38)
  │    │    │    │    │    │    ├── scan security
  │    │    │    │    │    │    │    ├── columns: s_symb:1!null s_name:4!null s_ex_id:5!null s_co_id:6!null s_num_out:7!null s_start_date:8!null s_exch_date:9!null security.s_pe:10!null security.s_52wk_high:11!null s_52wk_high_date:12!null security.s_52wk_low:13!null s_52wk_low_date:14!null security.s_dividend:15!null security.s_yield:16!null
  │    │    │    │    │    │    │    ├── constraint: /1: [/'SYMB' - /'SYMB']
@@ -1024,7 +1024,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,4,5,8,10,11,17,20)
+ │    ├── fd: ()-->(1,4,5,8,10,11,17,20), (17)==(4), (4)==(17)
  │    ├── scan trade
  │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8 t_exec_name:10!null trade.t_trade_price:11
  │    │    ├── constraint: /1: [/0 - /0]
@@ -3045,14 +3045,14 @@ project
       ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1-3,8,11,12,33,35)
+      ├── fd: ()-->(1-3,8,11,12,33,35), (3)==(8), (2)==(33), (33)==(2), (8)==(3)
       ├── inner-join (lookup customer)
       │    ├── columns: ca_id:1!null ca_b_id:2!null ca_c_id:3!null c_id:8!null c_l_name:11!null c_f_name:12!null
       │    ├── key columns: [3] = [8]
       │    ├── lookup columns are key
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    ├── fd: ()-->(1-3,8,11,12)
+      │    ├── fd: ()-->(1-3,8,11,12), (8)==(3), (3)==(8)
       │    ├── scan customer_account
       │    │    ├── columns: ca_id:1!null ca_b_id:2!null ca_c_id:3!null
       │    │    ├── constraint: /1: [/0 - /0]
@@ -3145,7 +3145,7 @@ project
  │    ├── lookup columns are key
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
- │    ├── fd: ()-->(1,4,5,8,10,11,17,20)
+ │    ├── fd: ()-->(1,4,5,8,10,11,17,20), (17)==(4), (4)==(17)
  │    ├── scan trade
  │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8 t_exec_name:10!null trade.t_trade_price:11
  │    │    ├── constraint: /1: [/0 - /0]
@@ -3516,7 +3516,7 @@ project
       ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1,3,7,16)
+      ├── fd: ()-->(1,3,7,16), (16)==(1), (1)==(16)
       ├── scan customer
       │    ├── columns: c_id:7!null c_ad_id:16!null
       │    ├── constraint: /7: [/0 - /0]
@@ -3542,7 +3542,7 @@ project
       ├── lookup columns are key
       ├── cardinality: [0 - 1]
       ├── key: ()
-      ├── fd: ()-->(1,3,7,13)
+      ├── fd: ()-->(1,3,7,13), (13)==(1), (1)==(13)
       ├── scan company
       │    ├── columns: co_id:7!null co_ad_id:13!null
       │    ├── constraint: /7: [/0 - /0]
