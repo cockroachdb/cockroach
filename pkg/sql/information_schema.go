@@ -1797,7 +1797,7 @@ func forEachSchema(
 	}
 	for i := range userDefinedSchemas {
 		desc := userDefinedSchemas[i]
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, desc, false /* allowAdding */)
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, desc, db, false /* allowAdding */)
 		if err != nil {
 			return err
 		}
@@ -1867,7 +1867,7 @@ func forEachDatabaseDesc(
 
 	// Ignore databases that the user cannot see.
 	for _, dbDesc := range dbDescs {
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, dbDesc, false /* allowAdding */)
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
 		if err != nil {
 			return err
 		}
@@ -1894,10 +1894,6 @@ func forEachTypeDesc(
 	if err != nil {
 		return err
 	}
-	schemaNames, err := getSchemaNames(ctx, p, dbContext)
-	if err != nil {
-		return err
-	}
 	lCtx := newInternalLookupCtx(ctx, descs, dbContext,
 		catalogkv.NewOneLevelUncachedDescGetter(p.txn, p.execCfg.Codec))
 	for _, id := range lCtx.typIDs {
@@ -1906,11 +1902,11 @@ func forEachTypeDesc(
 		if !parentExists {
 			continue
 		}
-		scName, ok := schemaNames[typ.GetParentSchemaID()]
+		scName, ok := lCtx.schemaNames[typ.GetParentSchemaID()]
 		if !ok {
 			return errors.AssertionFailedf("schema id %d not found", typ.GetParentSchemaID())
 		}
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typ, false /* allowAdding */)
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typ, dbDesc, false /* allowAdding */)
 		if err != nil {
 			return err
 		}
@@ -2082,26 +2078,23 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 
 	for _, typID := range lCtx.typIDs {
 		typDesc := lCtx.typDescs[typID]
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typDesc, allowAdding)
+		dbDesc, parentExists := lCtx.dbDescs[typDesc.GetParentID()]
+		if !parentExists {
+			return errors.AssertionFailedf("database id %d not found", typDesc.GetParentID())
+		}
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, typDesc, dbDesc, allowAdding)
 		if err != nil {
 			return err
 		}
 		if typDesc.Dropped() || !canSeeDescriptor {
 			continue
 		}
-		var scName string
-		dbDesc, parentExists := lCtx.dbDescs[typDesc.GetParentID()]
-		if parentExists {
-			var ok bool
-			scName, ok = lCtx.schemaNames[typDesc.GetParentSchemaID()]
-			if !ok {
-				return errors.AssertionFailedf("schema id %d not found", typDesc.GetParentSchemaID())
-			}
-			if err := fn(dbDesc, scName, typDesc, lCtx); err != nil {
-				return err
-			}
-		} else {
-			return errors.AssertionFailedf("database id %d not found", typDesc.GetParentID())
+		scName, ok := lCtx.schemaNames[typDesc.GetParentSchemaID()]
+		if !ok {
+			return errors.AssertionFailedf("schema id %d not found", typDesc.GetParentSchemaID())
+		}
+		if err := fn(dbDesc, scName, typDesc, lCtx); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -2155,7 +2148,7 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	// Physical descriptors next.
 	for _, tbID := range lCtx.tbIDs {
 		table := lCtx.tbDescs[tbID]
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, allowAdding)
+		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, dbContext, allowAdding)
 		if err != nil {
 			return err
 		}
@@ -2294,25 +2287,19 @@ func forEachRoleMembership(
 }
 
 func userCanSeeDescriptor(
-	ctx context.Context, p *planner, desc catalog.Descriptor, allowAdding bool,
+	ctx context.Context, p *planner, desc, parentDBDesc catalog.Descriptor, allowAdding bool,
 ) (bool, error) {
 	if !descriptorIsVisible(desc, allowAdding) {
 		return false, nil
 	}
 
-	found, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-		ctx, p.Txn(), desc.GetParentID(), tree.DatabaseLookupFlags{Required: false},
-	)
-	if err != nil {
-		return false, err
-	}
 	// TODO(richardjcai): We may possibly want to remove the ability to view
 	// the descriptor if they have any privilege on the descriptor and only
 	// allow the descriptor to be viewed if they have CONNECT on the DB. #59827.
 	canSeeDescriptor := p.CheckAnyPrivilege(ctx, desc) == nil
 	// Users can see objects in the database if they have connect privilege.
-	if found {
-		canSeeDescriptor = canSeeDescriptor || p.CheckPrivilege(ctx, dbDesc, privilege.CONNECT) == nil
+	if parentDBDesc != nil {
+		canSeeDescriptor = canSeeDescriptor || p.CheckPrivilege(ctx, parentDBDesc, privilege.CONNECT) == nil
 	}
 	return canSeeDescriptor, nil
 }
