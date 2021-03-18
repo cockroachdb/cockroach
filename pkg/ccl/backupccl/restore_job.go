@@ -1252,7 +1252,7 @@ func createImportingDescriptors(
 								return err
 							}
 
-							regionConfig, err := sql.SynthesizeRegionConfig(ctx, txn, desc.ID, descsCol)
+							regionConfig, err := sql.SynthesizeRegionConfigOffline(ctx, txn, desc.ID, descsCol)
 							if err != nil {
 								return err
 							}
