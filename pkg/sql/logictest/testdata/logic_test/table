@@ -22,16 +22,16 @@ CREATE TABLE "" (id INT PRIMARY KEY)
 statement error pgcode 42P07 relation "test.public.a" already exists
 CREATE TABLE a (id INT PRIMARY KEY)
 
-statement error duplicate column name: "id"
+statement error pgcode 42701 column "id" \(2\): another column \(1\) has the same name
 CREATE TABLE b (id INT PRIMARY KEY, id INT)
 
 statement error multiple primary keys for table "b" are not allowed
 CREATE TABLE b (id INT PRIMARY KEY, id2 INT PRIMARY KEY)
 
-statement error index \"primary\" contains duplicate column \"a\"
+statement error pgcode 42701 index "primary" \(1\): column "a" \(1\): not unique in index
 CREATE TABLE dup_primary (a int, primary key (a,a))
 
-statement error index \"dup_unique_a_a_key\" contains duplicate column \"a\"
+statement error pgcode 42701 index "dup_unique_a_a_key" \(2\): column "a" \(1\): not unique in index
 CREATE TABLE dup_unique (a int, unique (a,a))
 
 statement ok

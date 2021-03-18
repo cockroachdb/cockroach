@@ -13,8 +13,6 @@
 package dbdesc
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -203,44 +201,40 @@ func (desc *Immutable) ForEachSchemaInfo(
 // is at least one read and write user.
 func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
-	vea.Report(catalog.ValidateName(desc.GetName(), "descriptor"))
+	vea.Report(catalog.BadName, catalog.ValidateName(desc.GetName(), "descriptor"))
 	if desc.GetID() == descpb.InvalidID {
-		vea.Report(fmt.Errorf("invalid database ID %d", desc.GetID()))
+		vea.ReportInternalf(catalog.BadID, "invalid database ID")
 	}
 
 	// Validate the privilege descriptor.
-	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Database))
+	vea.Report(catalog.BadPrivileges, desc.Privileges.Validate(desc.GetID(), privilege.Database))
 
+	// Perform checks specific to multi-region databases.
 	if desc.IsMultiRegion() {
-		desc.validateMultiRegion(vea)
-	}
-}
+		regions := make(map[descpb.RegionName]struct{})
 
-// validateMultiRegion performs checks specific to multi-region DBs.
-func (desc *Immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulator) {
-
-	// Ensure no regions are duplicated.
-	regions := make(map[descpb.RegionName]struct{})
-	dbRegions, err := desc.RegionNames()
-	if err != nil {
-		vea.Report(err)
-		return
-	}
-
-	for _, region := range dbRegions {
-		if _, seen := regions[region]; seen {
-			vea.Report(errors.AssertionFailedf(
-				"region %q seen twice on db %d", region, desc.GetID()))
+		// Ensure no regions are duplicated.
+		for _, region := range desc.GetRegionConfig().Regions {
+			func() {
+				vea.PushContextf(`region`, "region %q", region)
+				defer vea.PopContext()
+				if _, seen := regions[region.Name]; seen {
+					vea.ReportInternalf(catalog.NotUnique, "name is not unique")
+				}
+				regions[region.Name] = struct{}{}
+			}()
 		}
-		regions[region] = struct{}{}
-	}
 
-	if desc.RegionConfig.PrimaryRegion == "" {
-		vea.Report(errors.AssertionFailedf(
-			"primary region unset on a multi-region db %d", desc.GetID()))
-	} else if _, found := regions[desc.RegionConfig.PrimaryRegion]; !found {
-		vea.Report(errors.AssertionFailedf(
-			"primary region not found in list of regions on db %d", desc.GetID()))
+		func() {
+			primary := desc.RegionConfig.PrimaryRegion
+			vea.PushContextf(`primary_region`, "primary region")
+			defer vea.PopContext()
+			if primary == "" {
+				vea.ReportInternalf(catalog.NotSet, "not set in multi-region database")
+			} else if _, found := regions[primary]; !found {
+				vea.ReportInternalf(catalog.NotFound, "%q not found in %v", primary, desc.GetRegionConfig().Regions)
+			}
+		}()
 	}
 }
 
@@ -261,40 +255,41 @@ func (desc *Immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
 func (desc *Immutable) ValidateCrossReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
+	if desc.Dropped() {
+		return
+	}
+
 	// Check schema references.
 	for schemaName, schemaInfo := range desc.Schemas {
 		if schemaInfo.Dropped {
 			continue
 		}
-		report := func(err error) {
-			vea.Report(errors.Wrapf(err, "schema mapping entry %q (%d)",
-				errors.Safe(schemaName), schemaInfo.ID))
-		}
-		schemaDesc, err := vdg.GetSchemaDescriptor(schemaInfo.ID)
-		if err != nil {
-			report(err)
-			continue
-		}
-		if schemaDesc.GetName() != schemaName {
-			report(errors.Errorf("schema name is actually %q", errors.Safe(schemaDesc.GetName())))
-		}
-		if schemaDesc.GetParentID() != desc.GetID() {
-			report(errors.Errorf("schema parentID is actually %d", schemaDesc.GetParentID()))
-		}
+		func() {
+			vea.PushContextf(`schema_mapping_entry`, "schema mapping entry %q (%d)", schemaName, schemaInfo.ID)
+			defer vea.PopContext()
+			schemaDesc, err := vdg.GetSchemaDescriptor(schemaInfo.ID)
+			if err != nil {
+				vea.Report(catalog.NotFound, err)
+				return
+			}
+			if schemaDesc.GetName() != schemaName {
+				vea.ReportInternalf(catalog.BadName, "schema name is actually %q", schemaDesc.GetName())
+			}
+			if schemaDesc.GetParentID() != desc.GetID() {
+				vea.ReportInternalf(catalog.BadParentID, "schema parent ID is actually %d", schemaDesc.GetParentID())
+			}
+		}()
 	}
 
 	// Check multi-region enum type.
 	if enumID, err := desc.MultiRegionEnumID(); err == nil {
-		report := func(err error) {
-			vea.Report(errors.Wrap(err, "multi-region enum"))
-		}
 		typ, err := vdg.GetTypeDescriptor(enumID)
 		if err != nil {
-			report(err)
-			return
-		}
-		if typ.GetParentID() != desc.GetID() {
-			report(errors.Errorf("parentID is actually %d", typ.GetParentID()))
+			vea.Report(catalog.NotFound, err)
+		} else if typ.GetParentID() != desc.GetID() {
+			vea.ReportInternalf(catalog.BadParentID,
+				"parent database (%d) of multi-region enum type %q (%d) is not this database",
+				typ.GetParentID(), typ.GetName(), typ.GetID())
 		}
 		// Further validation should be handled by the type descriptor itself.
 	}

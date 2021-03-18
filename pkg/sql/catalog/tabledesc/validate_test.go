@@ -314,20 +314,25 @@ func TestValidateTableDesc(t *testing.T) {
 		err  string
 		desc descpb.TableDescriptor
 	}{
-		{`empty table name`,
+		{ // 1
+			`empty table name`,
 			descpb.TableDescriptor{}},
-		{`invalid table ID 0`,
+		{ // 2
+			`invalid table ID`,
 			descpb.TableDescriptor{ID: 0, Name: "foo"}},
-		{`invalid parent ID 0`,
+		{ // 3
+			`invalid parent database ID`,
 			descpb.TableDescriptor{ID: 2, Name: "foo"}},
-		{`table must contain at least 1 column`,
+		{ // 4
+			`table must contain at least 1 column`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
 				Name:          "foo",
 				FormatVersion: descpb.FamilyFormatVersion,
 			}},
-		{`empty column name`,
+		{ // 5
+			`column "" (0): empty column name`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -338,7 +343,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`table "foo" is encoded using using version 0, but this client only supports version 2 and 3`,
+		{ // 6
+			`table is encoded using version 0 but this client only supports versions 2 and 3`,
 			descpb.TableDescriptor{
 				ID:       2,
 				ParentID: 1,
@@ -348,7 +354,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`virtual column "virt" is not computed`,
+		{ // 7
+			`column "virt" (2): is virtual but is not computed`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -360,7 +367,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
-		{`invalid column ID 0`,
+		{ // 8
+			`column "bar" (0): invalid column ID`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -371,7 +379,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`table must contain a primary key`,
+		{ // 9
+			`table must contain a primary key`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -386,7 +395,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`duplicate column name: "bar"`,
+		{ // 10
+			`column "bar" (1): another column "bar" has the same ID`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -398,7 +408,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`duplicate column name: "bar"`,
+		{ // 11
+			`column "bar" (2): another column (1) has the same name`,
 			descpb.TableDescriptor{
 				ID:            catconstants.CrdbInternalBackwardDependenciesTableID,
 				ParentID:      0,
@@ -406,11 +417,12 @@ func TestValidateTableDesc(t *testing.T) {
 				FormatVersion: descpb.FamilyFormatVersion,
 				Columns: []descpb.ColumnDescriptor{
 					{ID: 1, Name: "bar"},
-					{ID: 1, Name: "bar"},
+					{ID: 2, Name: "bar"},
 				},
 				NextColumnID: 2,
 			}},
-		{`column "blah" duplicate ID of column "bar": 1`,
+		{ // 12
+			`column "blah" (1): another column "bar" has the same ID`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -422,7 +434,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`at least 1 column family must be specified`,
+		{ // 13
+			`at least 1 column family must be specified`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -433,7 +446,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`the 0th family must have ID 0`,
+		{ // 14
+			`column family "" (1): the 0th family must have ID 0`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -447,7 +461,8 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{`duplicate family name: "baz"`,
+		{ // 15
+			`column family "baz" (1): another family (0) has the same name`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -463,7 +478,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 2,
 			}},
-		{`family "qux" duplicate ID of family "baz": 0`,
+		{ // 16
+			`column family "qux" (0): another family "baz" has the same ID`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -479,7 +495,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 2,
 			}},
-		{`duplicate family name: "baz"`,
+		{ // 17
+			`column family "baz" (3): another family (0) has the same name`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -495,7 +512,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 2,
 			}},
-		{`mismatched column ID size (1) and name size (0)`,
+		{ // 18
+			`column family "baz" (0): has 1 column IDs but 0 column names`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -510,7 +528,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`family "baz" contains unknown column "2"`,
+		{ // 19
+			`column family "baz" (0): column "bar" (2): not found`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -525,7 +544,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`family "baz" column 1 should have name "bar", but found name "qux"`,
+		{ // 20
+			`column family "baz" (0): column "qux" (1): column with same ID in table has different name "bar"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -540,7 +560,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`column "bar" is not in any column family`,
+		{ // 21
+			`column "bar" (1): non-virtual column not in any column family`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -555,7 +576,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`column 1 is in both family 0 and 1`,
+		{ // 22
+			`column family "qux" (1): column "bar" (1): also in another family "baz" (0)`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -571,7 +593,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 2,
 			}},
-		{`virtual computed column "virt" cannot be part of a family`,
+		{ // 23
+			`column family "fam2" (1): column "virt" (2): a virtual computed column cannot be in a family`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -588,7 +611,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 3,
 				NextFamilyID: 2,
 			}},
-		{`table must contain a primary key`,
+		{ // 24
+			`table must contain a primary key`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -606,7 +630,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`invalid index ID 0`,
+		{ // 25
+			`index "bar" (0): invalid index ID`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -624,7 +649,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`index "bar" must contain at least 1 column`,
+		{ // 26
+			`index "bar" (2): index must have at least one column`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -647,7 +673,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
-		{`mismatched column IDs (1) and names (0)`,
+		{ // 27
+			`index "bar" (1): has 1 column IDs but 0 column names`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -664,7 +691,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
-		{`mismatched column IDs (1) and names (2)`,
+		{ // 28
+			`index "bar" (1): has 1 column IDs but 2 column names`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -685,7 +713,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
-		{`duplicate index name: "bar"`,
+		{ // 29
+			`index "bar" (2): another index (1) has the same name`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -711,7 +740,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
-		{`index "blah" duplicate ID of index "bar": 1`,
+		{ // 30
+			`index "blah" (1): another index "bar" has the same ID`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -737,7 +767,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
-		{`index "bar" column "bar" should have ID 1, but found ID 2`,
+		{ // 31
+			`index "bar" (1): column "bar" (2): column with same name in table has different ID (1)`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -757,7 +788,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
-		{`index "bar" contains unknown column "blah"`,
+		{ // 32
+			`index "bar" (1): column "blah" (1): not found`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -777,7 +809,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
-		{`mismatched column IDs (1) and directions (0)`,
+		{ // 33
+			`index "bar" (1): has 1 column IDs but 0 column directions`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -796,7 +829,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
-		{`mismatched STORING column IDs (1) and names (0)`,
+		{ // 34
+			`index "primary" (1): has 1 STORING column IDs but 0 STORING column names`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -825,7 +859,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  2,
 			}},
-		{`at least one of LIST or RANGE partitioning must be used`,
+		{ // 35
+			`index "primary" (1): at least one of LIST or RANGE partitioning must be used`,
 			// Verify that validatePartitioning is hooked up. The rest of these
 			// tests are in TestValidatePartitionion.
 			descpb.TableDescriptor{
@@ -850,7 +885,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
-		{`index "foo_crdb_internal_bar_shard_5_bar_idx" refers to non-existent shard column "does not exist"`,
+		{ // 36
+			`index "foo_crdb_internal_bar_shard_5_bar_idx" (2): shard column "does not exist" not found`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -891,7 +927,8 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID: 1,
 				NextIndexID:  3,
 			}},
-		{`TableID mismatch for unique without index constraint "bar_unique": "1" doesn't match descriptor: "2"`,
+		{ // 37
+			`unique without index constraint "bar_unique": referenced table ID (1) does not match this table`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -916,7 +953,8 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`column-id "2" does not exist`,
+		{ // 38
+			`column-id "2" does not exist`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -941,7 +979,8 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`unique without index constraint "bar_unique" contains duplicate column "1"`,
+		{ // 39
+			`unique without index constraint "bar_unique": column (1): not unique in constraint column ID list`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -966,7 +1005,8 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`empty unique without index constraint name`,
+		{ // 40
+			`unique without index constraint "": empty unique without index constraint name`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -990,7 +1030,8 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`primary index column "v" cannot be virtual`,
+		{ // 41
+			`index "primary" (1): column "v" (2): virtual column cannot be in primary index`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -1001,11 +1042,12 @@ func TestValidateTableDesc(t *testing.T) {
 					{ID: 2, Name: "v", ComputeExpr: &computedExpr, Virtual: true},
 				},
 				PrimaryIndex: descpb.IndexDescriptor{
-					ID:          1,
-					Name:        "primary",
-					Unique:      true,
-					ColumnIDs:   []descpb.ColumnID{1, 2},
-					ColumnNames: []string{"bar", "v"},
+					ID:               1,
+					Name:             "primary",
+					Unique:           true,
+					ColumnIDs:        []descpb.ColumnID{1, 2},
+					ColumnNames:      []string{"bar", "v"},
+					ColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				},
 				Families: []descpb.ColumnFamilyDescriptor{
 					{ID: 0, Name: "primary",
@@ -1015,8 +1057,10 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 				NextFamilyID: 1,
+				NextIndexID:  2,
 			}},
-		{`index "sec" cannot store virtual column "v"`,
+		{ // 42
+			`index "sec" (2): STORING column "v" (3): virtual column cannot be stored`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -1049,13 +1093,13 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 	}
 	for i, d := range testData {
-		t.Run(d.err, func(t *testing.T) {
+		t.Run(fmt.Sprintf("#%d %s", i+1, d.err), func(t *testing.T) {
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
 			if err := catalog.ValidateSelf(desc); err == nil {
-				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, d.desc)
+				t.Errorf("expected \"%s\", but found success: %+v", expectedErr, d.desc)
 			} else if expectedErr != err.Error() {
-				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, expectedErr, err)
+				t.Errorf("expected \"%s\", but found \"%+v\"", expectedErr, err)
 			}
 		})
 	}
@@ -1075,8 +1119,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		otherDescs []descpb.TableDescriptor
 	}{
 		// Foreign keys
-		{ // 0
-			err: `invalid foreign key: missing table=52: referenced table ID 52: descriptor not found`,
+		{ // 1
+			err: `foreign key "fk": referenced table ID 52: descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1095,8 +1139,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 			otherDescs: nil,
 		},
-		{ // 1
-			err: `missing fk back reference "fk" to "foo" from "baz"`,
+		{ // 2
+			err: `foreign key "fk": missing back reference from "baz" (52)`,
 			desc: descpb.TableDescriptor{
 				ID:                      51,
 				Name:                    "foo",
@@ -1121,8 +1165,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				FormatVersion:           descpb.InterleavedFormatVersion,
 			}},
 		},
-		{ // 2
-			err: `invalid foreign key backreference: missing table=52: referenced table ID 52: descriptor not found`,
+		{ // 3
+			err: `foreign key back reference "fk": referenced table ID 52: descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1140,8 +1184,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 3
-			err: `missing fk forward reference "fk" to "foo" from "baz"`,
+		{ // 4
+			err: `foreign key back reference "fk": missing foreign key reference in back referenced table "baz" (52)`,
 			desc: descpb.TableDescriptor{
 				ID:                      51,
 				Name:                    "foo",
@@ -1170,7 +1214,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				FormatVersion:           descpb.InterleavedFormatVersion,
 			}},
 		},
-		{ // 4
+		{ // 5
 			// Regression test for #57066: We can handle one of the referenced tables
 			// having a pre-19.2 foreign key reference.
 			err: "",
@@ -1211,7 +1255,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			}},
 		},
-		{ // 5
+		{ // 6
 			// Regression test for #57066: We can handle one of the referenced tables
 			// having a pre-19.2 foreign key reference.
 			err: "",
@@ -1254,10 +1298,9 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			}},
 		},
-
 		// Interleaves
-		{ // 6
-			err: `invalid interleave: missing table=52 index=2: referenced table ID 52: descriptor not found`,
+		{ // 7
+			err: `index "" (1): interleave parent (52@2): referenced table ID 52: descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1273,8 +1316,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 			otherDescs: nil,
 		},
-		{ // 7
-			err: `invalid interleave: missing table=baz index=2: index-id "2" does not exist`,
+		{ // 8
+			err: `index "" (1): interleave parent (52@2): index not found in table "baz"`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1295,8 +1338,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 			}},
 		},
-		{ // 8
-			err: `missing interleave back reference to "foo"@"bar" from "baz"@"qux"`,
+		{ // 9
+			err: `index "bar" (1): interleave parent (52@2): missing interleave back reference from "baz"@"qux"`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1321,8 +1364,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			}},
 		},
-		{ // 9
-			err: `invalid interleave backreference table=52 index=2: referenced table ID 52: descriptor not found`,
+		{ // 10
+			err: `index "" (1): interleave back reference (52@2): referenced table ID 52: descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1334,8 +1377,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 10
-			err: `invalid interleave backreference table=baz index=2: index-id "2" does not exist`,
+		{ // 11
+			err: `index "" (1): interleave back reference (52@2): index not found in table "baz"`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1353,8 +1396,8 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 			}},
 		},
-		{ // 11
-			err: `broken interleave backward reference from "foo"@"bar" to "baz"@"qux"`,
+		{ // 12
+			err: `index "bar" (1): interleave back reference (52@2): missing interleave parent in "baz"@"qux"`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
 				ID:                      51,
@@ -1377,7 +1420,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			}},
 		},
-		{ // 12
+		{ // 13
 			err: `referenced type ID 500: descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -1400,7 +1443,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		// Add some expressions with invalid type references.
-		{ // 13
+		{ // 14
 			err: `referenced type ID 500: descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -1423,7 +1466,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 14
+		{ // 15
 			err: `referenced type ID 500: descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -1446,7 +1489,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 15
+		{ // 16
 			err: `referenced type ID 500: descriptor not found`,
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -1461,7 +1504,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			},
 		},
 		// Temporary tables.
-		{ // 16
+		{ // 17
 			err: "",
 			desc: descpb.TableDescriptor{
 				Name:                    "foo",
@@ -1475,22 +1518,24 @@ func TestValidateCrossTableReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		descs := catalog.MakeMapDescGetter()
-		descs.Descriptors[1] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable()
-		for _, otherDesc := range test.otherDescs {
-			otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
-			descs.Descriptors[otherDesc.ID] = NewBuilder(&otherDesc).BuildImmutable()
-		}
-		desc := NewBuilder(&test.desc).BuildImmutable()
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
-		if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
-			if test.err != "" {
-				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
+		t.Run(fmt.Sprintf("#%d %s", i+1, test.err), func(t *testing.T) {
+			descs := catalog.MakeMapDescGetter()
+			descs.Descriptors[1] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable()
+			for _, otherDesc := range test.otherDescs {
+				otherDesc.Privileges = descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+				descs.Descriptors[otherDesc.ID] = NewBuilder(&otherDesc).BuildImmutable()
 			}
-		} else if expectedErr != err.Error() {
-			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
-		}
+			desc := NewBuilder(&test.desc).BuildImmutable()
+			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
+			const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
+			if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
+				if test.err != "" {
+					t.Errorf("expected \"%s\", but found success: %+v", expectedErr, test.desc)
+				}
+			} else if expectedErr != err.Error() {
+				t.Errorf("expected \"%s\", but found \"%s\"", expectedErr, err.Error())
+			}
+		})
 	}
 }
 
