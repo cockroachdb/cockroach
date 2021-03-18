@@ -11,12 +11,13 @@
 package descpb
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/errors"
 )
@@ -274,15 +275,15 @@ func MaybeFixPrivileges(id ID, ptr **PrivilegeDescriptor) bool {
 // for regular users.
 func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) error {
 	allowedSuperuserPrivileges := DefaultSuperuserPrivileges
-	maybeSystem := ""
+	objectTypeStr := string(objectType)
 
 	if IsReservedID(id) {
 		var ok bool
-		maybeSystem = "system "
+		objectTypeStr = "system " + objectTypeStr
 		allowedSuperuserPrivileges, ok = SystemAllowedPrivileges[id]
 		if !ok {
-			return fmt.Errorf("no allowed privileges defined for %s%s with ID=%d",
-				maybeSystem, objectType, id)
+			return errors.AssertionFailedf("no allowed privileges defined for %s with ID=%d",
+				objectTypeStr, id)
 		}
 	}
 
@@ -298,8 +299,8 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 
 	if p.Version >= OwnerVersion {
 		if p.Owner().Undefined() {
-			return errors.AssertionFailedf("found no owner for %s%s with ID=%d",
-				maybeSystem, objectType, id)
+			return errors.AssertionFailedf("found no owner for %s with ID=%d",
+				objectTypeStr, id)
 		}
 	}
 
@@ -314,8 +315,9 @@ func (p PrivilegeDescriptor) Validate(id ID, objectType privilege.ObjectType) er
 		}
 
 		if remaining := u.Privileges &^ allowedPrivilegesBits; remaining != 0 {
-			return fmt.Errorf("user %s must not have %s privileges on %s%s with ID=%d",
-				u.User(), privilege.ListFromBitField(remaining, privilege.Any), maybeSystem, objectType, id)
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s must not have %s privileges on %s with ID=%d",
+				u.User(), privilege.ListFromBitField(remaining, privilege.Any), objectTypeStr, id)
 		}
 		// Get all the privilege bits set on the descriptor even if they're not valid.
 		privs := privilege.ListFromBitField(u.Privileges, privilege.Any)
@@ -335,20 +337,21 @@ func (p PrivilegeDescriptor) validateRequiredSuperuser(
 	user security.SQLUsername,
 	objectType privilege.ObjectType,
 ) error {
-	maybeSystem := ""
+	objectTypeStr := string(objectType)
 	if IsReservedID(id) {
-		maybeSystem = "system "
+		objectTypeStr = "system " + objectTypeStr
 	}
 	superPriv, ok := p.findUser(user)
 	if !ok {
-		return fmt.Errorf("user %s does not have privileges over %s%s with ID=%d",
-			user, maybeSystem, objectType, id)
+		return errors.AssertionFailedf("user %s does not have privileges over %s with ID=%d",
+			user, objectTypeStr, id)
 	}
 
 	// The super users must match the allowed privilege set exactly.
 	if superPriv.Privileges != allowedPrivileges.ToBitField() {
-		return fmt.Errorf("user %s must have exactly %s privileges on %s%s with ID=%d",
-			user, allowedPrivileges, maybeSystem, objectType, id)
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"user %s must have exactly %s privileges on %s with ID=%d",
+			user, allowedPrivileges, objectTypeStr, id)
 	}
 
 	return nil

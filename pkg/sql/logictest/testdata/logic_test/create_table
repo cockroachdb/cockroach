@@ -298,7 +298,7 @@ like_no_pk_rowid_hidden  CREATE TABLE public.like_no_pk_rowid_hidden (
                          FAMILY "primary" (a, b, rowid)
 )
 
-statement error duplicate column name
+statement error pgcode 42701 column "c" \([0-9]+\): another column \([0-9]+\) has the same name
 CREATE TABLE duplicate_column (LIKE like_table, c DECIMAL)
 
 statement ok

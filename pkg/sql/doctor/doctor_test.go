@@ -134,7 +134,7 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			expected: `Examining 1 descriptors and 0 namespace entries...
-  ParentID   0, ParentSchemaID 29: relation "foo" (1): invalid parent ID 0
+  ParentID   0, ParentSchemaID 29: relation "foo" (1): invalid parent database ID
   ParentID   0, ParentSchemaID 29: relation "foo" (1): table must contain at least 1 column
 `,
 		},
@@ -151,7 +151,7 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{ParentSchemaID: 29, Name: "foo"}, ID: 1},
 			},
 			expected: `Examining 1 descriptors and 1 namespace entries...
-  ParentID   0, ParentSchemaID 29: relation "foo" (1): invalid parent ID 0
+  ParentID   0, ParentSchemaID 29: relation "foo" (1): invalid parent database ID
   ParentID   0, ParentSchemaID 29: relation "foo" (1): table must contain at least 1 column
 `,
 		},
@@ -216,8 +216,8 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{Name: "type"}, ID: 1},
 			},
 			expected: `Examining 1 descriptors and 1 namespace entries...
-  ParentID   0, ParentSchemaID  0: type "type" (1): invalid parentID 0
-  ParentID   0, ParentSchemaID  0: type "type" (1): invalid parent schema ID 0
+  ParentID   0, ParentSchemaID  0: type "type" (1): invalid parent database ID
+  ParentID   0, ParentSchemaID  0: type "type" (1): invalid parent schema ID
 `,
 		},
 		{ // 10
@@ -241,7 +241,7 @@ func TestExamineDescriptors(t *testing.T) {
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
   ParentID   3, ParentSchemaID  2: type "type" (1): referenced schema ID 2: descriptor not found
-  ParentID   3, ParentSchemaID  2: type "type" (1): arrayTypeID 0 does not exist for "ENUM": referenced type ID 0: descriptor not found
+  ParentID   3, ParentSchemaID  2: type "type" (1): enum: referenced type ID 0: descriptor not found
 `,
 		},
 		{ // 11
@@ -313,8 +313,8 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 4},
 			},
 			expected: `Examining 4 descriptors and 4 namespace entries...
-  ParentID   2, ParentSchemaID  3: relation "t" (1): parent schema 3 is in different database 4
-  ParentID   4, ParentSchemaID  0: schema "schema" (3): not present in parent database [4] schemas mapping
+  ParentID   2, ParentSchemaID  3: relation "t" (1): parent database (4) of parent schema "schema" (3) different than table parent database "db" (2)
+  ParentID   4, ParentSchemaID  0: schema "schema" (3): parent database "db2" (4): matching schema entry not found
 `,
 		},
 		{ // 13
@@ -394,7 +394,7 @@ func TestExamineDescriptors(t *testing.T) {
 				{NameInfo: descpb.NameInfo{Name: "db2"}, ID: 1},
 			},
 			expected: `Examining 1 descriptors and 3 namespace entries...
-  ParentID   0, ParentSchemaID  0: database "db" (1): expected matching namespace entry for draining name (0, 0, db3), found none
+  ParentID   0, ParentSchemaID  0: database "db" (1): draining name (0, 0, db3): expected matching namespace entry, found none
 `,
 		},
 		{ // 18

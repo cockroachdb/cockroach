@@ -1,5 +1,5 @@
 # Test that we don't allow FAMILY constraints with virtual columns.
-statement error virtual computed column "v" cannot be part of a family
+statement error column "v" \(3\): a virtual computed column cannot be in a family
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
@@ -7,7 +7,7 @@ CREATE TABLE t (
   FAMILY (a, b, v)
 )
 
-statement error virtual computed column "v" cannot be part of a family
+statement error column "v" \(3\): a virtual computed column cannot be in a family
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,
@@ -17,7 +17,7 @@ CREATE TABLE t (
   FAMILY (v)
 )
 
-statement error primary index column "v" cannot be virtual
+statement error column "v" \(3\): virtual column cannot be in primary index
 CREATE TABLE t (
   a INT,
   b INT,
@@ -25,7 +25,7 @@ CREATE TABLE t (
   PRIMARY KEY (b,v)
 )
 
-statement error index "t_b_idx" cannot store virtual column "v"
+statement error index "t_b_idx" \(2\): STORING column "v" \(3\): virtual column cannot be stored
 CREATE TABLE t (
   a INT PRIMARY KEY,
   b INT,

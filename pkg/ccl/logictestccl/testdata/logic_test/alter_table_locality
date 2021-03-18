@@ -834,7 +834,7 @@ DATABASE alter_locality_test  ALTER DATABASE alter_locality_test CONFIGURE ZONE 
 
 # Altering from REGIONAL BY ROW IN PRIMARY REGION
 
-statement error region "invalid-region" has not been added to database "alter_locality_test"
+statement error pq: relation "regional_by_table_in_primary_region" \([0-9]+\): parent database "alter_locality_test" \([0-9]+\): homing region "invalid-region" for REGIONAL BY TABLE table not found in multi-region enum "crdb_internal_region" \([0-9]+\)
 ALTER TABLE regional_by_table_in_primary_region SET LOCALITY REGIONAL BY TABLE in "invalid-region"
 
 statement ok

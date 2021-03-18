@@ -89,7 +89,7 @@ var ErrDescriptorWrongType = errors.New("unexpected descriptor type")
 // NewDescriptorTypeError returns ErrDescriptorWrongType prefixed with
 // the actual go type of the descriptor.
 func NewDescriptorTypeError(desc interface{}) error {
-	return errors.Wrapf(ErrDescriptorWrongType, "descriptor is a %T", desc)
+	return errors.NewAssertionErrorWithWrappedErrf(ErrDescriptorWrongType, "descriptor is a %T", desc)
 }
 
 // AsDatabaseDescriptor tries to cast desc to a DatabaseDescriptor.
@@ -146,20 +146,20 @@ func AsTypeDescriptor(desc Descriptor) (TypeDescriptor, error) {
 
 // WrapDatabaseDescRefErr wraps an error pertaining to a database descriptor id.
 func WrapDatabaseDescRefErr(id descpb.ID, err error) error {
-	return errors.Wrapf(err, "referenced database ID %d", errors.Safe(id))
+	return errors.Wrapf(err, "referenced database ID %d", id)
 }
 
 // WrapSchemaDescRefErr wraps an error pertaining to a schema descriptor id.
 func WrapSchemaDescRefErr(id descpb.ID, err error) error {
-	return errors.Wrapf(err, "referenced schema ID %d", errors.Safe(id))
+	return errors.Wrapf(err, "referenced schema ID %d", id)
 }
 
 // WrapTableDescRefErr wraps an error pertaining to a table descriptor id.
 func WrapTableDescRefErr(id descpb.ID, err error) error {
-	return errors.Wrapf(err, "referenced table ID %d", errors.Safe(id))
+	return errors.Wrapf(err, "referenced table ID %d", id)
 }
 
 // WrapTypeDescRefErr wraps an error pertaining to a type descriptor id.
 func WrapTypeDescRefErr(id descpb.ID, err error) error {
-	return errors.Wrapf(err, "referenced type ID %d", errors.Safe(id))
+	return errors.Wrapf(err, "referenced type ID %d", id)
 }

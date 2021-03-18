@@ -441,7 +441,7 @@ DELETE FROM system.descriptor WHERE id=54;
 	require.Equal(t, 55, id)
 	require.Equal(t, "defaultdb", dbName)
 	require.Equal(t, "public", schemaName)
-	require.Equal(t, `relation "tbl" (55): invalid foreign key: missing table=54: referenced table ID 54: descriptor not found`, errStr)
+	require.Equal(t, `relation "tbl" (55): foreign key "fk_customer_ref_fktbl": referenced table ID 54: descriptor not found`, errStr)
 
 	require.False(t, rows.Next())
 }

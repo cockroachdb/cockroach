@@ -72,7 +72,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 		desc   descpb.SchemaDescriptor
 		dbDesc descpb.DatabaseDescriptor
 	}{
-		{ // 0
+		{ // 1
 			desc: descpb.SchemaDescriptor{
 				ID:       52,
 				ParentID: 51,
@@ -85,7 +85,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 1
+		{ // 2
 			err: `referenced database ID 500: descriptor not found`,
 			desc: descpb.SchemaDescriptor{
 				ID:       52,
@@ -93,8 +93,8 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				Name:     "schema1",
 			},
 		},
-		{ // 2
-			err: `not present in parent database [51] schemas mapping`,
+		{ // 3
+			err: `parent database "" (51): matching schema entry not found`,
 			desc: descpb.SchemaDescriptor{
 				ID:       52,
 				ParentID: 51,
@@ -104,8 +104,8 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				ID: 51,
 			},
 		},
-		{ // 2
-			err: `not present in parent database [51] schemas mapping`,
+		{ // 4
+			err: `parent database "" (51): matching schema entry not found`,
 			desc: descpb.SchemaDescriptor{
 				ID:       52,
 				ParentID: 51,
@@ -118,8 +118,8 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 3
-			err: `present in parent database [51] schemas mapping but marked as dropped`,
+		{ // 5
+			err: `parent database "" (51): schema mapping entry "schema1" (52): marked as dropped`,
 			desc: descpb.SchemaDescriptor{
 				ID:       52,
 				ParentID: 51,
@@ -132,8 +132,8 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 4
-			err: `present in parent database [51] schemas mapping but under name "bad"`,
+		{ // 6
+			err: `parent database "" (51): schema mapping entry "bad" (52): name mismatch`,
 			desc: descpb.SchemaDescriptor{
 				ID:       52,
 				ParentID: 51,
@@ -146,8 +146,8 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 5
-			err: `present in parent database [51] schemas mapping but name maps to other schema [500]`,
+		{ // 7
+			err: `parent database "" (51): schema mapping entry "schema1" (500): ID mismatch`,
 			desc: descpb.SchemaDescriptor{
 				ID:       52,
 				ParentID: 51,
@@ -163,21 +163,23 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
-		descs := catalog.MakeMapDescGetter()
-		test.desc.Privileges = privilege
-		desc := schemadesc.NewBuilder(&test.desc).BuildImmutable()
-		descs.Descriptors[test.desc.ID] = desc
-		test.dbDesc.Privileges = privilege
-		descs.Descriptors[test.dbDesc.ID] = dbdesc.NewBuilder(&test.dbDesc).BuildImmutable()
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
-		if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
-			if test.err != "" {
-				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
+		t.Run(fmt.Sprintf("#%d %s", i+1, test.err), func(t *testing.T) {
+			privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+			descs := catalog.MakeMapDescGetter()
+			test.desc.Privileges = privilege
+			desc := schemadesc.NewBuilder(&test.desc).BuildImmutable()
+			descs.Descriptors[test.desc.ID] = desc
+			test.dbDesc.Privileges = privilege
+			descs.Descriptors[test.dbDesc.ID] = dbdesc.NewBuilder(&test.dbDesc).BuildImmutable()
+			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
+			const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
+			if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
+				if test.err != "" {
+					t.Errorf("expected \"%s\", but found success: %+v", expectedErr, test.desc)
+				}
+			} else if expectedErr != err.Error() {
+				t.Errorf("expected \"%s\", but found \"%s\"", expectedErr, err.Error())
 			}
-		} else if expectedErr != err.Error() {
-			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
-		}
+		})
 	}
 }

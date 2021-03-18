@@ -91,15 +91,16 @@ func TestValidateDatabaseDesc(t *testing.T) {
 		err  string
 		desc descpb.DatabaseDescriptor
 	}{
-		{`invalid database ID 0`,
+		{ // 1
+			`invalid database ID`,
 			descpb.DatabaseDescriptor{
 				Name:       "db",
 				ID:         0,
 				Privileges: descpb.NewDefaultPrivilegeDescriptor(security.RootUserName()),
 			},
 		},
-		{
-			`primary region unset on a multi-region db 200`,
+		{ // 2
+			`primary region not set in multi-region database`,
 			descpb.DatabaseDescriptor{
 				Name:         "multi-region-db",
 				ID:           200,
@@ -109,13 +110,13 @@ func TestValidateDatabaseDesc(t *testing.T) {
 		},
 	}
 	for i, d := range testData {
-		t.Run(d.err, func(t *testing.T) {
+		t.Run(fmt.Sprintf("#%d %s", i+1, d.err), func(t *testing.T) {
 			desc := NewBuilder(&d.desc).BuildImmutable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
 			if err := catalog.ValidateSelf(desc); err == nil {
-				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, d.desc)
+				t.Errorf("expected \"%s\", but found success: %+v", expectedErr, d.desc)
 			} else if expectedErr != err.Error() {
-				t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, expectedErr, err)
+				t.Errorf("expected \"%s\", but found \"%+v\"", expectedErr, err)
 			}
 		})
 	}
@@ -131,13 +132,13 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 		multiRegionEnum descpb.TypeDescriptor
 		schemaDescs     []descpb.SchemaDescriptor
 	}{
-		{ // 0
+		{ // 1
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
 			},
 		},
-		{ // 1
+		{ // 2
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
@@ -153,7 +154,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 2
+		{ // 3
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
@@ -162,7 +163,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 3
+		{ // 4
 			err: `schema mapping entry "schema1" (500): referenced schema ID 500: descriptor not found`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -172,7 +173,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 4
+		{ // 5
 			err: `schema mapping entry "schema1" (52): schema name is actually "foo"`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -189,8 +190,8 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 5
-			err: `schema mapping entry "schema1" (52): schema parentID is actually 500`,
+		{ // 6
+			err: `schema mapping entry "schema1" (52): schema parent ID is actually 500`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
@@ -206,8 +207,8 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 6
-			err: `multi-region enum: referenced type ID 500: descriptor not found`,
+		{ // 7
+			err: `referenced type ID 500: descriptor not found`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
@@ -216,8 +217,8 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				},
 			},
 		},
-		{ // 7
-			err: `multi-region enum: parentID is actually 500`,
+		{ // 8
+			err: `parent database (500) of multi-region enum type "" (52) is not this database`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
@@ -230,7 +231,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ParentID: 500,
 			},
 		},
-		{ // 8
+		{ // 9
 			err: `schema mapping entry "schema1" (53): referenced schema ID 53: descriptor is a *typedesc.Immutable: unexpected descriptor type`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
@@ -244,8 +245,8 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ParentID: 51,
 			},
 		},
-		{ // 9
-			err: `multi-region enum: referenced type ID 53: descriptor is a *schemadesc.Immutable: unexpected descriptor type`,
+		{ // 10
+			err: `referenced type ID 53: descriptor is a *schemadesc.Immutable: unexpected descriptor type`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
@@ -264,25 +265,27 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
-		descs := catalog.MakeMapDescGetter()
-		test.desc.Privileges = privilege
-		desc := NewBuilder(&test.desc).BuildImmutable()
-		descs.Descriptors[test.desc.ID] = desc
-		test.multiRegionEnum.Privileges = privilege
-		descs.Descriptors[test.multiRegionEnum.ID] = typedesc.NewBuilder(&test.multiRegionEnum).BuildImmutable()
-		for _, schemaDesc := range test.schemaDescs {
-			schemaDesc.Privileges = privilege
-			descs.Descriptors[schemaDesc.ID] = schemadesc.NewBuilder(&schemaDesc).BuildImmutable()
-		}
-		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
-		if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
-			if test.err != "" {
-				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
+		t.Run(fmt.Sprintf("#%d %s", i+1, test.err), func(t *testing.T) {
+			privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
+			descs := catalog.MakeMapDescGetter()
+			test.desc.Privileges = privilege
+			desc := NewBuilder(&test.desc).BuildImmutable()
+			descs.Descriptors[test.desc.ID] = desc
+			test.multiRegionEnum.Privileges = privilege
+			descs.Descriptors[test.multiRegionEnum.ID] = typedesc.NewBuilder(&test.multiRegionEnum).BuildImmutable()
+			for _, schemaDesc := range test.schemaDescs {
+				schemaDesc.Privileges = privilege
+				descs.Descriptors[schemaDesc.ID] = schemadesc.NewBuilder(&schemaDesc).BuildImmutable()
 			}
-		} else if expectedErr != err.Error() {
-			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, expectedErr, err.Error())
-		}
+			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
+			const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
+			if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
+				if test.err != "" {
+					t.Errorf("expected \"%s\", but found success: %+v", expectedErr, test.desc)
+				}
+			} else if expectedErr != err.Error() {
+				t.Errorf("expected \"%s\", but found \"%s\"", expectedErr, err.Error())
+			}
+		})
 	}
 }

@@ -206,13 +206,13 @@ func (n *createViewNode) startExec(params runParams) error {
 			desc.IsMaterializedView = true
 			desc.State = descpb.DescriptorState_ADD
 			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
-			if err := desc.AllocateIDs(params.ctx); err != nil {
-				return err
-			}
 			// For multi-region databases, we want this descriptor to be GLOBAL instead.
 			if n.dbDesc.IsMultiRegion() {
 				desc.SetTableLocalityGlobal()
 				applyGlobalMultiRegionZoneConfig = true
+			}
+			if err := desc.AllocateIDs(params.ctx); err != nil {
+				return err
 			}
 		}
 

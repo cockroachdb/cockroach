@@ -150,7 +150,7 @@ CREATE INDEX foo ON t (a)
 statement error column "c" does not exist
 CREATE INDEX bar ON t (c)
 
-statement error index \"bar\" contains duplicate column \"b\"
+statement error pq: relation "t" \([0-9]+\): index "bar" \([0-9]+\): column "b" \([0-9]+\): not unique in index
 CREATE INDEX bar ON t (b, b);
 
 statement ok

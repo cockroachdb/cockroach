@@ -11,7 +11,6 @@
 package schemadesc
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -135,13 +134,13 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 // ValidateSelf implements the catalog.Descriptor interface.
 func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
-	vea.Report(catalog.ValidateName(desc.GetName(), "descriptor"))
+	vea.Report(catalog.BadName, catalog.ValidateName(desc.GetName(), "descriptor"))
 	if desc.GetID() == descpb.InvalidID {
-		vea.Report(fmt.Errorf("invalid schema ID %d", desc.GetID()))
+		vea.ReportInternalf(catalog.BadID, "invalid schema ID")
 	}
 
 	// Validate the privilege descriptor.
-	vea.Report(desc.Privileges.Validate(desc.GetID(), privilege.Schema))
+	vea.Report(catalog.BadPrivileges, desc.Privileges.Validate(desc.GetID(), privilege.Schema))
 }
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
@@ -154,41 +153,47 @@ func (desc *Immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
 func (desc *Immutable) ValidateCrossReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
+	if desc.Dropped() {
+		return
+	}
+
 	// Check schema parent reference.
 	db, err := vdg.GetDatabaseDescriptor(desc.GetParentID())
 	if err != nil {
-		vea.Report(err)
+		vea.Report(catalog.NotFound, err)
 		return
 	}
+
+	vea.PushContextf(`parent_database`, "parent database %q (%d)", db.GetName(), db.GetID())
+	defer vea.PopContext()
 
 	// Check that parent has correct entry in schemas mapping.
 	isInDBSchemas := false
 	_ = db.ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error {
+		vea.PushContextf(`schema_mapping_entry`, "schema mapping entry %q (%d)", name, id)
+		defer vea.PopContext()
+
 		if id == desc.GetID() {
 			if isDropped {
 				if name == desc.GetName() {
-					vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but marked as dropped",
-						desc.GetParentID()))
+					vea.ReportInternalf(catalog.Mismatch, "marked as dropped")
 				}
 				return nil
 			}
 			if name != desc.GetName() {
-				vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but under name %q",
-					desc.GetParentID(), errors.Safe(name)))
+				vea.ReportInternalf(catalog.Mismatch, "name mismatch")
 				return nil
 			}
 			isInDBSchemas = true
 			return nil
 		}
 		if name == desc.GetName() && !isDropped {
-			vea.Report(errors.AssertionFailedf("present in parent database [%d] schemas mapping but name maps to other schema [%d]",
-				desc.GetParentID(), id))
+			vea.ReportInternalf(catalog.Mismatch, "ID mismatch")
 		}
 		return nil
 	})
 	if !isInDBSchemas {
-		vea.Report(errors.AssertionFailedf("not present in parent database [%d] schemas mapping",
-			desc.GetParentID()))
+		vea.ReportInternalf(catalog.NotFound, "matching schema entry not found")
 	}
 }
 

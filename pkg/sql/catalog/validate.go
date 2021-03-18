@@ -13,8 +13,12 @@ package catalog
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,17 +46,15 @@ func Validate(
 		// returned ValidationErrors interface unwraps to descGetterErr. For this
 		// reason we place it at the head of the errors slice.
 		vea.errors = append(make([]error, 1, 1+len(vea.errors)), vea.errors...)
-		vea.errors[0] = errors.Wrapf(descGetterErr, "%s", errPrefix)
+		vea.errors[0] = errors.Wrap(descGetterErr, errPrefix)
 	}
 	if level == NoValidation {
 		return &vea
 	}
 	for _, desc := range descriptors {
-		if level&ValidationLevelSelfOnly == 0 {
-			continue
-		}
-		vea.setPrefix(desc)
-		desc.ValidateSelf(&vea)
+		vea.withContext(ValidationLevelSelfOnly, level, desc, func() {
+			desc.ValidateSelf(&vea)
+		})
 	}
 	if level <= ValidationLevelSelfOnly || len(vea.errors) > 0 {
 		return &vea
@@ -67,11 +69,9 @@ func Validate(
 	}
 	// Perform cross-reference checks.
 	for _, desc := range descriptors {
-		if level&ValidationLevelCrossReferences == 0 || desc.Dropped() {
-			continue
-		}
-		vea.setPrefix(desc)
-		desc.ValidateCrossReferences(&vea, vdg)
+		vea.withContext(ValidationLevelCrossReferences, level, desc, func() {
+			desc.ValidateCrossReferences(&vea, vdg)
+		})
 	}
 	if level <= ValidationLevelCrossReferences {
 		return &vea
@@ -85,8 +85,9 @@ func Validate(
 		}
 		// Perform Namespace checks
 		for _, desc := range descriptors {
-			vea.setPrefix(desc)
-			validateNamespace(desc, &vea, vdg.Namespace)
+			vea.withContext(ValidationLevelNamespace, level, desc, func() {
+				validateNamespace(desc, &vea, vdg.Namespace)
+			})
 		}
 	}
 	if level <= ValidationLevelNamespace {
@@ -94,11 +95,9 @@ func Validate(
 	}
 	// Perform pre-txn-commit checks.
 	for _, desc := range descriptors {
-		if level&ValidationLevelAllPreTxnCommit == 0 || desc.Dropped() {
-			continue
-		}
-		vea.setPrefix(desc)
-		desc.ValidateTxnCommit(&vea, vdg)
+		vea.withContext(ValidationLevelNamespace, level, desc, func() {
+			desc.ValidateTxnCommit(&vea, vdg)
+		})
 	}
 	return &vea
 }
@@ -136,6 +135,11 @@ func ValidateSelfAndCrossReferences(
 	return Validate(ctx, maybeBatchDescGetter, ValidationLevelCrossReferences, descriptors...).CombinedError()
 }
 
+// ValidationTelemetryKeySuffix is a string type used when reporting errors to a
+// ValidationErrorAccumulator. It's defined to encourage the use of shared
+// constants as much as possible, as opposed to haphazard string literals.
+type ValidationTelemetryKeySuffix string
+
 // ValidationErrorAccumulator is used by the validation methods on Descriptor
 // to accumulate any encountered validation errors which are then processed by
 // the Validate function.
@@ -143,9 +147,32 @@ func ValidateSelfAndCrossReferences(
 // called via the Validate function.
 type ValidationErrorAccumulator interface {
 
+	// PushContextf pushes a telemetry and error wrap message prefix to the
+	// accumulator context, narrowing the scope of the subsequently reported
+	// errors.
+	PushContextf(telemetryKeyPrefix string, errPrefixFmt string, args ...interface{})
+
+	// PopContext undoes the effects of a PushContextf.
+	// For safety, this should _always_ be called with defer right after a
+	// PushContextf.
+	PopContext()
+
 	// Report is called by the validation methods to report a possible error.
-	// No-ops when err is nil.
-	Report(err error)
+	// Does nothing and returns false iff err is nil.
+	Report(telemetryKeySuffix ValidationTelemetryKeySuffix, err error) bool
+
+	// ReportPG is a convenience method for pgerror.New.
+	ReportPG(telemetryKeySuffix ValidationTelemetryKeySuffix, code pgcode.Code, msg string) bool
+
+	// ReportPG is a convenience method for pgerror.Newf.
+	ReportPGf(telemetryKeySuffix ValidationTelemetryKeySuffix, code pgcode.Code, fmt string, args ...interface{}) bool
+
+	// ReportInternalf is a convenience method for errors.AssertionFailedf.
+	ReportInternalf(telemetryKeySuffix ValidationTelemetryKeySuffix, fmt string, args ...interface{}) bool
+
+	// ReportUnimplemented is a convenience method for `unimplemented` errors.
+	// These have no associated telemetry.
+	ReportUnimplemented(issue int, msg string) bool
 
 	// Seals this interface.
 	sealed()
@@ -188,26 +215,118 @@ func (ve *validationErrors) CombinedError() error {
 	return combinedErr
 }
 
+type veaContext struct {
+	telemetry string
+	fmt       string
+	args      []interface{}
+}
+
 type validationErrorAccumulator struct {
 	validationErrors
-	wrapPrefix string
+	contextStack []veaContext
 }
 
 var _ ValidationErrorAccumulator = &validationErrorAccumulator{}
 
 // Report implements the ValidationErrorAccumulator interface.
-func (vea *validationErrorAccumulator) Report(err error) {
+func (vea *validationErrorAccumulator) Report(
+	telemetryKeySuffix ValidationTelemetryKeySuffix, err error,
+) bool {
 	if err == nil {
-		return
+		return false
 	}
-	if vea.wrapPrefix != "" {
-		err = errors.Wrapf(err, "%s", vea.wrapPrefix)
+	t := make([]string, 0, 1+len(vea.contextStack))
+	for _, c := range vea.contextStack {
+		t = append(t, c.telemetry)
 	}
+	t = append(t, string(telemetryKeySuffix))
+	vea.reportInternal(errors.WithTelemetry(err, strings.Join(t, ".")))
+	return true
+}
+
+func (vea *validationErrorAccumulator) reportInternal(err error) {
+	fmts := make([]string, 0, len(vea.contextStack))
+	args := make([]interface{}, 0, 2*len(vea.contextStack))
+	for _, c := range vea.contextStack {
+		fmts = append(fmts, c.fmt)
+		args = append(args, c.args...)
+	}
+	err = errors.Wrapf(err, strings.Join(fmts, ": "), args...)
 	vea.errors = append(vea.errors, err)
 }
 
-func (vea *validationErrorAccumulator) setPrefix(desc Descriptor) {
-	vea.wrapPrefix = fmt.Sprintf("%s %q (%d)", desc.DescriptorType(), desc.GetName(), desc.GetID())
+// ReportUnimplemented implements the ValidationErrorAccumulator interface.
+func (vea *validationErrorAccumulator) ReportUnimplemented(issue int, msg string) bool {
+	vea.reportInternal(unimplemented.NewWithIssue(issue, msg))
+	return false
+}
+
+// ReportPG implements the ValidationErrorAccumulator interface.
+func (vea *validationErrorAccumulator) ReportPG(
+	telemetryKeySuffix ValidationTelemetryKeySuffix, code pgcode.Code, msg string,
+) bool {
+	return vea.Report(telemetryKeySuffix, pgerror.New(code, msg))
+}
+
+// ReportPGf implements the ValidationErrorAccumulator interface.
+func (vea *validationErrorAccumulator) ReportPGf(
+	telemetryKeySuffix ValidationTelemetryKeySuffix,
+	code pgcode.Code,
+	fmt string,
+	args ...interface{},
+) bool {
+	return vea.Report(telemetryKeySuffix, pgerror.Newf(code, fmt, args...))
+}
+
+// ReportInternalf implements the ValidationErrorAccumulator interface.
+func (vea *validationErrorAccumulator) ReportInternalf(
+	telemetryKeySuffix ValidationTelemetryKeySuffix, fmt string, args ...interface{},
+) bool {
+	return vea.Report(telemetryKeySuffix, errors.AssertionFailedf(fmt, args...))
+}
+
+// PushContextf implements the ValidationErrorAccumulator interface.
+func (vea *validationErrorAccumulator) PushContextf(
+	telemetryKeyPrefix string, fmt string, args ...interface{},
+) {
+	vea.contextStack = append(vea.contextStack, veaContext{
+		telemetry: telemetryKeyPrefix,
+		fmt:       fmt,
+		args:      args,
+	})
+}
+
+// PopContext implements the ValidationErrorAccumulator interface.
+func (vea *validationErrorAccumulator) PopContext() {
+	if len(vea.contextStack) > 0 {
+		vea.contextStack = vea.contextStack[:len(vea.contextStack)-1]
+	}
+}
+
+func (vea *validationErrorAccumulator) withContext(
+	currentLevel ValidationLevel, level ValidationLevel, desc Descriptor, validation func(),
+) {
+	if level&currentLevel == 0 {
+		return
+	}
+	rwScope := `read`
+	if level == ValidationLevelAllPreTxnCommit {
+		rwScope = `write`
+	}
+	levelScope, ok := map[ValidationLevel]string{
+		ValidationLevelSelfOnly:        `self`,
+		ValidationLevelCrossReferences: `crossref`,
+		ValidationLevelNamespace:       `ns`,
+		ValidationLevelAllPreTxnCommit: `pretxncommit`,
+	}[currentLevel]
+	if !ok {
+		return
+	}
+	typ := string(desc.DescriptorType())
+	telemetryKeyPrefix := fmt.Sprintf("sql.schema.validation.%s.%s.%s", rwScope, levelScope, typ)
+	vea.PushContextf(telemetryKeyPrefix, typ+" %q (%d)", desc.GetName(), desc.GetID())
+	defer vea.PopContext()
+	validation()
 }
 
 // ValidationDescGetter is used by the validation methods on Descriptor.
@@ -215,16 +334,20 @@ func (vea *validationErrorAccumulator) setPrefix(desc Descriptor) {
 // the Validate function.
 type ValidationDescGetter interface {
 
-	// GetDatabaseDescriptor returns the corresponding DatabaseDescriptor or an error instead.
+	// GetDatabaseDescriptor returns the corresponding DatabaseDescriptor
+	// or an internal error instead.
 	GetDatabaseDescriptor(id descpb.ID) (DatabaseDescriptor, error)
 
-	// GetSchemaDescriptor returns the corresponding SchemaDescriptor or an error instead.
+	// GetSchemaDescriptor returns the corresponding SchemaDescriptor
+	// or an internal error instead.
 	GetSchemaDescriptor(id descpb.ID) (SchemaDescriptor, error)
 
-	// GetTableDescriptor returns the corresponding TableDescriptor or an error instead.
+	// GetTableDescriptor returns the corresponding TableDescriptor
+	// or an internal error instead.
 	GetTableDescriptor(id descpb.ID) (TableDescriptor, error)
 
-	// GetTypeDescriptor returns the corresponding TypeDescriptor or an error instead.
+	// GetTypeDescriptor returns the corresponding TypeDescriptor
+	// or an internal error instead.
 	GetTypeDescriptor(id descpb.ID) (TypeDescriptor, error)
 
 	// Seals this interface.
@@ -244,7 +367,7 @@ func (vdg *validationDescGetterImpl) GetDatabaseDescriptor(
 ) (DatabaseDescriptor, error) {
 	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
-		return nil, WrapDatabaseDescRefErr(id, ErrDescriptorNotFound)
+		return nil, errors.WithAssertionFailure(WrapDatabaseDescRefErr(id, ErrDescriptorNotFound))
 	}
 	return AsDatabaseDescriptor(desc)
 }
@@ -253,7 +376,7 @@ func (vdg *validationDescGetterImpl) GetDatabaseDescriptor(
 func (vdg *validationDescGetterImpl) GetSchemaDescriptor(id descpb.ID) (SchemaDescriptor, error) {
 	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
-		return nil, WrapSchemaDescRefErr(id, ErrDescriptorNotFound)
+		return nil, errors.WithAssertionFailure(WrapSchemaDescRefErr(id, ErrDescriptorNotFound))
 	}
 	return AsSchemaDescriptor(desc)
 }
@@ -262,7 +385,7 @@ func (vdg *validationDescGetterImpl) GetSchemaDescriptor(id descpb.ID) (SchemaDe
 func (vdg *validationDescGetterImpl) GetTableDescriptor(id descpb.ID) (TableDescriptor, error) {
 	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
-		return nil, WrapTableDescRefErr(id, ErrDescriptorNotFound)
+		return nil, errors.WithAssertionFailure(WrapTableDescRefErr(id, ErrDescriptorNotFound))
 	}
 	return AsTableDescriptor(desc)
 }
@@ -271,7 +394,7 @@ func (vdg *validationDescGetterImpl) GetTableDescriptor(id descpb.ID) (TableDesc
 func (vdg *validationDescGetterImpl) GetTypeDescriptor(id descpb.ID) (TypeDescriptor, error) {
 	desc, found := vdg.Descriptors[id]
 	if !found || desc == nil {
-		return nil, WrapTypeDescRefErr(id, ErrDescriptorNotFound)
+		return nil, errors.WithAssertionFailure(WrapTypeDescRefErr(id, ErrDescriptorNotFound))
 	}
 	return AsTypeDescriptor(desc)
 }
@@ -397,6 +520,39 @@ const (
 	namespace2TableID = 30
 )
 
+const (
+	// Common ValidationTelemetryKeySuffix constants.
+
+	// BadFormat counts encoding format failures.
+	BadFormat ValidationTelemetryKeySuffix = `bad_format`
+	// BadID counts invalid IDs.
+	BadID = `bad_id`
+	// BadName counts invalid names.
+	BadName = `bad_name`
+	// BadOrder counts invalid orderings.
+	BadOrder = `bad_order`
+	// BadParentID counts invalid parent IDs.
+	BadParentID = `bad_parent_id`
+	// BadParentSchemaID counts invalid parent schema IDs.
+	BadParentSchemaID = `bad_parent_schema_id`
+	// BadPrivileges counts invalid privilege descriptors.
+	BadPrivileges = `bad_privileges`
+	// BadState counts unspecified inconsistencies.
+	BadState = `bad_state`
+	// Mismatch counts unspecified mismatches.
+	Mismatch = `mismatch`
+	// NotFound counts invalid references.
+	NotFound = `not_found`
+	// NotSet counts things that should have been set.
+	NotSet = `not_set`
+	// NotUnique counts things that should have been unique.
+	NotUnique = `not_unique`
+	// NotUnset counts things that should not have been set.
+	NotUnset = `not_unset`
+	// Unclassified counts things which should never happen.
+	Unclassified = `unclassified`
+)
+
 // validateNamespace checks that the namespace entries associated with a
 // descriptor are sane.
 func validateNamespace(
@@ -406,30 +562,32 @@ func validateNamespace(
 		return
 	}
 
-	id := namespace[descpb.NameInfo{
-		ParentID:       desc.GetParentID(),
-		ParentSchemaID: desc.GetParentSchemaID(),
-		Name:           desc.GetName(),
-	}]
+	checkNamespaceEntry := func(nameInfo descpb.NameInfo) {
+		id := namespace[nameInfo]
+		if id == descpb.InvalidID {
+			vea.ReportInternalf(NotFound, "expected matching namespace entry, found none")
+		} else if id != desc.GetID() {
+			vea.ReportInternalf(BadID, "expected matching namespace entry value, instead found %d", id)
+		}
+	}
+
 	// Check that correct entry for descriptor exists and has correct value,
 	// unless if the descriptor is dropped.
 	if !desc.Dropped() {
-		if id == descpb.InvalidID {
-			vea.Report(errors.Errorf("expected matching namespace entry, found none"))
-		} else if id != desc.GetID() {
-			vea.Report(errors.Errorf("expected matching namespace entry value, instead found %d", id))
-		}
+		checkNamespaceEntry(descpb.NameInfo{
+			ParentID:       desc.GetParentID(),
+			ParentSchemaID: desc.GetParentSchemaID(),
+			Name:           desc.GetName(),
+		})
 	}
 
 	// Check that all draining name entries exist and are correct.
 	for _, dn := range desc.GetDrainingNames() {
-		id := namespace[dn]
-		if id == descpb.InvalidID {
-			vea.Report(errors.Errorf("expected matching namespace entry for draining name (%d, %d, %s), found none",
-				dn.ParentID, dn.ParentSchemaID, dn.Name))
-		} else if id != desc.GetID() {
-			vea.Report(errors.Errorf("expected matching namespace entry value for draining name (%d, %d, %s), instead found %d",
-				dn.ParentID, dn.ParentSchemaID, dn.Name, id))
-		}
+		func() {
+			vea.PushContextf(`draining_name`, "draining name (%d, %d, %s)",
+				dn.ParentID, dn.ParentSchemaID, dn.Name)
+			defer vea.PopContext()
+			checkNamespaceEntry(dn)
+		}()
 	}
 }

@@ -449,7 +449,7 @@ TABLE "regional_us-east-1_table"  ALTER TABLE "regional_us-east-1_table" CONFIGU
                                   voter_constraints = '{+region=us-east-1: 2}',
                                   lease_preferences = '[[+region=us-east-1]]'
 
-statement error region "test4" has not been added to database "multi_region_test_db"\nHINT: available regions: ap-southeast-2, ca-central-1, us-east-1
+statement error pq: relation "regional_test4_table" \([0-9]+\): parent database "multi_region_test_db" \([0-9]+\): homing region "test4" for REGIONAL BY TABLE table not found in multi-region enum "crdb_internal_region" \([0-9]+\)\nHINT: available regions: ap-southeast-2, ca-central-1, us-east-1
 CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
 
 statement ok
@@ -1042,7 +1042,7 @@ SHOW ENUMS FROM drop_region_db
 schema  name                  values                         owner
 public  crdb_internal_region  {ap-southeast-2,ca-central-1}  root
 
-statement error pq: relation "t" \([0-9]+\): invalid locality config: region "us-east-1" has not been added to database "drop_region_db"
+statement error pq: relation "t" \([0-9]+\): parent database "drop_region_db" \([0-9]+\): homing region "us-east-1" for REGIONAL BY TABLE table not found in multi-region enum "crdb_internal_region" \([0-9]+\)
 CREATE TABLE drop_region_db.public.t(a int) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 statement ok

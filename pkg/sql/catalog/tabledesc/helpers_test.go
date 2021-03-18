@@ -20,7 +20,7 @@ func ValidatePartitioning(immI catalog.TableDescriptor) error {
 	if !ok {
 		return errors.Errorf("expected immutable descriptor")
 	}
-	return imm.validatePartitioning()
+	return imm.validatePartitioning(nil /* maybeVea */)
 }
 
 func GetPostDeserializationChanges(
