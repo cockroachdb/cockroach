@@ -38,11 +38,17 @@ type NewColOperatorArgs struct {
 	StreamingMemAccount  *mon.BoundAccount
 	ProcessorConstructor execinfra.ProcessorConstructor
 	LocalProcessors      []execinfra.LocalProcessor
-	DiskQueueCfg         colcontainer.DiskQueueCfg
-	FDSemaphore          semaphore.Semaphore
-	ExprHelper           *ExprHelper
-	Factory              coldata.ColumnFactory
-	TestingKnobs         struct {
+	// MetadataSources are all sources of the metadata that are present in the
+	// trees rooted in Inputs. The slice has the same length as Inputs. If
+	// NewColOperator call creates a colexec.Materializer, then it will take
+	// over the responsibility of draining the sources; otherwise, they will be
+	// returned in NewColOperatorResult.
+	MetadataSources []execinfrapb.MetadataSources
+	DiskQueueCfg    colcontainer.DiskQueueCfg
+	FDSemaphore     semaphore.Semaphore
+	ExprHelper      *ExprHelper
+	Factory         coldata.ColumnFactory
+	TestingKnobs    struct {
 		// SpillingCallbackFn will be called when the spilling from an in-memory
 		// to disk-backed operator occurs. It should only be set in tests.
 		SpillingCallbackFn func()
@@ -82,10 +88,16 @@ type NewColOperatorArgs struct {
 // NewColOperatorResult is a helper struct that encompasses all of the return
 // values of NewColOperator call.
 type NewColOperatorResult struct {
-	Op              colexecop.Operator
-	KVReader        colexecop.KVReader
-	ColumnTypes     []*types.T
-	MetadataSources []execinfrapb.MetadataSource
+	Op          colexecop.Operator
+	KVReader    colexecop.KVReader
+	ColumnTypes []*types.T
+	// MetadataSources are all sources of the metadata that are present in the
+	// tree rooted in Op that the caller must drain. These can be
+	// colfetcher.ColBatchScan or colexec.Columnarizer operators that were
+	// created during NewColOperator call, but it also might include all of the
+	// sources from NewColOperatorArgs.MetadataSources if no metadata draining
+	// component was created.
+	MetadataSources execinfrapb.MetadataSources
 	// ToClose is a slice of components that need to be Closed.
 	ToClose     []colexecop.Closer
 	OpMonitors  []*mon.BytesMonitor

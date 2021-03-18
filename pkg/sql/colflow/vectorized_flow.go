@@ -1081,24 +1081,29 @@ func (s *vectorizedFlowCreator) setupFlow(
 				return
 			}
 
-			// metadataSourcesQueue contains all the MetadataSources that need to be
+			// metadataSources contains all the MetadataSources that need to be
 			// drained. If in a given loop iteration no component that can drain
-			// metadata from these sources is found, the metadataSourcesQueue should be
-			// added as part of one of the last unconnected inputDAGs in
-			// streamIDToInputOp. This is to avoid cycles.
-			var metadataSourcesQueue []execinfrapb.MetadataSource
+			// metadata from these sources is found, the metadataSourcesQueue
+			// should be added as part of one of the last unconnected inputDAGs
+			// in streamIDToInputOp. This is to avoid cycles.
+			//
+			// The length of the slice is equal to the number of inputs (1 for
+			// most of processors, but could also be 0 or 2), and we keep the
+			// sources present in different input trees separately in order to
+			// prevent premature draining (in case of 2 inputs).
+			var metadataSources []execinfrapb.MetadataSources
 			// toClose is similar to metadataSourcesQueue with the difference that these
 			// components do not produce metadata and should be Closed even during
 			// non-graceful termination.
 			var toClose []colexecop.Closer
 			inputs := s.inputsScratch[:0]
 			for i := range pspec.Input {
-				input, metadataSources, closers, localErr := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
+				input, ms, closers, localErr := s.setupInput(ctx, flowCtx, pspec.Input[i], opt, factory)
 				if localErr != nil {
 					err = localErr
 					return
 				}
-				metadataSourcesQueue = append(metadataSourcesQueue, metadataSources...)
+				metadataSources = append(metadataSources, ms)
 				toClose = append(toClose, closers...)
 				inputs = append(inputs, input)
 			}
@@ -1115,6 +1120,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 				StreamingMemAccount:  s.newStreamingMemAccount(flowCtx),
 				ProcessorConstructor: rowexec.NewProcessor,
 				LocalProcessors:      localProcessors,
+				MetadataSources:      metadataSources,
 				DiskQueueCfg:         s.diskQueueCfg,
 				FDSemaphore:          s.fdSemaphore,
 				ExprHelper:           s.exprHelper,
@@ -1138,7 +1144,6 @@ func (s *vectorizedFlowCreator) setupFlow(
 			if flowCtx.EvalCtx.SessionData.TestingVectorizeInjectPanics {
 				result.Op = newPanicInjector(result.Op)
 			}
-			metadataSourcesQueue = append(metadataSourcesQueue, result.MetadataSources...)
 			if flowCtx.Cfg != nil && flowCtx.Cfg.TestingKnobs.CheckVectorizedFlowIsClosedCorrectly {
 				for _, closer := range result.ToClose {
 					func(c colexecop.Closer) {
@@ -1173,7 +1178,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 
 			if err = s.setupOutput(
-				ctx, flowCtx, pspec, op, result.ColumnTypes, metadataSourcesQueue, toClose, factory,
+				ctx, flowCtx, pspec, op, result.ColumnTypes, result.MetadataSources, toClose, factory,
 			); err != nil {
 				return
 			}

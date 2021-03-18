@@ -72,7 +72,9 @@ type Materializer struct {
 // trailing metadata state, which is meant only for internal metadata
 // generation.
 type drainHelper struct {
-	sources      execinfrapb.MetadataSources
+	sources execinfrapb.MetadataSources
+	// If unset, the drainHelper wasn't Start()'ed, so all operations on it
+	// are noops.
 	ctx          context.Context
 	bufferedMeta []execinfrapb.ProducerMetadata
 	getStats     func() []*execinfrapb.ComponentStats
@@ -110,6 +112,10 @@ func (d *drainHelper) Start(ctx context.Context) {
 
 // Next implements the RowSource interface.
 func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if d.ctx == nil {
+		// The drainHelper wasn't Start()'ed, so this operation is a noop.
+		return nil, nil
+	}
 	if d.bufferedMeta == nil {
 		d.bufferedMeta = d.sources.DrainMeta(d.ctx)
 		if d.bufferedMeta == nil {
@@ -127,6 +133,10 @@ func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 
 // ConsumerDone implements the RowSource interface.
 func (d *drainHelper) ConsumerDone() {
+	if d.ctx == nil {
+		// The drainHelper wasn't Start()'ed, so this operation is a noop.
+		return
+	}
 	if d.getStats != nil {
 		// If getStats is non-nil, then the drainHelper is responsible for
 		// attaching the execution statistics to the span, yet we don't get the
@@ -255,12 +265,17 @@ func (m *Materializer) Child(nth int, verbose bool) execinfra.OpNode {
 // Start is part of the execinfra.RowSource interface.
 func (m *Materializer) Start(ctx context.Context) {
 	ctx = m.ProcessorBase.StartInternal(ctx, materializerProcName)
-	m.drainHelper.Start(ctx)
 	// We can encounter an expected error during Init (e.g. an operator
 	// attempts to allocate a batch, but the memory budget limit has been
 	// reached), so we need to wrap it with a catcher.
 	if err := colexecerror.CatchVectorizedRuntimeError(m.input.Init); err != nil {
 		m.MoveToDraining(err)
+	} else {
+		// Note that we intentionally only start the drain helper if
+		// initialization was successful - no starting the helper will tell it
+		// to not drain the metadata sources (which have not been properly
+		// initialized).
+		m.drainHelper.Start(ctx)
 	}
 }
 
