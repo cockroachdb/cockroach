@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -412,11 +413,26 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if desc.LocalityConfig != nil {
+		_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+			params.ctx,
+			params.p.txn,
+			desc.ParentID,
+			tree.DatabaseLookupFlags{Required: true},
+		)
+		if err != nil {
+			return errors.Wrap(err, "error resolving database for multi-region")
+		}
+
+		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.ID, params.p.Descriptors())
+		if err != nil {
+			return err
+		}
+
 		if err := ApplyZoneConfigForMultiRegionTable(
 			params.ctx,
 			params.p.txn,
 			params.p.ExecCfg(),
-			*n.dbDesc.GetRegionConfig(),
+			regionConfig,
 			desc,
 			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 		); err != nil {
@@ -425,10 +441,14 @@ func (n *createTableNode) startExec(params runParams) error {
 		// Save the reference on the multi-region enum if there is a dependency with
 		// the descriptor.
 		if desc.GetMultiRegionEnumDependencyIfExists() {
+			regionEnumID, err := dbDesc.MultiRegionEnumID()
+			if err != nil {
+				return err
+			}
 			typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
 				params.ctx,
 				params.p.txn,
-				n.dbDesc.GetRegionConfig().RegionEnumID,
+				regionEnumID,
 			)
 			if err != nil {
 				return errors.Wrap(err, "error resolving multi-region enum")
@@ -1512,7 +1532,7 @@ func NewTableDesc(
 	st *cluster.Settings,
 	n *tree.CreateTable,
 	parentID, parentSchemaID, id descpb.ID,
-	regionConfig *descpb.DatabaseDescriptor_RegionConfig,
+	regionConfig *multiregion.RegionConfig,
 	creationTime hlc.Timestamp,
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
@@ -1620,7 +1640,7 @@ func NewTableDesc(
 					if err != nil {
 						return nil, errors.Wrap(err, "error resolving REGIONAL BY ROW column type")
 					}
-					if t.Oid() != typedesc.TypeIDToOID(regionConfig.RegionEnumID) {
+					if t.Oid() != typedesc.TypeIDToOID(regionConfig.RegionEnumID()) {
 						err = pgerror.Newf(
 							pgcode.InvalidTableDefinition,
 							"cannot use column %s which has type %s in REGIONAL BY ROW",
@@ -1629,7 +1649,7 @@ func NewTableDesc(
 						)
 						if t, terr := vt.ResolveTypeByOID(
 							ctx,
-							typedesc.TypeIDToOID(regionConfig.RegionEnumID),
+							typedesc.TypeIDToOID(regionConfig.RegionEnumID()),
 						); terr == nil {
 							if n.Locality.RegionalByRowColumn != tree.RegionalByRowRegionNotSpecifiedName {
 								// In this case, someone used REGIONAL BY ROW AS <col> where
@@ -1665,7 +1685,7 @@ func NewTableDesc(
 					regionalByRowCol.String(),
 				)
 			}
-			oid := typedesc.TypeIDToOID(regionConfig.RegionEnumID)
+			oid := typedesc.TypeIDToOID(regionConfig.RegionEnumID())
 			n.Defs = append(
 				n.Defs,
 				regionalByRowDefaultColDef(oid, regionalByRowGatewayRegionDefaultExpr(oid)),
@@ -2455,6 +2475,15 @@ func newTableDesc(
 		}
 	}
 
+	var regionConfig *multiregion.RegionConfig
+	if dbDesc.IsMultiRegion() {
+		conf, err := SynthesizeRegionConfig(params.ctx, params.p.txn, parentID, params.p.Descriptors())
+		if err != nil {
+			return nil, err
+		}
+		regionConfig = &conf
+	}
+
 	// We need to run NewTableDesc with caching disabled, because
 	// it needs to pull in descriptors from FK depended-on tables
 	// and interleaved parents using their current state in KV.
@@ -2469,7 +2498,7 @@ func newTableDesc(
 			parentID,
 			parentSchemaID,
 			id,
-			dbDesc.GetRegionConfig(),
+			regionConfig,
 			creationTime,
 			privileges,
 			affected,

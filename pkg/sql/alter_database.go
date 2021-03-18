@@ -172,32 +172,18 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		)
 	}
 
-	if err := validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		params.ctx,
-		n.desc.ID,
-		n.desc.Name,
-		params.p.txn,
-		params.ExecCfg().Codec,
-		params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
-		*n.desc.RegionConfig,
+		&n.desc.Immutable,
 	); err != nil {
 		return err
 	}
 
 	telemetry.Inc(sqltelemetry.AlterDatabaseAddRegionCounter)
 
-	// Add the region to the database descriptor. This function validates that the region
-	// we're adding is an active member of the cluster and isn't already present in the
-	// RegionConfig.
-	if err := params.p.addActiveRegionToRegionConfig(params.ctx, n.desc, n.n); err != nil {
-		return err
-	}
-
-	// Write the modified database descriptor.
-	if err := params.p.writeNonDropDatabaseChange(
+	if err := params.p.checkRegionIsCurrentlyActive(
 		params.ctx,
-		n.desc,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
+		descpb.RegionName(n.n.Region),
 	); err != nil {
 		return err
 	}
@@ -230,6 +216,9 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		&placement,
 		jobDesc,
 	); err != nil {
+		if pgerror.GetPGCode(err) == pgcode.DuplicateObject {
+			return errors.Newf("region %q already added to database", n.n.Region)
+		}
 		return err
 	}
 
@@ -289,14 +278,9 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, pgerror.New(pgcode.InvalidDatabaseDefinition, "database has no regions to drop")
 	}
 
-	if err := validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+	if err := p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		ctx,
-		dbDesc.ID,
-		dbDesc.Name,
-		p.txn,
-		p.ExecCfg().Codec,
-		p.SessionData().OverrideMultiRegionZoneConfigEnabled,
-		*dbDesc.RegionConfig,
+		&dbDesc.Immutable,
 	); err != nil {
 		return nil, err
 	}
@@ -315,7 +299,12 @@ func (p *planner) AlterDatabaseDropRegion(
 		if err != nil {
 			return nil, err
 		}
-		regions, err := typeDesc.RegionNames()
+
+		// Ensure that there's only 1 region on the multi-region enum (the primary
+		// region) as this can only be dropped once all other regions have been
+		// dropped. This check must account for regions that are transitioning,
+		// as transitions aren't guaranteed to succeed.
+		regions, err := typeDesc.RegionNamesIncludingTransitioning()
 		if err != nil {
 			return nil, err
 		}
@@ -352,39 +341,13 @@ func (p *planner) AlterDatabaseDropRegion(
 		}
 	}
 
-	if dbDesc.RegionConfig.SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
-		typeID, err := dbDesc.MultiRegionEnumID()
-		if err != nil {
-			return nil, err
-		}
-		typeDesc, err := p.Descriptors().GetMutableTypeVersionByID(ctx, p.txn, typeID)
-		if err != nil {
-			return nil, err
-		}
-		regionNames, err := typeDesc.RegionNames()
-		if err != nil {
-			return nil, err
-		}
-		if len(regionNames) < multiregion.MinNumRegionsForSurviveRegionGoal {
-			return nil, errors.AssertionFailedf(
-				"database %s has < %d regions left, but has SURVIVE REGION FAILURE",
-				dbDesc.Name,
-				multiregion.MinNumRegionsForSurviveRegionGoal,
-			)
-		}
-		if len(regionNames) == multiregion.MinNumRegionsForSurviveRegionGoal {
-			return nil, errors.WithHintf(
-				pgerror.Newf(
-					pgcode.ObjectNotInPrerequisiteState,
-					"cannot DROP REGION on database %s as databases with SURVIVE REGION FAILURE must have at least %d regions",
-					dbDesc.Name,
-					multiregion.MinNumRegionsForSurviveRegionGoal,
-				),
-				"you must first add another region, or configure the database to SURVIVE ZONE FAILURE "+
-					"using ALTER DATABASE %s SURVIVE ZONE FAILURE",
-				dbDesc.Name,
-			)
-		}
+	// Ensure survivability goal and number of regions after the drop jive.
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
+	if err != nil {
+		return nil, err
+	}
+	if err := multiregion.CanDropRegion(regionConfig); err != nil {
+		return nil, err
 	}
 
 	return &alterDatabaseDropRegionNode{
@@ -469,28 +432,6 @@ func (n *alterDatabaseDropRegionNode) startExec(params runParams) error {
 		if err := params.p.dropEnumValue(params.ctx, typeDesc, tree.EnumValue(n.n.Region)); err != nil {
 			return err
 		}
-
-		// Remove the region from the database descriptor as well.
-		idx := 0
-		found := false
-		for i, region := range n.desc.RegionConfig.Regions {
-			if region.Name == descpb.RegionName(n.n.Region) {
-				idx = i
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			// This shouldn't happen and is simply a sanity check to ensure the database
-			// descriptor regions and multi-region enum regions are indeed consistent.
-			return errors.AssertionFailedf(
-				"attempting to drop region %s not on database descriptor %d but found on type descriptor",
-				n.n.Region, n.desc.GetID(),
-			)
-		}
-		n.desc.RegionConfig.Regions = append(n.desc.RegionConfig.Regions[:idx],
-			n.desc.RegionConfig.Regions[idx+1:]...)
 	}
 
 	if err := params.p.writeNonDropDatabaseChange(
@@ -548,9 +489,13 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 	telemetry.Inc(sqltelemetry.SwitchPrimaryRegionCounter)
 	// First check if the new primary region has been added to the database. If not, return
 	// an error, as it must be added before it can be used as a primary region.
+	prevRegionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	if err != nil {
+		return err
+	}
 	found := false
-	for _, r := range n.desc.RegionConfig.Regions {
-		if r.Name == descpb.RegionName(n.n.PrimaryRegion) {
+	for _, r := range prevRegionConfig.Regions() {
+		if r == descpb.RegionName(n.n.PrimaryRegion) {
 			found = true
 			break
 		}
@@ -578,8 +523,8 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		return err
 	}
 
-	// To update the primary region we need to modify the database descriptor, update the multi-region
-	// enum, and write a new zone configuration.
+	// To update the primary region we need to modify the database descriptor,
+	// update the multi-region enum, and write a new zone configuration.
 	n.desc.RegionConfig.PrimaryRegion = descpb.RegionName(n.n.PrimaryRegion)
 	if err := params.p.writeNonDropDatabaseChange(
 		params.ctx,
@@ -595,11 +540,18 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		return err
 	}
 
+	updatedRegionConfig, err := SynthesizeRegionConfig(
+		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
+	)
+	if err != nil {
+		return err
+	}
+
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
 		n.desc.ID,
-		*n.desc.RegionConfig,
+		updatedRegionConfig,
 		params.p.txn,
 		params.p.execCfg,
 	); err != nil {
@@ -687,11 +639,11 @@ func checkCanConvertTableToMultiRegion(
 }
 
 // setInitialPrimaryRegion sets the primary region in cases where the database
-// is already a multi-region database.
+// isn't already a multi-region database.
 func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParams) error {
 	telemetry.Inc(sqltelemetry.SetInitialPrimaryRegionCounter)
 	// Create the region config structure to be added to the database descriptor.
-	regionConfig, err := params.p.createRegionConfig(
+	regionConfig, err := params.p.maybeInitializeMultiRegionMetadata(
 		params.ctx,
 		tree.SurvivalGoalDefault,
 		n.n.PrimaryRegion,
@@ -702,13 +654,15 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 	}
 
 	// Set the region config on the database descriptor.
-	n.desc.RegionConfig = regionConfig
+	if err := n.desc.SetInitialMultiRegionConfig(regionConfig); err != nil {
+		return err
+	}
 
 	if err := addDefaultLocalityConfigToAllTables(
 		params.ctx,
 		params.p,
 		&n.desc.Immutable,
-		regionConfig.RegionEnumID,
+		regionConfig.RegionEnumID(),
 	); err != nil {
 		return err
 	}
@@ -724,7 +678,7 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 
 	// Initialize that multi-region database by creating the multi-region enum
 	// and the database-level zone configuration.
-	return params.p.initializeMultiRegionDatabase(params.ctx, n.desc)
+	return params.p.maybeInitializeMultiRegionDatabase(params.ctx, n.desc, regionConfig)
 }
 
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
@@ -760,14 +714,9 @@ func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		if err := validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+		if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 			params.ctx,
-			n.desc.ID,
-			n.desc.Name,
-			params.p.txn,
-			params.ExecCfg().Codec,
-			params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
-			*n.desc.RegionConfig,
+			&n.desc.Immutable,
 		); err != nil {
 			return err
 		}
@@ -839,14 +788,9 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		)
 	}
 
-	if err := validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
+	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		params.ctx,
-		n.desc.ID,
-		n.desc.Name,
-		params.p.txn,
-		params.ExecCfg().Codec,
-		params.p.SessionData().OverrideMultiRegionZoneConfigEnabled,
-		*n.desc.RegionConfig,
+		&n.desc.Immutable,
 	); err != nil {
 		return err
 	}
@@ -857,32 +801,13 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		),
 	)
 
-	// If we're changing to survive a region failure, validate that we have enough regions
-	// in the database.
-	if n.n.SurvivalGoal == tree.SurvivalGoalRegionFailure {
-		regions, err := n.desc.RegionNames()
-		if err != nil {
-			return err
-		}
-		if len(regions) < multiregion.MinNumRegionsForSurviveRegionGoal {
-			return errors.WithHintf(
-				pgerror.Newf(pgcode.InvalidName,
-					"at least %d regions are required for surviving a region failure",
-					multiregion.MinNumRegionsForSurviveRegionGoal,
-				),
-				"you must add additional regions to the database using "+
-					"ALTER DATABASE %s ADD REGION <region_name>",
-				n.n.Name.String(),
-			)
-		}
-	}
-
 	// Update the survival goal in the database descriptor
 	survivalGoal, err := TranslateSurvivalGoal(n.n.SurvivalGoal)
 	if err != nil {
 		return err
 	}
 	n.desc.RegionConfig.SurvivalGoal = survivalGoal
+
 	if err := params.p.writeNonDropDatabaseChange(
 		params.ctx,
 		n.desc,
@@ -891,11 +816,20 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		return err
 	}
 
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	if err != nil {
+		return err
+	}
+
+	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
+		return err
+	}
+
 	// Update the database's zone configuration.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		params.ctx,
 		n.desc.ID,
-		*n.desc.RegionConfig,
+		regionConfig,
 		params.p.txn,
 		params.p.execCfg,
 	); err != nil {

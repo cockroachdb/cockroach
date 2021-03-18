@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -376,7 +377,7 @@ func WriteDescriptors(
 			if err != nil {
 				return err
 			}
-			if dbDesc.GetRegionConfig() != nil {
+			if dbDesc.IsMultiRegion() {
 				if table.GetLocalityConfig() == nil {
 					table.(*tabledesc.Mutable).SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 				}
@@ -1086,7 +1087,7 @@ func createImportingDescriptors(
 				// as the system tables are restored.
 				mrEnumsFound := make(map[descpb.ID]descpb.ID)
 				for _, t := range typesByID {
-					typeDesc := t.TypeDesc()
+					typeDesc := typedesc.NewBuilder(t.TypeDesc()).BuildImmutableType()
 					if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
 						// Check to see if we've found more than one multi-region enum on any
 						// given database.
@@ -1111,10 +1112,20 @@ func createImportingDescriptors(
 							// configuration.
 							if details.DescriptorCoverage != tree.AllDescriptors {
 								log.Infof(ctx, "restoring zone configuration for database %d", desc.ID)
+								regionNames, err := typeDesc.RegionNames()
+								if err != nil {
+									return err
+								}
+								regionConfig := multiregion.MakeRegionConfig(
+									regionNames,
+									desc.RegionConfig.PrimaryRegion,
+									desc.RegionConfig.SurvivalGoal,
+									desc.RegionConfig.RegionEnumID,
+								)
 								if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
 									ctx,
 									desc.GetID(),
-									*desc.RegionConfig,
+									regionConfig,
 									txn,
 									p.ExecCfg(),
 								); err != nil {
@@ -1241,11 +1252,15 @@ func createImportingDescriptors(
 								return err
 							}
 
+							regionConfig, err := sql.SynthesizeRegionConfig(ctx, txn, desc.ID, descsCol)
+							if err != nil {
+								return err
+							}
 							if err := sql.ApplyZoneConfigForMultiRegionTable(
 								ctx,
 								txn,
 								p.ExecCfg(),
-								*desc.RegionConfig,
+								regionConfig,
 								mutTable,
 								sql.ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 							); err != nil {

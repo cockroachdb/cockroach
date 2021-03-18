@@ -26,10 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -432,11 +432,7 @@ func performMultiRegionFinalization(
 	execCfg *ExecutorConfig,
 	descsCol *descs.Collection,
 ) ([]descpb.ID, error) {
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{
-			AvoidCached: true,
-			Required:    true,
-		})
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.ParentID, descsCol)
 	if err != nil {
 		return nil, err
 	}
@@ -444,15 +440,15 @@ func performMultiRegionFinalization(
 	// zone configuration on the database.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		ctx,
-		dbDesc.ID,
-		*dbDesc.RegionConfig,
+		typeDesc.ParentID,
+		regionConfig,
 		txn,
 		execCfg,
 	); err != nil {
 		return nil, err
 	}
 
-	return repartitionRegionalByRowTables(ctx, typeDesc, dbDesc, txn, execCfg, descsCol)
+	return repartitionRegionalByRowTables(ctx, typeDesc, txn, execCfg, descsCol, regionConfig)
 }
 
 // repartitionRegionalByRowTables takes a multi-region enum and re-partitions
@@ -467,10 +463,10 @@ func performMultiRegionFinalization(
 func repartitionRegionalByRowTables(
 	ctx context.Context,
 	typeDesc *typedesc.Immutable,
-	dbDesc *dbdesc.Immutable,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	descsCol *descs.Collection,
+	regionConfig multiregion.RegionConfig,
 ) ([]descpb.ID, error) {
 	var repartitionedTableIDs []descpb.ID
 	if typeDesc.GetKind() != descpb.TypeDescriptor_MULTIREGION_ENUM {
@@ -491,6 +487,13 @@ func repartitionRegionalByRowTables(
 	localPlanner := p.(*planner)
 
 	allDescs, err := localPlanner.Descriptors().GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{
+			Required: true,
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +524,7 @@ func repartitionRegionalByRowTables(
 		if err != nil {
 			return nil, err
 		}
-		partitionAllBy := partitionByForRegionalByRow(*dbDesc.RegionConfig, colName)
+		partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
 
 		// oldPartitioningDescs saves the old partitioning descriptors for each
 		// index that is repartitioned. This is later used to remove zone
@@ -579,11 +582,15 @@ func repartitionRegionalByRowTables(
 		}
 
 		// Update the zone configurations now that the partition's been added.
+		regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.ParentID, descsCol)
+		if err != nil {
+			return nil, err
+		}
 		if err := ApplyZoneConfigForMultiRegionTable(
 			ctx,
 			txn,
 			localPlanner.ExecCfg(),
-			*dbDesc.RegionConfig,
+			regionConfig,
 			tableDesc,
 			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 		); err != nil {
@@ -653,63 +660,8 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 			return nil
 		}
 
-		// First, we deal with cleanup specific to the multi-region enum.
-		// TODO(arul): This can go away once we stop copying regions on the dataabse
-		// descriptor.
-		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
-			for _, member := range typeDesc.EnumMembers {
-				if t.isTransitioningInCurrentJob(&member) {
-					_, dbDesc, err := descsCol.GetMutableDatabaseByID(
-						ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
-					if err != nil {
-						return err
-					}
-
-					// If the enum member was being removed, we need to add it back to the
-					// database region config.
-					if enumMemberIsRemoving(&member) {
-						err = addRegionToRegionConfig(dbDesc, descpb.RegionName(member.LogicalRepresentation))
-						if err != nil {
-							return err
-						}
-						if err := descsCol.WriteDescToBatch(ctx, true /* kvTrace */, dbDesc, b); err != nil {
-							return err
-						}
-					}
-
-					// If the enum member was being added, we must remove it from the
-					// database region config.
-					if enumMemberIsAdding(&member) {
-						idx := 0
-						found := false
-						for i, region := range dbDesc.RegionConfig.Regions {
-							if region.Name == descpb.RegionName(member.LogicalRepresentation) {
-								idx = i
-								found = true
-								break
-							}
-						}
-
-						if !found {
-							// This shouldn't happen and is simply a sanity check to ensure the
-							// database descriptor regions and multi-region enum regions are
-							// in sync.
-							return errors.AssertionFailedf(
-								"expected to find region on database %d during cleanup", dbDesc.GetID(),
-							)
-						}
-						dbDesc.RegionConfig.Regions = append(dbDesc.RegionConfig.Regions[:idx],
-							dbDesc.RegionConfig.Regions[idx+1:]...)
-						if err := descsCol.WriteDescToBatch(ctx, true /* kvTrace */, dbDesc, b); err != nil {
-							return err
-						}
-					}
-				}
-			}
-		}
-
-		// Next, deal with all members that we initially hoped to remove but
-		// now need to be promoted back to writable.
+		// Deal with all members that we initially hoped to remove but now need to
+		// be promoted back to writable.
 		for i := range typeDesc.EnumMembers {
 			member := &typeDesc.EnumMembers[i]
 			if t.isTransitioningInCurrentJob(member) && enumMemberIsRemoving(member) {

@@ -150,7 +150,6 @@ type DatabaseDescriptor interface {
 	DatabaseDesc() *descpb.DatabaseDescriptor
 
 	GetRegionConfig() *descpb.DatabaseDescriptor_RegionConfig
-	RegionNames() (descpb.RegionNames, error)
 	IsMultiRegion() bool
 	PrimaryRegionName() (descpb.RegionName, error)
 	MultiRegionEnumID() (descpb.ID, error)
@@ -554,6 +553,7 @@ type TypeDescriptor interface {
 
 	PrimaryRegionName() (descpb.RegionName, error)
 	RegionNames() (descpb.RegionNames, error)
+	RegionNamesIncludingTransitioning() (descpb.RegionNames, error)
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type
