@@ -588,10 +588,18 @@ func addDefaultLocalityConfigToAllTables(
 				return err
 			}
 
-			if err := p.alterTableDescLocalityToRegionalByTable(
-				ctx, tree.PrimaryRegionNotSpecifiedName, mutDesc, regionEnumID,
-			); err != nil {
-				return err
+			if mutDesc.MaterializedView() {
+				if err := p.alterTableDescLocalityToGlobal(
+					ctx, mutDesc, regionEnumID,
+				); err != nil {
+					return err
+				}
+			} else {
+				if err := p.alterTableDescLocalityToRegionalByTable(
+					ctx, tree.PrimaryRegionNotSpecifiedName, mutDesc, regionEnumID,
+				); err != nil {
+					return err
+				}
 			}
 
 			if err := p.writeSchemaChangeToBatch(ctx, mutDesc, b); err != nil {
