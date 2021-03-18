@@ -100,7 +100,11 @@ func interestingOrderingsForScan(scan *memo.ScanExpr) opt.OrderingSet {
 func interestingOrderingsForProject(prj *memo.ProjectExpr) opt.OrderingSet {
 	inOrd := DeriveInterestingOrderings(prj.Input)
 	res := inOrd.Copy()
-	res.RestrictToCols(prj.Passthrough)
+	outCols := prj.Relational().OutputCols
+	fds := prj.InternalFDs()
+	res.RestrictToCols(outCols, func(col opt.ColumnID) opt.ColSet {
+		return fds.ComputeEquivClosure(opt.MakeColSet(col))
+	})
 	return res
 }
 
@@ -121,7 +125,7 @@ func interestingOrderingsForGroupBy(rel memo.RelExpr) opt.OrderingSet {
 	}
 
 	// We can only keep orderings on grouping columns.
-	res.RestrictToCols(private.GroupingCols)
+	res.RestrictToCols(private.GroupingCols, nil /* equivCols */)
 	return res
 }
 
