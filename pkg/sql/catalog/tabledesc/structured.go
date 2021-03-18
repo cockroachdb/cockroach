@@ -188,7 +188,11 @@ func (desc *wrapper) AllActiveAndInactiveChecks() []*descpb.TableDescriptor_Chec
 	}
 	for _, m := range desc.Mutations {
 		if c := m.GetConstraint(); c != nil && c.ConstraintType == descpb.ConstraintToUpdate_CHECK {
-			checks = append(checks, &c.Check)
+			// Any mutations that are dropped should be
+			// excluded to avoid returning duplicates.
+			if m.Direction != descpb.DescriptorMutation_DROP {
+				checks = append(checks, &c.Check)
+			}
 		}
 	}
 	return checks
