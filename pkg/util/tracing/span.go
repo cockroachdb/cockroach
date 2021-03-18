@@ -113,10 +113,16 @@ func (sp *Span) ImportRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 // boundaries in order to derive child spans from this Span. This may return
 // nil, which is a valid input to `WithParentAndManualCollection`, if the Span
 // has been optimized out.
+// XXX: This allocates. If only it didn't. Is it for the nil value? There should
+// be better ways to do this.
 func (sp *Span) Meta() *SpanMeta {
 	// It shouldn't be done in practice, but it is allowed to call Meta on
 	// a finished span.
 	return sp.i.Meta()
+}
+
+func (sp *Span) MetaV2(sm *SpanMeta) *SpanMeta {
+	return sp.i.MetaV2(sm)
 }
 
 // SetVerbose toggles verbose recording on the Span, which must not be a noop
@@ -252,6 +258,15 @@ type SpanMeta struct {
 
 func (sm *SpanMeta) String() string {
 	return fmt.Sprintf("[spanID: %d, traceID: %d]", sm.spanID, sm.traceID)
+}
+
+func (sm *SpanMeta) Reset() {
+	sm.traceID = 0
+	sm.spanID = 0
+	sm.shadowTracerType = ""
+	sm.recordingType = RecordingOff
+	sm.shadowCtx = nil
+	sm.Baggage = nil
 }
 
 // Structured is an opaque protobuf that can be attached to a trace via

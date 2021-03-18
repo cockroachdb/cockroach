@@ -130,6 +130,53 @@ func (s *spanInner) Finish() {
 	}
 }
 
+func (s *spanInner) MetaV2(sm *SpanMeta) *SpanMeta {
+	// XXX: Reset all fields
+
+	var traceID uint64
+	var spanID uint64
+	var recordingType RecordingType
+	var baggage map[string]string
+
+	if s.crdb != nil {
+		traceID, spanID = s.crdb.traceID, s.crdb.spanID
+		s.crdb.mu.Lock()
+		defer s.crdb.mu.Unlock()
+		n := len(s.crdb.mu.baggage)
+		// In the common case, we have no baggage, so avoid making an empty map.
+		if n > 0 {
+			baggage = make(map[string]string, n)
+		}
+		for k, v := range s.crdb.mu.baggage {
+			baggage[k] = v
+		}
+		recordingType = s.crdb.mu.recording.recordingType.load()
+	}
+
+	var shadowTrTyp string
+	var shadowCtx opentracing.SpanContext
+	if s.ot.shadowSpan != nil {
+		shadowTrTyp, _ = s.ot.shadowTr.Type()
+		shadowCtx = s.ot.shadowSpan.Context()
+	}
+
+	if traceID == 0 &&
+		spanID == 0 &&
+		shadowTrTyp == "" &&
+		shadowCtx == nil &&
+		recordingType == 0 &&
+		baggage == nil {
+		return nil
+	}
+	sm.traceID = traceID
+	sm.spanID = spanID
+	sm.recordingType = recordingType
+	sm.shadowTracerType = shadowTrTyp
+	sm.Baggage = baggage
+	sm.shadowCtx = shadowCtx
+	return sm
+}
+
 func (s *spanInner) Meta() *SpanMeta {
 	var traceID uint64
 	var spanID uint64

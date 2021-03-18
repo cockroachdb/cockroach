@@ -363,6 +363,8 @@ func (t *Tracer) startSpanGeneric(
 	spanID := uint64(rand.Int63())
 	goroutineID := uint64(goid.Get())
 
+	// XXX: We should have a child-metadata-only span type instead of allocating
+	// the whole thing.
 	// Now allocate the main *Span and contained crdbSpan.
 	// Allocate these together to save on individual allocs.
 	//
@@ -773,7 +775,20 @@ func ChildSpanRemote(ctx context.Context, opName string) (context.Context, *Span
 	if sp == nil {
 		return ctx, nil
 	}
-	return sp.Tracer().StartSpanCtx(ctx, opName, WithParentAndManualCollection(sp.Meta()))
+	// XXX: This is in the hotpath, and Meta allocates. Can we syncpool here?
+	// Only needed for init.
+	spMeta := metaPool.Get().(*SpanMeta)
+	// ctx, sp := sp.Tracer().StartSpanCtx(ctx, opName, WithParentAndManualCollection(sp.Meta()))
+	ctx, sp = sp.Tracer().StartSpanCtx(ctx, opName, WithParentAndManualCollection(sp.MetaV2(spMeta)))
+	spMeta.Reset()
+	metaPool.Put(spMeta)
+	return ctx, sp
+}
+
+var metaPool = sync.Pool{
+	New: func() interface{} {
+		return &SpanMeta{}
+	},
 }
 
 // EnsureChildSpan looks at the supplied Context. If it contains a Span, returns

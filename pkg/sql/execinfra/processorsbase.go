@@ -707,8 +707,12 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 				pb.span.RecordStructured(stats)
 			}
 		}
+		// XXX: We're materializing the recording regardless of sample rate. Is that what we want?
+		// What happens if we just don't do anything here?
 		if trace := pb.span.GetRecording(); trace != nil {
-			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+			if len(trace) != 0 {
+				pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
+			}
 		}
 	}
 
