@@ -237,7 +237,13 @@ func DrainAndForwardMetadata(ctx context.Context, src RowSource, dst RowReceiver
 // GetTraceData returns the trace data.
 func GetTraceData(ctx context.Context) []tracingpb.RecordedSpan {
 	if sp := tracing.SpanFromContext(ctx); sp != nil {
-		return sp.GetRecording()
+		// XXX: Hack to drop trace data if empty. This should elide flows of
+		// extra producer metadata.
+		rec := sp.GetRecording()
+		if len(rec) == 0 {
+			return nil
+		}
+		return rec
 	}
 	return nil
 }
