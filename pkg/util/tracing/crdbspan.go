@@ -33,6 +33,7 @@ type crdbSpan struct {
 	spanID       uint64 // probabilistically unique
 	parentSpanID uint64
 	goroutineID  uint64
+	rootSpan     bool // XXX: Should be its own type.
 
 	operation string
 	startTime time.Time

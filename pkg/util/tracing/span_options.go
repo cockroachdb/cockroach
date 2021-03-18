@@ -76,6 +76,8 @@ func (opts *spanOptions) shadowTrTyp() (string, bool) {
 // - WithCtxLogTags: like WithLogTags, but takes a `context.Context`.
 // - WithTags: adds tags to a Span on creation.
 // - WithForceRealSpan: prevents optimizations that can avoid creating a real span.
+//
+// XXX: Are these allocating? Why not be more functional?
 type SpanOption interface {
 	apply(spanOptions) spanOptions
 }

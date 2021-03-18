@@ -662,7 +662,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmtThresholdSpan.Finish()
 		logTraceAboveThreshold(
 			ctx,
-			stmtThresholdSpan.GetRecording(),
+			stmtThresholdSpan,
 			fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
 			stmtTraceThreshold,
 			timeutil.Since(ex.phaseTimes[sessionQueryReceived]),
@@ -1555,11 +1555,12 @@ func createRootOrChildSpan(
 // given threshold. It is used when txn or stmt threshold tracing is enabled.
 // This function assumes that sp is non-nil and threshold tracing was enabled.
 func logTraceAboveThreshold(
-	ctx context.Context, r tracing.Recording, opName string, threshold, elapsed time.Duration,
+	ctx context.Context, sp *tracing.Span, opName string, threshold, elapsed time.Duration,
 ) {
 	if elapsed < threshold {
 		return
 	}
+	r := sp.GetRecording()
 	if r == nil {
 		log.Warning(ctx, "missing trace when threshold tracing was enabled")
 		return

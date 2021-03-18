@@ -220,7 +220,7 @@ func (ts *txnState) finishSQLTxn() {
 	}
 
 	if ts.recordingThreshold > 0 {
-		logTraceAboveThreshold(ts.Ctx, sp.GetRecording(), "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
+		logTraceAboveThreshold(ts.Ctx, sp, "SQL txn", ts.recordingThreshold, timeutil.Since(ts.recordingStart))
 	}
 
 	sp.Finish()

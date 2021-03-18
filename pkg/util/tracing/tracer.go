@@ -444,6 +444,7 @@ func (t *Tracer) startSpanGeneric(
 	} else {
 		// Local root span - put it into the registry of active local root
 		// spans. `Span.Finish` takes care of deleting it again.
+		s.i.crdb.rootSpan = true
 		t.activeSpans.Lock()
 
 		// Ensure that the registry does not grow unboundedly in case there
