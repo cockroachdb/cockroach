@@ -148,9 +148,12 @@ var concurrentRangefeedItersLimit = settings.RegisterIntSetting(
 
 // Minimum time interval between system config updates which will lead to
 // enqueuing replicas.
-var queueAdditionOnSystemConfigUpdateRate = settings.RegisterFloatSetting(
+//
+// Note that the name refers to queues because it used to be more narrow in what
+// was being rate-limited.
+var systemConfigUpdateRate = settings.RegisterFloatSetting(
 	"kv.store.system_config_update.queue_add_rate",
-	"the rate (per second) at which the store will add, all replicas to the split and merge queue due to system config gossip",
+	"the rate (per second) at which the store will process system config gossip updates",
 	.5,
 	settings.NonNegativeFloat,
 )
@@ -158,9 +161,12 @@ var queueAdditionOnSystemConfigUpdateRate = settings.RegisterFloatSetting(
 // Minimum time interval between system config updates which will lead to
 // enqueuing replicas. The default is relatively high to deal with startup
 // scenarios.
-var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
+//
+// Note that the name refers to queues because it used to be more narrow in what
+// was being rate-limited.
+var systemConfigUpdateBurst = settings.RegisterIntSetting(
 	"kv.store.system_config_update.queue_add_burst",
-	"the burst rate at which the store will add all replicas to the split and merge queue due to system config gossip",
+	"the burst rate at which the store will process system config gossip updates",
 	32,
 	settings.NonNegativeInt,
 )
@@ -623,8 +629,8 @@ type Store struct {
 	// tenantRateLimiters manages tenantrate.Limiters
 	tenantRateLimiters *tenantrate.LimiterFactory
 
-	computeInitialMetrics              sync.Once
-	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
+	computeInitialMetrics         sync.Once
+	systemConfigUpdateRateLimiter *quotapool.RateLimiter
 }
 
 var _ kv.Sender = &Store{}
@@ -904,18 +910,18 @@ func NewStore(
 	s.tenantRateLimiters = tenantrate.NewLimiterFactory(cfg.Settings, &cfg.TestingKnobs.TenantRateKnobs)
 	s.metrics.registry.AddMetricStruct(s.tenantRateLimiters.Metrics())
 
-	s.systemConfigUpdateQueueRateLimiter = quotapool.NewRateLimiter(
+	s.systemConfigUpdateRateLimiter = quotapool.NewRateLimiter(
 		"SystemConfigUpdateQueue",
-		quotapool.Limit(queueAdditionOnSystemConfigUpdateRate.Get(&cfg.Settings.SV)),
-		queueAdditionOnSystemConfigUpdateBurst.Get(&cfg.Settings.SV))
+		quotapool.Limit(systemConfigUpdateRate.Get(&cfg.Settings.SV)),
+		systemConfigUpdateBurst.Get(&cfg.Settings.SV))
 	updateSystemConfigUpdateQueueLimits := func() {
-		s.systemConfigUpdateQueueRateLimiter.UpdateLimit(
-			quotapool.Limit(queueAdditionOnSystemConfigUpdateRate.Get(&cfg.Settings.SV)),
-			queueAdditionOnSystemConfigUpdateBurst.Get(&cfg.Settings.SV))
+		s.systemConfigUpdateRateLimiter.UpdateLimit(
+			quotapool.Limit(systemConfigUpdateRate.Get(&cfg.Settings.SV)),
+			systemConfigUpdateBurst.Get(&cfg.Settings.SV))
 	}
-	queueAdditionOnSystemConfigUpdateRate.SetOnChange(&cfg.Settings.SV,
+	systemConfigUpdateRate.SetOnChange(&cfg.Settings.SV,
 		updateSystemConfigUpdateQueueLimits)
-	queueAdditionOnSystemConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
+	systemConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
 		updateSystemConfigUpdateQueueLimits)
 
 	if s.cfg.Gossip != nil {
@@ -1542,12 +1548,37 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// This may trigger splits along structured boundaries,
 		// and update max range bytes.
 		gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
+
 		_ = s.stopper.RunAsyncTask(ctx, "syscfg-listener", func(context.Context) {
+			ctx, cancel := s.stopper.WithCancelOnQuiesce(s.AnnotateCtx(ctx))
+			defer cancel()
+
+			// The goal of processing system config updates is to make sure that
+			// we do indeed see changes which need to apply to the KV layer. The
+			// risk, however, is that this operation is O(ranges) and for each range
+			// can require unmarshaling a bunch of data. If there are
+			// frequent updates, then we'll do an expensive operations very
+			// rapidly. Given the number of allocation which this can incur
+			// this load can have serious spillover impacts on the cluster.
+			//
+			// Because the gossipUpdateC is buffered, if we do delay processing an
+			// update, we'll never miss anything.
+			//
+			// TODO(ajwerner): Reduce the number of allocations required to update
+			// the zone config by caching *somewhere* the values used to produce a
+			// config.
+			processUpdate := func() {
+				if err := s.systemConfigUpdateRateLimiter.WaitN(ctx, 1); err != nil {
+					// indicates that the stopper has stopped, which we'll discover above.
+					return
+				}
+				cfg := s.cfg.Gossip.GetSystemConfig()
+				s.systemGossipUpdate(ctx, cfg)
+			}
 			for {
 				select {
 				case <-gossipUpdateC:
-					cfg := s.cfg.Gossip.GetSystemConfig()
-					s.systemGossipUpdate(cfg)
+					processUpdate()
 				case <-s.stopper.ShouldQuiesce():
 					return
 				}
@@ -1907,8 +1938,7 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
-func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
-	ctx := s.AnnotateCtx(context.Background())
+func (s *Store) systemGossipUpdate(ctx context.Context, sysCfg *config.SystemConfig) {
 	s.computeInitialMetrics.Do(func() {
 		// Metrics depend in part on the system config. Compute them as soon as we
 		// get the first system config, then periodically in the background
@@ -1925,7 +1955,6 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	// For every range, update its zone config and check if it needs to
 	// be split or merged.
 	now := s.cfg.Clock.NowAsClockTimestamp()
-	shouldQueue := s.systemConfigUpdateQueueRateLimiter.AdmitN(1)
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
 		zone, err := sysCfg.GetZoneConfigForKey(key)
@@ -1936,14 +1965,12 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			zone = s.cfg.DefaultZoneConfig
 		}
 		repl.SetZoneConfig(zone)
-		if shouldQueue {
-			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-		}
+		s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, repl, now)
+		})
+		s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, repl, now)
+		})
 		return true // more
 	})
 }
