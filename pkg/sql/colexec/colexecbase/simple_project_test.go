@@ -118,7 +118,7 @@ func TestSimpleProjectOpWithUnorderedSynchronizer(t *testing.T) {
 			var input colexecop.Operator
 			parallelUnorderedSynchronizerInputs := make([]colexec.SynchronizerInput, len(inputs))
 			for i := range parallelUnorderedSynchronizerInputs {
-				parallelUnorderedSynchronizerInputs[i].Op = inputs[i]
+				parallelUnorderedSynchronizerInputs[i].Root = inputs[i]
 			}
 			input = colexec.NewParallelUnorderedSynchronizer(parallelUnorderedSynchronizerInputs, &wg)
 			input = colexecbase.NewSimpleProjectOp(input, len(inputTypes), []uint32{0})

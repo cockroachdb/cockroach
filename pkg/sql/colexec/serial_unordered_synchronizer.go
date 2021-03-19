@@ -44,7 +44,7 @@ func (s *SerialUnorderedSynchronizer) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
-	return s.inputs[nth].Op
+	return s.inputs[nth].Root
 }
 
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
@@ -58,7 +58,7 @@ func NewSerialUnorderedSynchronizer(inputs []SynchronizerInput) *SerialUnordered
 // Init is part of the Operator interface.
 func (s *SerialUnorderedSynchronizer) Init() {
 	for _, input := range s.inputs {
-		input.Op.Init()
+		input.Root.Init()
 	}
 }
 
@@ -68,7 +68,7 @@ func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		if s.curSerialInputIdx == len(s.inputs) {
 			return coldata.ZeroBatch
 		}
-		b := s.inputs[s.curSerialInputIdx].Op.Next(ctx)
+		b := s.inputs[s.curSerialInputIdx].Root.Next(ctx)
 		if b.Length() == 0 {
 			s.curSerialInputIdx++
 		} else {
