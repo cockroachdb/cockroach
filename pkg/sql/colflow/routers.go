@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
@@ -407,6 +408,11 @@ type HashRouter struct {
 
 	// One output for each stream.
 	outputs []routerOutput
+	// getStats, when non-nil, will be called by the hash router to retrieve the
+	// execution statistics which are then propagated as
+	// execinfrapb.ProducerMetadata object. This will be done right before
+	// draining metadataSources.
+	getStats func() []*execinfrapb.ComponentStats
 	// metadataSources is a slice of execinfrapb.MetadataSources that need to be
 	// drained when the HashRouter terminates.
 	metadataSources execinfrapb.MetadataSources
@@ -459,6 +465,7 @@ func NewHashRouter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
+	getStats func() []*execinfrapb.ComponentStats,
 	toDrain []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
 ) (*HashRouter, []colexecop.DrainableOperator) {
@@ -491,7 +498,7 @@ func NewHashRouter(
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	return newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs, toDrain, toClose), outputsAsOps
+	return newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs, getStats, toDrain, toClose), outputsAsOps
 }
 
 func newHashRouterWithOutputs(
@@ -499,6 +506,7 @@ func newHashRouterWithOutputs(
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
+	getStats func() []*execinfrapb.ComponentStats,
 	toDrain []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
 ) *HashRouter {
@@ -506,8 +514,9 @@ func newHashRouterWithOutputs(
 		OneInputNode:        colexecop.NewOneInputNode(input),
 		hashCols:            hashCols,
 		outputs:             outputs,
-		closers:             toClose,
+		getStats:            getStats,
 		metadataSources:     toDrain,
+		closers:             toClose,
 		unblockedEventsChan: unblockEventsChan,
 		// waitForMetadata is a buffered channel to avoid blocking if nobody will
 		// read the metadata.
@@ -548,6 +557,11 @@ func (r *HashRouter) getDrainState() hashRouterDrainState {
 // output calculated by hashing columns. Cancel the given context to terminate
 // early.
 func (r *HashRouter) Run(ctx context.Context) {
+	var span *tracing.Span
+	ctx, span = execinfra.ProcessorSpan(ctx, "hash router")
+	if span != nil {
+		defer span.Finish()
+	}
 	// Since HashRouter runs in a separate goroutine, we want to be safe and
 	// make sure that we catch errors in all code paths, so we wrap the whole
 	// method with a catcher. Note that we also have "internal" catchers as
@@ -607,10 +621,21 @@ func (r *HashRouter) Run(ctx context.Context) {
 	}); err != nil {
 		r.cancelOutputs(ctx, err)
 	}
-
+	if span != nil {
+		if r.getStats != nil {
+			for _, s := range r.getStats() {
+				span.RecordStructured(s)
+			}
+		}
+		if trace := span.GetRecording(); len(trace) > 0 {
+			meta := execinfrapb.GetProducerMeta()
+			meta.TraceData = trace
+			r.bufferedMeta = append(r.bufferedMeta, *meta)
+		}
+	}
+	r.bufferedMeta = append(r.bufferedMeta, r.metadataSources.DrainMeta(ctx)...)
 	// Non-blocking send of metadata so that one of the outputs can return it
 	// in DrainMeta.
-	r.bufferedMeta = append(r.bufferedMeta, r.metadataSources.DrainMeta(ctx)...)
 	r.waitForMetadata <- r.bufferedMeta
 	close(r.waitForMetadata)
 

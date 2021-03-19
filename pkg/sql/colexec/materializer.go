@@ -72,12 +72,14 @@ type Materializer struct {
 // trailing metadata state, which is meant only for internal metadata
 // generation.
 type drainHelper struct {
-	sources execinfrapb.MetadataSources
 	// If unset, the drainHelper wasn't Start()'ed, so all operations on it
 	// are noops.
-	ctx          context.Context
+	ctx context.Context
+
+	getStats func() []*execinfrapb.ComponentStats
+	sources  execinfrapb.MetadataSources
+
 	bufferedMeta []execinfrapb.ProducerMetadata
-	getStats     func() []*execinfrapb.ComponentStats
 }
 
 var _ execinfra.RowSource = &drainHelper{}
@@ -90,11 +92,11 @@ var drainHelperPool = sync.Pool{
 }
 
 func newDrainHelper(
-	sources execinfrapb.MetadataSources, getStats func() []*execinfrapb.ComponentStats,
+	getStats func() []*execinfrapb.ComponentStats, sources execinfrapb.MetadataSources,
 ) *drainHelper {
 	d := drainHelperPool.Get().(*drainHelper)
-	d.sources = sources
 	d.getStats = getStats
+	d.sources = sources
 	return d
 }
 
@@ -180,10 +182,10 @@ var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
 // columnar data coming from input to return it as rows.
 // Arguments:
 // - typs is the output types scheme.
-// - metadataSourcesQueue are all of the metadata sources that are planned on
-// the same node as the Materializer and that need to be drained.
 // - getStats (when tracing is enabled) returns all of the execution statistics
 // of operators which the materializer is responsible for.
+// - metadataSources are all of the metadata sources that are planned on the
+// same node as the Materializer and that need to be drained.
 // - cancelFlow should return the context cancellation function that cancels
 // the context of the flow (i.e. it is Flow.ctxCancel). It should only be
 // non-nil in case of a root Materializer (i.e. not when we're wrapping a row
@@ -196,9 +198,9 @@ func NewMaterializer(
 	input colexecop.Operator,
 	typs []*types.T,
 	output execinfra.RowReceiver,
-	metadataSourcesQueue []execinfrapb.MetadataSource,
-	toClose []colexecop.Closer,
 	getStats func() []*execinfrapb.ComponentStats,
+	metadataSources []execinfrapb.MetadataSource,
+	toClose []colexecop.Closer,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := materializerPool.Get().(*Materializer)
@@ -206,7 +208,7 @@ func NewMaterializer(
 		ProcessorBase: m.ProcessorBase,
 		input:         input,
 		typs:          typs,
-		drainHelper:   newDrainHelper(metadataSourcesQueue, getStats),
+		drainHelper:   newDrainHelper(getStats, metadataSources),
 		converter:     colconv.NewAllVecToDatumConverter(len(typs)),
 		row:           make(rowenc.EncDatumRow, len(typs)),
 		closers:       toClose,
