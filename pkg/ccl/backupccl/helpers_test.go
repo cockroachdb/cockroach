@@ -302,7 +302,7 @@ func injectStatsWithRowCount(
 	return sqlDB.QueryStr(t, getStatsQuery(tableName))
 }
 
-func makeInsecureHTTPServer(t *testing.T) (*url.URL, func()) {
+func makeInsecureHTTPServer(t *testing.T) (string, func()) {
 	t.Helper()
 
 	const badHeadResponse = "bad-head-response"
@@ -352,5 +352,5 @@ func makeInsecureHTTPServer(t *testing.T) (*url.URL, func()) {
 		t.Fatal(err)
 	}
 	uri.Path = filepath.Join(uri.Path, "testing")
-	return uri, cleanup
+	return uri.String(), cleanup
 }
