@@ -497,8 +497,8 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:com_github_cockroachdb_errors.patch",
         ],
-        sum = "h1:rnnWK9Nn5kEMOGz9531HuDx/FOleL4NVH20VsDexVC8=",
-        version = "v1.8.2",
+        sum = "h1:msu7yizHpvUH6YKPBZ4gxt6jYB8llsBdgLwBPQIg68o=",
+        version = "v1.8.3",
     )
     go_repository(
         name = "com_github_cockroachdb_go_test_teamcity",
@@ -1249,8 +1249,8 @@ def go_deps():
         name = "com_github_gogo_googleapis",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/gogo/googleapis",
-        sum = "h1:dR8+Q0uO5S2ZBcs2IH6VBKYwSxPo2vYCYq0ot0mu7xA=",
-        version = "v0.0.0-20180223154316-0cd9801be74a",
+        sum = "h1:Z0v3OJDotX9ZBpdz2V+AI7F4fITSZhVE5mg6GQppwMM=",
+        version = "v1.2.0",
     )
     go_repository(
         name = "com_github_gogo_status",
