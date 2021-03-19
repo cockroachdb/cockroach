@@ -92,9 +92,9 @@ func TestSQLTypesIntegration(t *testing.T) {
 				arrowOp,
 				typs,
 				output,
-				nil, /* metadataSourcesQueue */
-				nil, /* toClose */
 				nil, /* getStats */
+				nil, /* metadataSources */
+				nil, /* toClose */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)

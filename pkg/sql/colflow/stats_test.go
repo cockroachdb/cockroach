@@ -51,7 +51,7 @@ func TestNumBatches(t *testing.T) {
 			break
 		}
 	}
-	s := vsc.(*vectorizedStatsCollectorImpl).getStats()
+	s := vsc.(*vectorizedStatsCollectorImpl).GetStats()
 	require.Equal(t, nBatches, int(s.Output.NumBatches.Value()))
 }
 
@@ -77,13 +77,13 @@ func TestNumTuples(t *testing.T) {
 				break
 			}
 		}
-		s := vsc.(*vectorizedStatsCollectorImpl).getStats()
+		s := vsc.(*vectorizedStatsCollectorImpl).GetStats()
 		require.Equal(t, nBatches*batchSize, int(s.Output.NumTuples.Value()))
 	}
 }
 
 // TestVectorizedStatsCollector is an integration test for the
-// vectorizedStatsCollector. It creates two inputs and feeds them into the
+// VectorizedStatsCollector. It creates two inputs and feeds them into the
 // merge joiner and makes sure that all the stats measured on the latter are as
 // expected.
 func TestVectorizedStatsCollector(t *testing.T) {
@@ -149,7 +149,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			batchCount++
 			tupleCount += b.Length()
 		}
-		s := mjStatsCollector.(*vectorizedStatsCollectorImpl).getStats()
+		s := mjStatsCollector.(*vectorizedStatsCollectorImpl).GetStats()
 
 		require.Equal(t, nBatches*coldata.BatchSize(), int(s.Output.NumTuples.Value()))
 		// Two inputs are advancing the time source for a total of 2 * nBatches

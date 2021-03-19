@@ -78,9 +78,9 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		noop,
 		types,
 		nil, /* output */
+		nil, /* getStats */
 		[]execinfrapb.MetadataSource{col},
 		nil, /* toClose */
-		nil, /* getStats */
 		nil, /* cancelFlow */
 	)
 	if err != nil {

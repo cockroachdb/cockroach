@@ -1,7 +1,7 @@
-# LogicTest: fakedist-vec-off
+# LogicTest: default-configs !local-spec-planning !fakedist-spec-planning
 #
-# TODO(radu): enable other configs when the vectorized stat collector issue
-# #56928 is fixed.
+# TODO(yuzefovich): for some reason spec-planning configs are not happy. Figure
+# it out.
 
 statement ok
 CREATE TABLE kv (k INT PRIMARY KEY, v INT, FAMILY (k, v))

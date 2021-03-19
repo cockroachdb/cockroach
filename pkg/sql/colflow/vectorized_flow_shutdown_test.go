@@ -197,11 +197,12 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					allocators,
 					hashRouterInput,
 					typs,
-					[]uint32{0},
-					64<<20,
+					[]uint32{0}, /* hashCols */
+					64<<20,      /* memoryLimit */
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
+					nil, /* getStats */
 					toDrain,
 					nil, /* toClose */
 				)
@@ -247,14 +248,17 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					idToClosed.mapping[id] = false
 					idToClosed.Unlock()
 					outbox, err := colrpc.NewOutbox(
-						colmem.NewAllocator(ctx, outboxMemAcc, testColumnFactory), outboxInput, typs, outboxMetadataSources,
+						colmem.NewAllocator(ctx, outboxMemAcc, testColumnFactory),
+						outboxInput,
+						typs,
+						nil, /* getStats */
+						outboxMetadataSources,
 						[]colexecop.Closer{callbackCloser{closeCb: func() error {
 							idToClosed.Lock()
 							idToClosed.mapping[id] = true
 							idToClosed.Unlock()
 							return nil
 						}}},
-						nil, /* getStats */
 					)
 
 					require.NoError(t, err)
@@ -356,12 +360,12 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					materializerInput,
 					typs,
 					nil, /* output */
+					nil, /* getStats */
 					[]execinfrapb.MetadataSource{materializerMetadataSource},
 					[]colexecop.Closer{callbackCloser{closeCb: func() error {
 						materializerCalledClose = true
 						return nil
 					}}}, /* toClose */
-					nil, /* getStats */
 					func() context.CancelFunc { return cancelLocal },
 				)
 				require.NoError(t, err)
