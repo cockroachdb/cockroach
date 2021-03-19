@@ -3,7 +3,7 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import _ from "lodash";
 
-import { makeStatementsColumns } from "../statementsTable";
+import statementsStyles from "../statementsPage/statementsPage.module.scss";
 import {
   SortedTable,
   ISortedTablePagination,
@@ -15,21 +15,28 @@ import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses"
 import { Button } from "../button";
 import { collectStatementsText } from "src/transactionsPage/utils";
 import { tableClasses } from "../transactionsTable/transactionsTableClasses";
-import { BackIcon } from "../icon";
 import { SqlBox } from "../sql";
 import { aggregateStatements } from "../transactionsPage/utils";
 import Long from "long";
 import { Loading } from "../loading";
 import { SummaryCard } from "../summaryCard";
-import { Bytes, Duration, formatNumberForDisplay } from "src/util";
+import {
+  Bytes,
+  Duration,
+  formatNumberForDisplay,
+  calculateTotalWorkload,
+} from "src/util";
 
 import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
 import transactionDetailsStyles from "./transactionDetails.modules.scss";
 import { Col, Row } from "antd";
 import { Text, Heading } from "@cockroachlabs/ui-components";
 import { formatTwoPlaces } from "../barCharts";
+import { ArrowLeft } from "@cockroachlabs/icons";
+import { makeStatementsColumns } from "src/statementsTable/statementsTable";
 
 const { containerClass } = tableClasses;
+const cx = classNames.bind(statementsStyles);
 
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
@@ -89,10 +96,10 @@ export class TransactionDetails extends React.Component<
             onClick={() => handleDetails(null, null)}
             type="unstyled-link"
             size="small"
-            icon={BackIcon}
+            icon={<ArrowLeft fontSize={"10px"} />}
             iconPosition="left"
           >
-            All transactions
+            Transactions
           </Button>
           <h1 className={baseHeadingClasses.tableName}>Transaction Details</h1>
         </section>
@@ -104,6 +111,7 @@ export class TransactionDetails extends React.Component<
             const { sortSetting, pagination } = this.state;
             const statementsSummary = collectStatementsText(statements);
             const aggregatedStatements = aggregateStatements(statements);
+            const totalWorkload = calculateTotalWorkload(statements);
             const duration = (v: number) => Duration(v * 1e9);
             return (
               <React.Fragment>
@@ -148,7 +156,7 @@ export class TransactionDetails extends React.Component<
                         <div
                           className={summaryCardStylesCx("summary--card__item")}
                         >
-                          <Text type="body-strong">Mean rows/bytes read</Text>
+                          <Text>Mean rows/bytes read</Text>
                           <Text>
                             {formatNumberForDisplay(
                               transactionStats.rows_read.mean,
@@ -164,9 +172,7 @@ export class TransactionDetails extends React.Component<
                         <div
                           className={summaryCardStylesCx("summary--card__item")}
                         >
-                          <Text type="body-strong">
-                            Bytes read over network
-                          </Text>
+                          <Text>Bytes read over network</Text>
                           <Text>
                             {formatNumberForDisplay(
                               transactionStats.exec_stats.network_bytes.mean,
@@ -177,7 +183,7 @@ export class TransactionDetails extends React.Component<
                         <div
                           className={summaryCardStylesCx("summary--card__item")}
                         >
-                          <Text type="body-strong">Max memory usage</Text>
+                          <Text>Max memory usage</Text>
                           <Text>
                             {formatNumberForDisplay(
                               transactionStats.exec_stats.max_mem_usage.mean,
@@ -188,7 +194,7 @@ export class TransactionDetails extends React.Component<
                         <div
                           className={summaryCardStylesCx("summary--card__item")}
                         >
-                          <Text type="body-strong">Max scratch disk usage</Text>
+                          <Text>Max scratch disk usage</Text>
                           <Text>
                             {formatNumberForDisplay(
                               _.get(
@@ -210,17 +216,20 @@ export class TransactionDetails extends React.Component<
                     arrayItemName={"statements for this transaction"}
                     activeFilters={0}
                   />
-                  <SortedTable
-                    data={aggregatedStatements}
-                    columns={makeStatementsColumns(
-                      aggregatedStatements,
-                      "",
-                      "",
-                    )}
-                    className="statements-table"
-                    sortSetting={sortSetting}
-                    onChangeSortSetting={this.onChangeSortSetting}
-                  />
+                  <div className={cx("table-area")}>
+                    <SortedTable
+                      data={aggregatedStatements}
+                      columns={makeStatementsColumns(
+                        aggregatedStatements,
+                        "",
+                        totalWorkload,
+                        "",
+                      )}
+                      className={cx("statements-table")}
+                      sortSetting={sortSetting}
+                      onChangeSortSetting={this.onChangeSortSetting}
+                    />
+                  </div>
                 </section>
                 <Pagination
                   pageSize={pagination.pageSize}

@@ -100,12 +100,21 @@ export const BytesFitScale = (scale: string) => (bytes: number) => {
 
 /**
  * Percentage creates a string representation of a fraction as a percentage.
+ * Accepts a precision parameter as optional indicating how many digits
+ * after the decimal point are desired. (e.g. precision 2 returns 8.37 %)
  */
-export function Percentage(numerator: number, denominator: number): string {
+export function Percentage(
+  numerator: number,
+  denominator: number,
+  precision?: number,
+): string {
   if (denominator === 0) {
     return "--%";
   }
-  return Math.floor((numerator / denominator) * 100).toString() + "%";
+  if (precision) {
+    return ((numerator / denominator) * 100).toFixed(precision) + " %";
+  }
+  return Math.floor((numerator / denominator) * 100).toString() + " %";
 }
 
 /**
