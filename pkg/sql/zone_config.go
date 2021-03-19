@@ -50,10 +50,15 @@ var errNoZoneConfigApplies = errors.New("no zone config applies")
 //
 // If getInheritedDefault is true, the direct zone configuration, if it exists, is
 // ignored, and the default that would apply if it did not exist is returned instead.
+//
+// If mayBeTable is true then we will attempt to decode the id into a table
+// descriptor in order to find its parent. If false, we'll assume that this
+// already is a parent and we'll not decode a descriptor.
 func getZoneConfig(
 	id config.SystemTenantObjectID,
 	getKey func(roachpb.Key) (*roachpb.Value, error),
 	getInheritedDefault bool,
+	mayBeTable bool,
 ) (
 	config.SystemTenantObjectID,
 	*zonepb.ZoneConfig,
@@ -86,27 +91,37 @@ func getZoneConfig(
 
 	// No zone config for this ID. We need to figure out if it's a table, so we
 	// look up its descriptor.
-	if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))); err != nil {
-		return 0, nil, 0, nil, err
-	} else if descVal != nil {
-		var desc descpb.Descriptor
-		if err := descVal.GetProto(&desc); err != nil {
+	if mayBeTable {
+		if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(id))); err != nil {
 			return 0, nil, 0, nil, err
-		}
-		if tableDesc := descpb.TableFromDescriptor(&desc, descVal.Timestamp); tableDesc != nil {
-			// This is a table descriptor. Look up its parent database zone config.
-			dbID, zone, _, _, err := getZoneConfig(config.SystemTenantObjectID(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
-			if err != nil {
+		} else if descVal != nil {
+			var desc descpb.Descriptor
+			if err := descVal.GetProto(&desc); err != nil {
 				return 0, nil, 0, nil, err
 			}
-			return dbID, zone, placeholderID, placeholder, nil
+			if tableDesc := descpb.TableFromDescriptor(&desc, descVal.Timestamp); tableDesc != nil {
+				// This is a table descriptor. Look up its parent database zone config.
+				dbID, zone, _, _, err := getZoneConfig(
+					config.SystemTenantObjectID(tableDesc.ParentID),
+					getKey,
+					false, /* getInheritedDefault */
+					false /* mayBeTable */)
+				if err != nil {
+					return 0, nil, 0, nil, err
+				}
+				return dbID, zone, placeholderID, placeholder, nil
+			}
 		}
 	}
 
 	// Retrieve the default zone config, but only as long as that wasn't the ID
 	// we were trying to retrieve (avoid infinite recursion).
 	if id != keys.RootNamespaceID {
-		rootID, zone, _, _, err := getZoneConfig(keys.RootNamespaceID, getKey, false /* getInheritedDefault */)
+		rootID, zone, _, _, err := getZoneConfig(
+			keys.RootNamespaceID,
+			getKey,
+			false, /* getInheritedDefault */
+			false /* mayBeTable */)
 		if err != nil {
 			return 0, nil, 0, nil, err
 		}
@@ -140,7 +155,8 @@ func completeZoneConfig(
 			return err
 		}
 		if tableDesc := descpb.TableFromDescriptor(&desc, descVal.Timestamp); tableDesc != nil {
-			_, dbzone, _, _, err := getZoneConfig(config.SystemTenantObjectID(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
+			_, dbzone, _, _, err := getZoneConfig(
+				config.SystemTenantObjectID(tableDesc.ParentID), getKey, false /* getInheritedDefault */, false /* mayBeTable */)
 			if err != nil {
 				return err
 			}
@@ -152,7 +168,7 @@ func completeZoneConfig(
 	if cfg.IsComplete() {
 		return nil
 	}
-	_, defaultZone, _, _, err := getZoneConfig(keys.RootNamespaceID, getKey, false /* getInheritedDefault */)
+	_, defaultZone, _, _, err := getZoneConfig(keys.RootNamespaceID, getKey, false /* getInheritedDefault */, false /* mayBeTable */)
 	if err != nil {
 		return err
 	}
@@ -173,8 +189,9 @@ func zoneConfigHook(
 	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
 		return cfg.GetValue(key), nil
 	}
+	const mayBeTable = true
 	zoneID, zone, _, placeholder, err := getZoneConfig(
-		id, getKey, false /* getInheritedDefault */)
+		id, getKey, false /* getInheritedDefault */, mayBeTable)
 	if errors.Is(err, errNoZoneConfigApplies) {
 		return nil, nil, true, nil
 	} else if err != nil {
@@ -209,7 +226,7 @@ func GetZoneConfigInTxn(
 		return kv.Value, nil
 	}
 	zoneID, zone, placeholderID, placeholder, err := getZoneConfig(
-		id, getKey, getInheritedDefault)
+		id, getKey, getInheritedDefault, true /* mayBeTable */)
 	if err != nil {
 		return 0, nil, nil, err
 	}
