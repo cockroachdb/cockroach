@@ -31,6 +31,7 @@ go_library(
         "sort_chunks.go",
         "sort_utils.go",
         "sorttopk.go",
+        "stats.go",
         "tuple_proj_op.go",
         "unordered_distinct.go",
         "utils.go",
