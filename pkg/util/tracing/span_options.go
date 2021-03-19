@@ -152,7 +152,8 @@ type tagsOption []opentracing.Tag
 
 // WithTags is an option to Tracer.StartSpan which populates the
 // tags on the newly created Span.
-// XXX: Do these tags give us anything? Let's just drop them.
+// XXX: Do these tags give us anything? Let's just drop them. For legitimate
+// usages, we could alloc together.
 func WithTags(tags ...opentracing.Tag) SpanOption {
 	return (tagsOption)(nil)
 }

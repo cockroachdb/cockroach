@@ -379,33 +379,22 @@ func (t *Tracer) startSpanGeneric(
 	// NB: at the time of writing, it's not possible to start a Span
 	// that *only* contains `ot` or `netTr`. This is just an artifact
 	// of the history of this code and may change in the future.
-	helper := struct {
-		span     Span
-		crdbSpan crdbSpan
-		octx     optimizedContext
-	}{}
-
-	helper.crdbSpan = crdbSpan{
-		traceID:      traceID,
-		spanID:       spanID,
-		goroutineID:  goroutineID,
-		operation:    opName,
-		startTime:    startTime,
-		parentSpanID: opts.parentSpanID(),
-		logTags:      opts.LogTags,
-		mu: crdbSpanMu{
-			duration: -1, // unfinished
-		},
-		testing: t.testing,
-	}
+	helper := g.alloc()
+	helper.crdbSpan.traceID = traceID
+	helper.crdbSpan.spanID = spanID
+	helper.crdbSpan.goroutineID = goroutineID
+	helper.crdbSpan.operation = opName
+	helper.crdbSpan.startTime = startTime
+	helper.crdbSpan.parentSpanID = opts.parentSpanID()
+	helper.crdbSpan.logTags = opts.LogTags
+	helper.crdbSpan.mu.duration = -1 // unfinished
+	helper.crdbSpan.testing = t.testing
 	helper.crdbSpan.mu.recording.logs = newSizeLimitedBuffer(maxLogBytesPerSpan)
 	helper.crdbSpan.mu.recording.structured = newSizeLimitedBuffer(maxStructuredBytesPerSpan)
-	helper.span.i = spanInner{
-		tracer: t,
-		crdb:   &helper.crdbSpan,
-		ot:     ot,
-		netTr:  netTr,
-	}
+	helper.span.i.tracer = t
+	helper.span.i.crdb = &helper.crdbSpan
+	helper.span.i.ot = ot
+	helper.span.i.netTr = netTr
 
 	s := &helper.span
 
@@ -473,6 +462,34 @@ func (t *Tracer) startSpanGeneric(
 	}
 
 	return maybeWrapCtx(ctx, &helper.octx, s)
+}
+
+type group struct {
+	span     Span
+	crdbSpan crdbSpan
+	octx     optimizedContext
+}
+
+type groupAllocator struct {
+	syncutil.Mutex
+	current []group
+}
+
+var g = groupAllocator{
+	current: make([]group, 2500, 2500),
+}
+
+func (g *groupAllocator) alloc() *group {
+	g.Lock()
+	if len(g.current) == 0 {
+		g.current = make([]group, 2500, 2500)
+	}
+
+	a := &g.current[0]
+	g.current = g.current[1:]
+	g.Unlock()
+
+	return a
 }
 
 // serializationFormat is the format used by the Tracer to {de,}serialize span
