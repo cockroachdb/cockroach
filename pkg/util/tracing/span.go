@@ -207,7 +207,7 @@ func (sp *Span) RecordStructured(item Structured) {
 
 // SetTag adds a tag to the span. If there is a pre-existing tag set for the
 // key, it is overwritten.
-func (sp *Span) SetTag(key string, value interface{}) {
+func (sp *Span) SetTag(key, value string) {
 	if sp.done() {
 		return
 	}

@@ -587,7 +587,7 @@ func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
 	carrier.Set(fieldNameSpanID, strconv.FormatUint(sm.spanID, 16))
 
 	for k, v := range sm.Baggage {
-		carrier.Set(prefixBaggage+k, v)
+		carrier.Set(strings.ToLower(prefixBaggage+k), v)
 	}
 
 	shadowTr := t.getShadowTracer()
@@ -600,7 +600,7 @@ func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
 			carrier.Set(fieldNameShadowType, sm.shadowTracerType)
 			// Encapsulate the shadow text map, prepending a prefix to the keys.
 			if err := shadowTr.Inject(sm.shadowCtx, format, textMapWriterFn(func(key, val string) {
-				carrier.Set(prefixShadow+key, val)
+				carrier.Set(strings.ToLower(prefixShadow+key), val)
 			})); err != nil {
 				return err
 			}

@@ -950,7 +950,7 @@ func (n *Node) setupSpanForIncomingRPC(
 			// disabled, this will be a noop span).
 			ctx, newSpan = tr.StartSpanCtx(ctx, opName)
 		} else {
-			grpcSpan.SetTag("node", n.Descriptor.NodeID)
+			grpcSpan.SetTag("node", n.Descriptor.NodeID.String())
 		}
 	}
 

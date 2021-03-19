@@ -12,6 +12,7 @@ package execinfra
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -900,7 +901,7 @@ func (pb *ProcessorBase) startImpl(
 		pb.Ctx, pb.span = ProcessorSpan(ctx, spanName)
 		if pb.span != nil && pb.span.IsVerbose() {
 			pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
-			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.processorID)
+			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, fmt.Sprintf("%d", pb.processorID))
 		}
 	} else {
 		pb.Ctx = ctx

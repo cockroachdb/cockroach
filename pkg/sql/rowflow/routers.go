@@ -310,7 +310,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, ctxCancel c
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
-				span.SetTag(execinfrapb.StreamIDTagKey, ro.streamID)
+				span.SetTag(execinfrapb.StreamIDTagKey, fmt.Sprintf("%d", ro.streamID))
 				ro.stats.Inputs = make([]execinfrapb.InputStats, 1)
 			}
 

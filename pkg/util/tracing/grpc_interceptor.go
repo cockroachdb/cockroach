@@ -12,11 +12,13 @@ package tracing
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"runtime"
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	"github.com/opentracing/opentracing-go"
@@ -34,13 +36,17 @@ type metadataCarrier struct {
 }
 
 // Set implements the Carrier interface.
+//
+// NB: The GRPC HPACK implementation rejects any uppercase keys here. We could
+// blindly convert strings to lower case, but avoid doing so because it
+// allocates. Instead we entrust the callers to provide lowercase keys (and
+// assert as much in test builds).
 func (w metadataCarrier) Set(key, val string) {
-	// The GRPC HPACK implementation rejects any uppercase keys here.
-	//
-	// As such, since the HTTP_HEADERS format is case-insensitive anyway, we
-	// blindly lowercase the key (which is guaranteed to work in the
-	// Inject/Extract sense per the OpenTracing spec).
-	key = strings.ToLower(key)
+	if util.CrdbTestBuild {
+		if key != strings.ToLower(key) {
+			panic("invalid key; found uppercase letters")
+		}
+	}
 	w.MD[key] = append(w.MD[key], val)
 }
 
@@ -82,13 +88,13 @@ func setSpanTags(sp *Span, err error, client bool) {
 	if s, ok := status.FromError(err); ok {
 		code = s.Code()
 	}
-	sp.SetTag("response_code", code)
-	sp.SetTag("response_class", c)
+	sp.SetTag("response_code", code.String())
+	sp.SetTag("response_class", fmt.Sprintf("%s", c))
 	if err == nil {
 		return
 	}
 	if client || c == otgrpc.ServerError {
-		sp.SetTag(string(ext.Error), true)
+		sp.SetTag(string(ext.Error), "true")
 	}
 }
 

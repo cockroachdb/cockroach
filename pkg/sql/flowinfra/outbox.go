@@ -12,6 +12,7 @@ package flowinfra
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -221,7 +222,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 	if span != nil && span.IsVerbose() {
 		m.statsCollectionEnabled = true
 		span.SetTag(execinfrapb.FlowIDTagKey, m.flowCtx.ID.String())
-		span.SetTag(execinfrapb.StreamIDTagKey, m.streamID)
+		span.SetTag(execinfrapb.StreamIDTagKey, fmt.Sprintf("%d", m.streamID))
 	}
 	// spanFinished specifies whether we've Finish()-ed the span. Some code
 	// paths (e.g. stats collection) need to prematurely call it to get trace

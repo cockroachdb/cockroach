@@ -11,6 +11,8 @@
 package tracing
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/logtags"
 	"github.com/opentracing/opentracing-go"
 )
@@ -24,7 +26,7 @@ type spanOptions struct {
 	RemoteParent  *SpanMeta                     // see WithParentAndManualCollection
 	RefType       opentracing.SpanReferenceType // see WithFollowsFrom
 	LogTags       *logtags.Buffer               // see WithLogTags
-	Tags          map[string]interface{}        // see WithTags
+	Tags          map[string]string             // see WithTags
 	ForceRealSpan bool                          // see WithForceRealSpan
 }
 
@@ -163,10 +165,10 @@ func (o tagsOption) apply(opts spanOptions) spanOptions {
 		return opts
 	}
 	if opts.Tags == nil {
-		opts.Tags = map[string]interface{}{}
+		opts.Tags = make(map[string]string)
 	}
 	for _, tag := range o {
-		opts.Tags[tag.Key] = tag.Value
+		opts.Tags[tag.Key] = fmt.Sprintf("%s", tag.Value) // XXX: Change the input type
 	}
 	return opts
 }

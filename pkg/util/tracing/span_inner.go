@@ -245,14 +245,14 @@ func (s *spanInner) SetOperationName(operationName string) *spanInner {
 	return s
 }
 
-func (s *spanInner) SetTag(key string, value interface{}) *spanInner {
+func (s *spanInner) SetTag(key, value string) *spanInner {
 	if s.isNoop() {
 		return s
 	}
 	return s.setTagInner(key, value, false /* locked */)
 }
 
-func (s *spanInner) setTagInner(key string, value interface{}, locked bool) *spanInner {
+func (s *spanInner) setTagInner(key, value string, locked bool) *spanInner {
 	if s.ot.shadowSpan != nil {
 		s.ot.shadowSpan.SetTag(key, value)
 	}
