@@ -36,12 +36,12 @@ require (
 	github.com/cockroachdb/cockroach-go v0.0.0-20200504194139-73ffeee90b62
 	github.com/cockroachdb/crlfmt v0.0.0-20200116191136-a78e1c207bc0
 	github.com/cockroachdb/datadriven v1.0.1-0.20200826112548-92602d883b11
-	github.com/cockroachdb/errors v1.7.5
+	github.com/cockroachdb/errors v1.8.3
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
 	github.com/cockroachdb/pebble v0.0.0-20210204213345-045f961ab673
-	github.com/cockroachdb/redact v1.0.7
+	github.com/cockroachdb/redact v1.0.8
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2
 	github.com/cockroachdb/stress v0.0.0-20170808184505-29b5d31b4c3a
@@ -64,7 +64,7 @@ require (
 	github.com/go-ole/go-ole v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gofrs/uuid v3.3.0+incompatible // indirect
-	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/protobuf v1.3.2
 	github.com/golang-commonmark/html v0.0.0-20180910111043-7d7c804e1d46 // indirect
 	github.com/golang-commonmark/linkify v0.0.0-20180910111149-f05efb453a0e // indirect
 	github.com/golang-commonmark/markdown v0.0.0-20180910011815-a8f139058164
