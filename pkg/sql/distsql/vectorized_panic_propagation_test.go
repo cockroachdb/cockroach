@@ -61,7 +61,6 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		}},
 		nil, /* typs */
 		&distsqlutils.RowBuffer{},
-		nil, /* statsCollectors */
 		nil, /* cancelFlow */
 	)
 	if err != nil {

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -372,10 +373,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				}
 				n++
 			}
-			merger, err := s.createMergerForPartitions(ctx, n)
-			if err != nil {
-				colexecerror.InternalError(err)
-			}
+			merger := s.createMergerForPartitions(ctx, n)
 			merger.Init()
 			s.numPartitions -= n
 			s.partitionsInfo.totalSize[s.numPartitions] = 0
@@ -410,11 +408,7 @@ func (s *externalSorter) Next(ctx context.Context) coldata.Batch {
 				s.createPartitionerToOperators(s.numPartitions)
 				s.emitter = s.partitionerToOperators[0]
 			} else {
-				var err error
-				s.emitter, err = s.createMergerForPartitions(ctx, s.numPartitions)
-				if err != nil {
-					colexecerror.InternalError(err)
-				}
+				s.emitter = s.createMergerForPartitions(ctx, s.numPartitions)
 			}
 			s.emitter.Init()
 			s.state = externalSorterEmitting
@@ -574,11 +568,9 @@ func (s *externalSorter) createPartitionerToOperators(n int) {
 
 // createMergerForPartitions creates an ordered synchronizer that will merge
 // the last n current partitions.
-func (s *externalSorter) createMergerForPartitions(
-	ctx context.Context, n int,
-) (colexecop.Operator, error) {
+func (s *externalSorter) createMergerForPartitions(ctx context.Context, n int) colexecop.Operator {
 	s.createPartitionerToOperators(n)
-	syncInputs := make([]SynchronizerInput, n)
+	syncInputs := make([]colexecargs.OpWithMetaInfo, n)
 	for i := range syncInputs {
 		syncInputs[i].Root = s.partitionerToOperators[i]
 	}
@@ -611,7 +603,7 @@ func (s *externalSorter) createMergerForPartitions(
 		outputBatchMemSize = minOutputBatchMemSize
 	}
 	return NewOrderedSynchronizer(
-		s.outputUnlimitedAllocator, outputBatchMemSize, syncInputs, s.inputTypes, s.columnOrdering,
+		ctx, s.outputUnlimitedAllocator, outputBatchMemSize, syncInputs, s.inputTypes, s.columnOrdering,
 	)
 }
 

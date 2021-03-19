@@ -125,7 +125,6 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		r.OpWithMetaInfo,
 		[]*types.T{types.Int},
 		nil, /* output */
-		nil, /* statsCollectors */
 		nil, /* cancelFlow */
 	)
 	require.NoError(t, err)

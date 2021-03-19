@@ -61,7 +61,6 @@ func TestVectorizedInternalPanic(t *testing.T) {
 		colexecargs.OpWithMetaInfo{Root: vee},
 		types,
 		nil, /* output */
-		nil, /* statsCollectors */
 		nil, /* cancelFlow */
 	)
 	if err != nil {
@@ -106,7 +105,6 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 		colexecargs.OpWithMetaInfo{Root: nvee},
 		types,
 		nil, /* output */
-		nil, /* statsCollectors */
 		nil, /* cancelFlow */
 	)
 	if err != nil {

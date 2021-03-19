@@ -93,7 +93,6 @@ func TestSQLTypesIntegration(t *testing.T) {
 				colexecargs.OpWithMetaInfo{Root: arrowOp},
 				typs,
 				output,
-				nil, /* statsCollectors */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)

@@ -14,9 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // SerialUnorderedSynchronizer is an Operator that combines multiple Operator
@@ -26,7 +28,10 @@ import (
 // undesirable - for example when the whole query is planned on the gateway and
 // we want to run it in the RootTxn.
 type SerialUnorderedSynchronizer struct {
-	inputs []SynchronizerInput
+	ctx  context.Context
+	span *tracing.Span
+
+	inputs []colexecargs.OpWithMetaInfo
 	// curSerialInputIdx indicates the index of the current input being consumed.
 	curSerialInputIdx int
 }
@@ -48,11 +53,16 @@ func (s *SerialUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpN
 }
 
 // NewSerialUnorderedSynchronizer creates a new SerialUnorderedSynchronizer.
-func NewSerialUnorderedSynchronizer(inputs []SynchronizerInput) *SerialUnorderedSynchronizer {
-	return &SerialUnorderedSynchronizer{
+func NewSerialUnorderedSynchronizer(
+	ctx context.Context, inputs []colexecargs.OpWithMetaInfo,
+) *SerialUnorderedSynchronizer {
+	s := &SerialUnorderedSynchronizer{
 		inputs:            inputs,
 		curSerialInputIdx: 0,
 	}
+	// TODO(yuzefovich): remove this once ctx is passed in Init.
+	s.ctx, s.span = execinfra.ProcessorSpan(ctx, "serial unordered sync")
+	return s
 }
 
 // Init is part of the Operator interface.
@@ -63,12 +73,12 @@ func (s *SerialUnorderedSynchronizer) Init() {
 }
 
 // Next is part of the Operator interface.
-func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
+func (s *SerialUnorderedSynchronizer) Next(context.Context) coldata.Batch {
 	for {
 		if s.curSerialInputIdx == len(s.inputs) {
 			return coldata.ZeroBatch
 		}
-		b := s.inputs[s.curSerialInputIdx].Root.Next(ctx)
+		b := s.inputs[s.curSerialInputIdx].Root.Next(s.ctx)
 		if b.Length() == 0 {
 			s.curSerialInputIdx++
 		} else {
@@ -78,12 +88,20 @@ func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
-func (s *SerialUnorderedSynchronizer) DrainMeta(
-	ctx context.Context,
-) []execinfrapb.ProducerMetadata {
+func (s *SerialUnorderedSynchronizer) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
 	var bufferedMeta []execinfrapb.ProducerMetadata
+	if s.span != nil {
+		for i := range s.inputs {
+			for _, stats := range s.inputs[i].StatsCollectors {
+				s.span.RecordStructured(stats.GetStats())
+			}
+		}
+		if meta := execinfra.GetTraceDataAsMetadata(s.span); meta != nil {
+			bufferedMeta = append(bufferedMeta, *meta)
+		}
+	}
 	for _, input := range s.inputs {
-		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(ctx)...)
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(s.ctx)...)
 	}
 	return bufferedMeta
 }
@@ -92,6 +110,9 @@ func (s *SerialUnorderedSynchronizer) DrainMeta(
 func (s *SerialUnorderedSynchronizer) Close(ctx context.Context) error {
 	for _, input := range s.inputs {
 		input.ToClose.CloseAndLogOnErr(ctx, "serial unordered synchronizer")
+	}
+	if s.span != nil {
+		s.span.Finish()
 	}
 	return nil
 }
