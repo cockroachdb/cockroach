@@ -1097,9 +1097,8 @@ Available Commands:
 
 Flags:
   -h, --help                 help for cockroach
-      --log <string>         
-                                     Logging configuration. See the documentation for details.
-                                    
+      --log <string>         Logging configuration. See the documentation for details.
+                             
       --version              version for cockroach
 
 Use "cockroach [command] --help" for more information about a command.

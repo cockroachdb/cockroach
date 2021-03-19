@@ -80,7 +80,7 @@ func wrapDescription(s string) string {
 // * indentation
 // * env variable name (if set)
 func (f FlagInfo) Usage() string {
-	s := "\n" + wrapDescription(f.Description) + "\n"
+	s := wrapDescription(f.Description) + "\n"
 	if f.EnvVar != "" {
 		// Check that the environment variable name matches the flag name. Note: we
 		// don't want to automatically generate the name so that grepping for a flag
@@ -92,10 +92,7 @@ func (f FlagInfo) Usage() string {
 		}
 		s = s + "Environment variable: " + f.EnvVar + "\n"
 	}
-	// github.com/spf13/pflag appends the default value after the usage text. Add
-	// the correct indentation (7 spaces) here. This is admittedly fragile.
-	return text.Indent(s, strings.Repeat(" ", usageIndentation)) +
-		strings.Repeat(" ", usageIndentation-1)
+	return s
 }
 
 // Attrs and others store the static information for CLI flags.
