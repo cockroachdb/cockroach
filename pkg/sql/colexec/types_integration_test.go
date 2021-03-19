@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -89,12 +90,10 @@ func TestSQLTypesIntegration(t *testing.T) {
 			materializer, err := NewMaterializer(
 				flowCtx,
 				1, /* processorID */
-				arrowOp,
+				colexecargs.OpWithMetaInfo{Root: arrowOp},
 				typs,
 				output,
 				nil, /* statsCollectors */
-				nil, /* metadataSources */
-				nil, /* toClose */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)

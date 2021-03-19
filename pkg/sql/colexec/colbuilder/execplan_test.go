@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -114,7 +113,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 			Post:        execinfrapb.PostProcessSpec{RenderExprs: []execinfrapb.Expression{{Expr: "@1 - 1"}}},
 			ResultTypes: []*types.T{types.Int},
 		},
-		Inputs:              []colexecop.Operator{r.Op},
+		Inputs:              []colexecargs.OpWithMetaInfo{{Root: r.Root}},
 		StreamingMemAccount: &streamingMemAcc,
 	}
 	r, err = NewColOperator(ctx, flowCtx, args)
@@ -123,12 +122,10 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	m, err := colexec.NewMaterializer(
 		flowCtx,
 		0, /* processorID */
-		r.Op,
+		r.OpWithMetaInfo,
 		[]*types.T{types.Int},
 		nil, /* output */
 		nil, /* statsCollectors */
-		nil, /* metadataSources */
-		nil, /* toClose */
 		nil, /* cancelFlow */
 	)
 	require.NoError(t, err)

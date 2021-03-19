@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -57,12 +58,10 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	mat, err := colexec.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
-		vee,
+		colexecargs.OpWithMetaInfo{Root: vee},
 		types,
 		nil, /* output */
 		nil, /* statsCollectors */
-		nil, /* metadataSourceQueue */
-		nil, /* toClose */
 		nil, /* cancelFlow */
 	)
 	if err != nil {
@@ -104,12 +103,10 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	mat, err := colexec.NewMaterializer(
 		&flowCtx,
 		1, /* processorID */
-		nvee,
+		colexecargs.OpWithMetaInfo{Root: nvee},
 		types,
 		nil, /* output */
 		nil, /* statsCollectors */
-		nil, /* metadataSourceQueue */
-		nil, /* toClose */
 		nil, /* cancelFlow */
 	)
 	if err != nil {

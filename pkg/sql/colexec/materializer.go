@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -179,8 +180,6 @@ var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
 // - typs is the output types scheme.
 // - getStats (when tracing is enabled) returns all of the execution statistics
 // of operators which the materializer is responsible for.
-// - metadataSources are all of the metadata sources that are planned on the
-// same node as the Materializer and that need to be drained.
 // - cancelFlow should return the context cancellation function that cancels
 // the context of the flow (i.e. it is Flow.ctxCancel). It should only be
 // non-nil in case of a root Materializer (i.e. not when we're wrapping a row
@@ -190,23 +189,21 @@ var materializerEmptyPostProcessSpec = &execinfrapb.PostProcessSpec{}
 func NewMaterializer(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	input colexecop.Operator,
+	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	output execinfra.RowReceiver,
 	statsCollectors []VectorizedStatsCollector,
-	metadataSources []colexecop.MetadataSource,
-	toClose []colexecop.Closer,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := materializerPool.Get().(*Materializer)
 	*m = Materializer{
 		ProcessorBase: m.ProcessorBase,
-		input:         input,
+		input:         input.Root,
 		typs:          typs,
-		drainHelper:   newDrainHelper(statsCollectors, metadataSources),
+		drainHelper:   newDrainHelper(statsCollectors, input.MetadataSources),
 		converter:     colconv.NewAllVecToDatumConverter(len(typs)),
 		row:           make(rowenc.EncDatumRow, len(typs)),
-		closers:       toClose,
+		closers:       input.ToClose,
 	}
 
 	if err := m.ProcessorBase.InitWithEvalCtx(

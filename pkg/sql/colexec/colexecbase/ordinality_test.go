@@ -115,12 +115,12 @@ func createTestOrdinalityOperator(
 	}
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecop.Operator{input},
+		Inputs:              []colexecargs.OpWithMetaInfo{{Root: input}},
 		StreamingMemAccount: testMemAcc,
 	}
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	if err != nil {
 		return nil, err
 	}
-	return result.Op, nil
+	return result.Root, nil
 }
