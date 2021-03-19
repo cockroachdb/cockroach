@@ -112,6 +112,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/privilege/kind_string.go
 # gazelle:exclude pkg/sql/roleoption/option_string.go
 # gazelle:exclude pkg/sql/schemachange/columnconversionkind_string.go
+# gazelle:exclude pkg/sql/schemachanger/scop/type_string.go
 # gazelle:exclude pkg/sql/sem/tree/createtypevariety_string.go
 # gazelle:exclude pkg/sql/sem/tree/statementtype_string.go
 # gazelle:exclude pkg/sql/txnevent_string.go
@@ -120,6 +121,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/util/timeutil/pgdate/field_string.go
 # gazelle:exclude pkg/util/timeutil/pgdate/parsemode_string.go
 # gazelle:exclude pkg/workload/schemachange/optype_string.go
+# gazelle:exclude pkg/workload/schemachange/txstatus_string.go
 # gazelle:exclude pkg/geo/wkt/wkt_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/backfill_visitor_generated.go
 # gazelle:exclude pkg/sql/schemachanger/scop/mutation_visitor_generated.go

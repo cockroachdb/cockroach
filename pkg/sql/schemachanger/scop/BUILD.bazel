@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "scop",
@@ -6,10 +7,10 @@ go_library(
         "backfill.go",
         "mutation.go",
         "ops.go",
-        "type_string.go",
         "validation.go",
         ":gen-backfill",  # keep
         ":gen-mutation",  # keep
+        ":gen-type-stringer",  # keep
         ":gen-validation",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop",
@@ -65,4 +66,10 @@ genrule(
     exec_tools = [
         ":gen-visitors",
     ],
+)
+
+stringer(
+    name = "gen-type-stringer",
+    src = "ops.go",
+    typ = "Type",
 )
