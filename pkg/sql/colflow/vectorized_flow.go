@@ -315,13 +315,13 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 // created wrapper with those corresponding to operators in inputs (the latter
 // must have already been wrapped).
 func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
-	op colexecop.Operator,
+	op *colexecargs.OpWithMetaInfo,
 	kvReader colexecop.KVReader,
 	columnarizer colexecop.VectorizedStatsCollector,
 	inputs []colexecargs.OpWithMetaInfo,
 	component execinfrapb.ComponentID,
 	monitors []*mon.BytesMonitor,
-) (colexecop.VectorizedStatsCollector, error) {
+) error {
 	inputWatch := timeutil.NewStopWatch()
 	var memMonitors, diskMonitors []*mon.BytesMonitor
 	for _, m := range monitors {
@@ -335,26 +335,33 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	for i, input := range inputs {
 		sc, ok := input.Root.(childStatsCollector)
 		if !ok {
-			return nil, errors.New("unexpectedly an input is not collecting stats")
+			return errors.New("unexpectedly an input is not collecting stats")
 		}
 		inputStatsCollectors[i] = sc
 	}
-	return newVectorizedStatsCollector(
-		op, kvReader, columnarizer, component, inputWatch,
+	vsc := newVectorizedStatsCollector(
+		op.Root, kvReader, columnarizer, component, inputWatch,
 		memMonitors, diskMonitors, inputStatsCollectors,
-	), nil
+	)
+	op.Root = vsc
+	op.StatsCollectors = append(op.StatsCollectors, vsc)
+	maybeAddStatsInvariantChecker(op)
+	return nil
 }
 
 // wrapWithNetworkVectorizedStatsCollector creates a new
-// colexec.NetworkVectorizedStatsCollector that wraps op.
+// colexecop.VectorizedStatsCollector that wraps op.
 func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
-	op colexecop.Operator,
+	op *colexecargs.OpWithMetaInfo,
 	inbox *colrpc.Inbox,
 	component execinfrapb.ComponentID,
 	latency time.Duration,
-) colexecop.VectorizedStatsCollector {
+) {
 	inputWatch := timeutil.NewStopWatch()
-	return newNetworkVectorizedStatsCollector(op, component, inputWatch, inbox, latency)
+	nvsc := newNetworkVectorizedStatsCollector(op.Root, component, inputWatch, inbox, latency)
+	op.Root = nvsc
+	op.StatsCollectors = []colexecop.VectorizedStatsCollector{nvsc}
+	maybeAddStatsInvariantChecker(op)
 }
 
 // makeGetStatsFnForOutbox creates a function that will retrieve all execution
@@ -768,15 +775,12 @@ func (s *vectorizedFlowCreator) setupRouter(
 				// Wrap local outputs with vectorized stats collectors when recording
 				// stats. This is mostly for compatibility but will provide some useful
 				// information (e.g. output stall time).
-				vsc, err := s.wrapWithVectorizedStatsCollectorBase(
-					op, nil /* kvReader */, nil /* columnarizer */, nil, /* inputs */
-					flowCtx.StreamComponentID(stream.StreamID), mons,
-				)
-				if err != nil {
+				if err := s.wrapWithVectorizedStatsCollectorBase(
+					&opWithMetaInfo, nil /* kvReader */, nil, /* columnarizer */
+					nil /* inputs */, flowCtx.StreamComponentID(stream.StreamID), mons,
+				); err != nil {
 					return err
 				}
-				opWithMetaInfo.Root = vsc
-				opWithMetaInfo.StatsCollectors = []colexecop.VectorizedStatsCollector{vsc}
 			}
 			s.streamIDToInputOp[stream.StreamID] = opWithMetaInfo
 		}
@@ -860,9 +864,7 @@ func (s *vectorizedFlowCreator) setupInput(
 				compID := execinfrapb.StreamComponentID(
 					base.SQLInstanceID(inputStream.OriginNodeID), flowCtx.ID, inputStream.StreamID,
 				)
-				vsc := s.wrapWithNetworkVectorizedStatsCollector(op, inbox, compID, latency)
-				opWithMetaInfo.Root = vsc
-				opWithMetaInfo.StatsCollectors = []colexecop.VectorizedStatsCollector{vsc}
+				s.wrapWithNetworkVectorizedStatsCollector(&opWithMetaInfo, inbox, compID, latency)
 			}
 			inputStreamOps = append(inputStreamOps, opWithMetaInfo)
 		default:
@@ -920,15 +922,12 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			// TODO(asubiotto): Once we have IDs for synchronizers, plumb them into
 			// this stats collector to display stats.
-			vsc, err := s.wrapWithVectorizedStatsCollectorBase(
-				opWithMetaInfo.Root, nil /* kvReader */, nil, /* columnarizer */
+			if err := s.wrapWithVectorizedStatsCollectorBase(
+				&opWithMetaInfo, nil /* kvReader */, nil, /* columnarizer */
 				statsInputsAsOps, execinfrapb.ComponentID{}, nil, /* monitors */
-			)
-			if err != nil {
+			); err != nil {
 				return colexecargs.OpWithMetaInfo{}, err
 			}
-			opWithMetaInfo.Root = vsc
-			opWithMetaInfo.StatsCollectors = []colexecop.VectorizedStatsCollector{vsc}
 		}
 	}
 	return opWithMetaInfo, nil
@@ -1113,15 +1112,12 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 
 			if s.recordingStats {
-				vsc, err := s.wrapWithVectorizedStatsCollectorBase(
-					result.Root, result.KVReader, result.Columnarizer, inputs,
+				if err := s.wrapWithVectorizedStatsCollectorBase(
+					&result.OpWithMetaInfo, result.KVReader, result.Columnarizer, inputs,
 					flowCtx.ProcessorComponentID(pspec.ProcessorID), result.OpMonitors,
-				)
-				if err != nil {
+				); err != nil {
 					return
 				}
-				result.Root = vsc
-				result.StatsCollectors = append(result.StatsCollectors, vsc)
 			}
 
 			if err = s.setupOutput(
