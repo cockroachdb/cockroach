@@ -1,11 +1,11 @@
-import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { stdDevLong } from "src/util";
-import { Duration, Bytes } from "src/util/format";
+import { Duration, Bytes, Percentage } from "src/util/format";
 import classNames from "classnames/bind";
 import styles from "./barCharts.module.scss";
 import { bar, formatTwoPlaces, longToInt, approximify } from "./utils";
-import { barChartFactory } from "./barChartFactory";
+import { barChartFactory, BarChartOptions } from "./barChartFactory";
+import { AggregateStatistics } from "src/statementsTable/statementsTable";
 
 type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 const cx = classNames.bind(styles);
@@ -127,3 +127,21 @@ export const networkBytesBarChart = barChartFactory(
 );
 
 export const retryBarChart = barChartFactory("red", retryBars, approximify);
+
+export function workloadPctBarChart(
+  statements: AggregateStatistics[],
+  defaultBarChartOptions: BarChartOptions<any>,
+  totalWorkload: number,
+) {
+  return barChartFactory(
+    "grey",
+    [
+      bar(
+        "pct-workload",
+        (d: StatementStatistics) =>
+          (d.stats.service_lat.mean * longToInt(d.stats.count)) / totalWorkload,
+      ),
+    ],
+    v => Percentage(v, 1, 1),
+  )(statements, defaultBarChartOptions);
+}

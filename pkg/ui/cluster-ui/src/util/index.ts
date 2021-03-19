@@ -14,3 +14,4 @@ export * from "./pick";
 export * from "./find";
 export * from "./proto";
 export * from "./formatNumber";
+export * from "./totalWorkload";

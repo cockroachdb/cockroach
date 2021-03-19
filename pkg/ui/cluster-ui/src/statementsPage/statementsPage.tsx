@@ -14,7 +14,12 @@ import { SortSetting } from "src/sortedtable";
 import { Search } from "src/search";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 
-import { DATE_FORMAT, appAttr, getMatchParamByName } from "src/util";
+import {
+  DATE_FORMAT,
+  appAttr,
+  getMatchParamByName,
+  calculateTotalWorkload,
+} from "src/util";
 import {
   AggregateStatistics,
   makeStatementsColumns,
@@ -245,6 +250,7 @@ export class StatementsPage extends React.Component<
     this.props.apps.forEach(app => appOptions.push({ value: app, name: app }));
     const currentOption = appOptions.find(o => o.value === selectedApp);
     const data = this.filteredStatementsData();
+    const totalWorkload = calculateTotalWorkload(data);
     const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
 
@@ -311,6 +317,7 @@ export class StatementsPage extends React.Component<
             columns={makeStatementsColumns(
               statements,
               selectedApp,
+              totalWorkload,
               search,
               this.activateDiagnosticsRef,
               onDiagnosticsReportDownload,
@@ -348,7 +355,7 @@ export class StatementsPage extends React.Component<
     } = this.props;
     const app = getMatchParamByName(match, appAttr);
     return (
-      <div className={cx("root")}>
+      <div className={cx("root", "table-area")}>
         <Helmet title={app ? `${app} App | Statements` : "Statements"} />
 
         <section className={cx("section")}>

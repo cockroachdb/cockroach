@@ -290,6 +290,22 @@ export const StatementTableTitle = {
       Retries
     </Tooltip>
   ),
+  workloadPct: (
+    <Tooltip
+      placement="bottom"
+      title={
+        <div className={cx("tooltip__table--title")}>
+          <p>
+            % of runtime all statements with this fingerprint represent,
+            compared to the cumulative runtime of all queries within the last
+            hour or specified time interval.
+          </p>
+        </div>
+      }
+    >
+      % of all runtime
+    </Tooltip>
+  ),
   diagnostics: (
     <Tooltip
       placement="bottom"

@@ -12,6 +12,7 @@ import {
   maxMemUsageBarChart,
   networkBytesBarChart,
   retryBarChart,
+  workloadPctBarChart,
 } from "src/barCharts";
 import { ActivateDiagnosticsModalRef } from "src/statementsDiagnostics";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
@@ -31,6 +32,7 @@ const longToInt = (d: number | Long) => Number(FixLong(d));
 
 function makeCommonColumns(
   statements: AggregateStatistics[],
+  totalWorkload: number,
 ): ColumnDescriptor<AggregateStatistics>[] {
   const defaultBarChartOptions = {
     classes: {
@@ -117,6 +119,18 @@ function makeCommonColumns(
       sort: stmt =>
         longToInt(stmt.stats.count) - longToInt(stmt.stats.first_attempt_count),
     },
+    {
+      name: "workloadPct",
+      title: StatementTableTitle.workloadPct,
+      cell: workloadPctBarChart(
+        statements,
+        defaultBarChartOptions,
+        totalWorkload,
+      ),
+      sort: stmt =>
+        (stmt.stats.service_lat.mean * longToInt(stmt.stats.count)) /
+        totalWorkload,
+    },
   ];
 }
 
@@ -129,6 +143,8 @@ export interface AggregateStatistics {
   drawer?: boolean;
   firstCellBordered?: boolean;
   diagnosticsReports?: cockroach.server.serverpb.IStatementDiagnosticsReport[];
+  // totalWorkload is the sum of service latency of all statements listed on the table.
+  totalWorkload?: Long;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
@@ -155,6 +171,8 @@ export function shortStatement(summary: StatementSummary, original: string) {
 export function makeStatementsColumns(
   statements: AggregateStatistics[],
   selectedApp: string,
+  // totalWorkload is the sum of service latency of all statements listed on the table.
+  totalWorkload: number,
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
   onDiagnosticsDownload?: (report: IStatementDiagnosticsReport) => void,
@@ -168,7 +186,7 @@ export function makeStatementsColumns(
       sort: stmt => stmt.label,
     },
   ];
-  columns.push(...makeCommonColumns(statements));
+  columns.push(...makeCommonColumns(statements, totalWorkload));
 
   if (activateDiagnosticsRef) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
@@ -196,6 +214,7 @@ export function makeStatementsColumns(
 export function makeNodesColumns(
   statements: AggregateStatistics[],
   nodeNames: NodeNames,
+  totalWorkload: number,
 ): ColumnDescriptor<AggregateStatistics>[] {
   const original: ColumnDescriptor<AggregateStatistics>[] = [
     {
@@ -205,5 +224,5 @@ export function makeNodesColumns(
     },
   ];
 
-  return original.concat(makeCommonColumns(statements));
+  return original.concat(makeCommonColumns(statements, totalWorkload));
 }
