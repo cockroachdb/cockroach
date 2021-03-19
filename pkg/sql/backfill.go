@@ -206,10 +206,16 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	log.Infof(ctx, "running backfill for %q, v=%d", tableDesc.Name, tableDesc.Version)
 
 	needColumnBackfill := false
-	for _, m := range tableDesc.Mutations {
+	for mutationIdx, m := range tableDesc.Mutations {
 		if m.MutationID != sc.mutationID {
 			break
 		}
+		// If the current mutation is discarded, then
+		// skip over processing.
+		if discarded, _ := isCurrentMutationDiscarded(tableDesc, m, mutationIdx+1); discarded {
+			continue
+		}
+
 		switch m.Direction {
 		case descpb.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
@@ -1865,6 +1871,11 @@ func runSchemaChangesInTxn(
 	// mutations that need to be processed.
 	for i := 0; i < len(tableDesc.Mutations); i++ {
 		m := tableDesc.Mutations[i]
+		// Skip mutations that get canceled by later operations
+		if discarded, _ := isCurrentMutationDiscarded(tableDesc, m, i+1); discarded {
+			continue
+		}
+
 		immutDesc := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildImmutableTable()
 		switch m.Direction {
 		case descpb.DescriptorMutation_ADD:

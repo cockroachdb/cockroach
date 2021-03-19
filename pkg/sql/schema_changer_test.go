@@ -7030,3 +7030,271 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 		}
 	})
 }
+
+// TestDropColumnAfterMutations tests the imapct of a drop column
+// after an existing a mutation on the column
+func TestDropColumnAfterMutations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+	ctx := context.Background()
+	var jobControlMu syncutil.Mutex
+	var delayJobList []string
+	var delayJobChannels []chan struct{}
+	delayNotify := make(chan struct{})
+
+	proceedBeforeBackfill := make(chan error)
+	params, _ := tests.CreateTestServerParams()
+
+	var s serverutils.TestServerInterface
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				lockHeld := true
+				jobControlMu.Lock()
+				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				pl := scJob.Payload()
+				// Check if we are blocking the correct job
+				for idx, s := range delayJobList {
+					if strings.Contains(pl.Description, s) {
+						delayNotify <- struct{}{}
+						channel := delayJobChannels[idx]
+						jobControlMu.Unlock()
+						lockHeld = false
+						<-channel
+					}
+				}
+				if lockHeld {
+					jobControlMu.Unlock()
+				}
+				return nil
+			},
+			RunAfterBackfill: func(jobID jobspb.JobID) error {
+				return <-proceedBeforeBackfill
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	conn1 := sqlutils.MakeSQLRunner(sqlDB)
+	conn2 := sqlutils.MakeSQLRunner(sqlDB)
+	var schemaChangeWaitGroup sync.WaitGroup
+
+	conn1.Exec(t, `
+CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+INSERT INTO t VALUES (1, 1);
+`)
+
+	// Test 1: with concurrent drop and mutations
+	t.Run("basic-concurrent-drop-mutations", func(t *testing.T) {
+		jobControlMu.Lock()
+		delayJobList = []string{"ALTER TABLE defaultdb.public.t ADD COLUMN k INT8 NOT NULL UNIQUE DEFAULT 42",
+			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
+		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
+		jobControlMu.Unlock()
+
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn2.DB.ExecContext(ctx,
+				`
+BEGIN;
+ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL UNIQUE;
+COMMIT;
+`)
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+		<-delayNotify
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn2.DB.ExecContext(ctx,
+				`
+SET sql_safe_updates = false;
+BEGIN;
+ALTER TABLE t DROP COLUMN j;
+ALTER TABLE t ALTER COLUMN k SET NOT NULL;
+COMMIT;
+`)
+			if err != nil {
+				t.Error(err)
+			}
+		}()
+		<-delayNotify
+
+		// Allow jobs to proceed once both are concurrent.
+		delayJobChannels[0] <- struct{}{}
+		// Allow both back fill jobs to proceed
+		proceedBeforeBackfill <- nil
+		// Allow the second job to proceed
+		delayJobChannels[1] <- struct{}{}
+		// Second job will also do back fill next
+		proceedBeforeBackfill <- nil
+
+		schemaChangeWaitGroup.Wait()
+		close(delayJobChannels[0])
+		close(delayJobChannels[1])
+	})
+
+	// Test 2: with concurrent drop and mutations, where
+	// the drop column will be failed intentionally
+	t.Run("failed-concurrent-drop-mutations", func(t *testing.T) {
+		jobControlMu.Lock()
+		delayJobList = []string{"ALTER TABLE defaultdb.public.t ALTER COLUMN j SET NOT NULL",
+			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
+		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
+		jobControlMu.Unlock()
+
+		conn2.Exec(t, `
+	   DROP TABLE t;
+	   CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+	   INSERT INTO t VALUES (1, 1);
+	   `)
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn2.DB.ExecContext(context.Background(),
+				`
+	   BEGIN;
+	   ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+	   ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL UNIQUE;
+	   COMMIT;
+	   `)
+			failureError := "pq: transaction committed but schema change aborted with error: (XXUUU): A dependent transaction failed for this schema change: Bogus error for drop column transaction"
+			if err != nil &&
+				!strings.Contains(err.Error(), failureError) {
+				t.Error(err.Error())
+			} else if err == nil {
+				t.Error("Expected error was not hit")
+			}
+		}()
+
+		// Wait for the alter to get submitted first
+		<-delayNotify
+
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn1.DB.ExecContext(context.Background(),
+				`
+	   SET sql_safe_updates = false;
+	   BEGIN;
+	   ALTER TABLE t DROP COLUMN j;
+	   ALTER TABLE t ALTER COLUMN k SET NOT NULL;
+	   ALTER TABLE t ALTER COLUMN k SET DEFAULT 421;
+	   ALTER TABLE t ADD COLUMN o INT8 DEFAULT 42 NOT NULL UNIQUE;
+	   COMMIT;
+	   `)
+			failureError := "pq: transaction committed but schema change aborted with error: (XXUUU): Bogus error for drop column transaction"
+			if err != nil &&
+				!strings.Contains(err.Error(), failureError) {
+				t.Error(err.Error())
+			} else if err == nil {
+				t.Error("Expected error was not hit")
+			}
+		}()
+		<-delayNotify
+
+		// Allow the first operation relying on
+		// the dropped column to resume.
+		delayJobChannels[0] <- struct{}{}
+		// Allow internal backfill processing to resume
+		proceedBeforeBackfill <- nil
+		// Allow the second job to proceed
+		delayJobChannels[1] <- struct{}{}
+		// Second job will also do backfill next
+		proceedBeforeBackfill <- errors.Newf("Bogus error for drop column transaction")
+		// Rollback attempt after failure
+		proceedBeforeBackfill <- nil
+
+		schemaChangeWaitGroup.Wait()
+		close(delayJobChannels[0])
+		close(delayJobChannels[1])
+	})
+
+	// Test 3: with concurrent drop and mutations where an insert will
+	// cause the backfill operation to fail.
+	t.Run("concurrent-drop-mutations-insert-fail", func(t *testing.T) {
+		jobControlMu.Lock()
+		delayJobList = []string{"ALTER TABLE defaultdb.public.t ALTER COLUMN j SET NOT NULL",
+			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
+		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
+		jobControlMu.Unlock()
+
+		conn2.Exec(t, `
+	   DROP TABLE t;
+	   CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
+	   INSERT INTO t VALUES (1, 1);
+	   `)
+
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn2.DB.ExecContext(context.Background(),
+				`
+	   BEGIN;
+	   ALTER TABLE t ALTER COLUMN j SET NOT NULL;
+	   ALTER TABLE t ADD COLUMN k INT8 DEFAULT 42 NOT NULL;
+	   COMMIT;
+	   	   `)
+			// Two possibilities exist based on timing, either the current transaction
+			// will fail during backfill or the dependent one with the drop will fail.
+			failureError := "pq: transaction committed but schema change aborted with error: (23505): A dependent transaction failed for this schema change: failed to ingest index entries during backfill: duplicate key value violates unique constraint \"t_o_key\""
+			if err != nil &&
+				!strings.Contains(err.Error(), failureError) {
+				t.Error(err.Error())
+			} else if err == nil {
+				t.Error("Expected error was not hit")
+			}
+		}()
+		<-delayNotify
+
+		schemaChangeWaitGroup.Add(1)
+		go func() {
+			defer schemaChangeWaitGroup.Done()
+			_, err := conn1.DB.ExecContext(context.Background(),
+				`
+	   SET sql_safe_updates = false;
+	   BEGIN;
+	   ALTER TABLE t DROP COLUMN j;
+	   ALTER TABLE t ALTER COLUMN k SET NOT NULL;
+	   ALTER TABLE t ALTER COLUMN k SET DEFAULT 421;
+	   ALTER TABLE t ADD COLUMN o INT8 DEFAULT 42 NOT NULL UNIQUE;
+	   INSERT INTO t VALUES (2);
+	   COMMIT;
+	   	   `)
+			failureError := "pq: transaction committed but schema change aborted with error: (23505): failed to ingest index entries during backfill: duplicate key value violates unique constraint \"t_o_key\""
+			if err != nil &&
+				!strings.Contains(err.Error(), failureError) {
+				t.Error(err.Error())
+			} else if err == nil {
+				t.Error("Expected error was not hit")
+			}
+		}()
+		<-delayNotify
+
+		// Allow jobs to proceed once both are concurrent.
+		// Allow the first operation relying on
+		// the dropped column to resume.
+		delayJobChannels[0] <- struct{}{}
+		// Allow internal backfill processing to resume
+		proceedBeforeBackfill <- nil
+		// Allow the second job to proceed
+		delayJobChannels[1] <- struct{}{}
+		// Second job will also do backfill next
+		proceedBeforeBackfill <- nil
+		schemaChangeWaitGroup.Wait()
+
+		close(delayJobChannels[0])
+		close(delayJobChannels[1])
+	})
+
+	close(delayNotify)
+	close(proceedBeforeBackfill)
+}

@@ -1689,6 +1689,26 @@ SELECT count(descriptor_id)
 ----
 0
 
+# Validation for #47719 where a mutation is canceled out by a drop.
+statement ok
+create table tColDrop (a int);
+
+statement ok
+begin;
+alter table tColDrop alter column a set not null;
+alter table tColDrop drop column a;
+commit;
+
+statement ok
+drop table tColDrop;
+
+statement ok
+begin;
+create table tColDrop (a int);
+alter table tColDrop alter column a set not null;
+alter table tColDrop drop column a;
+commit;
+
 # Validate that the schema_change_successful metric
 query T
 SELECT feature_name FROM crdb_internal.feature_usage

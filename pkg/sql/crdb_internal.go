@@ -4148,7 +4148,11 @@ CREATE TABLE crdb_internal.interleaved (
 		STRING NOT NULL,
 	index_name
 		STRING NOT NULL,
-	parent_index
+	parent_database_name
+		STRING NOT NULL,
+	parent_schema_name
+		STRING NOT NULL,
+	parent_table_name
 		STRING NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -4162,13 +4166,8 @@ CREATE TABLE crdb_internal.interleaved (
 					if index.NumInterleaveAncestors() == 0 {
 						continue
 					}
-
 					ancestor := index.GetInterleaveAncestor(index.NumInterleaveAncestors() - 1)
 					parentTable, err := lookupFn.getTableByID(ancestor.TableID)
-					if err != nil {
-						return err
-					}
-					parentIndex, err := parentTable.FindIndexWithID(ancestor.IndexID)
 					if err != nil {
 						return err
 					}
@@ -4176,16 +4175,18 @@ CREATE TABLE crdb_internal.interleaved (
 					if err != nil {
 						return err
 					}
-					database, err := lookupFn.getDatabaseByID(parentTable.GetParentID())
+					parentDatabase, err := lookupFn.getDatabaseByID(parentTable.GetParentID())
 					if err != nil {
 						return err
 					}
 
-					if err := addRow(tree.NewDString(database.GetName()),
-						tree.NewDString(parentSchemaName),
+					if err := addRow(tree.NewDString(db.GetName()),
+						tree.NewDString(schemaName),
 						tree.NewDString(table.GetName()),
 						tree.NewDString(index.GetName()),
-						tree.NewDString(parentIndex.GetName())); err != nil {
+						tree.NewDString(parentDatabase.GetName()),
+						tree.NewDString(parentSchemaName),
+						tree.NewDString(parentTable.GetName())); err != nil {
 						return err
 					}
 				}

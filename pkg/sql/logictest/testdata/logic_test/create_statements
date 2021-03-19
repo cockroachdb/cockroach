@@ -386,13 +386,17 @@ CREATE TABLE crdb_internal.interleaved (
    schema_name STRING NOT NULL,
    table_name STRING NOT NULL,
    index_name STRING NOT NULL,
-   parent_index STRING NOT NULL
+   parent_database_name STRING NOT NULL,
+   parent_schema_name STRING NOT NULL,
+   parent_table_name STRING NOT NULL
 )  CREATE TABLE crdb_internal.interleaved (
    database_name STRING NOT NULL,
    schema_name STRING NOT NULL,
    table_name STRING NOT NULL,
    index_name STRING NOT NULL,
-   parent_index STRING NOT NULL
+   parent_database_name STRING NOT NULL,
+   parent_schema_name STRING NOT NULL,
+   parent_table_name STRING NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.invalid_objects (
    id INT8 NULL,
