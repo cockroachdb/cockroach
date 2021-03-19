@@ -111,7 +111,10 @@ func (p *postgreStream) Next() (interface{}, error) {
 			// so here.
 			if p.unsupportedStmtLogger.ignoreUnsupported && errors.HasType(err, (*tree.UnsupportedError)(nil)) {
 				if unsupportedErr := (*tree.UnsupportedError)(nil); errors.As(err, &unsupportedErr) {
-					p.unsupportedStmtLogger.log(unsupportedErr.FeatureName, true /* isParseError */)
+					err := p.unsupportedStmtLogger.log(unsupportedErr.FeatureName, true /* isParseError */)
+					if err != nil {
+						return nil, err
+					}
 				}
 				continue
 			}
@@ -616,7 +619,10 @@ func readPostgresStmt(
 			case *tree.AlterTableAddColumn:
 				if cmd.IfNotExists {
 					if ignoreUnsupportedStmts {
-						unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+						err := unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
 						continue
 					}
 					return errors.Errorf("unsupported statement: %s", stmt)
@@ -641,7 +647,10 @@ func readPostgresStmt(
 				}
 			default:
 				if ignoreUnsupportedStmts {
-					unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+					err := unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
 				return errors.Errorf("unsupported statement: %s", stmt)
@@ -649,8 +658,7 @@ func readPostgresStmt(
 		}
 	case *tree.AlterTableOwner:
 		if ignoreUnsupportedStmts {
-			unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
-			return nil
+			return unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
 		}
 		return errors.Errorf("unsupported statement: %s", stmt)
 	case *tree.CreateSequence:
@@ -663,8 +671,7 @@ func readPostgresStmt(
 		}
 	case *tree.AlterSequence:
 		if ignoreUnsupportedStmts {
-			unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
-			return nil
+			return unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
 		}
 		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
 	// Some SELECT statements mutate schema. Search for those here.
@@ -693,7 +700,10 @@ func readPostgresStmt(
 						err := errors.Errorf("unsupported function call: %s in stmt: %s",
 							expr.Func.String(), stmt.String())
 						if ignoreUnsupportedStmts {
-							unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+							err := unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+							if err != nil {
+								return err
+							}
 							continue
 						}
 						return err
@@ -735,7 +745,10 @@ func readPostgresStmt(
 				default:
 					err := errors.Errorf("unsupported %T SELECT expr: %s", expr, expr)
 					if ignoreUnsupportedStmts {
-						unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						err := unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
 						continue
 					}
 					return err
@@ -744,7 +757,10 @@ func readPostgresStmt(
 		default:
 			err := errors.Errorf("unsupported %T SELECT %s", sel, sel)
 			if ignoreUnsupportedStmts {
-				unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+				err := unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+				if err != nil {
+					return err
+				}
 				return nil
 			}
 			return err
@@ -790,8 +806,7 @@ func readPostgresStmt(
 		// - ANALYZE is syntactic sugar for CreateStatistics. It can be ignored
 		// because the auto stats stuff will pick up the changes and run if needed.
 		if ignoreUnsupportedStmts {
-			unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
-			return nil
+			return unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
 		}
 		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
 	case error:
@@ -800,8 +815,7 @@ func readPostgresStmt(
 		}
 	default:
 		if ignoreUnsupportedStmts {
-			unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
-			return nil
+			return unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
 		}
 		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
 	}
@@ -845,6 +859,7 @@ type pgDumpReader struct {
 	opts                  roachpb.PgDumpOptions
 	walltime              int64
 	colMap                map[*row.DatumRowConverter](map[string]int)
+	jobID                 int64
 	unsupportedStmtLogger *unsupportedStmtLogger
 	evalCtx               *tree.EvalContext
 }
@@ -854,6 +869,7 @@ var _ inputConverter = &pgDumpReader{}
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
 	ctx context.Context,
+	jobID int64,
 	kvCh chan row.KVBatch,
 	opts roachpb.PgDumpOptions,
 	walltime int64,
@@ -895,6 +911,7 @@ func newPgDumpReader(
 		opts:       opts,
 		walltime:   walltime,
 		colMap:     colMap,
+		jobID:      jobID,
 		evalCtx:    evalCtx,
 	}, nil
 }
@@ -911,15 +928,16 @@ func (m *pgDumpReader) readFiles(
 	user security.SQLUsername,
 ) error {
 	// Setup logger to handle unsupported DML statements seen in the PGDUMP file.
-	m.unsupportedStmtLogger = makeUnsupportedStmtLogger(format.PgDump.IgnoreUnsupported,
-		format.PgDump.IgnoreUnsupportedLog, dataIngestion, makeExternalStorage)
+	m.unsupportedStmtLogger = makeUnsupportedStmtLogger(ctx, user,
+		m.jobID, format.PgDump.IgnoreUnsupported, format.PgDump.IgnoreUnsupportedLog, dataIngestion,
+		makeExternalStorage)
 
 	err := readInputFiles(ctx, dataFiles, resumePos, format, m.readFile, makeExternalStorage, user)
 	if err != nil {
 		return err
 	}
 
-	return m.unsupportedStmtLogger.flush(ctx, user)
+	return m.unsupportedStmtLogger.flush()
 }
 
 func (m *pgDumpReader) readFile(
@@ -976,7 +994,10 @@ func (m *pgDumpReader) readFile(
 				if m.unsupportedStmtLogger.ignoreUnsupported {
 					logLine := fmt.Sprintf("%s: unsupported by IMPORT\n",
 						i.Rows.Select.String())
-					m.unsupportedStmtLogger.log(logLine, false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(logLine, false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
 				return errors.Errorf("unsupported: %s", i.Rows.Select)
@@ -1127,7 +1148,10 @@ func (m *pgDumpReader) readFile(
 			if !ok {
 				err := errors.Errorf("unsupported %T Select: %v", i.Select, i.Select)
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
 				return err
@@ -1135,7 +1159,10 @@ func (m *pgDumpReader) readFile(
 			if len(sc.Exprs) != 1 {
 				err := errors.Errorf("unsupported %d select args: %v", len(sc.Exprs), sc.Exprs)
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
 				return err
@@ -1144,7 +1171,10 @@ func (m *pgDumpReader) readFile(
 			if !ok {
 				err := errors.Errorf("unsupported select arg %T: %v", sc.Exprs[0].Expr, sc.Exprs[0].Expr)
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
 				return err
@@ -1154,7 +1184,10 @@ func (m *pgDumpReader) readFile(
 			case "search_path", "pg_catalog.set_config":
 				err := errors.Errorf("unsupported %d fn args in select: %v", len(fn.Exprs), fn.Exprs)
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
 				return err
@@ -1162,7 +1195,10 @@ func (m *pgDumpReader) readFile(
 				if args := len(fn.Exprs); args < 2 || args > 3 {
 					err := errors.Errorf("unsupported %d fn args in select: %v", len(fn.Exprs), fn.Exprs)
 					if m.unsupportedStmtLogger.ignoreUnsupported {
-						m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
 						continue
 					}
 					return err
@@ -1183,7 +1219,10 @@ func (m *pgDumpReader) readFile(
 				if !ok {
 					err := errors.Errorf("unsupported setval %T arg: %v", fn.Exprs[1], fn.Exprs[1])
 					if m.unsupportedStmtLogger.ignoreUnsupported {
-						m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+						if err != nil {
+							return err
+						}
 						continue
 					}
 					return err
@@ -1198,7 +1237,10 @@ func (m *pgDumpReader) readFile(
 					if !ok {
 						err := errors.Errorf("unsupported setval %T arg: %v", fn.Exprs[2], fn.Exprs[2])
 						if m.unsupportedStmtLogger.ignoreUnsupported {
-							m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+							err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+							if err != nil {
+								return err
+							}
 							continue
 						}
 						return err
@@ -1232,7 +1274,10 @@ func (m *pgDumpReader) readFile(
 			default:
 				err := errors.Errorf("unsupported function %s in stmt %s", funcName, i.Select.String())
 				if m.unsupportedStmtLogger.ignoreUnsupported {
-					m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+					if err != nil {
+						return err
+					}
 					continue
 				}
 				return err
@@ -1248,7 +1293,10 @@ func (m *pgDumpReader) readFile(
 		default:
 			err := errors.Errorf("unsupported %T statement: %v", i, i)
 			if m.unsupportedStmtLogger.ignoreUnsupported {
-				m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+				err := m.unsupportedStmtLogger.log(err.Error(), false /* isParseError */)
+				if err != nil {
+					return err
+				}
 				continue
 			}
 			return err

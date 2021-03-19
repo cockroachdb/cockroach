@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/url"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -108,7 +109,6 @@ const (
 	pgDumpIgnoreShuntFileDest      = "log_ignored_statements"
 	pgDumpUnsupportedSchemaStmtLog = "unsupported_schema_stmts"
 	pgDumpUnsupportedDataStmtLog   = "unsupported_data_stmts"
-	pgDumpMaxLoggedStmts           = 10
 
 	// RunningStatusImportBundleParseSchema indicates to the user that a bundle format
 	// schema is being parsed
@@ -148,6 +148,16 @@ var importOptionExpectValues = map[string]sql.KVStringOptValidate{
 
 	pgDumpIgnoreAllUnsupported: sql.KVStringOptRequireNoValue,
 	pgDumpIgnoreShuntFileDest:  sql.KVStringOptRequireValue,
+}
+
+var pgDumpMaxLoggedStmts = 1024
+
+func testingSetMaxLogIgnoredImportStatements(maxLogSize int) (cleanup func()) {
+	prevLogSize := pgDumpMaxLoggedStmts
+	pgDumpMaxLoggedStmts = maxLogSize
+	return func() {
+		pgDumpMaxLoggedStmts = prevLogSize
+	}
 }
 
 func makeStringSet(opts ...string) map[string]struct{} {
@@ -1572,6 +1582,10 @@ const (
 // unsupportedStmtLogger is responsible for handling unsupported PGDUMP SQL
 // statements seen during the import.
 type unsupportedStmtLogger struct {
+	ctx   context.Context
+	user  security.SQLUsername
+	jobID int64
+
 	// Values are initialized based on the options specified in the IMPORT PGDUMP
 	// stmt.
 	ignoreUnsupported        bool
@@ -1582,79 +1596,88 @@ type unsupportedStmtLogger struct {
 	logBuffer       *bytes.Buffer
 	numIgnoredStmts int
 
+	// Incremented every time the logger flushes. It is used as the suffix of the
+	// log file written to external storage.
+	flushCount int
+
 	loggerType loggerKind
 }
 
 func makeUnsupportedStmtLogger(
+	ctx context.Context,
+	user security.SQLUsername,
+	jobID int64,
 	ignoreUnsupported bool,
 	unsupportedLogDest string,
 	loggerType loggerKind,
 	externalStorage cloud.ExternalStorageFactory,
 ) *unsupportedStmtLogger {
-	l := &unsupportedStmtLogger{
+	return &unsupportedStmtLogger{
+		ctx:                      ctx,
+		user:                     user,
+		jobID:                    jobID,
 		ignoreUnsupported:        ignoreUnsupported,
 		ignoreUnsupportedLogDest: unsupportedLogDest,
 		loggerType:               loggerType,
 		logBuffer:                new(bytes.Buffer),
 		externalStorage:          externalStorage,
 	}
-	header := "Unsupported statements during schema parse phase:\n\n"
-	if loggerType == dataIngestion {
-		header = "Unsupported statements during data ingestion phase:\n\n"
-	}
-	l.logBuffer.WriteString(header)
-	return l
 }
 
-func (u *unsupportedStmtLogger) log(logLine string, isParseError bool) {
+func (u *unsupportedStmtLogger) log(logLine string, isParseError bool) error {
 	// We have already logged parse errors during the schema ingestion phase, so
 	// skip them to avoid duplicate entries.
 	skipLoggingParseErr := isParseError && u.loggerType == dataIngestion
 	if u.ignoreUnsupportedLogDest == "" || skipLoggingParseErr {
-		return
+		return nil
 	}
 
-	if u.numIgnoredStmts < pgDumpMaxLoggedStmts {
-		if isParseError {
-			logLine = fmt.Sprintf("%s: could not be parsed\n", logLine)
-		} else {
-			logLine = fmt.Sprintf("%s: unsupported by IMPORT\n", logLine)
+	// Flush to a file if we have hit the max size of our buffer.
+	if u.numIgnoredStmts >= pgDumpMaxLoggedStmts {
+		err := u.flush()
+		if err != nil {
+			return err
 		}
-		u.logBuffer.Write([]byte(logLine))
 	}
+
+	if isParseError {
+		logLine = fmt.Sprintf("%s: could not be parsed\n", logLine)
+	} else {
+		logLine = fmt.Sprintf("%s: unsupported by IMPORT\n", logLine)
+	}
+	u.logBuffer.Write([]byte(logLine))
 	u.numIgnoredStmts++
+	return nil
 }
 
-func (u *unsupportedStmtLogger) flush(ctx context.Context, user security.SQLUsername) error {
+func (u *unsupportedStmtLogger) flush() error {
 	if u.ignoreUnsupportedLogDest == "" {
 		return nil
 	}
 
-	numLoggedStmts := pgDumpMaxLoggedStmts
-	if u.numIgnoredStmts < pgDumpMaxLoggedStmts {
-		numLoggedStmts = u.numIgnoredStmts
-	}
-	u.logBuffer.WriteString(fmt.Sprintf("\nLogging %d out of %d ignored statements.\n",
-		numLoggedStmts, u.numIgnoredStmts))
-
-	conf, err := cloudimpl.ExternalStorageConfFromURI(u.ignoreUnsupportedLogDest, user)
+	conf, err := cloudimpl.ExternalStorageConfFromURI(u.ignoreUnsupportedLogDest, u.user)
 	if err != nil {
 		return errors.Wrap(err, "failed to log unsupported stmts during IMPORT PGDUMP")
 	}
 	var s cloud.ExternalStorage
-	if s, err = u.externalStorage(ctx, conf); err != nil {
+	if s, err = u.externalStorage(u.ctx, conf); err != nil {
 		return errors.New("failed to log unsupported stmts during IMPORT PGDUMP")
 	}
 	defer s.Close()
 
-	logFileName := pgDumpUnsupportedSchemaStmtLog
+	logFileName := fmt.Sprintf("import%d", u.jobID)
 	if u.loggerType == dataIngestion {
-		logFileName = pgDumpUnsupportedDataStmtLog
+		logFileName = path.Join(logFileName, pgDumpUnsupportedDataStmtLog, fmt.Sprintf("%d.log", u.flushCount))
+	} else {
+		logFileName = path.Join(logFileName, pgDumpUnsupportedSchemaStmtLog, fmt.Sprintf("%d.log", u.flushCount))
 	}
-	err = s.WriteFile(ctx, logFileName, bytes.NewReader(u.logBuffer.Bytes()))
+	err = s.WriteFile(u.ctx, logFileName, bytes.NewReader(u.logBuffer.Bytes()))
 	if err != nil {
 		return errors.Wrap(err, "failed to log unsupported stmts to log during IMPORT PGDUMP")
 	}
+	u.flushCount++
+	u.numIgnoredStmts = 0
+	u.logBuffer.Truncate(0)
 	return nil
 }
 
@@ -1671,6 +1694,7 @@ func parseAndCreateBundleTableDescs(
 	format roachpb.IOFileFormat,
 	walltime int64,
 	owner security.SQLUsername,
+	jobID jobspb.JobID,
 ) ([]*tabledesc.Mutable, []*schemadesc.Mutable, error) {
 
 	var schemaDescs []*schemadesc.Mutable
@@ -1714,13 +1738,14 @@ func parseAndCreateBundleTableDescs(
 		evalCtx := &p.ExtendedEvalContext().EvalContext
 
 		// Setup a logger to handle unsupported DDL statements in the PGDUMP file.
-		unsupportedStmtLogger := makeUnsupportedStmtLogger(format.PgDump.IgnoreUnsupported,
-			format.PgDump.IgnoreUnsupportedLog, schemaParsing, p.ExecCfg().DistSQLSrv.ExternalStorage)
+		unsupportedStmtLogger := makeUnsupportedStmtLogger(ctx, p.User(), int64(jobID),
+			format.PgDump.IgnoreUnsupported, format.PgDump.IgnoreUnsupportedLog, schemaParsing,
+			p.ExecCfg().DistSQLSrv.ExternalStorage)
 
 		tableDescs, schemaDescs, err = readPostgresCreateTable(ctx, reader, evalCtx, p, tableName,
 			parentID, walltime, fks, int(format.PgDump.MaxRowSize), owner, unsupportedStmtLogger)
 
-		logErr := unsupportedStmtLogger.flush(ctx, p.User())
+		logErr := unsupportedStmtLogger.flush()
 		if logErr != nil {
 			return nil, nil, logErr
 		}
@@ -1765,7 +1790,8 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		walltime := p.ExecCfg().Clock.Now().WallTime
 
 		if tableDescs, schemaDescs, err = parseAndCreateBundleTableDescs(
-			ctx, p, details, seqVals, skipFKs, parentID, files, format, walltime, owner); err != nil {
+			ctx, p, details, seqVals, skipFKs, parentID, files, format, walltime, owner,
+			r.job.ID()); err != nil {
 			return err
 		}
 
