@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -47,11 +48,12 @@ import (
 // from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type ColBatchScan struct {
 	colexecop.ZeroInputNode
-	spans       roachpb.Spans
-	flowCtx     *execinfra.FlowCtx
-	rf          *cFetcher
-	limitHint   int64
-	parallelize bool
+	spans        roachpb.Spans
+	flowCtx      *execinfra.FlowCtx
+	minDynamicTS *hlc.Timestamp
+	rf           *cFetcher
+	limitHint    int64
+	parallelize  bool
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
 	tracingSpan *tracing.Span
@@ -84,7 +86,12 @@ func (s *ColBatchScan) Init() {
 	s.mu.init = true
 	limitBatches := !s.parallelize
 	if err := s.rf.StartScan(
-		s.flowCtx.Txn, s.spans, limitBatches, s.limitHint, s.flowCtx.TraceKV,
+		s.flowCtx.Txn,
+		s.spans,
+		s.minDynamicTS,
+		limitBatches,
+		s.limitHint,
+		s.flowCtx.TraceKV,
 		s.flowCtx.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		colexecerror.InternalError(err)
@@ -263,6 +270,16 @@ func NewColBatchScan(
 		neededColumns.Add(int(neededColumn))
 	}
 
+	minDynamicTS := evalCtx.MinDynamicTimestamp
+	if minDynamicTS != nil && minDynamicTS.Less(table.GetModificationTime()) {
+		// If the query is using a dynamic timestamp, forward its minimum
+		// timestamp to the start of the current table descriptor's validity
+		// window, so that any results returned will be compatible with the
+		// current schema.
+		minSchemaValidTS := table.GetModificationTime()
+		minDynamicTS = &minSchemaValidTS
+	}
+
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	if _, _, err := initCRowFetcher(
 		flowCtx.Codec(), allocator, execinfra.GetWorkMemLimit(flowCtx.Cfg),
@@ -279,10 +296,11 @@ func NewColBatchScan(
 		spans = append(spans, specSpans[i].Span)
 	}
 	*s = ColBatchScan{
-		spans:     spans,
-		flowCtx:   flowCtx,
-		rf:        fetcher,
-		limitHint: limitHint,
+		spans:        spans,
+		flowCtx:      flowCtx,
+		minDynamicTS: minDynamicTS,
+		rf:           fetcher,
+		limitHint:    limitHint,
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
 		parallelize: spec.Parallelize && limitHint == 0,

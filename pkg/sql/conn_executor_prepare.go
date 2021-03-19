@@ -253,10 +253,13 @@ func (ex *connExecutor) populatePrepared(
 	}
 	p.extendedEvalCtx.PrepareOnly = true
 
-	protoTS, err := p.isAsOf(ctx, stmt.AST)
+	protoTS, dynamic, err := p.isAsOf(ctx, stmt.AST)
 	if err != nil {
 		return 0, err
 	}
+	// TODO(nvanbenschoten): figure out what to do here. We'll want to support
+	// prepared statements that use the with_max_staleness function.
+	_ = dynamic
 	if protoTS != nil {
 		p.semaCtx.AsOfTimestamp = protoTS
 		txn.SetFixedTimestamp(ctx, *protoTS)

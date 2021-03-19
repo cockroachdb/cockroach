@@ -1907,6 +1907,14 @@ message Header {
   // If the desired behavior is to block on the conflicting lock up to some
   // maximum duration, use the Block wait policy and set a context timeout.
   kv.kvserver.concurrency.lock.WaitPolicy wait_policy = 18;
+  // min_closed_timestamp, if specified, indicates the minium closed timestamp
+  // (maximum staleness) that an inconsistent read can tolerate when served off
+  // of a follower replica. The timestamp is compared to the follower's closed
+  // timestamp before evaluating the request. If the closed timestamp is >= the
+  // minimum closed timestamp, then the request can be evaluated. Otherwise, the
+  // reuqest is rejected. The field is only appropriate for requests with a
+  // read_consistency set to INCONSISTENT.
+  util.hlc.Timestamp min_closed_timestamp = 19;
   // If set to a non-zero value, the total number of keys touched by requests in
   // the batch is limited. A resume span will be provided on the response of the
   // requests that were not able to run to completion before the limit was

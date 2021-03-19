@@ -1433,7 +1433,7 @@ func restorePlanHook(
 		var endTime hlc.Timestamp
 		if restoreStmt.AsOf.Expr != nil {
 			var err error
-			endTime, err = p.EvalAsOfTimestamp(ctx, restoreStmt.AsOf)
+			endTime, _, err = p.EvalAsOfTimestamp(ctx, restoreStmt.AsOf, false /* allowDynamic */)
 			if err != nil {
 				return err
 			}

@@ -60,6 +60,36 @@ func NewKVFetcher(
 	return newKVFetcher(&kvBatchFetcher), err
 }
 
+// NewKVFetcherWithDynamicTS creates a new KVFetch which scans at a dynamic
+// timestamp.
+func NewKVFetcherWithDynamicTS(
+	db *kv.DB,
+	minDynamicTS *hlc.Timestamp,
+	spans roachpb.Spans,
+	reverse bool,
+	useBatchLimit bool,
+	firstBatchLimit int64,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	mon *mon.BytesMonitor,
+	forceProductionKVBatchSize bool,
+) (*KVFetcher, error) {
+	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		ba.ReadConsistency = roachpb.INCONSISTENT
+		ba.MinClosedTimestamp = minDynamicTS
+		res, err := db.NonTransactionalSender().Send(ctx, ba)
+		if err != nil {
+			return nil, err.GoError()
+		}
+		return res, nil
+	}
+	kvBatchFetcher, err := makeKVBatchFetcherWithSendFunc(
+		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, lockStrength,
+		lockWaitPolicy, mon, forceProductionKVBatchSize,
+	)
+	return newKVFetcher(&kvBatchFetcher), err
+}
+
 func newKVFetcher(batchFetcher kvBatchFetcher) *KVFetcher {
 	ret := &KVFetcher{
 		kvBatchFetcher: batchFetcher,

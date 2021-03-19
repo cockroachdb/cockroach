@@ -1255,3 +1255,20 @@ func (e *InvalidLeaseError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &InvalidLeaseError{}
+
+func (e *InsufficientClosedTimestampError) Error() string {
+	return e.message(nil)
+}
+
+func (e *InsufficientClosedTimestampError) message(_ *Error) string {
+	return fmt.Sprintf("request with min_closed_timestamp %s could not be "+
+			"satisfied by replica %s with closed timestamp %s", 
+			e.MinClosedTimestamp, e.Replica, e.ReplicaClosedTimestamp)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *InsufficientClosedTimestampError) Type() ErrorDetailType {
+	return InvalidLeaseErrType
+}
+
+var _ ErrorDetailInterface = &InsufficientClosedTimestampError{}

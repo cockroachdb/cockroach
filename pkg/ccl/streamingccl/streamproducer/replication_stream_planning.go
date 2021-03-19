@@ -133,7 +133,7 @@ func doCreateReplicationStream(
 
 	var scanStart hlc.Timestamp
 	if eval.Options.Cursor != nil {
-		if scanStart, err = p.EvalAsOfTimestamp(ctx, tree.AsOfClause{Expr: eval.Options.Cursor}); err != nil {
+		if scanStart, _, err = p.EvalAsOfTimestamp(ctx, tree.AsOfClause{Expr: eval.Options.Cursor}, false /* allowDynamic */); err != nil {
 			return err
 		}
 	}
