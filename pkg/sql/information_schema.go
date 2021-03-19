@@ -1850,19 +1850,21 @@ func forEachDatabaseDesc(
 			return err
 		}
 		dbDescs = allDbDescs
-	} else {
+	} else if dbContext.GetPrivileges() == nil {
 		// We can't just use dbContext here because we need to fetch the descriptor
 		// with privileges from kv.
-		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(
-			ctx, p.txn, p.ExecCfg().Codec, []descpb.ID{dbContext.GetID()},
+		found, fetchedDbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+			ctx, p.txn, dbContext.GetID(), tree.DatabaseLookupFlags{Required: true, AvoidCached: p.avoidCachedDescriptors},
 		)
-		if err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		if err != nil || !found {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) || !found {
 				return pgerror.Newf(pgcode.UndefinedDatabase, "database %s does not exist", dbContext.GetName())
 			}
 			return err
 		}
-		dbDescs = fetchedDbDesc
+		dbDescs = append(dbDescs, fetchedDbDesc)
+	} else {
+		dbDescs = append(dbDescs, dbContext)
 	}
 
 	// Ignore databases that the user cannot see.
