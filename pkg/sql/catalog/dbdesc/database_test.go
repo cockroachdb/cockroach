@@ -265,18 +265,18 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 
 	for i, test := range tests {
 		privilege := descpb.NewDefaultPrivilegeDescriptor(security.AdminRoleName())
-		descs := catalog.MapDescGetter{}
+		descs := catalog.MakeMapDescGetter()
 		test.desc.Privileges = privilege
 		desc := NewBuilder(&test.desc).BuildImmutable()
-		descs[test.desc.ID] = desc
+		descs.Descriptors[test.desc.ID] = desc
 		test.multiRegionEnum.Privileges = privilege
-		descs[test.multiRegionEnum.ID] = typedesc.NewBuilder(&test.multiRegionEnum).BuildImmutable()
+		descs.Descriptors[test.multiRegionEnum.ID] = typedesc.NewBuilder(&test.multiRegionEnum).BuildImmutable()
 		for _, schemaDesc := range test.schemaDescs {
 			schemaDesc.Privileges = privilege
-			descs[schemaDesc.ID] = schemadesc.NewBuilder(&schemaDesc).BuildImmutable()
+			descs.Descriptors[schemaDesc.ID] = schemadesc.NewBuilder(&schemaDesc).BuildImmutable()
 		}
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		const validateCrossReferencesOnly = catalog.ValidationLevelSelfAndCrossReferences &^ (catalog.ValidationLevelSelfAndCrossReferences >> 1)
+		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
 		if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)

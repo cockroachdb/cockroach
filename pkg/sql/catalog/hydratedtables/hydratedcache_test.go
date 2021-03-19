@@ -84,10 +84,10 @@ func TestHydratedCache(t *testing.T) {
 		assertMetrics(t, m, 0, 1)
 
 		// Change the database name.
-		dbDesc := dbdesc.NewBuilder(dg[dbID].(catalog.DatabaseDescriptor).DatabaseDesc()).BuildExistingMutableDatabase()
+		dbDesc := dbdesc.NewBuilder(dg.Descriptors[dbID].(catalog.DatabaseDescriptor).DatabaseDesc()).BuildExistingMutableDatabase()
 		dbDesc.SetName("new_name")
 		dbDesc.Version++
-		dg[dbID] = dbDesc.ImmutableCopy()
+		dg.Descriptors[dbID] = dbDesc.ImmutableCopy()
 
 		// Ensure that we observe a new descriptor get created due to
 		// the name change.
@@ -152,9 +152,9 @@ func TestHydratedCache(t *testing.T) {
 		assertMetrics(t, m, 0, 1)
 
 		// Change the type descriptor.
-		typDesc := typedesc.NewBuilder(dg[typ1ID].(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutableType()
+		typDesc := typedesc.NewBuilder(dg.Descriptors[typ1ID].(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutableType()
 		typDesc.Version++
-		dg[typ1ID] = typedesc.NewBuilder(typDesc.TypeDesc()).BuildImmutable()
+		dg.Descriptors[typ1ID] = typedesc.NewBuilder(typDesc.TypeDesc()).BuildImmutable()
 
 		// Ensure that a new descriptor is returned.
 		retrieved, err := c.GetHydratedTableDescriptor(ctx, td, res)
@@ -200,7 +200,7 @@ func TestHydratedCache(t *testing.T) {
 		c := NewCache(cluster.MakeTestingClusterSettings())
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
-		mut := tabledesc.NewBuilder(dg[tableUDTID].(catalog.TableDescriptor).TableDesc()).BuildExistingMutable()
+		mut := tabledesc.NewBuilder(dg.Descriptors[tableUDTID].(catalog.TableDescriptor).TableDesc()).BuildExistingMutable()
 		mut.MaybeIncrementVersion()
 		td := mut.ImmutableCopy().(catalog.TableDescriptor)
 		hydrated, err := c.GetHydratedTableDescriptor(ctx, td, res)
@@ -214,7 +214,7 @@ func TestHydratedCache(t *testing.T) {
 		dg := mkDescGetter(descs...)
 		res := &descGetterTypeDescriptorResolver{dg: &dg}
 
-		mut := typedesc.NewBuilder(dg[typ1ID].(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutable()
+		mut := typedesc.NewBuilder(dg.Descriptors[typ1ID].(catalog.TypeDescriptor).TypeDesc()).BuildExistingMutable()
 		mut.MaybeIncrementVersion()
 		dgWithMut := mkDescGetter(append(descs, mut)...)
 		resWithMut := &descGetterTypeDescriptorResolver{dg: &dgWithMut}
@@ -362,9 +362,11 @@ var (
 )
 
 func mkDescGetter(descs ...catalog.MutableDescriptor) catalog.MapDescGetter {
-	ret := make(catalog.MapDescGetter, len(descs))
+	ret := catalog.MapDescGetter{
+		Descriptors: make(map[descpb.ID]catalog.Descriptor, len(descs)),
+	}
 	for _, desc := range descs {
-		ret[desc.GetID()] = desc.ImmutableCopy()
+		ret.Descriptors[desc.GetID()] = desc.ImmutableCopy()
 	}
 	return ret
 }
