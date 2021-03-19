@@ -588,7 +588,7 @@ DATABASE alter_test_db  ALTER DATABASE alter_test_db CONFIGURE ZONE USING
 statement error region "test" does not exist
 ALTER DATABASE alter_test_db ADD REGION "test"
 
-statement error region "ap-southeast-2" already added to database
+statement error pgcode 42710 region "ap-southeast-2" already added to database
 ALTER DATABASE alter_test_db ADD REGION "ap-southeast-2"
 
 statement error cannot add region
