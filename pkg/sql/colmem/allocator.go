@@ -163,10 +163,9 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 func (a *Allocator) ResetMaybeReallocate(
 	typs []*types.T, oldBatch coldata.Batch, minCapacity int, maxBatchMemSize int64,
 ) (newBatch coldata.Batch, reallocated bool) {
-	if minCapacity < 1 {
+	if minCapacity < 0 {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid minCapacity %d", minCapacity))
-	}
-	if minCapacity > coldata.BatchSize() {
+	} else if minCapacity == 0 || minCapacity > coldata.BatchSize() {
 		minCapacity = coldata.BatchSize()
 	}
 	reallocated = true
