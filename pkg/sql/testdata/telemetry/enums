@@ -14,6 +14,16 @@ ALTER TYPE t ADD VALUE 'howdy'
 sql.schema.alter_type.add_value
 sql.udts.alter_enum
 
+exec
+SET enable_drop_enum_value = true
+----
+
+feature-usage
+ALTER TYPE t DROP VALUE 'hello'
+----
+sql.schema.alter_type.drop_value
+sql.udts.alter_enum
+
 feature-usage
 CREATE TABLE tt (x t)
 ----
