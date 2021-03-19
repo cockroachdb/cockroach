@@ -20,6 +20,7 @@ import {
   stdDev,
   getMatchParamByName,
   formatNumberForDisplay,
+  calculateTotalWorkload,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -410,6 +411,7 @@ export class StatementDetails extends React.Component<
     );
 
     const statsByNode = this.props.statement.byNode;
+    const totalWorkload = calculateTotalWorkload(statsByNode);
     const logicalPlan =
       stats.sensitive_info && stats.sensitive_info.most_recent_plan_description;
     const duration = (v: number) => Duration(v * 1e9);
@@ -433,8 +435,8 @@ export class StatementDetails extends React.Component<
                 <Row>
                   <Col>
                     <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Heading type="h5">Statement time</Heading>
-                      <Text>
+                      <Heading type="h5">Mean statement time</Heading>
+                      <Text type="body-strong">
                         {formatNumberForDisplay(
                           stats.service_lat.mean,
                           duration,
@@ -442,7 +444,7 @@ export class StatementDetails extends React.Component<
                       </Text>
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text type="body-strong">Planning time</Text>
+                      <Text>Planning time</Text>
                       <Text>
                         {formatNumberForDisplay(stats.plan_lat.mean, duration)}
                       </Text>
@@ -451,7 +453,7 @@ export class StatementDetails extends React.Component<
                       className={summaryCardStylesCx("summary--card__divider")}
                     />
                     <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text type="body-strong">Execution time</Text>
+                      <Text>Execution time</Text>
                       <Text>
                         {formatNumberForDisplay(stats.run_lat.mean, duration)}
                       </Text>
@@ -463,11 +465,13 @@ export class StatementDetails extends React.Component<
                 </Row>
               </SummaryCard>
               <SummaryCard className={cx("summary-card")}>
-                <Heading type="h5">Resource usage</Heading>
                 <Row>
                   <Col>
                     <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text type="body-strong">Mean rows/bytes read</Text>
+                      <Heading type="h5">Resource usage</Heading>
+                    </div>
+                    <div className={summaryCardStylesCx("summary--card__item")}>
+                      <Text>Mean rows/bytes read</Text>
                       <Text>
                         {formatNumberForDisplay(
                           stats.rows_read.mean,
@@ -478,7 +482,7 @@ export class StatementDetails extends React.Component<
                       </Text>
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text type="body-strong">Max memory usage</Text>
+                      <Text>Max memory usage</Text>
                       <Text>
                         {formatNumberForDisplay(
                           stats.exec_stats.max_mem_usage.mean,
@@ -487,7 +491,7 @@ export class StatementDetails extends React.Component<
                       </Text>
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text type="body-strong">Network usage</Text>
+                      <Text>Network usage</Text>
                       <Text>
                         {formatNumberForDisplay(
                           stats.exec_stats.network_bytes.mean,
@@ -496,7 +500,7 @@ export class StatementDetails extends React.Component<
                       </Text>
                     </div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
-                      <Text type="body-strong">Max scratch disk usage</Text>
+                      <Text>Max scratch disk usage</Text>
                       <Text>
                         {formatNumberForDisplay(
                           stats.exec_stats.max_disk_usage.mean,
@@ -512,7 +516,7 @@ export class StatementDetails extends React.Component<
               <SummaryCard className={cx("summary-card")}>
                 <Heading type="h5">Statement details</Heading>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">App</Text>
+                  <Text>App</Text>
                   <Text>
                     {intersperse<ReactNode>(
                       app.map(a => <AppLink app={a} key={a} />),
@@ -521,38 +525,41 @@ export class StatementDetails extends React.Component<
                   </Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">Failed?</Text>
+                  <Text>Failed?</Text>
                   <Text>{renderBools(failed)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">Used cost-based optimizer?</Text>
+                  <Text>Used cost-based optimizer?</Text>
                   <Text>{renderBools(opt)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">Distributed execution?</Text>
+                  <Text>Distributed execution?</Text>
                   <Text>{renderBools(distSQL)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">Vectorized execution?</Text>
+                  <Text>Vectorized execution?</Text>
                   <Text>{renderBools(vec)}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">Transaction type</Text>
+                  <Text>Transaction type</Text>
                   <Text>{renderTransactionType(implicit_txn)}</Text>
                 </div>
-                <p className={summaryCardStylesCx("summary--card__divider")} />
-
+                <p
+                  className={summaryCardStylesCx(
+                    "summary--card__divider--large",
+                  )}
+                />
                 <Heading type="h5">Execution counts</Heading>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">First attempts</Text>
+                  <Text>First attempts</Text>
                   <Text>{firstAttemptsBarChart}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">Total executions</Text>
+                  <Text>Total executions</Text>
                   <Text>{totalCountBarChart}</Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">Retries</Text>
+                  <Text>Retries</Text>
                   <Text
                     className={summaryCardStylesCx(
                       "summary--card__item--value",
@@ -565,7 +572,7 @@ export class StatementDetails extends React.Component<
                   </Text>
                 </div>
                 <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text type="body-strong">Max retries</Text>
+                  <Text>Max retries</Text>
                   <Text
                     className={summaryCardStylesCx(
                       "summary--card__item--value",
@@ -605,7 +612,11 @@ export class StatementDetails extends React.Component<
             <PlanView title="Logical Plan" plan={logicalPlan} />
           </SummaryCard>
         </TabPane>
-        <TabPane tab="Execution Stats" key="execution-stats">
+        <TabPane
+          tab="Execution Stats"
+          key="execution-stats"
+          className={cx("fit-content-width")}
+        >
           <SummaryCard>
             <h2
               className={classNames(
@@ -698,7 +709,7 @@ export class StatementDetails extends React.Component<
               })}
             />
           </SummaryCard>
-          <SummaryCard>
+          <SummaryCard className={cx("fit-content-width")}>
             <h2
               className={classNames(
                 cx("base-heading"),
@@ -721,7 +732,11 @@ export class StatementDetails extends React.Component<
             <StatementsSortedTable
               className={cx("statements-table")}
               data={statsByNode}
-              columns={makeNodesColumns(statsByNode, this.props.nodeNames)}
+              columns={makeNodesColumns(
+                statsByNode,
+                this.props.nodeNames,
+                totalWorkload,
+              )}
               sortSetting={this.state.sortSetting}
               onChangeSortSetting={this.changeSortSetting}
               firstCellBordered
