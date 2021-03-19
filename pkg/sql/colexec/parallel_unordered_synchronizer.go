@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -104,7 +105,7 @@ func (s *ParallelUnorderedSynchronizer) ChildCount(verbose bool) int {
 
 // Child implements the execinfra.OpNode interface.
 func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
-	return s.inputs[nth].Op
+	return s.inputs[nth].Root
 }
 
 // SynchronizerInput is a wrapper over a colexecop.Operator that a
@@ -112,8 +113,7 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.O
 // colexecop.MetadataSources may also be specified, in which case
 // DrainMeta will be called from the same goroutine.
 type SynchronizerInput struct {
-	// Op is the input Operator.
-	Op colexecop.Operator
+	colexecargs.OpWithMetaInfo
 	// StatsCollectors are all vectorized stats collectors in the input tree.
 	// The field is currently being used *only* to track all of the stats
 	// collectors in the input tree, and the synchronizers should *not* access
@@ -121,18 +121,12 @@ type SynchronizerInput struct {
 	// TODO(yuzefovich): actually move the logic of getting stats into the
 	// synchronizers.
 	StatsCollectors []VectorizedStatsCollector
-	// MetadataSources are metadata sources in the input tree that should be
-	// drained in the same goroutine as Op.
-	MetadataSources colexecop.MetadataSources
-	// ToClose are Closers in the input tree that should be closed in the same
-	// goroutine as Op.
-	ToClose colexecop.Closers
 }
 
 func operatorsToSynchronizerInputs(ops []colexecop.Operator) []SynchronizerInput {
 	result := make([]SynchronizerInput, len(ops))
 	for i := range result {
-		result[i].Op = ops[i]
+		result[i].Root = ops[i]
 	}
 	return result
 }
@@ -175,7 +169,7 @@ func NewParallelUnorderedSynchronizer(
 // Init is part of the Operator interface.
 func (s *ParallelUnorderedSynchronizer) Init() {
 	for _, input := range s.inputs {
-		input.Op.Init()
+		input.Root.Init()
 	}
 }
 
@@ -199,7 +193,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 	for i, input := range s.inputs {
 		s.nextBatch[i] = func(input SynchronizerInput, inputIdx int) func() {
 			return func() {
-				s.batches[inputIdx] = input.Op.Next(ctx)
+				s.batches[inputIdx] = input.Root.Next(ctx)
 			}
 		}(input, i)
 		s.externalWaitGroup.Add(1)

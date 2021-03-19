@@ -174,8 +174,8 @@ func TestEval(t *testing.T) {
 					},
 					ResultTypes: []*types.T{typedExpr.ResolvedType()},
 				},
-				Inputs: []colexecop.Operator{
-					&colexecop.CallbackOperator{
+				Inputs: []colexecargs.OpWithMetaInfo{{
+					Root: &colexecop.CallbackOperator{
 						NextCb: func(_ context.Context) coldata.Batch {
 							if batchesReturned > 0 {
 								return coldata.ZeroBatch
@@ -185,8 +185,8 @@ func TestEval(t *testing.T) {
 							batch.SetLength(1)
 							batchesReturned++
 							return batch
-						},
-					},
+						}},
+				},
 				},
 				StreamingMemAccount: &acc,
 				// Unsupported post processing specs are wrapped and run through the
@@ -200,12 +200,10 @@ func TestEval(t *testing.T) {
 			mat, err := colexec.NewMaterializer(
 				flowCtx,
 				0, /* processorID */
-				result.Op,
+				result.OpWithMetaInfo,
 				[]*types.T{typedExpr.ResolvedType()},
 				nil, /* output */
 				nil, /* statsCollectors */
-				result.MetadataSources,
-				nil, /* toClose */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)

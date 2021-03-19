@@ -1015,7 +1015,7 @@ func TestHashJoiner(t *testing.T) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
 						Spec:                spec,
-						Inputs:              sources,
+						Inputs:              colexectestutils.MakeInputs(sources),
 						StreamingMemAccount: testMemAcc,
 					}
 					args.TestingKnobs.UseStreamingMemAccountForBuffering = true
@@ -1024,7 +1024,7 @@ func TestHashJoiner(t *testing.T) {
 					if err != nil {
 						return nil, err
 					}
-					return result.Op, nil
+					return result.Root, nil
 				})
 			}
 		}
@@ -1164,15 +1164,15 @@ func TestHashJoinerProjection(t *testing.T) {
 	rightSource := colexectestutils.NewOpTestInput(testAllocator, 1, rightTuples, rightTypes)
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              []colexecop.Operator{leftSource, rightSource},
+		Inputs:              []colexecargs.OpWithMetaInfo{{Root: leftSource}, {Root: rightSource}},
 		StreamingMemAccount: testMemAcc,
 	}
 	args.TestingKnobs.UseStreamingMemAccountForBuffering = true
 	args.TestingKnobs.DiskSpillingDisabled = true
 	hjOp, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
-	hjOp.Op.Init()
-	for b := hjOp.Op.Next(ctx); b.Length() > 0; b = hjOp.Op.Next(ctx) {
+	hjOp.Root.Init()
+	for b := hjOp.Root.Next(ctx); b.Length() > 0; b = hjOp.Root.Next(ctx) {
 		// The output types should be {Int64, Int64, Bool, Decimal, Float64, Bytes}
 		// and we check this explicitly.
 		b.ColVec(0).Int64()

@@ -373,7 +373,7 @@ func TestCrossJoiner(t *testing.T) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
 						Spec:                spec,
-						Inputs:              sources,
+						Inputs:              colexectestutils.MakeInputs(sources),
 						StreamingMemAccount: testMemAcc,
 						DiskQueueCfg:        queueCfg,
 						FDSemaphore:         colexecop.NewTestingSemaphore(externalHJMinPartitions),
@@ -384,7 +384,7 @@ func TestCrossJoiner(t *testing.T) {
 					}
 					accounts = append(accounts, result.OpAccounts...)
 					monitors = append(monitors, result.OpMonitors...)
-					return result.Op, nil
+					return result.Root, nil
 				})
 			}
 		}
@@ -444,7 +444,7 @@ func BenchmarkCrossJoiner(b *testing.B) {
 				args := &colexecargs.NewColOperatorArgs{
 					Spec: spec,
 					// Inputs will be set below.
-					Inputs:              []colexecop.Operator{nil, nil},
+					Inputs:              []colexecargs.OpWithMetaInfo{{}, {}},
 					StreamingMemAccount: testMemAcc,
 					DiskQueueCfg:        queueCfg,
 					FDSemaphore:         colexecop.NewTestingSemaphore(VecMaxOpenFDsLimit),
@@ -459,14 +459,14 @@ func BenchmarkCrossJoiner(b *testing.B) {
 					b.SetBytes(int64(8 * nOutputRows * (len(tc.leftOutCols) + len(tc.rightOutCols))))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						args.Inputs[0] = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
-						args.Inputs[1] = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
+						args.Inputs[0].Root = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
+						args.Inputs[1].Root = colexectestutils.NewChunkingBatchSource(testAllocator, sourceTypes, cols, nRows)
 						result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 						require.NoError(b, err)
 						accounts = append(accounts, result.OpAccounts...)
 						monitors = append(monitors, result.OpMonitors...)
 						require.NoError(b, err)
-						cj := result.Op
+						cj := result.Root
 						cj.Init()
 						for b := cj.Next(ctx); b.Length() > 0; b = cj.Next(ctx) {
 						}

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -737,7 +738,12 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		}
 	}
 
-	r := newHashRouterWithOutputs(in, []uint32{0}, nil /* ch */, outputs, nil /* statsCollectors */, nil /* toDrain */, nil /* toClose */)
+	r := newHashRouterWithOutputs(
+		colexecargs.OpWithMetaInfo{Root: in},
+		[]uint32{0}, /* hashCols */
+		nil /* ch */, outputs,
+		nil, /* statsCollectors */
+	)
 	for r.processNextBatch(ctx) {
 	}
 
@@ -780,7 +786,13 @@ func TestHashRouterCancellation(t *testing.T) {
 	in := colexecop.NewRepeatableBatchSource(tu.testAllocator, batch, typs)
 
 	unbufferedCh := make(chan struct{})
-	r := newHashRouterWithOutputs(in, []uint32{0}, unbufferedCh, routerOutputs, nil /* statsCollectors */, nil /* toDrain */, nil /* toClose */)
+	r := newHashRouterWithOutputs(
+		colexecargs.OpWithMetaInfo{Root: in},
+		[]uint32{0}, /* hashCols */
+		unbufferedCh,
+		routerOutputs,
+		nil, /* statsCollectors */
+	)
 
 	t.Run("BeforeRun", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -883,7 +895,9 @@ func TestHashRouterOneOutput(t *testing.T) {
 			defer diskAcc.Close(ctx)
 			r, routerOutputs := NewHashRouter(
 				[]*colmem.Allocator{tu.testAllocator},
-				colexectestutils.NewOpFixedSelTestInput(tu.testAllocator, sel, len(sel), data, typs),
+				colexecargs.OpWithMetaInfo{
+					Root: colexectestutils.NewOpFixedSelTestInput(tu.testAllocator, sel, len(sel), data, typs),
+				},
 				typs,
 				[]uint32{0}, /* hashCols */
 				mtc.bytes,
@@ -891,8 +905,6 @@ func TestHashRouterOneOutput(t *testing.T) {
 				colexecop.NewTestingSemaphore(2),
 				[]*mon.BoundAccount{&diskAcc},
 				nil, /* statsCollectors */
-				nil, /* toDrain */
-				nil, /* toClose */
 			)
 
 			if len(routerOutputs) != 1 {
@@ -1080,19 +1092,20 @@ func TestHashRouterRandom(t *testing.T) {
 
 				const hashRouterMetadataMsg = "hash router test metadata"
 				r := newHashRouterWithOutputs(
-					inputs[0],
+					colexecargs.OpWithMetaInfo{
+						Root: inputs[0],
+						MetadataSources: []colexecop.MetadataSource{
+							colexectestutils.CallbackMetadataSource{
+								DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
+									return []execinfrapb.ProducerMetadata{{Err: errors.New(hashRouterMetadataMsg)}}
+								},
+							},
+						},
+					},
 					hashCols,
 					unblockEventsChan,
 					outputs,
 					nil, /* statsCollectors */
-					[]colexecop.MetadataSource{
-						colexectestutils.CallbackMetadataSource{
-							DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
-								return []execinfrapb.ProducerMetadata{{Err: errors.New(hashRouterMetadataMsg)}}
-							},
-						},
-					},
-					nil, /* toClose */
 				)
 
 				var (
@@ -1310,7 +1323,7 @@ func BenchmarkHashRouter(b *testing.B) {
 				}
 				r, outputs := NewHashRouter(
 					allocators,
-					input,
+					colexecargs.OpWithMetaInfo{Root: input},
 					typs,
 					[]uint32{0}, /* hashCols */
 					64<<20,      /* memoryLimit */
@@ -1318,8 +1331,6 @@ func BenchmarkHashRouter(b *testing.B) {
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
 					nil, /* statsCollectors */
-					nil, /* toDrain */
-					nil, /* toClose */
 				)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that

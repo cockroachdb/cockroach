@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -459,7 +460,7 @@ type HashRouter struct {
 // needs to have a separate disk account.
 func NewHashRouter(
 	unlimitedAllocators []*colmem.Allocator,
-	input colexecop.Operator,
+	input colexecargs.OpWithMetaInfo,
 	types []*types.T,
 	hashCols []uint32,
 	memoryLimit int64,
@@ -467,8 +468,6 @@ func NewHashRouter(
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
 	statsCollectors []colexec.VectorizedStatsCollector,
-	toDrain []colexecop.MetadataSource,
-	toClose []colexecop.Closer,
 ) (*HashRouter, []colexecop.DrainableOperator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		colexecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
@@ -499,25 +498,23 @@ func NewHashRouter(
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	return newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs, statsCollectors, toDrain, toClose), outputsAsOps
+	return newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs, statsCollectors), outputsAsOps
 }
 
 func newHashRouterWithOutputs(
-	input colexecop.Operator,
+	input colexecargs.OpWithMetaInfo,
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
 	statsCollectors []colexec.VectorizedStatsCollector,
-	toDrain []colexecop.MetadataSource,
-	toClose []colexecop.Closer,
 ) *HashRouter {
 	r := &HashRouter{
-		OneInputNode:        colexecop.NewOneInputNode(input),
+		OneInputNode:        colexecop.NewOneInputNode(input.Root),
 		hashCols:            hashCols,
 		outputs:             outputs,
 		statsCollectors:     statsCollectors,
-		metadataSources:     toDrain,
-		closers:             toClose,
+		metadataSources:     input.MetadataSources,
+		closers:             input.ToClose,
 		unblockedEventsChan: unblockEventsChan,
 		// waitForMetadata is a buffered channel to avoid blocking if nobody will
 		// read the metadata.

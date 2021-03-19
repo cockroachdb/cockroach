@@ -582,7 +582,7 @@ func (s *externalSorter) createMergerForPartitions(
 	s.createPartitionerToOperators(n)
 	syncInputs := make([]SynchronizerInput, n)
 	for i := range syncInputs {
-		syncInputs[i].Op = s.partitionerToOperators[i]
+		syncInputs[i].Root = s.partitionerToOperators[i]
 	}
 	if log.V(2) {
 		var b strings.Builder
