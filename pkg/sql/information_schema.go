@@ -29,8 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1851,27 +1849,20 @@ func forEachDatabaseDesc(
 		}
 		dbDescs = allDbDescs
 	} else {
-		// We can't just use dbContext here because we need to fetch the descriptor
-		// with privileges from kv.
-		fetchedDbDesc, err := catalogkv.GetDatabaseDescriptorsFromIDs(
-			ctx, p.txn, p.ExecCfg().Codec, []descpb.ID{dbContext.GetID()},
-		)
-		if err != nil {
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				return pgerror.Newf(pgcode.UndefinedDatabase, "database %s does not exist", dbContext.GetName())
-			}
-			return err
-		}
-		dbDescs = fetchedDbDesc
+		dbDescs = append(dbDescs, dbContext)
 	}
 
 	// Ignore databases that the user cannot see.
 	for _, dbDesc := range dbDescs {
-		canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
-		if err != nil {
-			return err
+		canSeeDescriptor := !requiresPrivileges
+		if requiresPrivileges {
+			var err error
+			canSeeDescriptor, err = userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
+			if err != nil {
+				return err
+			}
 		}
-		if !requiresPrivileges || canSeeDescriptor {
+		if canSeeDescriptor {
 			if err := fn(dbDesc); err != nil {
 				return err
 			}
