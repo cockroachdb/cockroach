@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -408,11 +409,11 @@ type HashRouter struct {
 
 	// One output for each stream.
 	outputs []routerOutput
-	// getStats, when non-nil, will be called by the hash router to retrieve the
-	// execution statistics which are then propagated as
-	// execinfrapb.ProducerMetadata object. This will be done right before
-	// draining metadataSources.
-	getStats func() []*execinfrapb.ComponentStats
+	// statsCollectors, when non-nil, will be retrieved from by the hash router
+	// and the execution statistics will then be propagated as
+	// execinfrapb.ProducerMetadata object right before draining
+	// metadataSources.
+	statsCollectors []colexec.VectorizedStatsCollector
 	// metadataSources is a slice of colexecop.MetadataSources that need to be
 	// drained when the HashRouter terminates.
 	metadataSources colexecop.MetadataSources
@@ -465,7 +466,7 @@ func NewHashRouter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
-	getStats func() []*execinfrapb.ComponentStats,
+	statsCollectors []colexec.VectorizedStatsCollector,
 	toDrain []colexecop.MetadataSource,
 	toClose []colexecop.Closer,
 ) (*HashRouter, []colexecop.DrainableOperator) {
@@ -498,7 +499,7 @@ func NewHashRouter(
 		outputs[i] = op
 		outputsAsOps[i] = op
 	}
-	return newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs, getStats, toDrain, toClose), outputsAsOps
+	return newHashRouterWithOutputs(input, hashCols, unblockEventsChan, outputs, statsCollectors, toDrain, toClose), outputsAsOps
 }
 
 func newHashRouterWithOutputs(
@@ -506,7 +507,7 @@ func newHashRouterWithOutputs(
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
-	getStats func() []*execinfrapb.ComponentStats,
+	statsCollectors []colexec.VectorizedStatsCollector,
 	toDrain []colexecop.MetadataSource,
 	toClose []colexecop.Closer,
 ) *HashRouter {
@@ -514,7 +515,7 @@ func newHashRouterWithOutputs(
 		OneInputNode:        colexecop.NewOneInputNode(input),
 		hashCols:            hashCols,
 		outputs:             outputs,
-		getStats:            getStats,
+		statsCollectors:     statsCollectors,
 		metadataSources:     toDrain,
 		closers:             toClose,
 		unblockedEventsChan: unblockEventsChan,
@@ -622,10 +623,8 @@ func (r *HashRouter) Run(ctx context.Context) {
 		r.cancelOutputs(ctx, err)
 	}
 	if span != nil {
-		if r.getStats != nil {
-			for _, s := range r.getStats() {
-				span.RecordStructured(s)
-			}
+		for _, s := range r.statsCollectors {
+			span.RecordStructured(s.GetStats())
 		}
 		if trace := span.GetRecording(); len(trace) > 0 {
 			meta := execinfrapb.GetProducerMeta()
