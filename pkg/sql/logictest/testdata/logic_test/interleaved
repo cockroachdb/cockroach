@@ -497,22 +497,34 @@ CREATE INDEX NIINDX3 ON CHILD(z);
 statement ok
 CREATE INDEX IINDX ON CHILD(rowid,x,y,z) INTERLEAVE IN PARENT PARENT(rowid);
 
+# Child in different schema then parent
+statement ok
+CREATE TABLE parentDS (k STRING PRIMARY KEY);
 
+statement ok
+CREATE SCHEMA child_schema;
 
-query TTTTT
+statement ok
+CREATE TABLE child_schema.child (ck INT8 PRIMARY KEY, k STRING NOT NULL UNIQUE);
+
+statement ok
+CREATE INDEX interl ON child_schema.child (k) INTERLEAVE IN PARENT parentDS (k);
+
+query TTTTTTT
 select * from "".crdb_internal.interleaved;
 ----
-test   public  p1_1                      p1_id                    primary
-test   public  all_interleaves           primary                  primary
-test   public  all_interleaves           all_interleaves_c_d_idx  primary
-test   public  all_interleaves           all_interleaves_d_c_key  primary
-test   public  orders                    primary                  primary
-other  public  interdb                   primary                  primary
-test   public  c20067                    primary                  primary
-test   public  documents                 primary                  primary
-test   public  big_interleave_parent     primary                  primary
-test   public  big_interleave_child      primary                  primary
-test   public  interleave_create_notice  primary                  primary
-test   public  interleave_create_notice  interleave_index         primary
-test   public  interleave_pk_notice      primary                  primary
-test   public  child                     iindx                    primary
+test  public        p1_1                      p1_id                    test   public  p1_1
+test  public        all_interleaves           primary                  test   public  p1_1
+test  public        all_interleaves           all_interleaves_c_d_idx  test   public  p1_1
+test  public        all_interleaves           all_interleaves_d_c_key  test   public  p1_1
+test  public        orders                    primary                  test   public  customers
+test  public        interdb                   primary                  other  public  foo
+test  public        c20067                    primary                  test   public  p20067
+test  public        documents                 primary                  test   public  users
+test  public        big_interleave_parent     primary                  test   public  big_interleave_grandparent
+test  public        big_interleave_child      primary                  test   public  big_interleave_parent
+test  public        interleave_create_notice  primary                  test   public  interleave_parent
+test  public        interleave_create_notice  interleave_index         test   public  interleave_parent
+test  public        interleave_pk_notice      primary                  test   public  interleave_parent
+test  public        child                     iindx                    test   public  parent
+test  child_schema  child                     interl                   test   public  parentds
