@@ -203,7 +203,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
-					nil, /* getStats */
+					nil, /* statsCollectors */
 					toDrain,
 					nil, /* toClose */
 				)
@@ -361,7 +361,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					materializerInput,
 					typs,
 					nil, /* output */
-					nil, /* getStats */
+					nil, /* statsCollectors */
 					[]colexecop.MetadataSource{materializerMetadataSource},
 					[]colexecop.Closer{callbackCloser{closeCb: func() error {
 						materializerCalledClose = true
