@@ -681,6 +681,8 @@ func NewColOperator(
 	core := &spec.Core
 	post := &spec.Post
 
+	estimatedRowCount := spec.EstimatedRowCount
+
 	// resultPreSpecPlanningStateShallowCopy is a shallow copy of the result
 	// before any specs are planned. Used if there is a need to backtrack.
 	resultPreSpecPlanningStateShallowCopy := *r
@@ -735,7 +737,9 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
-			scanOp, err := colfetcher.NewColBatchScan(ctx, streamingAllocator, flowCtx, evalCtx, core.TableReader, post)
+			scanOp, err := colfetcher.NewColBatchScan(
+				ctx, streamingAllocator, flowCtx, evalCtx, core.TableReader, post, estimatedRowCount,
+			)
 			if err != nil {
 				return r, err
 			}
