@@ -1590,7 +1590,7 @@ func (s *statusServer) rangesHelper(
 		var span serverpb.PrettySpan
 		span.StartKey = desc.StartKey.String()
 		span.EndKey = desc.EndKey.String()
-		state := rep.State()
+		state := rep.State(ctx)
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     raftState,
