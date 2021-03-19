@@ -15,15 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/forbiddenmethod"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
-func TestForbiddenMethod(t *testing.T) {
-	skip.UnderStress(t)
+func TestNakedGo(t *testing.T) {
 	testdata := testutils.TestDataPath(t)
 	analysistest.TestData = func() string { return testdata }
-	analysistest.Run(t, testdata, forbiddenmethod.DescriptorMarshalAnalyzer, "descmarshaltest")
-	analysistest.Run(t, testdata, forbiddenmethod.GRPCClientConnCloseAnalyzer, "grpcconnclosetest")
-	analysistest.Run(t, testdata, forbiddenmethod.GRPCStatusWithDetailsAnalyzer, "grpcstatuswithdetailstest")
+	analysistest.Run(t, testdata, forbiddenmethod.NakedGoAnalyzer, "nakedgotest")
 }

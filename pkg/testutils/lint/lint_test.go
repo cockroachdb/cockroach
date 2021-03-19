@@ -2002,6 +2002,26 @@ func TestLint(t *testing.T) {
 			"redact.Sprintf",
 		}, ",")
 
+		nakedGoroutineExceptions := `(` + strings.Join([]string{
+			`pkg/.*_test.go`,
+			`pkg/workload/`,
+			`pkg/cli/systembench/`,
+			`pkg/cmd/roachprod/`,
+			`pkg/cmd/roachtest/`,
+			`pkg/cmd/roachprod-stress/`,
+			`pkg/cmd/urlcheck/`,
+			`pkg/acceptance/`,
+			`pkg/cli/syncbench/`,
+			`pkg/workload/`,
+			`pkg/cmd/cmp-protocol/`,
+			`pkg/cmd/cr2pg/`,
+			`pkg/cmd/smithtest/`,
+			`pkg/cmd/reduce/`,
+			`pkg/cmd/zerosum/`,
+			`pkg/cmd/allocsim/`,
+			`pkg/testutils/`,
+		}, ")|(") + `)`
+
 		filters := []stream.Filter{
 			// Ignore generated files.
 			stream.GrepNot(`pkg/.*\.pb\.go:`),
@@ -2050,6 +2070,11 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/cmd/roachtest/log\.go:.*format argument is not a constant expression`),
 			// We purposefully produce nil dereferences in this file to test crash conditions
 			stream.GrepNot(`pkg/util/log/logcrash/crash_reporting_test\.go:.*nil dereference in type assertion`),
+			// Spawning naked goroutines is ok when it's not as part of the main CRDB
+			// binary. This is for now - if we use #58164 to introduce more aggressive
+			// pooling, etc, then test code needs to adhere as well.
+			stream.GrepNot(nakedGoroutineExceptions + `:.*Use of go keyword not allowed`),
+			stream.GrepNot(nakedGoroutineExceptions + `:.*Illegal call to Group\.Go\(\)`),
 		}
 
 		const vetTool = "roachvet"
