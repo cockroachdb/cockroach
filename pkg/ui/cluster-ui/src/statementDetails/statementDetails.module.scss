@@ -56,6 +56,7 @@ h2.base-heading {
 }
 
 .cockroach--tabs {
+  overflow: visible !important;
   :global(.ant-tabs-bar) {
     border-bottom: 1px solid $grey2;
   }
@@ -81,6 +82,10 @@ h2.base-heading {
     border-radius: 40px;
     background-color: $blue;
   }
+}
+
+.fit-content-width {
+  width: fit-content;
 }
 
 .table-details {
