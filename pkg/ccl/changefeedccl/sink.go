@@ -334,7 +334,6 @@ type kafkaSinkConfig struct {
 	saslUser         string
 	saslPassword     string
 	saslMechanism    string
-	targetNames      map[descpb.ID]string
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
@@ -343,7 +342,7 @@ type kafkaSink struct {
 	cfg      kafkaSinkConfig
 	client   sarama.Client
 	producer sarama.AsyncProducer
-	topics   map[string]struct{}
+	topics   map[descpb.ID]string
 
 	lastMetadataRefresh time.Time
 
@@ -360,20 +359,21 @@ type kafkaSink struct {
 	}
 }
 
-func (s *kafkaSink) setTargets(targets jobspb.ChangefeedTargets) {
-	s.topics = make(map[string]struct{})
-	s.cfg.targetNames = make(map[descpb.ID]string)
+func makeTopicsMap(prefix string, targets jobspb.ChangefeedTargets) map[descpb.ID]string {
+	topics := make(map[descpb.ID]string)
 	for id, t := range targets {
-		s.cfg.targetNames[id] = t.StatementTimeName
-		s.topics[s.cfg.kafkaTopicPrefix+SQLNameToKafkaName(t.StatementTimeName)] = struct{}{}
+		topics[id] = prefix + SQLNameToKafkaName(t.StatementTimeName)
 	}
+	return topics
 }
 
 func makeKafkaSink(
 	cfg kafkaSinkConfig, bootstrapServers string, targets jobspb.ChangefeedTargets,
 ) (Sink, error) {
-	sink := &kafkaSink{cfg: cfg}
-	sink.setTargets(targets)
+	sink := &kafkaSink{
+		cfg:    cfg,
+		topics: makeTopicsMap(cfg.kafkaTopicPrefix, targets),
+	}
 
 	config := sarama.NewConfig()
 	config.ClientID = `CockroachDB`
@@ -509,9 +509,9 @@ func (s *kafkaSink) Close() error {
 func (s *kafkaSink) EmitRow(
 	ctx context.Context, topicDescr TopicDescriptor, key, value []byte, updated hlc.Timestamp,
 ) error {
-	topic := s.cfg.kafkaTopicPrefix + SQLNameToKafkaName(s.cfg.targetNames[topicDescr.GetID()])
-	if _, ok := s.topics[topic]; !ok {
-		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
+	topic, isKnownTopic := s.topics[topicDescr.GetID()]
+	if !isKnownTopic {
+		return errors.Errorf(`cannot emit to undeclared topic: %s`, topicDescr.GetName())
 	}
 
 	msg := &sarama.ProducerMessage{
@@ -536,7 +536,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 	const metadataRefreshMinDuration = time.Minute
 	if timeutil.Since(s.lastMetadataRefresh) > metadataRefreshMinDuration {
 		topics := make([]string, 0, len(s.topics))
-		for topic := range s.topics {
+		for _, topic := range s.topics {
 			topics = append(topics, topic)
 		}
 		if err := s.client.RefreshMetadata(topics...); err != nil {
@@ -545,7 +545,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 		s.lastMetadataRefresh = timeutil.Now()
 	}
 
-	for topic := range s.topics {
+	for _, topic := range s.topics {
 		payload, err := encoder.EncodeResolvedTimestamp(ctx, topic, resolved)
 		if err != nil {
 			return err
