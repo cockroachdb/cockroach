@@ -12,6 +12,7 @@ import (
 	"context"
 	"net/url"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,6 +51,30 @@ func (p asyncProducerMock) Close() error {
 	return nil
 }
 
+// consumeAndSucceed consumes input messages and sends them to successes channel.
+// Returns function that must be called to stop this consumer
+// to clean up.  The cleanup function must be called before closing asyncProducerMock.
+func (p asyncProducerMock) consumeAndSucceed() func() {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	done := make(chan struct{})
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-done:
+				return
+			case m := <-p.inputCh:
+				p.successesCh <- m
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		wg.Wait()
+	}
+}
+
 func topic(name string) tableDescriptorTopic {
 	return tableDescriptorTopic{tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()}
 }
@@ -64,12 +89,13 @@ func TestKafkaSink(t *testing.T) {
 		successesCh: make(chan *sarama.ProducerMessage, 1),
 		errorsCh:    make(chan *sarama.ProducerError, 1),
 	}
-	sink := &kafkaSink{
-		producer: p,
-	}
 	targets := make(jobspb.ChangefeedTargets, 1)
 	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `t`}
-	sink.setTargets(targets)
+
+	sink := &kafkaSink{
+		producer: p,
+		topics:   makeTopicsMap("", targets),
+	}
 	sink.start()
 	defer func() {
 		if err := sink.Close(); err != nil {
@@ -152,12 +178,12 @@ func TestKafkaSinkEscaping(t *testing.T) {
 		successesCh: make(chan *sarama.ProducerMessage, 1),
 		errorsCh:    make(chan *sarama.ProducerError, 1),
 	}
-	sink := &kafkaSink{
-		producer: p,
-	}
 	targets := make(jobspb.ChangefeedTargets, 1)
 	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `☃`}
-	sink.setTargets(targets)
+	sink := &kafkaSink{
+		producer: p,
+		topics:   makeTopicsMap("", targets),
+	}
 	sink.start()
 	defer func() { require.NoError(t, sink.Close()) }()
 	if err := sink.EmitRow(ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS); err != nil {
@@ -167,6 +193,42 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	require.Equal(t, `_u2603_`, m.Topic)
 	require.Equal(t, sarama.ByteEncoder(`k☃`), m.Key)
 	require.Equal(t, sarama.ByteEncoder(`v☃`), m.Value)
+}
+
+// goos: darwin
+// goarch: amd64
+// pkg: github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl
+// cpu: Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+// BenchmarkEmitRow-16    	  573620	      1779 ns/op	     235 B/op	       6 allocs/op
+func BenchmarkEmitRow(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	p := asyncProducerMock{
+		inputCh:     make(chan *sarama.ProducerMessage),
+		successesCh: make(chan *sarama.ProducerMessage),
+		errorsCh:    make(chan *sarama.ProducerError),
+	}
+	const tableName = `defaultdb.public.funky_table☃`
+	topic := topic(tableName)
+	targets := make(jobspb.ChangefeedTargets, 1)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: tableName}
+	sink := &kafkaSink{
+		producer: p,
+		topics:   makeTopicsMap("non-empty-prefix", targets),
+	}
+	sink.start()
+
+	stopConsume := p.consumeAndSucceed()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		require.NoError(b, sink.EmitRow(ctx, topic, []byte(`k☃`), []byte(`v☃`), hlc.Timestamp{}))
+	}
+
+	b.ReportAllocs()
+	stopConsume()
+	require.NoError(b, sink.Close())
 }
 
 type testEncoder struct{}
