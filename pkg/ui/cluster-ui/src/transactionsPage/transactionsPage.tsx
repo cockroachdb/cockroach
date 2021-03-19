@@ -290,7 +290,6 @@ export class TransactionsPage extends React.Component<
     const transactionDetails =
       statementIds && getStatementsById(statementIds, statements);
 
-    console.log(JSON.stringify(transactionDetails));
     return (
       <TransactionDetails
         statements={aggregateStatementStats(transactionDetails)}
