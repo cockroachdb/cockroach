@@ -68,7 +68,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		c,
 		typs,
 		nil, /* output */
-		nil, /* getStats */
+		nil, /* statsCollectors */
 		nil, /* metadataSources */
 		nil, /* toClose */
 		nil, /* cancelFlow */
@@ -153,7 +153,7 @@ func BenchmarkMaterializer(b *testing.B) {
 							input,
 							typs,
 							nil, /* output */
-							nil, /* getStats */
+							nil, /* statsCollectors */
 							nil, /* metadataSources */
 							nil, /* toClose */
 							nil, /* cancelFlow */
@@ -208,7 +208,7 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 		&colexecop.CallbackOperator{},
 		nil, /* typ */
 		nil, /* output */
-		nil, /* getStats */
+		nil, /* statsCollectors */
 		[]colexecop.MetadataSource{metadataSource},
 		nil, /* toClose */
 		nil, /* cancelFlow */
@@ -258,7 +258,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			c,
 			types,
 			nil, /* output */
-			nil, /* getStats */
+			nil, /* statsCollectors */
 			nil, /* metadataSources */
 			nil, /* toClose */
 			nil, /* cancelFlow */

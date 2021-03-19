@@ -78,7 +78,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		noop,
 		types,
 		nil, /* output */
-		nil, /* getStats */
+		nil, /* statsCollectors */
 		[]colexecop.MetadataSource{col},
 		nil, /* toClose */
 		nil, /* cancelFlow */

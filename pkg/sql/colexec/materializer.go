@@ -76,8 +76,8 @@ type drainHelper struct {
 	// are noops.
 	ctx context.Context
 
-	getStats func() []*execinfrapb.ComponentStats
-	sources  colexecop.MetadataSources
+	statsCollectors []VectorizedStatsCollector
+	sources         colexecop.MetadataSources
 
 	bufferedMeta []execinfrapb.ProducerMetadata
 }
@@ -92,10 +92,10 @@ var drainHelperPool = sync.Pool{
 }
 
 func newDrainHelper(
-	getStats func() []*execinfrapb.ComponentStats, sources colexecop.MetadataSources,
+	statsCollectors []VectorizedStatsCollector, sources colexecop.MetadataSources,
 ) *drainHelper {
 	d := drainHelperPool.Get().(*drainHelper)
-	d.getStats = getStats
+	d.statsCollectors = statsCollectors
 	d.sources = sources
 	return d
 }
@@ -118,6 +118,19 @@ func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 		// The drainHelper wasn't Start()'ed, so this operation is a noop.
 		return nil, nil
 	}
+	if len(d.statsCollectors) > 0 {
+		// If statsCollectors is non-nil, then the drainHelper is responsible
+		// for attaching the execution statistics to the span, yet we don't get
+		// the recording from the span - that is left to the materializer (more
+		// precisely to the embedded ProcessorBase) which is necessary in order
+		// to not collect same trace data twice.
+		if sp := tracing.SpanFromContext(d.ctx); sp != nil {
+			for _, s := range d.statsCollectors {
+				sp.RecordStructured(s.GetStats())
+			}
+		}
+		d.statsCollectors = nil
+	}
 	if d.bufferedMeta == nil {
 		d.bufferedMeta = d.sources.DrainMeta(d.ctx)
 		if d.bufferedMeta == nil {
@@ -134,25 +147,7 @@ func (d *drainHelper) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 }
 
 // ConsumerDone implements the RowSource interface.
-func (d *drainHelper) ConsumerDone() {
-	if d.ctx == nil {
-		// The drainHelper wasn't Start()'ed, so this operation is a noop.
-		return
-	}
-	if d.getStats != nil {
-		// If getStats is non-nil, then the drainHelper is responsible for
-		// attaching the execution statistics to the span, yet we don't get the
-		// recording from the span - that is left to the materializer (more
-		// precisely to the embedded ProcessorBase) which is necessary in order
-		// to not collect same trace data twice.
-		if sp := tracing.SpanFromContext(d.ctx); sp != nil {
-			for _, s := range d.getStats() {
-				sp.RecordStructured(s)
-			}
-		}
-		d.getStats = nil
-	}
-}
+func (d *drainHelper) ConsumerDone() {}
 
 // ConsumerClosed implements the RowSource interface.
 func (d *drainHelper) ConsumerClosed() {}
@@ -198,7 +193,7 @@ func NewMaterializer(
 	input colexecop.Operator,
 	typs []*types.T,
 	output execinfra.RowReceiver,
-	getStats func() []*execinfrapb.ComponentStats,
+	statsCollectors []VectorizedStatsCollector,
 	metadataSources []colexecop.MetadataSource,
 	toClose []colexecop.Closer,
 	cancelFlow func() context.CancelFunc,
@@ -208,7 +203,7 @@ func NewMaterializer(
 		ProcessorBase: m.ProcessorBase,
 		input:         input,
 		typs:          typs,
-		drainHelper:   newDrainHelper(getStats, metadataSources),
+		drainHelper:   newDrainHelper(statsCollectors, metadataSources),
 		converter:     colconv.NewAllVecToDatumConverter(len(typs)),
 		row:           make(rowenc.EncDatumRow, len(typs)),
 		closers:       toClose,
