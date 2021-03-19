@@ -741,8 +741,8 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	r := newHashRouterWithOutputs(
 		colexecargs.OpWithMetaInfo{Root: in},
 		[]uint32{0}, /* hashCols */
-		nil /* ch */, outputs,
-		nil, /* statsCollectors */
+		nil,         /* unblockEventsChan */
+		outputs,
 	)
 	for r.processNextBatch(ctx) {
 	}
@@ -791,7 +791,6 @@ func TestHashRouterCancellation(t *testing.T) {
 		[]uint32{0}, /* hashCols */
 		unbufferedCh,
 		routerOutputs,
-		nil, /* statsCollectors */
 	)
 
 	t.Run("BeforeRun", func(t *testing.T) {
@@ -904,7 +903,6 @@ func TestHashRouterOneOutput(t *testing.T) {
 				queueCfg,
 				colexecop.NewTestingSemaphore(2),
 				[]*mon.BoundAccount{&diskAcc},
-				nil, /* statsCollectors */
 			)
 
 			if len(routerOutputs) != 1 {
@@ -1105,7 +1103,6 @@ func TestHashRouterRandom(t *testing.T) {
 					hashCols,
 					unblockEventsChan,
 					outputs,
-					nil, /* statsCollectors */
 				)
 
 				var (
@@ -1330,7 +1327,6 @@ func BenchmarkHashRouter(b *testing.B) {
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
-					nil, /* statsCollectors */
 				)
 				b.SetBytes(8 * int64(coldata.BatchSize()) * int64(numInputBatches))
 				// We expect distribution to not change. This is a sanity check that

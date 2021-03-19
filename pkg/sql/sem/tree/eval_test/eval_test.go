@@ -203,7 +203,6 @@ func TestEval(t *testing.T) {
 				result.OpWithMetaInfo,
 				[]*types.T{typedExpr.ResolvedType()},
 				nil, /* output */
-				nil, /* statsCollectors */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)
