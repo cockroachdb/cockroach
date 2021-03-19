@@ -253,6 +253,10 @@ type cFetcher struct {
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
 
+	// estimatedRowCount is the optimizer-derived number of expected rows that
+	// this fetch will produce, if non-zero.
+	estimatedRowCount uint64
+
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
 		// state is the queue of next states of the state machine. The 0th entry
@@ -306,12 +310,16 @@ type cFetcher struct {
 	}
 }
 
-const cFetcherBatchMinCapacity = 1
-
 func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 	var reallocated bool
+	var estimatedRowCount int
+	if rf.estimatedRowCount > uint64(coldata.BatchSize()) {
+		estimatedRowCount = coldata.BatchSize()
+	} else {
+		estimatedRowCount = int(rf.estimatedRowCount)
+	}
 	rf.machine.batch, reallocated = rf.allocator.ResetMaybeReallocate(
-		rf.typs, rf.machine.batch, cFetcherBatchMinCapacity, rf.memoryLimit,
+		rf.typs, rf.machine.batch, estimatedRowCount, rf.memoryLimit,
 	)
 	if reallocated {
 		rf.machine.colvecs = rf.machine.batch.ColVecs()

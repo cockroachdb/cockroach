@@ -80,6 +80,8 @@ message ProcessorSpec {
   // This can be aliased with InputSyncSpec.ColumnTypes, so it must not be
   // modified in-place during planning.
   repeated sql.sem.types.T result_types = 7;
+
+  optional uint64 estimated_row_count = 8 [(gogoproto.nullable) = false];
 }
 
 message ProcessorCoreUnion {
