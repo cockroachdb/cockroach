@@ -9,11 +9,9 @@ go_library(
         "error_screening.go",
         "operation_generator.go",
         "schemachange.go",
-        # TODO(alanmas,irfansharif): Generate this stringer file within the
-        # sandbox as well.
-        "txstatus_string.go",
         "type_resolver.go",
         ":gen-optype-stringer",  # keep
+        ":gen-txstatus-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/schemachange",
     visibility = ["//visibility:public"],
@@ -36,12 +34,6 @@ go_library(
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
     ],
-)
-
-stringer(
-    name = "gen-optype-stringer",
-    src = "operation_generator.go",
-    typ = "opType",
 )
 
 go_test(
@@ -68,4 +60,16 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@org_golang_x_sync//errgroup",
     ],
+)
+
+stringer(
+    name = "gen-optype-stringer",
+    src = "operation_generator.go",
+    typ = "opType",
+)
+
+stringer(
+    name = "gen-txstatus-stringer",
+    src = "schemachange.go",
+    typ = "TxStatus",
 )
