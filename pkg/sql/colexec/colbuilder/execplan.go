@@ -84,10 +84,11 @@ func wrapRowSources(
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
 			inputInfoCopy := *inputInfo
-			// We pass on the responsibility of draining metadata sources and
-			// closing the closers to the materializer.
+			// We pass on the ownership over the meta components to the
+			// materializer.
 			// TODO(yuzefovich): possibly set the length to 0 in order to be
-			// able to pool the underlying slice.
+			// able to pool the underlying slices.
+			inputInfo.StatsCollectors = nil
 			inputInfo.MetadataSources = nil
 			inputInfo.ToClose = nil
 			// Note that this materializer is *not* added to the set of
@@ -104,7 +105,6 @@ func wrapRowSources(
 				inputInfoCopy,
 				inputTypes[i],
 				nil, /* output */
-				nil, /* statsCollectors */
 				nil, /* cancelFlow */
 			)
 			if err != nil {
@@ -1402,10 +1402,11 @@ func NewColOperator(
 			r.Root = colexec.NewInvariantsChecker(r.Root)
 		}
 	}
-	// Handle the metadata sources and the closers from the input trees. Note
-	// that it is possible that we have created materializers which took over
-	// the responsibility over those objects.
+	// Handle the metadata components from the input trees. Note that it is
+	// possible that we have created materializers which took over the
+	// responsibility over those objects.
 	for i := range inputs {
+		r.StatsCollectors = append(r.StatsCollectors, inputs[i].StatsCollectors...)
 		r.MetadataSources = append(r.MetadataSources, inputs[i].MetadataSources...)
 		r.ToClose = append(r.ToClose, inputs[i].ToClose...)
 	}

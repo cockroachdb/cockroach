@@ -37,6 +37,10 @@ var TestNewColOperator func(ctx context.Context, flowCtx *execinfra.FlowCtx, arg
 // TODO(yuzefovich): figure out the story about pooling these objects.
 type OpWithMetaInfo struct {
 	Root colexecop.Operator
+	// StatsCollectors are all stats collectors that are present in the tree
+	// rooted in Root for which the responsibility of retrieving stats hasn't
+	// been claimed yet.
+	StatsCollectors []colexecop.VectorizedStatsCollector
 	// MetadataSources are all sources of the metadata that are present in the
 	// tree rooted in Root for which the responsibility of draining hasn't been
 	// claimed yet.
