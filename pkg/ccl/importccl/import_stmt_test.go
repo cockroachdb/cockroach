@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -5800,14 +5801,14 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 
 	t.Run("require-both-unsupported-options", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE foo2; USE foo2;")
-		ignoredLog := `userfile:///ignore.log`
+		ignoredLog := `userfile:///ignore`
 		sqlDB.ExpectErr(t, "cannot log unsupported PGDUMP stmts without `ignore_unsupported_statements` option",
 			"IMPORT PGDUMP ($1) WITH log_ignored_statements=$2", srv.URL, ignoredLog)
 	})
 
 	t.Run("log-unsupported-stmts", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE foo3; USE foo3;")
-		ignoredLog := `userfile:///ignore.log`
+		ignoredLog := `userfile:///ignore`
 		sqlDB.Exec(t, "IMPORT PGDUMP ($1) WITH ignore_unsupported_statements, log_ignored_statements=$2",
 			srv.URL, ignoredLog)
 		// Check that statements which are not expected to be ignored, are still
@@ -5823,13 +5824,28 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			tc.Servers[0].InternalExecutor().(*sql.InternalExecutor), tc.Servers[0].DB())
 		require.NoError(t, err)
 		defer store.Close()
-		content, err := store.ReadFile(ctx, pgDumpUnsupportedSchemaStmtLog)
-		require.NoError(t, err)
-		descBytes, err := ioutil.ReadAll(content)
-		require.NoError(t, err)
-		expectedSchemaLog := `Unsupported statements during schema parse phase:
 
-create trigger: could not be parsed
+		var importJobID int
+		sqlDB.QueryRow(t, `SELECT id FROM system.jobs WHERE status=$1 ORDER BY created DESC LIMIT 1`,
+			jobs.StatusSucceeded).Scan(&importJobID)
+
+		// We expect there to be two log files since we have 13 unsupported statements.
+		dirName := fmt.Sprintf("import%d", importJobID)
+		checkFiles := func(expectedFileContent []string, logSubdir string) {
+			files, err := store.ListFiles(ctx, fmt.Sprintf("*/%s/*", logSubdir))
+			require.NoError(t, err)
+			for i, file := range files {
+				require.Equal(t, file, path.Join(dirName, logSubdir, fmt.Sprintf("%d.log", i)))
+				content, err := store.ReadFile(ctx, file)
+				require.NoError(t, err)
+				descBytes, err := ioutil.ReadAll(content)
+				require.NoError(t, err)
+				require.Equal(t, []byte(expectedFileContent[i]), descBytes)
+			}
+		}
+
+		schemaFileContents := []string{
+			`create trigger: could not be parsed
 revoke privileges on sequence: could not be parsed
 revoke privileges on sequence: could not be parsed
 grant privileges on sequence: could not be parsed
@@ -5839,24 +5855,20 @@ create extension if not exists with: could not be parsed
 create function: could not be parsed
 alter function: could not be parsed
 COMMENT ON TABLE t IS 'This should be skipped': unsupported by IMPORT
+`,
+			`COMMENT ON DATABASE t IS 'This should be skipped': unsupported by IMPORT
+COMMENT ON COLUMN t IS 'This should be skipped': unsupported by IMPORT
+unsupported function call: set_config in stmt: SELECT set_config('search_path', '', false): unsupported by IMPORT
+`,
+		}
+		checkFiles(schemaFileContents, pgDumpUnsupportedSchemaStmtLog)
 
-Logging 10 out of 13 ignored statements.
-`
-		require.Equal(t, []byte(expectedSchemaLog), descBytes)
-
-		expectedDataLog := `Unsupported statements during data ingestion phase:
-
-unsupported 3 fn args in select: ['search_path' '' false]: unsupported by IMPORT
+		ingestionFileContents := []string{
+			`unsupported 3 fn args in select: ['search_path' '' false]: unsupported by IMPORT
 unsupported *tree.Delete statement: DELETE FROM geometry_columns WHERE (f_table_name = 'nyc_census_blocks') AND (f_table_schema = 'public'): unsupported by IMPORT
-
-Logging 2 out of 2 ignored statements.
-`
-
-		content, err = store.ReadFile(ctx, pgDumpUnsupportedDataStmtLog)
-		require.NoError(t, err)
-		descBytes, err = ioutil.ReadAll(content)
-		require.NoError(t, err)
-		require.Equal(t, []byte(expectedDataLog), descBytes)
+`,
+		}
+		checkFiles(ingestionFileContents, pgDumpUnsupportedDataStmtLog)
 	})
 }
 
