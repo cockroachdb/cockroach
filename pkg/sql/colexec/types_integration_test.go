@@ -93,7 +93,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 				arrowOp,
 				typs,
 				output,
-				nil, /* getStats */
+				nil, /* statsCollectors */
 				nil, /* metadataSources */
 				nil, /* toClose */
 				nil, /* cancelFlow */

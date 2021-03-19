@@ -737,7 +737,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		}
 	}
 
-	r := newHashRouterWithOutputs(in, []uint32{0}, nil /* ch */, outputs, nil /* getStats */, nil /* toDrain */, nil /* toClose */)
+	r := newHashRouterWithOutputs(in, []uint32{0}, nil /* ch */, outputs, nil /* statsCollectors */, nil /* toDrain */, nil /* toClose */)
 	for r.processNextBatch(ctx) {
 	}
 
@@ -780,7 +780,7 @@ func TestHashRouterCancellation(t *testing.T) {
 	in := colexecop.NewRepeatableBatchSource(tu.testAllocator, batch, typs)
 
 	unbufferedCh := make(chan struct{})
-	r := newHashRouterWithOutputs(in, []uint32{0}, unbufferedCh, routerOutputs, nil /* getStats */, nil /* toDrain */, nil /* toClose */)
+	r := newHashRouterWithOutputs(in, []uint32{0}, unbufferedCh, routerOutputs, nil /* statsCollectors */, nil /* toDrain */, nil /* toClose */)
 
 	t.Run("BeforeRun", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -890,7 +890,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 				queueCfg,
 				colexecop.NewTestingSemaphore(2),
 				[]*mon.BoundAccount{&diskAcc},
-				nil, /* getStats */
+				nil, /* statsCollectors */
 				nil, /* toDrain */
 				nil, /* toClose */
 			)
@@ -1084,7 +1084,7 @@ func TestHashRouterRandom(t *testing.T) {
 					hashCols,
 					unblockEventsChan,
 					outputs,
-					nil, /* getStats */
+					nil, /* statsCollectors */
 					[]colexecop.MetadataSource{
 						colexectestutils.CallbackMetadataSource{
 							DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
@@ -1317,7 +1317,7 @@ func BenchmarkHashRouter(b *testing.B) {
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
-					nil, /* getStats */
+					nil, /* statsCollectors */
 					nil, /* toDrain */
 					nil, /* toClose */
 				)

@@ -203,7 +203,7 @@ func TestEval(t *testing.T) {
 				result.Op,
 				[]*types.T{typedExpr.ResolvedType()},
 				nil, /* output */
-				nil, /* getStats */
+				nil, /* statsCollectors */
 				result.MetadataSources,
 				nil, /* toClose */
 				nil, /* cancelFlow */

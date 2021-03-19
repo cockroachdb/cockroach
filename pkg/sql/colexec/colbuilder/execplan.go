@@ -98,7 +98,7 @@ func wrapRowSources(
 				input,
 				inputTypes[i],
 				nil, /* output */
-				nil, /* getStats */
+				nil, /* statsCollectors */
 				metadataSources,
 				nil, /* toClose */
 				nil, /* cancelFlow */
