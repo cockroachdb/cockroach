@@ -15,10 +15,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -236,4 +238,42 @@ func (nvsc *networkVectorizedStatsCollectorImpl) GetStats() *execinfrapb.Compone
 	s.Output.NumTuples.Set(numTuples)
 
 	return s
+}
+
+func maybeAddStatsInvariantChecker(op *colexecargs.OpWithMetaInfo) {
+	if util.CrdbTestBuild {
+		c := &statsInvariantChecker{}
+		op.StatsCollectors = append(op.StatsCollectors, c)
+		op.MetadataSources = append(op.MetadataSources, c)
+	}
+}
+
+// statsInvariantChecker is a dummy colexecop.VectorizedStatsCollector as well
+// as colexecop.MetadataSource which asserts that GetStats is called before
+// DrainMeta. It should only be used in the test environment.
+type statsInvariantChecker struct {
+	colexecop.ZeroInputNode
+
+	statsRetrieved bool
+}
+
+var _ colexecop.VectorizedStatsCollector = &statsInvariantChecker{}
+var _ colexecop.MetadataSource = &statsInvariantChecker{}
+
+func (i *statsInvariantChecker) Init() {}
+
+func (i *statsInvariantChecker) Next(context.Context) coldata.Batch {
+	return coldata.ZeroBatch
+}
+
+func (i *statsInvariantChecker) GetStats() *execinfrapb.ComponentStats {
+	i.statsRetrieved = true
+	return &execinfrapb.ComponentStats{}
+}
+
+func (i *statsInvariantChecker) DrainMeta(context.Context) []execinfrapb.ProducerMetadata {
+	if !i.statsRetrieved {
+		return []execinfrapb.ProducerMetadata{{Err: errors.New("GetStats wasn't called before DrainMeta")}}
+	}
+	return nil
 }
