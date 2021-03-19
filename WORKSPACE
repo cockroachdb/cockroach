@@ -48,8 +48,8 @@ go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:70qalHWW1n9yoI8B8zEQxFJO/D6NUWIX8SNmJO+rvNw=",
-    version = "v0.0.0-20210316092937-0b90fd5c4c48",
+    sum = "h1:jbzgAvDZn8aEnytae+4ou0J0GwFZoHR0hOrTg4qH8GA=",
+    version = "v0.0.0-20210319071255-635bc2c9138d",
 )
 
 go_repository(
