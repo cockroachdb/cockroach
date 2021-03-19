@@ -38,21 +38,19 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 	const numBatches = 4
 
 	typs := []*types.T{types.Int}
-	inputs := make([]SynchronizerInput, numInputs)
+	inputs := make([]colexecargs.OpWithMetaInfo, numInputs)
 	for i := range inputs {
 		batch := coldatatestutils.RandomBatch(testAllocator, rng, typs, coldata.BatchSize(), 0 /* length */, rng.Float64())
 		source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 		source.ResetBatchesToReturn(numBatches)
 		inputIdx := i
-		inputs[i] = SynchronizerInput{OpWithMetaInfo: colexecargs.OpWithMetaInfo{
-			Root: source,
-			MetadataSources: []colexecop.MetadataSource{
-				colexectestutils.CallbackMetadataSource{
-					DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
-						return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d test-induced metadata", inputIdx)}}
-					},
+		inputs[i].Root = source
+		inputs[i].MetadataSources = []colexecop.MetadataSource{
+			colexectestutils.CallbackMetadataSource{
+				DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
+					return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d test-induced metadata", inputIdx)}}
 				},
-			}},
+			},
 		}
 	}
 	s := NewSerialUnorderedSynchronizer(inputs)

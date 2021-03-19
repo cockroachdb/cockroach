@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,9 +57,12 @@ const _TYPE_WIDTH = 0
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns.
 type OrderedSynchronizer struct {
+	ctx  context.Context
+	span *tracing.Span
+
 	allocator             *colmem.Allocator
 	memoryLimit           int64
-	inputs                []SynchronizerInput
+	inputs                []colexecargs.OpWithMetaInfo
 	ordering              colinfo.ColumnOrdering
 	typs                  []*types.T
 	canonicalTypeFamilies []types.Family
@@ -117,10 +122,10 @@ func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
 func NewOrderedSynchronizer(
 	allocator *colmem.Allocator,
 	memoryLimit int64,
-	inputs []SynchronizerInput,
+	inputs []colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
-) (*OrderedSynchronizer, error) {
+) *OrderedSynchronizer {
 	return &OrderedSynchronizer{
 		allocator:             allocator,
 		memoryLimit:           memoryLimit,
@@ -128,16 +133,27 @@ func NewOrderedSynchronizer(
 		ordering:              ordering,
 		typs:                  typs,
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
-	}, nil
+	}
+}
+
+// maybeStartTracingSpan stores the context and possibly starts a tracing span
+// on its first call and is a noop on all consequent calls.
+// TODO(yuzefovich): remove this once ctx is passed in Init.
+func (o *OrderedSynchronizer) maybeStartTracingSpan(ctx context.Context) {
+	if o.ctx == nil {
+		// It is the very first call to maybeStartTracingSpan.
+		o.ctx, o.span = execinfra.ProcessorSpan(ctx, "ordered sync")
+	}
 }
 
 // Next is part of the Operator interface.
 func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	if o.inputBatches == nil {
+		o.maybeStartTracingSpan(ctx)
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
 		o.heap = make([]int, 0, len(o.inputs))
 		for i := range o.inputs {
-			o.inputBatches[i] = o.inputs[i].Root.Next(ctx)
+			o.inputBatches[i] = o.inputs[i].Root.Next(o.ctx)
 			o.updateComparators(i)
 			if o.inputBatches[i].Length() > 0 {
 				o.heap = append(o.heap, i)
@@ -189,7 +205,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
 				o.inputIndices[minBatch]++
 			} else {
-				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next(ctx)
+				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next(o.ctx)
 				o.inputIndices[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
@@ -255,8 +271,20 @@ func (o *OrderedSynchronizer) Init() {
 
 func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	var bufferedMeta []execinfrapb.ProducerMetadata
+	// It is possible that Next was never called, yet the tracing is enabled.
+	o.maybeStartTracingSpan(ctx)
+	if o.span != nil {
+		for i := range o.inputs {
+			for _, stats := range o.inputs[i].StatsCollectors {
+				o.span.RecordStructured(stats.GetStats())
+			}
+		}
+		if meta := execinfra.GetTraceDataAsMetadata(o.span); meta != nil {
+			bufferedMeta = append(bufferedMeta, *meta)
+		}
+	}
 	for _, input := range o.inputs {
-		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(ctx)...)
+		bufferedMeta = append(bufferedMeta, input.MetadataSources.DrainMeta(o.ctx)...)
 	}
 	return bufferedMeta
 }
@@ -264,6 +292,9 @@ func (o *OrderedSynchronizer) DrainMeta(ctx context.Context) []execinfrapb.Produ
 func (o *OrderedSynchronizer) Close(ctx context.Context) error {
 	for _, input := range o.inputs {
 		input.ToClose.CloseAndLogOnErr(ctx, "ordered synchronizer")
+	}
+	if o.span != nil {
+		o.span.Finish()
 	}
 	return nil
 }
