@@ -726,7 +726,11 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
-			scanOp, err := colfetcher.NewColBatchScan(ctx, streamingAllocator, flowCtx, evalCtx, core.TableReader, post)
+
+			estimatedRowCount := spec.EstimatedRowCount
+			scanOp, err := colfetcher.NewColBatchScan(
+				ctx, streamingAllocator, flowCtx, evalCtx, core.TableReader, post, estimatedRowCount,
+			)
 			if err != nil {
 				return r, err
 			}
