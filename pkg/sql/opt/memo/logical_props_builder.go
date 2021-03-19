@@ -752,7 +752,7 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 	// -----------
 	// Calculate cardinality of the set operator.
 	rel.Cardinality = b.makeSetCardinality(
-		setNode.Op(), leftProps.Cardinality, rightProps.Cardinality)
+		setNode.Op(), leftProps.Cardinality, rightProps.Cardinality, uint32(setPrivate.HardLimit))
 
 	// Statistics
 	// ----------
@@ -1807,11 +1807,11 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 }
 
 func (b *logicalPropsBuilder) makeSetCardinality(
-	nt opt.Operator, left, right props.Cardinality,
+	nt opt.Operator, left, right props.Cardinality, limit uint32,
 ) props.Cardinality {
 	var card props.Cardinality
 	switch nt {
-	case opt.UnionOp, opt.UnionAllOp:
+	case opt.UnionOp, opt.UnionAllOp, opt.LocalityOptimizedSearchOp:
 		// Add cardinality of left and right inputs.
 		card = left.Add(right)
 
@@ -1832,6 +1832,10 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 		// Removing distinct values results in at least one row if input has at
 		// least one row.
 		card = card.AsLowAs(1)
+	}
+	if limit > 0 {
+		// LocalityOptimizedSearch also has a limit that should be respected.
+		card = card.Limit(limit)
 	}
 	return card
 }

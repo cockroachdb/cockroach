@@ -1331,19 +1331,20 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		panic(errors.AssertionFailedf("invalid operator %s", log.Safe(set.Op())))
 	}
 
-	hardLimit := uint64(0)
+	hardLimit := uint64(private.HardLimit)
 	if set.Op() == opt.LocalityOptimizedSearchOp {
-		// If we are performing locality optimized search, set a limit equal to
-		// the maximum possible number of rows. This will tell the execution engine
-		// not to execute the right child if the limit is reached by the left
-		// child.
-		// TODO(rytaft): Store the limit in the expression.
-		hardLimit = uint64(set.Relational().Cardinality.Max)
+		// If we are performing locality optimized search, the limit tells the
+		// execution engine not to execute the right child if the limit is reached
+		// by the left child.
 		if hardLimit > 1 {
 			panic(errors.AssertionFailedf(
 				"locality optimized search is not yet supported for more than one row at a time",
 			))
 		}
+	} else if hardLimit != 0 {
+		panic(errors.AssertionFailedf(
+			"a hard limit is not supported for %s", set.Op(),
+		))
 	}
 	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root, hardLimit)
 	if err != nil {
@@ -1537,6 +1538,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		join.IsSecondJoinInPairedJoiner,
 		res.reqOrdering(join),
 		locking,
+		join.LocalityOptimized,
 	)
 	if err != nil {
 		return execPlan{}, err

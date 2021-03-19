@@ -713,9 +713,10 @@ locality-optimized-search
  ├── columns: r:1(string!null) a:2(int!null) b:3(int!null) c:4(string!null)
  ├── left columns: t.public.abc_part.r:6(string) t.public.abc_part.a:7(int) t.public.abc_part.b:8(int) t.public.abc_part.c:9(string)
  ├── right columns: t.public.abc_part.r:11(string) t.public.abc_part.a:12(int) t.public.abc_part.b:13(int) t.public.abc_part.c:14(string)
+ ├── limit: 1
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.910000001, distinct(3)=0.910000001, null(3)=0, distinct(4)=0.910000001, null(4)=0, distinct(3,4)=0.910000001, null(3,4)=0]
- ├── cost: 5.101218
+ ├── cost: 5.083216
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1,2)

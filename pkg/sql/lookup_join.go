@@ -54,6 +54,13 @@ type lookupJoinNode struct {
 	isSecondJoinInPairedJoiner bool
 
 	reqOrdering ReqOrdering
+
+	// localityOptimized is true if this lookup join is part of a locality
+	// optimized search strategy, which uses a limited UNION ALL operator to try
+	// to find a row on nodes in the gateway's region before fanning out to remote
+	// nodes. In order for this optimization to work, the DistSQL planner must
+	// create a local plan.
+	localityOptimized bool
 }
 
 func (lj *lookupJoinNode) startExec(params runParams) error {

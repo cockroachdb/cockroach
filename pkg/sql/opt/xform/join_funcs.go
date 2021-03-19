@@ -279,14 +279,24 @@ func (c *CustomFuncs) GenerateLookupJoins(
 				break
 			}
 
-			if len(foundVals) > 1 && (joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp) {
-				// We cannot use the method constructJoinWithConstants to create a cross
-				// join for left or anti joins, because constructing a cross join with
-				// foundVals will increase the size of the input. As a result,
-				// non-matching input rows will show up more than once in the output,
-				// which is incorrect (see #59615).
-				shouldBuildMultiSpanLookupJoin = true
-				break
+			if len(foundVals) > 1 {
+				if joinType == opt.LeftJoinOp || joinType == opt.AntiJoinOp {
+					// We cannot use the method constructJoinWithConstants to create a cross
+					// join for left or anti joins, because constructing a cross join with
+					// foundVals will increase the size of the input. As a result,
+					// non-matching input rows will show up more than once in the output,
+					// which is incorrect (see #59615).
+					shouldBuildMultiSpanLookupJoin = true
+					break
+				}
+				if j == 0 && index.PartitionCount() > 1 {
+					// If this is the first index column and there is more than one
+					// partition, we may be able to build a locality optimized lookup
+					// join. This requires a multi-span lookup join as a starting point.
+					// See GenerateLocalityOptimizedLookupJoin for details.
+					shouldBuildMultiSpanLookupJoin = true
+					break
+				}
 			}
 
 			// We will join these constant values with the input to make
@@ -312,9 +322,10 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		if shouldBuildMultiSpanLookupJoin {
 			// Some of the index columns were constrained to multiple constant values,
-			// and this is a left or anti join. As described above, we cannot use the
-			// method constructJoinWithConstants to create a cross join as the input
-			// for left or anti joins, since it would produce incorrect results.
+			// and we did not use the method constructJoinWithConstants to create a
+			// cross join as the input (either because it would have been incorrect or
+			// because it would have eliminated the opportunity to apply other
+			// optimizations such as locality optimized search; see above).
 			//
 			// As an alternative, we store all the filters needed for the lookup in
 			// LookupExpr, which will be used to construct spans at execution time.
@@ -368,11 +379,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			// Case 1 (see function comment).
 			lookupJoin.Cols.UnionWith(scanPrivate.Cols)
 
-			// If some optional filters were used to build the lookup expression, we may
-			// need to wrap the final expression with a project. We only need to do this
-			// for left joins, since anti joins have an implicit projection that removes
-			// all right-side columns.
-			needsProject := joinType == opt.LeftJoinOp &&
+			// If some optional filters were used to build the lookup expression, we
+			// may need to wrap the final expression with a project. We don't need to
+			// do this for semi or anti joins, since they have an implicit projection
+			// that removes all right-side columns.
+			needsProject := joinType != opt.SemiJoinOp && joinType != opt.AntiJoinOp &&
 				!lookupJoin.Cols.SubsetOf(grp.Relational().OutputCols)
 			if !needsProject {
 				c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
@@ -1120,4 +1131,326 @@ func (c *CustomFuncs) MakeProjectionsForOuterJoin(
 		result[i] = c.e.f.ConstructProjectionsItem(ifExpr, proj[i].Col)
 	}
 	return result
+}
+
+// CanMaybeGenerateLocalityOptimizedLookupJoin returns true if it may be
+// possible to generate a locality optimized lookup join from the given lookup
+// join private. CanMaybeGenerateLocalityOptimizedLookupJoin performs simple
+// checks that are inexpensive to execute and can filter out cases where the
+// optimization definitely cannot apply. See the comment above the
+// GenerateLocalityOptimizedLookupJoin rule for details.
+func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedLookupJoin(
+	private *memo.LookupJoinPrivate,
+) bool {
+	// Respect the session setting LocalityOptimizedSearch.
+	if !c.e.evalCtx.SessionData.LocalityOptimizedSearch {
+		return false
+	}
+
+	if private.LocalityOptimized {
+		// This lookup join has already been locality optimized.
+		return false
+	}
+
+	// This lookup join should have the LookupExpr filled in, indicating that one
+	// or more of the join filters constrain an index column to multiple constant
+	// values.
+	if private.LookupExpr == nil {
+		return false
+	}
+
+	// There should be at least two partitions, or we won't be able to
+	// differentiate between local and remote partitions.
+	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
+	index := tabMeta.Table.Index(private.Index)
+	if index.PartitionCount() < 2 {
+		return false
+	}
+
+	// The local region must be set, or we won't be able to determine which
+	// partitions are local.
+	_, found := c.e.evalCtx.Locality.Find(regionKey)
+	return found
+}
+
+// GenerateLocalityOptimizedLookupJoin generates a locality optimized lookup
+// join if possible from the given lookup join private. This function should
+// only be called if CanMaybeGenerateLocalityOptimizedLookupJoin returns true.
+// See the comment above the GenerateLocalityOptimizedLookupJoin rule for more
+// details.
+func (c *CustomFuncs) GenerateLocalityOptimizedLookupJoin(
+	grp memo.RelExpr, input memo.RelExpr, on memo.FiltersExpr, private *memo.LookupJoinPrivate,
+) {
+	// We can only generate a locality optimized lookup join if we know there is at
+	// most one row produced by the local lookup join.
+	// TODO(rytaft): We may be able to expand this to allow any number of rows,
+	// as long as the lookup columns form a key on the index.
+	if !grp.Relational().Cardinality.IsZeroOrOne() {
+		return
+	}
+
+	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
+	tab := tabMeta.Table
+	index := tab.Index(private.Index)
+
+	// We already know that a local region exists from calling
+	// CanMaybeGenerateLocalityOptimizedScan.
+	localRegion, _ := c.e.evalCtx.Locality.Find(regionKey)
+
+	// Determine whether the index has both local and remote partitions, and
+	// if so, which spans target local partitions.
+	var localPartitions util.FastIntSet
+	for i, n := 0, index.PartitionCount(); i < n; i++ {
+		part := index.Partition(i)
+		if isZoneLocal(part.Zone(), localRegion) {
+			localPartitions.Add(i)
+		}
+	}
+	if localPartitions.Len() == 0 || localPartitions.Len() == index.PartitionCount() {
+		// The partitions are either all local or all remote.
+		return
+	}
+
+	filterIdx, ok := c.getConstPrefixFilter(index, private.Table, private.LookupExpr)
+	if !ok {
+		return
+	}
+	filter := private.LookupExpr[filterIdx]
+	col, vals, ok := filter.ScalarProps().Constraints.HasSingleColumnConstValues(c.e.evalCtx)
+	if !ok || len(vals) < 2 {
+		return
+	}
+
+	localValOrds := c.getLocalValues(index, localPartitions, vals)
+	if localValOrds.Len() == 0 || localValOrds.Len() == len(vals) {
+		// The spans target all local or all remote partitions.
+		return
+	}
+
+	// Split the spans into local and remote sets.
+	localValues, remoteValues := c.splitValues(vals, localValOrds)
+
+	bindingExpr := c.ReplaceOutputCols(input)
+	srcCols := getTableColumns(tab, private.Table)
+	srcCols.UnionWith(input.Relational().OutputCols)
+
+	withID := c.e.mem.NextWithID()
+	c.e.mem.Metadata().AddWithBinding(withID, bindingExpr)
+
+	// Create the local lookup join.
+	localInput, localTable := c.copyLookupJoinInputAndTable(input, private.Table, withID)
+	dstCols := getTableColumns(tab, localTable)
+	dstCols.UnionWith(localInput.Relational().OutputCols)
+	colMap := makeMapFromColSets(srcCols, dstCols)
+	col = localTable.IndexColumnID(index, 0)
+
+	localPrivate := *private
+	localPrivate.Table = localTable
+	localPrivate.LocalityOptimized = true
+	localPrivate.Cols = c.mapColSet(private.Cols, colMap)
+	localPrivate.LookupExpr = c.MapFilterCols(private.LookupExpr, srcCols, dstCols)
+	localPrivate.LookupExpr[filterIdx] = c.makeConstFilter(col, localValues)
+	localPrivate.ConstFilters = c.MapFilterCols(private.ConstFilters, srcCols, dstCols)
+	localOn := c.MapFilterCols(on, srcCols, dstCols)
+	localLookupJoin := c.e.f.ConstructLookupJoin(localInput, localOn, &localPrivate)
+
+	// Create the remote lookup join.
+	remoteInput, remoteTable := c.copyLookupJoinInputAndTable(input, private.Table, withID)
+	dstCols = getTableColumns(tab, remoteTable)
+	dstCols.UnionWith(remoteInput.Relational().OutputCols)
+	colMap = makeMapFromColSets(srcCols, dstCols)
+	col = remoteTable.IndexColumnID(index, 0)
+
+	remotePrivate := *private
+	remotePrivate.Table = remoteTable
+	remotePrivate.LocalityOptimized = true
+	remotePrivate.Cols = c.mapColSet(private.Cols, colMap)
+	remotePrivate.LookupExpr = c.MapFilterCols(private.LookupExpr, srcCols, dstCols)
+	remotePrivate.LookupExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
+	remotePrivate.ConstFilters = c.MapFilterCols(private.ConstFilters, srcCols, dstCols)
+	remoteOn := c.MapFilterCols(on, srcCols, dstCols)
+	remoteLookupJoin := c.e.f.ConstructLookupJoin(remoteInput, remoteOn, &remotePrivate)
+
+	// Construct the locality optimized search with a limit corresponding to the
+	// maximum number of rows.
+	locOptSearch := c.e.f.ConstructLocalityOptimizedSearch(
+		localLookupJoin,
+		remoteLookupJoin,
+		&memo.SetPrivate{
+			LeftCols:  localLookupJoin.Relational().OutputCols.ToList(),
+			RightCols: remoteLookupJoin.Relational().OutputCols.ToList(),
+			OutCols:   grp.Relational().OutputCols.ToList(),
+			HardLimit: int(grp.Relational().Cardinality.Max),
+		},
+	)
+
+	// Add the WithExpr to the same group as the original lookup join.
+	with := memo.WithExpr{
+		Binding:     bindingExpr,
+		Main:        locOptSearch,
+		WithPrivate: memo.WithPrivate{ID: withID},
+	}
+	c.e.mem.AddWithToGroup(&with, grp)
+}
+
+// copyLookupJoinInputAndTable constructs a WithScan of the given WithID
+// (already bound to the input by the caller) and duplicates the given table. If
+// the output column IDs of the input start before the column IDs of the table,
+// it constructs the WithScan first. Otherwise, it duplicates the table first.
+// This ensures that the ordering of column IDs is consistent.
+func (c CustomFuncs) copyLookupJoinInputAndTable(
+	input memo.RelExpr, table opt.TableID, withID opt.WithID,
+) (newInput memo.RelExpr, newTable opt.TableID) {
+	firstInputCol, _ := input.Relational().OutputCols.Next(0)
+	firstTableCol := table.ColumnID(0)
+	if firstInputCol < firstTableCol {
+		newInput = c.MakeWithScan(withID)
+		newTable = c.e.mem.Metadata().DuplicateTable(table, c.RemapCols)
+	} else {
+		newTable = c.e.mem.Metadata().DuplicateTable(table, c.RemapCols)
+		newInput = c.MakeWithScan(withID)
+	}
+	return newInput, newTable
+}
+
+// getConstPrefixFilter finds the position of the filter in the given slice of
+// filters that constrains the first index column to one or more constant
+// values.
+func (c CustomFuncs) getConstPrefixFilter(
+	index cat.Index, table opt.TableID, filters memo.FiltersExpr,
+) (pos int, ok bool) {
+	idxCol := table.IndexColumnID(index, 0)
+	for i := range filters {
+		props := filters[i].ScalarProps()
+		if !props.TightConstraints {
+			continue
+		}
+		if props.OuterCols.Len() != 1 {
+			continue
+		}
+		col, _ := props.OuterCols.Next(0)
+		if col == idxCol {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// getLocalValues returns the indexes of the values in the given Datums slice
+// that target local partitions.
+func (c *CustomFuncs) getLocalValues(
+	index cat.Index, localPartitions util.FastIntSet, values tree.Datums,
+) util.FastIntSet {
+	// Collect all the prefixes from all the different partitions (remembering
+	// which ones came from local partitions), and sort them so that longer
+	// prefixes come before shorter prefixes. For each value in the given Datums,
+	// we will iterate through the list of prefixes until we find a match, so
+	// ordering them with longer prefixes first ensures that the correct match is
+	// found.
+	allPrefixes := getSortedPrefixes(index, localPartitions)
+
+	// TODO(rytaft): Sort the prefixes by key in addition to length, and use
+	// binary search here.
+	var localVals util.FastIntSet
+	for i, val := range values {
+		for j := range allPrefixes {
+			prefix := allPrefixes[j].prefix
+			isLocal := allPrefixes[j].isLocal
+			if len(prefix) > 1 {
+				continue
+			}
+			if val.Compare(c.e.evalCtx, prefix[0]) == 0 {
+				if isLocal {
+					localVals.Add(i)
+				}
+				break
+			}
+		}
+	}
+	return localVals
+}
+
+// splitValues splits the given slice of Datums into local and remote slices
+// by putting the Datums at positions identified by localValOrds into the local
+// slice, and the remaining Datums into the remote slice.
+func (c *CustomFuncs) splitValues(
+	values tree.Datums, localValOrds util.FastIntSet,
+) (localVals, remoteVals tree.Datums) {
+	localVals = make(tree.Datums, 0, localValOrds.Len())
+	remoteVals = make(tree.Datums, 0, len(values)-len(localVals))
+	for i, val := range values {
+		if localValOrds.Contains(i) {
+			localVals = append(localVals, val)
+		} else {
+			remoteVals = append(remoteVals, val)
+		}
+	}
+	return localVals, remoteVals
+}
+
+// MakeWithScan constructs a WithScan expression that scans the With expression
+// with the given WithID. It creates new columns in the metadata for the
+// WithScan output columns.
+func (c *CustomFuncs) MakeWithScan(withID opt.WithID) memo.RelExpr {
+	binding := c.e.mem.Metadata().WithBinding(withID).(memo.RelExpr)
+	cols := binding.Relational().OutputCols
+	inCols := make(opt.ColList, cols.Len())
+	outCols := make(opt.ColList, len(inCols))
+
+	i := 0
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		colMeta := c.e.mem.Metadata().ColumnMeta(col)
+		inCols[i] = col
+		outCols[i] = c.e.mem.Metadata().AddColumn(colMeta.Alias, colMeta.Type)
+		i++
+	}
+
+	return c.e.f.ConstructWithScan(&memo.WithScanPrivate{
+		With:    withID,
+		InCols:  inCols,
+		OutCols: outCols,
+		ID:      c.e.mem.Metadata().NextUniqueID(),
+	})
+}
+
+// ReplaceOutputCols replaces the output columns of the given expression by
+// wrapping the expression in a project expression that projects each of the
+// original output columns as a new column with a new ColumnID.
+func (c *CustomFuncs) ReplaceOutputCols(expr memo.RelExpr) memo.RelExpr {
+	srcCols := expr.Relational().OutputCols
+	projections := make(memo.ProjectionsExpr, srcCols.Len())
+
+	i := 0
+	for srcCol, ok := srcCols.Next(0); ok; srcCol, ok = srcCols.Next(srcCol + 1) {
+		colMeta := c.e.mem.Metadata().ColumnMeta(srcCol)
+		dstCol := c.e.mem.Metadata().AddColumn(colMeta.Alias, colMeta.Type)
+		projections[i] = c.e.f.ConstructProjectionsItem(c.e.f.ConstructVariable(srcCol), dstCol)
+		i++
+	}
+
+	return c.e.f.ConstructProject(expr, projections, opt.ColSet{})
+}
+
+// mapColSet returns a new ColSet in which every column in the given colSet is
+// mapped to a new column based on the given colMap.
+func (c *CustomFuncs) mapColSet(colSet opt.ColSet, colMap opt.ColMap) opt.ColSet {
+	var res opt.ColSet
+	colSet.ForEach(func(col opt.ColumnID) {
+		outCol, ok := colMap.Get(int(col))
+		if !ok {
+			panic(errors.AssertionFailedf("column %d not in mapping %s\n", col, colMap.String()))
+		}
+		res.Add(opt.ColumnID(outCol))
+	})
+	return res
+}
+
+// getTableColumns returns a ColSet containing the columns in the given table.
+func getTableColumns(tab cat.Table, tabID opt.TableID) opt.ColSet {
+	var res opt.ColSet
+	for i, n := 0, tab.ColumnCount(); i < n; i++ {
+		col := tabID.ColumnID(i)
+		res.Add(col)
+	}
+	return res
 }

@@ -327,6 +327,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatColList(e, tp, "left columns:", private.LeftCols)
 			f.formatColList(e, tp, "right columns:", private.RightCols)
 		}
+		if !f.HasFlags(ExprFmtHideMiscProps) {
+			if hardLimit := e.Private().(*SetPrivate).HardLimit; hardLimit > 0 {
+				tp.Childf("limit: %d", hardLimit)
+			}
+		}
 
 	case *ScanExpr:
 		if t.IsCanonical() {

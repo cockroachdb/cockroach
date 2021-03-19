@@ -70,6 +70,16 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		}
 	}
 
+	if opt.IsSetOp(e) {
+		if e.Op() == opt.LocalityOptimizedSearchOp {
+			if e.Private().(*SetPrivate).HardLimit <= 0 {
+				panic(errors.AssertionFailedf("hard limit must be positive for locality optimized search"))
+			}
+		} else if e.Private().(*SetPrivate).HardLimit != 0 {
+			panic(errors.AssertionFailedf("hard limit cannot be set for %s", e.Op()))
+		}
+	}
+
 	// Check operator-specific fields.
 	switch t := e.(type) {
 	case *ScanExpr:

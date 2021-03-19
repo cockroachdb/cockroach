@@ -536,6 +536,7 @@ project
       ├── columns: a:3!null b:4!null
       ├── left columns: a:10 b:11
       ├── right columns: a:17 b:18
+      ├── limit: 1
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(3,4)
@@ -566,6 +567,7 @@ index-join abc_part
       ├── columns: r:1!null a:3!null b:4!null
       ├── left columns: r:8 a:10 b:11
       ├── right columns: r:15 a:17 b:18
+      ├── limit: 1
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,3,4)
@@ -596,6 +598,7 @@ index-join abc_part
       ├── columns: r:1!null a:3!null b:4!null
       ├── left columns: r:8 a:10 b:11
       ├── right columns: r:15 a:17 b:18
+      ├── limit: 1
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1,3,4)
@@ -626,6 +629,7 @@ index-join abc_part
       ├── columns: r:1!null t:2!null a:3!null c:5!null
       ├── left columns: r:8 t:9 a:10 c:12
       ├── right columns: r:15 t:16 a:17 c:19
+      ├── limit: 1
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3,5)
@@ -663,6 +667,7 @@ index-join abc_part
       ├── columns: r:1!null t:2!null a:3!null c:5!null
       ├── left columns: r:8 t:9 a:10 c:12
       ├── right columns: r:15 t:16 a:17 c:19
+      ├── limit: 1
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3,5)
@@ -700,6 +705,7 @@ index-join abc_part
       ├── columns: r:1!null t:2!null a:3!null c:5!null
       ├── left columns: r:8 t:9 a:10 c:12
       ├── right columns: r:15 t:16 a:17 c:19
+      ├── limit: 1
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-3,5)
@@ -793,6 +799,7 @@ project
       ├── columns: a:3!null b:4!null
       ├── left columns: a:10 b:11
       ├── right columns: a:17 b:18
+      ├── limit: 1
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(3,4)

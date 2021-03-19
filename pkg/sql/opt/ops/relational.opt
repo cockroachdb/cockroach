@@ -372,6 +372,17 @@ define LookupJoinPrivate {
     # paired-joiner used for left joins.
     IsSecondJoinInPairedJoiner bool
 
+    # LocalityOptimized is true if this lookup join is a child of a
+    # LocalityOptimizedSearch operator, indicating that it either requires all
+    # local (relative to the gateway region) or all remote lookups. The
+    # LocalityOptimizedSearch operator is similar to a UNION ALL, but ensures
+    # that the right child (requiring remote lookups) is only executed if the
+    # left child (requiring local lookups) does not return any rows. Therefore,
+    # LocalityOptimized is used as a hint to the coster to reduce the cost of
+    # this lookup join. It is also used to ensure that the DistSQL planner creates a
+    # local plan.
+    LocalityOptimized bool
+
     # ConstFilters contains the constant filters that are represented as equality
     # conditions on the KeyCols. These filters are needed by the statistics code to
     # correctly estimate selectivity.
@@ -765,9 +776,10 @@ define Union {
 }
 
 # SetPrivate contains fields used by the relational set operators: Union,
-# Intersect, Except, UnionAll, IntersectAll and ExceptAll. It matches columns
-# from the left and right inputs of the operator with the output columns, since
-# OutputCols are not ordered and may not correspond to each other.
+# Intersect, Except, UnionAll, IntersectAll, ExceptAll, and
+# LocalityOptimizedSearch. It matches columns from the left and right inputs of
+# the operator with the output columns, since OutputCols are not ordered and may
+# not correspond to each other.
 #
 # For example, consider the following query:
 #   SELECT y, x FROM xy UNION SELECT b, a FROM ab
@@ -786,11 +798,16 @@ define Union {
 #
 # To make normalization rules and execution simpler, both inputs to the set op
 # must have matching types.
+#
+# SetPrivate also contains an optional HardLimit. If non-zero, the set operator
+# will short-circuit after returning the given number of rows. The HardLimit
+# field should only be used for LocalityOptimizedSearch.
 [Private]
 define SetPrivate {
     LeftCols ColList
     RightCols ColList
     OutCols ColList
+    HardLimit int
 }
 
 # Intersect is an operator used to perform an intersection between the Left

@@ -7567,3 +7567,715 @@ right-join (hash)
  │    └── columns: m:1 n:2
  └── filters
       └── p:5 = m:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# --------------------------------------------------
+# GenerateLocalityOptimizedLookupJoin
+# --------------------------------------------------
+
+# These tables mimic REGIONAL BY ROW tables.
+exec-ddl
+CREATE TABLE abc_part (
+    r STRING NOT NULL CHECK (r IN ('east', 'west', 'central')),
+    a INT NOT NULL,
+    b INT,
+    c INT,
+    PRIMARY KEY (r, a),
+    UNIQUE WITHOUT INDEX (a),
+    UNIQUE WITHOUT INDEX (b),
+    UNIQUE INDEX b_idx (r, b) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    ),
+    INDEX c_idx (r, c) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    )
+) PARTITION BY LIST (r) (
+  PARTITION east VALUES IN (('east')),
+  PARTITION west VALUES IN (('west')),
+  PARTITION central VALUES IN (('central'))
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+CREATE TABLE def_part (
+    r STRING NOT NULL CHECK (r IN ('east', 'west', 'central')),
+    d INT NOT NULL,
+    e INT REFERENCES abc_part (a),
+    f INT REFERENCES abc_part (b),
+    PRIMARY KEY (r, d),
+    UNIQUE WITHOUT INDEX (d),
+    UNIQUE WITHOUT INDEX (e),
+    UNIQUE INDEX e_idx (r, e) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    ),
+    INDEX f_idx (r, f) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    )
+) PARTITION BY LIST (r) (
+  PARTITION east VALUES IN (('east')),
+  PARTITION west VALUES IN (('west')),
+  PARTITION central VALUES IN (('central'))
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX def_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX def_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX def_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX def_part@e_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX def_part@e_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX def_part@e_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX def_part@f_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX def_part@f_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX def_part@f_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM abc_part INNER JOIN def_part ON e = a WHERE d = 1
+----
+with &2
+ ├── columns: r:1!null a:2!null b:3 c:4 r:6!null d:7!null e:8!null f:9
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4,6-9)
+ ├── project
+ │    ├── columns: r:40!null d:41!null e:42 f:43
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(40-43)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:6!null def_part.d:7!null def_part.e:8 def_part.f:9
+ │    │    ├── left columns: def_part.r:11 def_part.d:12 def_part.e:13 def_part.f:14
+ │    │    ├── right columns: def_part.r:16 def_part.d:17 def_part.e:18 def_part.f:19
+ │    │    ├── limit: 1
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(6-9)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null def_part.d:12!null def_part.e:13 def_part.f:14
+ │    │    │    ├── constraint: /11/12: [/'east'/1 - /'east'/1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null def_part.d:17!null def_part.e:18 def_part.f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'central'/1 - /'central'/1]
+ │    │         │    └── [/'west'/1 - /'west'/1]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── projections
+ │         ├── def_part.r:6 [as=r:40, outer=(6)]
+ │         ├── def_part.d:7 [as=d:41, outer=(7)]
+ │         ├── def_part.e:8 [as=e:42, outer=(8)]
+ │         └── def_part.f:9 [as=f:43, outer=(9)]
+ └── locality-optimized-search
+      ├── columns: abc_part.r:1!null a:2!null b:3 c:4 def_part.r:6!null def_part.d:7!null def_part.e:8!null def_part.f:9
+      ├── left columns: abc_part.r:44 a:45 b:46 c:47 r:49 d:50 e:51 f:52
+      ├── right columns: abc_part.r:53 a:54 b:55 c:56 r:58 d:59 e:60 f:61
+      ├── limit: 1
+      ├── cardinality: [0 - 1]
+      ├── inner-join (lookup abc_part)
+      │    ├── columns: abc_part.r:44!null a:45!null b:46 c:47 r:49!null d:50!null e:51!null f:52
+      │    ├── lookup expression
+      │    │    └── filters
+      │    │         ├── e:51 = a:45 [outer=(45,51), constraints=(/45: (/NULL - ]; /51: (/NULL - ]), fd=(45)==(51), (51)==(45)]
+      │    │         └── abc_part.r:44 = 'east' [outer=(44), constraints=(/44: [/'east' - /'east']; tight), fd=()-->(44)]
+      │    ├── lookup columns are key
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(44-47,49-52)
+      │    ├── with-scan &2
+      │    │    ├── columns: r:49!null d:50!null e:51 f:52
+      │    │    ├── mapping:
+      │    │    │    ├──  r:40 => r:49
+      │    │    │    ├──  d:41 => d:50
+      │    │    │    ├──  e:42 => e:51
+      │    │    │    └──  f:43 => f:52
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(49-52)
+      │    └── filters (true)
+      └── inner-join (lookup abc_part)
+           ├── columns: abc_part.r:53!null a:54!null b:55 c:56 r:58!null d:59!null e:60!null f:61
+           ├── lookup expression
+           │    └── filters
+           │         ├── e:60 = a:54 [outer=(54,60), constraints=(/54: (/NULL - ]; /60: (/NULL - ]), fd=(54)==(60), (60)==(54)]
+           │         └── abc_part.r:53 IN ('central', 'west') [outer=(53), constraints=(/53: [/'central' - /'central'] [/'west' - /'west']; tight)]
+           ├── lookup columns are key
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           ├── fd: ()-->(53-56,58-61)
+           ├── with-scan &2
+           │    ├── columns: r:58!null d:59!null e:60 f:61
+           │    ├── mapping:
+           │    │    ├──  r:40 => r:58
+           │    │    ├──  d:41 => d:59
+           │    │    ├──  e:42 => e:60
+           │    │    └──  f:43 => f:61
+           │    ├── cardinality: [0 - 1]
+           │    ├── key: ()
+           │    └── fd: ()-->(58-61)
+           └── filters (true)
+
+# Left join, with the order of the tables swapped.
+opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM def_part LEFT JOIN abc_part ON e = a WHERE d = 1
+----
+with &1
+ ├── columns: r:1!null d:2!null e:3 f:4 r:6 a:7 b:8 c:9
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4,6-9)
+ ├── project
+ │    ├── columns: r:21!null d:22!null e:23 f:24
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(21-24)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null def_part.d:2!null def_part.e:3 def_part.f:4
+ │    │    ├── left columns: def_part.r:11 def_part.d:12 def_part.e:13 def_part.f:14
+ │    │    ├── right columns: def_part.r:16 def_part.d:17 def_part.e:18 def_part.f:19
+ │    │    ├── limit: 1
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null def_part.d:12!null def_part.e:13 def_part.f:14
+ │    │    │    ├── constraint: /11/12: [/'east'/1 - /'east'/1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null def_part.d:17!null def_part.e:18 def_part.f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'central'/1 - /'central'/1]
+ │    │         │    └── [/'west'/1 - /'west'/1]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── projections
+ │         ├── def_part.r:1 [as=r:21, outer=(1)]
+ │         ├── def_part.d:2 [as=d:22, outer=(2)]
+ │         ├── def_part.e:3 [as=e:23, outer=(3)]
+ │         └── def_part.f:4 [as=f:24, outer=(4)]
+ └── locality-optimized-search
+      ├── columns: def_part.r:1!null def_part.d:2!null def_part.e:3 def_part.f:4 abc_part.r:6 a:7 b:8 c:9
+      ├── left columns: r:25 d:26 e:27 f:28 abc_part.r:29 a:30 b:31 c:32
+      ├── right columns: r:34 d:35 e:36 f:37 abc_part.r:38 a:39 b:40 c:41
+      ├── limit: 1
+      ├── cardinality: [0 - 1]
+      ├── left-join (lookup abc_part)
+      │    ├── columns: r:25!null d:26!null e:27 f:28 abc_part.r:29 a:30 b:31 c:32
+      │    ├── lookup expression
+      │    │    └── filters
+      │    │         ├── e:27 = a:30 [outer=(27,30), constraints=(/27: (/NULL - ]; /30: (/NULL - ]), fd=(27)==(30), (30)==(27)]
+      │    │         └── abc_part.r:29 = 'east' [outer=(29), constraints=(/29: [/'east' - /'east']; tight), fd=()-->(29)]
+      │    ├── lookup columns are key
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(25-32)
+      │    ├── with-scan &1
+      │    │    ├── columns: r:25!null d:26!null e:27 f:28
+      │    │    ├── mapping:
+      │    │    │    ├──  r:21 => r:25
+      │    │    │    ├──  d:22 => d:26
+      │    │    │    ├──  e:23 => e:27
+      │    │    │    └──  f:24 => f:28
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(25-28)
+      │    └── filters (true)
+      └── left-join (lookup abc_part)
+           ├── columns: r:34!null d:35!null e:36 f:37 abc_part.r:38 a:39 b:40 c:41
+           ├── lookup expression
+           │    └── filters
+           │         ├── e:36 = a:39 [outer=(36,39), constraints=(/36: (/NULL - ]; /39: (/NULL - ]), fd=(36)==(39), (39)==(36)]
+           │         └── abc_part.r:38 IN ('central', 'west') [outer=(38), constraints=(/38: [/'central' - /'central'] [/'west' - /'west']; tight)]
+           ├── lookup columns are key
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           ├── fd: ()-->(34-41)
+           ├── with-scan &1
+           │    ├── columns: r:34!null d:35!null e:36 f:37
+           │    ├── mapping:
+           │    │    ├──  r:21 => r:34
+           │    │    ├──  d:22 => d:35
+           │    │    ├──  e:23 => e:36
+           │    │    └──  f:24 => f:37
+           │    ├── cardinality: [0 - 1]
+           │    ├── key: ()
+           │    └── fd: ()-->(34-37)
+           └── filters (true)
+
+# Semi join, different region.
+opt locality=(region=central) expect=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE e = a) AND d = 1
+----
+with &4
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── project
+ │    ├── columns: r:81!null d:82!null e:83 f:84
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(81-84)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null def_part.d:2!null def_part.e:3 def_part.f:4
+ │    │    ├── left columns: def_part.r:11 def_part.d:12 def_part.e:13 def_part.f:14
+ │    │    ├── right columns: def_part.r:16 def_part.d:17 def_part.e:18 def_part.f:19
+ │    │    ├── limit: 1
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null def_part.d:12!null def_part.e:13 def_part.f:14
+ │    │    │    ├── constraint: /11/12: [/'central'/1 - /'central'/1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null def_part.d:17!null def_part.e:18 def_part.f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'east'/1 - /'east'/1]
+ │    │         │    └── [/'west'/1 - /'west'/1]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── projections
+ │         ├── def_part.r:1 [as=r:81, outer=(1)]
+ │         ├── def_part.d:2 [as=d:82, outer=(2)]
+ │         ├── def_part.e:3 [as=e:83, outer=(3)]
+ │         └── def_part.f:4 [as=f:84, outer=(4)]
+ └── locality-optimized-search
+      ├── columns: def_part.r:1!null def_part.d:2!null def_part.e:3 def_part.f:4
+      ├── left columns: r:85 d:86 e:87 f:88
+      ├── right columns: r:94 d:95 e:96 f:97
+      ├── limit: 1
+      ├── cardinality: [0 - 1]
+      ├── semi-join (lookup abc_part)
+      │    ├── columns: r:85!null d:86!null e:87 f:88
+      │    ├── lookup expression
+      │    │    └── filters
+      │    │         ├── e:87 = a:90 [outer=(87,90), constraints=(/87: (/NULL - ]; /90: (/NULL - ]), fd=(87)==(90), (90)==(87)]
+      │    │         └── abc_part.r:89 = 'central' [outer=(89), constraints=(/89: [/'central' - /'central']; tight), fd=()-->(89)]
+      │    ├── lookup columns are key
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(85-88)
+      │    ├── with-scan &4
+      │    │    ├── columns: r:85!null d:86!null e:87 f:88
+      │    │    ├── mapping:
+      │    │    │    ├──  r:81 => r:85
+      │    │    │    ├──  d:82 => d:86
+      │    │    │    ├──  e:83 => e:87
+      │    │    │    └──  f:84 => f:88
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(85-88)
+      │    └── filters (true)
+      └── semi-join (lookup abc_part)
+           ├── columns: r:94!null d:95!null e:96 f:97
+           ├── lookup expression
+           │    └── filters
+           │         ├── e:96 = a:99 [outer=(96,99), constraints=(/96: (/NULL - ]; /99: (/NULL - ]), fd=(96)==(99), (99)==(96)]
+           │         └── abc_part.r:98 IN ('east', 'west') [outer=(98), constraints=(/98: [/'east' - /'east'] [/'west' - /'west']; tight)]
+           ├── lookup columns are key
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           ├── fd: ()-->(94-97)
+           ├── with-scan &4
+           │    ├── columns: r:94!null d:95!null e:96 f:97
+           │    ├── mapping:
+           │    │    ├──  r:81 => r:94
+           │    │    ├──  d:82 => d:95
+           │    │    ├──  e:83 => e:96
+           │    │    └──  f:84 => f:97
+           │    ├── cardinality: [0 - 1]
+           │    ├── key: ()
+           │    └── fd: ()-->(94-97)
+           └── filters (true)
+
+# Anti join, different region.
+opt locality=(region=west) expect=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE e = a) AND d = 1
+----
+with &1
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── project
+ │    ├── columns: r:21!null d:22!null e:23 f:24
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(21-24)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null def_part.d:2!null def_part.e:3 def_part.f:4
+ │    │    ├── left columns: def_part.r:11 def_part.d:12 def_part.e:13 def_part.f:14
+ │    │    ├── right columns: def_part.r:16 def_part.d:17 def_part.e:18 def_part.f:19
+ │    │    ├── limit: 1
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null def_part.d:12!null def_part.e:13 def_part.f:14
+ │    │    │    ├── constraint: /11/12: [/'west'/1 - /'west'/1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null def_part.d:17!null def_part.e:18 def_part.f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'central'/1 - /'central'/1]
+ │    │         │    └── [/'east'/1 - /'east'/1]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── projections
+ │         ├── def_part.r:1 [as=r:21, outer=(1)]
+ │         ├── def_part.d:2 [as=d:22, outer=(2)]
+ │         ├── def_part.e:3 [as=e:23, outer=(3)]
+ │         └── def_part.f:4 [as=f:24, outer=(4)]
+ └── locality-optimized-search
+      ├── columns: def_part.r:1!null def_part.d:2!null def_part.e:3 def_part.f:4
+      ├── left columns: r:25 d:26 e:27 f:28
+      ├── right columns: r:34 d:35 e:36 f:37
+      ├── limit: 1
+      ├── cardinality: [0 - 1]
+      ├── anti-join (lookup abc_part)
+      │    ├── columns: r:25!null d:26!null e:27 f:28
+      │    ├── lookup expression
+      │    │    └── filters
+      │    │         ├── e:27 = a:30 [outer=(27,30), constraints=(/27: (/NULL - ]; /30: (/NULL - ]), fd=(27)==(30), (30)==(27)]
+      │    │         └── abc_part.r:29 = 'west' [outer=(29), constraints=(/29: [/'west' - /'west']; tight), fd=()-->(29)]
+      │    ├── lookup columns are key
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(25-28)
+      │    ├── with-scan &1
+      │    │    ├── columns: r:25!null d:26!null e:27 f:28
+      │    │    ├── mapping:
+      │    │    │    ├──  r:21 => r:25
+      │    │    │    ├──  d:22 => d:26
+      │    │    │    ├──  e:23 => e:27
+      │    │    │    └──  f:24 => f:28
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(25-28)
+      │    └── filters (true)
+      └── anti-join (lookup abc_part)
+           ├── columns: r:34!null d:35!null e:36 f:37
+           ├── lookup expression
+           │    └── filters
+           │         ├── e:36 = a:39 [outer=(36,39), constraints=(/36: (/NULL - ]; /39: (/NULL - ]), fd=(36)==(39), (39)==(36)]
+           │         └── abc_part.r:38 IN ('central', 'east') [outer=(38), constraints=(/38: [/'central' - /'central'] [/'east' - /'east']; tight)]
+           ├── lookup columns are key
+           ├── cardinality: [0 - 1]
+           ├── key: ()
+           ├── fd: ()-->(34-37)
+           ├── with-scan &1
+           │    ├── columns: r:34!null d:35!null e:36 f:37
+           │    ├── mapping:
+           │    │    ├──  r:21 => r:34
+           │    │    ├──  d:22 => d:35
+           │    │    ├──  e:23 => e:36
+           │    │    └──  f:24 => f:37
+           │    ├── cardinality: [0 - 1]
+           │    ├── key: ()
+           │    └── fd: ()-->(34-37)
+           └── filters (true)
+
+# Different join condition.
+opt locality=(region=east) expect=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM abc_part, def_part WHERE f = b AND d = 10
+----
+inner-join (lookup abc_part)
+ ├── columns: r:1!null a:2!null b:3!null c:4 r:6!null d:7!null e:8 f:9!null
+ ├── key columns: [1 2] = [1 2]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4,6-9)
+ ├── with &1
+ │    ├── columns: abc_part.r:1!null a:2!null b:3!null def_part.r:6!null def_part.d:7!null def_part.e:8 def_part.f:9!null
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-3,6-9)
+ │    ├── project
+ │    │    ├── columns: r:21!null d:22!null e:23 f:24
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(21-24)
+ │    │    ├── locality-optimized-search
+ │    │    │    ├── columns: def_part.r:6!null def_part.d:7!null def_part.e:8 def_part.f:9
+ │    │    │    ├── left columns: def_part.r:11 def_part.d:12 def_part.e:13 def_part.f:14
+ │    │    │    ├── right columns: def_part.r:16 def_part.d:17 def_part.e:18 def_part.f:19
+ │    │    │    ├── limit: 1
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    ├── fd: ()-->(6-9)
+ │    │    │    ├── scan def_part
+ │    │    │    │    ├── columns: def_part.r:11!null def_part.d:12!null def_part.e:13 def_part.f:14
+ │    │    │    │    ├── constraint: /11/12: [/'east'/10 - /'east'/10]
+ │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    ├── key: ()
+ │    │    │    │    └── fd: ()-->(11-14)
+ │    │    │    └── scan def_part
+ │    │    │         ├── columns: def_part.r:16!null def_part.d:17!null def_part.e:18 def_part.f:19
+ │    │    │         ├── constraint: /16/17
+ │    │    │         │    ├── [/'central'/10 - /'central'/10]
+ │    │    │         │    └── [/'west'/10 - /'west'/10]
+ │    │    │         ├── cardinality: [0 - 1]
+ │    │    │         ├── key: ()
+ │    │    │         └── fd: ()-->(16-19)
+ │    │    └── projections
+ │    │         ├── def_part.r:6 [as=r:21, outer=(6)]
+ │    │         ├── def_part.d:7 [as=d:22, outer=(7)]
+ │    │         ├── def_part.e:8 [as=e:23, outer=(8)]
+ │    │         └── def_part.f:9 [as=f:24, outer=(9)]
+ │    └── locality-optimized-search
+ │         ├── columns: abc_part.r:1!null a:2!null b:3!null def_part.r:6!null def_part.d:7!null def_part.e:8 def_part.f:9!null
+ │         ├── left columns: abc_part.r:25 a:26 b:27 r:30 d:31 e:32 f:33
+ │         ├── right columns: abc_part.r:34 a:35 b:36 r:39 d:40 e:41 f:42
+ │         ├── limit: 1
+ │         ├── cardinality: [0 - 1]
+ │         ├── inner-join (lookup abc_part@b_idx)
+ │         │    ├── columns: abc_part.r:25!null a:26!null b:27!null r:30!null d:31!null e:32 f:33!null
+ │         │    ├── lookup expression
+ │         │    │    └── filters
+ │         │    │         ├── f:33 = b:27 [outer=(27,33), constraints=(/27: (/NULL - ]; /33: (/NULL - ]), fd=(27)==(33), (33)==(27)]
+ │         │    │         └── abc_part.r:25 = 'east' [outer=(25), constraints=(/25: [/'east' - /'east']; tight), fd=()-->(25)]
+ │         │    ├── lookup columns are key
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(25-27,30-33)
+ │         │    ├── with-scan &1
+ │         │    │    ├── columns: r:30!null d:31!null e:32 f:33
+ │         │    │    ├── mapping:
+ │         │    │    │    ├──  r:21 => r:30
+ │         │    │    │    ├──  d:22 => d:31
+ │         │    │    │    ├──  e:23 => e:32
+ │         │    │    │    └──  f:24 => f:33
+ │         │    │    ├── cardinality: [0 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    └── fd: ()-->(30-33)
+ │         │    └── filters (true)
+ │         └── inner-join (lookup abc_part@b_idx)
+ │              ├── columns: abc_part.r:34!null a:35!null b:36!null r:39!null d:40!null e:41 f:42!null
+ │              ├── lookup expression
+ │              │    └── filters
+ │              │         ├── f:42 = b:36 [outer=(36,42), constraints=(/36: (/NULL - ]; /42: (/NULL - ]), fd=(36)==(42), (42)==(36)]
+ │              │         └── abc_part.r:34 IN ('central', 'west') [outer=(34), constraints=(/34: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ │              ├── lookup columns are key
+ │              ├── cardinality: [0 - 1]
+ │              ├── key: ()
+ │              ├── fd: ()-->(34-36,39-42)
+ │              ├── with-scan &1
+ │              │    ├── columns: r:39!null d:40!null e:41 f:42
+ │              │    ├── mapping:
+ │              │    │    ├──  r:21 => r:39
+ │              │    │    ├──  d:22 => d:40
+ │              │    │    ├──  e:23 => e:41
+ │              │    │    └──  f:24 => f:42
+ │              │    ├── cardinality: [0 - 1]
+ │              │    ├── key: ()
+ │              │    └── fd: ()-->(39-42)
+ │              └── filters (true)
+ └── filters (true)
+
+# Optimization does not apply, since it's not guaranteed to produce at most a
+# single row.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM abc_part, def_part WHERE e = a AND f = 10
+----
+inner-join (lookup abc_part)
+ ├── columns: r:1!null a:2!null b:3 c:4 r:6!null d:7!null e:8!null f:9!null
+ ├── lookup expression
+ │    └── filters
+ │         ├── e:8 = a:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │         └── abc_part.r:1 IN ('central', 'east', 'west') [outer=(1), constraints=(/1: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ ├── lookup columns are key
+ ├── key: (7)
+ ├── fd: ()-->(9), (2)-->(1,3,4), (3)~~>(1,2,4), (7)-->(6,8), (8)-->(6,7), (2)==(8), (8)==(2)
+ ├── index-join def_part
+ │    ├── columns: def_part.r:6!null d:7!null e:8 f:9!null
+ │    ├── key: (7)
+ │    ├── fd: ()-->(9), (7)-->(6,8), (8)~~>(6,7)
+ │    └── scan def_part@f_idx
+ │         ├── columns: def_part.r:6!null d:7!null f:9!null
+ │         ├── constraint: /6/9/7
+ │         │    ├── [/'central'/10 - /'central'/10]
+ │         │    ├── [/'east'/10 - /'east'/10]
+ │         │    └── [/'west'/10 - /'west'/10]
+ │         ├── key: (7)
+ │         └── fd: ()-->(9), (7)-->(6)
+ └── filters (true)
+
+# Optimization applies for the scan but not for the lookup join, since it's not
+# guaranteed to produce at most a single row.
+opt locality=(region=east) expect-not=GenerateLocalityOptimizedLookupJoin
+SELECT * FROM abc_part, def_part WHERE f = c AND d = 10
+----
+inner-join (lookup abc_part)
+ ├── columns: r:1!null a:2!null b:3 c:4!null r:6!null d:7!null e:8 f:9!null
+ ├── key columns: [1 2] = [1 2]
+ ├── lookup columns are key
+ ├── key: (2)
+ ├── fd: ()-->(4,6-9), (2)-->(1,3), (3)~~>(1,2), (4)==(9), (9)==(4)
+ ├── inner-join (lookup abc_part@c_idx)
+ │    ├── columns: abc_part.r:1!null a:2!null c:4!null def_part.r:6!null d:7!null e:8 f:9!null
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── f:9 = c:4 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
+ │    │         └── abc_part.r:1 IN ('central', 'east', 'west') [outer=(1), constraints=(/1: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │    ├── key: (2)
+ │    ├── fd: ()-->(4,6-9), (2)-->(1), (4)==(9), (9)==(4)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:6!null d:7!null e:8 f:9
+ │    │    ├── left columns: def_part.r:11 d:12 e:13 f:14
+ │    │    ├── right columns: def_part.r:16 d:17 e:18 f:19
+ │    │    ├── limit: 1
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(6-9)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null d:12!null e:13 f:14
+ │    │    │    ├── constraint: /11/12: [/'east'/10 - /'east'/10]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null d:17!null e:18 f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'central'/10 - /'central'/10]
+ │    │         │    └── [/'west'/10 - /'west'/10]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── filters (true)
+ └── filters (true)
