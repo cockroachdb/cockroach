@@ -2050,6 +2050,9 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`pkg/cmd/roachtest/log\.go:.*format argument is not a constant expression`),
 			// We purposefully produce nil dereferences in this file to test crash conditions
 			stream.GrepNot(`pkg/util/log/logcrash/crash_reporting_test\.go:.*nil dereference in type assertion`),
+			// Spawning naked goroutines is ok (directly or through errgroup), in tests, for now.
+			stream.GrepNot(`pkg/.*_test\.go:.*Use of go keyword not allowed`),
+			stream.GrepNot(`pkg/.*_test\.go:.*Illegal call to Group\.Go\(\)`),
 		}
 
 		const vetTool = "roachvet"
