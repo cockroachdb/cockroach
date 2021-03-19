@@ -57,17 +57,19 @@ func (t *oneLevelUncachedDescGetter) fromKeyValue(
 	)
 }
 
+// GetDesc implements the catalog.DescGetter interface.
+// Delegates to GetDescs.
 func (t *oneLevelUncachedDescGetter) GetDesc(
 	ctx context.Context, id descpb.ID,
 ) (catalog.Descriptor, error) {
-	descKey := catalogkeys.MakeDescMetadataKey(t.codec, id)
-	kv, err := t.txn.Get(ctx, descKey)
+	res, err := t.GetDescs(ctx, []descpb.ID{id})
 	if err != nil {
 		return nil, err
 	}
-	return t.fromKeyValue(ctx, kv)
+	return res[0], nil
 }
 
+// GetDescs implements the catalog.BatchDescGetter interface.
 func (t *oneLevelUncachedDescGetter) GetDescs(
 	ctx context.Context, reqs []descpb.ID,
 ) ([]catalog.Descriptor, error) {
@@ -82,9 +84,106 @@ func (t *oneLevelUncachedDescGetter) GetDescs(
 	}
 	ret := make([]catalog.Descriptor, len(reqs))
 	for i, res := range ba.Results {
+		if res.Err != nil {
+			return nil, res.Err
+		}
 		ret[i], err = t.fromKeyValue(ctx, res.Rows[0])
 		if err != nil {
 			return nil, err
+		}
+	}
+	return ret, nil
+}
+
+// GetNamespaceEntry implements the catalog.DescGetter interface.
+// Delegates to GetNamespaceEntries.
+func (t *oneLevelUncachedDescGetter) GetNamespaceEntry(
+	ctx context.Context, parentID, parentSchemaID descpb.ID, name string,
+) (descpb.ID, error) {
+	res, err := t.GetNamespaceEntries(ctx, []descpb.NameInfo{{
+		ParentID:       parentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           name,
+	}})
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	return res[0], nil
+}
+
+// GetNamespaceEntries implements the catalog.BatchDescGetter interface.
+// This looks up the new system.namespace table for records matching the
+// requests. If a request has no matching entry, then this falls back to the old
+// system.namespace table.
+func (t *oneLevelUncachedDescGetter) GetNamespaceEntries(
+	ctx context.Context, requests []descpb.NameInfo,
+) ([]descpb.ID, error) {
+	// Build batch for looking up new system.namespace table.
+	b := t.txn.NewBatch()
+	isBatchEmpty := true
+	for _, r := range requests {
+		if r.Name == "" {
+			// Ignore nameless requests.
+			continue
+		}
+		key := catalogkeys.MakeNameMetadataKey(t.codec, r.ParentID, r.ParentSchemaID, r.Name)
+		b.Get(key)
+		isBatchEmpty = false
+	}
+	ret := make([]descpb.ID, len(requests))
+	if isBatchEmpty {
+		// If all requests are nameless, return early.
+		return ret, nil
+	}
+	err := t.txn.Run(ctx, b)
+	if err != nil {
+		return nil, err
+	}
+	var indexesToFallBack []int
+	j := 0
+	for i, r := range requests {
+		if r.Name == "" {
+			// Nameless requests are not present in batch, skip.
+			continue
+		}
+		result := b.Results[j]
+		j++
+		if result.Err != nil {
+			return nil, result.Err
+		}
+		if result.Rows[0].Exists() {
+			ret[i] = descpb.ID(result.Rows[0].ValueInt())
+		} else if r.ParentSchemaID == keys.PublicSchemaID || r.ParentSchemaID == keys.RootNamespaceID {
+			// We'll retry this request in the old namespace table, but don't bother
+			// if it's for a user-defined schema as those won't supported back then.
+			if indexesToFallBack == nil {
+				// Allocate only once.
+				indexesToFallBack = make([]int, 0, len(requests))
+			}
+			indexesToFallBack = append(indexesToFallBack, i)
+		}
+	}
+	if indexesToFallBack == nil {
+		// Happy path return.
+		return ret, nil
+	}
+	// Fall back to old namespace table.
+	b = t.txn.NewBatch()
+	for _, i := range indexesToFallBack {
+		r := requests[i]
+		key := catalogkeys.MakeDeprecatedNameMetadataKey(t.codec, r.ParentID, r.Name)
+		b.Get(key)
+	}
+	err = t.txn.Run(ctx, b)
+	if err != nil {
+		return nil, err
+	}
+	for j, result := range b.Results {
+		if result.Err != nil {
+			return nil, result.Err
+		}
+		if result.Rows[0].Exists() {
+			ret[indexesToFallBack[j]] = descpb.ID(result.Rows[0].ValueInt())
 		}
 	}
 	return ret, nil
