@@ -352,7 +352,7 @@ func BenchmarkExternalDistinct(b *testing.B) {
 func createExternalDistinct(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	input []colexecop.Operator,
+	sources []colexecop.Operator,
 	typs []*types.T,
 	distinctCols []uint32,
 	outputOrdering execinfrapb.Ordering,
@@ -375,7 +375,7 @@ func createExternalDistinct(
 	}
 	args := &colexecargs.NewColOperatorArgs{
 		Spec:                spec,
-		Inputs:              input,
+		Inputs:              colexectestutils.MakeInputs(sources),
 		StreamingMemAccount: testMemAcc,
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
@@ -383,5 +383,5 @@ func createExternalDistinct(
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Op, result.OpAccounts, result.OpMonitors, result.ToClose, err
+	return result.Root, result.OpAccounts, result.OpMonitors, result.ToClose, err
 }

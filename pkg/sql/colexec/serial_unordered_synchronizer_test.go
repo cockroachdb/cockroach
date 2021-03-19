@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -43,15 +44,15 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 		source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
 		source.ResetBatchesToReturn(numBatches)
 		inputIdx := i
-		inputs[i] = SynchronizerInput{
-			Op: source,
+		inputs[i] = SynchronizerInput{OpWithMetaInfo: colexecargs.OpWithMetaInfo{
+			Root: source,
 			MetadataSources: []colexecop.MetadataSource{
 				colexectestutils.CallbackMetadataSource{
 					DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
 						return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d test-induced metadata", inputIdx)}}
 					},
 				},
-			},
+			}},
 		}
 	}
 	s := NewSerialUnorderedSynchronizer(inputs)

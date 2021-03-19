@@ -185,7 +185,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 	}
 	inputs := make([]SynchronizerInput, numInputs)
 	for i := range inputs {
-		inputs[i].Op = colexectestutils.NewOpTestInput(testAllocator, batchSize, sources[i], typs)
+		inputs[i].Root = colexectestutils.NewOpTestInput(testAllocator, batchSize, sources[i], typs)
 	}
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 	op, err := NewOrderedSynchronizer(testAllocator, colexecop.DefaultMemoryLimit, inputs, typs, ordering)
@@ -215,7 +215,7 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 
 	inputs := make([]SynchronizerInput, len(batches))
 	for i := range batches {
-		inputs[i].Op = colexecop.NewRepeatableBatchSource(testAllocator, batches[i], typs)
+		inputs[i].Root = colexecop.NewRepeatableBatchSource(testAllocator, batches[i], typs)
 	}
 
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}

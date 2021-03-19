@@ -93,7 +93,7 @@ func TestColBatchScanMeta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr := res.Op
+	tr := res.Root
 	tr.Init()
 	meta := tr.(*colexecutils.CancelChecker).Input.(*colfetcher.ColBatchScan).DrainMeta(ctx)
 	var txnFinalStateSeen bool
@@ -165,7 +165,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				tr := res.Op
+				tr := res.Root
 				tr.Init()
 				b.StartTimer()
 				for {

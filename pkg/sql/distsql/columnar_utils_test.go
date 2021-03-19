@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -138,7 +139,7 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 
 	constructorArgs := &colexecargs.NewColOperatorArgs{
 		Spec:                args.pspec,
-		Inputs:              columnarizers,
+		Inputs:              colexectestutils.MakeInputs(columnarizers),
 		StreamingMemAccount: &acc,
 		DiskQueueCfg: colcontainer.DiskQueueCfg{
 			FS:        tempFS,
@@ -172,12 +173,10 @@ func verifyColOperator(t *testing.T, args verifyColOperatorArgs) error {
 	outColOp, err := colexec.NewMaterializer(
 		flowCtx,
 		int32(len(args.inputs))+2,
-		result.Op,
+		result.OpWithMetaInfo,
 		args.pspec.ResultTypes,
 		nil, /* output */
 		nil, /* statsCollectors */
-		result.MetadataSources,
-		result.ToClose,
 		nil, /* cancelFlow */
 	)
 	if err != nil {
