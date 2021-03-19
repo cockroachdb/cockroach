@@ -3,7 +3,7 @@ module github.com/cockroachdb/cockroach
 go 1.15
 
 require (
-	cloud.google.com/go v0.45.1
+	cloud.google.com/go/storage v1.0.0
 	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.12.0
 	github.com/Azure/go-autorest/autorest v0.10.2
@@ -137,7 +137,7 @@ require (
 	github.com/sasha-s/go-deadlock v0.2.0
 	github.com/shirou/gopsutil v2.20.9+incompatible
 	github.com/shopspring/decimal v1.2.0 // indirect
-	github.com/spf13/cobra v0.0.5
+	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
 	github.com/twpayne/go-geom v1.3.7-0.20210228220813-9d9885b50d3e
@@ -157,13 +157,13 @@ require (
 	golang.org/x/text v0.3.5
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.1.0
-	google.golang.org/api v0.9.0
+	google.golang.org/api v0.13.0
 	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
 	google.golang.org/grpc v1.29.1
 	google.golang.org/protobuf v1.23.0
 	gopkg.in/DataDog/dd-trace-go.v1 v1.28.0
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.4.0
 	honnef.co/go/tools v0.0.1-2020.1.6
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )

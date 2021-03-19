@@ -43,7 +43,7 @@ go_library(
         "@com_github_azure_azure_storage_blob_go//azblob",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@com_google_cloud_go//storage",
+        "@com_google_cloud_go_storage//:storage",
         "@org_golang_google_api//iterator",
         "@org_golang_google_api//option",
         "@org_golang_google_grpc//codes",
