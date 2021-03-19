@@ -193,7 +193,6 @@ func NewMaterializer(
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	output execinfra.RowReceiver,
-	statsCollectors []colexecop.VectorizedStatsCollector,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := materializerPool.Get().(*Materializer)
@@ -201,7 +200,7 @@ func NewMaterializer(
 		ProcessorBase: m.ProcessorBase,
 		input:         input.Root,
 		typs:          typs,
-		drainHelper:   newDrainHelper(statsCollectors, input.MetadataSources),
+		drainHelper:   newDrainHelper(input.StatsCollectors, input.MetadataSources),
 		converter:     colconv.NewAllVecToDatumConverter(len(typs)),
 		row:           make(rowenc.EncDatumRow, len(typs)),
 		closers:       input.ToClose,

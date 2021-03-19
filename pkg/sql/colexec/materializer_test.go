@@ -69,7 +69,6 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		colexecargs.OpWithMetaInfo{Root: c},
 		typs,
 		nil, /* output */
-		nil, /* statsCollectors */
 		nil, /* cancelFlow */
 	)
 	if err != nil {
@@ -152,7 +151,6 @@ func BenchmarkMaterializer(b *testing.B) {
 							colexecargs.OpWithMetaInfo{Root: input},
 							typs,
 							nil, /* output */
-							nil, /* statsCollectors */
 							nil, /* cancelFlow */
 						)
 						if err != nil {
@@ -208,7 +206,6 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 		},
 		nil, /* typ */
 		nil, /* output */
-		nil, /* statsCollectors */
 		nil, /* cancelFlow */
 	)
 	require.NoError(t, err)
@@ -256,7 +253,6 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			colexecargs.OpWithMetaInfo{Root: c},
 			types,
 			nil, /* output */
-			nil, /* statsCollectors */
 			nil, /* cancelFlow */
 		)
 		if err != nil {

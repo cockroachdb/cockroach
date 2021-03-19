@@ -246,6 +246,17 @@ func GetTraceData(ctx context.Context) []tracingpb.RecordedSpan {
 	return nil
 }
 
+// GetTraceDataAsMetadata returns the trace data as execinfrapb.ProducerMetadata
+// object.
+func GetTraceDataAsMetadata(span *tracing.Span) *execinfrapb.ProducerMetadata {
+	if trace := span.GetRecording(); len(trace) > 0 {
+		meta := execinfrapb.GetProducerMeta()
+		meta.TraceData = trace
+		return meta
+	}
+	return nil
+}
+
 // SendTraceData collects the tracing information from the ctx and pushes it to
 // dst. The ConsumerStatus returned by dst is ignored.
 //

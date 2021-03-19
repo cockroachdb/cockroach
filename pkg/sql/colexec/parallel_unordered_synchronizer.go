@@ -12,6 +12,7 @@ package colexec
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,7 +61,7 @@ const (
 // ParallelUnorderedSynchronizer is an Operator that combines multiple Operator streams
 // into one.
 type ParallelUnorderedSynchronizer struct {
-	inputs []SynchronizerInput
+	inputs []colexecargs.OpWithMetaInfo
 	// readNextBatch is a slice of channels, where each channel corresponds to the
 	// input at the same index in inputs. It is used as a barrier for input
 	// goroutines to wait on until the Next goroutine signals that it is safe to
@@ -108,29 +110,6 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.O
 	return s.inputs[nth].Root
 }
 
-// SynchronizerInput is a wrapper over a colexecop.Operator that a
-// synchronizer goroutine will be calling Next on. An accompanying
-// colexecop.MetadataSources may also be specified, in which case
-// DrainMeta will be called from the same goroutine.
-type SynchronizerInput struct {
-	colexecargs.OpWithMetaInfo
-	// StatsCollectors are all vectorized stats collectors in the input tree.
-	// The field is currently being used *only* to track all of the stats
-	// collectors in the input tree, and the synchronizers should *not* access
-	// it themselves.
-	// TODO(yuzefovich): actually move the logic of getting stats into the
-	// synchronizers.
-	StatsCollectors []colexecop.VectorizedStatsCollector
-}
-
-func operatorsToSynchronizerInputs(ops []colexecop.Operator) []SynchronizerInput {
-	result := make([]SynchronizerInput, len(ops))
-	for i := range result {
-		result[i].Root = ops[i]
-	}
-	return result
-}
-
 // NewParallelUnorderedSynchronizer creates a new ParallelUnorderedSynchronizer.
 // On the first call to Next, len(inputs) goroutines are spawned to read each
 // input asynchronously (to not be limited by a slow input). These will
@@ -138,7 +117,7 @@ func operatorsToSynchronizerInputs(ops []colexecop.Operator) []SynchronizerInput
 // guaranteed that these spawned goroutines will have completed on any error or
 // zero-length batch received from Next.
 func NewParallelUnorderedSynchronizer(
-	inputs []SynchronizerInput, wg *sync.WaitGroup,
+	inputs []colexecargs.OpWithMetaInfo, wg *sync.WaitGroup,
 ) *ParallelUnorderedSynchronizer {
 	readNextBatch := make([]chan struct{}, len(inputs))
 	for i := range readNextBatch {
@@ -191,7 +170,7 @@ func (s *ParallelUnorderedSynchronizer) setState(state parallelUnorderedSynchron
 // affected by slow inputs.
 func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 	for i, input := range s.inputs {
-		s.nextBatch[i] = func(input SynchronizerInput, inputIdx int) func() {
+		s.nextBatch[i] = func(input colexecargs.OpWithMetaInfo, inputIdx int) func() {
 			return func() {
 				s.batches[inputIdx] = input.Root.Next(ctx)
 			}
@@ -201,8 +180,13 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 		// TODO(asubiotto): Most inputs are Inboxes, and these have handler
 		// goroutines just sitting around waiting for cancellation. I wonder if we
 		// could reuse those goroutines to push batches to batchCh directly.
-		go func(input SynchronizerInput, inputIdx int) {
+		go func(ctx context.Context, input colexecargs.OpWithMetaInfo, inputIdx int) {
+			var span *tracing.Span
+			ctx, span = execinfra.ProcessorSpan(ctx, fmt.Sprintf("parallel unordered sync input %d", inputIdx))
 			defer func() {
+				if span != nil {
+					span.Finish()
+				}
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)
 				}
@@ -244,8 +228,16 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 					msg = &unorderedSynchronizerMsg{
 						inputIdx: inputIdx,
 					}
+					if span != nil {
+						for _, s := range input.StatsCollectors {
+							span.RecordStructured(s.GetStats())
+						}
+						if meta := execinfra.GetTraceDataAsMetadata(span); meta != nil {
+							msg.meta = append(msg.meta, *meta)
+						}
+					}
 					if input.MetadataSources != nil {
-						msg.meta = input.MetadataSources.DrainMeta(ctx)
+						msg.meta = append(msg.meta, input.MetadataSources.DrainMeta(ctx)...)
 					}
 					if msg.meta == nil {
 						// Initialize msg.meta to be non-nil, which is a signal that
@@ -283,7 +275,7 @@ func (s *ParallelUnorderedSynchronizer) init(ctx context.Context) {
 					return
 				}
 			}
-		}(input, i)
+		}(ctx, input, i)
 	}
 }
 

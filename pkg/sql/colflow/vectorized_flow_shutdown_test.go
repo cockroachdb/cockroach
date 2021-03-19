@@ -164,7 +164,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					numInboxes           = numHashRouterOutputs + 3
 					inboxes              = make([]*colrpc.Inbox, 0, numInboxes+1)
 					handleStreamErrCh    = make([]chan error, numInboxes+1)
-					synchronizerInputs   = make([]colexec.SynchronizerInput, 0, numInboxes)
+					synchronizerInputs   = make([]colexecargs.OpWithMetaInfo, 0, numInboxes)
 					streamID             = 0
 					addAnotherRemote     = rng.Float64() < 0.5
 				)
@@ -207,7 +207,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
-					nil, /* statsCollectors */
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -222,11 +221,10 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxes = append(inboxes, inbox)
 					synchronizerInputs = append(
 						synchronizerInputs,
-						colexec.SynchronizerInput{
-							OpWithMetaInfo: colexecargs.OpWithMetaInfo{
-								Root:            colexecop.Operator(inbox),
-								MetadataSources: []colexecop.MetadataSource{inbox},
-							}},
+						colexecargs.OpWithMetaInfo{
+							Root:            colexecop.Operator(inbox),
+							MetadataSources: []colexecop.MetadataSource{inbox},
+						},
 					)
 				}
 				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg)
@@ -371,7 +369,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					},
 					typs,
 					nil, /* output */
-					nil, /* statsCollectors */
 					func() context.CancelFunc { return cancelLocal },
 				)
 				require.NoError(t, err)

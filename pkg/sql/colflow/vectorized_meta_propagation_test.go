@@ -83,7 +83,6 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		},
 		typs,
 		nil, /* output */
-		nil, /* statsCollectors */
 		nil, /* cancelFlow */
 	)
 	if err != nil {
