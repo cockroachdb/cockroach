@@ -67,17 +67,8 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 					argName := argTypes[i].Name
 					if argName == builtins.SequenceNameArg {
 						arg := funcExpr.Exprs[i]
-						switch a := arg.(type) {
-						case *tree.DString:
-							seqName := string(*a)
-							return &SeqIdentifier{
-								SeqName: seqName,
-							}, nil
-						case *tree.DOid:
-							id := int64(a.DInt)
-							return &SeqIdentifier{
-								SeqID: id,
-							}, nil
+						if seqIdentifier := getSequenceIdentifier(arg); seqIdentifier != nil {
+							return seqIdentifier, nil
 						}
 					}
 				}
@@ -91,6 +82,26 @@ func GetSequenceFromFunc(funcExpr *tree.FuncExpr) (*SeqIdentifier, error) {
 		}
 	}
 	return nil, nil
+}
+
+// getSequenceIdentifier takes a tree.Expr and extracts the
+// sequence identifier (either its name or its ID) if it exists.
+func getSequenceIdentifier(expr tree.Expr) *SeqIdentifier {
+	switch a := expr.(type) {
+	case *tree.DString:
+		seqName := string(*a)
+		return &SeqIdentifier{
+			SeqName: seqName,
+		}
+	case *tree.DOid:
+		id := int64(a.DInt)
+		return &SeqIdentifier{
+			SeqID: id,
+		}
+	case *tree.CastExpr:
+		return getSequenceIdentifier(a.Expr)
+	}
+	return nil
 }
 
 // GetUsedSequences returns the identifier of the sequence passed to

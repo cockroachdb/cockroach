@@ -348,3 +348,38 @@ USE other_db
 
 statement ok
 INSERT INTO t (i) VALUES (2)
+
+
+# Test using sequences in a castexpr.
+subtest sequence_castexpr
+
+statement ok
+CREATE SEQUENCE s5
+
+statement ok
+CREATE TABLE t2 (
+  i INT NOT NULL DEFAULT nextval('s5'::regclass),
+  j INT NOT NULL DEFAULT nextval('s5'::regclass::int::string),
+  FAMILY (i, j))
+
+statement ok
+ALTER SEQUENCE s5 RENAME TO s5_new
+
+query TT
+SHOW CREATE TABLE t2
+----
+t2  CREATE TABLE public.t2 (
+    i INT8 NOT NULL DEFAULT nextval('public.s5_new':::STRING::REGCLASS),
+    j INT8 NOT NULL DEFAULT nextval('public.s5_new':::STRING::REGCLASS),
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+    FAMILY fam_0_i_j_rowid (i, j, rowid)
+)
+
+query TT
+SELECT pg_get_serial_sequence('t2', 'i'), pg_get_serial_sequence('t2', 'j')
+----
+public.s5_new  public.s5_new
+
+statement ok
+INSERT INTO t2 VALUES (default, default)
