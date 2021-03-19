@@ -89,7 +89,7 @@ func (o *OrderedSynchronizer) ChildCount(verbose bool) int {
 
 // Child implements the execinfrapb.OpNode interface.
 func (o *OrderedSynchronizer) Child(nth int, verbose bool) execinfra.OpNode {
-	return o.inputs[nth].Op
+	return o.inputs[nth].Root
 }
 
 // NewOrderedSynchronizer creates a new OrderedSynchronizer.
@@ -117,7 +117,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 		o.inputBatches = make([]coldata.Batch, len(o.inputs))
 		o.heap = make([]int, 0, len(o.inputs))
 		for i := range o.inputs {
-			o.inputBatches[i] = o.inputs[i].Op.Next(ctx)
+			o.inputBatches[i] = o.inputs[i].Root.Next(ctx)
 			o.updateComparators(i)
 			if o.inputBatches[i].Length() > 0 {
 				o.heap = append(o.heap, i)
@@ -239,7 +239,7 @@ func (o *OrderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
 				o.inputIndices[minBatch]++
 			} else {
-				o.inputBatches[minBatch] = o.inputs[minBatch].Op.Next(ctx)
+				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next(ctx)
 				o.inputIndices[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
@@ -351,7 +351,7 @@ func (o *OrderedSynchronizer) Init() {
 	o.outNulls = make([]*coldata.Nulls, len(o.typs))
 	o.outColsMap = make([]int, len(o.typs))
 	for i := range o.inputs {
-		o.inputs[i].Op.Init()
+		o.inputs[i].Root.Init()
 	}
 	o.comparators = make([]vecComparator, len(o.ordering))
 	for i := range o.ordering {

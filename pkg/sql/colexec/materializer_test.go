@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -65,12 +66,10 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	m, err := NewMaterializer(
 		flowCtx,
 		1, /* processorID */
-		c,
+		colexecargs.OpWithMetaInfo{Root: c},
 		typs,
 		nil, /* output */
 		nil, /* statsCollectors */
-		nil, /* metadataSources */
-		nil, /* toClose */
 		nil, /* cancelFlow */
 	)
 	if err != nil {
@@ -150,12 +149,10 @@ func BenchmarkMaterializer(b *testing.B) {
 						m, err := NewMaterializer(
 							flowCtx,
 							0, /* processorID */
-							input,
+							colexecargs.OpWithMetaInfo{Root: input},
 							typs,
 							nil, /* output */
 							nil, /* statsCollectors */
-							nil, /* metadataSources */
-							nil, /* toClose */
 							nil, /* cancelFlow */
 						)
 						if err != nil {
@@ -205,12 +202,13 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 	m, err := NewMaterializer(
 		flowCtx,
 		0, /* processorID */
-		&colexecop.CallbackOperator{},
+		colexecargs.OpWithMetaInfo{
+			Root:            &colexecop.CallbackOperator{},
+			MetadataSources: colexecop.MetadataSources{metadataSource},
+		},
 		nil, /* typ */
 		nil, /* output */
 		nil, /* statsCollectors */
-		[]colexecop.MetadataSource{metadataSource},
-		nil, /* toClose */
 		nil, /* cancelFlow */
 	)
 	require.NoError(t, err)
@@ -255,12 +253,10 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 		m, err := NewMaterializer(
 			flowCtx,
 			1, /* processorID */
-			c,
+			colexecargs.OpWithMetaInfo{Root: c},
 			types,
 			nil, /* output */
 			nil, /* statsCollectors */
-			nil, /* metadataSources */
-			nil, /* toClose */
 			nil, /* cancelFlow */
 		)
 		if err != nil {
