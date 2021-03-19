@@ -740,9 +740,7 @@ func init() {
 				"For details, see: "+build.MakeIssueURL(53404))
 
 		boolFlag(f, &demoCtx.disableLicenseAcquisition, cliflags.DemoNoLicense)
-		// Mark the --global flag as hidden until we investigate it more.
 		boolFlag(f, &demoCtx.simulateLatency, cliflags.Global)
-		_ = f.MarkHidden(cliflags.Global.Name)
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
 		boolFlag(demoCmd.Flags(), &demoCtx.noExampleDatabase, cliflags.UseEmptyDatabase)
