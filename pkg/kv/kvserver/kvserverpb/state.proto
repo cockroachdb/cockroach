@@ -164,6 +164,27 @@ message RangeInfo {
   // lock_table contains a textual representation of the contents of the lock
   // table.
   string lock_table = 17;
+  roachpb.RangeClosedTimestampPolicy closed_timestamp_policy = 18;
+  // Closed timestamp info communicated through the side-transport. See also
+  // state.raft_closed_timestamp.
+  RangeSidetransportInfo closed_timestamp_sidetransport_info = 19 [(gogoproto.customname) = "ClosedTimestampSideTransportInfo", (gogoproto.nullable) = false ];
+}
+
+// RangeSidetransportInfo describes a range's closed timestamp info communicated
+// through the side-transport.
+//
+// This proto combines information that lives on a replica with information
+// taken from the side-transport's Receiver "centralized" state.
+message RangeSidetransportInfo {
+  option (gogoproto.equal) = true;
+
+  util.hlc.Timestamp replica_closed = 1 [(gogoproto.nullable) = false];
+  int64 replica_lai = 2 [(gogoproto.customname) = "ReplicaLAI",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
+
+  util.hlc.Timestamp central_closed = 3 [(gogoproto.nullable) = false];
+  int64 central_lai = 4 [(gogoproto.customname) = "CentralLAI",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
 }
 
 // LatchManagerInfo is used for reporting status information about a spanlatch

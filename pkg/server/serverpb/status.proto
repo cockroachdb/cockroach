@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
+
 import "build/info.proto";
 import "gossip/gossip.proto";
 import "jobs/jobspb/jobs.proto";
@@ -29,6 +30,7 @@ import "kv/kvserver/kvserverpb/state.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "util/log/logpb/log.proto";
 import "util/unresolved_addr.proto";
+import "util/hlc/timestamp.proto";
 
 import "etcd/raft/v3/raftpb/raft.proto";
 
@@ -213,6 +215,14 @@ message RangeInfo {
   kv.kvserver.storagepb.LeaseStatus lease_status = 13 [ (gogoproto.nullable) = false ];
   bool quiescent = 14;
   bool ticking = 15;
+  ClosedTimestampInfo closed_timestamp_info = 16 [ (gogoproto.nullable) = false ];
+}
+
+message ClosedTimestampInfo {
+  util.hlc.Timestamp sidetransport_replica_closed = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp sidetransport_central_closed = 2 [(gogoproto.nullable) = false];
+  int64 sidetransport_central_lai = 3 [(gogoproto.customname) = "SidetransportCentralLAI",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb.LAI"];
 }
 
 message RangesRequest {

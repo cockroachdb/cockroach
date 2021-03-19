@@ -576,6 +576,7 @@ Support status: [reserved](#support-status)
 | lease_status | [cockroach.kv.kvserver.storagepb.LeaseStatus](#cockroach.server.serverpb.RaftDebugResponse-cockroach.kv.kvserver.storagepb.LeaseStatus) |  |  | [reserved](#support-status) |
 | quiescent | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  |  | [reserved](#support-status) |
 | ticking | [bool](#cockroach.server.serverpb.RaftDebugResponse-bool) |  |  | [reserved](#support-status) |
+| closed_timestamp_info | [ClosedTimestampInfo](#cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.ClosedTimestampInfo) |  |  | [reserved](#support-status) |
 
 
 
@@ -680,6 +681,21 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 
 
 
+<a name="cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.ClosedTimestampInfo"></a>
+#### ClosedTimestampInfo
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| sidetransport_replica_closed | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.RaftDebugResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+| sidetransport_central_closed | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.RaftDebugResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+| sidetransport_central_lai | [int64](#cockroach.server.serverpb.RaftDebugResponse-int64) |  |  | [reserved](#support-status) |
+
+
+
+
+
 <a name="cockroach.server.serverpb.RaftDebugResponse-cockroach.server.serverpb.RaftRangeError"></a>
 #### RaftRangeError
 
@@ -759,6 +775,7 @@ Support status: [reserved](#support-status)
 | lease_status | [cockroach.kv.kvserver.storagepb.LeaseStatus](#cockroach.server.serverpb.RangesResponse-cockroach.kv.kvserver.storagepb.LeaseStatus) |  |  | [reserved](#support-status) |
 | quiescent | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  |  | [reserved](#support-status) |
 | ticking | [bool](#cockroach.server.serverpb.RangesResponse-bool) |  |  | [reserved](#support-status) |
+| closed_timestamp_info | [ClosedTimestampInfo](#cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.ClosedTimestampInfo) |  |  | [reserved](#support-status) |
 
 
 
@@ -858,6 +875,21 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 | ----- | ---- | ----- | ----------- | -------------- |
 | queries_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
 | writes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RangesResponse-cockroach.server.serverpb.ClosedTimestampInfo"></a>
+#### ClosedTimestampInfo
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| sidetransport_replica_closed | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.RangesResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+| sidetransport_central_closed | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.RangesResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+| sidetransport_central_lai | [int64](#cockroach.server.serverpb.RangesResponse-int64) |  |  | [reserved](#support-status) |
 
 
 
@@ -2268,6 +2300,7 @@ Support status: [reserved](#support-status)
 | lease_status | [cockroach.kv.kvserver.storagepb.LeaseStatus](#cockroach.server.serverpb.RangeResponse-cockroach.kv.kvserver.storagepb.LeaseStatus) |  |  | [reserved](#support-status) |
 | quiescent | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  |  | [reserved](#support-status) |
 | ticking | [bool](#cockroach.server.serverpb.RangeResponse-bool) |  |  | [reserved](#support-status) |
+| closed_timestamp_info | [ClosedTimestampInfo](#cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.ClosedTimestampInfo) |  |  | [reserved](#support-status) |
 
 
 
@@ -2367,6 +2400,21 @@ Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 | ----- | ---- | ----- | ----------- | -------------- |
 | queries_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Note that queries per second will only be known by the leaseholder. All other replicas will report it as 0. | [reserved](#support-status) |
 | writes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.RangeResponse-cockroach.server.serverpb.ClosedTimestampInfo"></a>
+#### ClosedTimestampInfo
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| sidetransport_replica_closed | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.RangeResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+| sidetransport_central_closed | [cockroach.util.hlc.Timestamp](#cockroach.server.serverpb.RangeResponse-cockroach.util.hlc.Timestamp) |  |  | [reserved](#support-status) |
+| sidetransport_central_lai | [int64](#cockroach.server.serverpb.RangeResponse-int64) |  |  | [reserved](#support-status) |
 
 
 

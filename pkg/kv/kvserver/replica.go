@@ -1106,7 +1106,7 @@ func (r *Replica) raftBasicStatusRLocked() raft.BasicStatus {
 
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
-func (r *Replica) State() kvserverpb.RangeInfo {
+func (r *Replica) State(ctx context.Context) kvserverpb.RangeInfo {
 	var ri kvserverpb.RangeInfo
 
 	// NB: this acquires an RLock(). Reentrant RLocks are deadlock prone, so do
@@ -1165,6 +1165,14 @@ func (r *Replica) State() kvserverpb.RangeInfo {
 			ri.TenantID = r.mu.tenantID.ToUint64()
 		}
 	}
+	ri.ClosedTimestampPolicy = r.closedTimestampPolicyRLocked()
+	ri.ClosedTimestampSideTransportInfo.ReplicaClosed = r.mu.sideTransportClosedTimestamp
+	ri.ClosedTimestampSideTransportInfo.ReplicaLAI = r.mu.sideTransportClosedTimestampLAI
+	centralClosed, centralLAI := r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(
+		ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
+	ri.ClosedTimestampSideTransportInfo.CentralClosed = centralClosed
+	ri.ClosedTimestampSideTransportInfo.CentralLAI = centralLAI
+
 	return ri
 }
 
