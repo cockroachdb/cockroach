@@ -949,9 +949,16 @@ The value "disabled" will disable all local file I/O.
 		Name:   "url",
 		EnvVar: "COCKROACH_URL",
 		Description: `
-Connection URL, e.g. "postgresql://myuser@localhost:26257/mydb".
-If left empty, the connection flags are used (host, port, user,
-database, insecure, certs-dir).`,
+Connection URL, of the form:
+<PRE>
+   postgresql://[user[:passwd]@]host[:port]/[db][?parameters...]
+</PRE>
+For example, postgresql://myuser@localhost:26257/mydb.
+<PRE>
+
+</PRE>
+If left empty, the discrete connection flags are used: host, port,
+user, database, insecure, certs-dir.`,
 	}
 
 	User = FlagInfo{
