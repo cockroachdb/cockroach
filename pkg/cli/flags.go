@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
@@ -561,7 +560,6 @@ func init() {
 	}
 	clientCmds = append(clientCmds, authCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
-	clientCmds = append(clientCmds, systemBenchCmds...)
 	clientCmds = append(clientCmds, nodeLocalCmds...)
 	clientCmds = append(clientCmds, importCmds...)
 	clientCmds = append(clientCmds, userFileCmds...)
@@ -610,32 +608,6 @@ func init() {
 		boolFlag(f, &nodeCtx.statusShowStats, cliflags.NodeStats)
 		boolFlag(f, &nodeCtx.statusShowAll, cliflags.NodeAll)
 		boolFlag(f, &nodeCtx.statusShowDecommission, cliflags.NodeDecommission)
-	}
-
-	// HDD Bench command.
-	{
-		f := seqWriteBench.Flags()
-		varFlag(f, humanizeutil.NewBytesValue(&systemBenchCtx.writeSize), cliflags.WriteSize)
-		varFlag(f, humanizeutil.NewBytesValue(&systemBenchCtx.syncInterval), cliflags.SyncInterval)
-	}
-
-	// Network Bench command.
-	{
-		f := networkBench.Flags()
-		boolFlag(f, &networkBenchCtx.server, cliflags.BenchServer)
-		intFlag(f, &networkBenchCtx.port, cliflags.BenchPort)
-		stringSliceFlag(f, &networkBenchCtx.addresses, cliflags.BenchAddresses)
-		boolFlag(f, &networkBenchCtx.latency, cliflags.BenchLatency)
-	}
-
-	// Bench command.
-	{
-		for _, cmd := range systemBenchCmds {
-			f := cmd.Flags()
-			intFlag(f, &systemBenchCtx.concurrency, cliflags.BenchConcurrency)
-			durationFlag(f, &systemBenchCtx.duration, cliflags.BenchDuration)
-			stringFlag(f, &systemBenchCtx.tempDir, cliflags.TempDir)
-		}
 	}
 
 	// Zip command.
