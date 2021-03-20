@@ -270,9 +270,10 @@ defaults
     mode                tcp
     # Timeout values should be configured for your specific use.
     # See: https://cbonte.github.io/haproxy-dconv/1.8/configuration.html#4-timeout%20connect
-    timeout connect     10s
-    timeout client      1m
-    timeout server      1m
+    retries             2
+    timeout connect     5s
+    timeout client      10m
+    timeout server      10m
     # TCP keep-alive on client side. Server already enables them.
     option              clitcpka
 
