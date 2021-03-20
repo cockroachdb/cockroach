@@ -80,9 +80,7 @@ project
       └── ordering: -1
 
 # This query causes an error in Postgres, and the optimizer has followed
-# that lead. However, it is supported by the heuristic planner in CockroachDB
-# with the semantics:
-#   SELECT c FROM t GROUP BY c ORDER BY max(b) DESC;
+# that lead.
 build
 SELECT DISTINCT c FROM t ORDER BY b DESC
 ----
