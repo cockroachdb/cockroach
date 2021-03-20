@@ -9,7 +9,7 @@ eexpect "Welcome"
 # Warn the user that they won't get persistence.
 eexpect "your changes to data stored in the demo session will not be saved!"
 # Inform the necessary URL.
-eexpect "(console)"
+eexpect "(webui)"
 eexpect "http:"
 # Ensure same messages as cockroach sql.
 eexpect "Server version"
@@ -34,16 +34,16 @@ eexpect "defaultdb>"
 # Show the URLs.
 # Also check that the default port is used.
 send "\\demo ls\r"
-eexpect "(console)"
+eexpect "(webui)"
 eexpect "http://"
 eexpect ":8080"
 eexpect "(sql)"
-eexpect "root:unused@"
-eexpect "=26257"
-eexpect "(sql/tcp)"
 eexpect "root@"
 eexpect ":26257"
 eexpect "sslmode=disable"
+eexpect "(sql/unix)"
+eexpect "root:unused@"
+eexpect "=26257"
 eexpect "defaultdb>"
 
 interrupt
@@ -57,13 +57,13 @@ eexpect "defaultdb>"
 
 # Show the URLs.
 send "\\demo ls\r"
-eexpect "(console)"
+eexpect "(webui)"
 eexpect "http://"
 eexpect "(sql)"
-eexpect "root:unused@"
-eexpect "(sql/tcp)"
 eexpect "root@"
 eexpect "sslmode=disable"
+eexpect "(sql/unix)"
+eexpect "root:unused@"
 eexpect "defaultdb>"
 
 interrupt
@@ -85,16 +85,16 @@ eexpect "defaultdb>"
 # Show the URLs.
 # Also check that the default port is used.
 send "\\demo ls\r"
-eexpect "(console)"
+eexpect "(webui)"
 eexpect "http://"
 eexpect ":8080"
 eexpect "(sql)"
 eexpect "demo:"
-eexpect "=26257"
-eexpect "(sql/tcp)"
-eexpect "demo:"
 eexpect ":26257"
 eexpect "sslmode=require"
+eexpect "(sql/unix)"
+eexpect "demo:"
+eexpect "=26257"
 eexpect "defaultdb>"
 
 interrupt
@@ -110,13 +110,13 @@ eexpect "defaultdb>"
 
 # Show the URLs.
 send "\\demo ls\r"
-eexpect "(console)"
+eexpect "(webui)"
 eexpect "http://"
 eexpect "(sql)"
 eexpect "demo:"
-eexpect "(sql/tcp)"
-eexpect "demo:"
 eexpect "sslmode=require"
+eexpect "(sql/unix)"
+eexpect "demo:"
 eexpect "defaultdb>"
 
 interrupt
@@ -130,7 +130,7 @@ spawn $argv demo --insecure --empty
 # Check that we see our message.
 eexpect "Connection parameters"
 eexpect "(sql)"
-eexpect "(sql/tcp)"
+eexpect "(sql/unix)"
 expect root@
 send_eof
 eexpect eof
@@ -141,19 +141,19 @@ spawn $argv demo --insecure --nodes 3 --empty
 # Check that we get a message for each node.
 eexpect "Connection parameters"
 eexpect "(sql)"
-eexpect "(sql/tcp)"
+eexpect "(sql/unix)"
 eexpect "defaultdb>"
 
 send "\\demo ls\r"
 eexpect "node 1"
 eexpect "(sql)"
-eexpect "(sql/tcp)"
+eexpect "(sql/unix)"
 eexpect "node 2"
 eexpect "(sql)"
-eexpect "(sql/tcp)"
+eexpect "(sql/unix)"
 eexpect "node 3"
 eexpect "(sql)"
-eexpect "(sql/tcp)"
+eexpect "(sql/unix)"
 eexpect "defaultdb>"
 
 send_eof
@@ -161,7 +161,7 @@ eexpect eof
 
 spawn $argv demo --insecure=false --empty
 # Expect that security related tags are part of the connection URL.
-eexpect "(sql/tcp)"
+eexpect "(sql)"
 eexpect "sslmode=require"
 eexpect "defaultdb>"
 
@@ -196,17 +196,17 @@ eexpect "defaultdb>"
 # Show the URLs.
 send "\\demo ls\r"
 eexpect "(sql)"
-eexpect "=23000"
-eexpect "(sql/tcp)"
 eexpect ":23000"
+eexpect "(sql/unix)"
+eexpect "=23000"
 eexpect "(sql)"
-eexpect "=23001"
-eexpect "(sql/tcp)"
 eexpect ":23001"
+eexpect "(sql/unix)"
+eexpect "=23001"
 eexpect "(sql)"
-eexpect "=23002"
-eexpect "(sql/tcp)"
 eexpect ":23002"
+eexpect "(sql/unix)"
+eexpect "=23002"
 eexpect "defaultdb>"
 
 interrupt
