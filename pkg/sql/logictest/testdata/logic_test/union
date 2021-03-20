@@ -390,3 +390,11 @@ FROM
 ----
 NULL
 NULL
+
+statement ok
+CREATE TABLE t34524 (a INT PRIMARY KEY)
+
+# Regression test for #34524.
+query I
+(SELECT NULL FROM t34524) EXCEPT (VALUES((SELECT 1 FROM t34524 LIMIT 1)), (1))
+----
