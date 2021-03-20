@@ -764,12 +764,12 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 func (c *cliState) refreshTransactionStatus() {
 	c.lastKnownTxnStatus = unknownTxnStatus
 
-	dbVal, hasVal := c.conn.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
+	dbVal, dbColType, hasVal := c.conn.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
 		return
 	}
 
-	txnString := formatVal(dbVal,
+	txnString := formatVal(dbVal, dbColType,
 		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Change the prompt based on the response from the server.
@@ -797,7 +797,7 @@ func (c *cliState) refreshDatabaseName() string {
 		return unknownDbName
 	}
 
-	dbVal, hasVal := c.conn.getServerValue("database name", `SHOW DATABASE`)
+	dbVal, dbColType, hasVal := c.conn.getServerValue("database name", `SHOW DATABASE`)
 	if !hasVal {
 		return unknownDbName
 	}
@@ -808,7 +808,7 @@ func (c *cliState) refreshDatabaseName() string {
 			" Use SET database = <dbname> to change, CREATE DATABASE to make a new database.")
 	}
 
-	dbName := formatVal(dbVal.(string),
+	dbName := formatVal(dbVal, dbColType,
 		false /* showPrintableUnicode */, false /* shownewLinesAndTabs */)
 
 	// Preserve the current database name in case of reconnects.
