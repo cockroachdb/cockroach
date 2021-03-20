@@ -99,11 +99,15 @@ type NewColOperatorArgs struct {
 // values of NewColOperator call.
 type NewColOperatorResult struct {
 	OpWithMetaInfo
-	KVReader    colexecop.KVReader
-	ColumnTypes []*types.T
-	OpMonitors  []*mon.BytesMonitor
-	OpAccounts  []*mon.BoundAccount
-	Releasables []execinfra.Releasable
+	KVReader colexecop.KVReader
+	// Columnarizer is the root colexec.Columnarizer, if needed, that is hidden
+	// behind the stats collector interface. We need to track it separately from
+	// all other stats collectors since it requires special handling.
+	Columnarizer colexecop.VectorizedStatsCollector
+	ColumnTypes  []*types.T
+	OpMonitors   []*mon.BytesMonitor
+	OpAccounts   []*mon.BoundAccount
+	Releasables  []execinfra.Releasable
 }
 
 var _ execinfra.Releasable = &NewColOperatorResult{}

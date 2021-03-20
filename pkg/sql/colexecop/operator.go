@@ -343,3 +343,13 @@ func (s MetadataSources) DrainMeta(ctx context.Context) []execinfrapb.ProducerMe
 	}
 	return result
 }
+
+// VectorizedStatsCollector is the common interface implemented by several
+// variations of the execution statistics collectors. At the moment of writing
+// we have two variants: the "default" option (for all Operators) and the
+// "network" option (strictly for colrpc.Inboxes).
+type VectorizedStatsCollector interface {
+	Operator
+	// GetStats returns the execution statistics of a single Operator.
+	GetStats() *execinfrapb.ComponentStats
+}
