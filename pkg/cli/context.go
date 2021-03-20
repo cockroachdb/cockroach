@@ -567,7 +567,7 @@ var demoCtx struct {
 	cacheSize                 int64
 	disableTelemetry          bool
 	disableLicenseAcquisition bool
-	useEmptyDatabase          bool
+	noExampleDatabase         bool
 	runWorkload               bool
 	localities                demoLocalityList
 	geoPartitionedReplicas    bool
@@ -585,7 +585,7 @@ func setDemoContextDefaults() {
 	demoCtx.nodes = 1
 	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
 	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.useEmptyDatabase = false
+	demoCtx.noExampleDatabase = false
 	demoCtx.simulateLatency = false
 	demoCtx.runWorkload = false
 	demoCtx.localities = nil

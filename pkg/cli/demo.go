@@ -36,7 +36,7 @@ Start an in-memory, standalone, single-node CockroachDB instance, and open an
 interactive SQL prompt to it. Various datasets are available to be preloaded as
 subcommands: e.g. "cockroach demo startrek". See --help for a full list.
 
-By default, the 'movr' dataset is pre-loaded. You can also use --empty
+By default, the 'movr' dataset is pre-loaded. You can also use --no-example-database
 to avoid pre-loading a dataset.
 
 cockroach demo attempts to connect to a Cockroach Labs server to obtain a
@@ -175,14 +175,14 @@ func incrementTelemetryCounters(cmd *cobra.Command) {
 func checkDemoConfiguration(
 	cmd *cobra.Command, gen workload.Generator,
 ) (workload.Generator, error) {
-	if gen == nil && !demoCtx.useEmptyDatabase {
-		// Use a default dataset unless prevented by --empty.
+	if gen == nil && !demoCtx.noExampleDatabase {
+		// Use a default dataset unless prevented by --no-example-database.
 		gen = defaultGenerator
 	}
 
 	// Make sure that the user didn't request a workload and an empty database.
-	if demoCtx.runWorkload && demoCtx.useEmptyDatabase {
-		return nil, errors.New("cannot run a workload against an empty database")
+	if demoCtx.runWorkload && demoCtx.noExampleDatabase {
+		return nil, errors.New("cannot run a workload when generation of the example database is disabled")
 	}
 
 	// Make sure the number of nodes is valid.
@@ -208,9 +208,9 @@ func checkDemoConfiguration(
 			return nil, errors.Newf("enterprise features are needed for this demo (%s)", geoFlag)
 		}
 
-		// Make sure that the user didn't request to have a topology and an empty database.
-		if demoCtx.useEmptyDatabase {
-			return nil, errors.New("cannot setup geo-partitioned replicas topology on an empty database")
+		// Make sure that the user didn't request to have a topology and disable the example database.
+		if demoCtx.noExampleDatabase {
+			return nil, errors.New("cannot setup geo-partitioned replicas topology without generating an example database")
 		}
 
 		// Make sure that the Movr database is selected when automatically partitioning.
