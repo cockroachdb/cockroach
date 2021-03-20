@@ -77,7 +77,7 @@ type drainHelper struct {
 	// are noops.
 	ctx context.Context
 
-	statsCollectors []VectorizedStatsCollector
+	statsCollectors []colexecop.VectorizedStatsCollector
 	sources         colexecop.MetadataSources
 
 	bufferedMeta []execinfrapb.ProducerMetadata
@@ -93,7 +93,7 @@ var drainHelperPool = sync.Pool{
 }
 
 func newDrainHelper(
-	statsCollectors []VectorizedStatsCollector, sources colexecop.MetadataSources,
+	statsCollectors []colexecop.VectorizedStatsCollector, sources colexecop.MetadataSources,
 ) *drainHelper {
 	d := drainHelperPool.Get().(*drainHelper)
 	d.statsCollectors = statsCollectors
@@ -192,7 +192,7 @@ func NewMaterializer(
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
 	output execinfra.RowReceiver,
-	statsCollectors []VectorizedStatsCollector,
+	statsCollectors []colexecop.VectorizedStatsCollector,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
 	m := materializerPool.Get().(*Materializer)

@@ -68,6 +68,7 @@ type Columnarizer struct {
 }
 
 var _ colexecop.Operator = &Columnarizer{}
+var _ colexecop.VectorizedStatsCollector = &Columnarizer{}
 
 // NewBufferingColumnarizer returns a new Columnarizer that will be buffering up
 // rows before emitting them as output batches.
@@ -155,7 +156,37 @@ func (c *Columnarizer) Init() {
 		c.ctx = c.StartInternalNoSpan(c.ctx)
 		c.input.Start(c.ctx)
 		c.initStatus = colexecop.OperatorInitialized
+		if pb, ok := c.input.(execinfra.ExecStatsForTraceHijacker); ok {
+			// The columnarizer is now responsible for propagating the execution
+			// stats of the wrapped processor.
+			//
+			// Note that this columnarizer cannot be removed from the flow
+			// because it will have a vectorized stats collector planned on top,
+			// so the optimization of wrapRowSources() in execplan.go will never
+			// trigger. We check this assumption with an assertion below in the
+			// test setting.
+			//
+			// Still, just to be safe, we delay the hijacking until Init so that
+			// in case the assumption is wrong, we still get the stats from the
+			// wrapped processor.
+			c.ExecStatsForTrace = pb.HijackExecStatsForTrace()
+		}
 	}
+}
+
+// GetStats is part of the colexecop.VectorizedStatsCollector interface.
+func (c *Columnarizer) GetStats() *execinfrapb.ComponentStats {
+	if c.removedFromFlow && util.CrdbTestBuild {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"unexpectedly the columnarizer was removed from the flow when stats are being collected",
+		))
+	}
+	if !c.removedFromFlow && c.ExecStatsForTrace != nil {
+		s := c.ExecStatsForTrace()
+		s.Component = c.FlowCtx.ProcessorComponentID(c.ProcessorID)
+		return s
+	}
+	return nil
 }
 
 // Next is part of the Operator interface.

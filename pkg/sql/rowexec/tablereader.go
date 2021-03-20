@@ -167,6 +167,12 @@ func newTableReader(
 	return tr, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (tr *tableReader) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return tr.ProcessorBase.HijackExecStatsForTrace()
+}
+
 func (tr *tableReader) generateTrailingMeta() []execinfrapb.ProducerMetadata {
 	// We need to generate metadata before closing the processor because
 	// InternalClose() updates tr.Ctx to the "original" context.

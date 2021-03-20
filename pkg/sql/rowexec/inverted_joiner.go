@@ -342,6 +342,12 @@ func newInvertedJoiner(
 	return ij, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (ij *invertedJoiner) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return ij.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // SetBatchSize sets the desired batch size. It should only be used in tests.
 func (ij *invertedJoiner) SetBatchSize(batchSize int) {
 	ij.batchSize = batchSize

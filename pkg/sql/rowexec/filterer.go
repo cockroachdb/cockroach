@@ -69,6 +69,12 @@ func newFiltererProcessor(
 	return f, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (f *filtererProcessor) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return f.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // Start is part of the RowSource interface.
 func (f *filtererProcessor) Start(ctx context.Context) {
 	ctx = f.StartInternal(ctx, filtererProcName)

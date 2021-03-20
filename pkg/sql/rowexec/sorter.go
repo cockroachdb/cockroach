@@ -86,6 +86,12 @@ func (s *sorterBase) init(
 	return nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (s *sorterBase) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return s.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // Next is part of the RowSource interface. It is extracted into sorterBase
 // because this implementation of next is shared between the sortAllProcessor
 // and the sortTopKProcessor.

@@ -151,6 +151,12 @@ func (ag *aggregatorBase) init(
 	)
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (ag *aggregatorBase) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return ag.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (ag *aggregatorBase) execStatsForTrace() *execinfrapb.ComponentStats {
 	is, ok := getInputStats(ag.input)

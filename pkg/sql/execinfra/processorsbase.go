@@ -438,7 +438,7 @@ type ProcessorConstructor func(
 type ProcessorBase struct {
 	self RowSource
 
-	processorID int32
+	ProcessorID int32
 
 	Out     ProcOutputHelper
 	FlowCtx *FlowCtx
@@ -678,6 +678,28 @@ func (pb *ProcessorBase) popTrailingMeta() *execinfrapb.ProducerMetadata {
 	return nil
 }
 
+// ExecStatsForTraceHijacker is an interface that allows us to hijack
+// ExecStatsForTrace function from the ProcessorBase.
+type ExecStatsForTraceHijacker interface {
+	// HijackExecStatsForTrace returns ExecStatsForTrace function, if set, and
+	// sets it to nil. The caller becomes responsible for collecting and
+	// propagating the execution statistics.
+	HijackExecStatsForTrace() func() *execinfrapb.ComponentStats
+}
+
+var _ ExecStatsForTraceHijacker = &ProcessorBase{}
+
+// HijackExecStatsForTrace is a part of the ExecStatsForTraceHijacker interface.
+//
+// WARNING: most processors embed ProcessorBase by value, so they cannot be
+// converted to ExecStatsForTraceHijacker from RowSource. Such processors *must*
+// override the implementation.
+func (pb *ProcessorBase) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	execStatsForTrace := pb.ExecStatsForTrace
+	pb.ExecStatsForTrace = nil
+	return execStatsForTrace
+}
+
 // moveToTrailingMeta switches the processor to the "trailing meta" state: only
 // trailing metadata is returned from now on. For simplicity, processors are
 // encouraged to always use MoveToDraining() instead of this method, even when
@@ -703,7 +725,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	if pb.span != nil {
 		if pb.ExecStatsForTrace != nil {
 			if stats := pb.ExecStatsForTrace(); stats != nil {
-				stats.Component = pb.FlowCtx.ProcessorComponentID(pb.processorID)
+				stats.Component = pb.FlowCtx.ProcessorComponentID(pb.ProcessorID)
 				pb.span.RecordStructured(stats)
 			}
 		}
@@ -824,7 +846,7 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	pb.self = self
 	pb.FlowCtx = flowCtx
 	pb.EvalCtx = evalCtx
-	pb.processorID = processorID
+	pb.ProcessorID = processorID
 	pb.MemMonitor = memMonitor
 	pb.trailingMetaCallback = opts.TrailingMetaCallback
 	if opts.InputsToDrain != nil {
@@ -894,7 +916,7 @@ func (pb *ProcessorBase) startImpl(
 		pb.Ctx, pb.span = ProcessorSpan(ctx, spanName)
 		if pb.span != nil && pb.span.IsVerbose() {
 			pb.span.SetTag(execinfrapb.FlowIDTagKey, pb.FlowCtx.ID.String())
-			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.processorID)
+			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, pb.ProcessorID)
 		}
 	} else {
 		pb.Ctx = ctx

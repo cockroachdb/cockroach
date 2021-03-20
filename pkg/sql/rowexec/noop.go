@@ -62,6 +62,12 @@ func newNoopProcessor(
 	return n, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (n *noopProcessor) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return n.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // Start is part of the RowSource interface.
 func (n *noopProcessor) Start(ctx context.Context) {
 	ctx = n.StartInternal(ctx, noopProcName)

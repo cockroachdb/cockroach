@@ -343,3 +343,9 @@ func (s MetadataSources) DrainMeta(ctx context.Context) []execinfrapb.ProducerMe
 	}
 	return result
 }
+
+// VectorizedStatsCollector is the common interface implemented by collectors.
+type VectorizedStatsCollector interface {
+	Operator
+	GetStats() *execinfrapb.ComponentStats
+}

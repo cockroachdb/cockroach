@@ -156,6 +156,12 @@ func newHashJoiner(
 	)
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (h *hashJoiner) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return h.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // Start is part of the RowSource interface.
 func (h *hashJoiner) Start(ctx context.Context) {
 	ctx = h.StartInternal(ctx, hashJoinerProcName)

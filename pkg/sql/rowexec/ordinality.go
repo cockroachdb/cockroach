@@ -71,6 +71,12 @@ func newOrdinalityProcessor(
 	return o, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (o *ordinalityProcessor) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return o.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // Start is part of the RowSource interface.
 func (o *ordinalityProcessor) Start(ctx context.Context) {
 	ctx = o.StartInternal(ctx, ordinalityProcName)

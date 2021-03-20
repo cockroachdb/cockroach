@@ -113,6 +113,12 @@ func newMergeJoiner(
 	return m, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (m *mergeJoiner) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return m.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // Start is part of the RowSource interface.
 func (m *mergeJoiner) Start(ctx context.Context) {
 	ctx = m.StartInternal(ctx, mergeJoinerProcName)

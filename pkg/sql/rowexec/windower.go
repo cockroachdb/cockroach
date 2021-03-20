@@ -203,6 +203,12 @@ func newWindower(
 	return w, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (w *windower) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return w.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // Start is part of the RowSource interface.
 func (w *windower) Start(ctx context.Context) {
 	ctx = w.StartInternal(ctx, windowerProcName)

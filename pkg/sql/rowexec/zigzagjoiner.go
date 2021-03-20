@@ -350,6 +350,12 @@ func newZigzagJoiner(
 	return z, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (z *zigzagJoiner) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return z.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // Helper function to convert a values spec containing one tuple into EncDatums for
 // each cell. Note that this function assumes that there is only one tuple in the
 // ValuesSpec (i.e. the way fixed values are encoded in the ZigzagJoinSpec).

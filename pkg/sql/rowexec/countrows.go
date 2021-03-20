@@ -67,6 +67,12 @@ func newCountAggregator(
 	return ag, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (ag *countAggregator) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return ag.ProcessorBase.HijackExecStatsForTrace()
+}
+
 func (ag *countAggregator) Start(ctx context.Context) {
 	ctx = ag.StartInternal(ctx, countRowsProcName)
 	ag.input.Start(ctx)

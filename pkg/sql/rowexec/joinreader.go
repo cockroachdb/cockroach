@@ -340,6 +340,12 @@ func newJoinReader(
 	return jr, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (jr *joinReader) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return jr.ProcessorBase.HijackExecStatsForTrace()
+}
+
 func (jr *joinReader) initJoinReaderStrategy(
 	flowCtx *execinfra.FlowCtx,
 	typs []*types.T,

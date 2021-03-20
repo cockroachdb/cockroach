@@ -66,6 +66,7 @@ type invertedFilterer struct {
 var _ execinfra.Processor = &invertedFilterer{}
 var _ execinfra.RowSource = &invertedFilterer{}
 var _ execinfra.OpNode = &invertedFilterer{}
+var _ execinfra.ExecStatsForTraceHijacker = &invertedFilterer{}
 
 const invertedFiltererProcName = "inverted filterer"
 
@@ -154,6 +155,12 @@ func newInvertedFilterer(
 	}
 
 	return ifr, nil
+}
+
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (ifr *invertedFilterer) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return ifr.ProcessorBase.HijackExecStatsForTrace()
 }
 
 // Next is part of the RowSource interface.

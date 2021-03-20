@@ -140,6 +140,12 @@ func newDistinct(
 	return returnProcessor, nil
 }
 
+// HijackExecStatsForTrace is part of the execinfra.ExecStatsForTraceHijacker
+// interface.
+func (d *distinct) HijackExecStatsForTrace() func() *execinfrapb.ComponentStats {
+	return d.ProcessorBase.HijackExecStatsForTrace()
+}
+
 // Start is part of the RowSource interface.
 func (d *distinct) Start(ctx context.Context) {
 	ctx = d.StartInternal(ctx, distinctProcName)
