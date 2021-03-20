@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
@@ -27,7 +26,7 @@ import (
 )
 
 // childStatsCollector gives access to the stopwatches of a
-// colexec.VectorizedStatsCollector's childStatsCollectors.
+// colexecop.VectorizedStatsCollector's childStatsCollectors.
 type childStatsCollector interface {
 	getElapsedTime() time.Duration
 }
@@ -113,25 +112,27 @@ func (bic *batchInfoCollector) getElapsedTime() time.Duration {
 	return bic.stopwatch.Elapsed()
 }
 
-// newVectorizedStatsCollector creates a colexec.VectorizedStatsCollector which
-// wraps 'op' that corresponds to a component with either ProcessorID or
+// newVectorizedStatsCollector creates a colexecop.VectorizedStatsCollector
+// which wraps 'op' that corresponds to a component with either ProcessorID or
 // StreamID 'id' (with 'idTagKey' distinguishing between the two). 'kvReader' is
 // a component (either an operator or a wrapped processor) that performs KV
 // reads that is present in the chain of operators rooted at 'op'.
 func newVectorizedStatsCollector(
 	op colexecop.Operator,
 	kvReader colexecop.KVReader,
+	columnarizer colexecop.VectorizedStatsCollector,
 	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
 	inputStatsCollectors []childStatsCollector,
-) colexec.VectorizedStatsCollector {
+) colexecop.VectorizedStatsCollector {
 	// TODO(cathymw): Refactor to have specialized stats collectors for
 	// memory/disk stats and IO operators.
 	return &vectorizedStatsCollectorImpl{
 		batchInfoCollector: makeBatchInfoCollector(op, id, inputWatch, inputStatsCollectors),
 		kvReader:           kvReader,
+		columnarizer:       columnarizer,
 		memMonitors:        memMonitors,
 		diskMonitors:       diskMonitors,
 	}
@@ -143,15 +144,25 @@ type vectorizedStatsCollectorImpl struct {
 	batchInfoCollector
 
 	kvReader     colexecop.KVReader
+	columnarizer colexecop.VectorizedStatsCollector
 	memMonitors  []*mon.BytesMonitor
 	diskMonitors []*mon.BytesMonitor
 }
 
-// GetStats is part of the colexec.VectorizedStatsCollector interface.
+// GetStats is part of the colexecop.VectorizedStatsCollector interface.
 func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := vsc.batchInfoCollector.finish()
 
-	s := &execinfrapb.ComponentStats{Component: vsc.componentID}
+	var s *execinfrapb.ComponentStats
+	if vsc.columnarizer != nil {
+		s = vsc.columnarizer.GetStats()
+	}
+	if s == nil {
+		// Either there was no root columnarizer or it has been
+		// removed from the flow (in which case the columnarizer will return
+		// nil). Create a new stats object.
+		s = &execinfrapb.ComponentStats{Component: vsc.componentID}
+	}
 
 	for _, memMon := range vsc.memMonitors {
 		s.Exec.MaxAllocatedMem.Add(memMon.MaximumBytes())
@@ -183,7 +194,7 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 }
 
 // newNetworkVectorizedStatsCollector creates a new
-// colexec.VectorizedStatsCollector for streams. In addition to the base stats,
+// colexecop.VectorizedStatsCollector for streams. In addition to the base stats,
 // newNetworkVectorizedStatsCollector collects the network latency for a stream.
 func newNetworkVectorizedStatsCollector(
 	op colexecop.Operator,
@@ -191,7 +202,7 @@ func newNetworkVectorizedStatsCollector(
 	inputWatch *timeutil.StopWatch,
 	inbox *colrpc.Inbox,
 	latency time.Duration,
-) colexec.VectorizedStatsCollector {
+) colexecop.VectorizedStatsCollector {
 	return &networkVectorizedStatsCollectorImpl{
 		batchInfoCollector: makeBatchInfoCollector(op, id, inputWatch, nil /* childStatsCollectors */),
 		inbox:              inbox,
@@ -208,7 +219,7 @@ type networkVectorizedStatsCollectorImpl struct {
 	latency time.Duration
 }
 
-// GetStats is part of the colexec.VectorizedStatsCollector interface.
+// GetStats is part of the colexecop.VectorizedStatsCollector interface.
 func (nvsc *networkVectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := nvsc.batchInfoCollector.finish()
 

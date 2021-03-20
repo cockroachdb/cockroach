@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexechash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -414,7 +413,7 @@ type HashRouter struct {
 	// and the execution statistics will then be propagated as
 	// execinfrapb.ProducerMetadata object right before draining
 	// metadataSources.
-	statsCollectors []colexec.VectorizedStatsCollector
+	statsCollectors []colexecop.VectorizedStatsCollector
 	// metadataSources is a slice of colexecop.MetadataSources that need to be
 	// drained when the HashRouter terminates.
 	metadataSources colexecop.MetadataSources
@@ -467,7 +466,7 @@ func NewHashRouter(
 	diskQueueCfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
-	statsCollectors []colexec.VectorizedStatsCollector,
+	statsCollectors []colexecop.VectorizedStatsCollector,
 ) (*HashRouter, []colexecop.DrainableOperator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
 		colexecerror.InternalError(errors.Errorf("hash router instantiated with incompatible disk queue cache mode: %d", diskQueueCfg.CacheMode))
@@ -506,7 +505,7 @@ func newHashRouterWithOutputs(
 	hashCols []uint32,
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
-	statsCollectors []colexec.VectorizedStatsCollector,
+	statsCollectors []colexecop.VectorizedStatsCollector,
 ) *HashRouter {
 	r := &HashRouter{
 		OneInputNode:        colexecop.NewOneInputNode(input.Root),
