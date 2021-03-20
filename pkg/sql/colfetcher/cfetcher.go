@@ -269,6 +269,10 @@ type cFetcher struct {
 		// seekPrefix is the prefix to seek to in stateSeekPrefix.
 		seekPrefix roachpb.Key
 
+		// limitHint is a hint as to the number of rows that the caller expects to
+		// be returned from this fetch.
+		limitHint int
+
 		// remainingValueColsByIdx is the set of value columns that are yet to be
 		// seen during the decoding of the current row.
 		remainingValueColsByIdx util.FastIntSet
@@ -649,6 +653,7 @@ func (rf *cFetcher) StartScan(
 	}
 	rf.fetcher = f
 	rf.machine.lastRowPrefix = nil
+	rf.machine.limitHint = int(limitHint)
 	rf.machine.state[0] = stateInitFetch
 	return nil
 }
@@ -1038,7 +1043,19 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
+
+			var emitBatch bool
 			if rf.machine.rowIdx >= rf.machine.batch.Capacity() {
+				// We have no more room in our batch, so output it immediately.
+				emitBatch = true
+			} else if rf.machine.limitHint > 0 && rf.machine.rowIdx >= rf.machine.limitHint {
+				// If we made it to our limit hint, output our batch early to make sure
+				// that we don't bother filling in extra data if we don't need to.
+				emitBatch = true
+				rf.machine.limitHint = 0
+			}
+
+			if emitBatch {
 				rf.pushState(stateResetBatch)
 				rf.machine.batch.SetLength(rf.machine.rowIdx)
 				rf.machine.rowIdx = 0
