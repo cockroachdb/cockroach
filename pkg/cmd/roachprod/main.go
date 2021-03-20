@@ -93,6 +93,7 @@ var (
 	useTreeDist       = true
 	encrypt           = false
 	skipInit          = false
+	newKVServer       = false
 	quiet             = false
 	sig               = 9
 	waitFlag          = false
@@ -1798,6 +1799,8 @@ func main() {
 				&install.StartOpts.SkipInit, "skip-init", skipInit, "skip initializing the cluster")
 			cmd.Flags().IntVar(
 				&install.StartOpts.StoreCount, "store-count", 1, "number of stores to start each node with")
+			cmd.Flags().BoolVar(
+				&install.StartOpts.NewKVServer, "new-kv-server", newKVServer, "start a new kv server")
 			fallthrough
 		case sqlCmd:
 			cmd.Flags().StringVarP(
