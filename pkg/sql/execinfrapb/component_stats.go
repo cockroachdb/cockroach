@@ -352,9 +352,14 @@ func ExtractStatsFromSpans(
 				statsMap[stats.Component] = &stats
 			} else {
 				// In the vectorized flow we can have multiple statistics
-				// entries for one component. Merge the stats together.
-				// TODO(radu): figure out a way to emit the statistics correctly
-				// in the first place.
+				// entries for one componentID because a single processor is
+				// represented by multiple components (e.g. when hash/merge
+				// joins have an ON expression that is not supported natively -
+				// we will plan the row-execution filterer processor then).
+				//
+				// Merge the stats together.
+				// TODO(yuzefovich): remove this once such edge cases are no
+				// longer present.
 				statsMap[stats.Component] = existing.Union(&stats)
 			}
 		})

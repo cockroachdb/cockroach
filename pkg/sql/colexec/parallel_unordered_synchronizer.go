@@ -120,7 +120,7 @@ type SynchronizerInput struct {
 	// it themselves.
 	// TODO(yuzefovich): actually move the logic of getting stats into the
 	// synchronizers.
-	StatsCollectors []VectorizedStatsCollector
+	StatsCollectors []colexecop.VectorizedStatsCollector
 }
 
 func operatorsToSynchronizerInputs(ops []colexecop.Operator) []SynchronizerInput {

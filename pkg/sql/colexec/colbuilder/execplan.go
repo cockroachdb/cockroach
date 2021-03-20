@@ -620,6 +620,7 @@ func (r opResult) createAndWrapRowSource(
 		return err
 	}
 	r.Root = c
+	r.Columnarizer = c
 	if args.TestingKnobs.PlanInvariantsCheckers {
 		r.Root = colexec.NewInvariantsChecker(r.Root)
 	}
