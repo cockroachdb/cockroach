@@ -1092,7 +1092,6 @@ Available Commands:
   debug             debugging commands
   sqlfmt            format SQL statements
   workload          generators for data and query loads
-  systembench       Run systembench
   help              Help about any command
 
 Flags:
