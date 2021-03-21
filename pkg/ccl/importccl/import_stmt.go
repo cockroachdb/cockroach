@@ -953,6 +953,18 @@ func importPlanHook(
 			return nil
 		}
 
+		// Double check that this transaction is implicit, so that
+		// we're allowed to commit.
+		if !p.ExtendedEvalContext().TxnImplicit {
+			return errors.AssertionFailedf("expected import planning transaction to be implicit")
+		}
+		// We're about to create the job record. We don't want this transaction
+		// to be auto-retried (and plan a second import job), so commit the
+		// transaction here.
+		if err := p.ExtendedEvalContext().Txn.Commit(ctx); err != nil {
+			return err
+		}
+
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
