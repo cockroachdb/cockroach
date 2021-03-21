@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -33,6 +34,7 @@ import (
 
 func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
 
 	skip.UnderStressRace(t, "times out")
 
