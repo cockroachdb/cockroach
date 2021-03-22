@@ -92,6 +92,7 @@ const (
 	SinkParamTLSEnabled       = `tls_enabled`
 	SinkParamSkipTLSVerify    = `insecure_tls_skip_verify`
 	SinkParamTopicPrefix      = `topic_prefix`
+	SinkParamTopicName        = `topic_name`
 	SinkSchemeBuffer          = ``
 	SinkSchemeExperimentalSQL = `experimental-sql`
 	SinkSchemeKafka           = `kafka`
