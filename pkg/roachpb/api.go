@@ -445,37 +445,9 @@ func (r *AdminScatterResponse) combine(c combinable) error {
 			return err
 		}
 
-		// Combined responses will always have only RangeInfo set, rather than
-		// DeprecatedRanges.
-		// TODO(pbardea): Remove in 21.1.
-		r.maybeUpgrade()
-		otherR.maybeUpgrade()
 		r.RangeInfos = append(r.RangeInfos, otherR.RangeInfos...)
 	}
 	return nil
-}
-
-// maybeUpgrade will upgrade responses from 20.1 clients to look like 20.2
-// responses.
-// It converts the DeprecatedRanges field of the response to the equivalent
-// RangeInfos and nils out DeprecatedRanges. Note that the converted RangeInfos
-// will have an empty lease and only have the start and end key of the range
-// descriptor populated.
-func (r *AdminScatterResponse) maybeUpgrade() {
-	if len(r.RangeInfos) == 0 {
-		r.RangeInfos = make([]RangeInfo, len(r.DeprecatedRanges))
-		for i, respRange := range r.DeprecatedRanges {
-			r.RangeInfos[i] = RangeInfo{
-				// respRange.Span's keys are not local keys. The keys were created with
-				// AsRawKey(), so converting back is safe.
-				Desc: RangeDescriptor{
-					StartKey: RKey(respRange.Span.Key),
-					EndKey:   RKey(respRange.Span.EndKey),
-				},
-			}
-		}
-	}
-	r.DeprecatedRanges = nil
 }
 
 var _ combinable = &AdminScatterResponse{}

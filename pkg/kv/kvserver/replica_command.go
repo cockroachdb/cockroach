@@ -3111,15 +3111,6 @@ func (r *Replica) adminScatter(
 
 	ri := r.GetRangeInfo(ctx)
 	return roachpb.AdminScatterResponse{
-		// TODO(pbardea): This is here for compatibility with 20.1, remove in 21.1.
-		DeprecatedRanges: []roachpb.AdminScatterResponse_Range{
-			{
-				Span: roachpb.Span{
-					Key:    ri.Desc.StartKey.AsRawKey(),
-					EndKey: ri.Desc.EndKey.AsRawKey(),
-				},
-			},
-		},
 		RangeInfos: []roachpb.RangeInfo{ri},
 	}, nil
 }
