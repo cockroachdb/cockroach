@@ -108,7 +108,7 @@ func runConnect(cmd *cobra.Command, args []string) (retErr error) {
 				"cert files generated in: " + os.ExpandEnv(baseCfg.SSLCertsDir) + "\n\n" +
 				"Do not forget to generate a client certificate for the 'root' user!\n" +
 				"This must be done manually, preferably from a different unix user account\n" +
-				"than the one running the server. Eample command:\n\n" +
+				"than the one running the server. Example command:\n\n" +
 				"   " + os.Args[0] + " cert create-client root --ca-key=<path-to-client-ca-key>\n")
 		}
 	}()
