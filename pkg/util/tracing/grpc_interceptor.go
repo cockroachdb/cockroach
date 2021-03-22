@@ -216,18 +216,34 @@ func spanInclusionFuncForClient(parent *Span) bool {
 }
 
 func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
-	md, ok := metadata.FromOutgoingContext(ctx)
+	// md, ok := metadata.FromOutgoingContext(ctx)
+	// XXX: Alloc heavy. Why can't we re-use the same MD?
+	// FromOutgoingContextRaw. Kind of an anti-pattern. Maybe it should be part
+	// of optimizedCtx? Or maybe we shouldn't be using MD headers? Or we should
+	// be using a new MD altogether? If the incoming ones are mostly empty, we
+	// could pool the metadata. At the caller, we could release the metadata back
+	// into the pool. Given we're mutating it, can we race with other threads
+	// setting directly to the map?
+	// If optimizedCtx had it's pre-built metadata, we could simply
+	// metadata.Join with the OutgoingContext. In the ideal path, we'd not find
+	// anything, we'd instantiate a new metadata and join it with the
+	// pre-allocated one.
+	md, _, ok := metadata.FromOutgoingContextRaw(ctx)
 	if !ok {
 		md = metadata.New(nil)
 	} else {
 		md = md.Copy()
 	}
 
-	if err := tracer.InjectMetaInto(clientSpan.Meta(), metadataCarrier{md}); err != nil {
+	// XXX: This is in the hotpath, and Meta allocates. Can we syncpool here?
+	spMeta := metaPool.Get().(*SpanMeta)
+	if err := tracer.InjectMetaInto(clientSpan.MetaV2(spMeta), metadataCarrier{md}); err != nil {
 		// We have no better place to record an error than the Span itself.
 		clientSpan.Recordf("error: %s", err)
 	}
-	return metadata.NewOutgoingContext(ctx, md)
+	spMeta.Reset()
+	metaPool.Put(spMeta)
+	return metadata.NewOutgoingContext(ctx, md) // XXX: Do we need this? Aren't we mutating things in-place?
 }
 
 // ClientInterceptor returns a grpc.UnaryClientInterceptor suitable

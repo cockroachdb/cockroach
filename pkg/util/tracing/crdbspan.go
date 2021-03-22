@@ -245,7 +245,9 @@ func (s *crdbSpan) importRemoteSpans(remoteSpans []tracingpb.RecordedSpan) {
 
 func (s *crdbSpan) setTagLocked(key, value string) {
 	if s.mu.tags == nil {
-		s.mu.tags = make(map[string]string) // XXX: Maybe this can be taken from a sync.Pool.
+		s.mu.tags = make(map[string]string)
+		// XXX: Every span that straddles the RPC boundary ends up with a node
+		// tag. All implicit txns do too. So lets just allocate all in one go?
 	}
 	s.mu.tags[key] = value
 }

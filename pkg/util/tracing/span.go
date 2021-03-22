@@ -242,6 +242,8 @@ func (sp *Span) TraceID() uint64 {
 // is that the recording is to be returned to the caller when the
 // child finishes, so that the caller can inductively construct the
 // entire trace.
+// XXX: We should try avoiding allocating this completely, and make it only pass
+// by value.
 type SpanMeta struct {
 	traceID uint64
 	spanID  uint64

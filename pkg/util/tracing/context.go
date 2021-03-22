@@ -33,6 +33,7 @@ func SpanFromContext(ctx context.Context) *Span {
 // cased to carry a Span under activeSpanKey{}. By making an explicit
 // type we unlock optimizations that save allocations by allocating
 // the optimizedContext together with the Span it eventually carries.
+// XXX: Should this also carry the metadata?
 type optimizedContext struct {
 	context.Context
 	sp *Span

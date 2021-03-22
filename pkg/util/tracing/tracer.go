@@ -292,7 +292,8 @@ func (t *Tracer) startSpanGeneric(
 	if opts.Parent != nil {
 		atomic.AddInt32(&opts.Parent.refCount, 1)
 		// opts.Parent.SetOperationName(opName)
-		return maybeWrapCtx(ctx, nil /* octx */, opts.Parent)
+		octx := optimizedContext{}
+		return maybeWrapCtx(ctx, &octx /* octx */, opts.Parent) // XXX: Should we refer to the parent's optimized ctx here? We should.
 	}
 
 	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.i.isNoop() {
@@ -566,6 +567,10 @@ func (t *Tracer) InjectMetaInto(sm *SpanMeta, carrier Carrier) error {
 		return errors.New("unsupported carrier")
 	}
 
+	// XXX: Would be nice to pull out a metadata.MD from a pool. Are these guys
+	// usually empty? Is metadata.MD the best way to propagate this info? Is
+	// this carrier implementation the best way to use it?
+	// XXX: What about metadata.AppendToOutgoingContext
 	carrier.Set(fieldNameTraceID, strconv.FormatUint(sm.traceID, 16))
 	carrier.Set(fieldNameSpanID, strconv.FormatUint(sm.spanID, 16))
 
@@ -608,48 +613,19 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (*SpanMeta, error) {
 	default:
 		return noopSpanMeta, errors.New("unsupported carrier")
 	}
-
-	var shadowType string
-	var shadowCarrier opentracing.TextMapCarrier
-
-	var traceID uint64
-	var spanID uint64
-	var baggage map[string]string
-
-	// TODO(tbg): ForeachKey forces things on the heap. We can do better
-	// by using an explicit carrier.
-	err := carrier.ForEach(func(k, v string) error {
-		switch k = strings.ToLower(k); k {
-		case fieldNameTraceID:
-			var err error
-			traceID, err = strconv.ParseUint(v, 16, 64)
-			if err != nil {
-				return opentracing.ErrSpanContextCorrupted
-			}
-		case fieldNameSpanID:
-			var err error
-			spanID, err = strconv.ParseUint(v, 16, 64)
-			if err != nil {
-				return opentracing.ErrSpanContextCorrupted
-			}
-		case fieldNameShadowType:
-			shadowType = v
-		default:
-			if strings.HasPrefix(k, prefixBaggage) {
-				if baggage == nil {
-					baggage = make(map[string]string)
-				}
-				baggage[strings.TrimPrefix(k, prefixBaggage)] = v
-			} else if strings.HasPrefix(k, prefixShadow) {
-				if shadowCarrier == nil {
-					shadowCarrier = make(opentracing.TextMapCarrier)
-				}
-				// We build a shadow textmap with the original shadow keys.
-				shadowCarrier.Set(strings.TrimPrefix(k, prefixShadow), v)
-			}
-		}
-		return nil
-	})
+	var (
+		traceID, spanID uint64
+		shadowType      string
+		baggage         map[string]string
+		shadowCarrier   opentracing.TextMapCarrier
+	)
+	var err error
+	switch carrier.(type) {
+	case MapCarrier:
+		traceID, spanID, shadowType, baggage, shadowCarrier, err = extract(carrier)
+	case metadataCarrier:
+		traceID, spanID, shadowType, baggage, shadowCarrier, err = extractv1(carrier.(metadataCarrier))
+	}
 	if err != nil {
 		return noopSpanMeta, err
 	}
@@ -692,6 +668,82 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (*SpanMeta, error) {
 		recordingType:    recordingType,
 		Baggage:          baggage,
 	}, nil
+}
+
+func extract(carrier Carrier) (traceID, spanID uint64, shadowType string, baggage map[string]string, shadowCarrier opentracing.TextMapCarrier, err error) {
+	// TODO(tbg): Foreach forces things on the heap. We can do better
+	// by using an explicit carrier. XXX: We should do this.
+	err = carrier.ForEach(func(k, v string) error {
+		switch k = strings.ToLower(k); k {
+		case fieldNameTraceID:
+			var err error
+			traceID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
+			}
+		case fieldNameSpanID:
+			var err error
+			spanID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
+			}
+		case fieldNameShadowType:
+			shadowType = v
+		default:
+			if strings.HasPrefix(k, prefixBaggage) {
+				if baggage == nil {
+					baggage = make(map[string]string)
+				}
+				baggage[strings.TrimPrefix(k, prefixBaggage)] = v
+			} else if strings.HasPrefix(k, prefixShadow) {
+				if shadowCarrier == nil {
+					shadowCarrier = make(opentracing.TextMapCarrier)
+				}
+				// We build a shadow textmap with the original shadow keys.
+				shadowCarrier.Set(strings.TrimPrefix(k, prefixShadow), v)
+			}
+		}
+		return nil
+	})
+	return traceID, spanID, shadowType, baggage, shadowCarrier, err
+}
+
+func extractv1(carrier metadataCarrier) (traceID, spanID uint64, shadowType string, baggage map[string]string, shadowCarrier opentracing.TextMapCarrier, err error) {
+	// TODO(tbg): Foreach forces things on the heap. We can do better
+	// by using an explicit carrier. XXX: We should do this.
+	err = carrier.ForEach(func(k, v string) error {
+		switch k = strings.ToLower(k); k {
+		case fieldNameTraceID:
+			var err error
+			traceID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
+			}
+		case fieldNameSpanID:
+			var err error
+			spanID, err = strconv.ParseUint(v, 16, 64)
+			if err != nil {
+				return opentracing.ErrSpanContextCorrupted
+			}
+		case fieldNameShadowType:
+			shadowType = v
+		default:
+			if strings.HasPrefix(k, prefixBaggage) {
+				if baggage == nil {
+					baggage = make(map[string]string)
+				}
+				baggage[strings.TrimPrefix(k, prefixBaggage)] = v
+			} else if strings.HasPrefix(k, prefixShadow) {
+				if shadowCarrier == nil {
+					shadowCarrier = make(opentracing.TextMapCarrier)
+				}
+				// We build a shadow textmap with the original shadow keys.
+				shadowCarrier.Set(strings.TrimPrefix(k, prefixShadow), v)
+			}
+		}
+		return nil
+	})
+	return traceID, spanID, shadowType, baggage, shadowCarrier, err
 }
 
 // GetActiveSpanFromID retrieves any active span given its span ID.

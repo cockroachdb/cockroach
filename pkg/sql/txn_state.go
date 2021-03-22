@@ -169,7 +169,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer)
 	}
 	if txnType == implicitTxn {
-		sp.SetTag("implicit", "true")
+		// sp.SetTag("implicit", "true")
 	}
 
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)

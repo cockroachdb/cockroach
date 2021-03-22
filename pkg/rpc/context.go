@@ -731,7 +731,7 @@ func (ctx *Context) grpcDialOptions(
 		// is in setupSpanForIncomingRPC().
 		//
 		tagger := func(span *tracing.Span) {
-			span.SetTag("node", ctx.NodeID.Get().String())
+			// span.SetTag("node", ctx.NodeID.Get().String()) // XXX: Allocation heavy. Do we have to use tags? No.
 		}
 		unaryInterceptors = append(unaryInterceptors,
 			tracing.ClientInterceptor(tracer, tagger))
