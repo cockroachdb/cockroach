@@ -673,3 +673,53 @@ SELECT estimated_row_count FROM [SHOW TABLES from rowtest] where table_name = 't
 1000
 
 user root
+
+# Unit test for #60737
+
+statement ok
+CREATE TABLE t1  (a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TYPE t2 as enum('foo')
+
+# Case 1: Both t1's are tables and the old one is being dropped.
+statement ok
+BEGIN
+
+statement ok
+DROP TABLE t1
+
+statement error pgcode 55000 table "t1" is being dropped, try again later
+CREATE TABLE IF NOT EXISTS t1 (a INT PRIMARY KEY, b INT)
+
+statement ok
+END
+
+# Case 2: Both t2's are different types and the old one is being dropped.
+statement ok
+BEGIN
+
+statement ok
+DROP TYPE t2
+
+statement error pgcode 42809 "t2" is not a table
+CREATE TABLE IF NOT EXISTS t2 (a INT PRIMARY KEY, b INT)
+
+statement ok
+END
+
+# Case 3: Both s2's are a different type
+statement ok
+BEGIN
+
+statement error pgcode 42809 "t2" is not a table
+CREATE TABLE IF NOT EXISTS t2 (a INT PRIMARY KEY, b INT)
+
+statement ok
+END
+
+statement ok
+DROP table t1
+
+statement ok
+DROP TYPE t2
