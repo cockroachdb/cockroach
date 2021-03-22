@@ -87,6 +87,11 @@ func (p *Provider) Delete(vms vm.List) error {
 	return nil
 }
 
+// Reset is part of the vm.Provider interface. This implementation is a no-op.
+func (p *Provider) Reset(vms vm.List) error {
+	return nil
+}
+
 // Extend is part of the vm.Provider interface.  This implementation returns an error.
 func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 	return errors.New("local clusters have unlimited lifetime")

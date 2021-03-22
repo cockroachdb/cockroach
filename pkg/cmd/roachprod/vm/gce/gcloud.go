@@ -514,6 +514,49 @@ func (p *Provider) Delete(vms vm.List) error {
 	return g.Wait()
 }
 
+// Reset implements the vm.Provider interface.
+func (p *Provider) Reset(vms vm.List) error {
+	// Map from project to map of zone to list of machines in that project/zone.
+	projectZoneMap := make(map[string]map[string][]string)
+	for _, v := range vms {
+		if v.Provider != ProviderName {
+			return errors.Errorf("%s received VM instance from %s", ProviderName, v.Provider)
+		}
+		if projectZoneMap[v.Project] == nil {
+			projectZoneMap[v.Project] = make(map[string][]string)
+		}
+
+		projectZoneMap[v.Project][v.Zone] = append(projectZoneMap[v.Project][v.Zone], v.Name)
+	}
+
+	var g errgroup.Group
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	for project, zoneMap := range projectZoneMap {
+		for zone, names := range zoneMap {
+			args := []string{
+				"compute", "instances", "reset",
+			}
+
+			args = append(args, "--project", project)
+			args = append(args, "--zone", zone)
+			args = append(args, names...)
+
+			g.Go(func() error {
+				cmd := exec.CommandContext(ctx, "gcloud", args...)
+
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+				}
+				return nil
+			})
+		}
+	}
+
+	return g.Wait()
+}
+
 // Extend TODO(peter): document
 func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 	// The gcloud command only takes a single instance.  Unlike Delete() above, we have to

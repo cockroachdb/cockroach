@@ -173,6 +173,7 @@ type Provider interface {
 	CleanSSH() error
 	ConfigSSH() error
 	Create(names []string, opts CreateOpts) error
+	Reset(vms List) error
 	Delete(vms List) error
 	Extend(vms List, lifetime time.Duration) error
 	// Return the account name associated with the provider
