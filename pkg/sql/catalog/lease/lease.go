@@ -219,7 +219,7 @@ func (s storage) acquire(
 			return err
 		}
 		if err := catalog.FilterDescriptorState(
-			desc, tree.CommonLookupFlags{}, // filter all non-public state
+			desc, tree.CommonLookupFlags{IncludeOffline: true}, // filter dropped only
 		); err != nil {
 			return err
 		}
@@ -984,7 +984,7 @@ func purgeOldVersions(
 	ctx context.Context,
 	db *kv.DB,
 	id descpb.ID,
-	takenOffline bool,
+	dropped bool,
 	minVersion descpb.DescriptorVersion,
 	m *Manager,
 ) error {
@@ -998,15 +998,15 @@ func purgeOldVersions(
 	}
 	empty := len(t.mu.active.data) == 0 && t.mu.acquisitionsInProgress == 0
 	t.mu.Unlock()
-	if empty && !takenOffline {
+	if empty && !dropped {
 		// We don't currently have a version on this descriptor, so no need to refresh
 		// anything.
 		return nil
 	}
 
-	removeInactives := func(takenOffline bool) {
+	removeInactives := func(dropped bool) {
 		t.mu.Lock()
-		t.mu.takenOffline = takenOffline
+		t.mu.takenOffline = dropped
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
@@ -1014,8 +1014,8 @@ func purgeOldVersions(
 		}
 	}
 
-	if takenOffline {
-		removeInactives(true /* takenOffline */)
+	if dropped {
+		removeInactives(true /* dropped */)
 		return nil
 	}
 
@@ -1031,7 +1031,7 @@ func purgeOldVersions(
 		return errRenewLease
 	}
 	newest.incRefcount()
-	removeInactives(false /* takenOffline */)
+	removeInactives(false /* dropped */)
 	s, err := t.release(newest.Descriptor, m.removeOnceDereferenced())
 	if err != nil {
 		return err
@@ -1419,6 +1419,16 @@ func (m *Manager) AcquireByName(
 					}
 				}
 			}
+			// For offline descriptors acquire the lease, but return
+			// back that the descriptor is offline.
+			if descVersion.Offline() {
+				if err := catalog.FilterDescriptorState(
+					descVersion, tree.CommonLookupFlags{},
+				); err != nil {
+					m.Release(descVersion)
+					return nil, hlc.Timestamp{}, err
+				}
+			}
 			return descVersion.Descriptor, descVersion.expiration, nil
 		}
 		if err := m.Release(descVersion); err != nil {
@@ -1428,6 +1438,17 @@ func (m *Manager) AcquireByName(
 		desc, expiration, err := m.Acquire(ctx, timestamp, descVersion.GetID())
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
+		}
+
+		// For offline descriptors acquire the lease, but return
+		// back that the descriptor is offline.
+		if desc.Offline() {
+			if err := catalog.FilterDescriptorState(
+				desc, tree.CommonLookupFlags{},
+			); err != nil {
+				m.Release(descVersion)
+				return nil, hlc.Timestamp{}, err
+			}
 		}
 		return desc, expiration, nil
 	}
@@ -1496,6 +1517,17 @@ func (m *Manager) AcquireByName(
 				log.Warningf(ctx, "error releasing lease: %s", err)
 			}
 			return nil, hlc.Timestamp{}, catalog.ErrDescriptorNotFound
+		}
+	}
+
+	// For offline descriptors acquire the lease, but return
+	// back that the descriptor is offline.
+	if desc.Offline() {
+		if err := catalog.FilterDescriptorState(
+			desc, tree.CommonLookupFlags{},
+		); err != nil {
+			m.Release(descVersion)
+			return nil, hlc.Timestamp{}, err
 		}
 	}
 	return desc, expiration, nil
@@ -1713,11 +1745,11 @@ func (m *Manager) refreshLeases(
 				}
 
 				id, version, name, state := descpb.GetDescriptorMetadata(desc)
-				goingOffline := state == descpb.DescriptorState_DROP || state == descpb.DescriptorState_OFFLINE
+				dropped := state == descpb.DescriptorState_DROP
 				// Try to refresh the lease to one >= this version.
-				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (offline %v)",
-					id, version, goingOffline)
-				if err := purgeOldVersions(ctx, db, id, goingOffline, version, m); err != nil {
+				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (dropped %v)",
+					id, version, dropped)
+				if err := purgeOldVersions(ctx, db, id, dropped, version, m); err != nil {
 					log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
 						id, name, err)
 				}
