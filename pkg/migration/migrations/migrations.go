@@ -62,6 +62,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.ProtectedTsMetaPrivilegesMigration),
 		protectedTsMetaPrivilegesMigration,
 	),
+	migration.NewSQLMigration(
+		"add the systems.join_tokens table",
+		toCV(clusterversion.JoinTokensTable),
+		joinTokensTableMigration,
+	),
 }
 
 func init() {
