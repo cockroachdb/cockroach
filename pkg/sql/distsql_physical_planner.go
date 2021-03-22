@@ -684,7 +684,7 @@ func (p *PlanningCtx) EvaluateSubqueries() bool {
 func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
 ) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, []execinfra.OpNode) error {
-	return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, leaves []execinfra.OpNode) error {
+	return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, roots []execinfra.OpNode) error {
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
 			diagramFlags := execinfrapb.DiagramFlags{
@@ -702,7 +702,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 			flowCtx := newFlowCtxForExplainPurposes(p, planner, &planner.extendedEvalCtx.DistSQLPlanner.rpcCtx.ClusterID)
 			getExplain := func(verbose bool) []string {
 				explain, err := colflow.ExplainVec(
-					ctx, flowCtx, flows, p.infra.LocalProcessors, leaves,
+					ctx, flowCtx, flows, p.infra.LocalProcessors, roots,
 					planner.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
 					verbose, planner.curPlan.flags.IsDistributed(),
 				)

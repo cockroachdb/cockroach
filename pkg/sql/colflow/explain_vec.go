@@ -33,7 +33,7 @@ import (
 // is not supported. Note that it does so by setting up the full flow without
 // running the components asynchronously, so it is pretty expensive.
 // It also returns a non-nil cleanup function that releases all
-// execinfra.Releasable objects which can *only* be performed once leaves are
+// execinfra.Releasable objects which can *only* be performed once roots are
 // no longer needed.
 func convertToVecTree(
 	ctx context.Context,
@@ -41,7 +41,7 @@ func convertToVecTree(
 	flow *execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
 	isPlanLocal bool,
-) (leaves []execinfra.OpNode, cleanup func(), err error) {
+) (roots []execinfra.OpNode, cleanup func(), err error) {
 	if !isPlanLocal && len(localProcessors) > 0 {
 		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
 	}
@@ -70,8 +70,8 @@ func convertToVecTree(
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
 	defer creator.cleanup(ctx)
-	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
-	return leaves, creator.Release, err
+	roots, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
+	return roots, creator.Release, err
 }
 
 type flowWithNode struct {
@@ -89,7 +89,7 @@ func ExplainVec(
 	flowCtx *execinfra.FlowCtx,
 	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
-	opChains []execinfra.OpNode,
+	roots []execinfra.OpNode,
 	gatewayNodeID roachpb.NodeID,
 	verbose bool,
 	distributed bool,
@@ -101,8 +101,8 @@ func ExplainVec(
 	// panic (an input that doesn't implement OpNode interface), so we're
 	// catching such errors.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
-		if opChains != nil {
-			formatChains(root, gatewayNodeID, opChains, verbose)
+		if roots != nil {
+			formatChains(root, gatewayNodeID, roots, verbose)
 		} else {
 			sortedFlows := make([]flowWithNode, 0, len(flows))
 			for nodeID, flow := range flows {
@@ -112,13 +112,13 @@ func ExplainVec(
 			// last.
 			sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
 			for _, flow := range sortedFlows {
-				opChains, cleanup, err := convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, !distributed)
+				roots, cleanup, err := convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, !distributed)
 				defer cleanup()
 				if err != nil {
 					conversionErr = err
 					return
 				}
-				formatChains(root, flow.nodeID, opChains, verbose)
+				formatChains(root, flow.nodeID, roots, verbose)
 			}
 		}
 	}); err != nil {

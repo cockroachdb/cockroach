@@ -324,9 +324,9 @@ func (ds *ServerImpl) setupFlow(
 		opt = flowinfra.FuseAggressively
 	}
 
-	var leaves []execinfra.OpNode
+	var roots []execinfra.OpNode
 	var err error
-	ctx, leaves, err = f.Setup(ctx, &req.Flow, opt)
+	ctx, roots, err = f.Setup(ctx, &req.Flow, opt)
 	if err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		// Flow.Cleanup will not be called, so we have to close the memory monitor
@@ -372,7 +372,7 @@ func (ds *ServerImpl) setupFlow(
 	// then the processors have erroneously captured the Root. See #41992.
 	f.SetTxn(txn)
 
-	return ctx, f, leaves, nil
+	return ctx, f, roots, nil
 }
 
 // newFlowContext creates a new FlowCtx that can be used during execution of
@@ -478,13 +478,13 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	output execinfra.RowReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, []execinfra.OpNode, error) {
-	ctx, f, leaves, err := ds.setupFlow(
+	ctx, f, roots, err := ds.setupFlow(
 		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return ctx, f, leaves, err
+	return ctx, f, roots, err
 }
 
 // SetupFlow is part of the DistSQLServer interface.

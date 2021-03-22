@@ -208,7 +208,7 @@ func (f *vectorizedFlow) Setup(
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(f.creator)
 	}
-	leaves, err := f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
+	roots, err := f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
 	if err == nil {
 		f.testingInfo.numClosers = f.creator.numClosers
 		f.testingInfo.numClosed = &f.creator.numClosed
@@ -216,11 +216,11 @@ func (f *vectorizedFlow) Setup(
 			log.Info(ctx, "vectorized flow setup succeeded")
 		}
 		if !f.IsLocal() {
-			// For distributed flows set leaves to nil, per the contract of
+			// For distributed flows set roots to nil, per the contract of
 			// flowinfra.Flow.Setup.
-			leaves = nil
+			roots = nil
 		}
-		return ctx, leaves, nil
+		return ctx, roots, nil
 	}
 	// It is (theoretically) possible that some of the memory monitoring
 	// infrastructure was created even in case of an error, and we need to clean
@@ -472,9 +472,9 @@ type vectorizedFlowCreator struct {
 	// procIdxQueue is a queue of indices into processorSpecs (the argument to
 	// setupFlow), for topologically ordered processing.
 	procIdxQueue []int
-	// leaves accumulates all operators that have no further outputs on the
+	// roots accumulates all operators that have no further outputs on the
 	// current node, for the purposes of EXPLAIN output.
-	leaves []execinfra.OpNode
+	roots []execinfra.OpNode
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
 	// monitors contains all monitors (for both memory and disk usage) of the
@@ -538,7 +538,7 @@ func newVectorizedFlowCreator(
 		exprHelper:             creator.exprHelper,
 		typeResolver:           typeResolver,
 		procIdxQueue:           creator.procIdxQueue,
-		leaves:                 creator.leaves,
+		roots:                  creator.roots,
 		monitors:               creator.monitors,
 		accounts:               creator.accounts,
 		releasables:            creator.releasables,
@@ -575,7 +575,7 @@ func (s *vectorizedFlowCreator) Release() {
 		streamIDToSpecIdx: s.streamIDToSpecIdx,
 		exprHelper:        s.exprHelper,
 		procIdxQueue:      s.procIdxQueue[:0],
-		leaves:            s.leaves[:0],
+		roots:             s.roots[:0],
 		monitors:          s.monitors[:0],
 		accounts:          s.accounts[:0],
 		releasables:       s.releasables[:0],
@@ -781,8 +781,8 @@ func (s *vectorizedFlowCreator) setupRouter(
 		}
 	}
 	if !foundLocalOutput {
-		// No local output means that our router is a leaf node.
-		s.leaves = append(s.leaves, router)
+		// No local output means that our router is a root node.
+		s.roots = append(s.roots, router)
 	}
 	return nil
 }
@@ -1025,9 +1025,9 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if err != nil {
 			return err
 		}
-		// An outbox is a leaf: there's nothing that sees it as an input on this
+		// An outbox is a root: there's nothing that sees it as an input on this
 		// node.
-		s.leaves = append(s.leaves, outbox)
+		s.roots = append(s.roots, outbox)
 	case execinfrapb.StreamEndpointSpec_SYNC_RESPONSE:
 		// Make the materializer, which will write to the given receiver.
 		var getStats func() []*execinfrapb.ComponentStats
@@ -1050,8 +1050,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 		if err != nil {
 			return err
 		}
-		// A materializer is a leaf.
-		s.leaves = append(s.leaves, proc)
+		// A materializer is a root.
+		s.roots = append(s.roots, proc)
 		s.addMaterializer(proc)
 	default:
 		return errors.Errorf("unsupported output stream type %s", outputStream.Type)
@@ -1078,7 +1078,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 	processorSpecs []execinfrapb.ProcessorSpec,
 	localProcessors []execinfra.LocalProcessor,
 	opt flowinfra.FuseOpt,
-) (leaves []execinfra.OpNode, err error) {
+) (roots []execinfra.OpNode, err error) {
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
 		// The column factory will not change the eval context, so we can use
 		// the one we have in the flow context, without making a copy.
@@ -1258,9 +1258,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 		}
 	}); vecErr != nil {
-		return s.leaves, vecErr
+		return s.roots, vecErr
 	}
-	return s.leaves, err
+	return s.roots, err
 }
 
 type vectorizedInboundStreamHandler struct {
