@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -79,7 +78,7 @@ func newScrubTableReader(
 		indexIdx: int(spec.IndexIdx),
 	}
 
-	tr.tableDesc = tabledesc.NewBuilder(&spec.Table).BuildImmutableTable()
+	tr.tableDesc = spec.BuildTableDescriptor()
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 
 	if err := tr.Init(
@@ -108,13 +107,13 @@ func newScrubTableReader(
 	// This is because the emitted schema is ScrubTypes so NeededColumns
 	// does not correctly represent the data being scanned.
 	if spec.IndexIdx == 0 {
-		neededColumns.AddRange(0, len(spec.Table.Columns)-1)
-		for i := range spec.Table.Columns {
+		neededColumns.AddRange(0, len(tr.tableDesc.PublicColumns())-1)
+		for i := range tr.tableDesc.PublicColumns() {
 			tr.fetcherResultToColIdx = append(tr.fetcherResultToColIdx, i)
 		}
 	} else {
 		colIdxMap := catalog.ColumnIDToOrdinalMap(tr.tableDesc.PublicColumns())
-		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id descpb.ColumnID) error {
+		err := tr.tableDesc.PublicNonPrimaryIndexes()[spec.IndexIdx-1].ForEachColumnID(func(id descpb.ColumnID) error {
 			neededColumns.Add(colIdxMap.GetDefault(id))
 			return nil
 		})

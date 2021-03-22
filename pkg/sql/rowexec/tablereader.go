@@ -87,7 +87,7 @@ func newTableReader(
 	tr.parallelize = spec.Parallelize && tr.limitHint == 0
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
-	tableDesc := tabledesc.NewBuilder(&spec.Table).BuildImmutableTable()
+	tableDesc := spec.BuildTableDescriptor()
 	virtualColumn := tabledesc.FindVirtualColumn(tableDesc, spec.VirtualColumn)
 	cols := tableDesc.PublicColumns()
 	if spec.Visibility == execinfra.ScanVisibilityPublicAndNotPublic {
