@@ -212,10 +212,20 @@ func registerSQLSmith(r *testRegistry) {
 			if err != nil {
 				es := err.Error()
 				// TODO(yuzefovich): we temporarily ignore internal errors that
-				// are because of #39433.
-				if strings.Contains(es, "internal error") && !strings.Contains(es, "internal error: invalid index") {
-					logStmt(stmt)
-					t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
+				// are because of #39433 and #40929.
+				var expectedInternalErrors = []string{
+					"internal error: invalid index",
+					"could not parse \"0E-2019\" as type decimal",
+				}
+				if strings.Contains(es, "internal error") {
+					var expectedError bool
+					for _, exp := range expectedInternalErrors {
+						expectedError = expectedError || strings.Contains(es, exp)
+					}
+					if !expectedError {
+						logStmt(stmt)
+						t.Fatalf("error: %s\nstmt:\n%s;", err, stmt)
+					}
 				} else if strings.Contains(es, "communication error") {
 					// A communication error can be because
 					// a non-gateway node has crashed.
