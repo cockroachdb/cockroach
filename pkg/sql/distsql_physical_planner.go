@@ -395,10 +395,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.onExpr); err != nil {
 			return cannotDistribute, err
 		}
-		if _, err := checkSupportForPlanNode(n.input); err != nil {
+		rec, err := checkSupportForPlanNode(n.input)
+		if err != nil {
 			return cannotDistribute, err
 		}
-		return shouldDistribute, nil
+		return rec.compose(shouldDistribute), nil
 
 	case *joinNode:
 		if err := checkExpr(n.pred.onCond); err != nil {
@@ -442,10 +443,11 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		if err := checkExpr(n.onCond); err != nil {
 			return cannotDistribute, err
 		}
-		if _, err := checkSupportForPlanNode(n.input); err != nil {
+		rec, err := checkSupportForPlanNode(n.input)
+		if err != nil {
 			return cannotDistribute, err
 		}
-		return shouldDistribute, nil
+		return rec.compose(shouldDistribute), nil
 
 	case *ordinalityNode:
 		// WITH ORDINALITY never gets distributed so that the gateway node can
