@@ -93,6 +93,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 ) {
 	limitVal := int64(*limit.(*tree.DInt))
 
+	var pkCols opt.ColSet
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
 
@@ -118,8 +119,8 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if isCovering {
-			sb.setScan(&newScanPrivate)
-			sb.build(grp)
+			sb.SetScan(&newScanPrivate)
+			sb.Build(grp)
 			return
 		}
 
@@ -129,18 +130,23 @@ func (c *CustomFuncs) GenerateLimitedScans(
 			return
 		}
 
+		// Calculate the PK columns once.
+		if pkCols.Empty() {
+			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
+		}
+
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(&newScanPrivate)
+		newScanPrivate.Cols.UnionWith(pkCols)
+		sb.SetScan(&newScanPrivate)
 
 		// The Scan operator will go into its own group (because it projects a
 		// different set of columns), and the IndexJoin operator will be added to
 		// the same group as the original Limit operator.
-		sb.addIndexJoin(scanPrivate.Cols)
+		sb.AddIndexJoin(scanPrivate.Cols)
 
-		sb.build(grp)
+		sb.Build(grp)
 	})
 }
 

@@ -97,6 +97,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
 	// Iterate over all partial indexes.
+	var pkCols opt.ColSet
 	var iter scanIndexIter
 	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonPartialIndexes|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, remainingFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
@@ -108,31 +109,36 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 		// If index is covering, just add a Select with the remaining filters,
 		// if there are any.
 		if isCovering {
-			sb.setScan(&newScanPrivate)
-			sb.addSelect(remainingFilters)
-			sb.build(grp)
+			sb.SetScan(&newScanPrivate)
+			sb.AddSelect(remainingFilters)
+			sb.Build(grp)
 			return
+		}
+
+		// Calculate the PK columns once.
+		if pkCols.Empty() {
+			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
 		}
 
 		// If the index is not covering, scan the needed index columns plus
 		// primary key columns.
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(&newScanPrivate)
+		newScanPrivate.Cols.UnionWith(pkCols)
+		sb.SetScan(&newScanPrivate)
 
 		// Add a Select with any remaining filters that can be filtered before
 		// the IndexJoin. If there are no remaining filters this is a no-op. If
 		// all or parts of the remaining filters cannot be applied until after
 		// the IndexJoin, the new value of remainingFilters will contain those
 		// filters.
-		remainingFilters = sb.addSelectAfterSplit(remainingFilters, newScanPrivate.Cols)
+		remainingFilters = sb.AddSelectAfterSplit(remainingFilters, newScanPrivate.Cols)
 
 		// Add an IndexJoin to retrieve the columns not provided by the Scan.
-		sb.addIndexJoin(scanPrivate.Cols)
+		sb.AddIndexJoin(scanPrivate.Cols)
 
 		// Add a Select with any remaining filters.
-		sb.addSelect(remainingFilters)
-		sb.build(grp)
+		sb.AddSelect(remainingFilters)
+		sb.Build(grp)
 	})
 }
 
@@ -202,6 +208,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 func (c *CustomFuncs) GenerateConstrainedScans(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, explicitFilters memo.FiltersExpr,
 ) {
+	var pkCols opt.ColSet
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
 
@@ -336,14 +343,14 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if isCovering {
-			sb.setScan(&newScanPrivate)
+			sb.SetScan(&newScanPrivate)
 
 			// If there are remaining filters, then the constrained Scan operator
 			// will be created in a new group, and a Select operator will be added
 			// to the same group as the original operator.
-			sb.addSelect(remainingFilters)
+			sb.AddSelect(remainingFilters)
 
-			sb.build(grp)
+			sb.Build(grp)
 			return
 		}
 
@@ -353,19 +360,24 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			return
 		}
 
+		// Calculate the PK columns once.
+		if pkCols.Empty() {
+			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
+		}
+
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(&newScanPrivate)
+		newScanPrivate.Cols.UnionWith(pkCols)
+		sb.SetScan(&newScanPrivate)
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
-		remainingFilters = sb.addSelectAfterSplit(remainingFilters, newScanPrivate.Cols)
-		sb.addIndexJoin(scanPrivate.Cols)
-		sb.addSelect(remainingFilters)
+		remainingFilters = sb.AddSelectAfterSplit(remainingFilters, newScanPrivate.Cols)
+		sb.AddIndexJoin(scanPrivate.Cols)
+		sb.AddSelect(remainingFilters)
 
-		sb.build(grp)
+		sb.Build(grp)
 	})
 }
 
@@ -664,6 +676,7 @@ func (c *CustomFuncs) partitionValuesFilters(
 func (c *CustomFuncs) GenerateInvertedIndexScans(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
 ) {
+	var pkCols opt.ColSet
 	var sb indexScanBuilder
 	sb.init(c, scanPrivate.Table)
 	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
@@ -714,12 +727,16 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		newScanPrivate.Constraint = constraint
 		newScanPrivate.InvertedConstraint = spansToRead
 
+		// Calculate the PK columns once.
+		if pkCols.Empty() {
+			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
+		}
+
 		// We will need an inverted filter above the scan if the spanExpr might
 		// produce duplicate primary keys or requires at least one UNION or
 		// INTERSECTION. In this case, we must scan both the primary key columns
 		// and the inverted key column.
 		needInvertedFilter := !spanExpr.Unique || spanExpr.Operator != inverted.None
-		pkCols := sb.primaryKeyCols()
 		newScanPrivate.Cols = pkCols.Copy()
 		var invertedCol opt.ColumnID
 		if needInvertedFilter {
@@ -734,20 +751,20 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 		// index join will be removed by EliminateIndexJoinInsideProject, but
 		// it'd be more efficient to not create the index join in the first
 		// place.
-		sb.setScan(&newScanPrivate)
+		sb.SetScan(&newScanPrivate)
 
 		// Add an inverted filter if needed.
 		if needInvertedFilter {
-			sb.addInvertedFilter(spanExpr, pfState, invertedCol)
+			sb.AddInvertedFilter(spanExpr, pfState, invertedCol)
 		}
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
-		filters = sb.addSelectAfterSplit(filters, pkCols)
-		sb.addIndexJoin(scanPrivate.Cols)
-		sb.addSelect(filters)
+		filters = sb.AddSelectAfterSplit(filters, pkCols)
+		sb.AddIndexJoin(scanPrivate.Cols)
+		sb.AddSelect(filters)
 
-		sb.build(grp)
+		sb.Build(grp)
 	})
 }
 
