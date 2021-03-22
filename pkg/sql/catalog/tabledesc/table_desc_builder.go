@@ -67,6 +67,20 @@ func NewBuilderForFKUpgrade(
 	return b
 }
 
+// NewUnsafeImmutable should be used as sparingly as possible only in cases
+// where deep-copying the descpb.TableDescriptor struct is bad for performance
+// and is known to not be necessary for safety. This is typically the case when
+// the descpb struct is embedded in another proto message and is never used in
+// any way other than to build a catalog.TableDescriptor interface. Currently
+// this is the case for the execinfrapb package.
+// Deprecated: this should be replaced with a NewBuilder call which is
+// implemented in such a way that it can deep-copy the descpb.TableDescriptor
+// struct without reflection (which is what protoutil.Clone uses, sadly).
+func NewUnsafeImmutable(desc *descpb.TableDescriptor) catalog.TableDescriptor {
+	b := tableDescriptorBuilder{original: desc}
+	return b.BuildImmutableTable()
+}
+
 func newBuilder(desc *descpb.TableDescriptor) *tableDescriptorBuilder {
 	return &tableDescriptorBuilder{
 		original: protoutil.Clone(desc).(*descpb.TableDescriptor),
