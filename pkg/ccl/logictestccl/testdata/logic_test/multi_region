@@ -1380,3 +1380,97 @@ mat_view    NULL
 s2          NULL
 v2          NULL
 mat_view2   NULL
+
+# Regression test for #62269. Ensure that locality optimized search results in
+# a local plan, even when there is a lookup join or an inverted join.
+statement ok
+USE multi_region_test_db;
+CREATE TABLE promos (
+  promo_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  discount DECIMAL NOT NULL,
+  info JSON,
+  INVERTED INDEX (info),
+  FAMILY (promo_id, discount, info)
+) LOCALITY GLOBAL;
+CREATE TABLE orders (
+  order_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  price    DECIMAL NOT NULL,
+  promo_id UUID REFERENCES promos,
+  info JSON,
+  FAMILY (order_id, price, promo_id, info)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO promos VALUES ('7fe2dce4-ecac-4d12-87b6-e1c1f837d835', 50, '{"some": "info"}');
+INSERT INTO orders
+  VALUES ('94e4b847-8f2f-4ac5-83f1-641d6e3df727', 100, '7fe2dce4-ecac-4d12-87b6-e1c1f837d835', '{"some": "info"}')
+
+query T nodeidx=3
+USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
+    order_id, promo_id, price AS price_without_promo, price * discount AS price_with_promo
+FROM
+    orders JOIN promos USING (promo_id)
+WHERE
+    order_id = '94e4b847-8f2f-4ac5-83f1-641d6e3df727'
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • lookup join
+    │ table: promos@primary
+    │ equality: (promo_id) = (promo_id)
+    │ equality cols are key
+    │
+    └── • union all
+        │ limit: 1
+        │
+        ├── • scan
+        │     missing stats
+        │     table: orders@primary
+        │     spans: [/'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
+        │
+        └── • scan
+              missing stats
+              table: orders@primary
+              spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk9tO20AQhu_7FKPhgoM2cnyABEtIRm1Kg9KEJlSt1I2Q8U5g22TX3V2rrlCu-mx9r8o2FIIaBOmFrT3MNzP_P_YN2u9zjLH3-Wxw3B_Czpv-5HzyYbALk96g9_octBFkLqRgkBu90LcrmREcT5rFxQ_prnXhLuqAu9s9ENJmulBuNbCJgrfj0fsmt4XTUX_YZLfwcdIfnsDOXa1d-PSuN-797QKOYPswouiyG3Va3Vkwa0Vptt_qhjO_dRD54oBCMesEnW1kqLSgYbogi_EXjHDKMDc6I2u1qY5u6oC-KDFuM5QqL1x1PGWYaUMY36CTbk4Y43l6OacxpYKM10aGglwq53XaRkGSG7lIzU9kOMlTZWPwOCYcPY6cl4cR5yVVr8vuCedld-ad_v7FeTnzBeelL9RRtelsc2xtyHlbkCoBPmh3TQYZjgoXQ-KzJGBJiNMlQ124e4XWpVeEsb9km7ngP9uFqu_2hk5synpbz3YgWOvAvfBC1fpIrIieLv_h0VC3dO4Fq-4M5EI68Nf20H7JFE61VLdDCFfLND_QgyEMtP5W5PBVSwVaxZBUwJiUIFM7A0nIIAmqZy_ZX9te-JL2xmRzrSw9smqd8ClDElfU-G11YTI6MzqryzTbUc3VB4Ksa26DZtNX9VX9FT-E_f-BgyfhcAVuP4bDJ-HoETxdvvoTAAD__499yik=
+
+query T nodeidx=3
+USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
+    order_id, promos.promo_id, price AS price_without_promo, price * discount AS price_with_promo
+FROM
+    orders JOIN promos ON promos.info @> orders.info
+WHERE
+    order_id = '94e4b847-8f2f-4ac5-83f1-641d6e3df727'
+----
+distribution: local
+vectorized: true
+·
+• render
+│
+└── • lookup join
+    │ table: promos@primary
+    │ equality: (promo_id) = (promo_id)
+    │ equality cols are key
+    │ pred: info @> info
+    │
+    └── • inverted join
+        │ table: promos@promos_info_idx
+        │
+        └── • union all
+            │ limit: 1
+            │
+            ├── • scan
+            │     missing stats
+            │     table: orders@primary
+            │     spans: [/'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ca-central-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
+            │
+            └── • scan
+                  missing stats
+                  table: orders@primary
+                  spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk19v2jwUxu_fT2GdXvRdZZq_BRqpkquNbVQMOqi0STNCaXzSegM7c5wtU8XVPtu-15SEtgMN1LILSHx8fjnPeexzB_nXOUTQ-3g5OO8Pyf-v-pOryfvBCzLpDXovr4g2As1MCkoyoxc6P64fq4BMkJxPmpfZd2lvdWFndcL97hERMk90oex6YpNFXo9H75oSObkY9YerImR0_3YsVaoJ44XrBrjKbGIf3vbGvQd55IwcnoYYXnfDTqub-mkrjJOTVjdIvVY79EQbA5F2_M4hUFBa4DBeYA7RJwhhSiEzOsE816YK3dUJfVFC5FKQKitsFZ5SSLRBiO7ASjtHiOAqvp7jGGOBxnGBgkAby3n92UYpy4xcxOYHUJhkscoj4nBgHBwOnJenIeclVn_X3Tecl93Uufj1k_My9QTnpSfUWbXoHHJo7ck5ByRWgnhE21s0QGFU2IgwjzKfshCmSwq6sI8d5ja-QYi8Jd3PBe_JLlS63T2d2Jd1Dp7sgL_VgcfGC1X3h2Kt6enyLx4NdUtnjr_uzkAupCXeVg3uc06hr76hsSgutFRonGC9VDNMrHnMqvmZSVECfcB6ZWYIaz9MGgs2rAp2uRU8R2mlcHVdwi0q76_LQOsvRUY-a6mIVhFhFTAaEtZZFzpGJdDUWgk7oYT51e-ItbcqDp-jeIx5plWOG-e87dSmFFDcYHNZcl2YBC-NTuoyzXJUc3VAYG6bXb9Z9FW9VY_gn7D3L7C_Ew7WYHcTDnbC4W443AmfbMDT5X-_AwAA___uBSO6
