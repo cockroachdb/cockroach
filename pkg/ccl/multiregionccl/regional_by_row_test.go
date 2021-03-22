@@ -525,31 +525,19 @@ CREATE TABLE db.t(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
 		t.Error(err)
 	}
 
-	// Overriding this operation until we get a fix for #60620. When that fix is
-	// ready, we can construct the view of the zone config as it was at the
-	// beginning of the transaction, and the checks for override should work
-	// again, and we won't require an explicit override here.
 	_, err = sqlDB.Exec(`BEGIN;
-SET override_multi_region_zone_config = true;
 ALTER DATABASE db ADD REGION "us-east3";
 ALTER DATABASE db DROP REGION "us-east2";
-SET override_multi_region_zone_config = false;
 COMMIT;`)
 	require.Error(t, err, "boom")
 
 	// The cleanup job should kick in and revert the changes that happened to the
 	// type descriptor in the user txn. We should eventually be able to add
 	// "us-east3" and remove "us-east2".
-	// Overriding this operation until we get a fix for #60620. When that fix is
-	// ready, we can construct the view of the zone config as it was at the
-	// beginning of the transaction, and the checks for override should work
-	// again, and we won't require an explicit override here.
 	testutils.SucceedsSoon(t, func() error {
 		_, err = sqlDB.Exec(`BEGIN;
-	SET override_multi_region_zone_config = true;
 	ALTER DATABASE db ADD REGION "us-east3";
 	ALTER DATABASE db DROP REGION "us-east2";
-	SET override_multi_region_zone_config = false;
 	COMMIT;`)
 		return err
 	})

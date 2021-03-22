@@ -888,7 +888,14 @@ func (p *planner) CurrentDatabaseRegionConfig(
 func SynthesizeRegionConfigOffline(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
 ) (multiregion.RegionConfig, error) {
-	return synthesizeRegionConfigImpl(ctx, txn, dbID, descsCol, true /* includeOffline */)
+	return synthesizeRegionConfigImpl(
+		ctx,
+		txn,
+		dbID,
+		descsCol,
+		true,  /* includeOffline */
+		false, /* forZoneConfigValidate */
+	)
 }
 
 // SynthesizeRegionConfig is the public function for the synthesizing region
@@ -897,28 +904,64 @@ func SynthesizeRegionConfigOffline(
 func SynthesizeRegionConfig(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
 ) (multiregion.RegionConfig, error) {
-	return synthesizeRegionConfigImpl(ctx, txn, dbID, descsCol, false /* includeOffline */)
+	return synthesizeRegionConfigImpl(
+		ctx,
+		txn,
+		dbID,
+		descsCol,
+		false, /* includeOffline */
+		false, /* forZoneConfigValidate */
+	)
 }
 
-// synthesizeRegionConfigImpl returns a RegionConfig representing the user
+// SynthesizeRegionConfigForZoneConfigValidation returns a RegionConfig
+// representing the user configured state of a multi-region database by
+// coalescing state from both the database descriptor and multi-region type
+// descriptor. It avoids the cache and is intended for use by DDL statements.
+// Since it is intended to be called for validation of the RegionConfig against
+// the current database zone configuration, it omits regions that are in the
+// adding state, but includes those that are being dropped.
+func SynthesizeRegionConfigForZoneConfigValidation(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
+) (multiregion.RegionConfig, error) {
+	return synthesizeRegionConfigImpl(
+		ctx,
+		txn,
+		dbID,
+		descsCol,
+		false, /* includeOffline */
+		true,  /* forZoneConfigValidate */
+	)
+}
+
+// SynthesizeRegionConfigImpl returns a RegionConfig representing the user
 // configured state of a multi-region database by coalescing state from both
 // the database descriptor and multi-region type descriptor. It avoids the cache
-// and is intended for use by DDL statements.
+// and is intended for use by DDL statements. It can be called either for a
+// traditional construction, which omits all regions in the non-PUBLIC state, or
+// for zone configuration validation, which only omits region that are being
+// added.
 func synthesizeRegionConfigImpl(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection, includeOffline bool,
+	ctx context.Context,
+	txn *kv.Txn,
+	dbID descpb.ID,
+	descsCol *descs.Collection,
+	includeOffline bool,
+	forZoneConfigValidate bool,
 ) (multiregion.RegionConfig, error) {
+	regionConfig := multiregion.RegionConfig{}
 	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
 		AvoidCached:    true,
 		Required:       true,
 		IncludeOffline: includeOffline,
 	})
 	if err != nil {
-		return multiregion.RegionConfig{}, err
+		return regionConfig, err
 	}
 
 	regionEnumID, err := dbDesc.MultiRegionEnumID()
 	if err != nil {
-		return multiregion.RegionConfig{}, err
+		return regionConfig, err
 	}
 
 	regionEnum, err := descsCol.GetImmutableTypeByID(
@@ -935,12 +978,17 @@ func synthesizeRegionConfigImpl(
 	if err != nil {
 		return multiregion.RegionConfig{}, err
 	}
-	regionNames, err := regionEnum.RegionNames()
+	var regionNames descpb.RegionNames
+	if forZoneConfigValidate {
+		regionNames, err = regionEnum.RegionNamesForZoneConfigValidation()
+	} else {
+		regionNames, err = regionEnum.RegionNames()
+	}
 	if err != nil {
-		return multiregion.RegionConfig{}, err
+		return regionConfig, err
 	}
 
-	regionConfig := multiregion.MakeRegionConfig(
+	regionConfig = multiregion.MakeRegionConfig(
 		regionNames,
 		dbDesc.RegionConfig.PrimaryRegion,
 		dbDesc.RegionConfig.SurvivalGoal,
@@ -1041,7 +1089,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		return nil
 	}
 
-	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.ID, p.Descriptors())
 	if err != nil {
 		return err
 	}
@@ -1067,8 +1115,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		)
 		err = errors.WithDetail(err, "the attempted operation will overwrite "+
 			"a user modified field")
-		return errors.WithHint(err, "to override this error and proceed with "+
-			"the overwrite, specify \"FORCE\" at the end of the statement")
+		return errors.WithHint(err, "to proceed with the override, SET override_multi_region_zone_config = true, and reissue the statement")
 	}
 
 	return nil
@@ -1092,8 +1139,6 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	if p.SessionData().OverrideMultiRegionZoneConfigEnabled || desc.GetLocalityConfig() == nil {
 		return nil
 	}
-
-	hint := "to proceed with the override, SET override_multi_region_zone_config = true, and reissue the statement"
 
 	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
 	if err != nil {
@@ -1139,7 +1184,8 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 					)
 					err = errors.WithDetail(err, "the attempted operation will override "+
 						"the index zone configuration field")
-					return errors.WithHint(err, hint)
+					return errors.WithHint(err, "to proceed with the override, SET "+
+						"override_multi_region_zone_config = true, and reissue the statement")
 				}
 			}
 		}
@@ -1185,7 +1231,8 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		)
 		err = errors.WithDetail(err, "the attempted operation will overwrite "+
 			"a user modified field")
-		return errors.WithHint(err, hint)
+		return errors.WithHint(err, "to proceed with the overwrite, SET "+
+			"override_multi_region_zone_config = true, and reissue the statement")
 	}
 
 	return nil
