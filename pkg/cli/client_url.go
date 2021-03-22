@@ -75,7 +75,7 @@ type urlParser struct {
 func (u urlParser) String() string { return "" }
 
 func (u urlParser) Type() string {
-	return "postgresql://[user[:passwd]@]host[:port]/[db][?parameters...]"
+	return "<postgres://...>"
 }
 
 func (u urlParser) Set(v string) error {
