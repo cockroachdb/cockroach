@@ -963,6 +963,19 @@ func importPlanHook(
 			return nil
 		}
 
+		// We're about to have side-effects not tied to this tranaction
+		// (creating the job record below). This is okay as long as the
+		// transaction eventually commits. To ensure that the transaction
+		// commits, we commit it here. This is allowed since we know we're in an
+		// implicit transaction.
+		// We know we're in an implicit transaction because we would have
+		// already returned if it were a detached job, and we check at the start
+		// of the plan hooks that the transaction is implicit if the detached
+		// option was not specified.
+		if err := p.ExtendedEvalContext().Txn.Commit(ctx); err != nil {
+			return err
+		}
+
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
