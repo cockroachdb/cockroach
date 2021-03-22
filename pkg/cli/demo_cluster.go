@@ -340,7 +340,13 @@ func testServerArgsForTransientCluster(
 		// Unit tests can be run with multiple processes side-by-side with
 		// `make stress`. This is bound to not work with fixed ports.
 		sqlPort := sqlBasePort + int(nodeID) - 1
+		if sqlBasePort == 0 {
+			sqlPort = 0
+		}
 		httpPort := httpBasePort + int(nodeID) - 1
+		if httpBasePort == 0 {
+			httpPort = 0
+		}
 		args.SQLAddr = fmt.Sprintf(":%d", sqlPort)
 		args.HTTPAddr = fmt.Sprintf(":%d", httpPort)
 	}
