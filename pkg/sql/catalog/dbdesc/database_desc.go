@@ -223,7 +223,30 @@ func (desc *Immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
 func (desc *Immutable) ValidateCrossReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
+	// Check multi-region enum type.
+	if enumID, err := desc.MultiRegionEnumID(); err == nil {
+		report := func(err error) {
+			vea.Report(errors.Wrap(err, "multi-region enum"))
+		}
+		typ, err := vdg.GetTypeDescriptor(enumID)
+		if err != nil {
+			report(err)
+			return
+		}
+		if typ.GetParentID() != desc.GetID() {
+			report(errors.Errorf("parentID is actually %d", typ.GetParentID()))
+		}
+		// Further validation should be handled by the type descriptor itself.
+	}
+}
+
+// ValidateTxnCommit implements the catalog.Descriptor interface.
+func (desc *Immutable) ValidateTxnCommit(
+	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
+) {
 	// Check schema references.
+	// This could be done in ValidateCrossReferences but it can be quite expensive
+	// so we do it here instead.
 	for schemaName, schemaInfo := range desc.Schemas {
 		if schemaInfo.Dropped {
 			continue
@@ -244,29 +267,6 @@ func (desc *Immutable) ValidateCrossReferences(
 			report(errors.Errorf("schema parentID is actually %d", schemaDesc.GetParentID()))
 		}
 	}
-
-	// Check multi-region enum type.
-	if enumID, err := desc.MultiRegionEnumID(); err == nil {
-		report := func(err error) {
-			vea.Report(errors.Wrap(err, "multi-region enum"))
-		}
-		typ, err := vdg.GetTypeDescriptor(enumID)
-		if err != nil {
-			report(err)
-			return
-		}
-		if typ.GetParentID() != desc.GetID() {
-			report(errors.Errorf("parentID is actually %d", typ.GetParentID()))
-		}
-		// Further validation should be handled by the type descriptor itself.
-	}
-}
-
-// ValidateTxnCommit implements the catalog.Descriptor interface.
-func (desc *Immutable) ValidateTxnCommit(
-	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
-) {
-	// No-op.
 }
 
 // SchemaMeta implements the tree.SchemaMeta interface.
