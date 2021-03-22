@@ -102,7 +102,9 @@ func getSink(
 	case u.Scheme == changefeedbase.SinkSchemeKafka:
 		var cfg kafkaSinkConfig
 		cfg.kafkaTopicPrefix = q.Get(changefeedbase.SinkParamTopicPrefix)
+		cfg.kafkaTopicName = q.Get(changefeedbase.SinkParamTopicName)
 		q.Del(changefeedbase.SinkParamTopicPrefix)
+		q.Del(changefeedbase.SinkParamTopicName)
 		if schemaTopic := q.Get(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 			return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 		}
@@ -324,6 +326,7 @@ func init() {
 
 type kafkaSinkConfig struct {
 	kafkaTopicPrefix string
+	kafkaTopicName   string
 	tlsEnabled       bool
 	tlsSkipVerify    bool
 	caCert           []byte
@@ -359,10 +362,20 @@ type kafkaSink struct {
 	}
 }
 
-func makeTopicsMap(prefix string, targets jobspb.ChangefeedTargets) map[descpb.ID]string {
+func makeTopicsMap(
+	prefix string, name string, targets jobspb.ChangefeedTargets,
+) map[descpb.ID]string {
 	topics := make(map[descpb.ID]string)
+	useSingleName := (name != "")
+	if useSingleName {
+		name = prefix + SQLNameToKafkaName(name)
+	}
 	for id, t := range targets {
-		topics[id] = prefix + SQLNameToKafkaName(t.StatementTimeName)
+		if useSingleName {
+			topics[id] = name
+		} else {
+			topics[id] = prefix + SQLNameToKafkaName(t.StatementTimeName)
+		}
 	}
 	return topics
 }
@@ -372,7 +385,7 @@ func makeKafkaSink(
 ) (Sink, error) {
 	sink := &kafkaSink{
 		cfg:    cfg,
-		topics: makeTopicsMap(cfg.kafkaTopicPrefix, targets),
+		topics: makeTopicsMap(cfg.kafkaTopicPrefix, cfg.kafkaTopicName, targets),
 	}
 
 	config := sarama.NewConfig()
