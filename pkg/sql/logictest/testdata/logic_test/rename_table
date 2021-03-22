@@ -381,3 +381,88 @@ DROP DATABASE olddb CASCADE
 
 statement ok
 DROP DATABASE newdb CASCADE
+
+# Sanity check for #55709 renaming tables and cross DB references
+
+statement ok
+CREATE DATABASE newdb;
+
+statement ok
+SET database = newdb;
+
+# First validate renames are blocked
+
+statement ok
+CREATE TABLE t1ref (i INT8 PRIMARY KEY);
+
+statement ok
+CREATE TABLE t2ref (
+	j INT8,
+	CONSTRAINT t1_reference FOREIGN KEY (j) REFERENCES t1ref (i)
+);
+
+statement error a foreign key constraint "t1_reference" will exist between databases after rename
+ALTER TABLE t2ref RENAME TO test2.public.t2;
+
+statement error a foreign key constraint "t1_reference" will exist between databases after rename
+ALTER TABLE t1ref RENAME TO test2.public.t1;
+
+statement ok
+CREATE TABLE t1vref (i INT8 PRIMARY KEY);
+
+statement ok
+CREATE VIEW t1view AS (SELECT i FROM t1vref);
+
+statement error cannot rename relation "t1vref" because view "t1view" depends on it
+ALTER TABLE t1vref RENAME TO test2.public.t1vref;
+
+statement error this view will reference a table "t1vref" in another databases after rename
+ALTER VIEW t1view RENAME TO test2.public.t1view;
+
+statement ok
+CREATE TABLE t1s1ref (i INT8 PRIMARY KEY);
+
+statement ok
+CREATE SEQUENCE s1 OWNED BY t1s1ref.i;
+
+statement error a sequence "s1" will be OWNED BY a table in a different database after rename
+ALTER TABLE t1s1ref RENAME TO test2.public.t1s1ref;
+
+statement error this sequence will be OWNED BY a table "t1s1ref" in a different database after rename
+ALTER SEQUENCE s1 RENAME TO test2.public.s1;
+
+# Enable cluster setting to allow foreign keys across DB's
+statement ok
+SET CLUSTER SETTING "sql.cross_db_fks.enabled" = true;
+
+statement ok
+ALTER TABLE t2ref RENAME TO test2.public.t2ref;
+
+statement ok
+ALTER TABLE test2.public.t2ref RENAME TO t2ref;
+
+statement ok
+ALTER TABLE t1ref RENAME TO test2.public.t1;
+
+#Enable cluster setting for views across DB's
+statement ok
+SET CLUSTER SETTING "sql.cross_db_views.enabled" = true;
+
+statement error cannot rename relation "t1vref" because view "t1view" depends on it
+ALTER TABLE t1vref RENAME TO test2.public.t1vref;
+
+statement ok
+ALTER VIEW t1view RENAME TO test2.public.t1view;
+
+#Enable cluster setting for sequence owned by across DB's
+statement ok
+SET CLUSTER SETTING "sql.cross_db_sequence_owners.enabled" = true;
+
+statement ok
+ALTER TABLE t1s1ref RENAME TO test2.public.t1s1ref;
+
+statement ok
+ALTER TABLE test2.public.t1s1ref RENAME TO t1s1ref;
+
+statement ok
+ALTER SEQUENCE s1 RENAME TO test2.public.s1;
