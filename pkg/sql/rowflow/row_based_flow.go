@@ -56,20 +56,20 @@ func NewRowBasedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // Setup if part of the flowinfra.Flow interface.
 func (f *rowBasedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
-) (context.Context, error) {
+) (context.Context, []execinfra.OpNode, error) {
 	var err error
-	ctx, err = f.FlowBase.Setup(ctx, spec, opt)
+	ctx, _, err = f.FlowBase.Setup(ctx, spec, opt)
 	if err != nil {
-		return ctx, err
+		return ctx, nil, err
 	}
 	// First step: setup the input synchronizers for all processors.
 	inputSyncs, err := f.setupInputSyncs(ctx, spec, opt)
 	if err != nil {
-		return ctx, err
+		return ctx, nil, err
 	}
 
 	// Then, populate processors.
-	return ctx, f.setupProcessors(ctx, spec, inputSyncs)
+	return ctx, nil, f.setupProcessors(ctx, spec, inputSyncs)
 }
 
 // setupProcessors creates processors for each spec in f.spec, fusing processors

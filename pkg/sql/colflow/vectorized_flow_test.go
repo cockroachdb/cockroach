@@ -294,7 +294,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 			creator = c
 		}
 
-		_, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
+		_, _, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
 		require.NoError(t, err)
 
 		// No directory should have been created.
@@ -328,7 +328,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 			creator = c
 		}
 
-		_, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
+		_, _, err := vf.Setup(ctx, &execinfrapb.FlowSpec{}, flowinfra.FuseNormally)
 		require.NoError(t, err)
 
 		createTempDir := creator.diskQueueCfg.GetPather.GetPath
