@@ -338,3 +338,18 @@ sql.multiregion.alter_table.locality.from.regional_by_row_as.to.regional_by_tabl
 exec
 ALTER TABLE t6 SET LOCALITY REGIONAL BY ROW AS "cr"
 ----
+
+# Test for locality optimized search counter.
+feature-allowlist
+sql.plan.opt.locality-optimized-search
+----
+
+exec
+USE survive_region;
+CREATE TABLE t7 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+----
+
+feature-usage
+SELECT * FROM t7 WHERE a = 1
+----
+sql.plan.opt.locality-optimized-search
