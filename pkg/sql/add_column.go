@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // addColumnImpl performs the logic of adding a column within an ALTER TABLE.
@@ -37,6 +38,13 @@ func (p *planner) addColumnImpl(
 	toType, err := tree.ResolveType(params.ctx, d.Type, params.p.semaCtx.GetTypeResolver())
 	if err != nil {
 		return err
+	}
+	switch toType.Oid() {
+	case oid.T_int2vector, oid.T_oidvector:
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"VECTOR column types are unsupported",
+		)
 	}
 	if supported, err := isTypeSupportedInVersion(version, toType); err != nil {
 		return err
