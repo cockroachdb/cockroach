@@ -745,7 +745,9 @@ func init() {
 		_ = f.MarkHidden(cliflags.Global.Name)
 		// The --empty flag is only valid for the top level demo command,
 		// so we use the regular flag set.
-		boolFlag(demoCmd.Flags(), &demoCtx.useEmptyDatabase, cliflags.UseEmptyDatabase)
+		boolFlag(demoCmd.Flags(), &demoCtx.noExampleDatabase, cliflags.UseEmptyDatabase)
+		_ = f.MarkDeprecated(cliflags.UseEmptyDatabase.Name, "use --no-workload-database")
+		boolFlag(demoCmd.Flags(), &demoCtx.noExampleDatabase, cliflags.NoExampleDatabase)
 		// We also support overriding the GEOS library path for 'demo'.
 		// Even though the demoCtx uses mostly different configuration
 		// variables from startCtx, this is one case where we afford

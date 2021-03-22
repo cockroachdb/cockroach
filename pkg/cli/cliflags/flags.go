@@ -1194,10 +1194,16 @@ If set, disable cockroach demo from attempting to obtain a temporary license.`,
 	}
 
 	UseEmptyDatabase = FlagInfo{
-		Name: "empty",
+		Name:        "empty",
+		Description: `Deprecated in favor of --no-example-database`,
+	}
+
+	NoExampleDatabase = FlagInfo{
+		Name:   "no-example-database",
+		EnvVar: "COCKROACH_NO_EXAMPLE_DATABASE",
 		Description: `
-Start with an empty database: avoid pre-loading a default dataset in
-the demo shell.`,
+Disable the creation of a default dataset in the demo shell.
+This makes 'cockroach demo' faster to start.`,
 	}
 
 	GeoLibsDir = FlagInfo{

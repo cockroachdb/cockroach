@@ -257,7 +257,7 @@ func (s WorkerSetup) run(ctx context.Context, rnd *rand.Rand) error {
 		// If we can't ping, check if the statement caused a panic.
 		if err := db.PingContext(ctx); err != nil {
 			input := fmt.Sprintf("%s; %s;", initSQL, stmt)
-			out, _ := exec.CommandContext(ctx, s.cockroach, "demo", "--empty", "-e", input).CombinedOutput()
+			out, _ := exec.CommandContext(ctx, s.cockroach, "demo", "--no-example-database", "-e", input).CombinedOutput()
 			var pqerr pq.Error
 			if match := stackRE.FindStringSubmatch(string(out)); match != nil {
 				pqerr.Detail = strings.TrimSpace(match[1])
