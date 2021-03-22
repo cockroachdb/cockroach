@@ -212,7 +212,8 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					RegionEnumID: 500,
+					RegionEnumID:  500,
+					PrimaryRegion: "us-east-1",
 				},
 			},
 		},
@@ -222,7 +223,8 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					RegionEnumID: 52,
+					RegionEnumID:  52,
+					PrimaryRegion: "us-east-1",
 				},
 			},
 			multiRegionEnum: descpb.TypeDescriptor{
@@ -250,7 +252,8 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					RegionEnumID: 53,
+					RegionEnumID:  53,
+					PrimaryRegion: "us-east-1",
 				},
 			},
 			schemaDescs: []descpb.SchemaDescriptor{
@@ -275,9 +278,16 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			schemaDesc.Privileges = privilege
 			descs.Descriptors[schemaDesc.ID] = schemadesc.NewBuilder(&schemaDesc).BuildImmutable()
 		}
+		for _, desc := range descs.Descriptors {
+			namespaceKey := descpb.NameInfo{
+				ParentID:       desc.GetParentID(),
+				ParentSchemaID: desc.GetParentSchemaID(),
+				Name:           desc.GetName(),
+			}
+			descs.Namespace[namespaceKey] = desc.GetID()
+		}
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
-		if err := catalog.Validate(ctx, descs, validateCrossReferencesOnly, desc).CombinedError(); err == nil {
+		if err := catalog.Validate(ctx, descs, catalog.ValidationLevelAllPreTxnCommit, desc).CombinedError(); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
 			}
