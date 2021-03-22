@@ -1,9 +1,8 @@
 import React from "react";
 import classnames from "classnames/bind";
+import { Heading, Text, Button } from "@cockroachlabs/ui-components";
 import styles from "./emptyPanel.module.scss";
-import { Text, TextTypes } from "../../text";
 import { Anchor } from "../../anchor";
-import { Button } from "../../button";
 import heroBannerLp from "../../assets/heroBannerLp.png";
 
 const cx = classnames.bind(styles);
@@ -43,15 +42,10 @@ export const EmptyPanel: React.FC<EmptyPanelProps> = ({
     className={cx("cl-empty-view")}
     style={{ backgroundImage: `url(${backgroundImage})` }}
   >
-    <Text className={cx("cl-empty-view__title")} textType={TextTypes.Heading3}>
-      {title}
-    </Text>
+    <Heading type="h2">{title}</Heading>
     <div className={cx("cl-empty-view__content")}>
       <main className={cx("cl-empty-view__main")}>
-        <Text
-          textType={TextTypes.Body}
-          className={cx("cl-empty-view__main--text")}
-        >
+        <Text>
           {description}
           {link && (
             <Anchor href={link} className={cx("cl-empty-view__main--anchor")}>
@@ -62,7 +56,7 @@ export const EmptyPanel: React.FC<EmptyPanelProps> = ({
       </main>
       <footer className={cx("cl-empty-view__footer")}>
         <Button
-          type="primary"
+          intent="primary"
           onClick={() =>
             buttonHref ? window.open(buttonHref) : onClick && onClick()
           }

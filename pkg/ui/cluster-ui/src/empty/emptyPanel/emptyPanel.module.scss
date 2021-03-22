@@ -10,16 +10,6 @@
   background-size: contain;
   background-repeat: no-repeat;
 
-  &__title {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-    font-size: $font-size--x-large;
-    color: $colors--neutral-7;
-    line-height: $line-height--x-large;
-    margin-bottom: 0;
-  }
-
   &__footer {
     margin: 20px 0 0;
   }
