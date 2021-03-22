@@ -155,7 +155,7 @@ func ApplyString(
 	if changed {
 		var sb strings.Builder
 		for _, s := range stmts {
-			sb.WriteString(s.String())
+			sb.WriteString(tree.Serialize(s))
 			sb.WriteString(";\n")
 		}
 		input = sb.String()
