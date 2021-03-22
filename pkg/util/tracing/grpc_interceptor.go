@@ -16,6 +16,7 @@ import (
 	"io"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -47,7 +48,14 @@ func (w metadataCarrier) Set(key, val string) {
 			panic("invalid key; found uppercase letters")
 		}
 	}
-	w.MD[key] = append(w.MD[key], val)
+	if (key == fieldNameTraceID || key == fieldNameSpanID) && len(w.MD[key]) == 1 {
+		w.MD[key][0] = val // XXX: Don't allocate, and make this poolable.
+		// We're re-using something.
+		// XXX: Given that trace,spanID are common usages, we could
+		// define a version that just overrides it inplace.
+	} else {
+		w.MD[key] = append(w.MD[key], val)
+	}
 }
 
 // ForEach implements the Carrier interface.
@@ -215,6 +223,12 @@ func spanInclusionFuncForClient(parent *Span) bool {
 	return parent != nil && !parent.i.isNoop()
 }
 
+var metaDataPool = sync.Pool{
+	New: func() interface{} {
+		return metadata.New(nil)
+	},
+}
+
 func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) context.Context {
 	// md, ok := metadata.FromOutgoingContext(ctx)
 	// XXX: Alloc heavy. Why can't we re-use the same MD?
@@ -235,6 +249,30 @@ func injectSpanMeta(ctx context.Context, tracer *Tracer, clientSpan *Span) conte
 		md = md.Copy()
 	}
 
+	// XXX: This is in the hotpath, and Meta allocates. Can we syncpool here?
+	spMeta := metaPool.Get().(*SpanMeta)
+	if err := tracer.InjectMetaInto(clientSpan.MetaV2(spMeta), metadataCarrier{md}); err != nil {
+		// We have no better place to record an error than the Span itself.
+		clientSpan.Recordf("error: %s", err)
+	}
+	spMeta.Reset()
+	metaPool.Put(spMeta)
+	return metadata.NewOutgoingContext(ctx, md) // XXX: Do we need this? Aren't we mutating things in-place?
+}
+
+func injectSpanMetaV2(ctx context.Context, md metadata.MD, tracer *Tracer, clientSpan *Span) context.Context {
+	// md, ok := metadata.FromOutgoingContext(ctx)
+	// XXX: Alloc heavy. Why can't we re-use the same MD?
+	// FromOutgoingContextRaw. Kind of an anti-pattern. Maybe it should be part
+	// of optimizedCtx? Or maybe we shouldn't be using MD headers? Or we should
+	// be using a new MD altogether? If the incoming ones are mostly empty, we
+	// could pool the metadata. At the caller, we could release the metadata back
+	// into the pool. Given we're mutating it, can we race with other threads
+	// setting directly to the map?
+	// If optimizedCtx had it's pre-built metadata, we could simply
+	// metadata.Join with the OutgoingContext. In the ideal path, we'd not find
+	// anything, we'd instantiate a new metadata and join it with the
+	// pre-allocated one.
 	// XXX: This is in the hotpath, and Meta allocates. Can we syncpool here?
 	spMeta := metaPool.Get().(*SpanMeta)
 	if err := tracer.InjectMetaInto(clientSpan.MetaV2(spMeta), metadataCarrier{md}); err != nil {
@@ -283,7 +321,21 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 		)
 		init(clientSpan)
 		defer clientSpan.Finish()
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
+
+		md, _, ok := metadata.FromOutgoingContextRaw(ctx)
+		if !ok {
+			// XXX: Can only do it if no baggage, and no shadow tracer.
+			md = metaDataPool.Get().(metadata.MD)
+			defer func() {
+				if md.Len() == 2 { // XXX: Only put it back in the pool if we've used the common keys.
+				}
+				metaDataPool.Put(md)
+			}()
+		} else {
+			md = md.Copy()
+		}
+
+		ctx = injectSpanMetaV2(ctx, md, tracer, clientSpan)
 		err := invoker(ctx, method, req, resp, cc, opts...)
 		if err != nil {
 			setSpanTags(clientSpan, err, true)
