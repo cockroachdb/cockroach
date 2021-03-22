@@ -201,7 +201,7 @@ func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 28, 1, 2, ' ', 0)
+	w := tabwriter.NewWriter(os.Stdout, 28 /*minwidth*/, 1 /*tabwidth*/, 2 /*padding*/, ' ' /*padchar*/, 0 /*flags*/)
 	basepath := uri.Path
 	manifestPaths := append([]string{""}, incPaths...)
 	stores := make([]cloud.ExternalStorage, len(manifestPaths))

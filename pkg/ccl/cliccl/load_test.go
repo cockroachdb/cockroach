@@ -128,6 +128,7 @@ func TestLoadShowBackups(t *testing.T) {
 	sqlDB.Exec(t, `USE testDB`)
 	const backupPath = "nodelocal://0/fooFolder"
 
+	ts := generateBackupTimestamps(3)
 	t.Run("show-backups-without-backups-in-collection", func(t *testing.T) {
 		out, err := c.RunWithCapture(fmt.Sprintf("load show backups %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
@@ -135,24 +136,18 @@ func TestLoadShowBackups(t *testing.T) {
 		checkExpectedOutput(t, expectedOutput, out)
 	})
 
-	intoTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	initAOST := intoTS.AsOfSystemTime()
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, initAOST), backupPath)
-	intoTS1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	intoAOST1 := intoTS1.AsOfSystemTime()
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, intoAOST1), backupPath)
-	intoTS2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	intoAOST2 := intoTS2.AsOfSystemTime()
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, intoAOST2), backupPath)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, ts[0].AsOfSystemTime()), backupPath)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, ts[1].AsOfSystemTime()), backupPath)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, ts[2].AsOfSystemTime()), backupPath)
 
 	t.Run("show-backups-with-backups-in-collection", func(t *testing.T) {
 		out, err := c.RunWithCapture(fmt.Sprintf("load show backups %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 
 		expectedOutput := fmt.Sprintf(".%s\n.%s\n.%s\n",
-			intoTS.GoTime().Format(backupccl.DateBasedIntoFolderName),
-			intoTS1.GoTime().Format(backupccl.DateBasedIntoFolderName),
-			intoTS2.GoTime().Format(backupccl.DateBasedIntoFolderName))
+			ts[0].GoTime().Format(backupccl.DateBasedIntoFolderName),
+			ts[1].GoTime().Format(backupccl.DateBasedIntoFolderName),
+			ts[2].GoTime().Format(backupccl.DateBasedIntoFolderName))
 		checkExpectedOutput(t, expectedOutput, out)
 	})
 }
@@ -174,28 +169,21 @@ func TestLoadShowIncremental(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE testDB`)
 	sqlDB.Exec(t, `USE testDB`)
 	const backupPath = "nodelocal://0/fooFolder"
-	initTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	initAOST := initTS.AsOfSystemTime()
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, initAOST), backupPath)
-
-	// We do two more incremental backups on the full backups.
-	incTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	incAOST := incTS.AsOfSystemTime()
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, incAOST), backupPath)
-	incTS2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	incAOST2 := incTS2.AsOfSystemTime()
-	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, incAOST2), backupPath)
+	ts := generateBackupTimestamps(3)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, ts[0].AsOfSystemTime()), backupPath)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, ts[1].AsOfSystemTime()), backupPath)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, ts[2].AsOfSystemTime()), backupPath)
 
 	out, err := c.RunWithCapture(fmt.Sprintf("load show incremental %s --external-io-dir=%s", backupPath, dir))
 	require.NoError(t, err)
-	expectedIncFolder := incTS.GoTime().Format(backupccl.DateBasedIncFolderName)
-	expectedIncFolder2 := incTS2.GoTime().Format(backupccl.DateBasedIncFolderName)
+	expectedIncFolder := ts[1].GoTime().Format(backupccl.DateBasedIncFolderName)
+	expectedIncFolder2 := ts[2].GoTime().Format(backupccl.DateBasedIncFolderName)
 
 	var buf bytes.Buffer
-	w := tabwriter.NewWriter(&buf, 28, 1, 2, ' ', 0)
-	fmt.Fprintf(w, "/fooFolder	-	%s\n", initTS.GoTime().Format(time.RFC3339))
-	fmt.Fprintf(w, "/fooFolder%s	%s	%s\n", expectedIncFolder, initTS.GoTime().Format(time.RFC3339), incTS.GoTime().Format(time.RFC3339))
-	fmt.Fprintf(w, "/fooFolder%s	%s	%s\n", expectedIncFolder2, incTS.GoTime().Format(time.RFC3339), incTS2.GoTime().Format(time.RFC3339))
+	w := tabwriter.NewWriter(&buf, 28 /*minwidth*/, 1 /*tabwidth*/, 2 /*padding*/, ' ' /*padchar*/, 0 /*flags*/)
+	fmt.Fprintf(w, "/fooFolder	-	%s\n", ts[0].GoTime().Format(time.RFC3339))
+	fmt.Fprintf(w, "/fooFolder%s	%s	%s\n", expectedIncFolder, ts[0].GoTime().Format(time.RFC3339), ts[1].GoTime().Format(time.RFC3339))
+	fmt.Fprintf(w, "/fooFolder%s	%s	%s\n", expectedIncFolder2, ts[2].GoTime().Format(time.RFC3339), ts[2].GoTime().Format(time.RFC3339))
 	if err := w.Flush(); err != nil {
 		t.Fatalf("TestLoadShowIncremental: flush: %v", err)
 	}
@@ -206,4 +194,19 @@ func checkExpectedOutput(t *testing.T, expected string, out string) {
 	endOfCmd := strings.Index(out, "\n")
 	output := out[endOfCmd+1:]
 	require.Equal(t, expected, output)
+}
+
+// generateBackupTimestamps creates n Timestamps with minimal
+// interval of 10 milliseconds to be used in incremental
+// backup tests.
+// Because incremental backup collections are stored in
+// a sub-directory structure that assumes that backups
+// are taken at least 10 milliseconds apart.
+func generateBackupTimestamps(n int) []hlc.Timestamp {
+	timestamps := make([]hlc.Timestamp, 0, n)
+	for i := 0; i < n; i++ {
+		timestamps = append(timestamps, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		time.Sleep(10 * time.Millisecond)
+	}
+	return timestamps
 }
