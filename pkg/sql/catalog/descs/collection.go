@@ -242,6 +242,13 @@ func (tc *Collection) getLeasedDescriptorByName(
 	readTimestamp := txn.ReadTimestamp()
 	desc, expiration, err := tc.leaseMgr.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
 	if err != nil {
+		// Read the descriptor from the store in the face of some specific errors
+		// because of a known limitation of AcquireByName. See the known
+		// limitations of AcquireByName for details.
+		if (catalog.HasInactiveDescriptorError(err) && errors.Is(err, catalog.ErrDescriptorDropped)) ||
+			errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil, nil
+		}
 		// Lease acquisition failed with some other error. This we don't
 		// know how to deal with, so propagate the error.
 		return nil, err
