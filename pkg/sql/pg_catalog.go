@@ -661,7 +661,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			return err
 		}
 
-		// Skip adding indexes for sequences (their table descriptors hav a primary
+		// Skip adding indexes for sequences (their table descriptors have a primary
 		// index to make them comprehensible to backup/restore, but PG doesn't include
 		// an index in pg_class).
 		if table.IsSequence() {
