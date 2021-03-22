@@ -125,7 +125,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
 	collectStats bool,
-) (context.Context, flowinfra.Flow, []execinfra.OpNode, error) {
+) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
 	thisNodeID := dsp.gatewayNodeID
 	_, ok := flows[thisNodeID]
 	if !ok {
@@ -320,7 +320,7 @@ func (dsp *DistSQLPlanner) Run(
 		localState.IsLocal = true
 	}
 
-	ctx, flow, leaves, err := dsp.setupFlows(
+	ctx, flow, opChains, err := dsp.setupFlows(
 		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats,
 	)
 	if err != nil {
@@ -337,7 +337,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	if planCtx.saveFlows != nil {
-		if err := planCtx.saveFlows(flows, leaves); err != nil {
+		if err := planCtx.saveFlows(flows, opChains); err != nil {
 			recv.SetError(err)
 			return func() {}
 		}

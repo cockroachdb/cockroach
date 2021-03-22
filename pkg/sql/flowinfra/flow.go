@@ -74,7 +74,7 @@ type Flow interface {
 	// The second return argument contains all operator chains planned on the
 	// gateway node if the flow is vectorized and the physical plan is fully
 	// local (in all other cases the second return argument is nil).
-	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) (_ context.Context, opChains []execinfra.OpNode, _ error)
+	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) (context.Context, execinfra.OpChains, error)
 
 	// SetTxn is used to provide the transaction in which the flow will run.
 	// It needs to be called after Setup() and before Start/Run.
@@ -181,7 +181,7 @@ type FlowBase struct {
 // Setup is part of the Flow interface.
 func (f *FlowBase) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, _ FuseOpt,
-) (context.Context, []execinfra.OpNode, error) {
+) (context.Context, execinfra.OpChains, error) {
 	ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 	f.ctxDone = ctx.Done()
 	f.spec = spec
