@@ -60,7 +60,9 @@ go_test(
         "physical_props_test.go",
         "scan_funcs_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@cockroach//c-deps:libgeos",
+    ],
     embed = [":xform"],
     tags = ["broken_in_bazel"],
     deps = [
