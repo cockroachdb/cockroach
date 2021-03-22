@@ -273,7 +273,6 @@ func init() {
 		DebugCmd,
 		sqlfmtCmd,
 		workloadCmd,
-		systemBenchCmd,
 	)
 }
 
