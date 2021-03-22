@@ -11,10 +11,6 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 
-import {
-  withBackgroundFactory,
-  withRouterProvider,
-} from "../../.storybook/decorators";
 import { SessionDetails } from "./sessionDetails";
 import {
   sessionDetailsActiveStmtPropsFixture,
@@ -22,6 +18,7 @@ import {
   sessionDetailsIdlePropsFixture,
   sessionDetailsNotFound,
 } from "./sessionDetailsPage.fixture";
+import { withRouterProvider, withBackgroundFactory } from "src/test-utils";
 
 storiesOf("Session Details Page", module)
   .addDecorator(withRouterProvider)

@@ -10,8 +10,6 @@
 
 import React from "react";
 
-export const withBackgroundFactory = (backgroundColor = "#F5F7FA") => (storyFn: any) => (
-  <div style={{backgroundColor}}>
-    {storyFn()}
-  </div>
-);
+export const withBackgroundFactory = (backgroundColor = "#F5F7FA") => (
+  storyFn: any,
+) => <div style={{ backgroundColor }}>{storyFn()}</div>;

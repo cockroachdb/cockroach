@@ -9,22 +9,22 @@
 // licenses/APL.txt.
 
 import React from "react";
-import {Provider} from "react-redux";
-import {ConnectedRouter, connectRouter} from "connected-react-router";
-import {createMemoryHistory} from "history";
+import { Provider } from "react-redux";
+import { ConnectedRouter, connectRouter } from "connected-react-router";
+import { createMemoryHistory } from "history";
 import { createStore, combineReducers } from "redux";
 
 const history = createMemoryHistory();
 const routerReducer = connectRouter(history);
 
-const store = createStore(combineReducers({
-  router: routerReducer,
-}));
+const store = createStore(
+  combineReducers({
+    router: routerReducer,
+  }),
+);
 
 export const withRouterProvider = (storyFn: any) => (
   <Provider store={store}>
-    <ConnectedRouter history={history}>
-      { storyFn() }
-    </ConnectedRouter>
+    <ConnectedRouter history={history}>{storyFn()}</ConnectedRouter>
   </Provider>
 );

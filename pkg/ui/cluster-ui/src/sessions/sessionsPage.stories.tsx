@@ -11,15 +11,12 @@
 import React from "react";
 import { storiesOf } from "@storybook/react";
 
-import {
-  withBackgroundFactory,
-  withRouterProvider,
-} from "../../.storybook/decorators";
 import { SessionsPage } from "./sessionsPage";
 import {
   sessionsPagePropsEmptyFixture,
   sessionsPagePropsFixture,
 } from "./sessionsPage.fixture";
+import { withRouterProvider, withBackgroundFactory } from "src/test-utils";
 
 storiesOf("Sessions Page", module)
   .addDecorator(withRouterProvider)
