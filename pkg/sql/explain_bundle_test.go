@@ -119,6 +119,27 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
+
+	// This is a regression test for the situation where wrapped into the
+	// vectorized flow planNodes in the postqueries were messed up because the
+	// generation of EXPLAIN (VEC) diagrams modified planNodeToRowSources in
+	// place (#62261).
+	t.Run("insert with postquery", func(t *testing.T) {
+		// We need to disable the insert fast path so that postqueries are
+		// planned.
+		r.Exec(t, `SET enable_insert_fast_path = false;
+CREATE TABLE promos(id SERIAL PRIMARY KEY);
+INSERT INTO promos VALUES (642606224929619969);
+CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT REFERENCES promos(id));
+`)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO users (promo_id) VALUES (642606224929619969);")
+		checkBundle(
+			t, fmt.Sprint(rows), "public.users", base, plans,
+			"stats-defaultdb.public.users.sql", "stats-defaultdb.public.promos.sql",
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
+		)
+		r.Exec(t, `RESET enable_insert_fast_path;`)
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the

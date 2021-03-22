@@ -189,14 +189,14 @@ func (ds *ServerImpl) setupFlow(
 	req *execinfrapb.SetupFlowRequest,
 	syncFlowConsumer execinfra.RowReceiver,
 	localState LocalState,
-) (context.Context, flowinfra.Flow, error) {
+) (context.Context, flowinfra.Flow, []execinfra.OpNode, error) {
 	if !FlowVerIsCompatible(req.Version, execinfra.MinAcceptedVersion, execinfra.Version) {
 		err := errors.Errorf(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
 			req.Version, execinfra.MinAcceptedVersion, execinfra.Version,
 		)
 		log.Warningf(ctx, "%v", err)
-		return ctx, nil, err
+		return ctx, nil, nil, err
 	}
 
 	const opName = "flow"
@@ -255,14 +255,14 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.Mon = monitor
 	} else {
 		if localState.IsLocal {
-			return nil, nil, errors.AssertionFailedf(
+			return nil, nil, nil, errors.AssertionFailedf(
 				"EvalContext expected to be populated when IsLocal is set")
 		}
 
 		sd, err := sessiondata.UnmarshalNonLocal(req.EvalContext.SessionData)
 		if err != nil {
 			sp.Finish()
-			return ctx, nil, err
+			return ctx, nil, nil, err
 		}
 		ie := &lazyInternalExecutor{
 			newInternalExecutor: func() sqlutil.InternalExecutor {
@@ -275,7 +275,7 @@ func (ds *ServerImpl) setupFlow(
 		// processors.
 		leafTxn, err = makeLeaf(req)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		evalCtx = &tree.EvalContext{
 			Settings:    ds.ServerConfig.Settings,
@@ -324,15 +324,17 @@ func (ds *ServerImpl) setupFlow(
 		opt = flowinfra.FuseAggressively
 	}
 
+	var leaves []execinfra.OpNode
 	var err error
-	if ctx, err = f.Setup(ctx, &req.Flow, opt); err != nil {
+	ctx, leaves, err = f.Setup(ctx, &req.Flow, opt)
+	if err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		// Flow.Cleanup will not be called, so we have to close the memory monitor
 		// and finish the span manually.
 		monitor.Stop(ctx)
 		sp.Finish()
 		ctx = tracing.ContextWithSpan(ctx, nil)
-		return ctx, nil, err
+		return ctx, nil, nil, err
 	}
 	if !f.IsLocal() {
 		flowCtx.AddLogTag("f", f.GetFlowCtx().ID.Short())
@@ -356,7 +358,7 @@ func (ds *ServerImpl) setupFlow(
 			var err error
 			leafTxn, err = makeLeaf(req)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		}
 		txn = leafTxn
@@ -370,7 +372,7 @@ func (ds *ServerImpl) setupFlow(
 	// then the processors have erroneously captured the Root. See #41992.
 	f.SetTxn(txn)
 
-	return ctx, f, nil
+	return ctx, f, leaves, nil
 }
 
 // newFlowContext creates a new FlowCtx that can be used during execution of
@@ -475,14 +477,14 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
 	localState LocalState,
-) (context.Context, flowinfra.Flow, error) {
-	ctx, f, err := ds.setupFlow(
+) (context.Context, flowinfra.Flow, []execinfra.OpNode, error) {
+	ctx, f, leaves, err := ds.setupFlow(
 		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return ctx, f, err
+	return ctx, f, leaves, err
 }
 
 // SetupFlow is part of the DistSQLServer interface.
@@ -495,7 +497,7 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow.
 	ctx = ds.AnnotateCtx(context.Background())
-	ctx, f, err := ds.setupFlow(ctx, parentSpan, ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
+	ctx, f, _, err := ds.setupFlow(ctx, parentSpan, ds.memMonitor, req, nil /* syncFlowConsumer */, LocalState{})
 	if err == nil {
 		err = ds.flowScheduler.ScheduleFlow(ctx, f)
 	}
