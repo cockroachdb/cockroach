@@ -5,7 +5,7 @@ CREATE TABLE a (
     s STRING,
     b BOOL,
     j JSON,
-    INDEX i (i) WHERE s = 'foo',
+    INDEX i (i) WHERE s LIKE 'foo%',
     INVERTED INDEX j (j)
 )
 ----
@@ -17,7 +17,7 @@ CREATE TABLE a (
 # Eliminate the IndexJoin when the Project passthrough columns are a subset of
 # the IndexJoin's input columns.
 opt expect=EliminateIndexJoinInsideProject
-SELECT k, i FROM a WHERE s = 'foo'
+SELECT k, i FROM a WHERE s LIKE 'foo%'
 ----
 project
  ├── columns: k:1!null i:2
@@ -31,7 +31,7 @@ project
 # Eliminate the IndexJoin when the Project projection outer columns are a subset of
 # the IndexJoin's input columns.
 opt expect=EliminateIndexJoinInsideProject
-SELECT k + 1, i + 1 FROM a WHERE s = 'foo'
+SELECT k + 1, i + 1 FROM a WHERE s LIKE 'foo%'
 ----
 project
  ├── columns: "?column?":8!null "?column?":9
@@ -47,7 +47,7 @@ project
 # Do not eliminate the IndexJoin when the Project passthrough columns are not a
 # subset of the IndexJoin's input columns.
 opt expect-not=EliminateIndexJoinInsideProject
-SELECT k, b FROM a WHERE s = 'foo'
+SELECT k, b FROM a WHERE s LIKE 'foo%'
 ----
 project
  ├── columns: k:1!null b:4
@@ -56,7 +56,7 @@ project
  └── index-join a
       ├── columns: k:1!null s:3!null b:4
       ├── key: (1)
-      ├── fd: ()-->(3), (1)-->(4)
+      ├── fd: (1)-->(3,4)
       └── scan a@i,partial
            ├── columns: k:1!null
            └── key: (1)
@@ -64,7 +64,7 @@ project
 # Do not eliminate the IndexJoin when the Project projection outer columns are
 # not a subset of the IndexJoin's input columns.
 opt expect-not=EliminateIndexJoinInsideProject
-SELECT k, NOT b FROM a WHERE s = 'foo'
+SELECT k, NOT b FROM a WHERE s LIKE 'foo%'
 ----
 project
  ├── columns: k:1!null "?column?":8
@@ -73,7 +73,7 @@ project
  ├── index-join a
  │    ├── columns: k:1!null s:3!null b:4
  │    ├── key: (1)
- │    ├── fd: ()-->(3), (1)-->(4)
+ │    ├── fd: (1)-->(3,4)
  │    └── scan a@i,partial
  │         ├── columns: k:1!null
  │         └── key: (1)
