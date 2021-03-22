@@ -2079,7 +2079,7 @@ func TestChangefeedErrors(t *testing.T) {
 	// Test that a well-formed URI gets as far as unavailable kafka error.
 	sqlDB.ExpectErr(
 		t, `client has run out of available brokers`,
-		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true'`,
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope/?tls_enabled=true&insecure_tls_skip_verify=true&topic_name=foo'`,
 	)
 
 	// kafka_topic_prefix was referenced by an old version of the RFC, it's
@@ -2087,6 +2087,12 @@ func TestChangefeedErrors(t *testing.T) {
 	sqlDB.ExpectErr(
 		t, `unknown sink query parameter: kafka_topic_prefix`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?kafka_topic_prefix=foo`,
+	)
+
+	// topic_name is only honored for kafka sinks
+	sqlDB.ExpectErr(
+		t, `unknown sink query parameter: topic_name`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?topic_name=foo`,
 	)
 
 	// schema_topic will be implemented but isn't yet.
