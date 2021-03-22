@@ -306,6 +306,10 @@ type DiskSpillingMetricsImpl struct {
 	}
 }
 
+func (d *DiskSpillingMetricsImpl) BytesWritten(i int64) {
+	panic ("need implementation")
+}
+
 func (d *DiskSpillingMetricsImpl) QuerySpilled() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
