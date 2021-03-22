@@ -13,6 +13,8 @@ package colcontainer
 import (
 	"bytes"
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"io"
 	"path/filepath"
 	"strconv"
@@ -292,10 +294,45 @@ func GetPatherFunc(f func(ctx context.Context) string) GetPather {
 	}
 }
 
+type DiskSpillingMetrics interface {
+	QuerySpilled()
+	QueryHasSpilled()
+	BytesWritten(i int)
+}
+
+type DiskSpillingMetricsImpl struct {
+	mu struct {
+		syncutil.Mutex
+		querySpilled bool
+		m *execinfra.DistSQLMetrics
+	}
+}
+
+func (d *DiskSpillingMetricsImpl) QuerySpilled() {
+	d.mu.m.QueriesSpilled.Inc(1)
+}
+
+func (d *DiskSpillingMetricsImpl) QueryHasSpilled() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.mu.querySpilled {
+		d.mu.querySpilled = true
+		d.mu.m.QueryHasSpilled.Inc(1)
+	}
+}
+
+func (d *DiskSpillingMetricsImpl) BytesWritten(i int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.mu.m.SpilledBytesWritten.Inc(1)
+}
+
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
 type DiskQueueCfg struct {
 	// FS is the filesystem interface to use.
 	FS fs.FS
+	// DiskSpillingMetrics defines disk spilling metrics to keep track of.
+	DiskSpillingMetrics  DiskSpillingMetrics
 	// GetPather returns where the temporary directory that will contain this
 	// DiskQueue's files has been created. The directory name will be a UUID.
 	// Note that the directory is created lazily on the first call to GetPath.
@@ -385,6 +422,8 @@ func newDiskQueue(
 	if err := cfg.FS.MkdirAll(filepath.Join(cfg.GetPather.GetPath(ctx), d.dirName)); err != nil {
 		return nil, err
 	}
+	cfg.DiskSpillingMetrics.QuerySpilled()
+	cfg.DiskSpillingMetrics.QueryHasSpilled()
 	// rotateFile will create a new file to write to.
 	return d, d.rotateFile(ctx)
 }
@@ -513,6 +552,7 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 	}
 	d.numBufferedBatches = 0
 	d.files[d.writeFileIdx].totalSize += written
+	d.cfg.DiskSpillingMetrics.BytesWritten(written)
 	if err := d.diskAcc.Grow(ctx, int64(written)); err != nil {
 		return err
 	}
