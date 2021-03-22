@@ -31,6 +31,7 @@ type DistSQLMetrics struct {
 	VecOpenFDs            *metric.Gauge
 	CurDiskBytesCount     *metric.Gauge
 	MaxDiskBytesHist      *metric.Histogram
+	QueriesSpilled        *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -111,6 +112,12 @@ var (
 		Measurement: "Disk",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaQueriesSpilled = metric.Metadata{
+		Name:        "sql.distsql.queries.spilled",
+		Help:        "Number of times queries have spilled to disk",
+		Measurement: "Queries",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // See pkg/sql/mem_metrics.go
@@ -132,6 +139,7 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		VecOpenFDs:            metric.NewGauge(metaVecOpenFDs),
 		CurDiskBytesCount:     metric.NewGauge(metaDiskCurBytes),
 		MaxDiskBytesHist:      metric.NewHistogram(metaDiskMaxBytes, histogramWindow, log10int64times1000, 3),
+		QueriesSpilled:            metric.NewCounter(metaQueriesSpilled),
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"io"
 	"path/filepath"
@@ -296,18 +297,22 @@ func GetPatherFunc(f func(ctx context.Context) string) GetPather {
 
 type DiskSpillingMetrics interface {
 	QuerySpilled()
+	BytesWritten(i int)
 }
 
 type DiskSpillingMetricsImpl struct {
 	mu struct {
 		syncutil.Mutex
 		querySpilled bool
+		a *execinfra.DistSQLMetrics
 		m *sql.EngineMetrics
 	}
 }
 
-func (d *DiskSpillingMetricsImpl) BytesWritten(i int64) {
-	panic ("need implementation")
+func (d *DiskSpillingMetricsImpl) BytesWritten(i int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.mu.m.SpillingBytesWritten.Inc(1)
 }
 
 func (d *DiskSpillingMetricsImpl) QuerySpilled() {
@@ -543,6 +548,7 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 	}
 	d.numBufferedBatches = 0
 	d.files[d.writeFileIdx].totalSize += written
+	d.cfg.DiskSpillingMetrics.BytesWritten(written)
 	if err := d.diskAcc.Grow(ctx, int64(written)); err != nil {
 		return err
 	}

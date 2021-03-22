@@ -545,6 +545,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaSpilledBytesWritten = metric.Metadata{
+		Name:        "sql.spilled.bytes.written.count",
+		Help:        "Number of bytes written to temporary disk storage as a result of spilling",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_BYTES,
+	}
 
 	// Below are the metadata for the statement started counters.
 	MetaQueryStarted = metric.Metadata{
