@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -393,8 +394,20 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 				if err != nil {
 					panic(err)
 				}
-				tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
-				ds, _, _ := b.resolveDataSource(&tn, privilege.SELECT)
+
+				var ds cat.DataSource
+				// Regclass can contain an ID or a string.
+				// Ex. nextval('s'::regclass) and nextval(59::regclass) are both valid.
+				id, err := strconv.Atoi(regclass.String())
+				if err == nil {
+					ds, _, err = b.catalog.ResolveDataSourceByID(b.ctx, cat.Flags{}, cat.StableID(id))
+					if err != nil {
+						panic(err)
+					}
+				} else {
+					tn := tree.MakeUnqualifiedTableName(tree.Name(regclass.String()))
+					ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
+				}
 
 				b.viewDeps = append(b.viewDeps, opt.ViewDep{
 					DataSource: ds,

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -57,13 +58,17 @@ func (s *LiveClusterRegions) toStrings() []string {
 // A region name is deemed active if there is at least one alive node
 // in the cluster in with locality set to a given region.
 func (p *planner) getLiveClusterRegions(ctx context.Context) (LiveClusterRegions, error) {
+	// Non-admin users can't access the crdb_internal.kv_node_status table, which
+	// this query hits, so we must override the user here.
+	override := sessiondata.InternalExecutorOverride{
+		User: security.RootUserName(),
+	}
+
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
 		ctx,
 		"get_live_cluster_regions",
 		p.txn,
-		sessiondata.InternalExecutorOverride{
-			User: p.SessionData().User(),
-		},
+		override,
 		"SELECT region FROM [SHOW REGIONS FROM CLUSTER]",
 	)
 	if err != nil {
@@ -711,64 +716,31 @@ func applyZoneConfigForMultiRegionDatabase(
 	return nil
 }
 
-// forEachTableWithLocalityConfigInDatabase loops through each schema and table
-// for a table with a LocalityConfig configured.
-// NOTE: this function uses cached table and schema descriptors. As a result, it may
-// not be safe to run within a schema change.
-// TODO(arul): This looks like a remnant of when we could have tables inside an
-// MR database without a locality config. Investigate if this can be cleaned up.
-func (p *planner) forEachTableWithLocalityConfigInDatabase(
+// forEachTableInMultiRegionDatabase calls the given function on every table
+// descriptor inside the given multi-region database. Tables that have been
+// dropped are skipped.
+func (p *planner) forEachTableInMultiRegionDatabase(
 	ctx context.Context,
-	desc *dbdesc.Mutable,
-	f func(ctx context.Context, schema string, tbName tree.TableName, tbDesc *tabledesc.Mutable) error,
+	dbDesc *dbdesc.Immutable,
+	fn func(ctx context.Context, tbDesc *tabledesc.Mutable) error,
 ) error {
-	// No work to be done if the database isn't a multi-region database.
-	if !desc.IsMultiRegion() {
-		return nil
+	if !dbDesc.IsMultiRegion() {
+		return errors.AssertionFailedf("db %q is not multi-region", dbDesc.Name)
 	}
-	lookupFlags := p.CommonLookupFlags(true /*required*/)
-	lookupFlags.AvoidCached = false
-	schemas, err := p.Descriptors().GetSchemasForDatabase(ctx, p.txn, desc.GetID())
+	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
 
-	tblLookupFlags := p.CommonLookupFlags(true /*required*/)
-	tblLookupFlags.AvoidCached = false
-	tblLookupFlags.Required = false
-
-	// Loop over all schemas, then loop over all tables.
-	for _, schema := range schemas {
-		tbNames, err := p.Descriptors().GetObjectNames(
-			ctx,
-			p.txn,
-			desc,
-			schema,
-			tree.DatabaseListFlags{
-				CommonLookupFlags: lookupFlags,
-				ExplicitPrefix:    true,
-			},
-		)
-		if err != nil {
-			return err
+	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
+	for _, tbID := range lCtx.tbIDs {
+		desc := lCtx.tbDescs[tbID]
+		if desc.Dropped() {
+			continue
 		}
-		for i := range tbNames {
-			found, tbDesc, err := p.Descriptors().GetMutableTableByName(
-				ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: tblLookupFlags},
-			)
-			if err != nil {
-				return err
-			}
-
-			// If we couldn't find the table, or it has no LocalityConfig, there's nothing
-			// to do here.
-			if !found || tbDesc.LocalityConfig == nil {
-				continue
-			}
-
-			if err := f(ctx, schema, tbNames[i], tbDesc); err != nil {
-				return err
-			}
+		mutable := tabledesc.NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
+		if err := fn(ctx, mutable); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -777,10 +749,10 @@ func (p *planner) forEachTableWithLocalityConfigInDatabase(
 // updateZoneConfigsForAllTables loops through all of the tables in the
 // specified database and refreshes the zone configs for all tables.
 func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdesc.Mutable) error {
-	return p.forEachTableWithLocalityConfigInDatabase(
+	return p.forEachTableInMultiRegionDatabase(
 		ctx,
-		desc,
-		func(ctx context.Context, schema string, tbName tree.TableName, tbDesc *tabledesc.Mutable) error {
+		&desc.Immutable,
+		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
 			regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.ID, p.Descriptors())
 			if err != nil {
 				return err

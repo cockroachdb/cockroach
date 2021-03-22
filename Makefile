@@ -1681,11 +1681,12 @@ cleanshort:
 	rm -rf $(ARCHIVE) pkg/sql/parser/gen
 
 .PHONY: clean
-clean: ## Like cleanshort, but also includes C++ artifacts and the go build cache.
+clean: ## Like cleanshort, but also includes C++ artifacts, Bazel artifacts, and the go build cache.
 clean: cleanshort clean-c-deps
 	rm -rf build/defs.mk*
 	-$(GO) clean $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i -cache github.com/cockroachdb/cockroach...
 	$(FIND_RELEVANT) -type f -name 'zcgo_flags*.go' -exec rm {} +
+	if command -v bazel &> /dev/null; then bazel clean --expunge; fi
 	rm -rf artifacts bin
 
 .PHONY: maintainer-clean

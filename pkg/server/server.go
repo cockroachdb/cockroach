@@ -461,13 +461,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	registry.AddMetricStruct(nodeLiveness.Metrics())
 
+	nodeLivenessFn := kvserver.MakeStorePoolNodeLivenessFunc(nodeLiveness)
+	if nodeLivenessKnobs, ok := cfg.TestingKnobs.Store.(*kvserver.NodeLivenessTestingKnobs); ok &&
+		nodeLivenessKnobs.StorePoolNodeLivenessFn != nil {
+		nodeLivenessFn = nodeLivenessKnobs.StorePoolNodeLivenessFn
+	}
 	storePool := kvserver.NewStorePool(
 		cfg.AmbientCtx,
 		st,
 		g,
 		clock,
 		nodeLiveness.GetNodeCount,
-		kvserver.MakeStorePoolNodeLivenessFunc(nodeLiveness),
+		nodeLivenessFn,
 		/* deterministic */ false,
 	)
 

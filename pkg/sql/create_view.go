@@ -18,11 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -33,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/sequence"
 	"github.com/cockroachdb/errors"
 )
 
@@ -156,7 +160,14 @@ func (n *createViewNode) startExec(params runParams) error {
 	// the name for our view. So instead of creating a new view, replace
 	// the existing one.
 	if replacingDesc != nil {
-		newDesc, err = params.p.replaceViewDesc(params.ctx, n, replacingDesc, backRefMutables)
+		newDesc, err = params.p.replaceViewDesc(
+			params.ctx,
+			params.p.ExecCfg().Settings,
+			params.p,
+			n,
+			replacingDesc,
+			backRefMutables,
+		)
 		if err != nil {
 			return err
 		}
@@ -174,6 +185,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		var creationTime hlc.Timestamp
 		desc, err := makeViewTableDesc(
 			params.ctx,
+			params.p.ExecCfg().Settings,
 			viewName,
 			n.viewQuery,
 			n.dbDesc.GetID(),
@@ -186,6 +198,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			params.p.EvalContext(),
 			n.persistence,
 			n.dbDesc.IsMultiRegion(),
+			params.p,
 		)
 		if err != nil {
 			return err
@@ -232,6 +245,13 @@ func (n *createViewNode) startExec(params runParams) error {
 		newDesc = &desc
 	}
 
+	// Used to determine if we want users to be allowed to rename
+	// sequences used in views.
+	st := params.p.ExecCfg().Settings
+	version := st.Version.ActiveVersionOrEmpty(params.ctx)
+	byID := version != (clusterversion.ClusterVersion{}) &&
+		version.IsActive(clusterversion.SequencesRegclass)
+
 	// Persist the back-references in all referenced table descriptors.
 	for id, updated := range n.planDeps {
 		backRefMutable := backRefMutables[id]
@@ -249,6 +269,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			// yet known.
 			// We need to do it here.
 			dep.ID = newDesc.ID
+			dep.ByID = byID && updated.desc.IsSequence()
 			backRefMutable.DependedOnBy = append(backRefMutable.DependedOnBy, dep)
 		}
 		if err := params.p.writeSchemaChange(
@@ -314,6 +335,7 @@ func (n *createViewNode) Close(ctx context.Context)  {}
 // include the back-references.
 func makeViewTableDesc(
 	ctx context.Context,
+	st *cluster.Settings,
 	viewName string,
 	viewQuery string,
 	parentID descpb.ID,
@@ -326,6 +348,7 @@ func makeViewTableDesc(
 	evalCtx *tree.EvalContext,
 	persistence tree.Persistence,
 	isMultiRegion bool,
+	sc resolver.SchemaResolver,
 ) (tabledesc.Mutable, error) {
 	desc := tabledesc.InitTableDescriptor(
 		id,
@@ -340,11 +363,64 @@ func makeViewTableDesc(
 	if isMultiRegion {
 		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 	}
+
+	// If we're in 21.1, then sequences in views should be referenced
+	// by IDs, so walk the tree and replace sequence names with IDs.
+	version := st.Version.ActiveVersionOrEmpty(ctx)
+	byID := version != (clusterversion.ClusterVersion{}) &&
+		version.IsActive(clusterversion.SequencesRegclass)
+
+	if sc != nil && byID {
+		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery)
+		if err != nil {
+			return tabledesc.Mutable{}, err
+		}
+		desc.ViewQuery = updatedQuery
+	}
+
 	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
 	}
 
 	return desc, nil
+}
+
+// replaceSeqNamesWithIDs prepares to walk the given viewQuery by defining the
+// function used to replace sequence names with IDs, and parsing the
+// viewQuery into a statement.
+func replaceSeqNamesWithIDs(
+	ctx context.Context, sc resolver.SchemaResolver, viewQuery string,
+) (string, error) {
+	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		seqIdentifiers, err := sequence.GetUsedSequences(expr)
+		if err != nil {
+			return false, expr, err
+		}
+		seqNameToID := make(map[string]int64)
+		for _, seqIdentifier := range seqIdentifiers {
+			seqDesc, err := GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
+			if err != nil {
+				return false, expr, err
+			}
+			seqNameToID[seqIdentifier.SeqName] = int64(seqDesc.ID)
+		}
+		newExpr, err = sequence.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, newExpr, nil
+	}
+
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse view query")
+	}
+
+	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceSeqFunc)
+	if err != nil {
+		return "", err
+	}
+	return newStmt.String(), nil
 }
 
 // replaceViewDesc modifies and returns the input view descriptor changed
@@ -354,12 +430,29 @@ func makeViewTableDesc(
 // on that the new view no longer depends on.
 func (p *planner) replaceViewDesc(
 	ctx context.Context,
+	st *cluster.Settings,
+	sc resolver.SchemaResolver,
 	n *createViewNode,
 	toReplace *tabledesc.Mutable,
 	backRefMutables map[descpb.ID]*tabledesc.Mutable,
 ) (*tabledesc.Mutable, error) {
 	// Set the query to the new query.
 	toReplace.ViewQuery = n.viewQuery
+
+	// If we're in 21.1, then sequences in views should be referenced
+	// by IDs, so walk the tree and replace sequence names with IDs.
+	version := st.Version.ActiveVersionOrEmpty(ctx)
+	byID := version != (clusterversion.ClusterVersion{}) &&
+		version.IsActive(clusterversion.SequencesRegclass)
+
+	if sc != nil && byID {
+		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery)
+		if err != nil {
+			return nil, err
+		}
+		toReplace.ViewQuery = updatedQuery
+	}
+
 	// Reset the columns to add the new result columns onto.
 	toReplace.Columns = make([]descpb.ColumnDescriptor, 0, len(n.columns))
 	toReplace.NextColumnID = 0

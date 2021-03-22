@@ -135,6 +135,9 @@ func (p *planner) CheckPrivilegeForUser(
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
+// TODO(arul): This CheckPrivileges method name is rather deceptive,
+// it should be probably be called CheckPrivilegesOrOwnership and return
+// a better error.
 func (p *planner) CheckPrivilege(
 	ctx context.Context, descriptor catalog.Descriptor, privilege privilege.Kind,
 ) error {

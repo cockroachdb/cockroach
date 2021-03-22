@@ -5083,6 +5083,47 @@ func TestAllocatorComputeAction(t *testing.T) {
 			},
 			expectedAction: AllocatorRemoveVoter,
 		},
+		// Need 2 non-voting replicas, have 2 but one of them is on a dead node.
+		{
+			zone: zonepb.ZoneConfig{
+				NumReplicas:   proto.Int32(5),
+				NumVoters:     proto.Int32(3),
+				RangeMinBytes: proto.Int64(0),
+				RangeMaxBytes: proto.Int64(64000),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+				},
+			},
+			expectedAction: AllocatorReplaceDeadNonVoter,
+		},
 		// Need 2 non-voting replicas, have none.
 		{
 			zone: zonepb.ZoneConfig{
@@ -5111,6 +5152,61 @@ func TestAllocatorComputeAction(t *testing.T) {
 				},
 			},
 			expectedAction: AllocatorAddNonVoter,
+		},
+		// Need 2 non-voting replicas, have 1 but its on a dead node.
+		{
+			zone: zonepb.ZoneConfig{
+				NumReplicas:   proto.Int32(3),
+				NumVoters:     proto.Int32(1),
+				RangeMinBytes: proto.Int64(0),
+				RangeMaxBytes: proto.Int64(64000),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+				},
+			},
+			expectedAction: AllocatorAddNonVoter,
+		},
+		{
+			zone: zonepb.ZoneConfig{
+				NumReplicas:   proto.Int32(2),
+				NumVoters:     proto.Int32(1),
+				RangeMinBytes: proto.Int64(0),
+				RangeMaxBytes: proto.Int64(64000),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+				},
+			},
+			expectedAction: AllocatorRemoveDeadNonVoter,
 		},
 		// Need 1 non-voting replicas, have 2.
 		{
@@ -5563,6 +5659,74 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 			live:            []roachpb.StoreID{4},
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{1, 2, 3},
+		},
+		{
+			zone: zonepb.ZoneConfig{
+				NumVoters:   proto.Int32(1),
+				NumReplicas: proto.Int32(3),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+					{
+						StoreID:   7,
+						NodeID:    7,
+						ReplicaID: 7,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+				},
+			},
+			expectedAction:  AllocatorRemoveDecommissioningNonVoter,
+			live:            []roachpb.StoreID{1, 4, 6},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{7},
+		},
+		{
+			zone: zonepb.ZoneConfig{
+				NumVoters:   proto.Int32(1),
+				NumReplicas: proto.Int32(3),
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+						Type:      roachpb.ReplicaTypeNonVoter(),
+					},
+				},
+			},
+			expectedAction:  AllocatorReplaceDecommissioningNonVoter,
+			live:            []roachpb.StoreID{1, 2, 3, 4, 6},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{4},
 		},
 	}
 
