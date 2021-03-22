@@ -1518,8 +1518,7 @@ message AdminScatterResponse {
     Span span = 1 [(gogoproto.nullable) = false];
     reserved 2;
   }
-  // This field is deprecated in 20.2 in favor of RangeInfos.
-  repeated Range deprecated_ranges = 2 [(gogoproto.nullable) = false];
+  reserved 2;
   repeated RangeInfo range_infos = 3 [(gogoproto.nullable) = false];
 }
 
