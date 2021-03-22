@@ -143,17 +143,10 @@ func (n *scatterNode) startExec(params runParams) error {
 	scatterRes := res.(*roachpb.AdminScatterResponse)
 	n.run.rangeIdx = -1
 	n.run.ranges = make([]roachpb.Span, len(scatterRes.RangeInfos))
-	if len(scatterRes.RangeInfos) != 0 {
-		for i, rangeInfo := range scatterRes.RangeInfos {
-			n.run.ranges[i] = roachpb.Span{
-				Key:    rangeInfo.Desc.StartKey.AsRawKey(),
-				EndKey: rangeInfo.Desc.EndKey.AsRawKey(),
-			}
-		}
-	} else {
-		// TODO(pbardea): This is a non-combined response from 20.1. Remove in 21.1.
-		for i, r := range scatterRes.DeprecatedRanges {
-			n.run.ranges[i] = r.Span
+	for i, rangeInfo := range scatterRes.RangeInfos {
+		n.run.ranges[i] = roachpb.Span{
+			Key:    rangeInfo.Desc.StartKey.AsRawKey(),
+			EndKey: rangeInfo.Desc.EndKey.AsRawKey(),
 		}
 	}
 	return nil
