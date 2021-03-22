@@ -99,17 +99,19 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	// Iterate over all partial indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonPartialIndexes|rejectInvertedIndexes)
-	iter.ForEach(func(index cat.Index, remainingFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, filters, rejectNonPartialIndexes|rejectInvertedIndexes)
+	iter.ForEach(func(index cat.Index, remainingFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		var sb indexScanBuilder
 		sb.init(c, scanPrivate.Table)
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
+		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
 
 		// If index is covering, just add a Select with the remaining filters,
 		// if there are any.
 		if isCovering {
 			sb.SetScan(&newScanPrivate)
+			sb.AddConstProjections(constProj)
 			sb.AddSelect(remainingFilters)
 			sb.Build(grp)
 			return
@@ -122,7 +124,6 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 
 		// If the index is not covering, scan the needed index columns plus
 		// primary key columns.
-		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
 		newScanPrivate.Cols.UnionWith(pkCols)
 		sb.SetScan(&newScanPrivate)
 
@@ -225,8 +226,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	md := c.e.mem.Metadata()
 	tabMeta := md.TableMeta(scanPrivate.Table)
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, explicitFilters, rejectInvertedIndexes)
-	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, explicitFilters, rejectInvertedIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// We only consider the partition values when a particular index can otherwise
 		// not be constrained. For indexes that are constrained, the partitioned values
 		// add no benefit as they don't really constrain anything.
@@ -336,14 +337,19 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
+		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
 		newScanPrivate.Constraint = constraint
 		// Record whether we were able to use partitions to constrain the scan.
 		newScanPrivate.PartitionConstrainedScan = (len(partitionFilters) > 0)
 
-		// If the alternate index includes the set of needed columns, then construct
-		// a new Scan operator using that index.
+		// If the alternate index includes the set of needed columns, then
+		// construct a new Scan operator using that index.
 		if isCovering {
 			sb.SetScan(&newScanPrivate)
+
+			// Project constants from partial index predicate filters, if there
+			// are any.
+			sb.AddConstProjections(constProj)
 
 			// If there are remaining filters, then the constrained Scan operator
 			// will be created in a new group, and a Select operator will be added
@@ -365,9 +371,8 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
 		}
 
-		// Scan whatever columns we need which are available from the index, plus
-		// the PK columns.
-		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
+		// If the index is not covering, scan the needed index columns plus
+		// primary key columns.
 		newScanPrivate.Cols.UnionWith(pkCols)
 		sb.SetScan(&newScanPrivate)
 
@@ -689,8 +694,8 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 	// Iterate over all inverted indexes.
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
-	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		// Check whether the filter can constrain the index.
 		spanExpr, constraint, remainingFilters, pfState, ok := invertedidx.TryFilterInvertedIndex(
 			c.e.evalCtx, c.e.f, filters, optionalFilters, scanPrivate.Table, index, tabMeta.ComputedCols,
@@ -910,8 +915,8 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	// TODO(mgartner): We should consider primary indexes when it has multiple
 	// columns and only the first is being constrained.
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectPrimaryIndex|rejectInvertedIndexes)
-	iter.ForEach(func(leftIndex cat.Index, outerFilters memo.FiltersExpr, leftCols opt.ColSet, _ bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, filters, rejectPrimaryIndex|rejectInvertedIndexes)
+	iter.ForEach(func(leftIndex cat.Index, outerFilters memo.FiltersExpr, leftCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		leftFixed := c.indexConstrainedCols(leftIndex, scanPrivate.Table, fixedCols)
 		// Short-circuit quickly if the first column in the index is not a fixed
 		// column.
@@ -920,9 +925,9 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		}
 
 		var iter2 scanIndexIter
-		iter2.Init(c.e.mem, &c.im, scanPrivate, outerFilters, rejectPrimaryIndex|rejectInvertedIndexes)
+		iter2.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, outerFilters, rejectPrimaryIndex|rejectInvertedIndexes)
 		iter2.SetOriginalFilters(filters)
-		iter2.ForEachStartingAfter(leftIndex.Ordinal(), func(rightIndex cat.Index, innerFilters memo.FiltersExpr, rightCols opt.ColSet, _ bool) {
+		iter2.ForEachStartingAfter(leftIndex.Ordinal(), func(rightIndex cat.Index, innerFilters memo.FiltersExpr, rightCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 			rightFixed := c.indexConstrainedCols(rightIndex, scanPrivate.Table, fixedCols)
 			// If neither side contributes a fixed column not contributed by the
 			// other, then there's no reason to zigzag on this pair of indexes.
@@ -1222,8 +1227,8 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 
 	// Iterate over all inverted indexes.
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
-	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, filters, rejectNonInvertedIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		if index.NonInvertedPrefixColumnCount() > 0 {
 			// TODO(mgartner): We don't yet support using multi-column inverted
 			//  indexes with zigzag joins.
