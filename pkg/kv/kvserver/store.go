@@ -1949,12 +1949,26 @@ func (s *Store) systemGossipUpdate(ctx context.Context, sysCfg *config.SystemCon
 		log.Event(ctx, "computed initial metrics")
 	})
 
-	// We'll want to offer all replicas to the split and merge queues. Be a little
-	// careful about not spawning too many individual goroutines.
-
-	// For every range, update its zone config and check if it needs to
-	// be split or merged.
 	now := s.cfg.Clock.NowAsClockTimestamp()
+	// Spawning a goroutine per queue turns out to be hugely problematic as
+	// that goroutine does not have the right size stack. It also incurs unbounded
+	// parallelism. Instead, let's just create a goroutine per queue and then
+	// send replicas to it.
+	const chanSize = 16
+	mergeQueueChan := make(chan *Replica, chanSize)
+	splitQueueChan := make(chan *Replica, chanSize)
+	s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		for repl := range splitQueueChan {
+			h.MaybeAdd(ctx, repl, now)
+		}
+	})
+	s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		for repl := range mergeQueueChan {
+			h.MaybeAdd(ctx, repl, now)
+		}
+	})
+	defer close(mergeQueueChan)
+	defer close(splitQueueChan)
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
 		zone, err := sysCfg.GetZoneConfigForKey(key)
@@ -1965,12 +1979,8 @@ func (s *Store) systemGossipUpdate(ctx context.Context, sysCfg *config.SystemCon
 			zone = s.cfg.DefaultZoneConfig
 		}
 		repl.SetZoneConfig(zone)
-		s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
-		s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
+		splitQueueChan <- repl
+		mergeQueueChan <- repl
 		return true // more
 	})
 }
