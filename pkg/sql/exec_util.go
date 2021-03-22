@@ -539,6 +539,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaQuerySpilled = metric.Metadata{
+		Name:        "sql.query.spilled.count",
+		Help:        "Number of times queries have spilled to disk",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Below are the metadata for the statement started counters.
 	MetaQueryStarted = metric.Metadata{

@@ -13,6 +13,8 @@ package colcontainer
 import (
 	"bytes"
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"io"
 	"path/filepath"
 	"strconv"
@@ -292,10 +294,33 @@ func GetPatherFunc(f func(ctx context.Context) string) GetPather {
 	}
 }
 
+type DiskSpillingMetrics interface {
+	QuerySpilled()
+}
+
+type DiskSpillingMetricsImpl struct {
+	mu struct {
+		syncutil.Mutex
+		querySpilled bool
+		m *sql.EngineMetrics
+	}
+}
+
+func (d *DiskSpillingMetricsImpl) QuerySpilled() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.mu.querySpilled {
+		d.mu.querySpilled = true
+		d.mu.m.QuerySpilledCount.Inc(1)
+	}
+}
+
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
 type DiskQueueCfg struct {
 	// FS is the filesystem interface to use.
 	FS fs.FS
+	// DiskSpillingMetrics defines disk spilling metrics to keep track of.
+	DiskSpillingMetrics  DiskSpillingMetrics
 	// GetPather returns where the temporary directory that will contain this
 	// DiskQueue's files has been created. The directory name will be a UUID.
 	// Note that the directory is created lazily on the first call to GetPath.
@@ -385,6 +410,7 @@ func newDiskQueue(
 	if err := cfg.FS.MkdirAll(filepath.Join(cfg.GetPather.GetPath(ctx), d.dirName)); err != nil {
 		return nil, err
 	}
+	cfg.DiskSpillingMetrics.QuerySpilled()
 	// rotateFile will create a new file to write to.
 	return d, d.rotateFile(ctx)
 }

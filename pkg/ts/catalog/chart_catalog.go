@@ -1909,6 +1909,14 @@ var charts = []sectionDescription{
 				AxisLabel: "SQL Statements",
 			},
 			{
+				Title: "Queries Spilled to Disk",
+				Metrics: []string{
+					"sql.query.spilled.count",
+					"sql.query.spilled.count.internal",
+				},
+				AxisLabel: "SQL Statements",
+			},
+			{
 				Title: "Byte I/O",
 				Metrics: []string{
 					"sql.bytesin",

@@ -324,6 +324,7 @@ func makeMetrics(internal bool) Metrics {
 			TxnAbortCount:             metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
 			FailureCount:              metric.NewCounter(getMetricMeta(MetaFailure, internal)),
 			FullTableOrIndexScanCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
+			QuerySpilledCount:         metric.NewCounter(getMetricMeta(MetaQuerySpilled, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
