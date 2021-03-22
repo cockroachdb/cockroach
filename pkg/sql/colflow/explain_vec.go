@@ -33,7 +33,7 @@ import (
 // is not supported. Note that it does so by setting up the full flow without
 // running the components asynchronously, so it is pretty expensive.
 // It also returns a non-nil cleanup function that releases all
-// execinfra.Releasable objects which can *only* be performed once leaves are
+// execinfra.Releasable objects which can *only* be performed once opChains are
 // no longer needed.
 func convertToVecTree(
 	ctx context.Context,
@@ -41,7 +41,7 @@ func convertToVecTree(
 	flow *execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
 	isPlanLocal bool,
-) (leaves []execinfra.OpNode, cleanup func(), err error) {
+) (opChains execinfra.OpChains, cleanup func(), err error) {
 	if !isPlanLocal && len(localProcessors) > 0 {
 		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
 	}
@@ -70,8 +70,8 @@ func convertToVecTree(
 	memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memoryMonitor.Stop(ctx)
 	defer creator.cleanup(ctx)
-	leaves, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
-	return leaves, creator.Release, err
+	opChains, err = creator.setupFlow(ctx, flowCtx, flow.Processors, localProcessors, fuseOpt)
+	return opChains, creator.Release, err
 }
 
 type flowWithNode struct {
@@ -89,7 +89,7 @@ func ExplainVec(
 	flowCtx *execinfra.FlowCtx,
 	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
-	opChains []execinfra.OpNode,
+	opChains execinfra.OpChains,
 	gatewayNodeID roachpb.NodeID,
 	verbose bool,
 	distributed bool,
@@ -131,7 +131,7 @@ func ExplainVec(
 }
 
 func formatChains(
-	root treeprinter.Node, nodeID roachpb.NodeID, opChains []execinfra.OpNode, verbose bool,
+	root treeprinter.Node, nodeID roachpb.NodeID, opChains execinfra.OpChains, verbose bool,
 ) {
 	node := root.Childf("Node %d", nodeID)
 	for _, op := range opChains {
