@@ -62,7 +62,7 @@ go_library(
 
 go_test(
     name = "pgwire_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "auth_test.go",
         "conn_test.go",
