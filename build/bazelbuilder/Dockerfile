@@ -16,7 +16,6 @@ RUN apt-get update \
     libtinfo-dev \
     make \
     netbase \
-    python3 \
     unzip \
  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \

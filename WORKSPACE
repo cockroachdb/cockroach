@@ -133,31 +133,6 @@ load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
 
 protobuf_deps()
 
-# Load up the pinned clang toolchain.
-
-http_archive(
-    name = "com_grail_bazel_toolchain",
-    sha256 = "b924b102adc0c3368d38a19bd971cb4fa75362a27bc363d0084b90ca6877d3f0",
-    strip_prefix = "bazel-toolchain-0.5.7",
-    urls = ["https://github.com/grailbio/bazel-toolchain/archive/0.5.7.tar.gz"],
-)
-
-load("@com_grail_bazel_toolchain//toolchain:deps.bzl", "bazel_toolchain_dependencies")
-
-bazel_toolchain_dependencies()
-
-load("@com_grail_bazel_toolchain//toolchain:rules.bzl", "llvm_toolchain")
-
-llvm_toolchain(
-    name = "llvm_toolchain",
-    absolute_paths = True,
-    llvm_version = "10.0.0",
-)
-
-load("@llvm_toolchain//:toolchains.bzl", "llvm_register_toolchains")
-
-llvm_register_toolchains()
-
 # Load up cockroachdb's go dependencies (the ones listed under go.mod). The
 # `DEPS.bzl` file is kept up to date using the `update-repos` Gazelle command
 # (see `make bazel-generate`).
