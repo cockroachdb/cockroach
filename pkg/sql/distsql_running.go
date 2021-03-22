@@ -127,14 +127,14 @@ func (dsp *DistSQLPlanner) setupFlows(
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
 	collectStats bool,
-) (context.Context, flowinfra.Flow, error) {
+) (context.Context, flowinfra.Flow, []execinfra.OpNode, error) {
 	thisNodeID := dsp.gatewayNodeID
 	_, ok := flows[thisNodeID]
 	if !ok {
-		return nil, nil, errors.AssertionFailedf("missing gateway flow")
+		return nil, nil, nil, errors.AssertionFailedf("missing gateway flow")
 	}
 	if localState.IsLocal && len(flows) != 1 {
-		return nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
+		return nil, nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
 	}
 
 	evalCtxProto := execinfrapb.MakeEvalContext(&evalCtx.EvalContext)
@@ -160,7 +160,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			if err := colflow.IsSupported(vectorizeMode, spec); err != nil {
 				log.VEventf(ctx, 2, "failed to vectorize: %s", err)
 				if vectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
-					return nil, nil, err
+					return nil, nil, nil, err
 				}
 				// Vectorization is not supported for this flow, so we override the
 				// setting.
@@ -178,7 +178,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// A tenant server should never find itself distributing flows.
 			// NB: we wouldn't hit this in practice but if we did the actual
 			// error would be opaque.
-			return nil, nil, errorutil.UnsupportedWithMultiTenancy(47900)
+			return nil, nil, nil, errorutil.UnsupportedWithMultiTenancy(47900)
 		}
 		req := setupReq
 		req.Flow = *flowSpec
@@ -211,7 +211,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// into the local flow.
 	}
 	if firstErr != nil {
-		return nil, nil, firstErr
+		return nil, nil, nil, firstErr
 	}
 
 	// Set up the flow on this node.
@@ -322,7 +322,7 @@ func (dsp *DistSQLPlanner) Run(
 		localState.IsLocal = true
 	}
 
-	ctx, flow, err := dsp.setupFlows(
+	ctx, flow, leaves, err := dsp.setupFlows(
 		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats,
 	)
 	if err != nil {
@@ -339,7 +339,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	if planCtx.saveFlows != nil {
-		if err := planCtx.saveFlows(flows); err != nil {
+		if err := planCtx.saveFlows(flows, leaves); err != nil {
 			recv.SetError(err)
 			return func() {}
 		}

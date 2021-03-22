@@ -167,11 +167,11 @@ func NewVectorizedFlow(base *flowinfra.FlowBase) flowinfra.Flow {
 // Setup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Setup(
 	ctx context.Context, spec *execinfrapb.FlowSpec, opt flowinfra.FuseOpt,
-) (context.Context, error) {
+) (context.Context, []execinfra.OpNode, error) {
 	var err error
-	ctx, err = f.FlowBase.Setup(ctx, spec, opt)
+	ctx, _, err = f.FlowBase.Setup(ctx, spec, opt)
 	if err != nil {
-		return ctx, err
+		return ctx, nil, err
 	}
 	if log.V(1) {
 		log.Infof(ctx, "setting up vectorize flow %s", f.ID.Short())
@@ -188,7 +188,7 @@ func (f *vectorizedFlow) Setup(
 		GetPather:      f,
 	}
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
-		return ctx, err
+		return ctx, nil, err
 	}
 	f.countingSemaphore = newCountingSemaphore(f.Cfg.VecFDSemaphore, f.Cfg.Metrics.VecOpenFDs)
 	flowCtx := f.GetFlowCtx()
@@ -208,14 +208,19 @@ func (f *vectorizedFlow) Setup(
 	if f.testingKnobs.onSetupFlow != nil {
 		f.testingKnobs.onSetupFlow(f.creator)
 	}
-	_, err = f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
+	leaves, err := f.creator.setupFlow(ctx, flowCtx, spec.Processors, f.GetLocalProcessors(), opt)
 	if err == nil {
 		f.testingInfo.numClosers = f.creator.numClosers
 		f.testingInfo.numClosed = &f.creator.numClosed
 		if log.V(1) {
 			log.Info(ctx, "vectorized flow setup succeeded")
 		}
-		return ctx, nil
+		if !f.IsLocal() {
+			// For distributed flows set leaves to nil, per the contract of
+			// flowinfra.Flow.Setup.
+			leaves = nil
+		}
+		return ctx, leaves, nil
 	}
 	// It is (theoretically) possible that some of the memory monitoring
 	// infrastructure was created even in case of an error, and we need to clean
@@ -225,7 +230,7 @@ func (f *vectorizedFlow) Setup(
 	if log.V(1) {
 		log.Infof(ctx, "failed to vectorize: %s", err)
 	}
-	return ctx, err
+	return ctx, nil, err
 }
 
 var _ colcontainer.GetPather = &vectorizedFlow{}

@@ -69,7 +69,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, err = base.Setup(ctx, nil, flowinfra.FuseAggressively)
+	ctx, _, err = base.Setup(ctx, nil, flowinfra.FuseAggressively)
 	require.NoError(t, err)
 
 	base.SetProcessors([]execinfra.Processor{mat})
