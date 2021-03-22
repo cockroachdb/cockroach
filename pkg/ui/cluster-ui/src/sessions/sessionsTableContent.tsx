@@ -39,27 +39,27 @@ export const SessionTableTitle = {
     <Tooltip2
       tableTitle
       placement="bottom"
-      title={<>{"The duration of the session."}</>}
+      title={<>{"The age of the session."}</>}
     >
-      Session Duration
+      Session Age
     </Tooltip2>
   ),
   txnAge: (
     <Tooltip2
       tableTitle
       placement="bottom"
-      title={<>{"The duration of the open transaction, if there is one."}</>}
+      title={<>{"The age of the open transaction, if there is one."}</>}
     >
-      Transaction Duration
+      Txn Age
     </Tooltip2>
   ),
   statementAge: (
     <Tooltip2
       tableTitle
       placement="bottom"
-      title={<>{"The duration of the active statement, if there is one."}</>}
+      title={<>{"The age of the active statement, if there is one."}</>}
     >
-      Statement Duration
+      Statement Age
     </Tooltip2>
   ),
   memUsage: (

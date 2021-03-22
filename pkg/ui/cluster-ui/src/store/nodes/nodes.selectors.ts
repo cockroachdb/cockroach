@@ -6,7 +6,7 @@ import { livenessStatusByNodeIDSelector } from "../liveness";
 import { accumulateMetrics } from "../../util";
 
 export const nodeStatusesSelector = (state: AppState) =>
-  state.adminUI.nodes.data;
+  state.adminUI.nodes.data || [];
 
 export const nodesSelector = createSelector(
   nodeStatusesSelector,
