@@ -52,7 +52,9 @@ go_test(
         "builder_test.go",
         "main_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@cockroach//c-deps:libgeos",
+    ],
     tags = ["broken_in_bazel"],
     deps = [
         "//pkg/security",
