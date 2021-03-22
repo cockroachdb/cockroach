@@ -12,6 +12,7 @@ package bench
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -39,15 +41,17 @@ type RoundTripBenchTestCase struct {
 // RunRoundTripBenchmark sets up a db run the RoundTripBenchTestCase test cases
 // and counts how many round trips the stmt specified by the test case performs.
 func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
-	defer log.Scope(b).Close(b)
+	skip.UnderMetamorphic(b, "changes the RTTs")
+
+	expData := readExpectationsFile(b)
 	for _, tc := range tests {
 		b.Run(tc.name, func(b *testing.B) {
+			defer log.Scope(b).Close(b)
 			var stmtToKvBatchRequests sync.Map
 
 			beforePlan := func(trace tracing.Recording, stmt string) {
 				if _, ok := stmtToKvBatchRequests.Load(stmt); ok {
-					count := countKvBatchRequestsInRecording(trace)
-					stmtToKvBatchRequests.Store(stmt, count)
+					stmtToKvBatchRequests.Store(stmt, trace)
 				}
 			}
 
@@ -59,6 +63,7 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 					},
 				},
 			}
+			exp, haveExp := expData.find(strings.TrimPrefix(b.Name(), "Benchmark"))
 
 			s, db, _ := serverutils.StartServer(
 				b, params,
@@ -67,56 +72,88 @@ func RunRoundTripBenchmark(b *testing.B, tests []RoundTripBenchTestCase) {
 
 			defer s.Stopper().Stop(context.Background())
 
+			roundTrips := 0
 			b.ResetTimer()
 			b.StopTimer()
+			var r tracing.Recording
 			for i := 0; i < b.N; i++ {
 				sql.Exec(b, "CREATE DATABASE bench;")
 				sql.Exec(b, tc.setup)
-				stmtToKvBatchRequests.Store(tc.stmt, -1)
+				stmtToKvBatchRequests.Store(tc.stmt, nil)
 
 				b.StartTimer()
 				sql.Exec(b, tc.stmt)
 				b.StopTimer()
 
+				out, _ := stmtToKvBatchRequests.Load(tc.stmt)
+				var ok bool
+				if r, ok = out.(tracing.Recording); !ok {
+					b.Fatalf(
+						"could not find number of round trips for statement: %s",
+						tc.stmt,
+					)
+				}
+
+				// If there's a retry error then we're just going to throw away this
+				// run.
+				rt, hasRetry := countKvBatchRequestsInRecording(r)
+				if hasRetry {
+					i--
+				} else {
+					roundTrips += rt
+				}
+
 				sql.Exec(b, "DROP DATABASE bench;")
 				sql.Exec(b, tc.reset)
 			}
 
-			out, _ := stmtToKvBatchRequests.Load(tc.stmt)
-			count := out.(int)
-			if count == -1 {
-				b.Fatalf(
-					"could not find number of round trips for statement: %s",
-					tc.stmt,
-				)
+			res := float64(roundTrips) / float64(b.N)
+			if haveExp && !exp.matches(int(res)) && *rewriteFlag == "" {
+				b.Fatalf("got %v, expected %v. trace: \n%v", res, exp, r)
 			}
-
-			b.ReportMetric(float64(count), "roundtrips")
+			b.ReportMetric(res, "roundtrips")
 		})
 	}
 }
 
 // count the number of KvBatchRequests inside a recording, this is done by
 // counting each "txn coordinator send" operation.
-func countKvBatchRequestsInRecording(r tracing.Recording) int {
+func countKvBatchRequestsInRecording(r tracing.Recording) (sends int, hasRetry bool) {
 	root := r[0]
 	return countKvBatchRequestsInSpan(r, root)
 }
 
-func countKvBatchRequestsInSpan(r tracing.Recording, sp tracingpb.RecordedSpan) int {
+func countKvBatchRequestsInSpan(r tracing.Recording, sp tracingpb.RecordedSpan) (int, bool) {
 	count := 0
 	// Count the number of OpTxnCoordSender operations while traversing the
 	// tree of spans.
 	if sp.Operation == kvcoord.OpTxnCoordSender {
 		count++
 	}
+	if logsContainRetry(sp.Logs) {
+		return 0, true
+	}
 
 	for _, osp := range r {
 		if osp.ParentSpanID != sp.SpanID {
 			continue
 		}
-		count += countKvBatchRequestsInSpan(r, osp)
+
+		subCount, hasRetry := countKvBatchRequestsInSpan(r, osp)
+		if hasRetry {
+			return 0, true
+		}
+		count += subCount
 	}
 
-	return count
+	return count, false
+}
+
+func logsContainRetry(logs []tracingpb.LogRecord) bool {
+	for _, l := range logs {
+		if strings.Contains(l.String(), "TransactionRetryWithProtoRefreshError") {
+			return true
+		}
+	}
+	return false
 }

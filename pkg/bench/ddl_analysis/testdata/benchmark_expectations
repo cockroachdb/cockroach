@@ -1,74 +1,74 @@
-min	max	benchmark
-32	32	AlterRole/alter_role_with_1_option
-45	45	AlterRole/alter_role_with_2_options
-59	60	AlterRole/alter_role_with_3_options
-14	14	AlterTableAddCheckConstraint/alter_table_add_1_check_constraint
-14	14	AlterTableAddCheckConstraint/alter_table_add_2_check_constraints
-14	14	AlterTableAddCheckConstraint/alter_table_add_3_check_constraints
-14	14	AlterTableAddColumn/alter_table_add_1_column
-14	14	AlterTableAddColumn/alter_table_add_2_columns
-14	14	AlterTableAddColumn/alter_table_add_3_columns
-24	24	AlterTableAddForeignKey/alter_table_add_1_foreign_key
-34	34	AlterTableAddForeignKey/alter_table_add_2_foreign_keys
-44	44	AlterTableAddForeignKey/alter_table_add_3_foreign_keys
-24	24	AlterTableAddForeignKey/alter_table_add_foreign_key_with_3_columns
-47	47	AlterTableConfigureZone/alter_table_configure_zone_5_replicas
-47	47	AlterTableConfigureZone/alter_table_configure_zone_7_replicas_
-47	47	AlterTableConfigureZone/alter_table_configure_zone_ranges
-28	28	AlterTableDropColumn/alter_table_drop_1_column
-42	42	AlterTableDropColumn/alter_table_drop_2_columns
-56	56	AlterTableDropColumn/alter_table_drop_3_columns
-15	15	AlterTableDropConstraint/alter_table_drop_1_check_constraint
-16	16	AlterTableDropConstraint/alter_table_drop_2_check_constraints
-17	17	AlterTableDropConstraint/alter_table_drop_3_check_constraints
-16	17	AlterTableSplit/alter_table_split_at_1_value
-32	33	AlterTableSplit/alter_table_split_at_2_values
-48	49	AlterTableSplit/alter_table_split_at_3_values
-2	2	AlterTableUnsplit/alter_table_unsplit_at_1_value
-4	4	AlterTableUnsplit/alter_table_unsplit_at_2_values
-6	6	AlterTableUnsplit/alter_table_unsplit_at_3_values
-36	36	CreateRole/create_role_with_1_option
-50	50	CreateRole/create_role_with_2_options
-63	63	CreateRole/create_role_with_3_options
-37	37	CreateRole/create_role_with_no_options
-28	28	DropDatabase/drop_database_0_tables
-44	44	DropDatabase/drop_database_1_table
-60	60	DropDatabase/drop_database_2_tables
-76	76	DropDatabase/drop_database_3_tables
-58	58	DropRole/drop_1_role
-112	112	DropRole/drop_2_roles
-166	166	DropRole/drop_3_roles
-16	16	DropSequence/drop_1_sequence
-32	32	DropSequence/drop_2_sequences
-48	48	DropSequence/drop_3_sequences
-29	29	DropTable/drop_1_table
-58	58	DropTable/drop_2_tables
-87	87	DropTable/drop_3_tables
-18	18	DropView/drop_1_view
-89	93	DropView/drop_2_views
-160	168	DropView/drop_3_views
-33	41	Grant/grant_all_on_1_table
-50	58	Grant/grant_all_on_2_tables
-67	75	Grant/grant_all_on_3_tables
-12	12	GrantRole/grant_1_role
-22	22	GrantRole/grant_2_roles
-33	41	Revoke/revoke_all_on_1_table
-50	58	Revoke/revoke_all_on_2_tables
-67	75	Revoke/revoke_all_on_3_tables
-12	12	RevokeRole/revoke_1_role
-22	22	RevokeRole/revoke_2_roles
-47	47	Truncate/truncate_1_column_0_rows
-46	46	Truncate/truncate_1_column_1_row
-46	46	Truncate/truncate_1_column_2_rows
-47	47	Truncate/truncate_2_column_0_rows
-46	46	Truncate/truncate_2_column_1_rows
-46	46	Truncate/truncate_2_column_2_rows
-8	8	VirtualTableQueries/select_crdb_internal.invalid_objects_with_1_fk
-1	1	VirtualTableQueries/select_crdb_internal.tables_with_1_fk
-2	2	SystemDatabaseQueries/select_system.users_without_schema_name
-1	1	SystemDatabaseQueries/select_system.users_with_empty_database_name
-1	1	SystemDatabaseQueries/select_system.users_with_schema_name
-2	2	ORMQueries/django_table_introspection_1_table
-2	2	ORMQueries/django_table_introspection_4_tables
-2	2	ORMQueries/django_table_introspection_8_tables
-4   4   ORMQueries/activerecord_type_introspection_query
+exp,benchmark
+7,AlterRole/alter_role_with_1_option
+8,AlterRole/alter_role_with_2_options
+10,AlterRole/alter_role_with_3_options
+21,AlterTableAddCheckConstraint/alter_table_add_1_check_constraint
+21,AlterTableAddCheckConstraint/alter_table_add_2_check_constraints
+21,AlterTableAddCheckConstraint/alter_table_add_3_check_constraints
+21,AlterTableAddColumn/alter_table_add_1_column
+21,AlterTableAddColumn/alter_table_add_2_columns
+21,AlterTableAddColumn/alter_table_add_3_columns
+31,AlterTableAddForeignKey/alter_table_add_1_foreign_key
+41,AlterTableAddForeignKey/alter_table_add_2_foreign_keys
+51,AlterTableAddForeignKey/alter_table_add_3_foreign_keys
+31,AlterTableAddForeignKey/alter_table_add_foreign_key_with_3_columns
+31,AlterTableConfigureZone/alter_table_configure_zone_5_replicas
+31,AlterTableConfigureZone/alter_table_configure_zone_7_replicas_
+31,AlterTableConfigureZone/alter_table_configure_zone_ranges
+25,AlterTableDropColumn/alter_table_drop_1_column
+29,AlterTableDropColumn/alter_table_drop_2_columns
+33,AlterTableDropColumn/alter_table_drop_3_columns
+22,AlterTableDropConstraint/alter_table_drop_1_check_constraint
+23,AlterTableDropConstraint/alter_table_drop_2_check_constraints
+24,AlterTableDropConstraint/alter_table_drop_3_check_constraints
+14-15,AlterTableSplit/alter_table_split_at_1_value
+20,AlterTableSplit/alter_table_split_at_2_values
+26,AlterTableSplit/alter_table_split_at_3_values
+10,AlterTableUnsplit/alter_table_unsplit_at_1_value
+12,AlterTableUnsplit/alter_table_unsplit_at_2_values
+14,AlterTableUnsplit/alter_table_unsplit_at_3_values
+7,CreateRole/create_role_with_1_option
+9,CreateRole/create_role_with_2_options
+10,CreateRole/create_role_with_3_options
+8,CreateRole/create_role_with_no_options
+23,DropDatabase/drop_database_0_tables
+32,DropDatabase/drop_database_1_table
+41,DropDatabase/drop_database_2_tables
+50,DropDatabase/drop_database_3_tables
+15,DropRole/drop_1_role
+25,DropRole/drop_2_roles
+35,DropRole/drop_3_roles
+23,DropSequence/drop_1_sequence
+37,DropSequence/drop_2_sequences
+51,DropSequence/drop_3_sequences
+26,DropTable/drop_1_table
+43,DropTable/drop_2_tables
+60,DropTable/drop_3_tables
+29,DropView/drop_1_view
+58,DropView/drop_2_views
+87,DropView/drop_3_views
+24,Grant/grant_all_on_1_table
+33,Grant/grant_all_on_2_tables
+42,Grant/grant_all_on_3_tables
+21,GrantRole/grant_1_role
+24,GrantRole/grant_2_roles
+4,ORMQueries/activerecord_type_introspection_query
+2,ORMQueries/django_table_introspection_1_table
+2,ORMQueries/django_table_introspection_4_tables
+2,ORMQueries/django_table_introspection_8_tables
+24,Revoke/revoke_all_on_1_table
+33,Revoke/revoke_all_on_2_tables
+42,Revoke/revoke_all_on_3_tables
+20,RevokeRole/revoke_1_role
+22,RevokeRole/revoke_2_roles
+1,SystemDatabaseQueries/select_system.users_with_empty_database_name
+1,SystemDatabaseQueries/select_system.users_with_schema_name
+2,SystemDatabaseQueries/select_system.users_without_schema_name
+30,Truncate/truncate_1_column_0_rows
+30,Truncate/truncate_1_column_1_row
+30,Truncate/truncate_1_column_2_rows
+30,Truncate/truncate_2_column_0_rows
+30,Truncate/truncate_2_column_1_rows
+30,Truncate/truncate_2_column_2_rows
+1,VirtualTableQueries/select_crdb_internal.invalid_objects_with_1_fk
+1,VirtualTableQueries/select_crdb_internal.tables_with_1_fk
