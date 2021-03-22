@@ -634,7 +634,7 @@ type PlanningCtx struct {
 
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
-	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec, []execinfra.OpNode) error
+	saveFlows func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
@@ -683,8 +683,8 @@ func (p *PlanningCtx) EvaluateSubqueries() bool {
 // plans and their diagrams.
 func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
-) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, []execinfra.OpNode) error {
-	return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, leaves []execinfra.OpNode) error {
+) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, execinfra.OpChains) error {
+	return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, opChains execinfra.OpChains) error {
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
 			diagramFlags := execinfrapb.DiagramFlags{
@@ -702,7 +702,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 			flowCtx := newFlowCtxForExplainPurposes(p, planner, &planner.extendedEvalCtx.DistSQLPlanner.rpcCtx.ClusterID)
 			getExplain := func(verbose bool) []string {
 				explain, err := colflow.ExplainVec(
-					ctx, flowCtx, flows, p.infra.LocalProcessors, leaves,
+					ctx, flowCtx, flows, p.infra.LocalProcessors, opChains,
 					planner.extendedEvalCtx.DistSQLPlanner.gatewayNodeID,
 					verbose, planner.curPlan.flags.IsDistributed(),
 				)

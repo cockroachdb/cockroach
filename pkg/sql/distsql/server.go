@@ -189,7 +189,7 @@ func (ds *ServerImpl) setupFlow(
 	req *execinfrapb.SetupFlowRequest,
 	syncFlowConsumer execinfra.RowReceiver,
 	localState LocalState,
-) (context.Context, flowinfra.Flow, []execinfra.OpNode, error) {
+) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
 	if !FlowVerIsCompatible(req.Version, execinfra.MinAcceptedVersion, execinfra.Version) {
 		err := errors.Errorf(
 			"version mismatch in flow request: %d; this node accepts %d through %d",
@@ -324,9 +324,9 @@ func (ds *ServerImpl) setupFlow(
 		opt = flowinfra.FuseAggressively
 	}
 
-	var leaves []execinfra.OpNode
+	var opChains execinfra.OpChains
 	var err error
-	ctx, leaves, err = f.Setup(ctx, &req.Flow, opt)
+	ctx, opChains, err = f.Setup(ctx, &req.Flow, opt)
 	if err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		// Flow.Cleanup will not be called, so we have to close the memory monitor
@@ -372,7 +372,7 @@ func (ds *ServerImpl) setupFlow(
 	// then the processors have erroneously captured the Root. See #41992.
 	f.SetTxn(txn)
 
-	return ctx, f, leaves, nil
+	return ctx, f, opChains, nil
 }
 
 // newFlowContext creates a new FlowCtx that can be used during execution of
@@ -477,14 +477,14 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	req *execinfrapb.SetupFlowRequest,
 	output execinfra.RowReceiver,
 	localState LocalState,
-) (context.Context, flowinfra.Flow, []execinfra.OpNode, error) {
-	ctx, f, leaves, err := ds.setupFlow(
+) (context.Context, flowinfra.Flow, execinfra.OpChains, error) {
+	ctx, f, opChains, err := ds.setupFlow(
 		ctx, tracing.SpanFromContext(ctx), parentMonitor, req, output, localState,
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return ctx, f, leaves, err
+	return ctx, f, opChains, err
 }
 
 // SetupFlow is part of the DistSQLServer interface.
