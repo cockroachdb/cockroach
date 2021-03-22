@@ -43,6 +43,7 @@ type indexScanBuilder struct {
 	mem                   *memo.Memo
 	tabID                 opt.TableID
 	scanPrivate           memo.ScanPrivate
+	constProjections      memo.ProjectionsExpr
 	innerFilters          memo.FiltersExpr
 	outerFilters          memo.FiltersExpr
 	invertedFilterPrivate memo.InvertedFilterPrivate
@@ -71,6 +72,20 @@ func (b *indexScanBuilder) SetScan(scanPrivate *memo.ScanPrivate) {
 		mem:         b.mem,
 		tabID:       b.tabID,
 		scanPrivate: *scanPrivate,
+	}
+}
+
+// AddConstProjections wraps the input expression with a Project expression with
+// the given constant projection expressions.
+func (b *indexScanBuilder) AddConstProjections(proj memo.ProjectionsExpr) {
+	if len(proj) != 0 {
+		if b.hasConstProjections() {
+			panic(errors.AssertionFailedf("cannot call AddConstProjections twice"))
+		}
+		if b.hasInnerFilters() || b.hasOuterFilters() {
+			panic(errors.AssertionFailedf("cannot call AddConstProjections after filters are added"))
+		}
+		b.constProjections = proj
 	}
 }
 
@@ -164,15 +179,30 @@ func (b *indexScanBuilder) AddIndexJoin(cols opt.ColSet) {
 // expressions that were specified by previous calls to various add methods.
 func (b *indexScanBuilder) Build(grp memo.RelExpr) {
 	// 1. Only scan.
-	if !b.hasInnerFilters() && !b.hasIndexJoin() && !b.hasInvertedFilter() {
+	if !b.hasConstProjections() && !b.hasInnerFilters() && !b.hasInvertedFilter() && !b.hasIndexJoin() {
 		b.mem.AddScanToGroup(&memo.ScanExpr{ScanPrivate: b.scanPrivate}, grp)
 		return
 	}
 
-	// 2. Wrap scan in inner filter if it was added.
 	input := b.f.ConstructScan(&b.scanPrivate)
+
+	// 2. Wrap input in a Project if constant projections were added.
+	if b.hasConstProjections() {
+		if !b.hasInnerFilters() && !b.hasInvertedFilter() && !b.hasIndexJoin() {
+			b.mem.AddProjectToGroup(&memo.ProjectExpr{
+				Input:       input,
+				Projections: b.constProjections,
+				Passthrough: b.scanPrivate.Cols,
+			}, grp)
+			return
+		}
+
+		input = b.f.ConstructProject(input, b.constProjections, b.scanPrivate.Cols)
+	}
+
+	// 3. Wrap scan in inner filter if it was added.
 	if b.hasInnerFilters() {
-		if !b.hasIndexJoin() && !b.hasInvertedFilter() {
+		if !b.hasInvertedFilter() && !b.hasIndexJoin() {
 			b.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: b.innerFilters}, grp)
 			return
 		}
@@ -180,7 +210,7 @@ func (b *indexScanBuilder) Build(grp memo.RelExpr) {
 		input = b.f.ConstructSelect(input, b.innerFilters)
 	}
 
-	// 3. Wrap input in inverted filter if it was added.
+	// 4. Wrap input in inverted filter if it was added.
 	if b.hasInvertedFilter() {
 		if !b.hasIndexJoin() {
 			invertedFilter := &memo.InvertedFilterExpr{
@@ -193,7 +223,7 @@ func (b *indexScanBuilder) Build(grp memo.RelExpr) {
 		input = b.f.ConstructInvertedFilter(input, &b.invertedFilterPrivate)
 	}
 
-	// 4. Wrap input in index join if it was added.
+	// 5. Wrap input in index join if it was added.
 	if b.hasIndexJoin() {
 		if !b.hasOuterFilters() {
 			indexJoin := &memo.IndexJoinExpr{Input: input, IndexJoinPrivate: b.indexJoinPrivate}
@@ -204,13 +234,19 @@ func (b *indexScanBuilder) Build(grp memo.RelExpr) {
 		input = b.f.ConstructIndexJoin(input, &b.indexJoinPrivate)
 	}
 
-	// 5. Wrap input in outer filter (which must exist at this point).
+	// 6. Wrap input in outer filter (which must exist at this point).
 	if !b.hasOuterFilters() {
-		// indexJoinDef == 0: outerFilters == 0 handled by #1, #2, and #3 above.
-		// indexJoinDef != 0: outerFilters == 0 handled by #4 above.
+		// indexJoinDef == 0: outerFilters == 0 handled by #1-4 above.
+		// indexJoinDef != 0: outerFilters == 0 handled by #5 above.
 		panic(errors.AssertionFailedf("outer filter cannot be 0 at this point"))
 	}
 	b.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: b.outerFilters}, grp)
+}
+
+// hasConstProjections returns true if constant projections have been added to
+// the builder.
+func (b *indexScanBuilder) hasConstProjections() bool {
+	return len(b.constProjections) != 0
 }
 
 // hasInnerFilters returns true if inner filters have been added to the builder.

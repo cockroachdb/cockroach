@@ -11,10 +11,13 @@
 package xform
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,7 +51,8 @@ const (
 // scanIndexIter is a helper struct that facilitates iteration over the indexes
 // of a Scan operator table.
 type scanIndexIter struct {
-	mem     *memo.Memo
+	evalCtx *tree.EvalContext
+	f       *norm.Factory
 	im      *partialidx.Implicator
 	tabMeta *opt.TableMeta
 
@@ -82,6 +86,8 @@ type scanIndexIter struct {
 
 // Init initializes a new scanIndexIter.
 func (it *scanIndexIter) Init(
+	evalCtx *tree.EvalContext,
+	f *norm.Factory,
 	mem *memo.Memo,
 	im *partialidx.Implicator,
 	scanPrivate *memo.ScanPrivate,
@@ -91,7 +97,8 @@ func (it *scanIndexIter) Init(
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*it = scanIndexIter{
-		mem:         mem,
+		evalCtx:     evalCtx,
+		f:           f,
 		im:          im,
 		tabMeta:     mem.Metadata().TableMeta(scanPrivate.Table),
 		scanPrivate: scanPrivate,
@@ -159,17 +166,28 @@ func (it *scanIndexIter) SetOriginalFilters(filters memo.FiltersExpr) {
 // ForEachStartingAfter functions. It is invoked for each index enumerated.
 //
 // The function is called with the enumerated index, the filters that must be
-// applied after a scan over the index, the index columns, and a boolean that is
-// true if the index covers the scanPrivate's columns. If the index is a partial
-// index, the filters are the remaining filters after proving partial index
-// implication (see partialidx.Implicator). Otherwise, the filters are the same
-// filters that were passed to Init.
+// applied after a scan over the index, and the index columns. The isCovering
+// boolean is true if the index covers the scanPrivate's columns, indicating
+// that an index join with the primary index is not necessary. A partial index
+// may cover columns not actually stored in the index because the predicate
+// holds the column constant. In this case, the provided constProj must be
+// projected after the scan to produce all required columns.
+//
+// If the index is a partial index, the filters are the remaining filters after
+// proving partial index implication (see partialidx.Implicator). Otherwise, the
+// filters are the same filters that were passed to Init.
 //
 // Note that the filters argument CANNOT be mutated in the callback function
 // because these filters are used internally by scanIndexIter for partial index
 // implication while iterating over indexes. In tests the filtersMutateChecker
 // will detect a callback that mutates filters and panic.
-type enumerateIndexFunc func(idx cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool)
+type enumerateIndexFunc func(
+	idx cat.Index,
+	filters memo.FiltersExpr,
+	indexCols opt.ColSet,
+	isCovering bool,
+	constProj memo.ProjectionsExpr,
+)
 
 // ForEach calls the given callback function for every index of the Scan
 // operator's table in the order they appear in the catalog.
@@ -234,8 +252,9 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 
 		// If the index is a partial index, check whether the filters imply the
 		// predicate.
+		var predFilters memo.FiltersExpr
 		if isPartialIndex {
-			predFilters := *pred.(*memo.FiltersExpr)
+			predFilters = *pred.(*memo.FiltersExpr)
 
 			// If there are no filters, then skip over any partial indexes that
 			// are not pseudo-partial indexes.
@@ -260,7 +279,23 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 		indexCols := it.tabMeta.IndexColumns(ord)
 		isCovering := it.scanPrivate.Cols.SubsetOf(indexCols)
 
-		f(index, filters, indexCols, isCovering)
+		// If the index does not contain all required columns, attempt to use
+		// columns held constant in the partial index predicate to cover the
+		// columns.
+		var constProj memo.ProjectionsExpr
+		if !isCovering && len(predFilters) > 0 {
+			constCols := it.extractConstNonCompositeColumns(predFilters)
+			if !constCols.Empty() && it.scanPrivate.Cols.SubsetOf(indexCols.Union(constCols)) {
+				isCovering = true
+
+				// Build a projection only for constant columns not in the
+				// index.
+				constCols = constCols.Difference(indexCols)
+				constProj = it.buildConstProjectionsFromPredicate(predFilters, constCols)
+			}
+		}
+
+		f(index, filters, indexCols, isCovering, constProj)
 
 		// Verify that f did not mutate filters or originalFilters (in test
 		// builds only).
@@ -298,6 +333,55 @@ func (it *scanIndexIter) filtersImplyPredicate(
 	}
 
 	return nil, false
+}
+
+// extractConstNonCompositeColumns returns the set of columns held constant by
+// the given filters and of types that do not have composite encodings.
+func (it *scanIndexIter) extractConstNonCompositeColumns(f memo.FiltersExpr) opt.ColSet {
+	constCols := memo.ExtractConstColumns(f, it.evalCtx)
+	var constNonCompositeCols opt.ColSet
+	for col, ok := constCols.Next(0); ok; col, ok = constCols.Next(col + 1) {
+		ord := it.tabMeta.MetaID.ColumnOrdinal(col)
+		typ := it.tabMeta.Table.Column(ord).DatumType()
+		if !colinfo.HasCompositeKeyEncoding(typ) {
+			constNonCompositeCols.Add(col)
+		}
+	}
+	return constNonCompositeCols
+}
+
+// buildConstProjectionsFromPredicate builds a ProjectionsExpr that projects
+// constant values for the given constCols. The constant values are extracted
+// from the given partial index predicate expression. Panics if a constant value
+// cannot be extracted from pred for any of the constCols.
+func (it *scanIndexIter) buildConstProjectionsFromPredicate(
+	pred memo.FiltersExpr, constCols opt.ColSet,
+) memo.ProjectionsExpr {
+	proj := make(memo.ProjectionsExpr, 0, constCols.Len())
+	for col, ok := constCols.Next(0); ok; col, ok = constCols.Next(col + 1) {
+		ord := it.tabMeta.MetaID.ColumnOrdinal(col)
+		typ := it.tabMeta.Table.Column(ord).DatumType()
+
+		val := memo.ExtractValueForConstColumn(pred, it.evalCtx, col)
+		if val == nil {
+			panic(errors.AssertionFailedf("could not extract constant value for column %d", col))
+		}
+
+		var scalar opt.ScalarExpr
+		if val == tree.DNull {
+			// NULL values should always be a memo.NullExpr, not a
+			// memo.ConstExpr.
+			scalar = memo.NullSingleton
+		} else {
+			scalar = it.f.ConstructConst(val, typ)
+		}
+
+		proj = append(proj, it.f.ConstructProjectionsItem(
+			scalar,
+			col,
+		))
+	}
+	return proj
 }
 
 // hasRejectFlags tests whether the given flags are all set.
