@@ -289,14 +289,14 @@ func (t *Tracer) startSpanGeneric(
 		}
 	}
 
-	if opts.LogTags == nil {
-		opts.LogTags = logtags.FromContext(ctx)
-	}
-
 	// Are we tracing everything, or have a parent, or want a real span? Then
 	// we create a real trace span. In all other cases, a noop span will do.
 	if !(t.AlwaysTrace() || opts.parentTraceID() != 0 || opts.ForceRealSpan) {
 		return maybeWrapCtx(ctx, nil /* octx */, t.noopSpan)
+	}
+
+	if opts.LogTags == nil {
+		opts.LogTags = logtags.FromContext(ctx)
 	}
 
 	if opts.LogTags == nil && opts.Parent != nil && !opts.Parent.i.isNoop() {
