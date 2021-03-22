@@ -35,9 +35,8 @@ go_test(
         "s2_geometry_index_test.go",
         "utils_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + ["@cockroach//c-deps:libgeos"],
     embed = [":geoindex"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geogfn",

@@ -203,9 +203,9 @@ func TestEval(t *testing.T) {
 				result.Op,
 				[]*types.T{typedExpr.ResolvedType()},
 				nil, /* output */
+				nil, /* getStats */
 				result.MetadataSources,
 				nil, /* toClose */
-				nil, /* getStats */
 				nil, /* cancelFlow */
 			)
 			require.NoError(t, err)

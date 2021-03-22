@@ -30,9 +30,7 @@ type indexJoinNode struct {
 
 	table *scanNode
 
-	// The columns returned by this node. While these are not ever different from
-	// the table scanNode in the heuristic planner, the optimizer plans them to
-	// be different in some cases.
+	// The columns returned by this node.
 	cols []descpb.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns colinfo.ResultColumns

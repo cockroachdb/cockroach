@@ -80,9 +80,9 @@ func NewOutbox(
 	allocator *colmem.Allocator,
 	input colexecop.Operator,
 	typs []*types.T,
+	getStats func() []*execinfrapb.ComponentStats,
 	metadataSources []execinfrapb.MetadataSource,
 	toClose []colexecop.Closer,
-	getStats func() []*execinfrapb.ComponentStats,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -99,9 +99,9 @@ func NewOutbox(
 		typs:            typs,
 		converter:       c,
 		serializer:      s,
+		getStats:        getStats,
 		metadataSources: metadataSources,
 		closers:         toClose,
-		getStats:        getStats,
 	}
 	o.scratch.buf = &bytes.Buffer{}
 	o.scratch.msg = &execinfrapb.ProducerMessage{}

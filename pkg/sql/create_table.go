@@ -60,27 +60,6 @@ type createTableNode struct {
 	n          *tree.CreateTable
 	dbDesc     catalog.DatabaseDescriptor
 	sourcePlan planNode
-
-	run createTableRun
-}
-
-// createTableRun contains the run-time state of createTableNode
-// during local execution.
-type createTableRun struct {
-	autoCommit autoCommitOpt
-
-	// synthRowID indicates whether an input column needs to be synthesized to
-	// provide the default value for the hidden rowid column. The optimizer's plan
-	// already includes this column if a user specified PK does not exist (so
-	// synthRowID is false), whereas the heuristic planner's plan does not in this
-	// case (so synthRowID is true).
-	synthRowID bool
-
-	// fromHeuristicPlanner indicates whether the planning was performed by the
-	// heuristic planner instead of the optimizer. This is used to determine
-	// whether or not a row_id was synthesized as part of the planning stage, if a
-	// user defined PK is not specified.
-	fromHeuristicPlanner bool
 }
 
 // minimumTypeUsageVersions defines the minimum version needed for a new
@@ -319,7 +298,6 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	privs := CreateInheritedPrivilegesFromDBDesc(n.dbDesc, params.SessionData().User())
 
-	var asCols colinfo.ResultColumns
 	var desc *tabledesc.Mutable
 	var affected map[descpb.ID]*tabledesc.Mutable
 	// creationTime is initialized to a zero value and populated at read time.
@@ -329,17 +307,17 @@ func (n *createTableNode) startExec(params runParams) error {
 	// it's	currently relied on in import and restore code and tests.
 	var creationTime hlc.Timestamp
 	if n.n.As() {
-		asCols = planColumns(n.sourcePlan)
-		if !n.run.fromHeuristicPlanner && !n.n.AsHasUserSpecifiedPrimaryKey() {
-			// rowID column is already present in the input as the last column if it
-			// was planned by the optimizer and the user did not specify a PRIMARY
-			// KEY. So ignore it for the purpose of creating column metadata (because
-			// newTableDescIfAs does it automatically).
+		asCols := planColumns(n.sourcePlan)
+		if !n.n.AsHasUserSpecifiedPrimaryKey() {
+			// rowID column is already present in the input as the last column
+			// if the user did not specify a PRIMARY KEY. So ignore it for the
+			// purpose of creating column metadata (because newTableDescIfAs
+			// does it automatically).
 			asCols = asCols[:len(asCols)-1]
 		}
-
-		desc, err = newTableDescIfAs(params,
-			n.n, n.dbDesc.GetID(), schemaID, id, creationTime, asCols, privs, params.p.EvalContext())
+		desc, err = newTableDescIfAs(
+			params, n.n, n.dbDesc.GetID(), schemaID, id, creationTime, asCols, privs, params.p.EvalContext(),
+		)
 		if err != nil {
 			return err
 		}
@@ -500,9 +478,6 @@ func (n *createTableNode) startExec(params runParams) error {
 			ti := tableInserterPool.Get().(*tableInserter)
 			*ti = tableInserter{ri: ri}
 			tw := tableWriter(ti)
-			if n.run.autoCommit == autoCommitEnabled {
-				tw.enableAutoCommit()
-			}
 			defer func() {
 				tw.close(params.ctx)
 				*ti = tableInserter{}
@@ -516,31 +491,6 @@ func (n *createTableNode) startExec(params runParams) error {
 			// been added by ensurePrimaryKey() to the list of columns in sourcePlan, if
 			// a PRIMARY KEY is not specified by the user.
 			rowBuffer := make(tree.Datums, len(desc.Columns))
-			pkColIdx := len(desc.Columns) - 1
-
-			// The optimizer includes the rowID expression as part of the input
-			// expression. But the heuristic planner does not do this, so construct
-			// a rowID expression to be evaluated separately.
-			var defTypedExpr tree.TypedExpr
-			if n.run.synthRowID {
-				// Prepare the rowID expression.
-				defExprSQL := *desc.Columns[pkColIdx].DefaultExpr
-				defExpr, err := parser.ParseExpr(defExprSQL)
-				if err != nil {
-					return err
-				}
-				defTypedExpr, err = params.p.analyzeExpr(
-					params.ctx,
-					defExpr,
-					nil, /*sources*/
-					tree.IndexedVarHelper{},
-					types.Any,
-					false, /*requireType*/
-					"CREATE TABLE AS")
-				if err != nil {
-					return err
-				}
-			}
 
 			for {
 				if err := params.p.cancelChecker.Check(); err != nil {
@@ -556,14 +506,8 @@ func (n *createTableNode) startExec(params runParams) error {
 					break
 				}
 
-				// Populate the buffer and generate the PK value.
+				// Populate the buffer.
 				copy(rowBuffer, n.sourcePlan.Values())
-				if n.run.synthRowID {
-					rowBuffer[pkColIdx], err = defTypedExpr.Eval(params.p.EvalContext())
-					if err != nil {
-						return err
-					}
-				}
 
 				// CREATE TABLE AS does not copy indexes from the input table.
 				// An empty row.PartialIndexUpdateHelper is used here because

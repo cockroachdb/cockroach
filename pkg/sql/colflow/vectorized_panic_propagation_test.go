@@ -60,9 +60,9 @@ func TestVectorizedInternalPanic(t *testing.T) {
 		vee,
 		types,
 		nil, /* output */
+		nil, /* getStats */
 		nil, /* metadataSourceQueue */
 		nil, /* toClose */
-		nil, /* getStats */
 		nil, /* cancelFlow */
 	)
 	if err != nil {
@@ -107,9 +107,9 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 		nvee,
 		types,
 		nil, /* output */
+		nil, /* getStats */
 		nil, /* metadataSourceQueue */
 		nil, /* toClose */
-		nil, /* getStats */
 		nil, /* cancelFlow */
 	)
 	if err != nil {

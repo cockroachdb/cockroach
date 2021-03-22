@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
@@ -25,14 +26,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// vectorizedStatsCollector is the common interface implemented by collectors.
-type vectorizedStatsCollector interface {
-	colexecop.Operator
-	getStats() *execinfrapb.ComponentStats
-}
-
 // childStatsCollector gives access to the stopwatches of a
-// vectorizedStatsCollector's childStatsCollectors.
+// colexec.VectorizedStatsCollector's childStatsCollectors.
 type childStatsCollector interface {
 	getElapsedTime() time.Duration
 }
@@ -118,11 +113,11 @@ func (bic *batchInfoCollector) getElapsedTime() time.Duration {
 	return bic.stopwatch.Elapsed()
 }
 
-// newVectorizedStatsCollector creates a vectorizedStatsCollector which wraps
-// 'op' that corresponds to a component with either ProcessorID or StreamID 'id'
-// (with 'idTagKey' distinguishing between the two). 'kvReader' is a component
-// (either an operator or a wrapped processor) that performs KV reads that is
-// present in the chain of operators rooted at 'op'.
+// newVectorizedStatsCollector creates a colexec.VectorizedStatsCollector which
+// wraps 'op' that corresponds to a component with either ProcessorID or
+// StreamID 'id' (with 'idTagKey' distinguishing between the two). 'kvReader' is
+// a component (either an operator or a wrapped processor) that performs KV
+// reads that is present in the chain of operators rooted at 'op'.
 func newVectorizedStatsCollector(
 	op colexecop.Operator,
 	kvReader colexecop.KVReader,
@@ -131,7 +126,7 @@ func newVectorizedStatsCollector(
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
 	inputStatsCollectors []childStatsCollector,
-) vectorizedStatsCollector {
+) colexec.VectorizedStatsCollector {
 	// TODO(cathymw): Refactor to have specialized stats collectors for
 	// memory/disk stats and IO operators.
 	return &vectorizedStatsCollectorImpl{
@@ -152,8 +147,8 @@ type vectorizedStatsCollectorImpl struct {
 	diskMonitors []*mon.BytesMonitor
 }
 
-// getStats is part of the vectorizedStatsCollector interface.
-func (vsc *vectorizedStatsCollectorImpl) getStats() *execinfrapb.ComponentStats {
+// GetStats is part of the colexec.VectorizedStatsCollector interface.
+func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := vsc.batchInfoCollector.finish()
 
 	s := &execinfrapb.ComponentStats{Component: vsc.componentID}
@@ -187,16 +182,16 @@ func (vsc *vectorizedStatsCollectorImpl) getStats() *execinfrapb.ComponentStats 
 	return s
 }
 
-// newNetworkVectorizedStatsCollector creates a new vectorizedStatsCollector
-// for streams. In addition to the base stats, newNetworkVectorizedStatsCollector
-// collects the network latency for a stream.
+// newNetworkVectorizedStatsCollector creates a new
+// colexec.VectorizedStatsCollector for streams. In addition to the base stats,
+// newNetworkVectorizedStatsCollector collects the network latency for a stream.
 func newNetworkVectorizedStatsCollector(
 	op colexecop.Operator,
 	id execinfrapb.ComponentID,
 	inputWatch *timeutil.StopWatch,
 	inbox *colrpc.Inbox,
 	latency time.Duration,
-) vectorizedStatsCollector {
+) colexec.VectorizedStatsCollector {
 	return &networkVectorizedStatsCollectorImpl{
 		batchInfoCollector: makeBatchInfoCollector(op, id, inputWatch, nil /* childStatsCollectors */),
 		inbox:              inbox,
@@ -213,8 +208,8 @@ type networkVectorizedStatsCollectorImpl struct {
 	latency time.Duration
 }
 
-// getStats is part of the vectorizedStatsCollector interface.
-func (nvsc *networkVectorizedStatsCollectorImpl) getStats() *execinfrapb.ComponentStats {
+// GetStats is part of the colexec.VectorizedStatsCollector interface.
+func (nvsc *networkVectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats {
 	numBatches, numTuples, time := nvsc.batchInfoCollector.finish()
 
 	s := &execinfrapb.ComponentStats{Component: nvsc.componentID}
