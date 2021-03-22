@@ -599,3 +599,45 @@ SET c = c
 RETURNING b
 ----
 1
+
+# Regression for #42881.
+statement ok
+DROP TABLE IF EXISTS t1
+
+statement ok
+CREATE TABLE t1 (
+bucket BYTES NOT NULL,
+fullpath BYTES NOT NULL,
+metadata BYTES NOT NULL,
+CONSTRAINT "primary" PRIMARY KEY (bucket ASC, fullpath ASC),
+FAMILY "primary" (bucket, fullpath, metadata),
+CONSTRAINT check_fullpath CHECK (fullpath != '')
+);
+
+statement ok
+prepare x as UPDATE t1
+ SET metadata = $4::BYTEA
+ FROM (SELECT * FROM t1 WHERE bucket = $1::BYTEA AND fullpath = $2::BYTEA) mk
+ WHERE t1.metadata = $3::BYTEA
+ AND t1.bucket = mk.bucket
+ AND t1.fullpath = mk.fullpath
+ RETURNING 1;
+
+statement ok
+PREPARE y AS
+WITH
+	matching_key AS (SELECT * FROM t1 WHERE bucket = $1::BYTES AND fullpath = $2::BYTES),
+	updated
+		AS (
+			UPDATE t1 SET metadata = $4::BYTES FROM matching_key AS mk WHERE
+				t1.metadata = $3::BYTES AND t1.bucket = mk.bucket AND t1.fullpath = mk.fullpath
+			RETURNING 1
+		)
+SELECT
+	EXISTS(SELECT 1 FROM matching_key) AS key_present, EXISTS(SELECT 1 FROM updated) AS value_updated;
+
+query TT rowsort
+SELECT name, parameter_types FROM pg_prepared_statements
+----
+x {bytea,bytea,bytea,bytea}
+y {bytea,bytea,bytea,bytea}

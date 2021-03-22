@@ -1155,6 +1155,17 @@ func (stmt *Select) walkStmt(v Visitor) Statement {
 			}
 		}
 	}
+	if stmt.With != nil {
+		for i, cte := range stmt.With.CTEList {
+			e, changed := walkStmt(v, cte.Stmt)
+			if changed {
+				if ret == stmt {
+					ret = stmt.copyNode()
+				}
+				ret.With.CTEList[i].Stmt = e
+			}
+		}
+	}
 	return ret
 }
 
@@ -1361,6 +1372,23 @@ func (stmt *Update) walkStmt(v Visitor) Statement {
 		}
 	}
 
+	if stmt.With != nil {
+		for i, cte := range stmt.With.CTEList {
+			e, changed := walkStmt(v, cte.Stmt)
+			if changed {
+				if ret == stmt {
+					ret = stmt.copyNode()
+				}
+				ret.With.CTEList[i].Stmt = e
+			}
+		}
+	}
+
+	for i, texpr := range stmt.From {
+		// TODO (rohany): Maybe copy the node here.
+		stmt.From[i] = WalkTableExpr(texpr, v)
+	}
+
 	if stmt.Where != nil {
 		e, changed := WalkExpr(v, stmt.Where.Expr)
 		if changed {
@@ -1415,6 +1443,17 @@ func (stmt *BeginTransaction) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+func (stmt *With) walkStmt(v Visitor) Statement {
+	if stmt == nil {
+		return stmt
+	}
+	for i, cte := range stmt.CTEList {
+		// TODO (rohany): handle changed here.
+		stmt.CTEList[i].Stmt, _ = walkStmt(v, cte.Stmt)
+	}
+	return stmt
+}
+
 var _ walkableStmt = &CreateTable{}
 var _ walkableStmt = &Backup{}
 var _ walkableStmt = &Delete{}
@@ -1434,6 +1473,7 @@ var _ walkableStmt = &CancelSessions{}
 var _ walkableStmt = &ControlJobs{}
 var _ walkableStmt = &ControlSchedules{}
 var _ walkableStmt = &BeginTransaction{}
+var _ walkableStmt = &With{}
 
 // walkStmt walks the entire parsed stmt calling WalkExpr on each
 // expression, and replacing each expression with the one returned
