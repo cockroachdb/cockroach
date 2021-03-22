@@ -286,14 +286,14 @@ func columnDescriptorsToPtrs(cols []descpb.ColumnDescriptor) []*descpb.ColumnDes
 	return ptrs
 }
 
-// replaceIDsWithFQNames walks the given expr and replaces occurrences
+// ReplaceIDsWithFQNames walks the given expr and replaces occurrences
 // of regclass IDs in the expr with the descriptor's fully qualified name.
 // For example, nextval(12345::REGCLASS) => nextval('foo.public.seq').
-func replaceIDsWithFQNames(
+func ReplaceIDsWithFQNames(
 	ctx context.Context, rootExpr tree.Expr, semaCtx *tree.SemaContext,
 ) (tree.Expr, error) {
 	replaceFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		_, id, ok := GetTypeExprAndSeqID(expr)
+		id, ok := GetSeqIDFromExpr(expr)
 		if !ok {
 			return true, expr, nil
 		}
@@ -322,32 +322,29 @@ func replaceIDsWithFQNames(
 	return newExpr, err
 }
 
-// GetTypeExprAndSeqID takes an expr and looks for a sequence ID in
-// this expr. If it finds one, it will return that ID as well as the
-// AnnotateTypeExpr that contains it.
-func GetTypeExprAndSeqID(expr tree.Expr) (*tree.AnnotateTypeExpr, int64, bool) {
-	// If it's not an AnnotateTypeExpr, skip this node.
-	annotateTypeExpr, ok := expr.(*tree.AnnotateTypeExpr)
-	if !ok {
-		return nil, 0, false
+// GetSeqIDFromExpr takes an expr and looks for a sequence ID in
+// this expr. If it finds one, it will return that ID.
+func GetSeqIDFromExpr(expr tree.Expr) (int64, bool) {
+	// Depending on if the given expr is typed checked, we're looking
+	// for either a *tree.AnnotateTypeExpr (if not typed checked), or
+	// a *tree.DOid (if type checked).
+	switch n := expr.(type) {
+	case *tree.AnnotateTypeExpr:
+		if typ, safe := tree.GetStaticallyKnownType(n.Type); !safe || typ.Oid() != oid.T_regclass {
+			return 0, false
+		}
+		numVal, ok := n.Expr.(*tree.NumVal)
+		if !ok {
+			return 0, false
+		}
+		id, err := numVal.AsInt64()
+		if err != nil {
+			return 0, false
+		}
+		return id, true
+	case *tree.DOid:
+		return int64(n.DInt), true
+	default:
+		return 0, false
 	}
-
-	// If it's not a regclass, skip this node.
-	if typ, safe := tree.GetStaticallyKnownType(
-		annotateTypeExpr.Type,
-	); !safe || typ.Oid() != oid.T_regclass {
-		return nil, 0, false
-	}
-
-	// If it's not a constant int, skip this node.
-	numVal, ok := annotateTypeExpr.Expr.(*tree.NumVal)
-	if !ok {
-		return nil, 0, false
-	}
-	id, err := numVal.AsInt64()
-	if err != nil {
-		return nil, 0, false
-	}
-
-	return annotateTypeExpr, id, true
 }

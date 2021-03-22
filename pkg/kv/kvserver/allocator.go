@@ -47,25 +47,6 @@ const (
 	// needed because a weight of zero doesn't work in the current lease scoring
 	// algorithm.
 	minReplicaWeight = 0.001
-
-	// Priorities for various repair operations.
-	//
-	// NB: These priorities only influence the replicateQueue's understanding of
-	// which ranges are to be dealt with before others. In other words, these
-	// priorities don't influence the relative order of actions taken on a given
-	// range. Within a given range, the ordering of the various checks inside
-	// `Allocator.computeAction` determines which repair/rebalancing actions are
-	// taken before the others.
-	finalizeAtomicReplicationChangePriority    float64 = 12002
-	removeLearnerReplicaPriority               float64 = 12001
-	addDeadReplacementVoterPriority            float64 = 12000
-	addMissingVoterPriority                    float64 = 10000
-	addDecommissioningReplacementVoterPriority float64 = 5000
-	removeDeadVoterPriority                    float64 = 1000
-	removeDecommissioningVoterPriority         float64 = 900
-	removeExtraVoterPriority                   float64 = 800
-	addMissingNonVoterPriority                 float64 = 700
-	removeExtraNonVoterPriority                float64 = 600
 )
 
 // MinLeaseTransferStatsDuration configures the minimum amount of time a
@@ -113,9 +94,13 @@ const (
 	AllocatorAddVoter
 	AllocatorAddNonVoter
 	AllocatorReplaceDeadVoter
+	AllocatorReplaceDeadNonVoter
 	AllocatorRemoveDeadVoter
+	AllocatorRemoveDeadNonVoter
 	AllocatorReplaceDecommissioningVoter
+	AllocatorReplaceDecommissioningNonVoter
 	AllocatorRemoveDecommissioningVoter
+	AllocatorRemoveDecommissioningNonVoter
 	AllocatorRemoveLearner
 	AllocatorConsiderRebalance
 	AllocatorRangeUnavailable
@@ -129,9 +114,13 @@ var allocatorActionNames = map[AllocatorAction]string{
 	AllocatorAddVoter:                        "add voter",
 	AllocatorAddNonVoter:                     "add non-voter",
 	AllocatorReplaceDeadVoter:                "replace dead voter",
+	AllocatorReplaceDeadNonVoter:             "replace dead non-voter",
 	AllocatorRemoveDeadVoter:                 "remove dead voter",
+	AllocatorRemoveDeadNonVoter:              "remove dead non-voter",
 	AllocatorReplaceDecommissioningVoter:     "replace decommissioning voter",
+	AllocatorReplaceDecommissioningNonVoter:  "replace decommissioning non-voter",
 	AllocatorRemoveDecommissioningVoter:      "remove decommissioning voter",
+	AllocatorRemoveDecommissioningNonVoter:   "remove decommissioning non-voter",
 	AllocatorRemoveLearner:                   "remove learner",
 	AllocatorConsiderRebalance:               "consider rebalance",
 	AllocatorRangeUnavailable:                "range unavailable",
@@ -140,6 +129,51 @@ var allocatorActionNames = map[AllocatorAction]string{
 
 func (a AllocatorAction) String() string {
 	return allocatorActionNames[a]
+}
+
+// Priority defines the priorities for various repair operations.
+//
+// NB: These priorities only influence the replicateQueue's understanding of
+// which ranges are to be dealt with before others. In other words, these
+// priorities don't influence the relative order of actions taken on a given
+// range. Within a given range, the ordering of the various checks inside
+// `Allocator.computeAction` determines which repair/rebalancing actions are
+// taken before the others.
+func (a AllocatorAction) Priority() float64 {
+	switch a {
+	case AllocatorFinalizeAtomicReplicationChange:
+		return 12002
+	case AllocatorRemoveLearner:
+		return 12001
+	case AllocatorReplaceDeadVoter:
+		return 12000
+	case AllocatorAddVoter:
+		return 10000
+	case AllocatorReplaceDecommissioningVoter:
+		return 5000
+	case AllocatorRemoveDeadVoter:
+		return 1000
+	case AllocatorRemoveDecommissioningVoter:
+		return 900
+	case AllocatorRemoveVoter:
+		return 800
+	case AllocatorReplaceDeadNonVoter:
+		return 700
+	case AllocatorAddNonVoter:
+		return 600
+	case AllocatorReplaceDecommissioningNonVoter:
+		return 500
+	case AllocatorRemoveDeadNonVoter:
+		return 400
+	case AllocatorRemoveDecommissioningNonVoter:
+		return 300
+	case AllocatorRemoveNonVoter:
+		return 200
+	case AllocatorConsiderRebalance, AllocatorRangeUnavailable, AllocatorNoop:
+		return 0
+	default:
+		panic(fmt.Sprintf("unknown AllocatorAction: %s", a))
+	}
 }
 
 type targetReplicaType int
@@ -376,61 +410,68 @@ func GetNeededNonVoters(numVoters, zoneConfigNonVoterCount, clusterNodes int) in
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
 	ctx context.Context, zone *zonepb.ZoneConfig, desc *roachpb.RangeDescriptor,
-) (AllocatorAction, float64) {
+) (action AllocatorAction, priority float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
-		return AllocatorNoop, 0
+		action = AllocatorNoop
+		return action, action.Priority()
 	}
 
 	if desc.Replicas().InAtomicReplicationChange() {
 		// With a similar reasoning to the learner branch below, if we're in a
 		// joint configuration the top priority is to leave it before we can
 		// even think about doing anything else.
-		return AllocatorFinalizeAtomicReplicationChange, finalizeAtomicReplicationChangePriority
+		action = AllocatorFinalizeAtomicReplicationChange
+		return action, action.Priority()
 	}
 
-	// Seeing a learner replica at this point is unexpected because learners are a
-	// short-lived (ish) transient state in a learner+snapshot+voter cycle, which
-	// is always done atomically. Only two places could have added a learner: the
-	// replicate queue or AdminChangeReplicas request.
-	//
-	// The replicate queue only operates on leaseholders, which means that only
-	// one node at a time is operating on a given range except in rare cases (old
-	// leaseholder could start the operation, and a new leaseholder steps up and
-	// also starts an overlapping operation). Combined with the above atomicity,
-	// this means that if the replicate queue sees a learner, either the node that
-	// was adding it crashed somewhere in the learner+snapshot+voter cycle and
-	// we're the new leaseholder or we caught a race.
-	//
-	// In the first case, we could assume the node that was adding it knew what it
-	// was doing and finish the addition. Or we could leave it and do higher
-	// priority operations first if there are any. However, this comes with code
-	// complexity and concept complexity (computing old vs new quorum sizes
-	// becomes ambiguous, the learner isn't in the quorum but it likely will be
-	// soon, so do you count it?). Instead, we do the simplest thing and remove it
-	// before doing any other operations to the range. We'll revisit this decision
-	// if and when the complexity becomes necessary.
-	//
-	// If we get the race where AdminChangeReplicas is adding a replica and the
-	// queue happens to run during the snapshot, this will remove the learner and
-	// AdminChangeReplicas will notice either during the snapshot transfer or when
-	// it tries to promote the learner to a voter. AdminChangeReplicas should
-	// retry.
-	//
-	// On the other hand if we get the race where a leaseholder starts adding a
-	// replica in the replicate queue and during this loses its lease, it should
-	// probably not retry.
 	if learners := desc.Replicas().LearnerDescriptors(); len(learners) > 0 {
+		// Seeing a learner replica at this point is unexpected because learners are
+		// a short-lived (ish) transient state in a learner+snapshot+voter cycle,
+		// which is always done atomically. Only two places could have added a
+		// learner: the replicate queue or AdminChangeReplicas request.
+		//
+		// The replicate queue only operates on leaseholders, which means that only
+		// one node at a time is operating on a given range except in rare cases
+		// (old leaseholder could start the operation, and a new leaseholder steps
+		// up and also starts an overlapping operation). Combined with the above
+		// atomicity, this means that if the replicate queue sees a learner, either
+		// the node that was adding it crashed somewhere in the
+		// learner+snapshot+voter cycle and we're the new leaseholder or we caught a
+		// race.
+		//
+		// In the first case, we could assume the node that was adding it knew what
+		// it was doing and finish the addition. Or we could leave it and do higher
+		// priority operations first if there are any. However, this comes with code
+		// complexity and concept complexity (computing old vs new quorum sizes
+		// becomes ambiguous, the learner isn't in the quorum but it likely will be
+		// soon, so do you count it?). Instead, we do the simplest thing and remove
+		// it before doing any other operations to the range. We'll revisit this
+		// decision if and when the complexity becomes necessary.
+		//
+		// If we get the race where AdminChangeReplicas is adding a replica and the
+		// queue happens to run during the snapshot, this will remove the learner
+		// and AdminChangeReplicas will notice either during the snapshot transfer
+		// or when it tries to promote the learner to a voter. AdminChangeReplicas
+		// should retry.
+		//
+		// On the other hand if we get the race where a leaseholder starts adding a
+		// replica in the replicate queue and during this loses its lease, it should
+		// probably not retry.
+		//
 		// TODO(dan): Since this goes before anything else, the priority here should
 		// be influenced by whatever operations would happen right after the learner
 		// is removed. In the meantime, we don't want to block something important
 		// from happening (like addDeadReplacementVoterPriority) by queueing this at
 		// a low priority so until this TODO is done, keep
 		// removeLearnerReplicaPriority as the highest priority.
-		return AllocatorRemoveLearner, removeLearnerReplicaPriority
+		action = AllocatorRemoveLearner
+		return action, action.Priority()
 	}
+
 	return a.computeAction(ctx, zone, desc.Replicas().VoterDescriptors(),
 		desc.Replicas().NonVoterDescriptors())
+
 }
 
 func (a *Allocator) computeAction(
@@ -438,7 +479,7 @@ func (a *Allocator) computeAction(
 	zone *zonepb.ZoneConfig,
 	voterReplicas []roachpb.ReplicaDescriptor,
 	nonVoterReplicas []roachpb.ReplicaDescriptor,
-) (AllocatorAction, float64) {
+) (action AllocatorAction, adjustedPriority float64) {
 	// NB: The ordering of the checks in this method is intentional. The order in
 	// which these actions are returned by this method determines the relative
 	// priority of the actions taken on a given range. We want this to be
@@ -453,8 +494,8 @@ func (a *Allocator) computeAction(
 	// actions.
 	haveVoters := len(voterReplicas)
 	decommissioningVoters := a.storePool.decommissioningReplicas(voterReplicas)
-	// Node count including dead nodes but excluding decommissioning/decommissioned
-	// nodes.
+	// Node count including dead nodes but excluding
+	// decommissioning/decommissioned nodes.
 	clusterNodes := a.storePool.ClusterNodeCount()
 	neededVoters := GetNeededVoters(zone.GetNumVoters(), clusterNodes)
 	desiredQuorum := computeQuorum(neededVoters)
@@ -467,11 +508,11 @@ func (a *Allocator) computeAction(
 		// Range is under-replicated, and should add an additional voter.
 		// Priority is adjusted by the difference between the current voter
 		// count and the quorum of the desired voter count.
-		priority := addMissingVoterPriority + float64(desiredQuorum-haveVoters)
-		action := AllocatorAddVoter
+		action = AllocatorAddVoter
+		adjustedPriority = action.Priority() + float64(desiredQuorum-haveVoters)
 		log.VEventf(ctx, 3, "%s - missing voter need=%d, have=%d, priority=%.2f",
-			action, neededVoters, haveVoters, priority)
-		return action, priority
+			action, neededVoters, haveVoters, adjustedPriority)
+		return action, adjustedPriority
 	}
 
 	liveVoters, deadVoters := a.storePool.liveAndDeadReplicas(voterReplicas)
@@ -481,9 +522,10 @@ func (a *Allocator) computeAction(
 		// live voters. If we're correctly assessing the unavailable state of the
 		// range, we also won't be able to add replicas as we try above, but hope
 		// springs eternal.
+		action = AllocatorRangeUnavailable
 		log.VEventf(ctx, 1, "unable to take action - live voters %v don't meet quorum of %d",
 			liveVoters, quorum)
-		return AllocatorRangeUnavailable, 0
+		return action, action.Priority()
 	}
 
 	if haveVoters == neededVoters && len(deadVoters) > 0 {
@@ -491,21 +533,18 @@ func (a *Allocator) computeAction(
 		// before removing the dead one. This can avoid permanent data loss in cases
 		// where the node is only temporarily dead, but we remove it from the range
 		// and lose a second node before we can up-replicate (#25392).
-		// The dead voter(s) will be down-replicated later.
-		priority := addDeadReplacementVoterPriority
-		action := AllocatorReplaceDeadVoter
+		action = AllocatorReplaceDeadVoter
 		log.VEventf(ctx, 3, "%s - replacement for %d dead voters priority=%.2f",
-			action, len(deadVoters), priority)
-		return action, priority
+			action, len(deadVoters), action.Priority())
+		return action, action.Priority()
 	}
 
 	if haveVoters == neededVoters && len(decommissioningVoters) > 0 {
 		// Range has decommissioning voter(s), which should be replaced.
-		priority := addDecommissioningReplacementVoterPriority
-		action := AllocatorReplaceDecommissioningVoter
+		action = AllocatorReplaceDecommissioningVoter
 		log.VEventf(ctx, 3, "%s - replacement for %d decommissioning voters priority=%.2f",
-			action, len(decommissioningVoters), priority)
-		return action, priority
+			action, len(decommissioningVoters), action.Priority())
+		return action, action.Priority()
 	}
 
 	// Voting replica removal actions follow.
@@ -515,62 +554,96 @@ func (a *Allocator) computeAction(
 	// remove the dead replica(s) to get down to an odd number of replicas.
 	if len(deadVoters) > 0 {
 		// The range has dead replicas, which should be removed immediately.
-		priority := removeDeadVoterPriority + float64(quorum-len(liveVoters))
-		action := AllocatorRemoveDeadVoter
+		action = AllocatorRemoveDeadVoter
+		adjustedPriority = action.Priority() + float64(quorum-len(liveVoters))
 		log.VEventf(ctx, 3, "%s - dead=%d, live=%d, quorum=%d, priority=%.2f",
-			action, len(deadVoters), len(liveVoters), quorum, priority)
-		return action, priority
+			action, len(deadVoters), len(liveVoters), quorum, adjustedPriority)
+		return action, adjustedPriority
 	}
 
 	if len(decommissioningVoters) > 0 {
 		// Range is over-replicated, and has a decommissioning voter which
 		// should be removed.
-		priority := removeDecommissioningVoterPriority
-		action := AllocatorRemoveDecommissioningVoter
+		action = AllocatorRemoveDecommissioningVoter
 		log.VEventf(ctx, 3,
 			"%s - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
-			action, neededVoters, haveVoters, len(decommissioningVoters), priority)
-		return action, priority
+			action, neededVoters, haveVoters, len(decommissioningVoters), action.Priority())
+		return action, action.Priority()
 	}
 
 	if haveVoters > neededVoters {
 		// Range is over-replicated, and should remove a voter.
 		// Ranges with an even number of voters get extra priority because
 		// they have a more fragile quorum.
-		priority := removeExtraVoterPriority - float64(haveVoters%2)
-		action := AllocatorRemoveVoter
-		log.VEventf(ctx, 3, "%s - need=%d, have=%d, priority=%.2f", action, neededVoters, haveVoters, priority)
-		return action, priority
+		action = AllocatorRemoveVoter
+		adjustedPriority = action.Priority() - float64(haveVoters%2)
+		log.VEventf(ctx, 3, "%s - need=%d, have=%d, priority=%.2f", action, neededVoters,
+			haveVoters, adjustedPriority)
+		return action, adjustedPriority
 	}
 
 	// Non-voting replica actions follow.
 	//
-	// Non-voting replica addition.
+	// Non-voting replica addition / replacement.
 	haveNonVoters := len(nonVoterReplicas)
 	neededNonVoters := GetNeededNonVoters(haveVoters, int(zone.GetNumNonVoters()), clusterNodes)
 	if haveNonVoters < neededNonVoters {
-		priority := addMissingNonVoterPriority
-		action := AllocatorAddNonVoter
+		action = AllocatorAddNonVoter
 		log.VEventf(ctx, 3, "%s - missing non-voter need=%d, have=%d, priority=%.2f",
-			action, neededNonVoters, haveNonVoters, priority)
-		return action, priority
+			action, neededNonVoters, haveNonVoters, action.Priority())
+		return action, action.Priority()
+	}
+
+	liveNonVoters, deadNonVoters := a.storePool.liveAndDeadReplicas(nonVoterReplicas)
+	if haveNonVoters == neededNonVoters && len(deadNonVoters) > 0 {
+		// The range has non-voter(s) on a dead node that we should replace.
+		action = AllocatorReplaceDeadNonVoter
+		log.VEventf(ctx, 3, "%s - replacement for %d dead non-voters priority=%.2f",
+			action, len(deadNonVoters), action.Priority())
+		return action, action.Priority()
+	}
+
+	decommissioningNonVoters := a.storePool.decommissioningReplicas(nonVoterReplicas)
+	if haveNonVoters == neededNonVoters && len(decommissioningNonVoters) > 0 {
+		// The range has non-voter(s) on a decommissioning node that we should
+		// replace.
+		action = AllocatorReplaceDecommissioningNonVoter
+		log.VEventf(ctx, 3, "%s - replacement for %d decommissioning non-voters priority=%.2f",
+			action, len(decommissioningNonVoters), action.Priority())
+		return action, action.Priority()
 	}
 
 	// Non-voting replica removal.
+	if len(deadNonVoters) > 0 {
+		// The range is over-replicated _and_ has non-voter(s) on a dead node. We'll
+		// just remove these.
+		action = AllocatorRemoveDeadNonVoter
+		log.VEventf(ctx, 3, "%s - dead=%d, live=%d, priority=%.2f",
+			action, len(deadNonVoters), len(liveNonVoters), action.Priority())
+		return action, action.Priority()
+	}
 
-	// TODO(aayush): Handle removal/replacement of decommissioning/dead non-voting
-	// replicas.
+	if len(decommissioningNonVoters) > 0 {
+		// The range is over-replicated _and_ has non-voter(s) on a decommissioning
+		// node. We'll just remove these.
+		action = AllocatorRemoveDecommissioningNonVoter
+		log.VEventf(ctx, 3,
+			"%s - need=%d, have=%d, num_decommissioning=%d, priority=%.2f",
+			action, neededNonVoters, haveNonVoters, len(decommissioningNonVoters), action.Priority())
+		return action, action.Priority()
+	}
 
 	if haveNonVoters > neededNonVoters {
-		// Like above, the range is over-replicated but should remove a non-voter.
-		priority := removeExtraNonVoterPriority
-		action := AllocatorRemoveNonVoter
-		log.VEventf(ctx, 3, "%s - need=%d, have=%d, priority=%.2f", action, neededNonVoters, haveNonVoters, priority)
-		return action, priority
+		// The range is simply over-replicated and should remove a non-voter.
+		action = AllocatorRemoveNonVoter
+		log.VEventf(ctx, 3, "%s - need=%d, have=%d, priority=%.2f", action,
+			neededNonVoters, haveNonVoters, action.Priority())
+		return action, action.Priority()
 	}
 
 	// Nothing needs to be done, but we may want to rebalance.
-	return AllocatorConsiderRebalance, 0
+	action = AllocatorConsiderRebalance
+	return action, action.Priority()
 }
 
 // getReplicasForDiversityCalc returns the set of replica descriptors that

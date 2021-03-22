@@ -131,7 +131,11 @@ func rewriteSequencesInExpr(expr string, rewrites DescRewriteMap) (string, error
 		return "", err
 	}
 	rewriteFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
-		annotateTypeExpr, id, ok := schemaexpr.GetTypeExprAndSeqID(expr)
+		id, ok := schemaexpr.GetSeqIDFromExpr(expr)
+		if !ok {
+			return true, expr, nil
+		}
+		annotateTypeExpr, ok := expr.(*tree.AnnotateTypeExpr)
 		if !ok {
 			return true, expr, nil
 		}
@@ -153,6 +157,41 @@ func rewriteSequencesInExpr(expr string, rewrites DescRewriteMap) (string, error
 		return "", err
 	}
 	return newExpr.String(), nil
+}
+
+// rewriteSequencesInView walks the given viewQuery and
+// rewrites all sequence IDs in it according to rewrites.
+func rewriteSequencesInView(viewQuery string, rewrites DescRewriteMap) (string, error) {
+	rewriteFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		id, ok := schemaexpr.GetSeqIDFromExpr(expr)
+		if !ok {
+			return true, expr, nil
+		}
+		annotateTypeExpr, ok := expr.(*tree.AnnotateTypeExpr)
+		if !ok {
+			return true, expr, nil
+		}
+		rewrite, ok := rewrites[descpb.ID(id)]
+		if !ok {
+			return true, expr, nil
+		}
+		annotateTypeExpr.Expr = tree.NewNumVal(
+			constant.MakeInt64(int64(rewrite.ID)),
+			strconv.Itoa(int(rewrite.ID)),
+			false, /* negative */
+		)
+		return false, annotateTypeExpr, nil
+	}
+
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return "", err
+	}
+	newStmt, err := tree.SimpleStmtVisit(stmt.AST, rewriteFunc)
+	if err != nil {
+		return "", err
+	}
+	return newStmt.String(), nil
 }
 
 // maybeFilterMissingViews filters the set of tables to restore to exclude views
@@ -1077,6 +1116,15 @@ func RewriteTableDescs(
 			return nil
 		}); err != nil {
 			return err
+		}
+
+		// Walk view query and remap sequence IDs.
+		if table.IsView() {
+			viewQuery, err := rewriteSequencesInView(table.ViewQuery, descriptorRewrites)
+			if err != nil {
+				return err
+			}
+			table.ViewQuery = viewQuery
 		}
 
 		if err := catalog.ForEachNonDropIndex(table, func(indexI catalog.Index) error {
