@@ -828,9 +828,9 @@ type changeFrontier struct {
 	// action which should be taken when the frontier reaches that boundary.
 	boundaryType jobspb.ResolvedSpan_BoundaryType
 
-	// jobProgressedFn, if non-nil, is called to checkpoint the changefeed's
+	// js, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
-	jobProgressedFn func(context.Context, jobs.HighWaterProgressedFn) error
+	js *jobState
 	// highWaterAtStart is the greater of the job high-water and the timestamp the
 	// CHANGEFEED statement was run at. It's used in an assertion that we never
 	// regress the job high-water.
@@ -847,6 +847,13 @@ type changeFrontier struct {
 	// metricsID is used as the unique id of this changefeed in the
 	// metrics.MaxBehindNanos map.
 	metricsID int
+}
+
+const runStatusUpdateFrequency time.Duration = time.Minute
+
+type jobState struct {
+	job                 *jobs.Job
+	lastRunStatusUpdate time.Time
 }
 
 var _ execinfra.Processor = &changeFrontier{}
@@ -948,13 +955,18 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 			cf.MoveToDraining(err)
 			return
 		}
-		cf.jobProgressedFn = func(ctx context.Context, fn jobs.HighWaterProgressedFn) error {
-			return job.HighWaterProgressed(ctx, nil /* txn */, fn)
-		}
+		cf.js = &jobState{job: job}
 
 		p := job.Progress()
 		if ts := p.GetHighWater(); ts != nil {
 			cf.highWaterAtStart.Forward(*ts)
+		}
+
+		if p.RunningStatus != "" {
+			// If we had running status set, that means we're probably retrying
+			// due to a transient error.  In that case, keep the previous
+			// running status around for a while before we override it.
+			cf.js.lastRunStatusUpdate = timeutil.Now()
 		}
 	}
 
@@ -1187,21 +1199,49 @@ func (cf *changeFrontier) handleFrontierChanged(isBehind bool) error {
 func (cf *changeFrontier) checkpointResolvedTimestamp(
 	resolved hlc.Timestamp, isBehind bool,
 ) (err error) {
-	// NB: Sinkless changefeeds will not have a jobProgressedFn. In fact, they
+	// NB: Sinkless changefeeds will not have a job state (js). In fact, they
 	// have no distributed state whatsoever. Because of this they also do not
 	// use protected timestamps.
-	if cf.jobProgressedFn == nil {
+	if cf.js == nil {
 		return nil
 	}
-	return cf.jobProgressedFn(cf.Ctx, func(
-		ctx context.Context, txn *kv.Txn, details jobspb.ProgressDetails,
-	) (hlc.Timestamp, error) {
-		progress := details.(*jobspb.Progress_Changefeed).Changefeed
-		if err := cf.manageProtectedTimestamps(ctx, progress, txn, resolved, isBehind); err != nil {
-			return hlc.Timestamp{}, err
+
+	runStatusUpdated := false
+	if err := cf.js.job.Update(cf.Ctx, nil, func(
+		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		if err := md.CheckRunningOrReverting(); err != nil {
+			return err
 		}
-		return resolved, nil
-	})
+
+		// Advance resolved timestamp.
+		progress := md.Progress
+		progress.Progress = &jobspb.Progress_HighWater{
+			HighWater: &resolved,
+		}
+
+		// Manage protected timestamps.
+		changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
+		if err := cf.manageProtectedTimestamps(cf.Ctx, changefeedProgress, txn, resolved, isBehind); err != nil {
+			return err
+		}
+
+		// Update running status if needed.
+		if timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency {
+			md.Progress.RunningStatus = fmt.Sprintf("running: resolved=%s", resolved)
+			runStatusUpdated = true
+		}
+
+		ju.UpdateProgress(progress)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if runStatusUpdated {
+		cf.js.lastRunStatusUpdate = timeutil.Now()
+	}
+	return nil
 }
 
 // manageProtectedTimestamps is called when the resolved timestamp is being
