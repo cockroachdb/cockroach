@@ -73,11 +73,10 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.Error(t, err, "cannot cutover to a timestamp")
 
 	var highWater time.Time
-	err = job.HighWaterProgressed(ctx, nil /* txn */, func(ctx context.Context, txn *kv.Txn,
-		details jobspb.ProgressDetails) (hlc.Timestamp, error) {
+	err = job.Update(ctx, nil, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		highWater = timeutil.Now().Round(time.Microsecond)
 		hlcHighWater := hlc.Timestamp{WallTime: highWater.UnixNano()}
-		return hlcHighWater, nil
+		return jobs.UpdateHighwaterProgressed(hlcHighWater, md, ju)
 	})
 	require.NoError(t, err)
 
