@@ -2285,6 +2285,29 @@ nearest replica.`, defaultFollowerReadDuration),
 		},
 	),
 
+	tree.BoundedStalenessFunctionName: makeBuiltin(
+		tree.FunctionProperties{},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"max_staleness", types.Interval},
+			},
+			ReturnType: tree.FixedReturnType(types.Interval),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				maxStaleness := args[0].(*tree.DInterval)
+				zeroDur := duration.MakeDuration(0, 0, 0)
+				if maxStaleness.Duration.Compare(zeroDur) <= 0 {
+					return nil, errors.Newf("staleness bound %s must be positive", maxStaleness)
+				}
+				maxStalenessInverted := &tree.DInterval{Duration: zeroDur.Sub(maxStaleness.Duration)}
+				return maxStalenessInverted, nil
+			},
+			Info: `When used in the AS OF SYSTEM TIME clause of an single-statement,
+read-only transaction, CockroachDB chooses the newest timestamp within the staleness
+bound that allows execution of the reads at the closest available replica without blocking.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"cluster_logical_timestamp": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,

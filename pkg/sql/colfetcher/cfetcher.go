@@ -606,6 +606,7 @@ func (rf *cFetcher) Init(
 func (rf *cFetcher) StartScan(
 	txn *kv.Txn,
 	spans roachpb.Spans,
+	minDynamicTS *hlc.Timestamp,
 	limitBatches bool,
 	limitHint int64,
 	traceKV bool,
@@ -633,17 +634,34 @@ func (rf *cFetcher) StartScan(
 
 	// Note that we pass a nil memMonitor here, because the cfetcher does its own
 	// memory accounting.
-	f, err := row.NewKVFetcher(
-		txn,
-		spans,
-		rf.reverse,
-		limitBatches,
-		firstBatchLimit,
-		rf.lockStrength,
-		rf.lockWaitPolicy,
-		nil, /* memMonitor */
-		forceProductionKVBatchSize,
-	)
+	var f *row.KVFetcher
+	var err error
+	if minDynamicTS == nil {
+		f, err = row.NewKVFetcher(
+			txn,
+			spans,
+			rf.reverse,
+			limitBatches,
+			firstBatchLimit,
+			rf.lockStrength,
+			rf.lockWaitPolicy,
+			nil, /* memMonitor */
+			forceProductionKVBatchSize,
+		)
+	} else {
+		f, err = row.NewKVFetcherWithDynamicTS(
+			txn.DB(),
+			minDynamicTS,
+			spans,
+			rf.reverse,
+			limitBatches,
+			firstBatchLimit,
+			rf.lockStrength,
+			rf.lockWaitPolicy,
+			nil, /* memMonitor */
+			forceProductionKVBatchSize,
+		)
+	}
 	if err != nil {
 		return err
 	}

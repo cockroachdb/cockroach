@@ -255,7 +255,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	// Evaluate the AS OF time, if any.
 	var asOf *hlc.Timestamp
 	if n.Options.AsOf.Expr != nil {
-		asOfTs, err := n.p.EvalAsOfTimestamp(ctx, n.Options.AsOf)
+		asOfTs, _, err := n.p.EvalAsOfTimestamp(ctx, n.Options.AsOf, false /* allowDynamic */)
 		if err != nil {
 			return nil, err
 		}

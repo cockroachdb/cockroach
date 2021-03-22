@@ -1263,9 +1263,15 @@ func (b *Builder) buildFromWithLateral(
 // validateAsOf ensures that any AS OF SYSTEM TIME timestamp is consistent with
 // that of the root statement.
 func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
-	ts, err := tree.EvalAsOfTimestamp(b.ctx, asOf, b.semaCtx, b.evalCtx)
+	ts, dynamic, err := tree.EvalAsOfTimestamp(b.ctx, asOf, b.semaCtx, b.evalCtx)
 	if err != nil {
 		panic(err)
+	}
+	if dynamic {
+		// TODO(nvanbenschoten): check that we're not using with_max_staleness
+		// in a subquery. Just check the EvalContext? Add a new field to the
+		// SemaContext?
+		return
 	}
 
 	if b.semaCtx.AsOfTimestamp == nil {

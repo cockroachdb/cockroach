@@ -555,11 +555,18 @@ func (ex *connExecutor) execStmtInOpenState(
 	// don't return any event unless an error happens.
 
 	if os.ImplicitTxn.Get() {
-		asOfTs, err := p.isAsOf(ctx, ast)
+		asOfTs, dynamic, err := p.isAsOf(ctx, ast)
 		if err != nil {
 			return makeErrEvent(err)
 		}
-		if asOfTs != nil {
+		if dynamic {
+			// TODO(nvanbenschoten): for now, intentionally don't set these
+			// fields. They seem redundant and it's not immediately clear what
+			// value they provide.
+			//  p.semaCtx.AsOfTimestamp = asOfTs
+			//  ex.state.setHistoricalTimestamp(ctx, *asOfTs)
+			p.extendedEvalCtx.SetMinDynamicTimestamp(*asOfTs)
+		} else if asOfTs != nil {
 			p.semaCtx.AsOfTimestamp = asOfTs
 			p.extendedEvalCtx.SetTxnTimestamp(asOfTs.GoTime())
 			ex.state.setHistoricalTimestamp(ctx, *asOfTs)
@@ -569,9 +576,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		// the transaction's timestamp. This is useful for running AOST statements
 		// using the InternalExecutor inside an external transaction; one might want
 		// to do that to force p.avoidCachedDescriptors to be set below.
-		ts, err := p.isAsOf(ctx, ast)
+		ts, dynamic, err := p.isAsOf(ctx, ast)
 		if err != nil {
 			return makeErrEvent(err)
+		}
+		if dynamic {
+			return makeErrEvent(tree.ErrIncorrectBoundedStalenessUsage)
 		}
 		if ts != nil {
 			if readTs := ex.state.getReadTimestamp(); *ts != readTs {
@@ -1088,7 +1098,7 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 	ex.statsCollector.reset(&ex.server.sqlStats, ex.appStats, &ex.phaseTimes)
 	p := &ex.planner
 	ex.resetPlanner(ctx, p, nil /* txn */, now)
-	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
+	ts, _, err := p.EvalAsOfTimestamp(ctx, asOf, false /* allowDynamic */)
 	if err != nil {
 		return 0, time.Time{}, nil, err
 	}

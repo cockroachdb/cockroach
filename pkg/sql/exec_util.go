@@ -1220,19 +1220,23 @@ func checkResultType(typ *types.T) error {
 }
 
 // EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM
-// TIME clause.
+// TIME clause. If allowDynamic is false, callers can ignore the dynamic bool
+// return value.
 func (p *planner) EvalAsOfTimestamp(
-	ctx context.Context, asOf tree.AsOfClause,
-) (_ hlc.Timestamp, err error) {
-	ts, err := tree.EvalAsOfTimestamp(ctx, asOf, &p.semaCtx, p.EvalContext())
+	ctx context.Context, asOf tree.AsOfClause, allowDynamic bool,
+) (ts hlc.Timestamp, dynamic bool, err error) {
+	ts, dynamic, err = tree.EvalAsOfTimestamp(ctx, asOf, &p.semaCtx, p.EvalContext())
 	if err != nil {
-		return hlc.Timestamp{}, err
+		return hlc.Timestamp{}, false, err
+	}
+	if dynamic && !allowDynamic {
+		return hlc.Timestamp{}, false, tree.ErrIncorrectBoundedStalenessUsage
 	}
 	if now := p.execCfg.Clock.Now(); now.Less(ts) && !ts.Synthetic {
-		return hlc.Timestamp{}, errors.Errorf(
+		return hlc.Timestamp{}, false, errors.Errorf(
 			"AS OF SYSTEM TIME: cannot specify timestamp in the future (%s > %s)", ts, now)
 	}
-	return ts, nil
+	return ts, dynamic, nil
 }
 
 // ParseHLC parses a string representation of an `hlc.Timestamp`.
@@ -1261,7 +1265,9 @@ func ParseHLC(s string) (hlc.Timestamp, error) {
 // timestamp is not nil, it is the timestamp to which a transaction
 // should be set. The statements that will be checked are Select,
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
-func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*hlc.Timestamp, error) {
+func (p *planner) isAsOf(
+	ctx context.Context, stmt tree.Statement,
+) (_ *hlc.Timestamp, dynamic bool, _ error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:
@@ -1274,32 +1280,32 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*hlc.Timesta
 
 		sc, ok := selStmt.(*tree.SelectClause)
 		if !ok {
-			return nil, nil
+			return nil, false, nil
 		}
 		if sc.From.AsOf.Expr == nil {
-			return nil, nil
+			return nil, false, nil
 		}
 
 		asOf = sc.From.AsOf
 	case *tree.Scrub:
 		if s.AsOf.Expr == nil {
-			return nil, nil
+			return nil, false, nil
 		}
 		asOf = s.AsOf
 	case *tree.Export:
 		return p.isAsOf(ctx, s.Query)
 	case *tree.CreateStats:
 		if s.Options.AsOf.Expr == nil {
-			return nil, nil
+			return nil, false, nil
 		}
 		asOf = s.Options.AsOf
 	case *tree.Explain:
 		return p.isAsOf(ctx, s.Statement)
 	default:
-		return nil, nil
+		return nil, false, nil
 	}
-	ts, err := p.EvalAsOfTimestamp(ctx, asOf)
-	return &ts, err
+	ts, dynamic, err := p.EvalAsOfTimestamp(ctx, asOf, true /* allowDynamic */)
+	return &ts, dynamic, err
 }
 
 // isSavepoint returns true if ast is a SAVEPOINT statement.

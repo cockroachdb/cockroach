@@ -1260,6 +1260,23 @@ func (r *Replica) checkExecutionCanProceed(
 		st = kvserverpb.LeaseStatus{
 			Now: now,
 		}
+		// If the request has a min_closed_timestamp bound, validate that this
+		// replica satisfies the bound. If not, reject the request.
+		if ba.MinClosedTimestamp != nil {
+			var maxClosed hlc.Timestamp
+			maxClosed, _, update = r.maxClosedRLocked(ctx, *ba.MinClosedTimestamp /* sufficient */)
+			if maxClosed.Less(*ba.MinClosedTimestamp) {
+				repDesc, err := r.getReplicaDescriptorRLocked()
+				if err != nil {
+					return kvserverpb.LeaseStatus{}, err
+				}
+				return kvserverpb.LeaseStatus{}, &roachpb.InsufficientClosedTimestampError{
+					MinClosedTimestamp:     *ba.MinClosedTimestamp,
+					ReplicaClosedTimestamp: maxClosed,
+					Replica:                repDesc,
+				}
+			}
+		}
 	} else if ba.IsSingleSkipLeaseCheckRequest() {
 		// For lease commands, use the provided previous lease for verification.
 		st = kvserverpb.LeaseStatus{

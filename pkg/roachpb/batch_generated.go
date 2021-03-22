@@ -68,8 +68,10 @@ func (ru ErrorDetail) GetInner() error {
 		return t.RangefeedRetry
 	case *ErrorDetail_IndeterminateCommit:
 		return t.IndeterminateCommit
-	case *ErrorDetail_InvalidLeaseError:
-		return t.InvalidLeaseError
+	case *ErrorDetail_InvalidLease:
+		return t.InvalidLease
+	case *ErrorDetail_InsufficientClosedTimestamp:
+		return t.InsufficientClosedTimestamp
 	default:
 		return nil
 	}
@@ -331,7 +333,9 @@ func (ru *ErrorDetail) MustSetInner(r error) {
 	case *IndeterminateCommitError:
 		union = &ErrorDetail_IndeterminateCommit{t}
 	case *InvalidLeaseError:
-		union = &ErrorDetail_InvalidLeaseError{t}
+		union = &ErrorDetail_InvalidLease{t}
+	case *InsufficientClosedTimestampError:
+		union = &ErrorDetail_InsufficientClosedTimestamp{t}
 	default:
 		panic(fmt.Sprintf("unsupported type %T for %T", r, ru))
 	}

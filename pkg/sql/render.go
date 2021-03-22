@@ -108,7 +108,7 @@ func (p *planner) getTimestamp(
 		// level. We accept AS OF SYSTEM TIME in multiple places (e.g. in
 		// subqueries or view queries) but they must all point to the same
 		// timestamp.
-		ts, err := p.EvalAsOfTimestamp(ctx, asOf)
+		ts, _, err := p.EvalAsOfTimestamp(ctx, asOf, false /* allowDynamic */)
 		if err != nil {
 			return hlc.MaxTimestamp, false, err
 		}

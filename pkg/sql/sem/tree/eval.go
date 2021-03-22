@@ -3315,6 +3315,10 @@ type EvalContext struct {
 	// of a transaction. Used for now(), current_timestamp(),
 	// transaction_timestamp() and the like.
 	TxnTimestamp time.Time
+	// Set to a non-nil timestamp when the current implicit, read-only
+	// transaction desires a dynamic query timestamp in order to ensure that
+	// reads are served from the closest available replica without blocking.
+	MinDynamicTimestamp *hlc.Timestamp
 
 	// Placeholders relates placeholder names to their type and, later, value.
 	// This pointer should always be set to the location of the PlaceholderInfo
@@ -3602,14 +3606,19 @@ func (ctx *EvalContext) GetTxnTimeNoZone(precision time.Duration) *DTime {
 	return MakeDTime(timeofday.FromTime(ctx.GetRelativeParseTime().Round(precision)))
 }
 
+// SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
+func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
+	ctx.StmtTimestamp = ts
+}
+
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetTxnTimestamp(ts time.Time) {
 	ctx.TxnTimestamp = ts
 }
 
-// SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
-func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
-	ctx.StmtTimestamp = ts
+// SetMinDynamicTimestamp sets the corresponding timestamp in the EvalContext.
+func (ctx *EvalContext) SetMinDynamicTimestamp(ts hlc.Timestamp) {
+	ctx.MinDynamicTimestamp = &ts
 }
 
 // GetLocation returns the session timezone.

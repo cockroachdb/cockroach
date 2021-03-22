@@ -24,7 +24,7 @@ func (p *planner) SetTransaction(ctx context.Context, n *tree.SetTransaction) (p
 	var asOfTs hlc.Timestamp
 	if n.Modes.AsOf.Expr != nil {
 		var err error
-		asOfTs, err = p.EvalAsOfTimestamp(ctx, n.Modes.AsOf)
+		asOfTs, _, err = p.EvalAsOfTimestamp(ctx, n.Modes.AsOf, false /* allowDynamic */)
 		if err != nil {
 			return nil, err
 		}

@@ -1775,7 +1775,8 @@ func (ds *DistSender) sendToReplicas(
 	desc := routing.Desc()
 	ba.RangeID = desc.RangeID
 	leaseholder := routing.Leaseholder()
-	canFollowerRead := CanSendToFollower(ds.clusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba)
+	// TODO(nvanbenschoten): push ba.RequiresLeaseHolder into CanSendToFollower.
+	canFollowerRead := !ba.RequiresLeaseHolder() || CanSendToFollower(ds.clusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba)
 	var replicas ReplicaSlice
 	var err error
 	if canFollowerRead {
@@ -1794,7 +1795,7 @@ func (ds *DistSender) sendToReplicas(
 	}
 
 	// Try the leaseholder first, if the request wants it.
-	sendToLeaseholder := (leaseholder != nil) && !canFollowerRead && ba.RequiresLeaseHolder()
+	sendToLeaseholder := (leaseholder != nil) && !canFollowerRead
 	if sendToLeaseholder {
 		idx := replicas.Find(leaseholder.ReplicaID)
 		if idx != -1 {

@@ -106,7 +106,7 @@ func ingestionPlanHook(
 		startTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		if ingestionStmt.AsOf.Expr != nil {
 			var err error
-			startTime, err = p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf)
+			startTime, _, err = p.EvalAsOfTimestamp(ctx, ingestionStmt.AsOf, false /* allowDynamic */)
 			if err != nil {
 				return err
 			}
