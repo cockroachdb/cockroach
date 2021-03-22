@@ -7,17 +7,16 @@ import { Download } from "@cockroachlabs/icons";
 import { Button } from "src/button";
 import { Text, TextTypes } from "src/text";
 import { Table, ColumnsConfig } from "src/table";
-import { Anchor } from "src/anchor";
 import { SummaryCard } from "src/summaryCard";
 import { DiagnosticStatusBadge } from "src/statementsDiagnostics";
-import emptyListIcon from "src/assets/emptyState/empty-list-results.svg";
+import emptyTracingBackground from "src/assets/statementsPage/emptyTracingBackground.svg";
 import {
   getDiagnosticsStatus,
   sortByCompletedField,
   sortByRequestedAtField,
 } from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
-import { EmptyTable } from "src/empty";
+import { EmptyPanel } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
 import { getBasePath } from "../../api";
 
@@ -50,6 +49,29 @@ interface DiagnosticsViewState {
 }
 
 const cx = classnames.bind(styles);
+
+export const EmptyDiagnosticsView = ({
+  activate,
+  statementFingerprint,
+}: DiagnosticsViewProps) => {
+  const onActivateButtonClick = () => {
+    activate(statementFingerprint);
+  };
+  return (
+    <EmptyPanel
+      title="Activate statement diagnostics"
+      description="When you activate statement diagnostics, CockroachDB will wait for the next query that matches
+      this statement fingerprint. A download button will appear on the statement list and detail pages
+      when the query is ready. The statement diagnostic will include EXPLAIN plans,
+      table statistics, and traces."
+      anchor="Learn More"
+      link={statementDiagnostics}
+      label="Activate"
+      onClick={onActivateButtonClick}
+      backgroundImage={emptyTracingBackground}
+    />
+  );
+};
 
 export class DiagnosticsView extends React.Component<
   DiagnosticsViewProps,
@@ -137,7 +159,7 @@ export class DiagnosticsView extends React.Component<
   }
 
   render() {
-    const { diagnosticsReports, showDiagnosticsViewLink } = this.props;
+    const { hasData, diagnosticsReports, showDiagnosticsViewLink } = this.props;
 
     const canRequestDiagnostics = diagnosticsReports.every(
       diagnostic => diagnostic.completed,
@@ -147,6 +169,14 @@ export class DiagnosticsView extends React.Component<
       ...diagnosticsReport,
       key: idx,
     }));
+
+    if (!hasData) {
+      return (
+        <SummaryCard className={cx("summary--card__empty-state")}>
+          <EmptyDiagnosticsView {...this.props} />
+        </SummaryCard>
+      );
+    }
 
     return (
       <SummaryCard>
@@ -159,38 +189,11 @@ export class DiagnosticsView extends React.Component<
               type="secondary"
               className={cx("crl-statements-diagnostics-view__activate-button")}
             >
-              Activate diagnostics
+              Activate
             </Button>
           )}
         </div>
-        <Table
-          noDataMessage={
-            <EmptyTable
-              title="Activate Statement Diagnostics"
-              icon={emptyListIcon}
-              message={
-                <>
-                  <span>
-                    {"When you activate statement diagnostics, CockroachDB will wait for the next query that" +
-                      " matches this statement fingerprint. A download button will appear on the statement list and" +
-                      " detail pages when the query is ready. The statement diagnostic will include EXPLAIN plans, table" +
-                      " statistics, and traces. "}
-                  </span>
-                  <Anchor href={statementDiagnostics} target="_blank">
-                    Learn More
-                  </Anchor>
-                </>
-              }
-              footer={
-                <Button onClick={this.onActivateButtonClick}>
-                  Activate Diagnostics
-                </Button>
-              }
-            />
-          }
-          dataSource={dataSource}
-          columns={this.columns}
-        />
+        <Table dataSource={dataSource} columns={this.columns} />
         {showDiagnosticsViewLink && (
           <div className={cx("crl-statements-diagnostics-view__footer")}>
             <Link to="/reports/statements/diagnosticshistory">
