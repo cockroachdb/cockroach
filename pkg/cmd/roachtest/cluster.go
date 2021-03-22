@@ -2221,6 +2221,23 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 	}
 }
 
+func (c *cluster) Reset(ctx context.Context) error {
+	if c.t.Failed() {
+		return errors.New("already failed")
+	}
+	if ctx.Err() != nil {
+		return errors.Wrap(ctx.Err(), "cluster.Reset")
+	}
+	args := []string{
+		roachprod,
+		"reset",
+		c.name,
+	}
+	c.status("resetting cluster")
+	defer c.status()
+	return execCmd(ctx, c.l, args...)
+}
+
 // WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
 func (c *cluster) WipeE(ctx context.Context, l *logger, opts ...option) error {
