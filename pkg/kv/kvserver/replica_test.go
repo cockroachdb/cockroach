@@ -1467,7 +1467,7 @@ func TestReplicaDrainLease(t *testing.T) {
 	rd := tc.LookupRangeOrFatal(t, rngKey)
 	r1, err := store1.GetReplica(rd.RangeID)
 	require.NoError(t, err)
-	status := r1.currentLeaseStatus(ctx)
+	status := r1.CurrentLeaseStatus(ctx)
 	require.True(t, status.Lease.OwnedBy(store1.StoreID()), "someone else got the lease: %s", status)
 	// We expect the lease to be valid, but don't check that because, under race, it might have
 	// expired already.
@@ -1480,7 +1480,7 @@ func TestReplicaDrainLease(t *testing.T) {
 
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
-		status := r1.currentLeaseStatus(ctx)
+		status := r1.CurrentLeaseStatus(ctx)
 		require.True(t, status.Lease.OwnedBy(store1.StoreID()), "someone else got the lease: %s", status)
 		if status.State == kvserverpb.LeaseState_VALID {
 			return errors.New("lease still valid")

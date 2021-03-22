@@ -584,9 +584,9 @@ func (r *Replica) leaseStatus(
 	return status
 }
 
-// currentLeaseStatus returns the status of the current lease for a current
+// CurrentLeaseStatus returns the status of the current lease for a current
 // timestamp.
-func (r *Replica) currentLeaseStatus(ctx context.Context) kvserverpb.LeaseStatus {
+func (r *Replica) CurrentLeaseStatus(ctx context.Context) kvserverpb.LeaseStatus {
 	timestamp := r.store.Clock().Now()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
