@@ -75,7 +75,7 @@ func runTestFlow(
 
 	var rowBuf distsqlutils.RowBuffer
 
-	ctx, flow, err := distSQLSrv.SetupLocalSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf, distsql.LocalState{})
+	ctx, flow, _, err := distSQLSrv.SetupLocalSyncFlow(context.Background(), distSQLSrv.ParentMemoryMonitor, &req, &rowBuf, distsql.LocalState{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -168,7 +168,7 @@ func runLocalFlow(
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 	var rowBuf distsqlutils.RowBuffer
-	flowCtx, flow, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, distsql.LocalState{})
+	flowCtx, flow, _, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, distsql.LocalState{})
 	if err != nil {
 		return nil, err
 	}

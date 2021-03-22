@@ -59,11 +59,11 @@ func TestTraceAnalyzer(t *testing.T) {
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					TestingSaveFlows: func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+					TestingSaveFlows: func(stmt string) func(map[roachpb.NodeID]*execinfrapb.FlowSpec, []execinfra.OpNode) error {
 						if stmt != testStmt {
-							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec) error { return nil }
+							return func(map[roachpb.NodeID]*execinfrapb.FlowSpec, []execinfra.OpNode) error { return nil }
 						}
-						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) error {
+						return func(flows map[roachpb.NodeID]*execinfrapb.FlowSpec, _ []execinfra.OpNode) error {
 							flowsMetadata := execstats.NewFlowsMetadata(flows)
 							analyzer := execstats.NewTraceAnalyzer(flowsMetadata)
 							analyzerChan <- analyzer
