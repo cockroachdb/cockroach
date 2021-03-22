@@ -1354,7 +1354,10 @@ func NewColOperator(
 	}
 	r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, projection)
 	if args.TestingKnobs.PlanInvariantsCheckers {
-		r.Op = colexec.NewInvariantsChecker(r.Op)
+		// Plan an invariants checker if it isn't already the root of the tree.
+		if _, isInvariantsChecker := r.Op.(*colexec.InvariantsChecker); !isInvariantsChecker {
+			r.Op = colexec.NewInvariantsChecker(r.Op)
+		}
 	}
 	// Handle the metadata sources from the input trees. Note that it is
 	// possible that we have created a materializer which took over draining
