@@ -84,6 +84,7 @@ CREATE TABLE g
 
 exec-ddl
 CREATE TABLE p (
+    k INT PRIMARY KEY,
     i INT,
     f FLOAT,
     s STRING,
@@ -146,10 +147,10 @@ opt expect=GeneratePartialIndexScans
 SELECT i FROM p WHERE s = 'foo'
 ----
 project
- ├── columns: i:1
+ ├── columns: i:2
  └── scan p@idx,partial
-      ├── columns: i:1 s:3!null
-      └── fd: ()-->(3)
+      ├── columns: i:2 s:4!null
+      └── fd: ()-->(4)
 
 # Generate a partial index scan inside a select when the index is covering and
 # there are remaining filters.
@@ -157,15 +158,15 @@ opt expect=GeneratePartialIndexScans
 SELECT i FROM p WHERE s = 'foo' AND (i = 1 OR f = 2.0)
 ----
 project
- ├── columns: i:1
+ ├── columns: i:2
  └── select
-      ├── columns: i:1 f:2 s:3!null
-      ├── fd: ()-->(3)
+      ├── columns: i:2 f:3 s:4!null
+      ├── fd: ()-->(4)
       ├── scan p@idx,partial
-      │    ├── columns: i:1 f:2 s:3!null
-      │    └── fd: ()-->(3)
+      │    ├── columns: i:2 f:3 s:4!null
+      │    └── fd: ()-->(4)
       └── filters
-           └── (i:1 = 1) OR (f:2 = 2.0) [outer=(1,2)]
+           └── (i:2 = 1) OR (f:3 = 2.0) [outer=(2,3)]
 
 # Generate a partial index scan inside an index-join when the index is not
 # covering and there no remaining filters.
@@ -173,14 +174,14 @@ opt expect=GeneratePartialIndexScans
 SELECT b FROM p WHERE s = 'foo'
 ----
 project
- ├── columns: b:4
+ ├── columns: b:5
  └── index-join p
-      ├── columns: s:3!null b:4
-      ├── fd: ()-->(3)
+      ├── columns: s:4!null b:5
+      ├── fd: ()-->(4)
       └── scan p@idx,partial
-           ├── columns: s:3!null rowid:5!null
-           ├── key: (5)
-           └── fd: ()-->(3)
+           ├── columns: k:1!null s:4!null
+           ├── key: (1)
+           └── fd: ()-->(4)
 
 # Generate a partial index scan inside a select inside an index-join when the
 # index is not covering and there are remaining filters that are covered by the
@@ -189,20 +190,20 @@ opt expect=GeneratePartialIndexScans
 SELECT b FROM p WHERE s = 'foo' AND (i = 1 OR f = 2.0)
 ----
 project
- ├── columns: b:4
+ ├── columns: b:5
  └── index-join p
-      ├── columns: i:1 f:2 s:3!null b:4
-      ├── fd: ()-->(3)
+      ├── columns: i:2 f:3 s:4!null b:5
+      ├── fd: ()-->(4)
       └── select
-           ├── columns: i:1 f:2 s:3!null rowid:5!null
-           ├── key: (5)
-           ├── fd: ()-->(3), (5)-->(1,2)
+           ├── columns: k:1!null i:2 f:3 s:4!null
+           ├── key: (1)
+           ├── fd: ()-->(4), (1)-->(2,3)
            ├── scan p@idx,partial
-           │    ├── columns: i:1 f:2 s:3!null rowid:5!null
-           │    ├── key: (5)
-           │    └── fd: ()-->(3), (5)-->(1,2)
+           │    ├── columns: k:1!null i:2 f:3 s:4!null
+           │    ├── key: (1)
+           │    └── fd: ()-->(4), (1)-->(2,3)
            └── filters
-                └── (i:1 = 1) OR (f:2 = 2.0) [outer=(1,2)]
+                └── (i:2 = 1) OR (f:3 = 2.0) [outer=(2,3)]
 
 # Generate a partial index scan inside an index-join inside a select when the
 # index is not covering and the remaining filters are not covered by the index.
@@ -210,20 +211,20 @@ opt expect=GeneratePartialIndexScans
 SELECT b FROM p WHERE s = 'foo' AND b
 ----
 project
- ├── columns: b:4!null
- ├── fd: ()-->(4)
+ ├── columns: b:5!null
+ ├── fd: ()-->(5)
  └── select
-      ├── columns: s:3!null b:4!null
-      ├── fd: ()-->(3,4)
+      ├── columns: s:4!null b:5!null
+      ├── fd: ()-->(4,5)
       ├── index-join p
-      │    ├── columns: s:3 b:4
-      │    ├── fd: ()-->(3)
+      │    ├── columns: s:4 b:5
+      │    ├── fd: ()-->(4)
       │    └── scan p@idx,partial
-      │         ├── columns: s:3!null rowid:5!null
-      │         ├── key: (5)
-      │         └── fd: ()-->(3)
+      │         ├── columns: k:1!null s:4!null
+      │         ├── key: (1)
+      │         └── fd: ()-->(4)
       └── filters
-           └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+           └── b:5 [outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
 # Generate a partial index scan inside a Select/IndexJoin/Select when the index
 # is not covering and the remaining filters are partially covered by the index.
@@ -231,26 +232,26 @@ opt expect=GeneratePartialIndexScans
 SELECT b FROM p WHERE s = 'foo' AND f = 1 AND b
 ----
 project
- ├── columns: b:4!null
- ├── fd: ()-->(4)
+ ├── columns: b:5!null
+ ├── fd: ()-->(5)
  └── select
-      ├── columns: f:2!null s:3!null b:4!null
-      ├── fd: ()-->(2-4)
+      ├── columns: f:3!null s:4!null b:5!null
+      ├── fd: ()-->(3-5)
       ├── index-join p
-      │    ├── columns: f:2 s:3 b:4
-      │    ├── fd: ()-->(2,3)
+      │    ├── columns: f:3 s:4 b:5
+      │    ├── fd: ()-->(3,4)
       │    └── select
-      │         ├── columns: f:2!null s:3!null rowid:5!null
-      │         ├── key: (5)
-      │         ├── fd: ()-->(2,3)
+      │         ├── columns: k:1!null f:3!null s:4!null
+      │         ├── key: (1)
+      │         ├── fd: ()-->(3,4)
       │         ├── scan p@idx,partial
-      │         │    ├── columns: f:2 s:3!null rowid:5!null
-      │         │    ├── key: (5)
-      │         │    └── fd: ()-->(3), (5)-->(2)
+      │         │    ├── columns: k:1!null f:3 s:4!null
+      │         │    ├── key: (1)
+      │         │    └── fd: ()-->(4), (1)-->(3)
       │         └── filters
-      │              └── f:2 = 1.0 [outer=(2), constraints=(/2: [/1.0 - /1.0]; tight), fd=()-->(2)]
+      │              └── f:3 = 1.0 [outer=(3), constraints=(/3: [/1.0 - /1.0]; tight), fd=()-->(3)]
       └── filters
-           └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+           └── b:5 [outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
 # Generate multiple partial index scans when there are multiple partial indexes
 # that have predicates implied by the filters.
@@ -262,15 +263,15 @@ CREATE INDEX idx2 ON p (s) WHERE i > 0
 memo expect=GeneratePartialIndexScans
 SELECT * FROM p WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~14KB, required=[presentation: i:1,f:2,s:3,b:4])
- ├── G1: (select G2 G3) (index-join G4 p,cols=(1-4)) (index-join G5 p,cols=(1-4)) (index-join G6 p,cols=(1-4)) (index-join G7 p,cols=(1-4))
- │    └── [presentation: i:1,f:2,s:3,b:4]
- │         ├── best: (index-join G4 p,cols=(1-4))
+memo (optimized, ~14KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+ ├── G1: (select G2 G3) (index-join G4 p,cols=(1-5)) (index-join G5 p,cols=(1-5)) (index-join G6 p,cols=(1-5)) (index-join G7 p,cols=(1-5))
+ │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
+ │         ├── best: (index-join G4 p,cols=(1-5))
  │         └── cost: 49.00
- ├── G2: (scan p,cols=(1-4))
+ ├── G2: (scan p,cols=(1-5))
  │    └── []
- │         ├── best: (scan p,cols=(1-4))
- │         └── cost: 1104.91
+ │         ├── best: (scan p,cols=(1-5))
+ │         └── cost: 1115.01
  ├── G3: (filters G8 G9)
  ├── G4: (select G10 G11)
  │    └── []
@@ -280,24 +281,24 @@ memo (optimized, ~14KB, required=[presentation: i:1,f:2,s:3,b:4])
  │    └── []
  │         ├── best: (select G12 G13)
  │         └── cost: 354.03
- ├── G6: (scan p@idx,partial,cols=(1-3,5),constrained)
+ ├── G6: (scan p@idx,partial,cols=(1-4),constrained)
  │    └── []
- │         ├── best: (scan p@idx,partial,cols=(1-3,5),constrained)
+ │         ├── best: (scan p@idx,partial,cols=(1-4),constrained)
  │         └── cost: 14.09
- ├── G7: (scan p@idx2,partial,cols=(3,5),constrained)
+ ├── G7: (scan p@idx2,partial,cols=(1,4),constrained)
  │    └── []
- │         ├── best: (scan p@idx2,partial,cols=(3,5),constrained)
+ │         ├── best: (scan p@idx2,partial,cols=(1,4),constrained)
  │         └── cost: 13.72
  ├── G8: (gt G14 G15)
  ├── G9: (eq G16 G17)
- ├── G10: (scan p@idx,partial,cols=(1-3,5))
+ ├── G10: (scan p@idx,partial,cols=(1-4))
  │    └── []
- │         ├── best: (scan p@idx,partial,cols=(1-3,5))
+ │         ├── best: (scan p@idx,partial,cols=(1-4))
  │         └── cost: 14.81
  ├── G11: (filters G8)
- ├── G12: (scan p@idx2,partial,cols=(3,5))
+ ├── G12: (scan p@idx2,partial,cols=(1,4))
  │    └── []
- │         ├── best: (scan p@idx2,partial,cols=(3,5))
+ │         ├── best: (scan p@idx2,partial,cols=(1,4))
  │         └── cost: 350.68
  ├── G13: (filters G9)
  ├── G14: (variable i)
@@ -310,9 +311,9 @@ memo (optimized, ~14KB, required=[presentation: i:1,f:2,s:3,b:4])
 memo expect-not=GeneratePartialIndexScans
 SELECT i FROM p WHERE s = 'bar'
 ----
-memo (optimized, ~8KB, required=[presentation: i:1])
+memo (optimized, ~8KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
- │    └── [presentation: i:1]
+ │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
  │         └── cost: 1094.84
  ├── G2: (select G4 G5)
@@ -320,9 +321,9 @@ memo (optimized, ~8KB, required=[presentation: i:1])
  │         ├── best: (select G4 G5)
  │         └── cost: 1094.73
  ├── G3: (projections)
- ├── G4: (scan p,cols=(1,3))
+ ├── G4: (scan p,cols=(2,4))
  │    └── []
- │         ├── best: (scan p,cols=(1,3))
+ │         ├── best: (scan p,cols=(2,4))
  │         └── cost: 1084.71
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
@@ -335,6 +336,122 @@ DROP INDEX idx
 
 exec-ddl
 DROP INDEX idx2
+----
+
+exec-ddl
+CREATE INDEX idx ON p (b) WHERE s IS NULL AND i = 0
+----
+
+# Project constant columns in a partial index predicate rather than performing
+# an index join.
+opt expect=GeneratePartialIndexScans
+SELECT k, b, s, i FROM p WHERE s IS NULL AND i = 0
+----
+project
+ ├── columns: k:1!null b:5 s:4 i:2!null
+ ├── key: (1)
+ ├── fd: ()-->(2,4), (1)-->(5)
+ ├── scan p@idx,partial
+ │    ├── columns: k:1!null b:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(5)
+ └── projections
+      ├── 0 [as=i:2]
+      └── NULL [as=s:4]
+
+# Do not project constant columns in a partial index predicate when an index
+# join must be performed to fetch other columns.
+opt expect=GeneratePartialIndexScans
+SELECT k, b, s, i, f FROM p WHERE s IS NULL AND i = 0
+----
+index-join p
+ ├── columns: k:1!null b:5 s:4 i:2!null f:3
+ ├── key: (1)
+ ├── fd: ()-->(2,4), (1)-->(3,5)
+ └── scan p@idx,partial
+      ├── columns: k:1!null b:5
+      ├── key: (1)
+      └── fd: (1)-->(5)
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+CREATE INDEX idx ON p (b) STORING (i) WHERE s IS NULL
+----
+
+# Project constant columns in a partial index predicate and apply a filter.
+opt expect=GeneratePartialIndexScans
+SELECT k, b, s FROM p WHERE s IS NULL AND i = 0
+----
+project
+ ├── columns: k:1!null b:5 s:4
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(5)
+ └── select
+      ├── columns: k:1!null i:2!null s:4 b:5
+      ├── key: (1)
+      ├── fd: ()-->(2,4), (1)-->(5)
+      ├── project
+      │    ├── columns: s:4 k:1!null i:2 b:5
+      │    ├── key: (1)
+      │    ├── fd: ()-->(4), (1)-->(2,5)
+      │    ├── scan p@idx,partial
+      │    │    ├── columns: k:1!null i:2 b:5
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,5)
+      │    └── projections
+      │         └── NULL [as=s:4]
+      └── filters
+           └── i:2 = 0 [outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+CREATE INDEX idx ON p (f, s) STORING (b) WHERE s IS NULL AND b AND i = 0
+----
+
+# Project only constant columns in the partial index predicate that do not exist
+# in the index.
+opt expect=GeneratePartialIndexScans
+SELECT * FROM p WHERE s IS NULL AND b AND i = 0
+----
+project
+ ├── columns: k:1!null i:2!null f:3 s:4 b:5!null
+ ├── key: (1)
+ ├── fd: ()-->(2,4,5), (1)-->(3)
+ ├── scan p@idx,partial
+ │    ├── columns: k:1!null f:3 s:4 b:5!null
+ │    ├── key: (1)
+ │    └── fd: ()-->(4,5), (1)-->(3)
+ └── projections
+      └── 0 [as=i:2]
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+CREATE INDEX idx ON p (i) WHERE f = 1.0
+----
+
+# Do not project constant columns with composite key encodings.
+opt expect=GeneratePartialIndexScans
+SELECT i, f FROM p WHERE f = 1.0
+----
+index-join p
+ ├── columns: i:2 f:3!null
+ ├── fd: ()-->(3)
+ └── scan p@idx,partial
+      ├── columns: k:1!null i:2
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+exec-ddl
+DROP INDEX idx
 ----
 
 opt
@@ -1459,11 +1576,11 @@ opt
 SELECT i FROM p WHERE s = 'foo' AND i > 5 AND i < 10
 ----
 project
- ├── columns: i:1!null
+ ├── columns: i:2!null
  └── scan p@idx,partial
-      ├── columns: i:1!null s:3!null
-      ├── constraint: /1/5: [/6 - /9]
-      └── fd: ()-->(3)
+      ├── columns: i:2!null s:4!null
+      ├── constraint: /2/1: [/6 - /9]
+      └── fd: ()-->(4)
 
 exec-ddl
 DROP INDEX idx
@@ -1479,8 +1596,8 @@ opt
 SELECT i FROM p WHERE i > 10 AND i < 20
 ----
 scan p@idx,partial
- ├── columns: i:1!null
- └── constraint: /1/5: [/11 - /19]
+ ├── columns: i:2!null
+ └── constraint: /2/1: [/11 - /19]
 
 exec-ddl
 DROP INDEX idx
@@ -1496,13 +1613,14 @@ opt
 SELECT * FROM p WHERE s = 'foo' AND i > 5 AND i < 10
 ----
 index-join p
- ├── columns: i:1!null f:2 s:3!null b:4
- ├── fd: ()-->(3)
+ ├── columns: k:1!null i:2!null f:3 s:4!null b:5
+ ├── key: (1)
+ ├── fd: ()-->(4), (1)-->(2,3,5)
  └── scan p@idx,partial
-      ├── columns: i:1!null rowid:5!null
-      ├── constraint: /1/5: [/6 - /9]
-      ├── key: (5)
-      └── fd: (5)-->(1)
+      ├── columns: k:1!null i:2!null
+      ├── constraint: /2/1: [/6 - /9]
+      ├── key: (1)
+      └── fd: (1)-->(2)
 
 exec-ddl
 DROP INDEX idx
@@ -1518,19 +1636,19 @@ opt
 SELECT i FROM p WHERE i > 10 AND i < 20 AND b
 ----
 project
- ├── columns: i:1!null
+ ├── columns: i:2!null
  └── select
-      ├── columns: i:1!null b:4!null
-      ├── fd: ()-->(4)
+      ├── columns: i:2!null b:5!null
+      ├── fd: ()-->(5)
       ├── index-join p
-      │    ├── columns: i:1 b:4
+      │    ├── columns: i:2 b:5
       │    └── scan p@idx,partial
-      │         ├── columns: i:1!null rowid:5!null
-      │         ├── constraint: /1/5: [/11 - /19]
-      │         ├── key: (5)
-      │         └── fd: (5)-->(1)
+      │         ├── columns: k:1!null i:2!null
+      │         ├── constraint: /2/1: [/11 - /19]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
       └── filters
-           └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+           └── b:5 [outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
 exec-ddl
 DROP INDEX idx
@@ -1547,24 +1665,26 @@ opt
 SELECT * FROM p WHERE i > 10 AND i < 20 AND s = 'bar' AND b
 ----
 select
- ├── columns: i:1!null f:2 s:3!null b:4!null
- ├── fd: ()-->(3,4)
+ ├── columns: k:1!null i:2!null f:3 s:4!null b:5!null
+ ├── key: (1)
+ ├── fd: ()-->(4,5), (1)-->(2,3)
  ├── index-join p
- │    ├── columns: i:1 f:2 s:3 b:4
- │    ├── fd: ()-->(3)
+ │    ├── columns: k:1!null i:2 f:3 s:4 b:5
+ │    ├── key: (1)
+ │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    └── select
- │         ├── columns: i:1!null s:3!null rowid:5!null
- │         ├── key: (5)
- │         ├── fd: ()-->(3), (5)-->(1)
+ │         ├── columns: k:1!null i:2!null s:4!null
+ │         ├── key: (1)
+ │         ├── fd: ()-->(4), (1)-->(2)
  │         ├── scan p@idx,partial
- │         │    ├── columns: i:1!null s:3 rowid:5!null
- │         │    ├── constraint: /1/5: [/11 - /19]
- │         │    ├── key: (5)
- │         │    └── fd: (5)-->(1,3)
+ │         │    ├── columns: k:1!null i:2!null s:4
+ │         │    ├── constraint: /2/1: [/11 - /19]
+ │         │    ├── key: (1)
+ │         │    └── fd: (1)-->(2,4)
  │         └── filters
- │              └── s:3 = 'bar' [outer=(3), constraints=(/3: [/'bar' - /'bar']; tight), fd=()-->(3)]
+ │              └── s:4 = 'bar' [outer=(4), constraints=(/4: [/'bar' - /'bar']; tight), fd=()-->(4)]
  └── filters
-      └── b:4 [outer=(4), constraints=(/4: [/true - /true]; tight), fd=()-->(4)]
+      └── b:5 [outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
 exec-ddl
 DROP INDEX idx
@@ -1584,61 +1704,62 @@ CREATE INDEX idx2 ON p (i) WHERE s = 'foo'
 memo
 SELECT i FROM p WHERE i = 3 AND s = 'foo'
 ----
-memo (optimized, ~18KB, required=[presentation: i:1])
- ├── G1: (project G2 G3 i) (project G4 G3 i) (project G5 G3 i)
- │    └── [presentation: i:1]
- │         ├── best: (project G5 G3 i)
+memo (optimized, ~18KB, required=[presentation: i:2])
+ ├── G1: (project G2 G3 i)
+ │    └── [presentation: i:2]
+ │         ├── best: (project G2 G3 i)
+ │         └── cost: 5.00
+ ├── G2: (select G4 G5) (select G6 G7) (select G8 G7) (select G9 G7) (project G10 G11 i)
+ │    └── []
+ │         ├── best: (project G10 G11 i)
  │         └── cost: 4.98
- ├── G2: (select G6 G7) (select G8 G9) (index-join G4 p,cols=(1,3)) (select G10 G9) (index-join G5 p,cols=(1,3))
- │    └── []
- │         ├── best: (index-join G5 p,cols=(1,3))
- │         └── cost: 10.50
  ├── G3: (projections)
- ├── G4: (select G11 G9)
+ ├── G4: (scan p,cols=(2,4))
  │    └── []
- │         ├── best: (select G11 G9)
- │         └── cost: 14.53
- ├── G5: (scan p@idx2,partial,cols=(1,5),constrained)
- │    └── []
- │         ├── best: (scan p@idx2,partial,cols=(1,5),constrained)
- │         └── cost: 4.96
- ├── G6: (scan p,cols=(1,3))
- │    └── []
- │         ├── best: (scan p,cols=(1,3))
+ │         ├── best: (scan p,cols=(2,4))
  │         └── cost: 1084.71
- ├── G7: (filters G12 G13)
- ├── G8: (index-join G14 p,cols=(1,3))
+ ├── G5: (filters G12 G13)
+ ├── G6: (index-join G14 p,cols=(2,4))
  │    └── []
- │         ├── best: (index-join G14 p,cols=(1,3))
+ │         ├── best: (index-join G14 p,cols=(2,4))
  │         └── cost: 374.63
- ├── G9: (filters G12)
- ├── G10: (index-join G15 p,cols=(1,3))
+ ├── G7: (filters G12)
+ ├── G8: (project G15 G11 i)
  │    └── []
- │         ├── best: (index-join G15 p,cols=(1,3))
+ │         ├── best: (project G15 G11 i)
+ │         └── cost: 14.52
+ ├── G9: (index-join G16 p,cols=(2,4))
+ │    └── []
+ │         ├── best: (index-join G16 p,cols=(2,4))
  │         └── cost: 70.38
- ├── G11: (scan p@idx2,partial,cols=(1,5))
+ ├── G10: (scan p@idx2,partial,cols=(2),constrained)
  │    └── []
- │         ├── best: (scan p@idx2,partial,cols=(1,5))
- │         └── cost: 14.41
- ├── G12: (eq G16 G17)
- ├── G13: (eq G18 G19)
- ├── G14: (select G20 G21)
+ │         ├── best: (scan p@idx2,partial,cols=(2),constrained)
+ │         └── cost: 4.95
+ ├── G11: (projections G17)
+ ├── G12: (eq G18 G19)
+ ├── G13: (eq G20 G17)
+ ├── G14: (select G21 G22)
  │    └── []
- │         ├── best: (select G20 G21)
+ │         ├── best: (select G21 G22)
  │         └── cost: 354.03
- ├── G15: (scan p@idx,partial,cols=(3,5),constrained)
+ ├── G15: (scan p@idx2,partial,cols=(2))
  │    └── []
- │         ├── best: (scan p@idx,partial,cols=(3,5),constrained)
+ │         ├── best: (scan p@idx2,partial,cols=(2))
+ │         └── cost: 14.31
+ ├── G16: (scan p@idx,partial,cols=(1,4),constrained)
+ │    └── []
+ │         ├── best: (scan p@idx,partial,cols=(1,4),constrained)
  │         └── cost: 13.72
- ├── G16: (variable i)
- ├── G17: (const 3)
- ├── G18: (variable s)
- ├── G19: (const 'foo')
- ├── G20: (scan p@idx,partial,cols=(3,5))
+ ├── G17: (const 'foo')
+ ├── G18: (variable i)
+ ├── G19: (const 3)
+ ├── G20: (variable s)
+ ├── G21: (scan p@idx,partial,cols=(1,4))
  │    └── []
- │         ├── best: (scan p@idx,partial,cols=(3,5))
+ │         ├── best: (scan p@idx,partial,cols=(1,4))
  │         └── cost: 350.68
- └── G21: (filters G13)
+ └── G22: (filters G13)
 
 exec-ddl
 DROP INDEX idx
@@ -1657,9 +1778,9 @@ CREATE INDEX idx ON p (i) WHERE s = 'foo'
 memo expect-not=GenerateConstrainedScans
 SELECT i FROM p WHERE s = 'bar' AND i = 5
 ----
-memo (optimized, ~7KB, required=[presentation: i:1])
+memo (optimized, ~7KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
- │    └── [presentation: i:1]
+ │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
  │         └── cost: 1094.76
  ├── G2: (select G4 G5)
@@ -1667,9 +1788,9 @@ memo (optimized, ~7KB, required=[presentation: i:1])
  │         ├── best: (select G4 G5)
  │         └── cost: 1094.74
  ├── G3: (projections)
- ├── G4: (scan p,cols=(1,3))
+ ├── G4: (scan p,cols=(2,4))
  │    └── []
- │         ├── best: (scan p,cols=(1,3))
+ │         ├── best: (scan p,cols=(2,4))
  │         └── cost: 1084.71
  ├── G5: (filters G6 G7)
  ├── G6: (eq G8 G9)
@@ -1678,6 +1799,127 @@ memo (optimized, ~7KB, required=[presentation: i:1])
  ├── G9: (const 'bar')
  ├── G10: (variable i)
  └── G11: (const 5)
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+CREATE INDEX idx ON p (b) WHERE s IS NULL AND i = 0
+----
+
+# Project constant columns in a partial index predicate rather than performing
+# an index join.
+opt expect=GenerateConstrainedScans
+SELECT k, b, s, i FROM p WHERE b AND s IS NULL AND i = 0
+----
+project
+ ├── columns: k:1!null b:5!null s:4 i:2!null
+ ├── key: (1)
+ ├── fd: ()-->(2,4,5)
+ ├── scan p@idx,partial
+ │    ├── columns: k:1!null b:5!null
+ │    ├── constraint: /5/1: [/true - /true]
+ │    ├── key: (1)
+ │    └── fd: ()-->(5)
+ └── projections
+      ├── 0 [as=i:2]
+      └── NULL [as=s:4]
+
+# Do not project constant columns in a partial index predicate when an index
+# join must be performed to fetch other columns.
+opt expect=GenerateConstrainedScans
+SELECT k, b, s, i, f FROM p WHERE b AND s IS NULL AND i = 0
+----
+index-join p
+ ├── columns: k:1!null b:5!null s:4 i:2!null f:3
+ ├── key: (1)
+ ├── fd: ()-->(2,4,5), (1)-->(3)
+ └── scan p@idx,partial
+      ├── columns: k:1!null b:5!null
+      ├── constraint: /5/1: [/true - /true]
+      ├── key: (1)
+      └── fd: ()-->(5)
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+CREATE INDEX idx ON p (b) STORING (i) WHERE s IS NULL
+----
+
+# Project constant columns in a partial index predicate and apply a filter.
+opt expect=GenerateConstrainedScans
+SELECT k, b, s FROM p WHERE b AND s IS NULL AND i = 0
+----
+project
+ ├── columns: k:1!null b:5!null s:4
+ ├── key: (1)
+ ├── fd: ()-->(4,5)
+ └── select
+      ├── columns: k:1!null i:2!null s:4 b:5!null
+      ├── key: (1)
+      ├── fd: ()-->(2,4,5)
+      ├── project
+      │    ├── columns: s:4 k:1!null i:2 b:5!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(4,5), (1)-->(2)
+      │    ├── scan p@idx,partial
+      │    │    ├── columns: k:1!null i:2 b:5!null
+      │    │    ├── constraint: /5/1: [/true - /true]
+      │    │    ├── key: (1)
+      │    │    └── fd: ()-->(5), (1)-->(2)
+      │    └── projections
+      │         └── NULL [as=s:4]
+      └── filters
+           └── i:2 = 0 [outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+CREATE INDEX idx ON p (f, s) STORING (b) WHERE s IS NULL AND b AND i = 0
+----
+
+# Project only constant columns in the partial index predicate that do not exist
+# in the index.
+opt expect=GenerateConstrainedScans
+SELECT * FROM p WHERE f > 1.0 AND s IS NULL AND b AND i = 0
+----
+project
+ ├── columns: k:1!null i:2!null f:3!null s:4 b:5!null
+ ├── key: (1)
+ ├── fd: ()-->(2,4,5), (1)-->(3)
+ ├── scan p@idx,partial
+ │    ├── columns: k:1!null f:3!null s:4 b:5!null
+ │    ├── constraint: /3/4/1: [/1.0000000000000002 - ]
+ │    ├── key: (1)
+ │    └── fd: ()-->(4,5), (1)-->(3)
+ └── projections
+      └── 0 [as=i:2]
+
+exec-ddl
+DROP INDEX idx
+----
+
+exec-ddl
+CREATE INDEX idx ON p (i) WHERE f = 1.0
+----
+
+# Do not project constant columns with composite key encodings.
+opt expect=GenerateConstrainedScans
+SELECT i, f FROM p WHERE i = 0 AND f = 1.0
+----
+index-join p
+ ├── columns: i:2!null f:3!null
+ ├── fd: ()-->(2,3)
+ └── scan p@idx,partial
+      ├── columns: k:1!null i:2!null
+      ├── constraint: /2/1: [/0 - /0]
+      ├── key: (1)
+      └── fd: ()-->(2)
 
 exec-ddl
 DROP INDEX idx
@@ -5098,12 +5340,22 @@ CREATE INDEX j ON zz_partial (j) WHERE s = 'foo'
 
 # Don't generate a zigzag join when the expression that fixes the left columns
 # is removed during partial index implication of the right index.
+# TODO(mgartner): Once again, we find ourselves with a suboptimal query plan
+# with an unnecessary Project that projects s='foo' which is not needed by the
+# parent expression. This is the result of GenerateConstrainedScans replacing
+# the matched Select with a Project that is required to produce all the columns
+# that the Select produced. One way to fix this would be to add a new
+# exploration rule that can remove these unnecessary Projects, similar to
+# EliminateIndexJoinInsideProject.
 opt expect-not=GenerateZigzagJoins format=hide-all
 SELECT k FROM zz_partial WHERE s = 'foo' AND j = 20
 ----
 project
- └── scan zz_partial@j,partial
-      └── constraint: /3/1: [/20 - /20]
+ └── project
+      ├── scan zz_partial@j,partial
+      │    └── constraint: /3/1: [/20 - /20]
+      └── projections
+           └── 'foo'
 
 exec-ddl
 DROP INDEX zz_partial_s
@@ -5127,8 +5379,11 @@ opt expect-not=GenerateZigzagJoins format=hide-all
 SELECT k FROM zz_partial WHERE i = 10 AND s = 'foo'
 ----
 project
- └── scan zz_partial@i,partial
-      └── constraint: /2/1: [/10 - /10]
+ └── project
+      ├── scan zz_partial@i,partial
+      │    └── constraint: /2/1: [/10 - /10]
+      └── projections
+           └── 'foo'
 
 exec-ddl
 DROP INDEX i
@@ -8033,91 +8288,91 @@ CREATE INDEX idx_f ON p (f) WHERE s IN ('foo', 'bar', 'baz')
 # Apply when one side of the disjunction can be "constrained" by an
 # unconstrained partial index scan with no remaining filters.
 opt expect=SplitDisjunctionAddKey
-SELECT * FROM p WHERE i = 10 OR s IN ('foo', 'bar', 'baz')
+SELECT i, f, s, b FROM p WHERE i = 10 OR s IN ('foo', 'bar', 'baz')
 ----
 project
- ├── columns: i:1 f:2 s:3 b:4
+ ├── columns: i:2 f:3 s:4 b:5
  └── distinct-on
-      ├── columns: i:1 f:2 s:3 b:4 rowid:5!null
-      ├── grouping columns: rowid:5!null
-      ├── key: (5)
-      ├── fd: (5)-->(1-4)
+      ├── columns: k:1!null i:2 f:3 s:4 b:5
+      ├── grouping columns: k:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(2-5)
       ├── union-all
-      │    ├── columns: i:1 f:2 s:3 b:4 rowid:5!null
-      │    ├── left columns: i:7 f:8 s:9 b:10 rowid:11
-      │    ├── right columns: i:13 f:14 s:15 b:16 rowid:17
+      │    ├── columns: k:1!null i:2 f:3 s:4 b:5
+      │    ├── left columns: k:7 i:8 f:9 s:10 b:11
+      │    ├── right columns: k:13 i:14 f:15 s:16 b:17
       │    ├── index-join p
-      │    │    ├── columns: i:7!null f:8 s:9 b:10 rowid:11!null
-      │    │    ├── key: (11)
-      │    │    ├── fd: ()-->(7), (11)-->(8-10)
+      │    │    ├── columns: k:7!null i:8!null f:9 s:10 b:11
+      │    │    ├── key: (7)
+      │    │    ├── fd: ()-->(8), (7)-->(9-11)
       │    │    └── scan p@idx_i
-      │    │         ├── columns: i:7!null rowid:11!null
-      │    │         ├── constraint: /7/11: [/10 - /10]
-      │    │         ├── key: (11)
-      │    │         └── fd: ()-->(7)
+      │    │         ├── columns: k:7!null i:8!null
+      │    │         ├── constraint: /8/7: [/10 - /10]
+      │    │         ├── key: (7)
+      │    │         └── fd: ()-->(8)
       │    └── index-join p
-      │         ├── columns: i:13 f:14 s:15!null b:16 rowid:17!null
-      │         ├── key: (17)
-      │         ├── fd: (17)-->(13-16)
+      │         ├── columns: k:13!null i:14 f:15 s:16!null b:17
+      │         ├── key: (13)
+      │         ├── fd: (13)-->(14-17)
       │         └── scan p@idx_f,partial
-      │              ├── columns: f:14 rowid:17!null
-      │              ├── key: (17)
-      │              └── fd: (17)-->(14)
+      │              ├── columns: k:13!null f:15
+      │              ├── key: (13)
+      │              └── fd: (13)-->(15)
       └── aggregations
-           ├── const-agg [as=i:1, outer=(1)]
-           │    └── i:1
-           ├── const-agg [as=f:2, outer=(2)]
-           │    └── f:2
-           ├── const-agg [as=s:3, outer=(3)]
-           │    └── s:3
-           └── const-agg [as=b:4, outer=(4)]
-                └── b:4
+           ├── const-agg [as=i:2, outer=(2)]
+           │    └── i:2
+           ├── const-agg [as=f:3, outer=(3)]
+           │    └── f:3
+           ├── const-agg [as=s:4, outer=(4)]
+           │    └── s:4
+           └── const-agg [as=b:5, outer=(5)]
+                └── b:5
 
 # Apply when one side of the disjunction can be "constrained" by an
 # unconstrained partial index scan with remaining filters.
 opt expect=SplitDisjunctionAddKey
-SELECT * FROM p WHERE i = 10 OR s = 'foo'
+SELECT i, s, f, b FROM p WHERE i = 10 OR s = 'foo'
 ----
 project
- ├── columns: i:1 f:2 s:3 b:4
+ ├── columns: i:2 s:4 f:3 b:5
  └── distinct-on
-      ├── columns: i:1 f:2 s:3 b:4 rowid:5!null
-      ├── grouping columns: rowid:5!null
-      ├── key: (5)
-      ├── fd: (5)-->(1-4)
+      ├── columns: k:1!null i:2 f:3 s:4 b:5
+      ├── grouping columns: k:1!null
+      ├── key: (1)
+      ├── fd: (1)-->(2-5)
       ├── union-all
-      │    ├── columns: i:1 f:2 s:3 b:4 rowid:5!null
-      │    ├── left columns: i:7 f:8 s:9 b:10 rowid:11
-      │    ├── right columns: i:13 f:14 s:15 b:16 rowid:17
+      │    ├── columns: k:1!null i:2 f:3 s:4 b:5
+      │    ├── left columns: k:7 i:8 f:9 s:10 b:11
+      │    ├── right columns: k:13 i:14 f:15 s:16 b:17
       │    ├── index-join p
-      │    │    ├── columns: i:7!null f:8 s:9 b:10 rowid:11!null
-      │    │    ├── key: (11)
-      │    │    ├── fd: ()-->(7), (11)-->(8-10)
+      │    │    ├── columns: k:7!null i:8!null f:9 s:10 b:11
+      │    │    ├── key: (7)
+      │    │    ├── fd: ()-->(8), (7)-->(9-11)
       │    │    └── scan p@idx_i
-      │    │         ├── columns: i:7!null rowid:11!null
-      │    │         ├── constraint: /7/11: [/10 - /10]
-      │    │         ├── key: (11)
-      │    │         └── fd: ()-->(7)
+      │    │         ├── columns: k:7!null i:8!null
+      │    │         ├── constraint: /8/7: [/10 - /10]
+      │    │         ├── key: (7)
+      │    │         └── fd: ()-->(8)
       │    └── select
-      │         ├── columns: i:13 f:14 s:15!null b:16 rowid:17!null
-      │         ├── key: (17)
-      │         ├── fd: ()-->(15), (17)-->(13,14,16)
+      │         ├── columns: k:13!null i:14 f:15 s:16!null b:17
+      │         ├── key: (13)
+      │         ├── fd: ()-->(16), (13)-->(14,15,17)
       │         ├── index-join p
-      │         │    ├── columns: i:13 f:14 s:15 b:16 rowid:17!null
-      │         │    ├── key: (17)
-      │         │    ├── fd: (17)-->(13-16)
+      │         │    ├── columns: k:13!null i:14 f:15 s:16 b:17
+      │         │    ├── key: (13)
+      │         │    ├── fd: (13)-->(14-17)
       │         │    └── scan p@idx_f,partial
-      │         │         ├── columns: f:14 rowid:17!null
-      │         │         ├── key: (17)
-      │         │         └── fd: (17)-->(14)
+      │         │         ├── columns: k:13!null f:15
+      │         │         ├── key: (13)
+      │         │         └── fd: (13)-->(15)
       │         └── filters
-      │              └── s:15 = 'foo' [outer=(15), constraints=(/15: [/'foo' - /'foo']; tight), fd=()-->(15)]
+      │              └── s:16 = 'foo' [outer=(16), constraints=(/16: [/'foo' - /'foo']; tight), fd=()-->(16)]
       └── aggregations
-           ├── const-agg [as=i:1, outer=(1)]
-           │    └── i:1
-           ├── const-agg [as=f:2, outer=(2)]
-           │    └── f:2
-           ├── const-agg [as=s:3, outer=(3)]
-           │    └── s:3
-           └── const-agg [as=b:4, outer=(4)]
-                └── b:4
+           ├── const-agg [as=i:2, outer=(2)]
+           │    └── i:2
+           ├── const-agg [as=f:3, outer=(3)]
+           │    └── f:3
+           ├── const-agg [as=s:4, outer=(4)]
+           │    └── s:4
+           └── const-agg [as=b:5, outer=(5)]
+                └── b:5
