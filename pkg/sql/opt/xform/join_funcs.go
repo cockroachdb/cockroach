@@ -229,8 +229,8 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 	var pkCols opt.ColList
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
-	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
+	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// Find the longest prefix of index key columns that are constrained by
 		// an equality with another column or a constant.
 		numIndexKeyCols := index.LaxKeyColumnCount()
@@ -364,7 +364,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		lookupJoin.Cols = lookupJoin.LookupExpr.OuterCols()
 		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
-		if isCovering {
+		// TODO(mgartner): The right side of the join can "produce" columns held
+		// constant by a partial index predicate, but the lookup joiner does not
+		// currently support this. For now, if constProj is non-empty we
+		// consider the index non-covering.
+		if isCovering && len(constProj) == 0 {
 			// Case 1 (see function comment).
 			lookupJoin.Cols.UnionWith(scanPrivate.Cols)
 
@@ -639,8 +643,8 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	var optionalFilters memo.FiltersExpr
 
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
-	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
+	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		invertedJoin := memo.InvertedJoinExpr{Input: input}
 		numPrefixCols := index.NonInvertedPrefixColumnCount()
 
