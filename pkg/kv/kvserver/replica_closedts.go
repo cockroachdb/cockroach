@@ -145,7 +145,7 @@ func (r *Replica) BumpSideTransportClosed(
 	// Update the replica directly since there's no side-transport connection to
 	// the local node.
 	r.mu.sideTransportClosedTimestamp = target
-	r.mu.sideTransportCloseTimestampLAI = lai
+	r.mu.sideTransportClosedTimestampLAI = lai
 	return true, lai, policy, desc
 }
 
@@ -173,12 +173,12 @@ func (r *Replica) ForwardSideTransportClosedTimestamp(
 	defer r.mu.Unlock()
 
 	if r.mu.sideTransportClosedTimestamp.Forward(closedTS) {
-		if r.mu.sideTransportCloseTimestampLAI > lai {
+		if r.mu.sideTransportClosedTimestampLAI > lai {
 			log.Fatalf(ctx, "received side-transport notification with higher closed timestamp "+
 				"but lower LAI: r%d current LAI: %d received LAI: %d",
-				r.RangeID, r.mu.sideTransportCloseTimestampLAI, lai)
+				r.RangeID, r.mu.sideTransportClosedTimestampLAI, lai)
 		}
-		r.mu.sideTransportCloseTimestampLAI = lai
+		r.mu.sideTransportClosedTimestampLAI = lai
 	}
 }
 
@@ -193,5 +193,5 @@ func (r *Replica) ForwardSideTransportClosedTimestamp(
 // replica's applied LAI. If the returned LAI hasn't applied, the closed
 // timestamp cannot be used.
 func (r *Replica) getSideTransportClosedTimestampRLocked() (closedTS hlc.Timestamp, lai ctpb.LAI) {
-	return r.mu.sideTransportClosedTimestamp, r.mu.sideTransportCloseTimestampLAI
+	return r.mu.sideTransportClosedTimestamp, r.mu.sideTransportClosedTimestampLAI
 }
