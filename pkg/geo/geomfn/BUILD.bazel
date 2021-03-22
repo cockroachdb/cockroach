@@ -93,8 +93,8 @@ go_test(
         "validity_check_test.go",
         "voronoi_test.go",
     ],
+    data = ["@cockroach//c-deps:libgeos"],
     embed = [":geomfn"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",

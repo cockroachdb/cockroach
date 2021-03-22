@@ -194,12 +194,3 @@ vectorized: true
           estimated row count: 1,000 (missing stats)
           table: uniontest@primary
           spans: FULL SCAN
-
-statement ok
-CREATE TABLE a (a INT PRIMARY KEY)
-
-# Regression test for #34524. This test is here because the issue still exists
-# in the heuristic planner.
-query I
-(SELECT NULL FROM a) EXCEPT (VALUES((SELECT 1 FROM a LIMIT 1)), (1))
-----

@@ -114,6 +114,13 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.O
 type SynchronizerInput struct {
 	// Op is the input Operator.
 	Op colexecop.Operator
+	// StatsCollectors are all vectorized stats collectors in the input tree.
+	// The field is currently being used *only* to track all of the stats
+	// collectors in the input tree, and the synchronizers should *not* access
+	// it themselves.
+	// TODO(yuzefovich): actually move the logic of getting stats into the
+	// synchronizers.
+	StatsCollectors []VectorizedStatsCollector
 	// MetadataSources are metadata sources in the input tree that should be
 	// drained in the same goroutine as Op.
 	MetadataSources execinfrapb.MetadataSources

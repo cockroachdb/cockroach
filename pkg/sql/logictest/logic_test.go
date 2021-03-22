@@ -20,8 +20,8 @@ import (
 // CockroachDB features. The tests use a similar methodology to the SQLLite
 // Sqllogictests. All of these tests should only verify correctness of output,
 // and not how that output was derived. Therefore, these tests can be run
-// using the heuristic planner, the cost-based optimizer, or even run against
-// Postgres to verify it returns the same logical results.
+// with multiple configs, or even run against Postgres to verify it returns the
+// same logical results.
 //
 // See the comments in logic.go for more details.
 func TestLogic(t *testing.T) {

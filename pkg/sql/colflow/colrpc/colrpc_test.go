@@ -226,7 +226,7 @@ func TestOutboxInbox(t *testing.T) {
 		defer outboxMemAcc.Close(ctx)
 		outbox, err := NewOutbox(
 			colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-			input, typs, nil /* metadataSource */, nil /* toClose */, nil, /* getStats */
+			input, typs, nil /* getStats */, nil /* metadataSources */, nil, /* toClose */
 		)
 		require.NoError(t, err)
 
@@ -503,13 +503,13 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			}
 			outbox, err := NewOutbox(
 				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-				input, typs, []execinfrapb.MetadataSource{
+				input, typs, nil /* getStats */, []execinfrapb.MetadataSource{
 					execinfrapb.CallbackMetadataSource{
 						DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
 							return expectedMetadata
 						},
 					},
-				}, nil /* toClose */, nil /* getStats */)
+				}, nil /* toClose */)
 			require.NoError(t, err)
 
 			inboxMemAcc := testMemMonitor.MakeBoundAccount()
@@ -583,7 +583,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-		input, typs, nil /* metadataSources */, nil /* toClose */, nil, /* getStats */
+		input, typs, nil /* getStats */, nil /* metadataSources */, nil, /* toClose */
 	)
 	require.NoError(b, err)
 
@@ -647,7 +647,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-		input, typs, nil /* metadataSources */, nil /* toClose */, nil, /* getStats */
+		input, typs, nil /* getStats */, nil /* metadataSources */, nil, /* toClose */
 	)
 	require.NoError(t, err)
 
