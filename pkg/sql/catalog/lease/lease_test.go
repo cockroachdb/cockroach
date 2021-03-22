@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -42,7 +43,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -53,9 +56,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/lib/pq"
@@ -2544,9 +2549,16 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	checkLeaseState(true /* shouldBePresent */)
 
 	// Take the table offline and back online again.
-	// This should relinquish the lease.
+	// This should not relinquish the lease anymore
+	// and offline ones will now be held.
 	setTableState(descpb.DescriptorState_PUBLIC, descpb.DescriptorState_OFFLINE)
 	setTableState(descpb.DescriptorState_OFFLINE, descpb.DescriptorState_PUBLIC)
+	checkLeaseState(true /* shouldBePresent */)
+
+	// Take the table dropped and back online again.
+	// This should relinquish the lease.
+	setTableState(descpb.DescriptorState_PUBLIC, descpb.DescriptorState_DROP)
+	setTableState(descpb.DescriptorState_DROP, descpb.DescriptorState_PUBLIC)
 	checkLeaseState(false /* shouldBePresent */)
 
 	// Query the table, thereby acquiring a lease once again.
@@ -2556,4 +2568,130 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	// Do a no-op descriptor update, lease should still be present.
 	setTableState(descpb.DescriptorState_PUBLIC, descpb.DescriptorState_PUBLIC)
 	checkLeaseState(true /* shouldBePresent */)
+}
+
+// TestOfflineLeaseRefresh validates that no live lock can occur,
+// after a table is brought offline. Specifically a table a will be
+// brought offline, and then one transaction will attempt to bring it
+// online while another transaction will attempt to do a read. The read
+// transaction could previously push back the lease of transaction
+// trying to online the table perpetually (as seen in issue #61798).
+func TestOfflineLeaseRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	waitForTxn := make(chan chan struct{})
+	waitForRqstFilter := make(chan chan struct{})
+	errorChan := make(chan error)
+	var txnID uuid.UUID
+	var mu syncutil.RWMutex
+
+	knobs := &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
+			mu.RLock()
+			checkRequest := req.Txn != nil && req.Txn.ID.Equal(txnID)
+			mu.RUnlock()
+			if _, ok := req.GetArg(roachpb.EndTxn); checkRequest && ok {
+				notify := make(chan struct{})
+				waitForRqstFilter <- notify
+				<-notify
+			}
+			return nil
+		},
+	}
+	params := base.TestServerArgs{Knobs: base.TestingKnobs{Store: knobs}}
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	s := tc.Server(0)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+
+	// Create t1 that will be offline, and t2,
+	// that will serve inserts.
+	_, err := conn.Exec(`
+CREATE DATABASE d1;
+CREATE TABLE d1.t1 (name int);
+INSERT INTO d1.t1 values(5);
+INSERT INTO d1.t1 values(5);
+INSERT INTO d1.t1 values(5);
+CREATE TABLE d1.t2 (name int);
+`)
+	require.NoError(t, err)
+
+	desc := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "d1", "t1")
+	tableID := desc.ID
+
+	// Force the table descriptor into a offline state
+	err = descs.Txn(ctx, s.ClusterSettings(), s.LeaseManager().(*lease.Manager), s.InternalExecutor().(sqlutil.InternalExecutor), s.DB(),
+		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			tableDesc, err := descriptors.GetMutableTableVersionByID(ctx, tableID, txn)
+			if err != nil {
+				return err
+			}
+			tableDesc.SetOffline("For unit test")
+			err = descriptors.WriteDesc(ctx, false, tableDesc, txn)
+			if err != nil {
+				return err
+			}
+			tableID = tableDesc.ID
+			return nil
+		})
+	require.NoError(t, err)
+
+	_, err = s.LeaseManager().(*lease.Manager).WaitForOneVersion(ctx, tableID, retry.Options{})
+	require.NoError(t, err)
+
+	go func() {
+		err := descs.Txn(ctx, s.ClusterSettings(), s.LeaseManager().(*lease.Manager),
+			s.InternalExecutor().(sqlutil.InternalExecutor), s.DB(),
+			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+				close(waitForRqstFilter)
+				mu.Lock()
+				waitForRqstFilter = make(chan chan struct{})
+				txnID = txn.ID()
+				mu.Unlock()
+
+				// Online the descriptor by making it public
+				tableDesc, err := descriptors.GetMutableTableVersionByID(ctx, tableID, txn)
+				if err != nil {
+					return err
+				}
+				tableDesc.SetPublic()
+				err = descriptors.WriteDesc(ctx, false, tableDesc, txn)
+				if err != nil {
+					return err
+				}
+				// Allow the select on the table to proceed,
+				// so that it waits on the channel at the appropriate
+				// moment.
+				notify := make(chan struct{})
+				waitForTxn <- notify
+				<-notify
+
+				// Select from an unrelated table
+				_, err = s.InternalExecutor().(sqlutil.InternalExecutor).ExecEx(ctx, "inline-exec", txn,
+					sessiondata.InternalExecutorOverride{User: security.RootUser},
+					"insert into d1.t2 values (10);")
+				return err
+
+			})
+		close(waitForTxn)
+		close(waitForRqstFilter)
+		errorChan <- err
+	}()
+
+	for notify := range waitForTxn {
+		close(notify)
+		mu.RLock()
+		rqstFilterChannel := waitForRqstFilter
+		mu.RUnlock()
+		for notify2 := range rqstFilterChannel {
+			// Push the query trying to online the table out by
+			// leasing out the table again
+			_, err = conn.Query("select  * from d1.t1")
+			require.EqualError(t, err, "pq: relation \"t1\" is offline: For unit test",
+				"Table offline error was not generated as expected")
+			close(notify2)
+		}
+	}
+	require.NoError(t, <-errorChan)
+	close(errorChan)
 }

@@ -278,7 +278,7 @@ func (tc *Collection) getLeasedDescriptorByName(
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
-		if catalog.HasInactiveDescriptorError(err) ||
+		if (catalog.HasInactiveDescriptorError(err) && errors.Is(err, catalog.ErrDescriptorDropped)) ||
 			errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, true, nil
 		}
@@ -941,12 +941,19 @@ func (tc *Collection) getDescriptorVersionByID(
 	// First, look to see if we already have the table in the shared cache.
 	if desc := tc.leasedDescriptors.getByID(id); desc != nil {
 		log.VEventf(ctx, 2, "found descriptor %d in cache", id)
+		if err := catalog.FilterDescriptorState(desc, flags); err != nil {
+			return nil, err
+		}
 		return desc, nil
 	}
 
 	readTimestamp := txn.ReadTimestamp()
 	desc, expiration, err := tc.leaseMgr.Acquire(ctx, readTimestamp, id)
 	if err != nil {
+		return nil, err
+	}
+	// Filter based on the state
+	if err := catalog.FilterDescriptorState(desc, flags); err != nil {
 		return nil, err
 	}
 
