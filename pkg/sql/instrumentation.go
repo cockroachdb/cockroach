@@ -229,7 +229,7 @@ func (ih *instrumentationHelper) Finish(
 			ih.explainPlan,
 			p.curPlan.distSQLFlowInfos,
 			trace,
-			cfg.TestingKnobs.DeterministicExplainAnalyze,
+			cfg.TestingKnobs.DeterministicExplain,
 		)
 	}
 
@@ -238,7 +238,7 @@ func (ih *instrumentationHelper) Finish(
 	for _, flowInfo := range p.curPlan.distSQLFlowInfos {
 		flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
 	}
-	queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplainAnalyze, flowsMetadata)
+	queryLevelStats, err := execstats.GetQueryLevelStats(trace, cfg.TestingKnobs.DeterministicExplain, flowsMetadata)
 	if err != nil {
 		const msg = "error getting query level stats for statement: %s: %+v"
 		if util.CrdbTestBuild {

@@ -686,7 +686,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
 			diagramFlags := execinfrapb.DiagramFlags{
-				MakeDeterministic: planner.execCfg.TestingKnobs.DeterministicExplainAnalyze,
+				MakeDeterministic: planner.execCfg.TestingKnobs.DeterministicExplain,
 			}
 			var err error
 			diagram, err = p.flowSpecsToDiagram(ctx, flows, diagramFlags)

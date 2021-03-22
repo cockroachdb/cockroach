@@ -25,9 +25,38 @@ type Flags struct {
 	// If HideValues is true, then Verbose must be false.
 	HideValues bool
 
-	// MakeDeterministic edits values that are not suitable for testing, such as
-	// planning time.
-	MakeDeterministic bool
+	// Redaction control (for testing purposes).
+	Redact RedactFlags
+}
+
+// RedactFlags control the redacting of various field values. They are used to
+// guarantee deterministic results for testing purposes.
+type RedactFlags uint8
+
+const (
+	// RedactDistribution hides the value of the "distribution" field.
+	RedactDistribution RedactFlags = (1 << iota)
+
+	// RedactVectorized hides the value of the "vectorized" field.
+	RedactVectorized
+
+	// RedactNodes hides cluster nodes involved.
+	RedactNodes
+
+	// RedactVolatile hides any values that can vary from one query run to the
+	// other, even without changes to the configuration or data distribution (e.g.
+	// timings).
+	RedactVolatile
+)
+
+const (
+	// RedactAll has all redact flags set.
+	RedactAll RedactFlags = RedactDistribution | RedactVectorized | RedactNodes | RedactVolatile
+)
+
+// Has returns true if the receiver has the given flag set.
+func (f RedactFlags) Has(flag RedactFlags) bool {
+	return (f & flag) != 0
 }
 
 // MakeFlags crates Flags from ExplainOptions.
