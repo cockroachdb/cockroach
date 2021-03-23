@@ -1349,11 +1349,12 @@ type tableInfo struct {
 	columnNames      []tree.Name
 	columnsTableDefs []*tree.ColumnTableDef
 	pkCols           []tree.Name
+	refColsLists     [][]tree.Name
 }
 
-// getTableInfoFromCreateStatements collects tableInfo from every CreateTable
-// statement in the given list of statements.
-func getTableInfoFromCreateStatements(stmts []tree.Statement) map[tree.Name]tableInfo {
+// getTableInfoFromDDLStatements collects tableInfo from every CreateTable
+// and AlterTable statement in the given list of statements.
+func getTableInfoFromDDLStatements(stmts []tree.Statement) map[tree.Name]tableInfo {
 	tables := make(map[tree.Name]tableInfo)
 	for _, stmt := range stmts {
 		switch ast := stmt.(type) {
@@ -1373,9 +1374,29 @@ func getTableInfoFromCreateStatements(stmts []tree.Statement) map[tree.Name]tabl
 							info.pkCols = append(info.pkCols, elem.Column)
 						}
 					}
+				case *tree.ForeignKeyConstraintTableDef:
+					// The tableInfo must have already been created, since FK constraints
+					// can only reference tables that already exist.
+					if refTableInfo, ok := tables[ast.Table.ObjectName]; ok {
+						refTableInfo.refColsLists = append(refTableInfo.refColsLists, ast.ToCols)
+					}
 				}
 			}
 			tables[ast.Table.ObjectName] = info
+		case *tree.AlterTable:
+			for _, cmd := range ast.Cmds {
+				switch alterCmd := cmd.(type) {
+				case *tree.AlterTableAddConstraint:
+					switch constraintDef := alterCmd.ConstraintDef.(type) {
+					case *tree.ForeignKeyConstraintTableDef:
+						// The tableInfo must have already been created, since ALTER
+						// statements come after CREATE statements.
+						if info, ok := tables[constraintDef.Table.ObjectName]; ok {
+							info.refColsLists = append(info.refColsLists, constraintDef.ToCols)
+						}
+					}
+				}
+			}
 		}
 	}
 	return tables
@@ -1385,7 +1406,7 @@ func getTableInfoFromCreateStatements(stmts []tree.Statement) map[tree.Name]tabl
 // prevent dependency cycles with RandCreateTable.
 func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
 	changed := false
-	tables := getTableInfoFromCreateStatements(stmts)
+	tables := getTableInfoFromDDLStatements(stmts)
 	mapFromIndexCols := func(cols []tree.Name) map[tree.Name]struct{} {
 		colMap := map[tree.Name]struct{}{}
 		for _, col := range cols {
@@ -1416,21 +1437,21 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 			if ast.Inverted {
 				continue
 			}
-			tableInfo, ok := tables[ast.Table.ObjectName]
+			info, ok := tables[ast.Table.ObjectName]
 			if !ok {
 				continue
 			}
 			// If we don't have a storing list, make one with 50% chance.
 			if ast.Storing == nil && rng.Intn(2) == 0 {
-				indexCols := mapFromIndexCols(tableInfo.pkCols)
+				indexCols := mapFromIndexCols(info.pkCols)
 				for _, elem := range ast.Columns {
 					indexCols[elem.Column] = struct{}{}
 				}
-				ast.Storing = generateStoringCols(rng, tableInfo, indexCols)
+				ast.Storing = generateStoringCols(rng, info, indexCols)
 				changed = true
 			}
 		case *tree.CreateTable:
-			tableInfo, ok := tables[ast.Table.ObjectName]
+			info, ok := tables[ast.Table.ObjectName]
 			if !ok {
 				panic("table info could not be found")
 			}
@@ -1449,11 +1470,11 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 				}
 				// If we don't have a storing list, make one with 50% chance.
 				if idx.Storing == nil && rng.Intn(2) == 0 {
-					indexCols := mapFromIndexCols(tableInfo.pkCols)
+					indexCols := mapFromIndexCols(info.pkCols)
 					for _, elem := range idx.Columns {
 						indexCols[elem.Column] = struct{}{}
 					}
-					idx.Storing = generateStoringCols(rng, tableInfo, indexCols)
+					idx.Storing = generateStoringCols(rng, info, indexCols)
 					changed = true
 				}
 			}
@@ -1467,24 +1488,27 @@ func IndexStoringMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 // partial index predicate expressions to indexes.
 func PartialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Statement, bool) {
 	changed := false
-	tables := getTableInfoFromCreateStatements(stmts)
+	tables := getTableInfoFromDDLStatements(stmts)
 	for _, stmt := range stmts {
 		switch ast := stmt.(type) {
 		case *tree.CreateIndex:
-			tableInfo, ok := tables[ast.Table.ObjectName]
+			info, ok := tables[ast.Table.ObjectName]
 			if !ok {
 				continue
 			}
 
-			// If the index is not already a partial index, make it a partial
-			// index with a 50% chance.
-			if ast.Predicate == nil && rng.Intn(2) == 0 {
+			// If the index is not already a partial index, make it a partial index
+			// with a 50% chance. Do not mutate an index that was created to satisfy a
+			// FK constraint.
+			if ast.Predicate == nil &&
+				!hasReferencingConstraint(info, ast.Columns) &&
+				rng.Intn(2) == 0 {
 				tn := tree.MakeUnqualifiedTableName(ast.Table.ObjectName)
-				ast.Predicate = randPartialIndexPredicateFromCols(rng, tableInfo.columnsTableDefs, &tn)
+				ast.Predicate = randPartialIndexPredicateFromCols(rng, info.columnsTableDefs, &tn)
 				changed = true
 			}
 		case *tree.CreateTable:
-			tableInfo, ok := tables[ast.Table.ObjectName]
+			info, ok := tables[ast.Table.ObjectName]
 			if !ok {
 				panic("table info could not be found")
 			}
@@ -1505,15 +1529,35 @@ func PartialIndexMutator(rng *rand.Rand, stmts []tree.Statement) ([]tree.Stateme
 
 				// If the index is not already a partial index, make it a partial
 				// index with a 50% chance.
-				if idx.Predicate == nil && rng.Intn(2) == 0 {
+				if idx.Predicate == nil &&
+					!hasReferencingConstraint(info, idx.Columns) &&
+					rng.Intn(2) == 0 {
 					tn := tree.MakeUnqualifiedTableName(ast.Table.ObjectName)
-					idx.Predicate = randPartialIndexPredicateFromCols(rng, tableInfo.columnsTableDefs, &tn)
+					idx.Predicate = randPartialIndexPredicateFromCols(rng, info.columnsTableDefs, &tn)
 					changed = true
 				}
 			}
 		}
 	}
 	return stmts, changed
+}
+
+// hasReferencingConstraint returns true if the tableInfo has any referencing
+// columns that match idxColumns.
+func hasReferencingConstraint(info tableInfo, idxColumns tree.IndexElemList) bool {
+RefColsLoop:
+	for _, refCols := range info.refColsLists {
+		if len(refCols) != len(idxColumns) {
+			continue RefColsLoop
+		}
+		for i := range refCols {
+			if refCols[i] != idxColumns[i].Column {
+				continue RefColsLoop
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
