@@ -212,7 +212,9 @@ func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.R
 }
 
 // GetCurrentReadSummary is part of the EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp) {
+func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(
+	ctx context.Context,
+) (rspb.ReadSummary, hlc.Timestamp) {
 	// To capture a read summary over the range, all keys must be latched for
 	// writing to prevent any concurrent reads or writes.
 	desc := rec.i.Desc()
@@ -224,7 +226,7 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary() (rspb.ReadSummary,
 		Key:    desc.StartKey.AsRawKey(),
 		EndKey: desc.EndKey.AsRawKey(),
 	})
-	return rec.i.GetCurrentReadSummary()
+	return rec.i.GetCurrentReadSummary(ctx)
 }
 
 // GetLimiters returns the per-store limiters.
