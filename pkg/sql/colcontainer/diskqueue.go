@@ -13,7 +13,6 @@ package colcontainer
 import (
 	"bytes"
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"io"
@@ -297,6 +296,7 @@ func GetPatherFunc(f func(ctx context.Context) string) GetPather {
 
 type DiskSpillingMetrics interface {
 	QuerySpilled()
+	QueryHasSpilled()
 	BytesWritten(i int)
 }
 
@@ -304,24 +304,27 @@ type DiskSpillingMetricsImpl struct {
 	mu struct {
 		syncutil.Mutex
 		querySpilled bool
-		a *execinfra.DistSQLMetrics
-		m *sql.EngineMetrics
+		m *execinfra.DistSQLMetrics
+	}
+}
+
+func (d *DiskSpillingMetricsImpl) QuerySpilled() {
+	d.mu.m.QueriesSpilled.Inc(1)
+}
+
+func (d *DiskSpillingMetricsImpl) QueryHasSpilled() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.mu.querySpilled {
+		d.mu.querySpilled = true
+		d.mu.m.QueryHasSpilled.Inc(1)
 	}
 }
 
 func (d *DiskSpillingMetricsImpl) BytesWritten(i int) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.mu.m.SpillingBytesWritten.Inc(1)
-}
-
-func (d *DiskSpillingMetricsImpl) QuerySpilled() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if !d.mu.querySpilled {
-		d.mu.querySpilled = true
-		d.mu.m.QuerySpilledCount.Inc(1)
-	}
+	d.mu.m.SpilledBytesWritten.Inc(1)
 }
 
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
@@ -420,6 +423,7 @@ func newDiskQueue(
 		return nil, err
 	}
 	cfg.DiskSpillingMetrics.QuerySpilled()
+	cfg.DiskSpillingMetrics.QueryHasSpilled()
 	// rotateFile will create a new file to write to.
 	return d, d.rotateFile(ctx)
 }

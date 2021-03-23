@@ -143,13 +143,6 @@ type EngineMetrics struct {
 
 	// FullTableOrIndexScanCount counts the number of full table or index scans.
 	FullTableOrIndexScanCount *metric.Counter
-
-	// QuerySpilledCount counts the number of times queries have spilled to disk.
-	QuerySpilledCount *metric.Counter
-
-	// SpillingBytesWritten counts the number of bytes written to temporary disk storage
-	// as a result of spilling.
-	SpillingBytesWritten *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface

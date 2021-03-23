@@ -1667,6 +1667,14 @@ var charts = []sectionDescription{
 				Title:   "Disk Usage per Statement",
 				Metrics: []string{"sql.disk.distsql.max"},
 			},
+			{
+				Title:   "Number of Times Queries Have Spilled To Disk",
+				Metrics: []string{"sql.distsql.queries.spilled"},
+			},
+			{
+				Title:   "Number of Queries Spilled to Disk",
+				Metrics: []string{"sql.distsql.query.has.spilled"},
+			},
 		},
 	},
 	{
@@ -1905,14 +1913,6 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"sql.full.scan.count",
 					"sql.full.scan.count.internal",
-				},
-				AxisLabel: "SQL Statements",
-			},
-			{
-				Title: "Queries Spilled to Disk",
-				Metrics: []string{
-					"sql.query.spilled.count",
-					"sql.query.spilled.count.internal",
 				},
 				AxisLabel: "SQL Statements",
 			},
