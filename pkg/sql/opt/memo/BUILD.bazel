@@ -3,14 +3,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "memo",
     srcs = [
-        "check_expr_skip.go",
+        "check_expr.go",
+        "check_expr_skip.go",  # keep
         "constraint_builder.go",
         "cost.go",
         "expr.go",
         "expr_format.go",
         "expr_name_gen.go",
         "extract.go",
-        "filters_expr_mutate_checker_skip.go",
+        "filters_expr_mutate_checker.go",
+        "filters_expr_mutate_checker_skip.go",  # keep
         "group.go",
         "interner.go",
         "logical_props_builder.go",
