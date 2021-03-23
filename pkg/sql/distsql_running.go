@@ -118,7 +118,7 @@ func (dsp *DistSQLPlanner) initRunners(ctx context.Context) {
 // It will first attempt to set up all remote flows using the dsp workers if
 // available or sequentially if not, and then finally set up the gateway flow,
 // whose output is the DistSQLReceiver provided. This flow is then returned to
-// be run.
+// be run. It also returns a boolean indicating whether the flow is vectorized.
 func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
@@ -198,6 +198,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			nodeID:     nodeID,
 			resultChan: resultChan,
 		}
+		defer physicalplan.ReleaseSetupFlowRequest(&req)
 
 		// Send out a request to the workers; if no worker is available, run
 		// directly.
@@ -226,6 +227,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// Set up the flow on this node.
 	localReq := setupReq
 	localReq.Flow = *flows[thisNodeID]
+	defer physicalplan.ReleaseSetupFlowRequest(&localReq)
 	return dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 }
 
@@ -293,14 +295,16 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	flows := plan.GenerateFlowSpecs()
-	defer func() {
-		for _, flowSpec := range flows {
-			physicalplan.ReleaseFlowSpec(flowSpec)
-		}
-	}()
 	if _, ok := flows[dsp.gatewayNodeID]; !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
 		return func() {}
+	}
+
+	if planCtx.saveFlows != nil {
+		if err := planCtx.saveFlows(flows); err != nil {
+			recv.SetError(err)
+			return func() {}
+		}
 	}
 
 	if logPlanDiagram {
@@ -347,13 +351,6 @@ func (dsp *DistSQLPlanner) Run(
 
 	if planCtx.planner != nil && flow.IsVectorized() {
 		planCtx.planner.curPlan.flags.Set(planFlagVectorized)
-	}
-
-	if planCtx.saveFlows != nil {
-		if err := planCtx.saveFlows(flows); err != nil {
-			recv.SetError(err)
-			return func() {}
-		}
 	}
 
 	// Check that flows that were forced to be planned locally also have no concurrency.

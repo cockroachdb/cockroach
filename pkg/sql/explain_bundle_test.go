@@ -60,7 +60,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
 			t, fmt.Sprint(rows), "public.abc",
-			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html",
 		)
 	})
 
@@ -69,7 +69,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT EXISTS (SELECT * FROM abc WHERE c=1)")
 		checkBundle(
 			t, fmt.Sprint(rows), "public.abc",
-			base, plans, "stats-defaultdb.public.abc.sql", "distsql-2-main-query.html distsql-1-subquery.html vec-1-subquery-v.txt vec-1-subquery.txt vec-2-main-query-v.txt vec-2-main-query.txt",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql-2-main-query.html distsql-1-subquery.html",
 		)
 	})
 
@@ -77,7 +77,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM s.a WHERE a=1")
 		checkBundle(
 			t, fmt.Sprint(rows), "s.a",
-			base, plans, "stats-defaultdb.s.a.sql", "distsql.html vec.txt vec-v.txt",
+			base, plans, "stats-defaultdb.s.a.sql", "distsql.html",
 		)
 	})
 
@@ -116,7 +116,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		}
 		checkBundle(
 			t, rowsBuf.String(), "public.abc",
-			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html",
 		)
 	})
 }
