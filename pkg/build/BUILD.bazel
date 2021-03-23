@@ -13,6 +13,12 @@ go_library(
     embed = [":build_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/build",
     visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/build.rev": "{STABLE_BUILD_GIT_COMMIT}",
+        "github.com/cockroachdb/cockroach/pkg/build.tag": "{STABLE_BUILD_GIT_TAG}",
+        "github.com/cockroachdb/cockroach/pkg/build.utcTime": "{STABLE_BUILD_GIT_UTCTIME}",
+        "github.com/cockroachdb/cockroach/pkg/build.typ": "{STABLE_BUILD_GIT_BUILD_TYPE}",
+    },
     deps = [
         "//pkg/util/envutil",
         "//pkg/util/version",
