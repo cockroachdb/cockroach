@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -61,6 +62,14 @@ const (
 // not request detailed errors.
 var errEnterpriseRequired = pgerror.New(pgcode.CCLValidLicenseRequired,
 	"a valid enterprise license is required")
+
+// decodeCache is used to cache licenses for decodeCached().
+var decodeCache = struct {
+	syncutil.RWMutex
+	licenses map[string]*licenseccl.License
+}{
+	licenses: map[string]*licenseccl.License{},
+}
 
 // TestingEnableEnterprise allows overriding the license check in tests.
 func TestingEnableEnterprise() func() {
@@ -113,11 +122,9 @@ func TimeToEnterpriseLicenseExpiry(
 	ctx context.Context, st *cluster.Settings, asOf time.Time,
 ) (time.Duration, error) {
 	var lic *licenseccl.License
-	// FIXME(tschottdorf): see whether it makes sense to cache the decoded
-	// license.
 	if str := enterpriseLicense.Get(&st.SV); str != "" {
 		var err error
-		if lic, err = decode(str); err != nil {
+		if lic, err = decodeCached(str); err != nil {
 			return 0, err
 		}
 	} else {
@@ -135,11 +142,9 @@ func checkEnterpriseEnabledAt(
 		return nil
 	}
 	var lic *licenseccl.License
-	// FIXME(tschottdorf): see whether it makes sense to cache the decoded
-	// license.
 	if str := enterpriseLicense.Get(&st.SV); str != "" {
 		var err error
-		if lic, err = decode(str); err != nil {
+		if lic, err = decodeCached(str); err != nil {
 			return err
 		}
 	}
@@ -151,7 +156,7 @@ func getLicenseType(st *cluster.Settings) (string, error) {
 	if str == "" {
 		return "None", nil
 	}
-	lic, err := decode(str)
+	lic, err := decodeCached(str)
 	if err != nil {
 		return "", err
 	}
@@ -164,7 +169,27 @@ func decode(s string) (*licenseccl.License, error) {
 	if err != nil {
 		return nil, pgerror.WithCandidateCode(err, pgcode.Syntax)
 	}
-	return lic, err
+	return lic, nil
+}
+
+// decodeCache decodes a base64-encoded License and caches the result.
+func decodeCached(s string) (*licenseccl.License, error) {
+	decodeCache.RLock()
+	lic, ok := decodeCache.licenses[s]
+	decodeCache.RUnlock()
+	if ok {
+		return lic, nil
+	}
+
+	lic, err := decode(s)
+	if err != nil {
+		return nil, err
+	}
+
+	decodeCache.Lock()
+	decodeCache.licenses[s] = lic
+	decodeCache.Unlock()
+	return lic, nil
 }
 
 // check returns an error if the license is empty or not currently valid. If
