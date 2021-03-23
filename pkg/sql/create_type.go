@@ -344,6 +344,7 @@ func (p *planner) createEnumWithID(
 		enumKind = descpb.TypeDescriptor_MULTIREGION_ENUM
 		regionConfig = &descpb.TypeDescriptor_RegionConfig{
 			PrimaryRegion: multiregionConfig.PrimaryRegion(),
+			SurvivalGoal:  multiregionConfig.SurvivalGoal(),
 		}
 	}
 

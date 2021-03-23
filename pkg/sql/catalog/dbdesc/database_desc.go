@@ -370,7 +370,6 @@ func (desc *Mutable) SetInitialMultiRegionConfig(config *multiregion.RegionConfi
 		)
 	}
 	desc.RegionConfig = &descpb.DatabaseDescriptor_RegionConfig{
-		SurvivalGoal: config.SurvivalGoal(),
 		RegionEnumID: config.RegionEnumID(),
 	}
 	return nil
