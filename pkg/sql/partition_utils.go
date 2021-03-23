@@ -86,6 +86,15 @@ func GenerateSubzoneSpans(
 		}
 	}
 
+	// We already completely avoid creating subzone spans for dropped indexes.
+	// Whether this was intentional is a different story, but it turns out to be
+	// pretty sane. Dropped elements may refer to dropped types and we aren't
+	// necessarily in a position to deal with those dropped types. Add a special
+	// case to avoid generating any subzone spans in the face of being dropped.
+	if tableDesc.Dropped() {
+		return nil, nil
+	}
+
 	a := &rowenc.DatumAlloc{}
 
 	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
