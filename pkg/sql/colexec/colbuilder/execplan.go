@@ -761,7 +761,9 @@ func NewColOperator(
 			result.ColumnTypes = make([]*types.T, len(spec.Input[0].ColumnTypes))
 			copy(result.ColumnTypes, spec.Input[0].ColumnTypes)
 			result.Op = inputs[0]
-			if err := result.planAndMaybeWrapFilter(ctx, flowCtx, evalCtx, args, core.Filterer.Filter, factory); err != nil {
+			if err := result.planAndMaybeWrapFilter(
+				ctx, flowCtx, evalCtx, args, spec.ProcessorID, core.Filterer.Filter, factory,
+			); err != nil {
 				return r, err
 			}
 
@@ -1061,7 +1063,7 @@ func NewColOperator(
 
 			if !core.HashJoiner.OnExpr.Empty() && core.HashJoiner.Type == descpb.InnerJoin {
 				if err = result.planAndMaybeWrapFilter(
-					ctx, flowCtx, evalCtx, args, core.HashJoiner.OnExpr, factory,
+					ctx, flowCtx, evalCtx, args, spec.ProcessorID, core.HashJoiner.OnExpr, factory,
 				); err != nil {
 					return r, err
 				}
@@ -1115,7 +1117,7 @@ func NewColOperator(
 
 			if onExpr != nil {
 				if err = result.planAndMaybeWrapFilter(
-					ctx, flowCtx, evalCtx, args, *onExpr, factory,
+					ctx, flowCtx, evalCtx, args, spec.ProcessorID, *onExpr, factory,
 				); err != nil {
 					return r, err
 				}
@@ -1355,6 +1357,7 @@ func (r opResult) planAndMaybeWrapFilter(
 	flowCtx *execinfra.FlowCtx,
 	evalCtx *tree.EvalContext,
 	args *colexecargs.NewColOperatorArgs,
+	processorID int32,
 	filter execinfrapb.Expression,
 	factory coldata.ColumnFactory,
 ) error {
@@ -1378,6 +1381,7 @@ func (r opResult) planAndMaybeWrapFilter(
 					Filter: filter,
 				},
 			},
+			ProcessorID: processorID,
 			ResultTypes: args.Spec.ResultTypes,
 		}
 		return r.createAndWrapRowSource(
