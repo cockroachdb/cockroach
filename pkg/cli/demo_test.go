@@ -13,14 +13,20 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTestServerArgsForTransientCluster(t *testing.T) {
@@ -110,6 +116,107 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 
 			// Restore demoCtx state after each test.
 			demoCtx = demoCtxTemp
+		})
+	}
+}
+
+func TestTransientClusterSimulateLatencies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This is slow under race as it starts a 9-node cluster which
+	// has a very high simulated latency between each node.
+	skip.UnderRace(t)
+
+	// Ensure flags are reset on start, and also make sure
+	// at the end of the test they are reset.
+	TestingReset()
+	defer TestingReset()
+
+	// Set up an empty 9-node cluster with simulated latencies.
+	demoCtx.simulateLatency = true
+	demoCtx.nodes = 9
+
+	certsDir, err := ioutil.TempDir("", "cli-demo-test")
+	require.NoError(t, err)
+
+	cleanupFunc := createTestCerts(certsDir)
+	defer func() {
+		if err := cleanupFunc(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	ctx := context.Background()
+
+	// Setup the transient cluster.
+	c := transientCluster{
+		stopper:              stop.NewStopper(),
+		demoDir:              certsDir,
+		stickyEngineRegistry: server.NewStickyInMemEnginesRegistry(),
+	}
+	// Stop the cluster when the test exits, including when it fails.
+	// This also calls the Stop() method on the stopper, and thus
+	// cancels everything controlled by the stopper.
+	defer c.cleanup(ctx)
+
+	// Also ensure the context gets canceled when the stopper
+	// terminates above.
+	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
+
+	require.NoError(t, c.start(ctx, demoCmd, nil /* gen */))
+
+	for _, tc := range []struct {
+		desc    string
+		nodeIdx int
+		region  string
+	}{
+		{
+			desc:    "from us-east1",
+			nodeIdx: 0,
+			region:  "us-east1",
+		},
+		{
+			desc:    "from us-west1",
+			nodeIdx: 3,
+			region:  "us-west1",
+		},
+		{
+			desc:    "from europe-west1",
+			nodeIdx: 6,
+			region:  "europe-west1",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			url, err := c.getNetworkURLForServer(tc.nodeIdx, nil /* gen */, true /* includeAppName */)
+			require.NoError(t, err)
+			conn := makeSQLConn(url)
+			defer conn.Close()
+			// Find the maximum latency in the cluster from the current node.
+			var maxLatency time.Duration
+			for _, latencyMS := range regionToRegionToLatency[tc.region] {
+				if d := time.Duration(latencyMS) * time.Millisecond; d > maxLatency {
+					maxLatency = d
+				}
+			}
+
+			// Attempt to make a query that talks to every node.
+			// This should take at least maxLatency.
+			startTime := timeutil.Now()
+			_, _, err = runQuery(
+				conn,
+				makeQuery(`SHOW ALL CLUSTER QUERIES`),
+				false,
+			)
+			totalDuration := timeutil.Since(startTime)
+			require.NoError(t, err)
+			require.Truef(
+				t,
+				totalDuration >= maxLatency,
+				"expected duration at least %s, got %s",
+				maxLatency,
+				totalDuration,
+			)
 		})
 	}
 }
