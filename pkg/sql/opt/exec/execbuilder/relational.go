@@ -1333,6 +1333,10 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 
 	hardLimit := uint64(0)
 	if set.Op() == opt.LocalityOptimizedSearchOp {
+		if !b.disableTelemetry {
+			telemetry.Inc(sqltelemetry.LocalityOptimizedSearchUseCounter)
+		}
+
 		// If we are performing locality optimized search, set a limit equal to
 		// the maximum possible number of rows. This will tell the execution engine
 		// not to execute the right child if the limit is reached by the left

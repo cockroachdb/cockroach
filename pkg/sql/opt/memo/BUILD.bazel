@@ -58,7 +58,9 @@ go_test(
         "statistics_builder_test.go",
         "typing_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@cockroach//c-deps:libgeos",
+    ],
     embed = [":memo"],
     tags = ["broken_in_bazel"],
     deps = [
