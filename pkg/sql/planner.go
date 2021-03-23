@@ -314,7 +314,9 @@ func newInternalPlanner(
 		SequenceState: sessiondata.NewSequenceState(),
 		Location:      time.UTC,
 	}
-	sd.SessionData.Database = "system"
+	if sd.SessionData.Database == "" {
+		sd.SessionData.Database = "system"
+	}
 	sd.SessionData.UserProto = user.EncodeProto()
 	dataMutator := &sessionDataMutator{
 		data: sd,

@@ -62,6 +62,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.ProtectedTsMetaPrivilegesMigration),
 		protectedTsMetaPrivilegesMigration,
 	),
+	migration.NewSQLMigration(
+		"upgrade sequences in default expressions to be referenced by ID",
+		toCV(clusterversion.SequenceMigration),
+		sequenceMigration,
+	),
 }
 
 func init() {
