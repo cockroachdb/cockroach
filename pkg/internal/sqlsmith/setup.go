@@ -70,12 +70,6 @@ func randTables(r *rand.Rand) string {
 	// Create the random tables.
 	stmts := rowenc.RandCreateTables(r, "table", r.Intn(5)+1,
 		mutations.StatisticsMutator,
-		// The PartialIndexMutator must be listed before the ForeignKeyMutator.
-		// A foreign key requires a unique index on the referenced column. These
-		// unique indexes are created by the ForeignKeyMutator. If the
-		// PartialIndexMutator is listed after the ForeignKeyMutator, it may
-		// mutate these unique indexes into partial unique indexes, which do not
-		// satisfy the requirements for creating the foreign key.
 		mutations.PartialIndexMutator,
 		mutations.ForeignKeyMutator,
 	)
