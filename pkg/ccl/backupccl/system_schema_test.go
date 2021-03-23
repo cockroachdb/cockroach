@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupbase
+package backupccl
 
 import (
 	"context"
@@ -33,7 +33,7 @@ func TestAllSystemTablesHaveBackupConfig(t *testing.T) {
 	systemTableNames := sqlDB.QueryStr(t, `USE system; SELECT table_name FROM [SHOW TABLES];`)
 	for _, systemTableNameRow := range systemTableNames {
 		systemTableName := systemTableNameRow[0]
-		if SystemTableBackupConfiguration[systemTableName].IncludeInClusterBackup == InvalidBackupInclusion {
+		if systemTableBackupConfiguration[systemTableName].shouldIncludeInClusterBackup == invalidBackupInclusion {
 			t.Fatalf("cluster backup inclusion not specified for system table %s", systemTableName)
 		}
 	}
@@ -43,12 +43,12 @@ func TestConfigurationDetailsOnlySetForIncludedTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for systemTable, configuration := range SystemTableBackupConfiguration {
-		if configuration.CustomRestoreFunc != nil {
+	for systemTable, configuration := range systemTableBackupConfiguration {
+		if configuration.customRestoreFunc != nil {
 			// If some restore options were specified, we probably want to also
 			// include in in the set of system tables that are looked at by cluster
 			// backup/restore.
-			if OptInToClusterBackup != configuration.IncludeInClusterBackup {
+			if optInToClusterBackup != configuration.shouldIncludeInClusterBackup {
 				t.Fatalf("custom restore function specified for table %q, but it's not included in cluster backups",
 					systemTable)
 			}
