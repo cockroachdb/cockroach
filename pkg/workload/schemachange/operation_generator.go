@@ -130,6 +130,8 @@ const (
 	setColumnNotNull // ALTER TABLE <table> ALTER [COLUMN] <column> SET NOT NULL
 	setColumnType    // ALTER TABLE <table> ALTER [COLUMN] <column> [SET DATA] TYPE <type>
 
+	survive // ALTER DATABASE <db> SURVIVE <failure_mode>
+
 	insertRow // INSERT INTO <table> (<cols>) VALUES (<values>)
 
 	validate // validate all table descriptors
@@ -169,6 +171,7 @@ var opFuncs = map[opType]func(*operationGenerator, *pgx.Tx) (string, error){
 	setColumnDefault:        (*operationGenerator).setColumnDefault,
 	setColumnNotNull:        (*operationGenerator).setColumnNotNull,
 	setColumnType:           (*operationGenerator).setColumnType,
+	survive:                 (*operationGenerator).survive,
 	insertRow:               (*operationGenerator).insertRow,
 	validate:                (*operationGenerator).validate,
 }
@@ -212,6 +215,7 @@ var opWeights = []int{
 	setColumnDefault:        1,
 	setColumnNotNull:        1,
 	setColumnType:           1,
+	survive:                 1,
 	insertRow:               0,
 	validate:                2, // validate twice more often
 }
@@ -1831,6 +1835,40 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
 		tableName, columnForTypeChange.name, newTypeName.SQLString()), nil
+}
+
+func (og *operationGenerator) survive(tx *pgx.Tx) (string, error) {
+	dbRegions, err := getDatabaseRegionNames(tx)
+	if err != nil {
+		return "", err
+	}
+
+	// Choose a survival mode based on a coin toss.
+	needsAtLeastThreeRegions := false
+	survive := "ZONE FAILURE"
+	if coinToss := og.randIntn(2); coinToss == 1 {
+		survive = "REGION FAILURE"
+		needsAtLeastThreeRegions = true
+	}
+
+	// Expect 0 regions to fail, and less than three regions to fail
+	// if there are < 3 regions.
+	codesWithConditions{
+		{
+			code:      pgcode.InvalidName,
+			condition: len(dbRegions) == 0,
+		},
+		{
+			code:      pgcode.InvalidParameterValue,
+			condition: needsAtLeastThreeRegions && len(dbRegions) < 3,
+		},
+	}.add(og.expectedExecErrors)
+
+	dbName, err := getDatabase(tx)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`ALTER DATABASE %s SURVIVE %s`, dbName, survive), nil
 }
 
 func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
