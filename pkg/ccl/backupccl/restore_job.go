@@ -663,14 +663,6 @@ func loadBackupSQLDescs(
 		return nil, BackupManifest{}, nil, err
 	}
 
-	// Upgrade the table descriptors to use the new FK representation.
-	// TODO(lucy, jordan): This should become unnecessary in 20.1 when we stop
-	// writing old-style descs in RestoreDetails (unless a job persists across
-	// an upgrade?).
-	if err := maybeUpgradeTableDescsInBackupManifests(ctx, backupManifests, true); err != nil {
-		return nil, BackupManifest{}, nil, err
-	}
-
 	allDescs, latestBackupManifest := loadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
 
 	var sqlDescs []catalog.Descriptor
@@ -679,6 +671,14 @@ func loadBackupSQLDescs(
 		if _, ok := details.DescriptorRewrites[id]; ok {
 			sqlDescs = append(sqlDescs, desc)
 		}
+	}
+
+	// Upgrade the table descriptors to use the new FK representation.
+	// TODO(lucy, jordan): This should become unnecessary in 20.1 when we stop
+	// writing old-style descs in RestoreDetails (unless a job persists across
+	// an upgrade?).
+	if err := maybeUpgradeTableDescsInSlice(ctx, sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
+		return nil, BackupManifest{}, nil, err
 	}
 	return backupManifests, latestBackupManifest, sqlDescs, nil
 }
