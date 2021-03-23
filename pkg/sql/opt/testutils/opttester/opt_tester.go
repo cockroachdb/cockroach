@@ -28,6 +28,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1322,16 +1323,28 @@ func (ot *OptTester) Import(tb testing.TB) {
 	if ot.Flags.File == "" {
 		tb.Fatal("file not specified")
 	}
-	// Find the file to be imported in opttester/testfixtures.
-	_, optTesterFile, _, ok := runtime.Caller(1)
-	if !ok {
-		tb.Fatalf("unable to find file %s", ot.Flags.File)
-	}
-	path := filepath.Join(filepath.Dir(optTesterFile), "testfixtures", ot.Flags.File)
+	path := ot.testFixturePath(tb, ot.Flags.File)
 	datadriven.RunTest(tb.(*testing.T), path, func(t *testing.T, d *datadriven.TestData) string {
 		tester := New(ot.catalog, d.Input)
 		return tester.RunCommand(t, d)
 	})
+}
+
+// testFixturePath returns the path of a fixture inside opttester/testfixtures.
+func (ot *OptTester) testFixturePath(tb testing.TB, file string) string {
+	if bazel.BuiltWithBazel() {
+		runfile, err := bazel.Runfile("pkg/sql/opt/testutils/opttester/testfixtures/" + file)
+		if err != nil {
+			tb.Fatalf("%s; is your package missing a dependency on \"//pkg/sql/opt/testutils/opttester:testfixtures\"?", err)
+		}
+		return runfile
+	}
+	// Get the path to this file from the runtime.
+	_, thisFilePath, _, ok := runtime.Caller(0)
+	if !ok {
+		tb.Fatal("unable to get caller information")
+	}
+	return filepath.Join(filepath.Dir(thisFilePath), "testfixtures", file)
 }
 
 // InjectStats constructs and executes an ALTER TABLE INJECT STATISTICS
