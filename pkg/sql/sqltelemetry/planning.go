@@ -176,6 +176,10 @@ var PartialIndexScanUseCounter = telemetry.GetCounterOnce("sql.plan.opt.partial-
 // on a partial index is planned.
 var PartialIndexLookupJoinUseCounter = telemetry.GetCounterOnce("sql.plan.opt.partial-index.lookup-join")
 
+// LocalityOptimizedSearchUseCounter is to be incremented whenever a locality
+// optimized search node is planned.
+var LocalityOptimizedSearchUseCounter = telemetry.GetCounterOnce("sql.plan.opt.locality-optimized-search")
+
 // CancelQueriesUseCounter is to be incremented whenever CANCEL QUERY or
 // CANCEL QUERIES is run.
 var CancelQueriesUseCounter = telemetry.GetCounterOnce("sql.session.cancel-queries")

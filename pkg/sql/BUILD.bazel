@@ -489,7 +489,9 @@ go_test(
         "zone_config_test.go",
         "zone_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "@cockroach//c-deps:libgeos",
+    ],
     embed = [":sql"],
     deps = [
         "//pkg/base",
