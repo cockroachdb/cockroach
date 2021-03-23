@@ -10,6 +10,7 @@ package kvfollowerreadsccl
 
 import (
 	"context"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -65,6 +67,19 @@ func TestEvalFollowerReadOffset(t *testing.T) {
 	if !testutils.IsError(err, "requires an enterprise license") {
 		t.Fatalf("failed to get error when evaluating follower read offset without " +
 			"an enterprise license")
+	}
+}
+
+func TestZeroDurationDisablesFollowerReadOffset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	st := cluster.MakeTestingClusterSettings()
+	closedts.TargetDuration.Override(&st.SV, 0)
+	if offset, err := evalFollowerReadOffset(uuid.MakeV4(), st); err != nil {
+		t.Fatal(err)
+	} else if offset != math.MinInt64 {
+		t.Fatalf("expected %v, got %v", math.MinInt64, offset)
 	}
 }
 
@@ -133,6 +148,12 @@ func TestCanSendToFollower(t *testing.T) {
 	if canSendToFollower(uuid.MakeV4(), st, roNew) {
 		t.Fatalf("should not be able to send a ro batch with new MaxTimestamp to a follower")
 	}
+	oldTD := closedts.TargetDuration.Get(&st.SV)
+	closedts.TargetDuration.Override(&st.SV, 0)
+	if canSendToFollower(uuid.MakeV4(), st, roOld) {
+		t.Fatalf("should not be able to send a ro batch to a follower when target_duration is zero")
+	}
+	closedts.TargetDuration.Override(&st.SV, oldTD)
 	disableEnterprise()
 	if canSendToFollower(uuid.MakeV4(), st, roOld) {
 		t.Fatalf("should not be able to send an old ro batch to a follower without enterprise enabled")
