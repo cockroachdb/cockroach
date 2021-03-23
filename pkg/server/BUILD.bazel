@@ -40,6 +40,7 @@ go_library(
         "statements.go",
         "status.go",
         "sticky_engine.go",
+        "tenant.go",
         "tenant_status.go",
         "testing_knobs.go",
         "testserver.go",
