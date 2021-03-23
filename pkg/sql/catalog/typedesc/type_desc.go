@@ -169,6 +169,25 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 	}
 }
 
+// SetSurvivalGoal updates the survival goal of a multi-region database.
+func (desc *Mutable) SetSurvivalGoal(goal descpb.SurvivalGoal) error {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return errors.AssertionFailedf(
+			"can not set survivability goal for a non multi-region enum")
+	}
+	desc.RegionConfig.SurvivalGoal = goal
+	return nil
+}
+
+// SetSurvivalGoal updates the survival goal of a multi-region database.
+func (desc *Immutable) SurvivalGoal() (descpb.SurvivalGoal, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return descpb.SurvivalGoal_ZONE_FAILURE, errors.AssertionFailedf(
+			"can not set survivability goal for a non multi-region enum")
+	}
+	return desc.RegionConfig.SurvivalGoal, nil
+}
+
 // PrimaryRegionName returns the primary region for a multi-region enum.
 func (desc *Immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
@@ -607,7 +626,12 @@ func (desc *Immutable) validateMultiRegion(
 		}
 	}
 
-	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+	survivalGoal, err := desc.SurvivalGoal()
+	if err != nil {
+		vea.Report(err)
+	}
+
+	if survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
 		regionNames, err := desc.RegionNames()
 		if err != nil {
 			vea.Report(err)

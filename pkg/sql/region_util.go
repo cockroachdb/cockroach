@@ -876,11 +876,15 @@ func (p *planner) CurrentDatabaseRegionConfig(
 	if err != nil {
 		return nil, err
 	}
+	survivalGoal, err := regionEnum.SurvivalGoal()
+	if err != nil {
+		return nil, err
+	}
 
 	return multiregion.MakeRegionConfig(
 		regionNames,
 		primaryRegion,
-		dbDesc.RegionConfig.SurvivalGoal,
+		survivalGoal,
 		regionEnumID,
 	), nil
 }
@@ -947,11 +951,15 @@ func synthesizeRegionConfigImpl(
 	if err != nil {
 		return multiregion.RegionConfig{}, err
 	}
+	survivalGoal, err := regionEnum.SurvivalGoal()
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
 
 	regionConfig := multiregion.MakeRegionConfig(
 		regionNames,
 		primaryRegion,
-		dbDesc.RegionConfig.SurvivalGoal,
+		survivalGoal,
 		regionEnumID,
 	)
 

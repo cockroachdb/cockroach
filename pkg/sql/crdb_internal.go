@@ -244,23 +244,24 @@ CREATE TABLE crdb_internal.databases (
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(db *dbdesc.Immutable) error {
-				var survivalGoal tree.Datum = tree.DNull
-				var primaryRegion tree.Datum = tree.DNull
+				var survivalGoal = tree.DNull
+				var primaryRegion = tree.DNull
 				regions := tree.NewDArray(types.String)
 				if db.IsMultiRegion() {
-					switch db.RegionConfig.SurvivalGoal {
+					regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, db.ID, p.Descriptors())
+					if err != nil {
+						return err
+					}
+
+					switch regionConfig.SurvivalGoal() {
 					case descpb.SurvivalGoal_ZONE_FAILURE:
 						survivalGoal = tree.NewDString("zone")
 					case descpb.SurvivalGoal_REGION_FAILURE:
 						survivalGoal = tree.NewDString("region")
 					default:
-						return errors.Newf("unknown survival goal: %d", db.RegionConfig.SurvivalGoal)
+						return errors.Newf("unknown survival goal: %d", regionConfig.SurvivalGoal())
 					}
 
-					regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, db.ID, p.Descriptors())
-					if err != nil {
-						return err
-					}
 					for _, region := range regionConfig.Regions() {
 						if err := regions.Append(tree.NewDString(string(region))); err != nil {
 							return err

@@ -866,17 +866,32 @@ func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
 		),
 	)
 
-	// Update the survival goal in the database descriptor
+	// Update the survival goal in the type descriptor.
 	survivalGoal, err := TranslateSurvivalGoal(n.n.SurvivalGoal)
 	if err != nil {
 		return err
 	}
-	n.desc.RegionConfig.SurvivalGoal = survivalGoal
-
-	if err := params.p.writeNonDropDatabaseChange(
+	regionEnumID, err := n.desc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	regionEnum, err := params.p.Descriptors().GetMutableTypeByID(
 		params.ctx,
-		n.desc,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
+		params.p.txn,
+		regionEnumID,
+		tree.ObjectLookupFlags{},
+	)
+	if err != nil {
+		return err
+	}
+	if err := regionEnum.SetSurvivalGoal(survivalGoal); err != nil {
+		return err
+	}
+	if err := params.p.Descriptors().WriteDesc(
+		params.ctx,
+		true, /* kvTrace */
+		regionEnum,
+		params.p.Txn(),
 	); err != nil {
 		return err
 	}

@@ -1220,7 +1220,7 @@ message DatabaseDescriptor {
     option (gogoproto.equal) = true;
 
     reserved 1;
-    optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
+    reserved 2;
     reserved 3;
 
     // RegionEnumID represents ID of the type descriptor corresponding to the
@@ -1342,6 +1342,8 @@ message TypeDescriptor {
 
     // PrimaryRegion represents the PrimaryRegion for a multi-region enum.
     optional string primary_region = 1 [(gogoproto.nullable) = false, (gogoproto.casttype)="RegionName"];
+    // SurvivalGoal represents the survival goal for a multi-region database.
+    optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
   }
 
   optional RegionConfig region_config = 16;
