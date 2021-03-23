@@ -42,6 +42,7 @@ var (
 	leftRectHoleCornerPoint = geo.MustParseGeometry("POINT(-0.75 0.75)")
 	leftRectHoleEdgePoint   = geo.MustParseGeometry("POINT(-0.75 0.5)")
 	leftRectMultiPoint      = geo.MustParseGeometry("MULTIPOINT(-0.5 0.5, -0.9 0.1)")
+	leftRectEdgeMultiPoint  = geo.MustParseGeometry("MULTIPOINT(-1.0 0.2, -0.9 0.1)")
 )
 
 func TestCovers(t *testing.T) {
@@ -53,6 +54,9 @@ func TestCovers(t *testing.T) {
 		{rightRect, rightRectPoint, true},
 		{rightRectPoint, rightRect, false},
 		{leftRect, rightRect, false},
+		{leftRect, leftRectEdgePoint, true},
+		{leftRectWithHole, leftRectPoint, false},
+		{leftRect, emptyPoint, false},
 	}
 
 	for i, tc := range testCases {
@@ -78,6 +82,8 @@ func TestCoveredBy(t *testing.T) {
 		{rightRect, rightRectPoint, false},
 		{rightRectPoint, rightRect, true},
 		{leftRect, rightRect, false},
+		{leftRectEdgeMultiPoint, leftRectWithHole, true},
+		{leftRectPoint, emptyRect, false},
 	}
 
 	for i, tc := range testCases {
@@ -110,6 +116,8 @@ func TestContains(t *testing.T) {
 		{leftRectWithHole, leftRectMultiPoint, false},
 		{leftRect, leftRectMultiPoint, true},
 		{bothLeftRectsHoleFirst, leftRectPoint, true},
+		{leftRect, leftRectEdgePoint, false},
+		{leftRect, leftRectEdgeMultiPoint, true},
 	}
 
 	for i, tc := range testCases {
