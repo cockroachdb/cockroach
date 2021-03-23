@@ -1896,6 +1896,16 @@ func (r *restoreResumer) dropDescriptors(
 		// TypeDescriptors don't have a GC job process, so we can just write them
 		// as dropped here.
 		typDesc := details.TypeDescs[i]
+		mutType, err := descsCol.GetMutableTypeByID(ctx, txn, typDesc.ID, tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidCached:    true,
+				IncludeOffline: true,
+			},
+		})
+		if err != nil {
+			return err
+		}
+
 		catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
 			ctx,
 			b,
@@ -1905,6 +1915,11 @@ func (r *restoreResumer) dropDescriptors(
 			typDesc.Name,
 			false, /* kvTrace */
 		)
+		mutType.State = descpb.DescriptorState_DROP
+		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, mutType, b); err != nil {
+			return errors.Wrap(err, "writing dropping type to batch")
+		}
+		// Remove the system.descriptor entry.
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
 	}
 
