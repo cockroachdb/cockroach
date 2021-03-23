@@ -552,6 +552,14 @@ func maybeUpgradeTableDescsInBackupManifests(
 				backupManifest.Descriptors[j] = *sqlbase.WrapDescriptor(table)
 			}
 		}
+		for j := range backupManifest.DescriptorChanges {
+			if table := backupManifest.DescriptorChanges[j].Desc.Table(hlc.Timestamp{}); table != nil {
+				if _, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, skipFKsWithNoMatchingTable); err != nil {
+					return err
+				}
+				backupManifest.DescriptorChanges[j].Desc = sqlbase.WrapDescriptor(table)
+			}
+		}
 	}
 	return nil
 }
