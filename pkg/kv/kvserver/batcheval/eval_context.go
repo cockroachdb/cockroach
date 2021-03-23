@@ -110,7 +110,7 @@ type EvalContext interface {
 	// have performed some action (either calling RevokeLease or WatchForMerge)
 	// to freeze further progression of the closed timestamp before calling this
 	// method.
-	GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp)
+	GetCurrentReadSummary(ctx context.Context) (rspb.ReadSummary, hlc.Timestamp)
 
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
 	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
@@ -239,7 +239,9 @@ func (m *mockEvalCtxImpl) GetLease() (roachpb.Lease, roachpb.Lease) {
 func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	return roachpb.RangeInfo{Desc: *m.Desc(), Lease: m.Lease}
 }
-func (m *mockEvalCtxImpl) GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp) {
+func (m *mockEvalCtxImpl) GetCurrentReadSummary(
+	ctx context.Context,
+) (rspb.ReadSummary, hlc.Timestamp) {
 	return m.CurrentReadSummary, hlc.Timestamp{}
 }
 func (m *mockEvalCtxImpl) GetExternalStorage(
