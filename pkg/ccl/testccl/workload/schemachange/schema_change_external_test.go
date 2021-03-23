@@ -20,10 +20,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -41,13 +41,14 @@ func TestWorkload(t *testing.T) {
 	dir, err := ioutil.TempDir("", t.Name())
 	require.NoError(t, err)
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			ExternalIODir: dir,
-		},
-	})
+	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t,
+		3, /* numServers */
+		base.TestingKnobs{},
+		&dir,
+	)
+	defer cleanup()
 
-	defer tc.Stopper().Stop(ctx)
 	m, err := workload.Get("schemachange")
 	require.NoError(t, err)
 	wl := m.New().(interface {

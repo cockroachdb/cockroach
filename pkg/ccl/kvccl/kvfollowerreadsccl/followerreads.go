@@ -131,9 +131,10 @@ func canSendToFollower(
 	ctPolicy roachpb.RangeClosedTimestampPolicy,
 	ba roachpb.BatchRequest,
 ) bool {
-	return checkFollowerReadsEnabled(clusterID, st) &&
-		kvserver.BatchCanBeEvaluatedOnFollower(ba) &&
-		closedTimestampLikelySufficient(st, clock, ctPolicy, ba.Txn.RequiredFrontier())
+	return kvserver.BatchCanBeEvaluatedOnFollower(ba) &&
+		closedTimestampLikelySufficient(st, clock, ctPolicy, ba.Txn.RequiredFrontier()) &&
+		// NOTE: this call can be expensive, so perform it last. See #62447.
+		checkFollowerReadsEnabled(clusterID, st)
 }
 
 type followerReadOracle struct {
@@ -188,9 +189,10 @@ func (o *followerReadOracle) useClosestOracle(
 	// sent to the correct replicas once canSendToFollower is checked for each
 	// BatchRequests in the DistSender. This would hurt performance, but would
 	// not violate correctness.
-	return checkFollowerReadsEnabled(o.clusterID.Get(), o.st) &&
-		txn != nil &&
-		closedTimestampLikelySufficient(o.st, o.clock, ctPolicy, txn.RequiredFrontier())
+	return txn != nil &&
+		closedTimestampLikelySufficient(o.st, o.clock, ctPolicy, txn.RequiredFrontier()) &&
+		// NOTE: this call can be expensive, so perform it last. See #62447.
+		checkFollowerReadsEnabled(o.clusterID.Get(), o.st)
 }
 
 // followerReadOraclePolicy is a leaseholder choosing policy that detects

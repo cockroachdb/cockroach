@@ -94,7 +94,7 @@ func TestKafkaSink(t *testing.T) {
 
 	sink := &kafkaSink{
 		producer: p,
-		topics:   makeTopicsMap("", targets),
+		topics:   makeTopicsMap("", "", targets),
 	}
 	sink.start()
 	defer func() {
@@ -182,7 +182,7 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: `☃`}
 	sink := &kafkaSink{
 		producer: p,
-		topics:   makeTopicsMap("", targets),
+		topics:   makeTopicsMap("", "", targets),
 	}
 	sink.start()
 	defer func() { require.NoError(t, sink.Close()) }()
@@ -193,6 +193,64 @@ func TestKafkaSinkEscaping(t *testing.T) {
 	require.Equal(t, `_u2603_`, m.Topic)
 	require.Equal(t, sarama.ByteEncoder(`k☃`), m.Key)
 	require.Equal(t, sarama.ByteEncoder(`v☃`), m.Value)
+}
+
+func TestKafkaTopicNameProvided(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	p := asyncProducerMock{
+		inputCh:     make(chan *sarama.ProducerMessage, 1),
+		successesCh: make(chan *sarama.ProducerMessage, 1),
+		errorsCh:    make(chan *sarama.ProducerError, 1),
+	}
+	targets := make(jobspb.ChangefeedTargets, 2)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: "particular0"}
+	targets[1] = jobspb.ChangefeedTarget{StatementTimeName: "particular1"}
+	sink := &kafkaSink{
+		producer: p,
+		topics:   makeTopicsMap("", "general", targets),
+	}
+	sink.start()
+	defer func() { require.NoError(t, sink.Close()) }()
+
+	//all messages go to the general topic
+	if err := sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS); err != nil {
+		t.Fatal(err)
+	}
+	m := <-p.inputCh
+	require.Equal(t, `general`, m.Topic)
+
+}
+
+func TestKafkaTopicNameWithPrefix(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	p := asyncProducerMock{
+		inputCh:     make(chan *sarama.ProducerMessage, 1),
+		successesCh: make(chan *sarama.ProducerMessage, 1),
+		errorsCh:    make(chan *sarama.ProducerError, 1),
+	}
+	targets := make(jobspb.ChangefeedTargets, 2)
+	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: "particular0"}
+	targets[1] = jobspb.ChangefeedTarget{StatementTimeName: "particular1"}
+	sink := &kafkaSink{
+		producer: p,
+		topics:   makeTopicsMap("prefix-", "☃", targets),
+	}
+	sink.start()
+	defer func() { require.NoError(t, sink.Close()) }()
+
+	//the prefix is applied and the name is escaped
+	if err := sink.EmitRow(ctx, topic("particular0"), []byte(`k☃`), []byte(`v☃`), zeroTS); err != nil {
+		t.Fatal(err)
+	}
+	m := <-p.inputCh
+	require.Equal(t, `prefix-_u2603_`, m.Topic)
+
 }
 
 // goos: darwin
@@ -216,7 +274,7 @@ func BenchmarkEmitRow(b *testing.B) {
 	targets[0] = jobspb.ChangefeedTarget{StatementTimeName: tableName}
 	sink := &kafkaSink{
 		producer: p,
-		topics:   makeTopicsMap("non-empty-prefix", targets),
+		topics:   makeTopicsMap("non-empty-prefix", "", targets),
 	}
 	sink.start()
 
