@@ -98,10 +98,30 @@ export function PrintTimestampDelta(
   return PrintDuration(diff);
 }
 
+// PrintTimestampDeltaFromNow is like PrintTimestampDelta, except it works both
+// when `timestamp` is below or above `now`, and at appends "ago" or "in the
+// future" to the result.
+export function PrintTimestampDeltaFromNow(
+  timestamp: protos.cockroach.util.hlc.ITimestamp,
+  now: moment.Moment,
+): string {
+  if (_.isNil(timestamp)) {
+    return "";
+  }
+  const time: moment.Moment = LongToMoment(timestamp.wall_time);
+  if (now.isAfter(time)) {
+    const diff = moment.duration(moment().diff(time));
+    return `${PrintDuration(diff)} ago`;
+  }
+  const diff = moment.duration(time.diff(moment()));
+  return `${PrintDuration(diff)} in the future`;
+}
+
 export default {
   Duration: PrintDuration,
   ReplicaID: PrintReplicaID,
   Time: PrintTime,
   Timestamp: PrintTimestamp,
   TimestampDelta: PrintTimestampDelta,
+  TimestampDeltaFromNow: PrintTimestampDeltaFromNow,
 };
