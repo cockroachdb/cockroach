@@ -12,6 +12,7 @@ package tree
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
@@ -1442,12 +1443,14 @@ func (d *DBytes) Format(ctx *FmtCtx) {
 		ctx.WriteString(`"\\x`)
 		writeAsHexString(ctx, d)
 		ctx.WriteString(`"`)
+	} else if f.HasFlags(fmtFormatByteLiterals) {
+		ctx.WriteByte('x')
+		ctx.WriteByte('\'')
+		_, _ = hex.NewEncoder(ctx).Write([]byte(*d))
+		ctx.WriteByte('\'')
 	} else {
 		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
 		if withQuotes {
-			if f.HasFlags(fmtFormatByteLiterals) {
-				ctx.WriteByte('b')
-			}
 			ctx.WriteByte('\'')
 		}
 		ctx.WriteString("\\x")
