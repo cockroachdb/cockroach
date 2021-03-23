@@ -34,6 +34,7 @@ type DistSQLMetrics struct {
 	QueriesSpilled        *metric.Counter
 	QueryHasSpilled       *metric.Counter
 	SpilledBytesWritten   *metric.Counter
+	SpilledBytesRead      *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -132,6 +133,12 @@ var (
 		Measurement: "Disk",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaSpilledBytesRead = metric.Metadata{
+		Name:        "sql.disk.distsql.spilled.bytes.read",
+		Help:        "Number of bytes read from temporary disk storage as a result of spilling",
+		Measurement: "Disk",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // See pkg/sql/mem_metrics.go
@@ -156,6 +163,7 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		QueriesSpilled:        metric.NewCounter(metaQueriesSpilled),
 		QueryHasSpilled:       metric.NewCounter(metaQueryHasSpilled),
 		SpilledBytesWritten:   metric.NewCounter(metaSpilledBytesWritten),
+		SpilledBytesRead:      metric.NewCounter(metaSpilledBytesRead),
 	}
 }
 

@@ -297,7 +297,8 @@ func GetPatherFunc(f func(ctx context.Context) string) GetPather {
 type DiskSpillingMetrics interface {
 	QuerySpilled()
 	QueryHasSpilled()
-	BytesWritten(i int)
+	BytesWritten(i int64)
+	BytesRead(i int64)
 }
 
 type DiskSpillingMetricsImpl struct {
@@ -321,10 +322,12 @@ func (d *DiskSpillingMetricsImpl) QueryHasSpilled() {
 	}
 }
 
-func (d *DiskSpillingMetricsImpl) BytesWritten(i int) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.mu.m.SpilledBytesWritten.Inc(1)
+func (d *DiskSpillingMetricsImpl) BytesWritten(i int64) {
+	d.mu.m.SpilledBytesWritten.Inc(i)
+}
+
+func (d *DiskSpillingMetricsImpl) BytesRead(i int64) {
+	d.mu.m.SpilledBytesRead.Inc(i)
 }
 
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
@@ -552,7 +555,7 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 	}
 	d.numBufferedBatches = 0
 	d.files[d.writeFileIdx].totalSize += written
-	d.cfg.DiskSpillingMetrics.BytesWritten(written)
+	d.cfg.DiskSpillingMetrics.BytesWritten(int64(written))
 	if err := d.diskAcc.Grow(ctx, int64(written)); err != nil {
 		return err
 	}
@@ -679,6 +682,7 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 	if err != nil && err != io.EOF {
 		return false, err
 	}
+	d.cfg.DiskSpillingMetrics.BytesRead(int64(n))
 	if n != len(d.writer.scratch.compressedBuf) {
 		return false, errors.Errorf("expected to read %d bytes but read %d", len(d.writer.scratch.compressedBuf), n)
 	}

@@ -1679,6 +1679,10 @@ var charts = []sectionDescription{
 				Title:   "Number of Bytes Written Due to Disk Spilling",
 				Metrics: []string{"sql.disk.distsql.spilled.bytes.written"},
 			},
+			{
+				Title:   "Number of Bytes Read Due to Disk Spilling",
+				Metrics: []string{"sql.disk.distsql.spilled.bytes.read"},
+			},
 		},
 	},
 	{
