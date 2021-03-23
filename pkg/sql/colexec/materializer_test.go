@@ -68,9 +68,9 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		c,
 		typs,
 		nil, /* output */
-		nil, /* metadataSourcesQueue */
-		nil, /* toClose */
 		nil, /* getStats */
+		nil, /* metadataSources */
+		nil, /* toClose */
 		nil, /* cancelFlow */
 	)
 	if err != nil {
@@ -152,9 +152,9 @@ func BenchmarkMaterializer(b *testing.B) {
 							input,
 							typs,
 							nil, /* output */
-							nil, /* metadataSourcesQueue */
-							nil, /* toClose */
 							nil, /* getStats */
+							nil, /* metadataSources */
+							nil, /* toClose */
 							nil, /* cancelFlow */
 						)
 						if err != nil {
@@ -207,9 +207,9 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 		&colexecop.CallbackOperator{},
 		nil, /* typ */
 		nil, /* output */
+		nil, /* getStats */
 		[]execinfrapb.MetadataSource{metadataSource},
 		nil, /* toClose */
-		nil, /* getStats */
 		nil, /* cancelFlow */
 	)
 	require.NoError(t, err)
@@ -256,9 +256,9 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 			c,
 			types,
 			nil, /* output */
-			nil, /* metadataSourcesQueue */
-			nil, /* toClose */
 			nil, /* getStats */
+			nil, /* metadataSources */
+			nil, /* toClose */
 			nil, /* cancelFlow */
 		)
 		if err != nil {
