@@ -1613,12 +1613,16 @@ func TestLint(t *testing.T) {
 	t.Run("TestStaticCheck", func(t *testing.T) {
 		// staticcheck uses 2.4GB of ram (as of 2019-05-10), so don't parallelize it.
 		skip.UnderShort(t)
+		var args []string
+		if pkgSpecified {
+			args = []string{pkgScope}
+		} else {
+			args = []string{"-unused.whole-program", pkgScope}
+		}
 		cmd, stderr, filter, err := dirCmd(
 			crdb.Dir,
 			"staticcheck",
-			"-unused.whole-program",
-			pkgScope,
-		)
+			args...)
 		if err != nil {
 			t.Fatal(err)
 		}

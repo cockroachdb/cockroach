@@ -1,7 +1,7 @@
 # TODO(irfansharif): We should fold this into `dev` instead (#56965).
 
-build --ui_event_filters=-DEBUG --define gotags=bazel
-test --define gotags=bazel
+build --ui_event_filters=-DEBUG --define gotags=bazel,crdb_test_off
+test --define gotags=bazel,crdb_test
 query --ui_event_filters=-DEBUG
 
 try-import %workspace%/.bazelrc.user
