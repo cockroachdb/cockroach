@@ -294,7 +294,16 @@ func (p *planner) AlterDatabaseDropRegion(
 	removingPrimaryRegion := false
 	var toDrop []*typedesc.Mutable
 
-	if dbDesc.RegionConfig.PrimaryRegion == descpb.RegionName(n.Region) {
+	// Ensure survivability goal and number of regions after the drop jive.
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
+	if err != nil {
+		return nil, err
+	}
+	if err := multiregion.CanDropRegion(regionConfig); err != nil {
+		return nil, err
+	}
+
+	if regionConfig.PrimaryRegion() == descpb.RegionName(n.Region) {
 		removingPrimaryRegion = true
 
 		typeID, err := dbDesc.MultiRegionEnumID()
@@ -316,7 +325,7 @@ func (p *planner) AlterDatabaseDropRegion(
 		}
 		if len(regions) != 1 {
 			return nil, errors.WithHintf(
-				errors.Newf("cannot drop region %q", dbDesc.RegionConfig.PrimaryRegion),
+				errors.Newf("cannot drop region %q", regionConfig.PrimaryRegion()),
 				"You must designate another region as the primary region using "+
 					"ALTER DATABASE %s PRIMARY REGION <region name> or remove all other regions before "+
 					"attempting to drop region %q", dbDesc.GetName(), n.Region,
@@ -345,15 +354,6 @@ func (p *planner) AlterDatabaseDropRegion(
 					err, "error removing primary region from database %s", dbDesc.Name)
 			}
 		}
-	}
-
-	// Ensure survivability goal and number of regions after the drop jive.
-	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
-	if err != nil {
-		return nil, err
-	}
-	if err := multiregion.CanDropRegion(regionConfig); err != nil {
-		return nil, err
 	}
 
 	return &alterDatabaseDropRegionNode{
@@ -593,17 +593,6 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		params.p.txn,
 		n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
-		return err
-	}
-
-	// To update the primary region we need to modify the database descriptor,
-	// update the multi-region enum, and write a new zone configuration.
-	n.desc.RegionConfig.PrimaryRegion = descpb.RegionName(n.n.PrimaryRegion)
-	if err := params.p.writeNonDropDatabaseChange(
-		params.ctx,
-		n.desc,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
-	); err != nil {
 		return err
 	}
 

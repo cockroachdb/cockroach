@@ -607,15 +607,6 @@ func (desc *Immutable) validateMultiRegion(
 		}
 	}
 
-	dbPrimaryRegion, err := dbDesc.PrimaryRegionName()
-	if err != nil {
-		vea.Report(err)
-	}
-	if dbPrimaryRegion != primaryRegion {
-		vea.Report(errors.AssertionFailedf("unexpected primary region on db desc: %q expected %q",
-			dbPrimaryRegion, primaryRegion))
-	}
-
 	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
 		regionNames, err := desc.RegionNames()
 		if err != nil {
