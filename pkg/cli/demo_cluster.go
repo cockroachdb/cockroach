@@ -627,6 +627,9 @@ func (c *transientCluster) cleanup(ctx context.Context) {
 // DrainAndShutdown will gracefully attempt to drain a node in the cluster, and
 // then shut it down.
 func (c *transientCluster) DrainAndShutdown(nodeID roachpb.NodeID) error {
+	if demoCtx.simulateLatency {
+		return errors.Errorf("shutting down nodes is not supported in --%s configurations", cliflags.Global.Name)
+	}
 	nodeIndex := int(nodeID - 1)
 
 	if nodeIndex < 0 || nodeIndex >= len(c.servers) {
@@ -748,6 +751,9 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 	// TODO(#42243): re-compute the latency mapping.
 	// TODO(...): the RPC address of the first server may not be available
 	// if the first server was shut down.
+	if demoCtx.simulateLatency {
+		return errors.Errorf("restarting nodes is not supported in --%s configurations", cliflags.Global.Name)
+	}
 	args := testServerArgsForTransientCluster(c.sockForServer(nodeID), nodeID,
 		c.firstServer.ServingRPCAddr(), c.demoDir,
 		c.sqlFirstPort, c.httpFirstPort, c.stickyEngineRegistry)
@@ -783,6 +789,11 @@ func (c *transientCluster) RestartNode(nodeID roachpb.NodeID) error {
 // This function uses RestartNode to perform the actual node
 // starting.
 func (c *transientCluster) AddNode(ctx context.Context, localityString string) error {
+	// TODO(#42243): re-compute the latency mapping for this to work.
+	if demoCtx.simulateLatency {
+		return errors.Errorf("adding nodes is not supported in --%s configurations", cliflags.Global.Name)
+	}
+
 	// '\demo add' accepts both strings that are quoted and not quoted. To properly make use of
 	// quoted strings, strip off the quotes.  Before we do that though, make sure that the quotes match,
 	// or that there aren't any quotes in the string.
