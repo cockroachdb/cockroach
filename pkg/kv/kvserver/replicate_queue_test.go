@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -784,6 +785,104 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 		require.NoError(t, err)
 		checkRelocated(t, voterStores, nonVoterStores)
 	}
+}
+
+// TestReplicateQueueShouldQueueNonVoter tests that, in situations where the
+// voting replicas don't need to be rebalanced but the non-voting replicas do,
+// that the replicate queue correctly accepts the replica into the queue.
+func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	serverArgs := make(map[int]base.TestServerArgs)
+	// Assign each store a rack number so we can constrain individual voting and
+	// non-voting replicas to them.
+	for i := 1; i <= 3; i++ {
+		serverArgs[i-1] = base.TestServerArgs{
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key: "rack", Value: strconv.Itoa(i),
+					},
+				},
+			},
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationAuto,
+		ServerArgsPerNode: serverArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchStartKey := tc.ScratchRange(t)
+	_, err := tc.ServerConn(0).Exec("ALTER RANGE default CONFIGURE ZONE USING" +
+		" num_replicas = 2, num_voters = 1," +
+		" constraints='{\"+rack=2\": 1}', voter_constraints='{\"+rack=1\": 1}'")
+	require.NoError(t, err)
+
+	// Make sure that the range has conformed to the constraints we just set
+	// above.
+	require.Eventually(t, func() bool {
+		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+			log.Warningf(ctx, "received error while forcing a replicateQueue scan: %s", err)
+			return false
+		}
+		scratchRange := tc.LookupRangeOrFatal(t, scratchStartKey)
+		if len(scratchRange.Replicas().VoterDescriptors()) != 1 {
+			return false
+		}
+		if len(scratchRange.Replicas().NonVoterDescriptors()) != 1 {
+			return false
+		}
+		// Ensure that the voter is on rack 1 and the non-voter is on rack 2.
+		if scratchRange.Replicas().VoterDescriptors()[0].NodeID != tc.Server(0).NodeID() {
+			return false
+		}
+		if scratchRange.Replicas().NonVoterDescriptors()[0].NodeID != tc.Server(1).NodeID() {
+			return false
+		}
+		return true
+	}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
+
+	// Turn off the replicateQueues to prevent them from taking action on
+	// `scratchRange`. We will manually enqueue the leaseholder for `scratchRange`
+	// below.
+	toggleReplicationQueues(tc, false)
+	// We change the default zone configuration to dictate that the existing
+	// voter doesn't need to be rebalanced but non-voter should be rebalanced to
+	// rack 3 instead.
+	_, err = tc.ServerConn(0).Exec("ALTER RANGE default CONFIGURE ZONE USING" +
+		" constraints='{\"+rack=3\": 1}', voter_constraints='{\"+rack=1\": 1}'")
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		// NB: Manually enqueuing the replica on server 0 (i.e. rack 1) is copacetic
+		// because we know that it is the leaseholder (since it is the only voting
+		// replica).
+		store, repl := getFirstStoreReplica(t, tc.Server(0), scratchStartKey)
+		recording, processErr, err := store.ManuallyEnqueue(
+			ctx,
+			"replicate",
+			repl,
+			false, /* skipShouldQueue */
+		)
+		if err != nil {
+			log.Errorf(ctx, "err: %s", err.Error())
+			return false
+		}
+		if processErr != nil {
+			log.Errorf(ctx, "processErr: %s", processErr.Error())
+			return false
+		}
+		if matched, err := regexp.Match("rebalance target found for non-voter, enqueuing",
+			[]byte(recording.String())); !matched {
+			require.NoError(t, err)
+			return false
+		}
+		return true
+	}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
 }
 
 // queryRangeLog queries the range log. The query must be of type:
