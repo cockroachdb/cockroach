@@ -171,16 +171,12 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 		// 1. We don't init invoked using `--skip-init`.
 		// 2. We don't init when invoking with `start-single-node`.
-		// 3. For nodes running <20.1, the --join flags are constructed in a
-		//    manner such that the first node doesn't have any (see
-		//   `generateStartArgs`),which prompts CRDB to auto-initialize. For
-		//    nodes running >=20.1, we need to explicitly initialize.
 
 		if StartOpts.SkipInit {
 			return nil, nil
 		}
 
-		shouldInit := !h.useStartSingleNode(vers) && vers.AtLeast(version.MustParse("v20.1.0"))
+		shouldInit := !h.useStartSingleNode(vers)
 		if shouldInit {
 			fmt.Printf("%s: initializing cluster\n", h.c.Name)
 			initOut, err := h.initializeCluster(nodeIdx)
@@ -190,26 +186,6 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 			if initOut != "" {
 				fmt.Println(initOut)
-			}
-		}
-
-		if !vers.AtLeast(version.MustParse("v20.1.0")) {
-			// Given #51897 remains unresolved, master-built roachprod is used
-			// to run roachtests against the 20.1 branch. Some of those
-			// roachtests test mixed-version clusters that start off at 19.2.
-			// Consequently, we manually add this `cluster-bootstrapped` file
-			// where roachprod expects to find it for already-initialized
-			// clusters. This is a pretty gross hack, that we should address by
-			// addressing #51897.
-			//
-			// TODO(irfansharif): Remove this once #51897 is resolved.
-			markBootstrap := fmt.Sprintf("touch %s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "cluster-bootstrapped")
-			cmdOut, err := h.run(nodeIdx, markBootstrap)
-			if err != nil {
-				log.Fatalf("unable to run cmd: %v", err)
-			}
-			if cmdOut != "" {
-				fmt.Println(cmdOut)
 			}
 		}
 
@@ -488,17 +464,19 @@ func (h *crdbInstallHelper) generateStartArgs(
 		}
 	}
 
+	// --join flags are unsupported/unnecessary in `cockroach start-single-node`.
 	if !h.useStartSingleNode(vers) {
-		// --join flags are unsupported/unnecessary in `cockroach
-		// start-single-node`. That aside, setting up --join flags is a bit
-		// precise. We have every node point to node 1. For clusters running
-		// <20.1, we have node 1 not point to anything (which in turn is used to
-		// trigger auto-initialization node 1). For clusters running >=20.1,
-		// node 1 also points to itself, and an explicit `cockroach init` is
-		// needed.
-		if nodes[nodeIdx] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
-			args = append(args, fmt.Sprintf("--join=%s:%d", h.c.host(1), h.r.NodePort(h.c, 1)))
+		if idx := argExists(extraArgs, "--join"); idx == -1 {
+			// If --join is not specified, have every node point to node 1. Node 1
+			// points to itself, and an explicit `cockroach init` is needed.
+			args = append(args, fmt.Sprintf("--join=%s:%d", h.c.host(1),
+				h.r.NodePort(h.c, 1)))
 		}
+		// If --join is specified it will be appended to the args below.
+		// TODO(during review): Should we parse the supplied join flags, check if
+		// they are pointing the node itself, thereby indicating a "new cluster",
+		// and automatically run `init` as this is the first node of the new
+		// cluster?
 	}
 
 	if h.shouldAdvertisePublicIP() {
@@ -593,7 +571,7 @@ func (h *crdbInstallHelper) generateInitCmd(nodeIdx int) string {
 
 	var initCmd string
 	if h.c.IsLocal() {
-		initCmd = `cd ${HOME}/local/1 ; `
+		initCmd = fmt.Sprintf(`cd ${HOME}/local/%d ; `, nodes[nodeIdx])
 	}
 
 	path := fmt.Sprintf("%s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "cluster-bootstrapped")

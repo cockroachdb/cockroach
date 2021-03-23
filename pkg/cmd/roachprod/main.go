@@ -112,6 +112,8 @@ var (
 	cachedHostsCluster string
 )
 
+const allNodes = "all"
+
 func sortedClusters() []string {
 	var r []string
 	for n := range install.Clusters {
@@ -121,26 +123,31 @@ func sortedClusters() []string {
 	return r
 }
 
-func newCluster(name string) (*install.SyncedCluster, error) {
-	nodeNames := "all"
-	{
-		parts := strings.Split(name, ":")
-		switch len(parts) {
-		case 2:
-			nodeNames = parts[1]
-			fallthrough
-		case 1:
-			name = parts[0]
-		case 0:
-			return nil, fmt.Errorf("no cluster specified")
-		default:
-			return nil, fmt.Errorf("invalid cluster name: %s", name)
-		}
+func parseClusterName(name string) (string, string, error) {
+	nodeNames := allNodes
+	parts := strings.Split(name, ":")
+	switch len(parts) {
+	case 2:
+		nodeNames = parts[1]
+		fallthrough
+	case 1:
+		name = parts[0]
+	case 0:
+		return "", "", fmt.Errorf("no cluster specified")
+	default:
+		return "", "", fmt.Errorf("invalid cluster name: %s", name)
 	}
+	return nodeNames, name, nil
+}
 
-	c, ok := install.Clusters[name]
+func newCluster(name string) (*install.SyncedCluster, error) {
+	nodeNames, clusterName, err := parseClusterName(name)
+	if err != nil {
+		return nil, err
+	}
+	c, ok := install.Clusters[clusterName]
 	if !ok {
-		err := errors.Newf(`unknown cluster: %s`, name)
+		err := errors.Newf(`unknown cluster: %s`, clusterName)
 		err = errors.WithHintf(err, `
 Available clusters:
   %s
@@ -1053,16 +1060,17 @@ default cluster settings. It's intended to be used in conjunction with
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		clusterName, err := verifyClusterName(args[0])
+		c, err := newCluster(args[0])
 		if err != nil {
 			return err
 		}
 
-		c, err := newCluster(clusterName)
+		nodeNames, _, err := parseClusterName(args[0])
 		if err != nil {
 			return err
 		}
-		c.Init()
+		targetNodeSpecified := nodeNames != allNodes
+		c.Init(targetNodeSpecified)
 		return nil
 	}),
 }

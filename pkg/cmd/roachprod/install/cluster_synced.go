@@ -37,7 +37,6 @@ import (
 	clog "github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -1741,38 +1740,47 @@ func (c *SyncedCluster) escapedTag() string {
 // to maintain parity with auto-init behavior of `roachprod start` (when
 // --skip-init) is not specified. The implementation should be kept in
 // sync with Cockroach.Start.
-func (c *SyncedCluster) Init() {
+func (c *SyncedCluster) Init(targetNodeSpecified bool) {
 	r := c.Impl.(Cockroach)
 	h := &crdbInstallHelper{c: c, r: r}
 
-	// See (Cockroach).Start. We reserve a few special operations for the first
-	// node, so we strive to maintain the same here for interoperability.
-	const firstNodeIdx = 0
+	nodes := c.ServerNodes()
 
-	vers, err := getCockroachVersion(c, c.ServerNodes()[firstNodeIdx])
-	if err != nil {
-		log.Fatalf("unable to retrieve cockroach version: %v", err)
+	initNodes := 1
+	if targetNodeSpecified {
+		initNodes = len(nodes)
 	}
+	// If nodes were not explicitly specified in the `roachprod init` command then
+	// we will assume all nodes are part of the same cluster, and only run init
+	// through the first node. See (Cockroach).Start. We reserve a few special
+	// operations for the first node, so we strive to maintain the same here
+	// for interoperability.
+	//
+	// If nodes are specified in the `roachprod init` command we will iterate over
+	// them and attempt to init each node as though it is part of a different
+	// cluster.
+	//
+	// NB: The logic below is not parallelized to ensure that we init through node
+	// 1 if all roachprod VMs are part of the same cluster, which is almost always
+	// the case. This also makes Printf logging acceptable.
+	c.Parallel("", initNodes, 1 /* concurrency */, func(nodeIdx int) ([]byte, error) {
+		fmt.Printf("%s:%d: initializing cluster\n", h.c.Name, nodes[nodeIdx])
+		initOut, err := h.initializeCluster(nodeIdx)
+		if err != nil {
+			return nil, err
+		}
+		if initOut != "" {
+			fmt.Println(initOut)
+		}
 
-	if !vers.AtLeast(version.MustParse("v20.1.0")) {
-		log.Fatal("`roachprod init` only supported for v20.1 and beyond")
-	}
-
-	fmt.Printf("%s: initializing cluster\n", h.c.Name)
-	initOut, err := h.initializeCluster(firstNodeIdx)
-	if err != nil {
-		log.Fatalf("unable to initialize cluster: %v", err)
-	}
-	if initOut != "" {
-		fmt.Println(initOut)
-	}
-
-	fmt.Printf("%s: setting cluster settings\n", h.c.Name)
-	clusterSettingsOut, err := h.setClusterSettings(firstNodeIdx)
-	if err != nil {
-		log.Fatalf("unable to set cluster settings: %v", err)
-	}
-	if clusterSettingsOut != "" {
-		fmt.Println(clusterSettingsOut)
-	}
+		fmt.Printf("%s:%d: setting cluster settings\n", h.c.Name, nodes[nodeIdx])
+		clusterSettingsOut, err := h.setClusterSettings(nodeIdx)
+		if err != nil {
+			log.Fatalf("unable to set cluster settings: %v", err)
+		}
+		if clusterSettingsOut != "" {
+			fmt.Println(clusterSettingsOut)
+		}
+		return nil, err
+	})
 }
