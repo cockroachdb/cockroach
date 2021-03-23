@@ -377,6 +377,25 @@ const (
 
 // Format emits a string representation of a Duration to a Buffer truncated to microseconds.
 func (d Duration) Format(buf *bytes.Buffer) {
+	d.FormatWithStyle(buf, "postgres")
+}
+
+// FormatWithStyle emits a string representation of a Duration to a Buffer
+// truncated to microseconds with a given style.
+func (d Duration) FormatWithStyle(buf *bytes.Buffer, style string) {
+	switch style {
+	case "postgres":
+		d.encodePostgres(buf)
+	case "iso_8601":
+		d.encodeISO8601(buf)
+	case "sql_standard":
+		d.encodeSQLStandard(buf)
+	default:
+		d.encodePostgres(buf)
+	}
+}
+
+func (d Duration) encodePostgres(buf *bytes.Buffer) {
 	if d.nanos == 0 && d.Days == 0 && d.Months == 0 {
 		buf.WriteString("00:00:00")
 		return
@@ -419,27 +438,176 @@ func (d Duration) Format(buf *bytes.Buffer) {
 		buf.WriteString("+")
 	}
 
-	// Extract abs(d.nanos). See https://play.golang.org/p/U3_gNMpyUew.
-	var nanos uint64
-	if d.nanos >= 0 {
-		nanos = uint64(d.nanos)
-	} else {
-		nanos = uint64(-d.nanos)
-	}
+	hours, minutes, seconds, micros := extractAbsTime(d.nanos)
+	fmt.Fprintf(buf, "%02d:%02d:%02d", hours, minutes, seconds)
 
-	hn := nanos / hourNanos
-	nanos %= hourNanos
-	mn := nanos / minuteNanos
-	nanos %= minuteNanos
-	sn := nanos / secondNanos
-	nanos %= secondNanos
-	fmt.Fprintf(buf, "%02d:%02d:%02d", hn, mn, sn)
-
-	micros := nanos / nanosInMicro
 	if micros != 0 {
 		s := fmt.Sprintf(".%06d", micros)
 		buf.WriteString(strings.TrimRight(s, "0"))
 	}
+}
+
+func (d Duration) encodeSQLStandard(buf *bytes.Buffer) {
+	hasNegative := d.Months < 0 || d.Days < 0 || d.nanos < 0
+	hasPositive := d.Months > 0 || d.Days > 0 || d.nanos > 0
+	hasYearMonth := d.Months != 0
+	hasDayTime := d.Days != 0 || d.nanos != 0
+	hasDay := d.Days != 0
+	sqlStandardValue := !(hasNegative && hasPositive) &&
+		!(hasYearMonth && hasDayTime)
+
+	var years, months, days int64
+	hours, minutes, seconds, micros := extractTime(d.nanos)
+	if absGE(d.Months, 12) {
+		years = d.Months / 12
+		d.Months %= 12
+	}
+	months = d.Months
+	days = d.Days
+
+	if hasNegative && sqlStandardValue {
+		buf.WriteByte('-')
+		years = -years
+		months = -months
+		days = -days
+		hours = -hours
+		minutes = -minutes
+		seconds = -seconds
+		micros = -micros
+	}
+
+	switch {
+	case !hasNegative && !hasPositive:
+		buf.WriteByte('0')
+	case !sqlStandardValue:
+		yearSign := '+'
+		if years < 0 || months < 0 {
+			yearSign = '-'
+			years = -years
+			months = -months
+		}
+		daySign := '+'
+		if days < 0 {
+			daySign = '-'
+			days = -days
+		}
+		secSign := '+'
+		if d.nanos < 0 {
+			secSign = '-'
+			hours = -hours
+			minutes = -minutes
+			seconds = -seconds
+			micros = -micros
+		}
+		fmt.Fprintf(buf, "%c%d-%d %c%d %c%d:%02d:",
+			yearSign, years, months, daySign, days, secSign, hours, minutes)
+		writeSecondsMicroseconds(buf, seconds, micros)
+	case hasYearMonth:
+		fmt.Fprintf(buf, "%d-%d", years, months)
+	case hasDay:
+		fmt.Fprintf(buf, "%d %d:%02d:", days, hours, minutes)
+		writeSecondsMicroseconds(buf, seconds, micros)
+	default:
+		fmt.Fprintf(buf, "%d:%02d:", hours, minutes)
+		writeSecondsMicroseconds(buf, seconds, micros)
+	}
+}
+
+func (d Duration) encodeISO8601(buf *bytes.Buffer) {
+	if d.nanos == 0 && d.Days == 0 && d.Months == 0 {
+		buf.WriteString("PT0S")
+		return
+	}
+
+	buf.WriteByte('P')
+	years := d.Months / 12
+	writeISO8601IntPart(buf, years, 'Y')
+	d.Months %= 12
+
+	writeISO8601IntPart(buf, d.Months, 'M')
+	writeISO8601IntPart(buf, d.Days, 'D')
+	if d.nanos != 0 {
+		buf.WriteByte('T')
+	}
+
+	hnAbs, mnAbs, snAbs, microsAbs := extractAbsTime(d.nanos)
+	hours := int64(hnAbs)
+	minutes := int64(mnAbs)
+	seconds := int64(snAbs)
+	microsSign := ""
+
+	if d.nanos < 0 {
+		hours = -hours
+		minutes = -minutes
+		seconds = -seconds
+		microsSign = "-"
+	}
+	writeISO8601IntPart(buf, hours, 'H')
+	writeISO8601IntPart(buf, minutes, 'M')
+
+	if microsAbs != 0 {
+		// the sign is captured by microsSign, hence using abs values here.
+		s := fmt.Sprintf("%s%d.%06d", microsSign, snAbs, microsAbs)
+		trimmed := strings.TrimRight(s, "0")
+		fmt.Fprintf(buf, "%sS", trimmed)
+	} else {
+		writeISO8601IntPart(buf, seconds, 'S')
+	}
+}
+
+// Return an ISO-8601-style interval field, but only if value isn't zero.
+func writeISO8601IntPart(buf *bytes.Buffer, value int64, units rune) {
+	if value == 0 {
+		return
+	}
+	fmt.Fprintf(buf, "%d%c", value, units)
+}
+
+func writeSecondsMicroseconds(buf *bytes.Buffer, seconds, micros int64) {
+	fmt.Fprintf(buf, "%02d", seconds)
+
+	if micros != 0 {
+		s := fmt.Sprintf(".%06d", micros)
+		buf.WriteString(strings.TrimRight(s, "0"))
+	}
+}
+
+// extractAbsTime returns positive amount of hours, minutes, seconds,
+// and microseconds contained in the given amount of nanoseconds.
+func extractAbsTime(nanosOrig int64) (hours, minutes, seconds, micros uint64) {
+	// Extract abs(d.nanos). See https://play.golang.org/p/U3_gNMpyUew.
+	var nanos uint64
+	if nanosOrig >= 0 {
+		nanos = uint64(nanosOrig)
+	} else {
+		nanos = uint64(-nanosOrig)
+	}
+
+	hours = nanos / hourNanos
+	nanos %= hourNanos
+	minutes = nanos / minuteNanos
+	nanos %= minuteNanos
+	seconds = nanos / secondNanos
+	nanos %= secondNanos
+	micros = nanos / nanosInMicro
+	return
+}
+
+// extractAbsTime returns signed amount of hours, minutes, seconds,
+// and microseconds contained in the given amount of nanoseconds.
+func extractTime(nanosOrig int64) (hours, minutes, seconds, micros int64) {
+	hnAbs, mnAbs, snAbs, microsAbs := extractAbsTime(nanosOrig)
+	hours = int64(hnAbs)
+	minutes = int64(mnAbs)
+	seconds = int64(snAbs)
+	micros = int64(microsAbs)
+	if nanosOrig < 0 {
+		hours = -hours
+		minutes = -minutes
+		seconds = -seconds
+		micros = -micros
+	}
+	return
 }
 
 func isPlural(i int64) string {
@@ -467,10 +635,11 @@ func (d Duration) String() string {
 
 // StringNanos returns a string representation of a Duration including
 // its hidden nanoseconds value. To be used only by the encoding/decoding
-// packages for pretty printing of on-disk values.
+// packages for pretty printing of on-disk values. The encoded value is
+// expected to be in "postgres" interval style format.
 func (d Duration) StringNanos() string {
 	var buf bytes.Buffer
-	d.Format(&buf)
+	d.encodePostgres(&buf)
 	nanos := d.nanos % nanosInMicro
 	if nanos != 0 {
 		fmt.Fprintf(&buf, "%+dns", nanos)

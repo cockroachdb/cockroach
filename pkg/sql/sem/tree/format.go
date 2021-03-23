@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
 
@@ -233,6 +234,8 @@ type FmtCtx struct {
 	// indexedTypeFormatter is an optional interceptor for formatting
 	// IDTypeReferences differently than normal.
 	indexedTypeFormatter func(*FmtCtx, *OIDTypeReference)
+	// intervalStyleFormatter will be called on Duration if it is non-nil.
+	intervalStyleFormatter func(ctx *FmtCtx, d *duration.Duration)
 }
 
 // NewFmtCtx creates a FmtCtx; only flags that don't require Annotations
@@ -314,6 +317,12 @@ func (ctx *FmtCtx) SetPlaceholderFormat(placeholderFn func(_ *FmtCtx, _ *Placeho
 // IDTypeReferences using the provided function.
 func (ctx *FmtCtx) SetIndexedTypeFormat(fn func(*FmtCtx, *OIDTypeReference)) {
 	ctx.indexedTypeFormatter = fn
+}
+
+// SetIntervalFormat modifies FmtCtx to customize the printing of
+// Duration using the provided function.
+func (ctx *FmtCtx) SetIntervalFormat(fn func(*FmtCtx, *duration.Duration)) {
+	ctx.intervalStyleFormatter = fn
 }
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.

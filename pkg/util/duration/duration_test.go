@@ -11,12 +11,13 @@
 package duration
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"testing"
 	"time"
 
-	_ "github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 type durationTest struct {
@@ -60,6 +61,13 @@ var positiveDurationTests = []durationTest{
 	{1, Duration{Months: math.MaxInt64, Days: math.MaxInt64, nanos: math.MaxInt64}, true},
 }
 
+var mixedDurationTests = []durationTest{
+	{-1, Duration{Months: -1, Days: -2, nanos: 123}, false},
+	{1, Duration{Months: 0, Days: -1, nanos: 123}, false},
+	{1, Duration{Months: 0, Days: 0, nanos: -123}, false},
+	{1, Duration{Months: 0, Days: 1, nanos: -123456}, false},
+}
+
 func fullDurationTests() []durationTest {
 	var ret []durationTest
 	for _, test := range positiveDurationTests {
@@ -68,6 +76,7 @@ func fullDurationTests() []durationTest {
 		ret = append(ret, durationTest{cmpToPrev: -test.cmpToPrev, duration: negDuration, err: test.err})
 	}
 	ret = append(ret, positiveDurationTests...)
+	ret = append(ret, mixedDurationTests...)
 	return ret
 }
 
@@ -584,4 +593,154 @@ func BenchmarkAdd(b *testing.B) {
 			Add(s, d)
 		}
 	})
+}
+
+func TestFormat(t *testing.T) {
+	tests := []struct {
+		duration Duration
+		output   []string
+	}{
+		{
+			Duration{},
+			[]string{"00:00:00", "PT0S", "0"},
+		},
+		// all negative
+		// plural
+		{
+			Duration{Months: -35, Days: -2, nanos: -12345678000000},
+			[]string{"-2 years -11 mons -2 days -03:25:45.678", "P-2Y-11M-2DT-3H-25M-45.678S", "-2-11 -2 -3:25:45.678"},
+		},
+		// singular
+		{
+			Duration{Months: -13, Days: -1, nanos: -1000000},
+			[]string{"-1 years -1 mons -1 days -00:00:00.001", "P-1Y-1M-1DT-0.001S", "-1-1 -1 -0:00:00.001"},
+		},
+		// years only
+		{
+			Duration{Months: -12},
+			[]string{"-1 years", "P-1Y", "-1-0"},
+		},
+		// months only
+		{
+			Duration{Months: -1},
+			[]string{"-1 mons", "P-1M", "-0-1"},
+		},
+		// days only
+		{
+			Duration{Days: -1},
+			[]string{"-1 days", "P-1D", "-1 0:00:00"},
+		},
+		// hours only
+		{
+			Duration{nanos: -int64(time.Hour)},
+			[]string{"-01:00:00", "PT-1H", "-1:00:00"},
+		},
+		// minutes only
+		{
+			Duration{nanos: -int64(time.Minute)},
+			[]string{"-00:01:00", "PT-1M", "-0:01:00"},
+		},
+		// seconds only
+		{
+			Duration{nanos: -int64(time.Second)},
+			[]string{"-00:00:01", "PT-1S", "-0:00:01"},
+		},
+		// milliseconds only
+		{
+			Duration{nanos: -int64(time.Millisecond)},
+			[]string{"-00:00:00.001", "PT-0.001S", "-0:00:00.001"},
+		},
+		// without time
+		{
+			Duration{Months: -35, Days: -1, nanos: 0},
+			[]string{"-2 years -11 mons -1 days", "P-2Y-11M-1D", "-2-11 -1 +0:00:00"},
+		},
+		// without years
+		{
+			Duration{Months: -11, Days: -1, nanos: -1000000},
+			[]string{"-11 mons -1 days -00:00:00.001", "P-11M-1DT-0.001S", "-0-11 -1 -0:00:00.001"},
+		},
+		// without months
+		{
+			Duration{Months: -12, Days: -1, nanos: -1000000},
+			[]string{"-1 years -1 days -00:00:00.001", "P-1Y-1DT-0.001S", "-1-0 -1 -0:00:00.001"},
+		},
+		// without years, months
+		{
+			Duration{Months: 0, Days: -1, nanos: -1000000},
+			[]string{"-1 days -00:00:00.001", "P-1DT-0.001S", "-1 0:00:00.001"},
+		},
+		// without days
+		{
+			Duration{Months: -35, Days: 0, nanos: -1000000},
+			[]string{"-2 years -11 mons -00:00:00.001", "P-2Y-11MT-0.001S", "-2-11 +0 -0:00:00.001"},
+		},
+		// all positive
+		// plural
+		{
+			Duration{Months: 35, Days: 2, nanos: 12345678000000},
+			[]string{"2 years 11 mons 2 days 03:25:45.678", "P2Y11M2DT3H25M45.678S", "+2-11 +2 +3:25:45.678"},
+		},
+		// singular
+		{
+			Duration{Months: 13, Days: 1, nanos: 1000000},
+			[]string{"1 year 1 mon 1 day 00:00:00.001", "P1Y1M1DT0.001S", "+1-1 +1 +0:00:00.001"},
+		},
+		// without time
+		{
+			Duration{Months: 35, Days: 1, nanos: 0},
+			[]string{"2 years 11 mons 1 day", "P2Y11M1D", "+2-11 +1 +0:00:00"},
+		},
+		// without years
+		{
+			Duration{Months: 11, Days: 1, nanos: 1000000},
+			[]string{"11 mons 1 day 00:00:00.001", "P11M1DT0.001S", "+0-11 +1 +0:00:00.001"},
+		},
+		// without months
+		{
+			Duration{Months: 12, Days: 1, nanos: 1000000},
+			[]string{"1 year 1 day 00:00:00.001", "P1Y1DT0.001S", "+1-0 +1 +0:00:00.001"},
+		},
+		// without years, months
+		{
+			Duration{Months: 0, Days: 1, nanos: 1000000},
+			[]string{"1 day 00:00:00.001", "P1DT0.001S", "1 0:00:00.001"},
+		},
+		// without days
+		{
+			Duration{Months: 35, Days: 0, nanos: 1000000},
+			[]string{"2 years 11 mons 00:00:00.001", "P2Y11MT0.001S", "+2-11 +0 +0:00:00.001"},
+		},
+		// mixed positive and negative units
+		// PG prints '+' when a time unit changes the sign compared to the previous
+		// unit, i.e. below CRDB should print +2 days (in 'postgres' style).
+		{
+			Duration{Months: -35, Days: 2, nanos: -12345678000000},
+			[]string{"-2 years -11 mons 2 days -03:25:45.678", "P-2Y-11M2DT-3H-25M-45.678S", "-2-11 +2 -3:25:45.678"},
+		},
+		{
+			Duration{Months: 35, Days: -2, nanos: 12345678000000},
+			[]string{"2 years 11 mons -2 days +03:25:45.678", "P2Y11M-2DT3H25M45.678S", "+2-11 -2 +3:25:45.678"},
+		},
+		{
+			Duration{Days: -1, nanos: -123456789000000},
+			[]string{"-1 days -34:17:36.789", "P-1DT-34H-17M-36.789S", "-1 34:17:36.789"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.output[0], func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			tt.duration.FormatWithStyle(buf, "postgres")
+			require.Equal(t, tt.output[0], buf.String())
+
+			buf.Reset()
+			tt.duration.FormatWithStyle(buf, "iso_8601")
+			require.Equal(t, tt.output[1], buf.String())
+
+			buf.Reset()
+			tt.duration.FormatWithStyle(buf, "sql_standard")
+			require.Equal(t, tt.output[2], buf.String())
+		})
+	}
 }

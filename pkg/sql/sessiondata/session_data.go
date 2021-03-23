@@ -246,6 +246,10 @@ type LocalOnlySessionData struct {
 	// SequenceCache stores sequence values which have been cached using the
 	// CACHE sequence option.
 	SequenceCache SequenceCache
+
+	// IntervalStyle specifies the format that will be used to serialize
+	// intervals.
+	IntervalStyle IntervalStyle
 	///////////////////////////////////////////////////////////////////////////
 	// WARNING: consider whether a session parameter you're adding needs to  //
 	// be propagated to the remote nodes. If so, that parameter should live  //
@@ -463,6 +467,48 @@ func NewSchemaChangerModeFromString(val string) (_ NewSchemaChangerMode, ok bool
 		return UseNewSchemaChangerOn, true
 	case "UNSAFE_ALWAYS":
 		return UseNewSchemaChangerUnsafeAlways, true
+	default:
+		return 0, false
+	}
+}
+
+// IntervalStyle controls intervals representation.
+type IntervalStyle int64
+
+const (
+	// Postgres interval style represents intervals in format
+	// "-1 year -2 mons +3 days -04:05:06".
+	Postgres IntervalStyle = iota
+	// ISO8601 interval style represents intervals in format
+	// "P-1Y-2M3DT-4H-5M-6S".
+	ISO8601
+	// SQLStandard interval style represents intervals in format
+	// "+2-11 -2 +3:25:45.678"
+	SQLStandard
+)
+
+func (m IntervalStyle) String() string {
+	switch m {
+	case Postgres:
+		return "postgres"
+	case ISO8601:
+		return "iso_8601"
+	case SQLStandard:
+		return "sql_standard"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
+
+// IntervalStyleFromString converts a string into an IntervalStyle.
+func IntervalStyleFromString(val string) (_ IntervalStyle, ok bool) {
+	switch strings.ToUpper(val) {
+	case "POSTGRES":
+		return Postgres, true
+	case "ISO_8601":
+		return ISO8601, true
+	case "SQL_STANDARD":
+		return SQLStandard, true
 	default:
 		return 0, false
 	}
