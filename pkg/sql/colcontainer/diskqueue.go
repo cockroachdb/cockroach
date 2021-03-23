@@ -19,9 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/snappy"
@@ -292,10 +294,55 @@ func GetPatherFunc(f func(ctx context.Context) string) GetPather {
 	}
 }
 
+// DiskSpillingMetrics keeps track of various disk spilling metrics.
+type DiskSpillingMetrics interface {
+	// QuerySpilled tracks when a query is spilled to disk.
+	QuerySpilled()
+	// BytesWritten tracks the number of bytes written due to disk spilling.
+	BytesWritten(i int64)
+	// BytesRead tracks the number of bytes read due to disk spilling.
+	BytesRead(i int64)
+}
+
+type diskSpillingMetricsImpl struct {
+	mu struct {
+		syncutil.Mutex
+		querySpilled bool
+	}
+	m *execinfra.DistSQLMetrics
+}
+
+// NewDiskSpillingMetrics initializes and returns a DiskSpillingMetrics object.
+func NewDiskSpillingMetrics(m *execinfra.DistSQLMetrics) DiskSpillingMetrics {
+	return &diskSpillingMetricsImpl{
+		m: m,
+	}
+}
+
+func (d *diskSpillingMetricsImpl) QuerySpilled() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.mu.querySpilled {
+		d.mu.querySpilled = true
+		d.m.QueriesSpilled.Inc(1)
+	}
+}
+
+func (d *diskSpillingMetricsImpl) BytesWritten(i int64) {
+	d.m.SpilledBytesWritten.Inc(i)
+}
+
+func (d *diskSpillingMetricsImpl) BytesRead(i int64) {
+	d.m.SpilledBytesRead.Inc(i)
+}
+
 // DiskQueueCfg is a struct holding the configuration options for a DiskQueue.
 type DiskQueueCfg struct {
 	// FS is the filesystem interface to use.
 	FS fs.FS
+	// DiskSpillingMetrics defines disk spilling metrics to keep track of.
+	// This can be nil if there are no disk spilling metrics.
+	DiskSpillingMetrics DiskSpillingMetrics
 	// GetPather returns where the temporary directory that will contain this
 	// DiskQueue's files has been created. The directory name will be a UUID.
 	// Note that the directory is created lazily on the first call to GetPath.
@@ -384,6 +431,9 @@ func newDiskQueue(
 	}
 	if err := cfg.FS.MkdirAll(filepath.Join(cfg.GetPather.GetPath(ctx), d.dirName)); err != nil {
 		return nil, err
+	}
+	if cfg.DiskSpillingMetrics != nil {
+		cfg.DiskSpillingMetrics.QuerySpilled()
 	}
 	// rotateFile will create a new file to write to.
 	return d, d.rotateFile(ctx)
@@ -513,6 +563,9 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 	}
 	d.numBufferedBatches = 0
 	d.files[d.writeFileIdx].totalSize += written
+	if d.cfg.DiskSpillingMetrics != nil {
+		d.cfg.DiskSpillingMetrics.BytesWritten(int64(written))
+	}
 	if err := d.diskAcc.Grow(ctx, int64(written)); err != nil {
 		return err
 	}
@@ -638,6 +691,9 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 	n, err := d.readFile.ReadAt(d.writer.scratch.compressedBuf, int64(readRegionStart))
 	if err != nil && err != io.EOF {
 		return false, err
+	}
+	if d.cfg.DiskSpillingMetrics != nil {
+		d.cfg.DiskSpillingMetrics.BytesRead(int64(n))
 	}
 	if n != len(d.writer.scratch.compressedBuf) {
 		return false, errors.Errorf("expected to read %d bytes but read %d", len(d.writer.scratch.compressedBuf), n)
