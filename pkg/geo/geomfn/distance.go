@@ -844,6 +844,9 @@ const (
 	// PointPolygonIntersects is the relationship where a (multi)point
 	// intersects a (multi)polygon.
 	PointPolygonIntersects PointPolygonRelationType = iota + 1
+	// PointPolygonCoveredBy is the relationship where a (multi)point
+	// is covered by a (multi)polygon.
+	PointPolygonCoveredBy
 )
 
 // PointKindRelatesToPolygonKind returns whether a (multi)point and
@@ -864,6 +867,9 @@ func PointKindRelatesToPolygonKind(
 
 	// Check whether each point intersects with at least one polygon.
 	// For Intersects, at least one point must intersect with at least one polygon.
+	// For CoveredBy, every point must intersect with at least one polygon.
+	intersectsOnce := false
+pointOuterLoop:
 	for {
 		point, hasPoint, err := pointKindIterator.Next()
 		if err != nil {
@@ -887,16 +893,29 @@ func PointKindRelatesToPolygonKind(
 				return false, err
 			}
 			if intersects {
+				intersectsOnce = true
 				switch relationType {
 				case PointPolygonIntersects:
+					// A single intersection is sufficient.
 					return true, nil
+				case PointPolygonCoveredBy:
+					// If the current point intersects, check the next point.
+					continue pointOuterLoop
 				default:
 					return false, errors.Newf("unknown PointPolygonRelationType")
 				}
 			}
 		}
+		// Case where a point in the (multi)point does not intersect
+		// a polygon in the (multi)polygon.
+		switch relationType {
+		case PointPolygonCoveredBy:
+			// Each point in a (multi)point must intersect a polygon in the
+			// (multi)point to be covered by it.
+			return false, nil
+		}
 	}
-	return false, nil
+	return intersectsOnce, nil
 }
 
 // pointIntersectsPolygon returns whether a point intersects with a polygon.
@@ -915,7 +934,7 @@ func pointIntersectsPolygon(point geom.T, polygon geom.T) (bool, error) {
 		return false, errors.Newf("geomToGeodist failed to convert a *geom.Point to a *geodist.Point")
 	}
 
-	// Convert polygon from a geo.Geometry to a geodist.Polygon.
+	// Convert polygon from a geom.T to a geodist.Polygon.
 	_, ok = polygon.(*geom.Polygon)
 	if !ok {
 		return false, errors.Newf("second geometry passed to PointIntersectsPolygon must be a polygon")
