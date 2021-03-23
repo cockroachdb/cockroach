@@ -307,9 +307,6 @@ type Context struct {
 	// For unittesting.
 	BreakerFactory  func() *circuit.Breaker
 	testingDialOpts []grpc.DialOption
-
-	// For testing. See the comment on the same field in HeartbeatService.
-	TestingAllowNamedRPCToAnonymousServer bool
 }
 
 // connKey is used as key in the Context.conns map.
@@ -1006,7 +1003,7 @@ func (ctx *Context) GRPCUnvalidatedDial(target string) *Connection {
 func (ctx *Context) GRPCDialNode(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {
-	if remoteNodeID == 0 && !ctx.TestingAllowNamedRPCToAnonymousServer {
+	if remoteNodeID == 0 {
 		log.Fatalf(context.TODO(), "%v", errors.AssertionFailedf("invalid node ID 0 in GRPCDialNode()"))
 	}
 	return ctx.grpcDialNodeInternal(target, remoteNodeID, class)
@@ -1257,6 +1254,5 @@ func (ctx *Context) NewHeartbeatService() *HeartbeatService {
 		nodeID:                                &ctx.NodeID,
 		settings:                              ctx.Settings,
 		onHandlePing:                          ctx.OnIncomingPing,
-		testingAllowNamedRPCToAnonymousServer: ctx.TestingAllowNamedRPCToAnonymousServer,
 	}
 }

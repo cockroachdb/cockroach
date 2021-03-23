@@ -218,7 +218,7 @@ func createTestStoreWithoutStart(
 	cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), cfg.DefaultZoneConfig)
 	cfg.StorePool = NewTestStorePool(*cfg)
 	// Many tests using this test harness (as opposed to higher-level
-	// ones like multiTestContext or TestServer) want to micro-manage
+	// ones like TestCluster and TestServer) want to micro-manage
 	// replicas and the background queues just get in the way. The
 	// scanner doesn't run frequently enough to expose races reliably,
 	// so just disable the scanner for all tests that use this function

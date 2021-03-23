@@ -176,7 +176,7 @@ func (h *testClusterStoreRaftMessageHandler) HandleSnapshot(
 }
 
 // testClusterPartitionedRange is a convenient abstraction to create a range on a node
-// in a multiTestContext which can be partitioned and unpartitioned.
+// in a TestCluster which can be partitioned and unpartitioned.
 type testClusterPartitionedRange struct {
 	rangeID roachpb.RangeID
 	mu      struct {

@@ -55,13 +55,6 @@ type HeartbeatService struct {
 	disableClusterNameVerification bool
 
 	onHandlePing func(*PingRequest) error // see ContextOptions.OnIncomingPing
-
-	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
-	// disables errors in case a heartbeat requests a specific node ID but
-	// the remote node doesn't have a node ID yet. This testing knob is
-	// currently used by the multiTestContext which does not suitably
-	// populate separate node IDs for each heartbeat service.
-	testingAllowNamedRPCToAnonymousServer bool
 }
 
 func checkClusterName(clusterName string, peerName string) error {
@@ -126,7 +119,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	if hs.nodeID != nil {
 		nodeID = hs.nodeID.Get()
 	}
-	if args.TargetNodeID != 0 && (!hs.testingAllowNamedRPCToAnonymousServer || nodeID != 0) && args.TargetNodeID != nodeID {
+	if args.TargetNodeID != 0 && args.TargetNodeID != nodeID {
 		// If nodeID != 0, the situation is clear (we are checking that
 		// the other side is talking to the right node).
 		//
