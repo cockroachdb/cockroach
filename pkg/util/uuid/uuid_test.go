@@ -181,7 +181,7 @@ func TestTimestampFromV1(t *testing.T) {
 }
 
 func TestDeterministicV4(t *testing.T) {
-	// Test sortedness by enumerating everything in a small `n`.
+	// Test sortwaedness by enumerating everything in a small `n`.
 	var previous, current UUID
 	for i := 0; i < 10; i++ {
 		current.DeterministicV4(uint64(i), uint64(10))
