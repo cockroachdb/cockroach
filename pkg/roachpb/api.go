@@ -343,7 +343,10 @@ var _ combinable = &ScanResponse{}
 func (avptr *AdminVerifyProtectedTimestampResponse) combine(c combinable) error {
 	other := c.(*AdminVerifyProtectedTimestampResponse)
 	if avptr != nil {
-		avptr.FailedRanges = append(avptr.FailedRanges, other.FailedRanges...)
+		avptr.DeprecatedFailedRanges = append(avptr.DeprecatedFailedRanges,
+			other.DeprecatedFailedRanges...)
+		avptr.VerificationFailedRanges = append(avptr.VerificationFailedRanges,
+			other.VerificationFailedRanges...)
 		if err := avptr.ResponseHeader.combine(other.Header()); err != nil {
 			return err
 		}
