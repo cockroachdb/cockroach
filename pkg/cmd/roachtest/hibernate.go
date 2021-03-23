@@ -12,16 +12,57 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 )
 
 var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedHibernateTag = "5.4.20"
+var supportedHibernateTag = "5.4.30"
 
-// This test runs hibernate-core's full test suite against a single cockroach
+type hibernateOptions struct {
+	testName string
+	testDir  string
+	buildCmd,
+	testCmd string
+	blocklists  blocklistsForVersion
+	dbSetupFunc func(ctx context.Context, t *test, c *cluster)
+}
+
+var (
+	hibernateOpts = hibernateOptions{
+		testName: "hibernate",
+		testDir:  "hibernate-core",
+		buildCmd: `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb ` +
+			`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
+		testCmd:     "./gradlew test -Pdb=cockroachdb",
+		blocklists:  hibernateBlocklists,
+		dbSetupFunc: nil,
+	}
+	hibernateSpatialOpts = hibernateOptions{
+		testName: "hibernate-spatial",
+		testDir:  "hibernate-spatial",
+		buildCmd: `cd /mnt/data1/hibernate/hibernate-spatial/ && ./../gradlew test -Pdb=cockroachdb_spatial ` +
+			`--tests org.hibernate.spatial.dialect.postgis.*`,
+		testCmd: `cd /mnt/data1/hibernate/hibernate-spatial && ` +
+			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
+		blocklists: hibernateSpatialBlocklists,
+		dbSetupFunc: func(ctx context.Context, t *test, c *cluster) {
+			db := c.Conn(ctx, 1)
+			defer db.Close()
+			if _, err := db.ExecContext(
+				ctx,
+				"SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on",
+			); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+)
+
+// This test runs one of hibernate's test suite against a single cockroach
 // node.
 
-func registerHibernate(r *testRegistry) {
+func registerHibernate(r *testRegistry, opt hibernateOptions) {
 	runHibernate := func(
 		ctx context.Context,
 		t *test,
@@ -33,7 +74,14 @@ func registerHibernate(r *testRegistry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
+		if err := c.PutLibraries(ctx, "./lib"); err != nil {
+			t.Fatal(err)
+		}
 		c.Start(ctx, t, c.All())
+
+		if opt.dbSetupFunc != nil {
+			opt.dbSetupFunc(ctx, t, c)
+		}
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
@@ -98,29 +146,22 @@ func registerHibernate(r *testRegistry) {
 			c,
 			node,
 			"building hibernate (without tests)",
-			`cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb `+
-				`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
+			opt.buildCmd,
 		); err != nil {
 			t.Fatal(err)
 		}
 
-		blocklistName, expectedFailures, _, _ := hibernateBlocklists.getLists(version)
+		blocklistName, expectedFailures, _, _ := opt.blocklists.getLists(version)
 		if expectedFailures == nil {
 			t.Fatalf("No hibernate blocklist defined for cockroach version %s", version)
 		}
 		c.l.Printf("Running cockroach version %s, using blocklist %s", version, blocklistName)
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
-		// When testing, it is helpful to run only a subset of the tests. To do so
-		// add "--tests org.hibernate.test.annotations.lob.*" to the end of the
-		// test run command.
 		// Note that this will take upwards of 3 hours.
 		// Also note that this is expected to return an error, since the test suite
 		// will fail. And it is safe to swallow it here.
-		_ = c.RunE(ctx, node,
-			`cd /mnt/data1/hibernate/ && `+
-				`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./gradlew test -Pdb=cockroachdb`,
-		)
+		_ = c.RunE(ctx, node, opt.testCmd)
 
 		t.Status("collecting the test results")
 		// Copy all of the test results to the cockroach logs directory to be
@@ -132,7 +173,7 @@ func registerHibernate(r *testRegistry) {
 			c,
 			node,
 			"copy html report",
-			`cp /mnt/data1/hibernate/hibernate-core/target/reports/tests/test ~/logs/report -a`,
+			fmt.Sprintf(`cp /mnt/data1/hibernate/%s/target/reports/tests/test ~/logs/report -a`, opt.testDir),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -143,7 +184,7 @@ func registerHibernate(r *testRegistry) {
 			c,
 			node,
 			"copy test result files",
-			`cp /mnt/data1/hibernate/hibernate-core/target/test-results/test ~/logs/report/results -a`,
+			fmt.Sprintf(`cp /mnt/data1/hibernate/%s/target/test-results/test ~/logs/report/results -a`, opt.testDir),
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -156,7 +197,7 @@ func registerHibernate(r *testRegistry) {
 			t.l,
 			node,
 			"get list of test files",
-			`ls /mnt/data1/hibernate/*/target/test-results/test/*.xml`,
+			fmt.Sprintf(`ls /mnt/data1/hibernate/%s/target/test-results/test/*.xml`, opt.testDir),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -172,7 +213,7 @@ func registerHibernate(r *testRegistry) {
 	}
 
 	r.Add(testSpec{
-		Name:    "hibernate",
+		Name:    opt.testName,
 		Owner:   OwnerSQLExperience,
 		Cluster: makeClusterSpec(1),
 		Tags:    []string{`default`, `orm`},
