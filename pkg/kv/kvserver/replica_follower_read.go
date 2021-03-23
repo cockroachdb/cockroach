@@ -217,8 +217,6 @@ func (r *Replica) maxClosedRLocked(
 	var update replicaUpdate
 	// In some tests the lease can be empty, or the ClosedTimestampReceiver might
 	// not be set.
-	// TODO(andrei): Remove the ClosedTimestampReceiver == nil protection once the
-	// multiTestContext goes away.
 	if !replicationBehind && !lease.Empty() && r.store.cfg.ClosedTimestampReceiver != nil {
 		otherSideTransportClosed, otherSideTransportLAI :=
 			r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(ctx, r.RangeID, lease.Replica.NodeID)
