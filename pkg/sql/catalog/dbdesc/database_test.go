@@ -99,7 +99,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 			},
 		},
 		{
-			`primary region unset on a multi-region db 200`,
+			`invalid region enum ID on a multi-region db 200`,
 			descpb.DatabaseDescriptor{
 				Name:         "multi-region-db",
 				ID:           200,
@@ -212,8 +212,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					RegionEnumID:  500,
-					PrimaryRegion: "us-east-1",
+					RegionEnumID: 500,
 				},
 			},
 		},
@@ -223,8 +222,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					RegionEnumID:  52,
-					PrimaryRegion: "us-east-1",
+					RegionEnumID: 52,
 				},
 			},
 			multiRegionEnum: descpb.TypeDescriptor{
@@ -252,8 +250,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 				ID:   51,
 				Name: "db1",
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-					RegionEnumID:  53,
-					PrimaryRegion: "us-east-1",
+					RegionEnumID: 53,
 				},
 			},
 			schemaDescs: []descpb.SchemaDescriptor{

@@ -115,8 +115,8 @@ func ValidateRegionConfig(config RegionConfig) error {
 	return canSatisfySurvivalGoal(config.survivalGoal, len(config.regions))
 }
 
-// CanDropRegion returns an error if the survival goal doesn't allow for
+// CanSatisfySurvivalGoalAfterRegionDrop returns an error if the survival goal doesn't allow for
 // removing regions.
-func CanDropRegion(config RegionConfig) error {
+func CanSatisfySurvivalGoalAfterRegionDrop(config RegionConfig) error {
 	return canSatisfySurvivalGoal(config.survivalGoal, len(config.regions)-1)
 }

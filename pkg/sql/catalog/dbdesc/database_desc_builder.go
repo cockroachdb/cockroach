@@ -120,9 +120,8 @@ func MaybeWithDatabaseRegionConfig(regionConfig *multiregion.RegionConfig) NewIn
 			return
 		}
 		desc.RegionConfig = &descpb.DatabaseDescriptor_RegionConfig{
-			SurvivalGoal:  regionConfig.SurvivalGoal(),
-			PrimaryRegion: regionConfig.PrimaryRegion(),
-			RegionEnumID:  regionConfig.RegionEnumID(),
+			SurvivalGoal: regionConfig.SurvivalGoal(),
+			RegionEnumID: regionConfig.RegionEnumID(),
 		}
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -41,13 +42,6 @@ type createTypeNode struct {
 	typeName *tree.TypeName
 	dbDesc   catalog.DatabaseDescriptor
 }
-
-type enumType int
-
-const (
-	enumTypeUserDefined = iota
-	enumTypeMultiRegion
-)
 
 // Use to satisfy the linter.
 var _ planNode = &createTypeNode{n: nil}
@@ -283,7 +277,7 @@ func (p *planner) createUserDefinedEnum(params runParams, n *createTypeNode) err
 		return err
 	}
 	return params.p.createEnumWithID(
-		params, id, n.n.EnumLabels, n.dbDesc, n.typeName, enumTypeUserDefined,
+		params, id, n.n.EnumLabels, n.dbDesc, n.typeName, nil, /* regionConfig*/
 	)
 }
 
@@ -293,7 +287,7 @@ func (p *planner) createEnumWithID(
 	enumLabels tree.EnumValueList,
 	dbDesc catalog.DatabaseDescriptor,
 	typeName *tree.TypeName,
-	enumType enumType,
+	regionConfig *multiregion.RegionConfig,
 ) error {
 	// Make sure that all nodes in the cluster are able to recognize ENUM types.
 	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.Enums) {
@@ -345,15 +339,11 @@ func (p *planner) createEnumWithID(
 	privs.Grant(params.p.User(), privilege.List{privilege.ALL})
 
 	enumKind := descpb.TypeDescriptor_ENUM
-	var regionConfig *descpb.TypeDescriptor_RegionConfig
-	if enumType == enumTypeMultiRegion {
+	var typeDescRegionConfig *descpb.TypeDescriptor_RegionConfig
+	if regionConfig != nil {
 		enumKind = descpb.TypeDescriptor_MULTIREGION_ENUM
-		primaryRegion, err := dbDesc.PrimaryRegionName()
-		if err != nil {
-			return err
-		}
-		regionConfig = &descpb.TypeDescriptor_RegionConfig{
-			PrimaryRegion: primaryRegion,
+		typeDescRegionConfig = &descpb.TypeDescriptor_RegionConfig{
+			PrimaryRegion: regionConfig.PrimaryRegion(),
 		}
 	}
 
@@ -371,7 +361,7 @@ func (p *planner) createEnumWithID(
 		EnumMembers:    members,
 		Version:        1,
 		Privileges:     privs,
-		RegionConfig:   regionConfig,
+		RegionConfig:   typeDescRegionConfig,
 	}).BuildCreatedMutableType()
 
 	// Create the implicit array type for this type before finishing the type.
