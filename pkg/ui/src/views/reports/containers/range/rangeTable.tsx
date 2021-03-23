@@ -35,8 +35,13 @@ interface RangeTableRow {
 }
 
 interface RangeTableCellContent {
+  // value represents the strings to be rendered. Each one is rendered on its
+  // own line (as a <li>).
   value: string[];
+  // title represents the strings that will constitute the HTML title of the
+  // cell (i.e. the tooltip). If nil, value is used.
   title?: string[];
+  // The classes to be applied to the cell.
   className?: string[];
 }
 
