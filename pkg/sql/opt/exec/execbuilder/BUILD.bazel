@@ -47,7 +47,7 @@ go_library(
 
 go_test(
     name = "execbuilder_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "builder_test.go",
         "main_test.go",
@@ -55,7 +55,6 @@ go_test(
     data = glob(["testdata/**"]) + [
         "@cockroach//c-deps:libgeos",
     ],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/security",
         "//pkg/security/securitytest",

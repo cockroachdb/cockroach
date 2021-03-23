@@ -15,10 +15,13 @@ go_library(
 go_test(
     name = "nilness_test",
     srcs = ["nilness_test.go"],
-    data = glob(["testdata/**"]),
-    tags = ["broken_in_bazel"],
+    data = glob(["testdata/**"]) + [
+        "@go_sdk//:files",
+    ],
     deps = [
         ":nilness",
+        "//pkg/build/bazel",
+        "//pkg/testutils",
         "@org_golang_x_tools//go/analysis/analysistest",
     ],
 )
