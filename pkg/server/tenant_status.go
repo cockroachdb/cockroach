@@ -18,6 +18,7 @@ package server
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -122,4 +123,21 @@ func (t *tenantStatusServer) ResetSQLStats(
 ) (*serverpb.ResetSQLStatsResponse, error) {
 	t.sqlServer.pgServer.SQLServer.ResetSQLStats(ctx)
 	return &serverpb.ResetSQLStatsResponse{}, nil
+}
+
+func (t *tenantStatusServer) Statements(
+	ctx context.Context, _ *serverpb.StatementsRequest,
+) (*serverpb.StatementsResponse, error) {
+	if _, err := t.privilegeChecker.requireViewActivityPermission(ctx); err != nil {
+		return nil, err
+	}
+	// Use a dummy value here until pod-to-pod communication is implemented since tenant status server
+	// does not have concept of node.
+	resp, err := statementsLocal(&base.NodeIDContainer{}, t.sqlServer)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }

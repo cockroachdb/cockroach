@@ -26,6 +26,7 @@ type SQLStatusServer interface {
 	ListContentionEvents(context.Context, *ListContentionEventsRequest) (*ListContentionEventsResponse, error)
 	ListLocalContentionEvents(context.Context, *ListContentionEventsRequest) (*ListContentionEventsResponse, error)
 	ResetSQLStats(context.Context, *ResetSQLStatsRequest) (*ResetSQLStatsResponse, error)
+	Statements(context.Context, *StatementsRequest) (*StatementsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
