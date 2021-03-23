@@ -274,6 +274,9 @@ type NodeLivenessTestingKnobs struct {
 	// RenewalDuration specifies how long before the expiration a record is
 	// heartbeated. If LivenessDuration is set, this should probably be set too.
 	RenewalDuration time.Duration
+	// StorePoolNodeLivenessFn is the function used by the StorePool to determine
+	// whether a node is live or not.
+	StorePoolNodeLivenessFn NodeLivenessFunc
 }
 
 var _ base.ModuleTestingKnobs = NodeLivenessTestingKnobs{}

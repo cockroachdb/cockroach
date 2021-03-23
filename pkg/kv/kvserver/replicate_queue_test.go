@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -366,6 +368,282 @@ func TestReplicateQueueUpAndDownReplicateNonVoters(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func checkReplicaCount(
+	ctx context.Context,
+	tc *testcluster.TestCluster,
+	rangeDesc roachpb.RangeDescriptor,
+	voterCount, nonVoterCount int,
+) (bool, error) {
+	err := forceScanOnAllReplicationQueues(tc)
+	if err != nil {
+		log.Infof(ctx, "store.ForceReplicationScanAndProcess() failed with: %s", err)
+		return false, err
+	}
+	rangeDesc, err = tc.LookupRange(rangeDesc.StartKey.AsRawKey())
+	if err != nil {
+		return false, err
+	}
+	if len(rangeDesc.Replicas().VoterDescriptors()) != voterCount {
+		return false, nil
+	}
+	if len(rangeDesc.Replicas().NonVoterDescriptors()) != nonVoterCount {
+		return false, nil
+	}
+	return true, nil
+}
+
+// TestReplicateQueueDecommissioningNonVoters is an end-to-end test ensuring
+// that the replicateQueue will replace or remove non-voter(s) on
+// decommissioning nodes.
+func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Setup a scratch range on a test cluster with 2 non-voters and 1 voter.
+	setupFn := func(t *testing.T) (*testcluster.TestCluster, roachpb.RangeDescriptor) {
+		tc := testcluster.StartTestCluster(t, 5,
+			base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		)
+
+		scratchKey := tc.ScratchRange(t)
+		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+		_, err := tc.ServerConn(0).Exec(
+			`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 3, num_voters = 1`,
+		)
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
+			if err != nil {
+				log.Errorf(ctx, "error checking replica count: %s", err)
+				return false
+			}
+			return ok
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
+		return tc, scratchRange
+	}
+
+	// Check that non-voters on decommissioning nodes are replaced by
+	// upreplicating elsewhere. This test is supposed to tickle the
+	// `AllocatorReplaceDecommissioningNonVoter` code path.
+	t.Run("replace", func(t *testing.T) {
+		tc, scratchRange := setupFn(t)
+		defer tc.Stopper().Stop(ctx)
+		// Do a fresh look up on the range descriptor.
+		scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+		beforeNodeIDs := getNonVoterNodeIDs(scratchRange)
+		// Decommission each of the two nodes that have the non-voters and make sure
+		// that those non-voters are upreplicated elsewhere.
+		require.NoError(t,
+			tc.Server(0).Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, beforeNodeIDs))
+
+		require.Eventually(t, func() bool {
+			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
+			if err != nil {
+				log.Errorf(ctx, "error checking replica count: %s", err)
+				return false
+			}
+			if !ok {
+				return false
+			}
+			// Ensure that the non-voters have actually been removed from the dead
+			// nodes and moved to others.
+			scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+			afterNodeIDs := getNonVoterNodeIDs(scratchRange)
+			for _, before := range beforeNodeIDs {
+				for _, after := range afterNodeIDs {
+					if after == before {
+						return false
+					}
+				}
+			}
+			return true
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
+	})
+
+	// Check that when we have more non-voters than needed and some of those
+	// non-voters are on decommissioning nodes, that we simply remove those
+	// non-voters. This test is supposed to tickle the
+	// `AllocatorRemoveDecommissioningNonVoter` code path.
+	t.Run("remove", func(t *testing.T) {
+		tc, scratchRange := setupFn(t)
+		defer tc.Stopper().Stop(ctx)
+
+		// Turn off the replicateQueue and update the zone configs to remove all
+		// non-voters. At the same time, also mark all the nodes that have
+		// non-voters as decommissioning.
+		tc.ToggleReplicateQueues(false)
+		_, err := tc.ServerConn(0).Exec(
+			`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 1`,
+		)
+		require.NoError(t, err)
+
+		// Do a fresh look up on the range descriptor.
+		scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+		var nonVoterNodeIDs []roachpb.NodeID
+		for _, repl := range scratchRange.Replicas().NonVoterDescriptors() {
+			nonVoterNodeIDs = append(nonVoterNodeIDs, repl.NodeID)
+		}
+		require.NoError(t,
+			tc.Server(0).Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, nonVoterNodeIDs))
+
+		// At this point, we know that we have an over-replicated range with
+		// non-voters on nodes that are marked as decommissioning. So turn the
+		// replicateQueue on and ensure that these redundant non-voters are removed.
+		tc.ToggleReplicateQueues(true)
+		require.Eventually(t, func() bool {
+			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
+			if err != nil {
+				log.Errorf(ctx, "error checking replica count: %s", err)
+				return false
+			}
+			return ok
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
+	})
+}
+
+// TestReplicateQueueDeadNonVoters is an end to end test ensuring that
+// non-voting replicas on dead nodes are replaced or removed.
+func TestReplicateQueueDeadNonVoters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var livenessTrap atomic.Value
+	setupFn := func(t *testing.T) (*testcluster.TestCluster, roachpb.RangeDescriptor) {
+		tc := testcluster.StartTestCluster(t, 5,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationAuto,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						NodeLiveness: kvserver.NodeLivenessTestingKnobs{
+							StorePoolNodeLivenessFn: func(
+								id roachpb.NodeID, now time.Time, duration time.Duration,
+							) livenesspb.NodeLivenessStatus {
+								val := livenessTrap.Load()
+								if val == nil {
+									return livenesspb.NodeLivenessStatus_LIVE
+								}
+								return val.(func(nodeID roachpb.NodeID) livenesspb.NodeLivenessStatus)(id)
+							},
+						},
+					},
+				},
+			},
+		)
+		// Setup a scratch range on a test cluster with 2 non-voters and 1 voter.
+		scratchKey := tc.ScratchRange(t)
+		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
+		_, err := tc.ServerConn(0).Exec(
+			`ALTER RANGE DEFAULT CONFIGURE ZONE USING num_replicas = 3, num_voters = 1`,
+		)
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
+			if err != nil {
+				log.Errorf(ctx, "error checking replica count: %s", err)
+				return false
+			}
+			return ok
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
+		return tc, scratchRange
+	}
+
+	markDead := func(nodeIDs []roachpb.NodeID) {
+		livenessTrap.Store(func(id roachpb.NodeID) livenesspb.NodeLivenessStatus {
+			for _, dead := range nodeIDs {
+				if dead == id {
+					return livenesspb.NodeLivenessStatus_DEAD
+				}
+			}
+			return livenesspb.NodeLivenessStatus_LIVE
+		})
+	}
+
+	// This subtest checks that non-voters on dead nodes are replaced by
+	// upreplicating elsewhere. This test is supposed to tickle the
+	// `AllocatorReplaceDeadNonVoter` code path. It does the following:
+	//
+	// 1. On a 5 node cluster, instantiate a range with 1 voter and 2 non-voters.
+	// 2. Kill the 2 nodes that have the non-voters.
+	// 3. Check that those non-voters are replaced.
+	t.Run("replace", func(t *testing.T) {
+		tc, scratchRange := setupFn(t)
+		defer tc.Stopper().Stop(ctx)
+
+		beforeNodeIDs := getNonVoterNodeIDs(scratchRange)
+		markDead(beforeNodeIDs)
+		require.Eventually(t, func() bool {
+			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
+			if err != nil {
+				log.Errorf(ctx, "error checking replica count: %s", err)
+				return false
+			}
+			if !ok {
+				return false
+			}
+			// Ensure that the non-voters have actually been removed from the dead
+			// nodes and moved to others.
+			scratchRange = tc.LookupRangeOrFatal(t, scratchRange.StartKey.AsRawKey())
+			afterNodeIDs := getNonVoterNodeIDs(scratchRange)
+			for _, before := range beforeNodeIDs {
+				for _, after := range afterNodeIDs {
+					if after == before {
+						return false
+					}
+				}
+			}
+			return true
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
+	})
+
+	// This subtest checks that when we have more non-voters than needed and some
+	// existing non-voters are on dead nodes, we will simply remove these
+	// non-voters. This test is supposed to tickle the
+	// AllocatorRemoveDeadNonVoter` code path. The test does the following:
+	//
+	// 1. Instantiate a range with 1 voter and 2 non-voters on a 5-node cluster.
+	// 2. Turn off the replicateQueue
+	// 3. Change the zone configs such that there should be no non-voters --
+	// the two existing non-voters should now be considered "over-replicated"
+	// by the system.
+	// 4. Kill the nodes that have non-voters.
+	// 5. Turn on the replicateQueue
+	// 6. Make sure that the non-voters are downreplicated from the dead nodes.
+	t.Run("remove", func(t *testing.T) {
+		tc, scratchRange := setupFn(t)
+		defer tc.Stopper().Stop(ctx)
+
+		toggleReplicationQueues(tc, false)
+		_, err := tc.ServerConn(0).Exec(
+			// Remove all non-voters.
+			"ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1",
+		)
+		require.NoError(t, err)
+		beforeNodeIDs := getNonVoterNodeIDs(scratchRange)
+		markDead(beforeNodeIDs)
+
+		toggleReplicationQueues(tc, true)
+		require.Eventually(t, func() bool {
+			ok, err := checkReplicaCount(ctx, tc, scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
+			if err != nil {
+				log.Errorf(ctx, "error checking replica count: %s", err)
+				return false
+			}
+			return ok
+		}, testutils.DefaultSucceedsSoonDuration, 100*time.Millisecond)
+	})
+}
+
+func getNonVoterNodeIDs(rangeDesc roachpb.RangeDescriptor) (result []roachpb.NodeID) {
+	for _, repl := range rangeDesc.Replicas().NonVoterDescriptors() {
+		result = append(result, repl.NodeID)
+	}
+	return result
 }
 
 // TestReplicateQueueSwapVoterWithNonVoters tests that voting replicas can
