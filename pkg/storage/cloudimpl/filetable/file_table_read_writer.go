@@ -289,7 +289,7 @@ func NewFileToTableSystem(
 		// TODO(adityamaru): Handle scenario where the user has already created
 		// tables with the same names not via the FileToTableSystem
 		// object. Not sure if we want to error out or work around it.
-		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, e.ie)
+		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn, e.ie)
 		if err != nil {
 			return err
 		}
@@ -722,7 +722,7 @@ func (f *FileToTableSystem) ReadFile(ctx context.Context, filename string) (io.R
 }
 
 func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
-	ctx context.Context, ie *sql.InternalExecutor,
+	ctx context.Context, txn *kv.Txn, ie *sql.InternalExecutor,
 ) (bool, error) {
 	tablePrefix, err := f.GetTableName()
 	if err != nil {
@@ -751,7 +751,7 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 	tableExistenceQuery := fmt.Sprintf(
 		`SELECT quote_ident(table_name) FROM [SHOW TABLES FROM %s] WHERE quote_ident(table_name)=$1 OR quote_ident(table_name)=$2`,
 		databaseSchema)
-	rows, err := ie.QueryEx(ctx, "tables-exist", nil,
+	rows, err := ie.QueryEx(ctx, "tables-exist", txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUser},
 		tableExistenceQuery, fileTableName, payloadTableName)
 	if err != nil {
