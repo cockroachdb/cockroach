@@ -207,4 +207,58 @@ SELECT status
 
 		waitForJobDone(t, tdb, "GC for DROP INDEX%idx")
 	})
+
+	// This is a regression test for a hazardous scenario whereby a drop index gc
+	// job may attempt to rewrite subzone spans for a dropped table which used types
+	// which no longer exist.
+	t.Run("drop table and type", func(t *testing.T) {
+
+		// Sketch of the test:
+		//
+		//  * Set up a partitioned table and index which are partitioned by an enum.
+		//  * Set a short GC TTL on the index.
+		//  * Drop the index.
+		//  * Drop the table.
+		//  * Drop the type.
+		//  * Wait for the index to be cleaned up, which would have crashed before the
+		//    this fix
+		//  * Set a short GC TTL on everything
+		//  * Wait for the table to be cleaned up.
+		//
+
+		defer log.Scope(t).Close(t)
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		defer tc.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+		tdb.Exec(t, `
+	  CREATE TYPE typ AS ENUM ('a', 'b', 'c');
+	  CREATE TABLE t (e typ PRIMARY KEY) PARTITION BY LIST (e) (
+	              PARTITION a VALUES IN ('a'),
+	              PARTITION b VALUES IN ('b'),
+	              PARTITION c VALUES IN ('c')
+	  );
+	  CREATE INDEX idx
+	      ON t (e)
+	      PARTITION BY LIST (e)
+	          (
+	              PARTITION ai VALUES IN ('a'),
+	              PARTITION bi VALUES IN ('b'),
+	              PARTITION ci VALUES IN ('c')
+	          );
+	  ALTER PARTITION ai OF INDEX t@idx CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321;
+	  ALTER PARTITION a OF TABLE t CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321;
+	  ALTER INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
+	  DROP INDEX t@idx;
+	  SET sql_safe_updates = false;
+	  DROP TABLE t;
+	  DROP TYPE typ;
+	  `)
+
+		waitForJobDone(t, tdb, "GC for DROP INDEX%idx")
+		tdb.Exec(t, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1`)
+		waitForJobDone(t, tdb, "GC for DROP TABLE%t")
+	})
 }
