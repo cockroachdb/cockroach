@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -162,8 +163,7 @@ func runFollowerReadsTest(
 
 	// Wait until the table has completed up-replication.
 	t.l.Printf("waiting for up-replication...")
-	tStart := timeutil.Now()
-	for {
+	require.NoError(t, retry.ForDuration(5*time.Minute, func() error {
 		const q = `
 			SELECT
 				coalesce(array_length(voting_replicas, 1), 0),
@@ -173,7 +173,10 @@ func runFollowerReadsTest(
 			WHERE
 				table_name = 'test'`
 		var voters, nonVoters int
-		require.NoError(t, db.QueryRowContext(ctx, q).Scan(&voters, &nonVoters))
+		if err := db.QueryRowContext(ctx, q).Scan(&voters, &nonVoters); err != nil {
+			t.l.Printf("retrying: %v\n", err)
+			return err
+		}
 
 		var ok bool
 		if survival == zone {
@@ -183,15 +186,11 @@ func runFollowerReadsTest(
 			// Expect 5 voting replicas and 0 non-voting replicas.
 			ok = voters == 5 && nonVoters == 0
 		}
-		if ok {
-			break
+		if !ok {
+			return errors.Newf("rebalancing not complete")
 		}
-
-		if timeutil.Since(tStart) > 30*time.Second {
-			t.l.Printf("still waiting for full replication")
-		}
-		time.Sleep(time.Second)
-	}
+		return nil
+	}))
 
 	const rows = 100
 	const concurrency = 32
