@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -44,6 +45,7 @@ import (
 )
 
 var externalIODir string
+var dumpTime string
 
 func init() {
 
@@ -105,6 +107,13 @@ func init() {
 		cliflags.ExternalIODir.Shorthand,
 		"", /*value*/
 		cliflags.ExternalIODir.Usage())
+
+	loadShowDataCmd.Flags().StringVarP(
+		&dumpTime,
+		cliflags.DumpTime.Name,
+		cliflags.DumpTime.Shorthand,
+		"", /*value*/
+		cliflags.DumpTime.Usage())
 
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadShowCmds)
@@ -390,18 +399,23 @@ func runLoadShowData(cmd *cobra.Command, args []string) error {
 		manifests = append(manifests, manifest)
 	}
 
-	entry, err := backupccl.MakeEntryForTableName(ctx, fullyQualifiedTableName, manifests, hlc.Timestamp{})
+	endTime, err := evalAsOfTimestamp(ctx, dumpTime)
+	if err != nil {
+		return errors.Wrapf(err, "eval as of timestamp %s", dumpTime)
+	}
+
+	entry, err := backupccl.MakeEntryForTableName(ctx, fullyQualifiedTableName, manifests, endTime)
 	if err != nil {
 		return errors.Wrapf(err, "fetching entry")
 	}
 
-	if err = showKV(ctx, entry); err != nil {
+	if err = showKV(ctx, entry, endTime); err != nil {
 		return errors.Wrapf(err, "showing key-value pairs")
 	}
 	return nil
 }
 
-func showKV(ctx context.Context, entry execinfrapb.RestoreSpanEntry) error {
+func showKV(ctx context.Context, entry execinfrapb.RestoreSpanEntry, endTime hlc.Timestamp) error {
 
 	iters := make([]storage.SimpleMVCCIterator, len(entry.Files))
 	dirStorage := make([]cloud.ExternalStorage, len(entry.Files))
@@ -439,6 +453,12 @@ func showKV(ctx context.Context, entry execinfrapb.RestoreSpanEntry) error {
 		if !ok || !iter.UnsafeKey().Less(endKeyMVCC) {
 			break
 		}
+		if !endTime.IsEmpty() {
+			if endTime.Less(iter.UnsafeKey().Timestamp) {
+				iter.Next()
+				continue
+			}
+		}
 		if len(iter.UnsafeValue()) == 0 {
 			// Value is deleted.
 			iter.NextKey()
@@ -454,4 +474,20 @@ func showKV(ctx context.Context, entry execinfrapb.RestoreSpanEntry) error {
 		iter.NextKey()
 	}
 	return nil
+}
+
+func evalAsOfTimestamp(ctx context.Context, dumpTime string) (hlc.Timestamp, error) {
+	if dumpTime == "" {
+		return hlc.Timestamp{}, nil
+	}
+	currentTime := timeutil.Now()
+	ts, err := tree.DatumToHLC(tree.NewTestingEvalContext(cluster.NoSettings), currentTime, tree.NewDString(dumpTime))
+	if err != nil {
+		return hlc.Timestamp{}, errors.Wrapf(err, "eval timestamp %s", dumpTime)
+	}
+	currentTS := hlc.Timestamp{WallTime: currentTime.UnixNano()}
+	if currentTS.Less(ts) {
+		return hlc.Timestamp{}, errors.Newf("--as-of: cannot specify timestamp in the future (%s > %s)", ts, currentTS)
+	}
+	return ts, nil
 }

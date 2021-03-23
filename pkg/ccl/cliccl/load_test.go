@@ -294,6 +294,145 @@ func TestLoadShowData(t *testing.T) {
 	}
 }
 
+func TestLoadShowDataAOST(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := cli.NewCLITest(cli.TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
+
+	ctx := context.Background()
+	dir, cleanFn := testutils.TempDir(t)
+	defer cleanFn()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE testDB`)
+	sqlDB.Exec(t, `USE testDB`)
+	sqlDB.Exec(t, `CREATE TABLE fooTable (a INT PRIMARY KEY)`)
+
+	const backupPublicSchemaPath = "nodelocal://0/fooFolder/public"
+
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (123)`)
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (223)`)
+	ts1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts1.AsOfSystemTime()), backupPublicSchemaPath)
+
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (323)`)
+	ts2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE fooTable TO $1 AS OF SYSTEM TIME '%s'`, ts2.AsOfSystemTime()), backupPublicSchemaPath)
+
+	t.Run("show-data-as-of-a-future-timestamp", func(t *testing.T) {
+		out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --as-of=10s --external-io-dir=%s",
+			"testDB.public.fooTable",
+			backupPublicSchemaPath,
+			dir))
+		require.NoError(t, err)
+		expectedError := "ERROR: eval as of timestamp 10s: AS OF SYSTEM TIME: cannot specify timestamp in the future"
+		require.Contains(t, out, expectedError)
+	})
+
+	testCases := []struct {
+		name        string
+		tableName   string
+		backupPaths []string
+		asof        string
+		expectedKV  []struct{ key, value string }
+	}{
+		{
+			"show-data-without-as-of-time",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+				backupPublicSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			"", /*asof*/
+			[]struct{ key, value string }{
+				{"/Table/53/1/123/0", "/TUPLE/"},
+				{"/Table/53/1/223/0", "/TUPLE/"},
+				{"/Table/53/1/323/0", "/TUPLE/"},
+			},
+		},
+		{
+			"show-data-as-of-time-after-first-insertion-should-work-in-a-single-full-backup",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+			},
+			ts.AsOfSystemTime(),
+			[]struct{ key, value string }{
+				{"/Table/53/1/123/0", "/TUPLE/"},
+			},
+		},
+		{
+			"show-data-as-of-time-after-second-insertion-should-work-in-a-single-full-backup",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+			},
+			ts1.AsOfSystemTime(),
+			[]struct{ key, value string }{
+				{"/Table/53/1/123/0", "/TUPLE/"},
+				{"/Table/53/1/223/0", "/TUPLE/"},
+			},
+		},
+		{
+			"show-data-as-of-time-after-first-insertion-should-work-in-a-chain-of-incremental-backups",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+				backupPublicSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			ts.AsOfSystemTime(),
+			[]struct{ key, value string }{
+				{"/Table/53/1/123/0", "/TUPLE/"},
+			},
+		},
+		{
+			"show-data-as-of-time-after-second-insertion-should-work-in-a-chain-of-incremental-backups",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+				backupPublicSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			ts1.AsOfSystemTime(),
+			[]struct{ key, value string }{
+				{"/Table/53/1/123/0", "/TUPLE/"},
+				{"/Table/53/1/223/0", "/TUPLE/"},
+			},
+		},
+		{
+			"show-data-as-of-time-after-third-insertion-should-work-in-a-chain-of-incremental-backups",
+			"testDB.public.fooTable",
+			[]string{
+				backupPublicSchemaPath,
+				backupPublicSchemaPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			ts2.AsOfSystemTime(),
+			[]struct{ key, value string }{
+				{"/Table/53/1/123/0", "/TUPLE/"},
+				{"/Table/53/1/223/0", "/TUPLE/"},
+				{"/Table/53/1/323/0", "/TUPLE/"},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s --as-of=%s --external-io-dir=%s ",
+				tc.tableName,
+				strings.Join(tc.backupPaths, " "),
+				tc.asof,
+				dir))
+			require.NoError(t, err)
+			checkExpectedKV(t, tc.expectedKV, out)
+		})
+	}
+}
+
 func checkExpectedOutput(t *testing.T, expected string, out string) {
 	endOfCmd := strings.Index(out, "\n")
 	output := out[endOfCmd+1:]

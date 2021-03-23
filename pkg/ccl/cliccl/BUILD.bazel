@@ -33,6 +33,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/storage",
         "//pkg/storage/cloud",
