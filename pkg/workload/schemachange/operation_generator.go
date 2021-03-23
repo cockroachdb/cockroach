@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -95,6 +96,7 @@ const (
 	addColumn               opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
 	addConstraint                         // ALTER TABLE <table> ADD CONSTRAINT <constraint> <def>
 	addForeignKeyConstraint               // ALTER TABLE <table> ADD CONSTRAINT <constraint> FOREIGN KEY (<column>) REFERENCES <table> (<column>)
+	addRegion                             // ALTER DATABASE <db> ADD REGION <region>
 	addUniqueConstraint                   // ALTER TABLE <table> ADD CONSTRAINT <constraint> UNIQUE (<column>)
 
 	createIndex    // CREATE INDEX <index> ON <table> <def>
@@ -115,6 +117,8 @@ const (
 	dropTable         // DROP TABLE <table>
 	dropView          // DROP VIEW <view>
 	dropSchema        // DROP SCHEMA <schema>
+
+	primaryRegion //  ALTER DATABASE <db> PRIMARY REGION <region>
 
 	renameColumn   // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
 	renameIndex    // ALTER TABLE <table> RENAME CONSTRAINT <constraint> TO <constraint>
@@ -137,6 +141,7 @@ var opFuncs = map[opType]func(*operationGenerator, *pgx.Tx) (string, error){
 	addColumn:               (*operationGenerator).addColumn,
 	addConstraint:           (*operationGenerator).addConstraint,
 	addForeignKeyConstraint: (*operationGenerator).addForeignKeyConstraint,
+	addRegion:               (*operationGenerator).addRegion,
 	addUniqueConstraint:     (*operationGenerator).addUniqueConstraint,
 	createIndex:             (*operationGenerator).createIndex,
 	createSequence:          (*operationGenerator).createSequence,
@@ -155,6 +160,7 @@ var opFuncs = map[opType]func(*operationGenerator, *pgx.Tx) (string, error){
 	dropTable:               (*operationGenerator).dropTable,
 	dropView:                (*operationGenerator).dropView,
 	dropSchema:              (*operationGenerator).dropSchema,
+	primaryRegion:           (*operationGenerator).primaryRegion,
 	renameColumn:            (*operationGenerator).renameColumn,
 	renameIndex:             (*operationGenerator).renameIndex,
 	renameSequence:          (*operationGenerator).renameSequence,
@@ -178,6 +184,7 @@ var opWeights = []int{
 	addColumn:               1,
 	addConstraint:           0, // TODO(spaskob): unimplemented
 	addForeignKeyConstraint: 0,
+	addRegion:               1,
 	addUniqueConstraint:     0,
 	createIndex:             1,
 	createSequence:          1,
@@ -196,6 +203,7 @@ var opWeights = []int{
 	dropTable:               1,
 	dropView:                1,
 	dropSchema:              1,
+	primaryRegion:           1,
 	renameColumn:            1,
 	renameIndex:             1,
 	renameSequence:          1,
@@ -368,6 +376,155 @@ func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
 	}
 
 	return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constaintName, columnForConstraint.name), nil
+}
+
+func getClusterRegionNames(tx *pgx.Tx) (descpb.RegionNames, error) {
+	return scanRegionNames(tx, "SELECT region FROM [SHOW REGIONS FROM CLUSTER]")
+}
+
+func getDatabaseRegionNames(tx *pgx.Tx) (descpb.RegionNames, error) {
+	return scanRegionNames(tx, "SELECT region FROM [SHOW REGIONS FROM DATABASE]")
+}
+
+func getDatabase(tx *pgx.Tx) (string, error) {
+	var database string
+	err := tx.QueryRow("SHOW DATABASE").Scan(&database)
+	return database, err
+}
+
+type getRegionsResult struct {
+	regionNamesInDatabase descpb.RegionNames
+	regionNamesInCluster  descpb.RegionNames
+
+	regionNamesNotInDatabase descpb.RegionNames
+}
+
+func getRegions(tx *pgx.Tx) (getRegionsResult, error) {
+	regionNamesInCluster, err := getClusterRegionNames(tx)
+	if err != nil {
+		return getRegionsResult{}, err
+	}
+	regionNamesNotInDatabaseSet := make(map[descpb.RegionName]struct{}, len(regionNamesInCluster))
+	for _, clusterRegionName := range regionNamesInCluster {
+		regionNamesNotInDatabaseSet[clusterRegionName] = struct{}{}
+	}
+	regionNamesInDatabase, err := getDatabaseRegionNames(tx)
+	if err != nil {
+		return getRegionsResult{}, err
+	}
+	for _, databaseRegionName := range regionNamesInDatabase {
+		delete(regionNamesNotInDatabaseSet, databaseRegionName)
+	}
+
+	regionNamesNotInDatabase := make(descpb.RegionNames, 0, len(regionNamesNotInDatabaseSet))
+	for regionName := range regionNamesNotInDatabaseSet {
+		regionNamesNotInDatabase = append(regionNamesNotInDatabase, regionName)
+	}
+	return getRegionsResult{
+		regionNamesInDatabase:    regionNamesInDatabase,
+		regionNamesInCluster:     regionNamesInCluster,
+		regionNamesNotInDatabase: regionNamesNotInDatabase,
+	}, nil
+}
+
+func scanRegionNames(tx *pgx.Tx, query string) (descpb.RegionNames, error) {
+	var regionNames descpb.RegionNames
+	rows, err := tx.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var regionName descpb.RegionName
+		if err := rows.Scan(&regionName); err != nil {
+			return nil, err
+		}
+		regionNames = append(regionNames, regionName)
+	}
+	if rows.Err() != nil {
+		return nil, errors.Wrapf(rows.Err(), "failed to get regions: %s", query)
+	}
+
+	return regionNames, nil
+}
+
+func (og *operationGenerator) addRegion(tx *pgx.Tx) (string, error) {
+	regionResult, err := getRegions(tx)
+	if err != nil {
+		return "", err
+	}
+	database, err := getDatabase(tx)
+	if err != nil {
+		return "", err
+	}
+	// No regions in cluster, try add an invalid region and expect an error.
+	if len(regionResult.regionNamesInCluster) == 0 {
+		og.expectedExecErrors.add(pgcode.InvalidDatabaseDefinition)
+		return fmt.Sprintf(`ALTER DATABASE %s ADD REGION "invalid-region"`, database), nil
+	}
+	// No regions in database, add a random region from the cluster and expect an error.
+	if len(regionResult.regionNamesInDatabase) == 0 {
+		idx := og.params.rng.Intn(len(regionResult.regionNamesInCluster))
+		og.expectedExecErrors.add(pgcode.InvalidDatabaseDefinition)
+		return fmt.Sprintf(
+			`ALTER DATABASE %s ADD REGION "%s"`,
+			database,
+			regionResult.regionNamesInCluster[idx],
+		), nil
+	}
+	// All regions are already in the database, expect an error with adding an existing one.
+	if len(regionResult.regionNamesNotInDatabase) == 0 {
+		idx := og.params.rng.Intn(len(regionResult.regionNamesInDatabase))
+		og.expectedExecErrors.add(pgcode.DuplicateObject)
+		return fmt.Sprintf(
+			`ALTER DATABASE %s ADD REGION "%s"`,
+			database,
+			regionResult.regionNamesInDatabase[idx],
+		), nil
+	}
+	// Choose a region not yet in the cluster and add it.
+	idx := og.params.rng.Intn(len(regionResult.regionNamesNotInDatabase))
+	return fmt.Sprintf(
+		`ALTER DATABASE %s ADD REGION "%s"`,
+		database,
+		regionResult.regionNamesNotInDatabase[idx],
+	), nil
+}
+
+func (og *operationGenerator) primaryRegion(tx *pgx.Tx) (string, error) {
+	regionResult, err := getRegions(tx)
+	if err != nil {
+		return "", err
+	}
+	database, err := getDatabase(tx)
+	if err != nil {
+		return "", err
+	}
+
+	// No regions in cluster, try PRIMARY REGION an invalid region and expect an error.
+	if len(regionResult.regionNamesInCluster) == 0 {
+		og.expectedExecErrors.add(pgcode.InvalidDatabaseDefinition)
+		return fmt.Sprintf(`ALTER DATABASE %s PRIMARY REGION "invalid-region"`, database), nil
+	}
+
+	// No regions in database, set a random region to be the PRIMARY REGION.
+	if len(regionResult.regionNamesInDatabase) == 0 {
+		idx := og.params.rng.Intn(len(regionResult.regionNamesInCluster))
+		return fmt.Sprintf(
+			`ALTER DATABASE %s PRIMARY REGION "%s"`,
+			database,
+			regionResult.regionNamesInCluster[idx],
+		), nil
+	}
+
+	// Regions exist in database, so set a random region to be the primary region.
+	idx := og.params.rng.Intn(len(regionResult.regionNamesInDatabase))
+	return fmt.Sprintf(
+		`ALTER DATABASE %s PRIMARY REGION "%s"`,
+		database,
+		regionResult.regionNamesInDatabase[idx],
+	), nil
 }
 
 func (og *operationGenerator) addForeignKeyConstraint(tx *pgx.Tx) (string, error) {
@@ -1782,7 +1939,7 @@ func (og *operationGenerator) validate(tx *pgx.Tx) (string, error) {
 	}
 
 	if rows.Err() != nil {
-		return "", errors.Wrap(rows.Err(), "querying for validation erors failed")
+		return "", errors.Wrap(rows.Err(), "querying for validation errors failed")
 	}
 
 	if len(errs) == 0 {

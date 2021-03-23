@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//build:STRINGER.bzl", "stringer")
 
 go_library(
@@ -18,6 +18,7 @@ go_library(
     deps = [
         "//pkg/security",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -33,32 +34,6 @@ go_library(
         "@com_github_jackc_pgx//:pgx",
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
-    ],
-)
-
-go_test(
-    name = "schemachange_test",
-    srcs = [
-        "main_test.go",
-        "schema_change_external_test.go",
-    ],
-    deps = [
-        ":schemachange",
-        "//pkg/base",
-        "//pkg/ccl",
-        "//pkg/security",
-        "//pkg/security/securitytest",
-        "//pkg/server",
-        "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
-        "//pkg/testutils/sqlutils",
-        "//pkg/testutils/testcluster",
-        "//pkg/util/leaktest",
-        "//pkg/util/randutil",
-        "//pkg/workload",
-        "//pkg/workload/histogram",
-        "@com_github_stretchr_testify//require",
-        "@org_golang_x_sync//errgroup",
     ],
 )
 
