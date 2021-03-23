@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -1111,16 +1110,10 @@ func createImportingDescriptors(
 							// configuration.
 							if details.DescriptorCoverage != tree.AllDescriptors {
 								log.Infof(ctx, "restoring zone configuration for database %d", desc.ID)
-								regionNames, err := typeDesc.RegionNames()
+								regionConfig, err := sql.SynthesizeRegionConfigOffline(ctx, txn, desc.ID, descsCol)
 								if err != nil {
 									return err
 								}
-								regionConfig := multiregion.MakeRegionConfig(
-									regionNames,
-									desc.RegionConfig.PrimaryRegion,
-									desc.RegionConfig.SurvivalGoal,
-									desc.RegionConfig.RegionEnumID,
-								)
 								if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
 									ctx,
 									desc.GetID(),

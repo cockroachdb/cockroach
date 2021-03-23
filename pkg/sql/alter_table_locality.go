@@ -267,10 +267,11 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		return err
 	}
 
-	enumTypeID, err := n.dbDesc.MultiRegionEnumID()
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.dbDesc.ID, params.p.Descriptors())
 	if err != nil {
 		return err
 	}
+	enumTypeID := regionConfig.RegionEnumID()
 	enumOID := typedesc.TypeIDToOID(enumTypeID)
 
 	var newColumnID *descpb.ColumnID
@@ -307,17 +308,11 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			)
 		}
 	} else {
-		// No crdb_region column is found so we are implicitly creating it.
-		// We insert the column definition before altering the primary key.
-
-		primaryRegion, err := n.dbDesc.PrimaryRegionName()
-		if err != nil {
-			return err
-		}
+		primaryRegion := regionConfig.PrimaryRegion()
 		// No crdb_region column is found so we are implicitly creating it.
 		// We insert the column definition before altering the primary key.
 		//
-		// Note we initially set the default expression to be primary_region,
+		// Note we initially set the default expression to be primary region,
 		// so that it is backfilled this way. When the backfill is complete,
 		// we will change this to use gateway_region.
 		defaultColDef := &tree.AlterTableAddColumn{
