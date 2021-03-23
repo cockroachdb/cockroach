@@ -11,6 +11,7 @@ go_library(
         "multiplicity.go",
         "selectivity.go",
         "statistics.go",
+        "verify.go",
         "volatility.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/props",

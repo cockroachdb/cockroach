@@ -7,6 +7,7 @@ go_library(
     srcs = [
         "constants.go",
         "crdb_test_off.go",
+        "crdb_test_on.go",  # keep
         "every_n.go",
         "fast_int_map.go",
         "fast_int_set.go",
