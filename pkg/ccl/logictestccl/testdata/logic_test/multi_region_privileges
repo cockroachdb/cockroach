@@ -11,7 +11,7 @@ ALTER USER testuser CREATEDB;
 
 user testuser
 
-statement error user testuser must be owner of t or have CREATE privilege on t
+statement error user testuser must be owner of t or have CREATE privilege on relation t
 ALTER DATABASE db SET PRIMARY REGION "us-east-1"
 
 user root
@@ -31,7 +31,7 @@ REVOKE CREATE ON TABLE db.t FROM testuser
 
 user testuser
 
-statement error user testuser must be owner of t or have CREATE privilege on t
+statement error user testuser must be owner of t or have CREATE privilege on relation t
 ALTER DATABASE db DROP REGION "us-east-1"
 
 user root
@@ -70,7 +70,7 @@ CREATE TABLE alter_db.t();
 
 user testuser
 
-statement error pq: user testuser must be owner of t or have CREATE privilege on t
+statement error pq: user testuser must be owner of t or have CREATE privilege on relation t
 ALTER TABLE alter_db.t SET LOCALITY GLOBAL
 
 user root
@@ -100,3 +100,67 @@ user testuser
 
 statement ok
 ALTER TABLE alter_db.t SET LOCALITY REGIONAL
+
+subtest alter_database_privileges
+
+user root
+
+statement ok
+CREATE DATABASE alter_mr_db PRIMARY REGION "ca-central-1" REGIONS "us-east-1", "ap-southeast-2"
+
+user testuser
+
+statement error user testuser must be owner of alter_mr_db or have CREATE privilege on database alter_mr_db
+ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1"
+
+statement error user testuser must be owner of alter_mr_db or have CREATE privilege on database alter_mr_db
+ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE
+
+statement error user testuser must be owner of alter_mr_db or have CREATE privilege on database alter_mr_db
+ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2"
+
+statement error user testuser must be owner of alter_mr_db or have CREATE privilege on database alter_mr_db
+ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2"
+
+user root
+
+statement ok
+GRANT CREATE ON DATABASE alter_mr_db TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
+
+user root
+
+# Revoke CREATE from testuser but make it an admin user.
+statement ok
+REVOKE CREATE ON DATABASE alter_mr_db FROM testuser;
+GRANT root TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
+
+user root
+
+# Make it such that testuser is no longer an admin role, but make it the owner of the database.
+statement ok
+REVOKE root FROM testuser;
+ALTER DATABASE alter_mr_db OWNER TO testuser
+
+user testuser
+
+statement ok
+ALTER DATABASE alter_mr_db SET PRIMARY REGION "us-east-1";
+ALTER DATABASE alter_mr_db SURVIVE ZONE FAILURE;
+ALTER DATABASE alter_mr_db DROP REGION "ap-southeast-2";
+ALTER DATABASE alter_mr_db ADD REGION "ap-southeast-2";
