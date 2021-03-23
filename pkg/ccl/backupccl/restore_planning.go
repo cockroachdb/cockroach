@@ -517,6 +517,41 @@ func allocateTableRewrites(
 	return tableRewrites, nil
 }
 
+// maybeUpgradeTableDescsInSliceis updates the passed slice of table descriptors
+// to use the newer 19.2-style foreign key representation, if they are not
+// already upgraded. This requires resolving cross-table FK references, which is
+// done by looking up all table descriptors in the slice provided.
+//
+// if skipFKsWithNoMatchingTable is set, FKs whose "other" table is missing from
+// the set provided are omitted during the upgrade, instead of causing an error
+// to be returned.
+func maybeUpgradeTableDescsInSlice(
+	ctx context.Context, descs []sqlbase.Descriptor, skipFKsWithNoMatchingTable bool,
+) error {
+	protoGetter := sqlbase.MapProtoGetter{
+		Protos: make(map[interface{}]protoutil.Message),
+	}
+	// Populate the protoGetter with all table descriptors in all backup
+	// descriptors so that they can be looked up.
+	for _, desc := range descs {
+		if table := desc.Table(hlc.Timestamp{}); table != nil {
+			protoGetter.Protos[string(sqlbase.MakeDescMetadataKey(table.ID))] =
+				sqlbase.WrapDescriptor(protoutil.Clone(table).(*sqlbase.TableDescriptor))
+		}
+	}
+
+	for j := range descs {
+		if table := descs[j].Table(hlc.Timestamp{}); table != nil {
+			if _, err := table.MaybeUpgradeForeignKeyRepresentation(ctx, protoGetter, skipFKsWithNoMatchingTable); err != nil {
+				return err
+			}
+			// TODO(lucy): Is this necessary?
+			descs[j] = *sqlbase.WrapDescriptor(table)
+		}
+	}
+	return nil
+}
+
 // maybeUpgradeTableDescsInBackupManifests updates the backup descriptors'
 // table descriptors to use the newer 19.2-style foreign key representation,
 // if they are not already upgraded. This requires resolving cross-table FK
@@ -554,21 +589,6 @@ func maybeUpgradeTableDescsInBackupManifests(
 		}
 	}
 	return nil
-}
-
-func maybeRewriteSchemaID(
-	curSchemaID sqlbase.ID, descriptorRewrites TableRewriteMap, isTemporaryDesc bool,
-) sqlbase.ID {
-	// If the current schema is the public schema, then don't attempt to
-	// do any rewriting.
-	if curSchemaID == keys.PublicSchemaID && !isTemporaryDesc {
-		return curSchemaID
-	}
-	rw, ok := descriptorRewrites[curSchemaID]
-	if !ok {
-		return curSchemaID
-	}
-	return rw.TableID
 }
 
 // RewriteTableDescs mutates tables to match the ID and privilege specified
@@ -917,12 +937,13 @@ func doRestorePlan(
 	}
 
 	_, skipMissingFKs := opts[restoreOptSkipMissingFKs]
-	if err := maybeUpgradeTableDescsInBackupManifests(ctx, mainBackupManifests, skipMissingFKs); err != nil {
-		return err
-	}
 
 	sqlDescs, restoreDBs, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
+		return err
+	}
+
+	if err := maybeUpgradeTableDescsInSlice(ctx, sqlDescs, skipMissingFKs); err != nil {
 		return err
 	}
 
