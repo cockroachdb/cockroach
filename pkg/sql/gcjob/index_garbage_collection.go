@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -65,13 +67,23 @@ func gcIndexes(
 
 		// All the data chunks have been removed. Now also removed the
 		// zone configs for the dropped indexes, if any.
-		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			freshParentTableDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, execCfg.Codec, parentID)
-			if err != nil {
-				return err
-			}
-			return sql.RemoveIndexZoneConfigs(ctx, txn, execCfg, freshParentTableDesc, []descpb.IndexDescriptor{indexDesc})
-		}); err != nil {
+		if err := descs.Txn(
+			ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor, execCfg.DB, func(
+				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			) error {
+				freshParentTableDesc, err := descriptors.GetMutableTableByID(
+					ctx, txn, parentID, tree.ObjectLookupFlags{
+						CommonLookupFlags: tree.CommonLookupFlags{
+							Required:       true,
+							IncludeDropped: true,
+							IncludeOffline: true,
+						},
+					})
+				if err != nil {
+					return err
+				}
+				return sql.RemoveIndexZoneConfigs(ctx, txn, execCfg, freshParentTableDesc, []descpb.IndexDescriptor{indexDesc})
+			}); err != nil {
 			return errors.Wrapf(err, "removing index %d zone configs", indexDesc.ID)
 		}
 

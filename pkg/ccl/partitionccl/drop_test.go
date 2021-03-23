@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -24,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func subzoneExists(cfg *zonepb.ZoneConfig, index uint32, partition string) bool {
@@ -143,5 +146,65 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 			}
 		}
 		return nil
+	})
+}
+
+// TestDropIndexPartitionedByUserDefinedTypeCCL is a regression test to ensure
+// that dropping an index partitioned by a user-defined types is safe.
+func TestDropIndexPartitionedByUserDefinedTypeCCL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	waitForJobDone := func(t *testing.T, tdb *sqlutils.SQLRunner, description string) {
+		t.Helper()
+		var id int
+		tdb.QueryRow(t, `
+SELECT job_id 
+  FROM crdb_internal.jobs
+ WHERE description LIKE $1
+`, description).Scan(&id)
+		var done string
+		tdb.QueryRow(t, `
+SELECT status 
+  FROM [SHOW JOBS WHEN COMPLETE VALUES ($1)]
+`, id).Scan(&done)
+		require.Equal(t, string(jobs.StatusSucceeded), done)
+	}
+
+	// This is a regression test for a bug which was caused by not using hydrated
+	// descriptors in the index gc job to re-write zone config subzone spans.
+	// This test ensures that subzone spans can be re-written by creating a
+	// table partitioned by user-defined types and then dropping an index and
+	// ensuring that the drop job for the index completes successfully.
+	t.Run("drop index, type-partitioned table", func(t *testing.T) {
+		// Sketch of the test:
+		//
+		//  * Set up a partitioned table partitioned by an enum.
+		//  * Create an index.
+		//  * Set a short GC TTL on the index.
+		//  * Drop the index.
+		//  * Wait for the index to be cleaned up, which would have crashed before the
+		//    this fix
+
+		defer log.Scope(t).Close(t)
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		defer tc.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+		tdb.Exec(t, `
+	  CREATE TYPE typ AS ENUM ('a', 'b', 'c');
+	  CREATE TABLE t (e typ PRIMARY KEY) PARTITION BY LIST (e) (
+	              PARTITION a VALUES IN ('a'),
+	              PARTITION b VALUES IN ('b'),
+	              PARTITION c VALUES IN ('c')
+	  );
+	  CREATE INDEX idx ON t (e);
+	  ALTER PARTITION a OF TABLE t CONFIGURE ZONE USING range_min_bytes = 123456, range_max_bytes = 654321;
+	  ALTER INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
+	  DROP INDEX t@idx;
+	  `)
+
+		waitForJobDone(t, tdb, "GC for DROP INDEX%idx")
 	})
 }
