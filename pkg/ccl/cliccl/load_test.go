@@ -183,7 +183,7 @@ func TestLoadShowIncremental(t *testing.T) {
 	w := tabwriter.NewWriter(&buf, 28 /*minwidth*/, 1 /*tabwidth*/, 2 /*padding*/, ' ' /*padchar*/, 0 /*flags*/)
 	fmt.Fprintf(w, "/fooFolder	-	%s\n", ts[0].GoTime().Format(time.RFC3339))
 	fmt.Fprintf(w, "/fooFolder%s	%s	%s\n", expectedIncFolder, ts[0].GoTime().Format(time.RFC3339), ts[1].GoTime().Format(time.RFC3339))
-	fmt.Fprintf(w, "/fooFolder%s	%s	%s\n", expectedIncFolder2, ts[2].GoTime().Format(time.RFC3339), ts[2].GoTime().Format(time.RFC3339))
+	fmt.Fprintf(w, "/fooFolder%s	%s	%s\n", expectedIncFolder2, ts[1].GoTime().Format(time.RFC3339), ts[2].GoTime().Format(time.RFC3339))
 	if err := w.Flush(); err != nil {
 		t.Fatalf("TestLoadShowIncremental: flush: %v", err)
 	}
