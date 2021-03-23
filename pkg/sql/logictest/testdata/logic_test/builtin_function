@@ -1928,6 +1928,16 @@ SELECT length(gen_random_uuid()::BYTES), gen_random_uuid() = gen_random_uuid()
 ----
 16 false
 
+query IB
+SELECT length(gen_random_ulid()::BYTES), gen_random_ulid() = gen_random_ulid()
+----
+16 false
+
+query TTTTTT
+SELECT uuid_ulid_to_string('0178951c-b665-30a7-19a2-a18999834858')
+----
+01F2AHSDK562KHK8N1H6CR6J2R
+
 query TTTTTT
 SELECT to_uuid('63616665-6630-3064-6465-616462656566'),
        to_uuid('{63616665-6630-3064-6465-616462656566}'),
