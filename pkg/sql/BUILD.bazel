@@ -493,7 +493,6 @@ go_test(
     embed = [":sql"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
