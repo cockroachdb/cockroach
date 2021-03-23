@@ -694,9 +694,6 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 							TestingEvalFilter: testingEvalFilter,
 						},
 						LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
-						// TODO(andrei): remove this knob once #59179 is fixed. It should
-						// only be needed by TestLeaseExpirationBelowFutureTimeRequest.
-						AllowLeaseRequestProposalsWhenNotLeader: true,
 					},
 					Server: &server.TestingKnobs{
 						ClockSource: l.manualClock.UnixNano,
@@ -1072,10 +1069,15 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 		l := setupLeaseTransferTest(t)
 		defer l.tc.Stopper().Stop(ctx)
 
-		// Ensure that replica1 has the lease.
+		// Ensure that replica1 has the lease, and that replica0 has also picked up
+		// on the lease transfer.
 		require.NoError(t, l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID))
 		l.checkHasLease(t, 1)
 		preLease, _ := l.replica1.GetLease()
+		require.Eventually(t, func() bool {
+			lease, _ := l.replica0.GetLease()
+			return lease.Replica.StoreID == l.replica1.StoreID()
+		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for replica 0 to pick up new lease")
 
 		// Pause the cluster's clocks.
 		l.manualClock.Pause()
