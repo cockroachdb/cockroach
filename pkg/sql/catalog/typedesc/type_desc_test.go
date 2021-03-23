@@ -348,6 +348,8 @@ func TestValidateTypeDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
+	typeDescID := descpb.ID(keys.MaxReservedDescID + 1)
+
 	descs := catalog.MakeMapDescGetter()
 	descs.Descriptors[100] = dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name: "db",
@@ -366,7 +368,7 @@ func TestValidateTypeDesc(t *testing.T) {
 		Name: "multi-region-db",
 		ID:   200,
 		RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{
-			PrimaryRegion: "us-east-1",
+			RegionEnumID: typeDescID,
 		},
 	}).BuildImmutable()
 
@@ -374,7 +376,6 @@ func TestValidateTypeDesc(t *testing.T) {
 	invalidPrivileges := descpb.NewDefaultPrivilegeDescriptor(security.RootUserName())
 	// Make the PrivilegeDescriptor invalid by granting SELECT to a type.
 	invalidPrivileges.Grant(security.TestUserName(), privilege.List{privilege.SELECT})
-	typeDescID := descpb.ID(keys.MaxReservedDescID + 1)
 	testData := []struct {
 		err  string
 		desc descpb.TypeDescriptor
@@ -723,27 +724,6 @@ func TestValidateTypeDesc(t *testing.T) {
 				EnumMembers: []descpb.TypeDescriptor_EnumMember{
 					{
 						LogicalRepresentation:  "us-east-1",
-						PhysicalRepresentation: []byte{2},
-					},
-				},
-				ArrayTypeID: 102,
-				Privileges:  defaultPrivileges,
-			},
-		},
-		{
-			`unexpected primary region on db desc: "us-east-1" expected "us-east-2"`,
-			descpb.TypeDescriptor{
-				Name:           "t",
-				ID:             typeDescID,
-				ParentID:       200,
-				ParentSchemaID: keys.PublicSchemaID,
-				Kind:           descpb.TypeDescriptor_MULTIREGION_ENUM,
-				RegionConfig: &descpb.TypeDescriptor_RegionConfig{
-					PrimaryRegion: "us-east-2",
-				},
-				EnumMembers: []descpb.TypeDescriptor_EnumMember{
-					{
-						LogicalRepresentation:  "us-east-2",
 						PhysicalRepresentation: []byte{2},
 					},
 				},

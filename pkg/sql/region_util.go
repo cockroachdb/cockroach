@@ -798,7 +798,7 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 		regionLabels,
 		desc,
 		tree.NewQualifiedTypeName(desc.Name, tree.PublicSchema, tree.RegionEnum),
-		enumTypeMultiRegion,
+		regionConfig,
 	); err != nil {
 		return err
 	}
@@ -915,10 +915,14 @@ func (p *planner) CurrentDatabaseRegionConfig(
 	if err != nil {
 		return nil, err
 	}
+	primaryRegion, err := regionEnum.PrimaryRegionName()
+	if err != nil {
+		return nil, err
+	}
 
 	return multiregion.MakeRegionConfig(
 		regionNames,
-		dbDesc.RegionConfig.PrimaryRegion,
+		primaryRegion,
 		dbDesc.RegionConfig.SurvivalGoal,
 		regionEnumID,
 	), nil
@@ -1030,10 +1034,14 @@ func synthesizeRegionConfigImpl(
 	if err != nil {
 		return regionConfig, err
 	}
+	primaryRegion, err := regionEnum.PrimaryRegionName()
+	if err != nil {
+		return multiregion.RegionConfig{}, err
+	}
 
 	regionConfig = multiregion.MakeRegionConfig(
 		regionNames,
-		dbDesc.RegionConfig.PrimaryRegion,
+		primaryRegion,
 		dbDesc.RegionConfig.SurvivalGoal,
 		regionEnumID,
 	)
