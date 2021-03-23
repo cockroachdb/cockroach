@@ -204,12 +204,12 @@ func checkDemoConfiguration(
 
 	// Make sure the number of nodes is valid.
 	if demoCtx.nodes <= 0 {
-		return nil, errors.Newf("--nodes has invalid value (expected positive, got %d)", demoCtx.nodes)
+		return nil, errors.Newf("--%s has invalid value (expected positive, got %d)", cliflags.DemoNodes.Name, demoCtx.nodes)
 	}
 
 	// If artificial latencies were requested, then the user cannot supply their own localities.
 	if demoCtx.simulateLatency && demoCtx.localities != nil {
-		return nil, errors.New("--global cannot be used with --demo-locality")
+		return nil, errors.Newf("--%s cannot be used with --%s", cliflags.Global.Name, cliflags.DemoNodeLocality.Name)
 	}
 
 	demoCtx.disableTelemetry = cluster.TelemetryOptOut()
