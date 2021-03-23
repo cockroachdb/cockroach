@@ -576,8 +576,9 @@ func (s *Server) newConnExecutor(
 		sessionData: sd,
 		dataMutator: sdMutator,
 		state: txnState{
-			mon:     txnMon,
-			connCtx: ctx,
+			mon:                          txnMon,
+			connCtx:                      ctx,
+			testingForceRealTracingSpans: s.cfg.TestingKnobs.ForceRealTracingSpans,
 		},
 		transitionCtx: transitionCtx{
 			db:           s.cfg.DB,

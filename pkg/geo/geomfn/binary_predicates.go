@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
@@ -105,6 +106,13 @@ func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if !a.CartesianBoundingBox().Intersects(b.CartesianBoundingBox()) {
 		return false, nil
 	}
+
+	// Optimization for point in polygon calculations.
+	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
+	if pointPolygonPair {
+		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonIntersects)
+	}
+
 	return geos.Intersects(a.EWKB(), b.EWKB())
 }
 
@@ -223,6 +231,25 @@ func Overlaps(a geo.Geometry, b geo.Geometry) (bool, error) {
 		return false, nil
 	}
 	return geos.Overlaps(a.EWKB(), b.EWKB())
+}
+
+// PointKindAndPolygonKind returns whether a pair of geometries contains
+// a (multi)point and a (multi)polygon. It is used to determine if the
+// point in polygon optimization can be applied.
+func PointKindAndPolygonKind(a geo.Geometry, b geo.Geometry) (bool, geo.Geometry, geo.Geometry) {
+	var validPoint, validPolygon bool
+	var pointKind, polygonKind geo.Geometry
+	for _, geometry := range []geo.Geometry{a, b} {
+		switch geometry.ShapeType2D() {
+		case geopb.ShapeType_Point, geopb.ShapeType_MultiPoint:
+			validPoint = true
+			pointKind = geometry
+		case geopb.ShapeType_Polygon, geopb.ShapeType_MultiPolygon:
+			validPolygon = true
+			polygonKind = geometry
+		}
+	}
+	return validPoint && validPolygon, pointKind, polygonKind
 }
 
 // Touches returns whether geometry A touches geometry B.

@@ -358,8 +358,8 @@ func (c *geographyDistanceCalculator) NewEdgeCrosser(
 	}
 }
 
-// PointInLinearRing implements geodist.DistanceCalculator.
-func (c *geographyDistanceCalculator) PointInLinearRing(
+// PointIntersectsLinearRing implements geodist.DistanceCalculator.
+func (c *geographyDistanceCalculator) PointIntersectsLinearRing(
 	point geodist.Point, polygon geodist.LinearRing,
 ) bool {
 	return polygon.(*s2GeodistLinearRing).ContainsPoint(point.GeogPoint)
