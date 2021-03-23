@@ -62,9 +62,9 @@ go_test(
     ],
     data = glob(["testdata/**"]) + [
         "@cockroach//c-deps:libgeos",
+        "//pkg/sql/opt/testutils/opttester:testfixtures",
     ],
     embed = [":xform"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/config/zonepb",
         "//pkg/roachpb",
