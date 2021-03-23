@@ -62,6 +62,10 @@ const (
 var errEnterpriseRequired = pgerror.New(pgcode.CCLValidLicenseRequired,
 	"a valid enterprise license is required")
 
+// licenseCacheKey is used to cache licenses in cluster.Settings.Cache,
+// keeping the entries private.
+type licenseCacheKey string
+
 // TestingEnableEnterprise allows overriding the license check in tests.
 func TestingEnableEnterprise() func() {
 	before := atomic.LoadInt32(&testingEnterprise)
@@ -112,19 +116,14 @@ func init() {
 func TimeToEnterpriseLicenseExpiry(
 	ctx context.Context, st *cluster.Settings, asOf time.Time,
 ) (time.Duration, error) {
-	var lic *licenseccl.License
-	// FIXME(tschottdorf): see whether it makes sense to cache the decoded
-	// license.
-	if str := enterpriseLicense.Get(&st.SV); str != "" {
-		var err error
-		if lic, err = decode(str); err != nil {
-			return 0, err
-		}
-	} else {
+	license, err := getLicense(st)
+	if err != nil {
+		return 0, err
+	} else if license == nil {
 		return 0, nil
 	}
 
-	expiration := timeutil.Unix(lic.ValidUntilUnixSec, 0)
+	expiration := timeutil.Unix(license.ValidUntilUnixSec, 0)
 	return expiration.Sub(asOf), nil
 }
 
@@ -134,28 +133,41 @@ func checkEnterpriseEnabledAt(
 	if atomic.LoadInt32(&testingEnterprise) == testingEnterpriseEnabled {
 		return nil
 	}
-	var lic *licenseccl.License
-	// FIXME(tschottdorf): see whether it makes sense to cache the decoded
-	// license.
-	if str := enterpriseLicense.Get(&st.SV); str != "" {
-		var err error
-		if lic, err = decode(str); err != nil {
-			return err
-		}
+	license, err := getLicense(st)
+	if err != nil {
+		return err
 	}
-	return check(lic, at, cluster, org, feature, withDetails)
+	return check(license, at, cluster, org, feature, withDetails)
+}
+
+// getLicense fetches the license from the given settings, using Settings.Cache
+// to cache the decoded license (if any). The returned license must not be
+// modified by the caller.
+func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
+	str := enterpriseLicense.Get(&st.SV)
+	if str == "" {
+		return nil, nil
+	}
+	cacheKey := licenseCacheKey(str)
+	if cachedLicense, ok := st.Cache.Load(cacheKey); ok {
+		return cachedLicense.(*licenseccl.License), nil
+	}
+	license, err := decode(str)
+	if err != nil {
+		return nil, err
+	}
+	st.Cache.Store(cacheKey, license)
+	return license, nil
 }
 
 func getLicenseType(st *cluster.Settings) (string, error) {
-	str := enterpriseLicense.Get(&st.SV)
-	if str == "" {
-		return "None", nil
-	}
-	lic, err := decode(str)
+	license, err := getLicense(st)
 	if err != nil {
 		return "", err
+	} else if license == nil {
+		return "None", nil
 	}
-	return lic.Type.String(), nil
+	return license.Type.String(), nil
 }
 
 // decode attempts to read a base64 encoded License.
@@ -164,7 +176,7 @@ func decode(s string) (*licenseccl.License, error) {
 	if err != nil {
 		return nil, pgerror.WithCandidateCode(err, pgcode.Syntax)
 	}
-	return lic, err
+	return lic, nil
 }
 
 // check returns an error if the license is empty or not currently valid. If
