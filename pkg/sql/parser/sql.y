@@ -1927,6 +1927,10 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableSetNotNull{Column: tree.Name($3)}
   }
+| ALTER opt_column column_name ADD error
+  {
+    return unimplemented(sqllex, "alter table alter column add")
+  }
   // ALTER TABLE <name> DROP [COLUMN] IF EXISTS <colname> [RESTRICT|CASCADE]
 | DROP opt_column IF EXISTS column_name opt_drop_behavior
   {
@@ -2739,9 +2743,13 @@ import_format:
   }
 
 alter_unsupported_stmt:
- ALTER FUNCTION error
+  ALTER FUNCTION error
   {
     return unimplemented(sqllex, "alter function")
+  }
+| ALTER DEFAULT error
+  {
+    return unimplemented(sqllex, "alter default privileges")
   }
 
 
@@ -2932,6 +2940,10 @@ copy_from_stmt:
        Stdin: true,
        Options: *$6.copyOptions(),
     }
+  }
+| COPY table_name opt_column_list FROM error
+  {
+    return unimplemented(sqllex, "copy from unsupported format")
   }
 
 opt_with_copy_options:
@@ -3978,6 +3990,10 @@ grant_stmt:
       },
       Grantees: $7.nameList(),
     }
+  }
+| GRANT privileges ON SCHEMA schema_name_list TO name_list WITH error
+  {
+    return unimplemented(sqllex, "grant privileges on schema with")
   }
 | GRANT privileges ON SEQUENCE error
   {
