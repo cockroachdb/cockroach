@@ -564,11 +564,6 @@ func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateE
 		return c.internalServerError(errState, fmt.Errorf("bad call to handleDemoAddNode"))
 	}
 
-	if demoCtx.simulateLatency {
-		fmt.Printf("add command is not supported in --global configurations\n")
-		return nextState
-	}
-
 	if err := demoCtx.transientCluster.AddNode(cmd[1]); err != nil {
 		return c.internalServerError(errState, err)
 	}
