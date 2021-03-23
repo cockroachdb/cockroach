@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -50,6 +51,7 @@ func TestRestoreOldVersions(t *testing.T) {
 	const (
 		testdataBase    = "testdata/restore_old_versions"
 		exportDirs      = testdataBase + "/exports"
+		fkRevDirs       = testdataBase + "/fk-rev-history"
 		clusterDirs     = testdataBase + "/cluster"
 		exceptionalDirs = testdataBase + "/exceptional"
 	)
@@ -62,6 +64,17 @@ func TestRestoreOldVersions(t *testing.T) {
 			exportDir, err := filepath.Abs(filepath.Join(exportDirs, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), restoreOldVersionTest(exportDir))
+		}
+	})
+
+	t.Run("fk-rev-restore", func(t *testing.T) {
+		dirs, err := ioutil.ReadDir(fkRevDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(fkRevDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), restoreOldVersionFKRevTest(exportDir))
 		}
 	})
 
@@ -124,7 +137,7 @@ func TestRestoreOldVersions(t *testing.T) {
 			// cannot resolve (e.g. missing database descriptor, create_statement).
 			sqlDB.CheckQueryResults(t, `
 SELECT
-  database_name, parent_schema_name, object_name, object_type, create_statement 
+  database_name, parent_schema_name, object_name, object_type, create_statement
 FROM [SHOW BACKUP SCHEMAS '`+LocalFoo+`' WITH privileges]
 ORDER BY object_type, object_name`, [][]string{
 				{"NULL", "NULL", "otherdb", "database", "NULL"},
@@ -163,6 +176,43 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t1 ORDER BY k`, results)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t2 ORDER BY k`, results)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM test.t4 ORDER BY k`, results)
+	}
+}
+
+func restoreOldVersionFKRevTest(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		params := base.TestServerArgs{}
+		const numAccounts = 1000
+		_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+			InitManualReplication, base.TestClusterArgs{ServerArgs: params})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
+		require.NoError(t, err)
+		sqlDB.Exec(t, `CREATE DATABASE ts`)
+		sqlDB.Exec(t, `RESTORE test.rev_times FROM $1 WITH into_db = 'ts'`, LocalFoo)
+		for _, ts := range sqlDB.QueryStr(t, `SELECT logical_time FROM ts.rev_times`) {
+
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE test FROM $1 AS OF SYSTEM TIME %s`, ts[0]), LocalFoo)
+			// Just rendering the constraints loads and validates schema.
+			sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
+			sqlDB.Exec(t, `DROP DATABASE test`)
+
+			// Restore a couple tables, including parent but not child_pk.
+			sqlDB.Exec(t, `CREATE DATABASE test`)
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.circular FROM $1 AS OF SYSTEM TIME %s`, ts[0]), LocalFoo)
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.parent, test.child FROM $1 AS OF SYSTEM TIME %s  WITH skip_missing_foreign_keys`, ts[0]), LocalFoo)
+			sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
+			sqlDB.Exec(t, `DROP DATABASE test`)
+
+			// Now do each table on its own with skip_missing_foreign_keys.
+			sqlDB.Exec(t, `CREATE DATABASE test`)
+			for _, name := range []string{"child_pk", "child", "circular", "parent"} {
+				sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.%s FROM $1 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`, name, ts[0]), LocalFoo)
+			}
+			sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
+			sqlDB.Exec(t, `DROP DATABASE test`)
+
+		}
 	}
 }
 
