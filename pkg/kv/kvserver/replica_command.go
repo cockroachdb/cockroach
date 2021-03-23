@@ -3118,9 +3118,30 @@ func (r *Replica) adminScatter(
 func (r *Replica) adminVerifyProtectedTimestamp(
 	ctx context.Context, args roachpb.AdminVerifyProtectedTimestampRequest,
 ) (resp roachpb.AdminVerifyProtectedTimestampResponse, err error) {
-	resp.Verified, err = r.protectedTimestampRecordApplies(ctx, &args)
-	if err == nil && !resp.Verified {
-		resp.FailedRanges = append(resp.FailedRanges, *r.Desc())
+	var doesNotApplyReason string
+	resp.Verified, doesNotApplyReason, err = r.protectedTimestampRecordApplies(ctx, &args)
+	if err != nil {
+		return resp, err
 	}
-	return resp, err
+
+	// In certain cases we do not want to return an error even if we failed to
+	// verify the protected ts record. This ensures that executeAdminBatch adds
+	// the response to the batch, thereby allowing us to aggregate the
+	// verification failures across all AdminVerifyProtectedTimestampRequests and
+	// construct a more informative error to show to the user.
+	if doesNotApplyReason != "" {
+		if !resp.Verified {
+			failedRange := roachpb.AdminVerifyProtectedTimestampResponse_FailedRange{
+				RangeID:  int64(r.Desc().GetRangeID()),
+				StartKey: r.Desc().GetStartKey(),
+				EndKey:   r.Desc().EndKey,
+				Reason:   doesNotApplyReason,
+			}
+			resp.VerificationFailedRanges = append(resp.VerificationFailedRanges, failedRange)
+			// TODO(adityamaru): This is here for compatibility with 20.2, remove in
+			// 21.2.
+			resp.DeprecatedFailedRanges = append(resp.DeprecatedFailedRanges, *r.Desc())
+		}
+	}
+	return resp, nil
 }
