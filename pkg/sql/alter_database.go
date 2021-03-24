@@ -154,8 +154,7 @@ var GetMultiRegionEnumAddValuePlacementCCL = func(
 }
 
 func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
-	// To add a region, the user has to have CREATEDB privileges, or be an admin user.
-	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
+	if err := params.p.checkPrivilegesForMultiRegionOp(params.ctx, n.desc); err != nil {
 		return err
 	}
 
@@ -270,9 +269,7 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, err
 	}
 
-	// To drop the region, the user has to have CREATEDB privileges,
-	// or be an admin user.
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEDB); err != nil {
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
 		return nil, err
 	}
 
@@ -361,16 +358,17 @@ func (p *planner) AlterDatabaseDropRegion(
 }
 
 // checkPrivilegesForMultiRegionOp ensures the current user has the required
-// privileges to perform a multi-region operation of the given table descriptor.
-// A multi-region operation can be either altering the table's locality or
-// performing a region add/drop that implicitly repartitions the given table.
+// privileges to perform a multi-region operation of the given (table|database)
+// descriptor. A multi-region operation can be altering the table's locality,
+// performing a region add/drop that implicitly repartitions the given table,
+// changing the survivability goal on the database etc.
 // The user must:
 // - either be part of an admin role.
 // - or be an owner of the table.
 // - or have the CREATE privilege on the table.
 // privilege on the table descriptor.
 func (p *planner) checkPrivilegesForMultiRegionOp(
-	ctx context.Context, tableDesc catalog.TableDescriptor,
+	ctx context.Context, desc catalog.Descriptor,
 ) error {
 	hasAdminRole, err := p.HasAdminRole(ctx)
 	if err != nil {
@@ -380,16 +378,17 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 		// TODO(arul): It's worth noting CREATE isn't a thing on tables in postgres,
 		// so this will require some changes when (if) we move our privilege system
 		// to be more in line with postgres.
-		err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE)
+		err := p.CheckPrivilege(ctx, desc, privilege.CREATE)
 		// Wrap an insufficient privileges error a bit better to reflect the lack
 		// of ownership as well.
 		if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
-				"user %s must be owner of %s or have %s privilege on %s",
+				"user %s must be owner of %s or have %s privilege on %s %s",
 				p.SessionData().User(),
-				tableDesc.GetName(),
+				desc.GetName(),
 				privilege.CREATE,
-				tableDesc.GetName(),
+				desc.DescriptorType(),
+				desc.GetName(),
 			)
 		}
 		return err
@@ -754,8 +753,7 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 }
 
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
-	// To add a region, the user has to have CREATEDB privileges, or be an admin user.
-	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
+	if err := params.p.checkPrivilegesForMultiRegionOp(params.ctx, n.desc); err != nil {
 		return err
 	}
 
@@ -843,8 +841,7 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 }
 
 func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
-	// To change the survival goal, the user has to have CREATEDB privileges, or be an admin user.
-	if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEDB); err != nil {
+	if err := params.p.checkPrivilegesForMultiRegionOp(params.ctx, n.desc); err != nil {
 		return err
 	}
 
