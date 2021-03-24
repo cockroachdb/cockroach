@@ -1,5 +1,5 @@
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { stdDevLong } from "src/util/appStats";
+import { stdDevLong } from "src/util";
 import { Duration } from "src/util/format";
 import classNames from "classnames/bind";
 import styles from "../barCharts/barCharts.module.scss";
