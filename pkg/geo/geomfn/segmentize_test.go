@@ -38,7 +38,7 @@ func TestSegmentize(t *testing.T) {
 		{
 			wkt:              "LINESTRING (1.0 1.0, 2.0 2.0, 3.0 3.0)",
 			maxSegmentLength: 0.33333,
-			expectedWKT:      "LINESTRING (1.0 1.0, 1.2000000000000002 1.2000000000000002, 1.4 1.4, 1.6 1.6, 1.8 1.8, 2.0 2.0, 2.2 2.2, 2.4000000000000004 2.4000000000000004, 2.5999999999999996 2.5999999999999996, 2.8000000000000003 2.8000000000000003, 3 3)",
+			expectedWKT:      "LINESTRING (1.0 1.0, 1.2000000000000002 1.2000000000000002, 1.4 1.4, 1.6 1.6, 1.8 1.8, 2.0 2.0, 2.2 2.2, 2.4000000000000004 2.4000000000000004, 2.6 2.6, 2.8000000000000003 2.8000000000000003, 3 3)",
 		},
 		{
 			wkt:              "LINESTRING EMPTY",
@@ -54,6 +54,16 @@ func TestSegmentize(t *testing.T) {
 			wkt:              "LINESTRING (0.0 0.0, 0.0 10.0, 0.0 16.0)",
 			maxSegmentLength: 3,
 			expectedWKT:      "LINESTRING (0.0 0.0,0.0 2.5,0.0 5.0,0.0 7.5,0.0 10.0,0.0 13.0,0.0 16.0)",
+		},
+		{
+			wkt:              "LINESTRING M (0 0 23, 1 0 -5)",
+			maxSegmentLength: 0.25,
+			expectedWKT:      "LINESTRING M (0 0 23, 0.25 0 16, 0.5 0 9, 0.75 0 2, 1 0 -5)",
+		},
+		{
+			wkt:              "LINESTRING ZM (0 0 23 10, 1 0 -5 0)",
+			maxSegmentLength: 0.5,
+			expectedWKT:      "LINESTRING ZM (0 0 23 10,0.5 0 9 5,1 0 -5 0)",
 		},
 		{
 			wkt:              "POLYGON ((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 0.0))",
@@ -74,6 +84,16 @@ func TestSegmentize(t *testing.T) {
 			wkt:              "POLYGON EMPTY",
 			maxSegmentLength: 1,
 			expectedWKT:      "POLYGON EMPTY",
+		},
+		{
+			wkt:              "POLYGON Z EMPTY",
+			maxSegmentLength: 1,
+			expectedWKT:      "POLYGON Z EMPTY",
+		},
+		{
+			wkt:              "POLYGON Z ((1 1 0, 5 1 10, 5 3 20, 1 3 30, 1 1 0))",
+			maxSegmentLength: 2,
+			expectedWKT:      "POLYGON Z ((1 1 0, 3 1 5, 5 1 10, 5 3 20, 3 3 25, 1 3 30, 1 1 0))",
 		},
 		{
 			wkt:              "MULTIPOINT ((1.0 1.0), (2.0 2.0))",
@@ -99,11 +119,6 @@ func TestSegmentize(t *testing.T) {
 			wkt:              "GEOMETRYCOLLECTION (POINT (40.0 10.0), LINESTRING (10.0 10.0, 20.0 20.0, 10.0 40.0), POLYGON ((40.0 40.0, 20.0 45.0, 45.0 30.0, 40.0 40.0)))",
 			maxSegmentLength: 10,
 			expectedWKT:      "GEOMETRYCOLLECTION (POINT (40.0 10.0), LINESTRING (10.0 10.0, 15.0 15.0, 20.0 20.0, 16.666666666666668 26.666666666666668, 13.333333333333334 33.33333333333333, 10.0 40.0), POLYGON ((40.0 40.0, 33.333333333333336 41.66666666666667, 26.666666666666668 43.333333333333336, 20.0 45.0, 28.333333333333336 40.0, 36.66666666666667 35.0, 45.0 30.0, 42.5 35.0, 40.0 40.0)))",
-		},
-		{
-			wkt:              "MULTIPOINT ((0.0 0.0), (1.0 1.0))",
-			maxSegmentLength: -1,
-			expectedWKT:      "MULTIPOINT ((0.0 0.0), (1.0 1.0))",
 		},
 	}
 	for _, test := range segmentizeTestCases {
@@ -154,13 +169,6 @@ func TestSegmentizeCoords(t *testing.T) {
 			b:                    geom.Coord{1, 0},
 			segmentMaxLength:     0.49999999999999,
 			resultantCoordinates: []float64{0, 0, 0.3333333333333333, 0, 0.6666666666666666, 0},
-		},
-		{
-			desc:                 `Coordinate(1, 1) to Coordinate(0, 0), -1`,
-			a:                    geom.Coord{1, 1},
-			b:                    geom.Coord{0, 0},
-			segmentMaxLength:     -1,
-			resultantCoordinates: []float64{1, 1},
 		},
 		{
 			desc:                 `Coordinate(1, 1) to Coordinate(0, 0), 2`,

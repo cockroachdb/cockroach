@@ -90,11 +90,6 @@ func TestSegmentize(t *testing.T) {
 			maxSegmentLength: 1000000.0,
 			expectedWKT:      "GEOMETRYCOLLECTION (POINT (40 10), LINESTRING (10 10, 14.88248913028353 15.054670903122675, 20 20, 17.84783705611024 25.063693381403255, 15.510294720403053 30.09369304154877, 12.922758839587525 35.07789165618019, 10 40), POLYGON ((40 40, 30.404184608679003 42.93646050008845, 20 45, 27.258698904670663 41.785178536245354, 33.78296512799812 38.158856049677816, 39.6629587979805 34.20684491196235, 45 30, 42.6532474552537 35.02554212454631, 40 40)))",
 		},
-		{
-			wkt:              "MULTIPOINT((0 0), (1 1))",
-			maxSegmentLength: -1,
-			expectedWKT:      "MULTIPOINT((0 0), (1 1))",
-		},
 	}
 	for _, test := range segmentizeTestCases {
 		t.Run(fmt.Sprintf("%s, maximum segment length: %f", test.wkt, test.maxSegmentLength), func(t *testing.T) {
@@ -154,13 +149,6 @@ func TestSegmentizeCoords(t *testing.T) {
 			b:                    geom.Coord{0, 0},
 			segmentMaxLength:     0.29502092024628396,
 			resultantCoordinates: []float64{85, 85, 22.871662720021178, 77.3609628116894, 11.655816669136824, 66.66485041602017, 7.329091976767396, 55.658764687902504, 4.924985039227315, 44.56803892063211, 3.299940624127866, 33.443216802941045, 2.048695380627787, 22.302074138733943, 0.9845421446758968, 11.1527721155093},
-		},
-		{
-			desc:                 `Coordinate(85, 85) to Coordinate(0, 0), -1`,
-			a:                    geom.Coord{85, 85},
-			b:                    geom.Coord{0, 0},
-			segmentMaxLength:     -1,
-			resultantCoordinates: []float64{85, 85},
 		},
 		{
 			desc:                 `Coordinate(0, 0) to Coordinate(0, 0), 0.29`,
