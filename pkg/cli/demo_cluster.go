@@ -122,11 +122,14 @@ func (c *transientCluster) start(
 	serverFactory := server.TestServerFactory
 	var servers []*server.TestServer
 
-	// latencyMapWaitCh is used to block test servers after RPC address computation until the artificial
-	// latency map has been constructed.
+	// latencyMapWaitCh is used to block test servers after RPC address
+	// computation until the artificial latency map has been constructed.
 	latencyMapWaitCh := make(chan struct{})
 
-	// errCh is used to catch all errors when initializing servers.
+	// serverReadyCh is used .
+	serverReadyCh := make(chan struct{}, demoCtx.nodes)
+	// errCh is used to catch all errors when initializing servers for
+	// simulateLatencies.
 	// Sending a nil on this channel indicates success.
 	errCh := make(chan error, demoCtx.nodes)
 
@@ -184,31 +187,44 @@ func (c *transientCluster) start(
 		servers = append(servers, serv)
 
 		// We force a wait for all servers until they are ready.
-		servReadyFnCh := make(chan struct{})
+		nodeReadyCh := make(chan struct{}, 1)
 		serv.Cfg.ReadyFn = func(bool) {
-			close(servReadyFnCh)
+			nodeReadyCh <- struct{}{}
 		}
 
 		// If latency simulation is requested, start the servers in a background thread. We do this because
 		// the start routine needs to wait for the latency map construction after their RPC address has been computed.
 		if demoCtx.simulateLatency {
-			go func(i int) {
-				if err := serv.Start(); err != nil {
-					errCh <- err
-				} else {
-					// Block until the ReadyFn has been called before continuing.
-					<-servReadyFnCh
-					errCh <- nil
+			nodeErrCh := make(chan error, 1)
+			go func() {
+				err := serv.Start()
+				nodeErrCh <- err
+				errCh <- err
+
+				// If there is no error, block until the server's ReadyFn is called.
+				if err == nil {
+					<-nodeReadyCh
+					serverReadyCh <- struct{}{}
 				}
-			}(i)
-			<-servRPCReadyCh
+			}()
+
+			select {
+			case <-servRPCReadyCh:
+				// The server has an IP address, we can continue to the next section
+				// to assign the latency mapping.
+			case err := <-nodeErrCh:
+				// If there is an error at this point, return the error immediately.
+				if err != nil {
+					return err
+				}
+			}
 		} else {
 			if err := serv.Start(); err != nil {
 				return err
 			}
-			// Block until the ReadyFn has been called before continuing.
-			<-servReadyFnCh
-			errCh <- nil
+			// Block until the ReadyCh is called.
+			<-nodeReadyCh
+			serverReadyCh <- struct{}{}
 		}
 	}
 
@@ -258,6 +274,7 @@ func (c *transientCluster) start(
 			select {
 			case e := <-errCh:
 				err = errors.CombineErrors(err, e)
+			case <-serverReadyCh:
 			case <-time.After(timeRemaining):
 				return errors.New("failed to setup transientCluster in time")
 			}
