@@ -53,6 +53,9 @@ define CreateViewPrivate {
 
     # Deps contains the data source dependencies of the view.
     Deps ViewDeps
+
+    # TypeDeps contains the type dependencies of the view.
+    TypeDeps ViewTypeDeps
 }
 
 # Explain returns information about the execution plan of the "input"

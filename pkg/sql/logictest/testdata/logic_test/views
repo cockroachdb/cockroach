@@ -934,5 +934,71 @@ db1  public  sys2  system  public  descriptor  view references table
 db2  public  v1    db1     public  ab          view references table
 db2  public  v2    db1     public  ab          view references table
 db2  public  vm    db1     public  tval        view references table
+db2  public  vm    db1     public  status      view references type
 db2  public  vm    db1     public  sq1         view references table
 db2  public  vm    db1     public  rv          view references table
+db2  public  vm    db1     public  _status     view references type
+
+
+# Test that user defined types used in views are tracked.
+subtest view_user_defined_types
+
+statement ok
+CREATE TYPE typ AS ENUM('a')
+
+statement ok
+CREATE VIEW v AS (SELECT 'a'::typ::string AS k)
+
+statement error cannot drop type "typ" because other objects \(\[db2.public.v\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE VIEW v AS (WITH r AS (SELECT 'a'::typ < 'a'::typ AS k) SELECT k FROM r)
+
+statement error cannot drop type "typ" because other objects \(\[db2.public.v\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+DROP VIEW v
+
+statement ok
+CREATE TABLE t (k STRING AS ('a'::typ::string) STORED)
+
+statement ok
+CREATE VIEW v AS SELECT k FROM t
+
+statement error cannot drop type "typ" because other objects \(\[db2.public.t db2.public.v\]\) still depend on it
+DROP TYPE typ
+
+statement ok
+CREATE TYPE typ2 AS ENUM('a')
+
+statement ok
+CREATE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
+
+statement error cannot drop type "typ2" because other objects \(\[db2.public.v3\]\) still depend on it
+DROP TYPE typ2
+
+statement ok
+CREATE OR REPLACE VIEW v3 AS (SELECT 'a' AS k)
+
+statement ok
+DROP TYPE typ2
+
+statement ok
+CREATE TYPE typ2 AS ENUM('a')
+
+statement ok
+CREATE OR REPLACE VIEW v3 AS (SELECT 'a'::typ2::string AS k)
+
+statement error cannot drop type "typ2" because other objects \(\[db2.public.v3\]\) still depend on it
+DROP TYPE typ2
+
+statement ok
+ALTER TYPE typ2 RENAME TO typ3
+
+statement error cannot drop type "typ3" because other objects \(\[db2.public.v3\]\) still depend on it
+DROP TYPE typ3

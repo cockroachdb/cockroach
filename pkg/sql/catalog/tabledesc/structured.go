@@ -451,6 +451,12 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 		ids[regionEnumID] = struct{}{}
 	}
 
+	// Add any other type dependencies that are not
+	// used in a column (specifically for views).
+	for _, id := range desc.DependsOnTypes {
+		ids[id] = struct{}{}
+	}
+
 	// Construct the output.
 	result := make(descpb.IDs, 0, len(ids))
 	for id := range ids {
