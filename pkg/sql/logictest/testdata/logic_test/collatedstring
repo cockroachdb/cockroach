@@ -483,3 +483,27 @@ SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en-us-u-ks-l"evel2")
 
 statement error DEFAULT collations are not supported
 SELECT 'default collate'::text collate "default"
+
+statement ok
+CREATE TABLE nocase_strings2 (
+  i INT,
+  s STRING COLLATE "en-US-u-ks-level2"
+);
+
+statement ok
+INSERT INTO nocase_strings2 VALUES (1, 'Aaa' COLLATE "en-US-u-ks-level2"), (2, 'Bbb' COLLATE "en-US-u-ks-level2");
+
+query T
+SELECT s FROM nocase_strings2 WHERE s = ('bbb' COLLATE "en-US-u-ks-level2")
+----
+Bbb
+
+query T
+SELECT s FROM nocase_strings2 WHERE s = ('bbb' COLLATE "en-us-u-ks-level2")
+----
+Bbb
+
+query T
+SELECT s FROM nocase_strings2 WHERE s = ('bbb' COLLATE "en_US_u_ks_level2")
+----
+Bbb

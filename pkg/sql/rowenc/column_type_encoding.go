@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -811,7 +812,7 @@ func MarshalColumnValue(col *descpb.ColumnDescriptor, val tree.Datum) (roachpb.V
 		}
 	case types.CollatedStringFamily:
 		if v, ok := val.(*tree.DCollatedString); ok {
-			if v.Locale == col.Type.Locale() {
+			if lex.LocaleNamesAreEqual(v.Locale, col.Type.Locale()) {
 				r.SetString(v.Contents)
 				return r, nil
 			}
