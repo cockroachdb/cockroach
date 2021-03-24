@@ -161,7 +161,8 @@ func validateSafely(
 			errs = append(errs, err)
 		}
 	}()
-	errs = append(errs, catalog.Validate(ctx, descGetter, catalog.ValidationLevelNamespace, desc).Errors()...)
+	results := catalog.Validate(ctx, descGetter, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
+	errs = append(errs, results.Errors()...)
 	return errs
 }
 

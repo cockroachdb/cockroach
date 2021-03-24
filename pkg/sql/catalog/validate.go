@@ -12,8 +12,9 @@ package catalog
 
 import (
 	"context"
-	"fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
@@ -30,31 +31,21 @@ import (
 func Validate(
 	ctx context.Context,
 	maybeBatchDescGetter DescGetter,
-	level ValidationLevel,
+	telemetry ValidationTelemetry,
+	targetLevel ValidationLevel,
 	descriptors ...Descriptor,
 ) ValidationErrors {
-	// Check internal descriptor consistency.
-	var vea validationErrorAccumulator
-	handleDescGetterError := func(descGetterErr error, errPrefix string) {
-		// Contrary to errors collected during Validate via vea.Report(),
-		// the descGetterErr may be a transaction error, which may trigger retries.
-		// It's therefore important that the combined error produced by the
-		// returned ValidationErrors interface unwraps to descGetterErr. For this
-		// reason we place it at the head of the errors slice.
-		vea.errors = append(make([]error, 1, 1+len(vea.errors)), vea.errors...)
-		vea.errors[0] = errors.Wrapf(descGetterErr, "%s", errPrefix)
+	vea := validationErrorAccumulator{
+		ValidationTelemetry: telemetry,
+		targetLevel:         targetLevel,
 	}
-	if level == NoValidation {
-		return &vea
-	}
-	for _, desc := range descriptors {
-		if level&ValidationLevelSelfOnly == 0 {
-			continue
-		}
-		vea.setPrefix(desc)
-		desc.ValidateSelf(&vea)
-	}
-	if level <= ValidationLevelSelfOnly || len(vea.errors) > 0 {
+	// Internal descriptor consistency checks.
+	if !vea.validateDescriptorsAtLevel(
+		ValidationLevelSelfOnly,
+		descriptors,
+		func(desc Descriptor) {
+			desc.ValidateSelf(&vea)
+		}) {
 		return &vea
 	}
 	// Collect descriptors referenced by the validated descriptors.
@@ -62,44 +53,46 @@ func Validate(
 	// special cases those neighbors' immediate neighbors also.
 	vdg, descGetterErr := collectDescriptorsForValidation(ctx, maybeBatchDescGetter, descriptors)
 	if descGetterErr != nil {
-		handleDescGetterError(descGetterErr, "collecting referenced descriptors")
+		vea.reportDescGetterError(collectingReferencedDescriptors, descGetterErr)
 		return &vea
 	}
-	// Perform cross-reference checks.
-	for _, desc := range descriptors {
-		if level&ValidationLevelCrossReferences == 0 || desc.Dropped() {
-			continue
-		}
-		vea.setPrefix(desc)
-		desc.ValidateCrossReferences(&vea, vdg)
-	}
-	if level <= ValidationLevelCrossReferences {
+	// Descriptor cross-reference checks.
+	if !vea.validateDescriptorsAtLevel(
+		ValidationLevelCrossReferences,
+		descriptors,
+		func(desc Descriptor) {
+			if !desc.Dropped() {
+				desc.ValidateCrossReferences(&vea, vdg)
+			}
+		}) {
 		return &vea
 	}
-	if level&ValidationLevelNamespace != 0 {
-		// Collect descriptor namespace table entries.
+	// Collect descriptor namespace table entries, if running namespace checks.
+	if ValidationLevelNamespace&targetLevel != 0 {
 		descGetterErr = vdg.addNamespaceEntries(ctx, descriptors, maybeBatchDescGetter)
 		if descGetterErr != nil {
-			handleDescGetterError(descGetterErr, "collecting namespace table entries")
+			vea.reportDescGetterError(collectingNamespaceEntries, descGetterErr)
 			return &vea
 		}
-		// Perform Namespace checks
-		for _, desc := range descriptors {
-			vea.setPrefix(desc)
-			validateNamespace(desc, &vea, vdg.Namespace)
-		}
 	}
-	if level <= ValidationLevelNamespace {
+	// Namespace validation checks
+	if !vea.validateDescriptorsAtLevel(
+		ValidationLevelNamespace,
+		descriptors,
+		func(desc Descriptor) {
+			validateNamespace(desc, &vea, vdg.Namespace)
+		}) {
 		return &vea
 	}
-	// Perform pre-txn-commit checks.
-	for _, desc := range descriptors {
-		if level&ValidationLevelAllPreTxnCommit == 0 || desc.Dropped() {
-			continue
-		}
-		vea.setPrefix(desc)
-		desc.ValidateTxnCommit(&vea, vdg)
-	}
+	// Descriptor pre-txn-commit checks.
+	_ = vea.validateDescriptorsAtLevel(
+		ValidationLevelAllPreTxnCommit,
+		descriptors,
+		func(desc Descriptor) {
+			if !desc.Dropped() {
+				desc.ValidateTxnCommit(&vea, vdg)
+			}
+		})
 	return &vea
 }
 
@@ -118,14 +111,32 @@ const (
 	// table records.
 	ValidationLevelNamespace
 	// ValidationLevelAllPreTxnCommit means do the above and also perform
-	// pre-txn-commit checks.
+	// pre-txn-commit checks. This is the level of validation required when
+	// writing a descriptor to storage.
+	// Errors accumulated when validating up to this level come with additional
+	// telemetry.
 	ValidationLevelAllPreTxnCommit
+)
+
+// ValidationTelemetry defines the kind of telemetry keys to add to the errors.
+type ValidationTelemetry int
+
+const (
+	// NoValidationTelemetry means no telemetry keys are added.
+	NoValidationTelemetry ValidationTelemetry = iota
+	// ValidationReadTelemetry means telemetry keys are added for descriptor
+	// reads.
+	ValidationReadTelemetry
+	// ValidationWriteTelemetry means telemetry keys are added for descriptor
+	// writes.
+	ValidationWriteTelemetry
 )
 
 // ValidateSelf is a convenience function for validate called at the
 // ValidationLevelSelfOnly level and combining the resulting errors.
 func ValidateSelf(descriptors ...Descriptor) error {
-	return Validate(context.TODO(), nil, ValidationLevelSelfOnly, descriptors...).CombinedError()
+	results := Validate(context.TODO(), nil, NoValidationTelemetry, ValidationLevelSelfOnly, descriptors...)
+	return results.CombinedError()
 }
 
 // ValidateSelfAndCrossReferences is a convenience function for Validate called at the
@@ -133,7 +144,8 @@ func ValidateSelf(descriptors ...Descriptor) error {
 func ValidateSelfAndCrossReferences(
 	ctx context.Context, maybeBatchDescGetter DescGetter, descriptors ...Descriptor,
 ) error {
-	return Validate(ctx, maybeBatchDescGetter, ValidationLevelCrossReferences, descriptors...).CombinedError()
+	results := Validate(ctx, maybeBatchDescGetter, NoValidationTelemetry, ValidationLevelCrossReferences, descriptors...)
+	return results.CombinedError()
 }
 
 // ValidationErrorAccumulator is used by the validation methods on Descriptor
@@ -182,16 +194,45 @@ func (ve *validationErrors) Errors() []error {
 // CombinedError implements the ValidationErrors interface.
 func (ve *validationErrors) CombinedError() error {
 	var combinedErr error
+	var extraTelemetryKeys []string
 	for i := len(ve.errors) - 1; i >= 0; i-- {
 		combinedErr = errors.CombineErrors(ve.errors[i], combinedErr)
 	}
-	return combinedErr
+	// Decorate the combined error with all validation telemetry keys.
+	// Otherwise, those not in the causal chain will be ignored.
+	for _, err := range ve.errors {
+		for _, key := range errors.GetTelemetryKeys(err) {
+			if strings.HasPrefix(key, catconstants.ValidationTelemetryKeyPrefix) {
+				extraTelemetryKeys = append(extraTelemetryKeys, key)
+			}
+		}
+	}
+	if extraTelemetryKeys == nil {
+		return combinedErr
+	}
+	return errors.WithTelemetry(combinedErr, extraTelemetryKeys...)
 }
 
 type validationErrorAccumulator struct {
+	// Accumulated errors end up in here.
 	validationErrors
-	wrapPrefix string
+
+	// The remaining fields represent the internal state of the Validate function
+	// Used to decorate errors with appropriate prefixes and telemetry keys.
+	ValidationTelemetry                 // set at initialization
+	targetLevel         ValidationLevel // set at initialization
+	currentState        validationErrorAccumulatorState
+	currentLevel        ValidationLevel
+	currentDescriptor   Descriptor
 }
+
+type validationErrorAccumulatorState int
+
+const (
+	validatingDescriptor validationErrorAccumulatorState = iota
+	collectingReferencedDescriptors
+	collectingNamespaceEntries
+)
 
 var _ ValidationErrorAccumulator = &validationErrorAccumulator{}
 
@@ -200,14 +241,91 @@ func (vea *validationErrorAccumulator) Report(err error) {
 	if err == nil {
 		return
 	}
-	if vea.wrapPrefix != "" {
-		err = errors.Wrapf(err, "%s", vea.wrapPrefix)
-	}
-	vea.errors = append(vea.errors, err)
+	vea.errors = append(vea.errors, vea.decorate(err))
 }
 
-func (vea *validationErrorAccumulator) setPrefix(desc Descriptor) {
-	vea.wrapPrefix = fmt.Sprintf("%s %q (%d)", desc.DescriptorType(), desc.GetName(), desc.GetID())
+func (vea *validationErrorAccumulator) validateDescriptorsAtLevel(
+	level ValidationLevel, descs []Descriptor, validationFn func(descriptor Descriptor),
+) bool {
+	vea.currentState = validatingDescriptor
+	vea.currentLevel = level
+	if vea.currentLevel&vea.targetLevel != 0 {
+		for _, desc := range descs {
+			vea.currentDescriptor = desc
+			validationFn(desc)
+		}
+	}
+	vea.currentDescriptor = nil // ensures we don't needlessly hold a reference.
+	if len(vea.errors) > 0 {
+		return false
+	}
+	if vea.targetLevel <= vea.currentLevel {
+		return false
+	}
+	return true
+}
+
+func (vea *validationErrorAccumulator) reportDescGetterError(
+	state validationErrorAccumulatorState, err error,
+) {
+	vea.currentState = state
+	// Contrary to errors collected during Validate via vea.Report(), this error
+	// may be a transaction error, which may trigger retries.  It's therefore
+	// important that the combined error produced by the returned ValidationErrors
+	// interface unwraps to this error. For this reason we place it at the head of
+	// the errors slice.
+	vea.errors = append(make([]error, 1, 1+len(vea.errors)), vea.errors...)
+	vea.errors[0] = vea.decorate(err)
+}
+
+func (vea *validationErrorAccumulator) decorate(err error) error {
+	var tkSuffix string
+	switch vea.currentState {
+	case collectingReferencedDescriptors:
+		err = errors.Wrap(err, "collecting referenced descriptors")
+		tkSuffix = "read_referenced_descriptors"
+	case collectingNamespaceEntries:
+		err = errors.Wrap(err, "collecting namespace table entries")
+		tkSuffix = "read_namespace_table"
+	case validatingDescriptor:
+		name := vea.currentDescriptor.GetName()
+		id := vea.currentDescriptor.GetID()
+		// This contrived switch case is required to make the linter happy.
+		switch vea.currentDescriptor.DescriptorType() {
+		case Table:
+			err = errors.Wrapf(err, Table+" %q (%d)", name, id)
+		case Database:
+			err = errors.Wrapf(err, Database+" %q (%d)", name, id)
+		case Schema:
+			err = errors.Wrapf(err, Schema+" %q (%d)", name, id)
+		case Type:
+			err = errors.Wrapf(err, Type+" %q (%d)", name, id)
+		default:
+			return err
+		}
+		switch vea.currentLevel {
+		case ValidationLevelSelfOnly:
+			tkSuffix = "self"
+		case ValidationLevelCrossReferences:
+			tkSuffix = "cross_references"
+		case ValidationLevelNamespace:
+			tkSuffix = "namespace"
+		case ValidationLevelAllPreTxnCommit:
+			tkSuffix = "pre_txn_commit"
+		default:
+			return err
+		}
+		tkSuffix += "." + string(vea.currentDescriptor.DescriptorType())
+	}
+	switch vea.ValidationTelemetry {
+	case ValidationReadTelemetry:
+		tkSuffix = "read." + tkSuffix
+	case ValidationWriteTelemetry:
+		tkSuffix = "write." + tkSuffix
+	default:
+		return err
+	}
+	return errors.WithTelemetry(err, catconstants.ValidationTelemetryKeyPrefix+tkSuffix)
 }
 
 // ValidationDescGetter is used by the validation methods on Descriptor.
