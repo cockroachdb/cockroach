@@ -38,7 +38,7 @@ func TestSegmentize(t *testing.T) {
 		{
 			wkt:              "LINESTRING (1.0 1.0, 2.0 2.0, 3.0 3.0)",
 			maxSegmentLength: 0.33333,
-			expectedWKT:      "LINESTRING (1.0 1.0, 1.2000000000000002 1.2000000000000002, 1.4 1.4, 1.6 1.6, 1.8 1.8, 2.0 2.0, 2.2 2.2, 2.4000000000000004 2.4000000000000004, 2.5999999999999996 2.5999999999999996, 2.8000000000000003 2.8000000000000003, 3 3)",
+			expectedWKT:      "LINESTRING (1.0 1.0, 1.2000000000000002 1.2000000000000002, 1.4 1.4, 1.6 1.6, 1.8 1.8, 2.0 2.0, 2.2 2.2, 2.4000000000000004 2.4000000000000004, 2.6 2.6, 2.8000000000000003 2.8000000000000003, 3 3)",
 		},
 		{
 			wkt:              "LINESTRING EMPTY",
@@ -54,6 +54,16 @@ func TestSegmentize(t *testing.T) {
 			wkt:              "LINESTRING (0.0 0.0, 0.0 10.0, 0.0 16.0)",
 			maxSegmentLength: 3,
 			expectedWKT:      "LINESTRING (0.0 0.0,0.0 2.5,0.0 5.0,0.0 7.5,0.0 10.0,0.0 13.0,0.0 16.0)",
+		},
+		{
+			wkt:              "LINESTRING M (0 0 23, 1 0 -5)",
+			maxSegmentLength: 0.25,
+			expectedWKT:      "LINESTRING M (0 0 23, 0.25 0 16, 0.5 0 9, 0.75 0 2, 1 0 -5)",
+		},
+		{
+			wkt:              "LINESTRING ZM (0 0 23 10, 1 0 -5 0)",
+			maxSegmentLength: 0.5,
+			expectedWKT:      "LINESTRING ZM (0 0 23 10,0.5 0 9 5,1 0 -5 0)",
 		},
 		{
 			wkt:              "POLYGON ((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 0.0))",
@@ -74,6 +84,16 @@ func TestSegmentize(t *testing.T) {
 			wkt:              "POLYGON EMPTY",
 			maxSegmentLength: 1,
 			expectedWKT:      "POLYGON EMPTY",
+		},
+		{
+			wkt:              "POLYGON Z EMPTY",
+			maxSegmentLength: 1,
+			expectedWKT:      "POLYGON Z EMPTY",
+		},
+		{
+			wkt:              "POLYGON Z ((1 1 0, 5 1 10, 5 3 20, 1 3 30, 1 1 0))",
+			maxSegmentLength: 2,
+			expectedWKT:      "POLYGON Z ((1 1 0, 3 1 5, 5 1 10, 5 3 20, 3 3 25, 1 3 30, 1 1 0))",
 		},
 		{
 			wkt:              "MULTIPOINT ((1.0 1.0), (2.0 2.0))",
@@ -156,13 +176,6 @@ func TestSegmentizeCoords(t *testing.T) {
 			resultantCoordinates: []float64{0, 0, 0.3333333333333333, 0, 0.6666666666666666, 0},
 		},
 		{
-			desc:                 `Coordinate(1, 1) to Coordinate(0, 0), -1`,
-			a:                    geom.Coord{1, 1},
-			b:                    geom.Coord{0, 0},
-			segmentMaxLength:     -1,
-			resultantCoordinates: []float64{1, 1},
-		},
-		{
 			desc:                 `Coordinate(1, 1) to Coordinate(0, 0), 2`,
 			a:                    geom.Coord{1, 1},
 			b:                    geom.Coord{0, 0},
@@ -185,13 +198,39 @@ func TestSegmentizeCoords(t *testing.T) {
 		})
 	}
 
-	t.Run("many coordinates to segmentize", func(t *testing.T) {
-		g := geo.MustParseGeometry("LINESTRING(0 0, 100 100)")
-		_, err := Segmentize(g, 0.001)
-		require.EqualError(
-			t,
-			err,
-			fmt.Sprintf("attempting to segmentize into too many coordinates; need 282846 points between [0 0] and [100 100], max %d", geo.MaxAllowedSplitPoints),
-		)
-	})
+	errorTestCases := []struct {
+		desc             string
+		a                geom.Coord
+		b                geom.Coord
+		segmentMaxLength float64
+		expectedErr      string
+	}{
+		{
+			desc:             "too many segments required",
+			a:                geom.Coord{0, 0},
+			b:                geom.Coord{100, 100},
+			segmentMaxLength: 0.001,
+			expectedErr:      fmt.Sprintf("attempting to segmentize into too many coordinates; need 282846 points between [0 0] and [100 100], max %d", geo.MaxAllowedSplitPoints),
+		},
+		{
+			desc:             "input coords have different dimensions",
+			a:                geom.Coord{1, 1},
+			b:                geom.Coord{1, 2, 3},
+			segmentMaxLength: 1,
+			expectedErr:      "cannot segmentize two coordinates of different dimensions",
+		},
+		{
+			desc:             "negative max segment length",
+			a:                geom.Coord{1, 1},
+			b:                geom.Coord{2, 2},
+			segmentMaxLength: -1,
+			expectedErr:      "maximum segment length must be positive",
+		},
+	}
+	for _, test := range errorTestCases {
+		t.Run(test.desc, func(t *testing.T) {
+			_, err := segmentizeCoords(test.a, test.b, test.segmentMaxLength)
+			require.EqualError(t, err, test.expectedErr)
+		})
+	}
 }
