@@ -721,6 +721,15 @@ func TestParse(t *testing.T) {
 		{`SHOW SYNTAX 'select 1'`},
 		{`EXPLAIN SHOW SYNTAX 'select 1'`},
 
+		{`SHOW ALL LOGS`},
+		{`SHOW ALL LOGS WITH k = 'v'`},
+		{`SHOW ALL LOGS FROM NODES 1, 2, 3`},
+		{`SHOW ALL LOGS FROM NODES 1, 2, 3 WITH k = 'v'`},
+		{`SHOW LOGS MATCHING 'foo'`},
+		{`SHOW LOGS MATCHING 'foo' WITH k = 'v'`},
+		{`SHOW LOGS FROM NODES 1, 2, 3 MATCHING 'foo'`},
+		{`SHOW LOGS FROM NODES 1, 2, 3 MATCHING 'foo' WITH k = 'v'`},
+
 		{`PREPARE a AS SELECT 1`},
 		{`PREPARE a AS EXPLAIN SELECT 1`},
 		{`PREPARE a (INT8) AS SELECT $1`},

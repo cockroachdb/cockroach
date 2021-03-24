@@ -298,6 +298,11 @@ func ApplyConfig(config logconfig.Config) (cleanupFn func(), err error) {
 		}
 	}
 
+	interceptInfo := newInterceptSink()
+	for _, l := range chans {
+		l.sinkInfos = append(l.sinkInfos, interceptInfo)
+	}
+
 	logging.setChannelLoggers(chans, &stderrSinkInfo)
 	setActive()
 
@@ -334,6 +339,18 @@ func newFluentSinkInfo(c logconfig.FluentSinkConfig) (*sinkInfo, error) {
 	fluentSink := newFluentSink(c.Net, c.Address)
 	info.sink = fluentSink
 	return info, nil
+}
+
+// newInterceptSinkInfo creates a new intercepSink and its accompanying sinkInfo.
+func newInterceptSink() *sinkInfo {
+	return &sinkInfo{
+		sink:      &interceptSink{},
+		threshold: 0,
+		editor:    getEditor(SelectEditMode(true, true)),
+		formatter: formatCrdbV2{},
+		// redact:     true,
+		redactable: true,
+	}
 }
 
 // applyConfig applies a common sink configuration to a sinkInfo.

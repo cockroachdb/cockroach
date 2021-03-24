@@ -367,6 +367,10 @@ func TestContextualHelp(t *testing.T) {
 
 		{`SHOW ZONE CONFIGURATION FROM ??`, `SHOW ZONE CONFIGURATION`},
 
+		{`SHOW LOGS ??`, `SHOW LOGS`},
+		{`SHOW LOGS MATCHING ??`, `SHOW LOGS`},
+		{`SHOW ALL LOGS ??`, `SHOW LOGS`},
+
 		{`TRUNCATE foo ??`, `TRUNCATE`},
 		{`TRUNCATE foo, ??`, `TRUNCATE`},
 

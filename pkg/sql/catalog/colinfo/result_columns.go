@@ -273,3 +273,8 @@ var ExportColumns = ResultColumns{
 	{Name: "rows", Typ: types.Int},
 	{Name: "bytes", Typ: types.Int},
 }
+
+// ShowLogsColumns are the result columns of an SHOW LOGS statement.
+var ShowLogsColumns = ResultColumns{
+	{Name: "message", Typ: types.String},
+}

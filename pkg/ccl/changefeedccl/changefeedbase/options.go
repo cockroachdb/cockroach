@@ -96,6 +96,7 @@ const (
 	SinkSchemeBuffer          = ``
 	SinkSchemeExperimentalSQL = `experimental-sql`
 	SinkSchemeKafka           = `kafka`
+	SinkSchemeNull            = `null`
 	SinkParamSASLEnabled      = `sasl_enabled`
 	SinkParamSASLHandshake    = `sasl_handshake`
 	SinkParamSASLUser         = `sasl_user`

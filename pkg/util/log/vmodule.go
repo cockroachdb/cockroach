@@ -65,6 +65,13 @@ func SetVModule(value string) error {
 	return logging.vmoduleConfig.mu.vmodule.Set(value)
 }
 
+// SetVModuleWithOldValue alters the vmodule logging level to the passed in value and returns
+// old vmodule value.
+func SetVModuleWithOldValue(value string) (string, error) {
+	old := logging.vmoduleConfig.mu.vmodule.String()
+	return old, logging.vmoduleConfig.mu.vmodule.Set(value)
+}
+
 // VDepth reports whether verbosity at the call site is at least the requested
 // level.
 func VDepth(l Level, depth int) bool {

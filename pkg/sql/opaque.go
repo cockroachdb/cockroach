@@ -190,6 +190,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
+	case *tree.ShowLogs:
+		return p.ShowLogs(ctx, n)
 	case *tree.ShowTableStats:
 		return p.ShowTableStats(ctx, n)
 	case *tree.ShowTraceForSession:
@@ -271,6 +273,7 @@ func init() {
 		&tree.SetSessionCharacteristics{},
 		&tree.ShowClusterSetting{},
 		&tree.ShowHistogram{},
+		&tree.ShowLogs{},
 		&tree.ShowTableStats{},
 		&tree.ShowTraceForSession{},
 		&tree.ShowZoneConfig{},

@@ -84,6 +84,7 @@ proto_library(
         "api.proto",
         "component_stats.proto",
         "data.proto",
+        "logspy.proto",
         "processors.proto",
         "processors_base.proto",
         "processors_bulk_io.proto",
