@@ -1,0 +1,1172 @@
+{
+  "produces": [
+    "application/json"
+  ],
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "swagger": "2.0",
+  "info": {
+    "description": "API for querying information about CockroachDB health, nodes, ranges,\nsessions, and other meta entities.",
+    "title": "CockroachDB v2 API",
+    "license": {
+      "name": "Business Source License"
+    },
+    "version": "2.0.0"
+  },
+  "host": "localhost",
+  "basePath": "/api/v2/",
+  "paths": {
+    "/health/": {
+      "get": {
+        "description": "Helper endpoint to check for node health. If `ready` is true, it also checks\nif this node is fully operational and ready to accept SQL connections.\nOtherwise, this endpoint always returns a successful response (if the API\nserver is up, of course).",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "Check node health",
+        "operationId": "health",
+        "parameters": [
+          {
+            "type": "boolean",
+            "description": "If true, check whether this node is ready to accept SQL connections. If false, this endpoint always returns success, unless the API server itself is down.",
+            "name": "ready",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Indicates healthy node."
+          },
+          "500": {
+            "description": "Indicates unhealthy node."
+          }
+        }
+      }
+    },
+    "/login/": {
+      "post": {
+        "description": "Creates an API session for use with API endpoints that require\nauthentication.",
+        "consumes": [
+          "application/x-www-form-urlencoded"
+        ],
+        "produces": [
+          "application/json",
+          "text/plain"
+        ],
+        "summary": "API Login",
+        "operationId": "login",
+        "parameters": [
+          {
+            "description": "Credentials for login",
+            "name": "credentials",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "object",
+              "required": [
+                "username",
+                "password"
+              ],
+              "properties": {
+                "password": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Login response.",
+            "schema": {
+              "$ref": "#/definitions/loginResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request, if required parameters absent."
+          },
+          "401": {
+            "description": "Unauthorized, if credentials don't match."
+          }
+        }
+      }
+    },
+    "/logout/": {
+      "post": {
+        "security": [
+          {
+            "api_session": []
+          }
+        ],
+        "description": "Logs out on a previously-created API session.",
+        "produces": [
+          "application/json",
+          "text/plain"
+        ],
+        "summary": "API Logout",
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "Logout response.",
+            "schema": {
+              "$ref": "#/definitions/logoutResponse"
+            }
+          },
+          "400": {
+            "description": "Bad request, if API session not present in headers, or invalid session."
+          }
+        }
+      }
+    },
+    "/nodes/": {
+      "get": {
+        "security": [
+          {
+            "api_session": []
+          }
+        ],
+        "description": "List all nodes on this cluster.\n\nClient must be logged-in as a user with admin privileges.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "List nodes",
+        "operationId": "listNodes",
+        "parameters": [
+          {
+            "type": "integer",
+            "description": "Maximum number of results to return in this call.",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "Continuation token for results after a past limited run.",
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List nodes response.",
+            "schema": {
+              "$ref": "#/definitions/nodesResponse"
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{node_id}/ranges/": {
+      "get": {
+        "security": [
+          {
+            "api_session": []
+          }
+        ],
+        "description": "Lists information about ranges on a specified node. If a list of range IDs\nis specified, only information about those ranges is returned.\n\nClient must be logged-in as a user with admin privileges.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "List ranges on a node",
+        "operationId": "listNodeRanges",
+        "parameters": [
+          {
+            "type": "integer",
+            "description": "ID of node to query, or `local` for local node.",
+            "name": "node_id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "IDs of ranges to return information for. All ranges returned if unspecified.",
+            "name": "ranges",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "Maximum number of results to return in this call.",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "Continuation token for results after a past limited run.",
+            "name": "offset",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Node ranges response.",
+            "schema": {
+              "$ref": "#/definitions/nodeRangesResponse"
+            }
+          }
+        }
+      }
+    },
+    "/ranges/hot/": {
+      "get": {
+        "security": [
+          {
+            "api_session": []
+          }
+        ],
+        "description": "Lists information about hot ranges. If a list of range IDs\nis specified, only information about those ranges is returned.\n\nClient must be logged-in as a user with admin privileges.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "List hot ranges",
+        "operationId": "listHotRanges",
+        "parameters": [
+          {
+            "type": "integer",
+            "description": "ID of node to query, or `local` for local node. If unspecified, all nodes are queried.",
+            "name": "node_id",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "Maximum number of results to return in this call.",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "string",
+            "description": "Continuation token for results after a past limited run.",
+            "name": "start",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hot ranges response.",
+            "schema": {
+              "$ref": "#/definitions/hotRangesResponse"
+            }
+          }
+        }
+      }
+    },
+    "/ranges/{range_id}/": {
+      "get": {
+        "security": [
+          {
+            "api_session": []
+          }
+        ],
+        "description": "Retrieves more information about a specific range.\n\nClient must be logged-in as a user with admin privileges.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "Get info about a range",
+        "operationId": "listRange",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "range_id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List range response",
+            "schema": {
+              "$ref": "#/definitions/rangeResponse"
+            }
+          }
+        }
+      }
+    },
+    "/sessions/": {
+      "get": {
+        "security": [
+          {
+            "api_session": []
+          }
+        ],
+        "description": "List all sessions on this cluster. If a username is provided, only\nsessions from that user are returned.\n\nClient must be logged-in as a user with admin privileges.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "List sessions",
+        "operationId": "listSessions",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "Username of user to return sessions for; if unspecified, sessions from all users are returned.",
+            "name": "username",
+            "in": "query"
+          },
+          {
+            "type": "integer",
+            "description": "Maximum number of results to return in this call.",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "type": "string",
+            "description": "Continuation token for results after a past limited run.",
+            "name": "start",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List sessions response.",
+            "schema": {
+              "$ref": "#/definitions/listSessionsResp"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "ActiveQuery": {
+      "type": "object",
+      "title": "ActiveQuery represents a query in flight on some Session.",
+      "properties": {
+        "id": {
+          "description": "ID of the query (uint128 presented as a hexadecimal string).",
+          "type": "string",
+          "x-go-name": "ID"
+        },
+        "is_distributed": {
+          "description": "True if this query is distributed.",
+          "type": "boolean",
+          "x-go-name": "IsDistributed"
+        },
+        "phase": {
+          "$ref": "#/definitions/ActiveQuery_Phase"
+        },
+        "progress": {
+          "type": "number",
+          "format": "float",
+          "x-go-name": "Progress"
+        },
+        "sql": {
+          "description": "SQL query string specified by the user.",
+          "type": "string",
+          "x-go-name": "Sql"
+        },
+        "sql_anon": {
+          "description": "The SQL statement fingerprint, compatible with StatementStatisticsKey.",
+          "type": "string",
+          "x-go-name": "SqlAnon"
+        },
+        "start": {
+          "description": "Start timestamp of this query.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "Start"
+        },
+        "txn_id": {
+          "$ref": "#/definitions/UUID"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "ActiveQuery_Phase": {
+      "type": "integer",
+      "format": "int32",
+      "title": "Enum for phase of execution.",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "Attributes": {
+      "description": "Attributes specifies a list of arbitrary strings describing\nnode topology, store type, and machine capabilities.",
+      "type": "object",
+      "properties": {
+        "attrs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "x-go-name": "Attrs"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "ClockTimestamp": {
+      "description": "ClockTimestamp is the statically typed version of a Timestamp with its\nSynthetic flag set to false.",
+      "title": "ClockTimestamp is a Timestamp with the added capability of being able to\nupdate a peer's HLC clock. It possesses this capability because the clock\ntimestamp itself is guaranteed to have come from an HLC clock somewhere in\nthe system. As such, a clock timestamp is an promise that some node in the\nsystem has a clock with a reading equal to or above its value.",
+      "$ref": "#/definitions/Timestamp"
+    },
+    "Key": {
+      "description": "Key is a custom type for a byte string in proto\nmessages which refer to Cockroach keys.",
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8"
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "Lease": {
+      "description": "Lease contains information about range leases including the\nexpiration and lease holder.",
+      "type": "object",
+      "properties": {
+        "deprecated_start_stasis": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "epoch": {
+          "description": "The epoch of the lease holder's node liveness entry. If this value is\nnon-zero, the expiration field is ignored.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Epoch"
+        },
+        "expiration": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "proposed_ts": {
+          "$ref": "#/definitions/ClockTimestamp"
+        },
+        "replica": {
+          "$ref": "#/definitions/ReplicaDescriptor"
+        },
+        "sequence": {
+          "$ref": "#/definitions/LeaseSequence"
+        },
+        "start": {
+          "$ref": "#/definitions/ClockTimestamp"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "LeaseSequence": {
+      "type": "integer",
+      "format": "int64",
+      "title": "LeaseSequence is a custom type for a lease sequence number.",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "ListSessionsError": {
+      "type": "object",
+      "title": "An error wrapper object for ListSessionsResponse.",
+      "properties": {
+        "message": {
+          "description": "Error message.",
+          "type": "string",
+          "x-go-name": "Message"
+        },
+        "node_id": {
+          "$ref": "#/definitions/NodeID"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "ListSessionsResponse": {
+      "type": "object",
+      "title": "Response object for ListSessions and ListLocalSessions.",
+      "properties": {
+        "errors": {
+          "description": "Any errors that occurred during fan-out calls to other nodes.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ListSessionsError"
+          },
+          "x-go-name": "Errors"
+        },
+        "sessions": {
+          "description": "A list of sessions on this node or cluster.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Session"
+          },
+          "x-go-name": "Sessions"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "Locality": {
+      "description": "Locality is an ordered set of key value Tiers that describe a node's\nlocation. The tier keys should be the same across all nodes.",
+      "type": "object",
+      "properties": {
+        "tiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Tier"
+          },
+          "x-go-name": "Tiers"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "NodeID": {
+      "description": "NodeID is a custom type for a cockroach node ID. (not a raft node ID)\n0 is not a valid NodeID.",
+      "type": "integer",
+      "format": "int32",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "NodeLivenessStatus": {
+      "description": "TODO(irfansharif): We should reconsider usage of NodeLivenessStatus.\nIt's unclear if the enum is well considered. It enumerates across two\ndistinct set of things: the \"membership\" status (live/active,\ndecommissioning, decommissioned), and the node \"process\" status (live,\nunavailable, available). It's possible for two of these \"states\" to be true,\nsimultaneously (consider a decommissioned, dead node). It makes for confusing\nsemantics, and the code attempting to disambiguate across these states\n(kvserver.LivenessStatus() for e.g.) seem wholly arbitrary.\n\nSee #50707 for more details.",
+      "type": "integer",
+      "format": "int32",
+      "title": "NodeLivenessStatus describes the status of a node from the perspective of the\nliveness system. See comment on LivenessStatus() for a description of the\nstates.",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+    },
+    "PrettySpan": {
+      "type": "object",
+      "properties": {
+        "end_key": {
+          "type": "string",
+          "x-go-name": "EndKey"
+        },
+        "start_key": {
+          "type": "string",
+          "x-go-name": "StartKey"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "RKey": {
+      "description": "RKey stands for \"resolved key,\" as in a key whose address has been resolved.",
+      "title": "RKey denotes a Key whose local addressing has been accounted for.\nA key can be transformed to an RKey by keys.Addr().",
+      "$ref": "#/definitions/Key"
+    },
+    "RangeID": {
+      "type": "integer",
+      "format": "int64",
+      "title": "A RangeID is a unique ID associated to a Raft consensus group.",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "RangeProblems": {
+      "type": "object",
+      "properties": {
+        "leader_not_lease_holder": {
+          "type": "boolean",
+          "x-go-name": "LeaderNotLeaseHolder"
+        },
+        "no_lease": {
+          "type": "boolean",
+          "x-go-name": "NoLease"
+        },
+        "no_raft_leader": {
+          "type": "boolean",
+          "x-go-name": "NoRaftLeader"
+        },
+        "overreplicated": {
+          "type": "boolean",
+          "x-go-name": "Overreplicated"
+        },
+        "quiescent_equals_ticking": {
+          "description": "Quiescent ranges do not tick by definition, but we track this in\ntwo different ways and suspect that they're getting out of sync.\nIf the replica's quiescent flag doesn't agree with the store's\nlist of replicas that are ticking, warn about it.",
+          "type": "boolean",
+          "x-go-name": "QuiescentEqualsTicking"
+        },
+        "raft_log_too_large": {
+          "description": "When the raft log is too large, it can be a symptom of other issues.",
+          "type": "boolean",
+          "x-go-name": "RaftLogTooLarge"
+        },
+        "unavailable": {
+          "type": "boolean",
+          "x-go-name": "Unavailable"
+        },
+        "underreplicated": {
+          "type": "boolean",
+          "x-go-name": "Underreplicated"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "RangeStatistics": {
+      "type": "object",
+      "properties": {
+        "queries_per_second": {
+          "description": "Note that queries per second will only be known by the leaseholder.\nAll other replicas will report it as 0.",
+          "type": "number",
+          "format": "double",
+          "x-go-name": "QueriesPerSecond"
+        },
+        "writes_per_second": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "WritesPerSecond"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "ReplicaDescriptor": {
+      "description": "ReplicaDescriptor describes a replica location by node ID\n(corresponds to a host:port via lookup on gossip network) and store\nID (identifies the device).\nTODO(jeffreyxiao): All nullable fields in ReplicaDescriptor can be made\nnon-nullable if #38302 is guaranteed to be on all nodes (I.E. 20.1).",
+      "type": "object",
+      "properties": {
+        "node_id": {
+          "$ref": "#/definitions/NodeID"
+        },
+        "replica_id": {
+          "$ref": "#/definitions/ReplicaID"
+        },
+        "store_id": {
+          "$ref": "#/definitions/StoreID"
+        },
+        "type": {
+          "$ref": "#/definitions/ReplicaType"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "ReplicaID": {
+      "type": "integer",
+      "format": "int32",
+      "title": "ReplicaID is a custom type for a range replica ID.",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "ReplicaType": {
+      "description": "All VOTER* types indicate a replica that participates in all raft activities,\nincluding voting for leadership and committing entries. Typically, this\nrequires a majority of voters to reach a decision. In a joint config, two\nseparate majorities are required: one from the set of replicas that have\neither type VOTER or VOTER_OUTGOING or VOTER_DEMOTING_{LEARNER, NON_VOTER},\nas well as that of the set of types VOTER and VOTER_INCOMING . For example,\nwhen type VOTER_FULL is assigned to replicas 1 and 2, while 3 is\nVOTER_OUTGOING and 4 is VOTER_INCOMING, then the two sets over which quorums\nneed to be achieved are {1,2,3} and {1,2,4}. Thus, {1,2} is a quorum of both,\n{1,3} is a quorum of the first but not the second, {1,4} is a quorum of the\nsecond but not the first, and {3,4} is a quorum of neither.",
+      "type": "integer",
+      "format": "int32",
+      "title": "ReplicaType identifies which raft activities a replica participates in. In\nnormal operation, VOTER_FULL, NON_VOTER, and LEARNER are the only used\nstates. However, atomic replication changes require a transition through a\n\"joint config\"; in this joint config, the VOTER_DEMOTING_{LEARNER, NON_VOTER}\nand VOTER_INCOMING types are used as well to denote voters which are being\ndowngraded to learners and newly added by the change, respectively. When\nbeing removed, a demoting voter is turning into a learner, which we prefer\nover a direct removal, which was used prior to v20.1 and uses the\nVOTER_OUTGOING type instead (see VersionChangeReplicasDemotion for details on\nwhy we're not doing that any more).",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "Session": {
+      "type": "object",
+      "title": "Session represents one SQL session.",
+      "properties": {
+        "active_queries": {
+          "description": "Queries in progress on this session.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ActiveQuery"
+          },
+          "x-go-name": "ActiveQueries"
+        },
+        "active_txn": {
+          "$ref": "#/definitions/TxnInfo"
+        },
+        "alloc_bytes": {
+          "description": "Number of currently allocated bytes in the session memory monitor.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "AllocBytes"
+        },
+        "application_name": {
+          "description": "Application name specified by the client.",
+          "type": "string",
+          "x-go-name": "ApplicationName"
+        },
+        "client_address": {
+          "description": "Connected client's IP address and port.",
+          "type": "string",
+          "x-go-name": "ClientAddress"
+        },
+        "id": {
+          "description": "ID of the session (uint128 represented as raw bytes).",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8"
+          },
+          "x-go-name": "ID"
+        },
+        "last_active_query": {
+          "description": "SQL string of the last query executed on this session.",
+          "type": "string",
+          "x-go-name": "LastActiveQuery"
+        },
+        "last_active_query_anon": {
+          "description": "The SQL statement fingerprint of the last query executed on this session,\ncompatible with StatementStatisticsKey.",
+          "type": "string",
+          "x-go-name": "LastActiveQueryAnon"
+        },
+        "max_alloc_bytes": {
+          "description": "High water mark of allocated bytes in the session memory monitor.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "MaxAllocBytes"
+        },
+        "node_id": {
+          "$ref": "#/definitions/NodeID"
+        },
+        "start": {
+          "description": "Timestamp of session's start.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "Start"
+        },
+        "username": {
+          "description": "Username of the user for this session.",
+          "type": "string",
+          "x-go-name": "Username"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "StoreID": {
+      "type": "integer",
+      "format": "int32",
+      "title": "StoreID is a custom type for a cockroach store ID.",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "Tier": {
+      "type": "object",
+      "title": "Tier represents one level of the locality hierarchy.",
+      "properties": {
+        "key": {
+          "description": "Key is the name of tier and should match all other nodes.",
+          "type": "string",
+          "x-go-name": "Key"
+        },
+        "value": {
+          "description": "Value is node specific value corresponding to the key.",
+          "type": "string",
+          "x-go-name": "Value"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "Timestamp": {
+      "type": "object",
+      "title": "Timestamp represents a state of the hybrid logical clock.",
+      "properties": {
+        "logical": {
+          "description": "The logical component captures causality for events whose wall times\nare equal. It is effectively bounded by (maximum clock skew)/(minimal\nns between events) and nearly impossible to overflow.\n\nIt is not safe to mutate this field directly. Instead, use one of the\nmethods on Timestamp, which ensure that the synthetic flag is updated\nappropriately.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "Logical"
+        },
+        "synthetic": {
+          "description": "Indicates that the Timestamp did not come from an HLC clock somewhere\nin the system and, therefore, does not have the ability to update a\npeer's HLC clock. If set to true, the \"synthetic timestamp\" may be\narbitrarily disconnected from real time.\n\nThe flag serves as the dynamically typed version of a ClockTimestamp\n(but inverted). Only Timestamps with this flag set to false can be\ndowncast to a ClockTimestamp successfully (see TryToClockTimestamp).\n\nSynthetic timestamps with this flag set to true are central to\nnon-blocking transactions, which write \"into the future\". Setting the\nflag to true is also used to disconnect some committed MVCC versions\nfrom observed timestamps by indicating that those versions were moved\nfrom the timestamp at which they were originally written. Committed\nMVCC versions with synthetic timestamps require observing the full\nuncertainty interval, whereas readings off the leaseholders's clock\ncan tighten the uncertainty interval that is applied to MVCC versions\nwith clock timestamp.\n\nThis flag does not affect the sort order of Timestamps. However, it\nis considered when performing structural equality checks (e.g. using\nthe == operator). Consider use of the EqOrdering method when testing\nfor equality.",
+          "type": "boolean",
+          "x-go-name": "Synthetic"
+        },
+        "wall_time": {
+          "description": "Holds a wall time, typically a unix epoch time expressed in\nnanoseconds.\n\nIt is not safe to mutate this field directly. Instead, use one of the\nmethods on Timestamp, which ensure that the synthetic flag is updated\nappropriately.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "WallTime"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/util/hlc"
+    },
+    "TxnInfo": {
+      "type": "object",
+      "title": "TxnInfo represents an in flight user transaction on some Session.",
+      "properties": {
+        "alloc_bytes": {
+          "description": "Number of currently allocated bytes in the txn memory monitor.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "AllocBytes"
+        },
+        "deadline": {
+          "description": "The deadline by which the transaction must be committed.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "Deadline"
+        },
+        "id": {
+          "$ref": "#/definitions/UUID"
+        },
+        "implicit": {
+          "description": "implicit is true if this transaction was an implicit SQL transaction.",
+          "type": "boolean",
+          "x-go-name": "Implicit"
+        },
+        "is_historical": {
+          "type": "boolean",
+          "x-go-name": "IsHistorical"
+        },
+        "max_alloc_bytes": {
+          "description": "High water mark of allocated bytes in the txn memory monitor.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "MaxAllocBytes"
+        },
+        "num_auto_retries": {
+          "description": "num_retries is the number of times that this transaction was automatically\nretried by the SQL executor.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "NumAutoRetries"
+        },
+        "num_retries": {
+          "description": "num_retries is the number of times that this transaction was retried.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "NumRetries"
+        },
+        "num_statements_executed": {
+          "description": "num_statements_executed is the number of statements that were executed so\nfar on this transaction.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "NumStatementsExecuted"
+        },
+        "priority": {
+          "type": "string",
+          "x-go-name": "Priority"
+        },
+        "read_only": {
+          "type": "boolean",
+          "x-go-name": "ReadOnly"
+        },
+        "start": {
+          "description": "The start timestamp of the transaction.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "Start"
+        },
+        "txn_description": {
+          "description": "txn_description is a text description of the underlying kv.Txn, intended\nfor troubleshooting purposes.",
+          "type": "string",
+          "x-go-name": "TxnDescription"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server/serverpb"
+    },
+    "UUID": {
+      "type": "array",
+      "title": "UUID is an array type to represent the value of a UUID, as defined in RFC-4122.",
+      "items": {
+        "type": "integer",
+        "format": "uint8"
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/util/uuid"
+    },
+    "UnresolvedAddr": {
+      "type": "object",
+      "title": "UnresolvedAddr is an unresolved version of net.Addr.",
+      "properties": {
+        "address_field": {
+          "type": "string",
+          "x-go-name": "AddressField"
+        },
+        "network_field": {
+          "type": "string",
+          "x-go-name": "NetworkField"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/util"
+    },
+    "Version": {
+      "type": "object",
+      "properties": {
+        "internal": {
+          "description": "The internal version is used to introduce migrations during the development\ncycle. They are subversions that are never the end versions of a release,\ni.e. users of stable, public release will only use binaries with the\ninternal version set to 0.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "Internal"
+        },
+        "major_val": {
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "Major"
+        },
+        "minor_val": {
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "Minor"
+        },
+        "patch": {
+          "description": "Note that patch is a placeholder and will always be zero.",
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "Patch"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/roachpb"
+    },
+    "hotRangesResponse": {
+      "type": "object",
+      "title": "Response struct for listHotRanges.",
+      "properties": {
+        "next": {
+          "description": "Continuation token for the next paginated call. Use as the `start`\nparameter.",
+          "type": "string",
+          "x-go-name": "Next"
+        },
+        "ranges_by_node_id": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/rangeDescriptorInfo"
+            }
+          },
+          "x-go-name": "RangesByNodeID"
+        },
+        "response_error": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/responseError"
+          },
+          "x-go-name": "Errors"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "listSessionsResp": {
+      "type": "object",
+      "title": "Response for listSessions.",
+      "properties": {
+        "errors": {
+          "description": "Any errors that occurred during fan-out calls to other nodes.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ListSessionsError"
+          },
+          "x-go-name": "Errors"
+        },
+        "next": {
+          "description": "The continuation token, for use in the next paginated call in the `start`\nparameter.",
+          "type": "string",
+          "x-go-name": "Next"
+        },
+        "sessions": {
+          "description": "A list of sessions on this node or cluster.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Session"
+          },
+          "x-go-name": "Sessions"
+        }
+      },
+      "x-go-name": "listSessionsResponse",
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "loginResponse": {
+      "type": "object",
+      "properties": {
+        "session": {
+          "description": "Session string for a valid API session. Specify this in header for any API\nrequests that require authentication.",
+          "type": "string",
+          "x-go-name": "Session"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "logoutResponse": {
+      "type": "object",
+      "properties": {
+        "logged_out": {
+          "description": "Indicates whether logout was succeessful.",
+          "type": "boolean",
+          "x-go-name": "LoggedOut"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "nodeRangeResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string",
+          "x-go-name": "Error"
+        },
+        "range_info": {
+          "$ref": "#/definitions/rangeInfo"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "nodeRangesResponse": {
+      "type": "object",
+      "title": "Response struct for listNodeRanges.",
+      "properties": {
+        "next": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Next"
+        },
+        "ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/rangeInfo"
+          },
+          "x-go-name": "Ranges"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "nodeStatus": {
+      "type": "object",
+      "properties": {
+        "ServerVersion": {
+          "$ref": "#/definitions/Version"
+        },
+        "address": {
+          "$ref": "#/definitions/UnresolvedAddr"
+        },
+        "attrs": {
+          "$ref": "#/definitions/Attributes"
+        },
+        "build_tag": {
+          "type": "string",
+          "x-go-name": "BuildTag"
+        },
+        "cluster_name": {
+          "type": "string",
+          "x-go-name": "ClusterName"
+        },
+        "liveness_status": {
+          "$ref": "#/definitions/NodeLivenessStatus"
+        },
+        "locality": {
+          "$ref": "#/definitions/Locality"
+        },
+        "metrics": {
+          "description": "Other fields that are a subset of roachpb.NodeStatus.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "format": "double"
+          },
+          "x-go-name": "Metrics"
+        },
+        "node_id": {
+          "$ref": "#/definitions/NodeID"
+        },
+        "num_cpus": {
+          "type": "integer",
+          "format": "int32",
+          "x-go-name": "NumCpus"
+        },
+        "sql_address": {
+          "$ref": "#/definitions/UnresolvedAddr"
+        },
+        "started_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "StartedAt"
+        },
+        "total_system_memory": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "TotalSystemMemory"
+        },
+        "updated_at": {
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "UpdatedAt"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "nodesResponse": {
+      "type": "object",
+      "title": "Response struct for listNodes.",
+      "properties": {
+        "next": {
+          "description": "Continuation token for the next paginated call, if more values are present.\nSpecify as the `offset` parameter.",
+          "type": "integer",
+          "format": "int64",
+          "x-go-name": "Next"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/nodeStatus"
+          },
+          "x-go-name": "Nodes"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "rangeDescriptorInfo": {
+      "description": "rangeDescriptorInfo contains a subset of fields from roachpb.RangeDescriptor\nthat are safe to be returned from APIs.",
+      "type": "object",
+      "properties": {
+        "end_key": {
+          "$ref": "#/definitions/RKey"
+        },
+        "queries_per_second": {
+          "type": "number",
+          "format": "double",
+          "x-go-name": "QueriesPerSecond"
+        },
+        "range_id": {
+          "$ref": "#/definitions/RangeID"
+        },
+        "start_key": {
+          "$ref": "#/definitions/RKey"
+        },
+        "store_id": {
+          "$ref": "#/definitions/StoreID"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "rangeInfo": {
+      "type": "object",
+      "properties": {
+        "desc": {
+          "$ref": "#/definitions/rangeDescriptorInfo"
+        },
+        "error_message": {
+          "type": "string",
+          "x-go-name": "ErrorMessage"
+        },
+        "lease_history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Lease"
+          },
+          "x-go-name": "LeaseHistory"
+        },
+        "problems": {
+          "$ref": "#/definitions/RangeProblems"
+        },
+        "quiescent": {
+          "type": "boolean",
+          "x-go-name": "Quiescent"
+        },
+        "source_node_id": {
+          "$ref": "#/definitions/NodeID"
+        },
+        "source_store_id": {
+          "$ref": "#/definitions/StoreID"
+        },
+        "span": {
+          "$ref": "#/definitions/PrettySpan"
+        },
+        "stats": {
+          "$ref": "#/definitions/RangeStatistics"
+        },
+        "ticking": {
+          "type": "boolean",
+          "x-go-name": "Ticking"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "rangeResponse": {
+      "type": "object",
+      "properties": {
+        "responses_by_node_id": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/nodeRangeResponse"
+          },
+          "x-go-name": "Responses"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    },
+    "responseError": {
+      "type": "object",
+      "properties": {
+        "error_message": {
+          "type": "string",
+          "x-go-name": "ErrorMessage"
+        },
+        "node_id": {
+          "$ref": "#/definitions/NodeID"
+        }
+      },
+      "x-go-package": "github.com/cockroachdb/cockroach/pkg/server"
+    }
+  },
+  "securityDefinitions": {
+    "api_session": {
+      "description": "Handle to logged-in REST session. Use `/login/` to log in and get a session.",
+      "type": "apiKey",
+      "name": "X-Cockroach-API-Session",
+      "in": "header"
+    }
+  }
+}

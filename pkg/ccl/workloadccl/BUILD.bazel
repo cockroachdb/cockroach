@@ -14,7 +14,7 @@ go_library(
         "//pkg/workload",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_spf13_pflag//:pflag",
-        "@com_google_cloud_go//storage",
+        "@com_google_cloud_go_storage//:storage",
         "@org_golang_google_api//iterator",
     ],
 )
@@ -48,7 +48,7 @@ go_test(
         "//pkg/workload/tpcc",
         "@com_github_spf13_pflag//:pflag",
         "@com_github_stretchr_testify//require",
-        "@com_google_cloud_go//storage",
+        "@com_google_cloud_go_storage//:storage",
         "@org_golang_google_api//option",
         "@org_golang_x_oauth2//google",
     ],
