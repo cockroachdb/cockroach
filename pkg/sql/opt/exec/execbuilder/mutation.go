@@ -243,20 +243,15 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
 	colList = appendColsWhenPresent(colList, ins.PartialIndexPutCols)
-	if !colList.Equals(values.Cols) {
-		// We have a Values input, but the columns are not in the right order. For
-		// example:
-		//   INSERT INTO ab (SELECT y, x FROM (VALUES (1, 10)) AS v (x, y))
-		//
-		// TODO(radu): we could rearrange the columns of the rows below, or add
-		// a normalization rule that adds a Project to rearrange the Values node
-		// columns.
-		return execPlan{}, false, nil
-	}
-
 	rows, err := b.buildValuesRows(values)
 	if err != nil {
 		return execPlan{}, false, err
+	}
+	// We may need to permute the values to make sure they are in the right order.
+	if !permuteValuesColumns(values.Cols, colList, rows) {
+		// It is possible that we need a more complicated projection (e.g.
+		// duplicating a column).
+		return execPlan{}, false, nil
 	}
 
 	// Construct the InsertFastPath node.
@@ -281,6 +276,42 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		ep.outputCols = mutationOutputColMap(ins)
 	}
 	return ep, true, nil
+}
+
+// permuteValuesColumns rearranges the columns in a matrix of TypedExpr values.
+//
+// Each column in `rows` corresponds to a column in `cols`. The values in the
+// columns are permuted so that they correspond to `wantedCols` (which should be
+// a permutation of `cols`).
+//
+// If `wantedCols` is not a permutation of `cols`, returns false (in which case
+// `rows` cannot be used anymore).
+func permuteValuesColumns(cols, wantedCols opt.ColList, rows [][]tree.TypedExpr) (ok bool) {
+	if cols.Equals(wantedCols) {
+		// Nothing to do.
+		return true
+	}
+	if len(cols) != len(wantedCols) {
+		return false
+	}
+
+	// Make a copy of cols - we will need to keep track of the current column
+	// list as we perform swaps.
+	cols = append(opt.ColList(nil), cols...)
+	for i, wanted := range wantedCols {
+		// Find the wanted column among cols[i:].
+		j, ok := cols[i:].Find(wanted)
+		if !ok {
+			return false
+		}
+		j += i
+		// Swap columns i and j, which puts the wanted column on position i.
+		cols[i], cols[j] = cols[j], cols[i]
+		for _, row := range rows {
+			row[i], row[j] = row[j], row[i]
+		}
+	}
+	return true
 }
 
 func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
