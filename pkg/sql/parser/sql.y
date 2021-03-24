@@ -2747,6 +2747,14 @@ alter_unsupported_stmt:
   {
     return unimplemented(sqllex, "alter function")
   }
+| ALTER DOMAIN error
+  {
+    return unimplemented(sqllex, "alter domain")
+  }
+| ALTER AGGREGATE error
+  {
+    return unimplemented(sqllex, "alter aggregate")
+  }
 | ALTER DEFAULT error
   {
     return unimplemented(sqllex, "alter default privileges")
