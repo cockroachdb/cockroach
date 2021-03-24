@@ -216,6 +216,7 @@ func NewColBatchScan(
 	evalCtx *tree.EvalContext,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
+	estimatedRowCount uint64,
 ) (*ColBatchScan, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
@@ -264,6 +265,7 @@ func NewColBatchScan(
 	}
 
 	fetcher := cFetcherPool.Get().(*cFetcher)
+	fetcher.estimatedRowCount = estimatedRowCount
 	if _, _, err := initCRowFetcher(
 		flowCtx.Codec(), allocator, execinfra.GetWorkMemLimit(flowCtx.Cfg),
 		fetcher, table, columnIdxMap, neededColumns, spec, spec.HasSystemColumns,
