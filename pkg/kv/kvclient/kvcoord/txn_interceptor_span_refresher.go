@@ -679,14 +679,14 @@ func (sr *txnSpanRefresher) epochBumpedLocked() {
 	sr.refreshedTimestamp.Reset()
 }
 
-// createSavepointLocked is part of the txnReqInterceptor interface.
+// createSavepointLocked is part of the txnInterceptor interface.
 func (sr *txnSpanRefresher) createSavepointLocked(ctx context.Context, s *savepoint) {
 	s.refreshSpans = make([]roachpb.Span, len(sr.refreshFootprint.asSlice()))
 	copy(s.refreshSpans, sr.refreshFootprint.asSlice())
 	s.refreshInvalid = sr.refreshInvalid
 }
 
-// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+// rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (sr *txnSpanRefresher) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
 	sr.refreshFootprint.clear()
 	sr.refreshFootprint.insert(s.refreshSpans...)

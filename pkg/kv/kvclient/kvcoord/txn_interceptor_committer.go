@@ -509,16 +509,16 @@ func (*txnCommitter) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
 // importLeafFinalState is part of the txnInterceptor interface.
 func (*txnCommitter) importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) {}
 
-// epochBumpedLocked implements the txnReqInterceptor interface.
+// epochBumpedLocked implements the txnInterceptor interface.
 func (tc *txnCommitter) epochBumpedLocked() {}
 
-// createSavepointLocked is part of the txnReqInterceptor interface.
+// createSavepointLocked is part of the txnInterceptor interface.
 func (*txnCommitter) createSavepointLocked(context.Context, *savepoint) {}
 
-// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+// rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (*txnCommitter) rollbackToSavepointLocked(context.Context, savepoint) {}
 
-// closeLocked implements the txnReqInterceptor interface.
+// closeLocked implements the txnInterceptor interface.
 func (tc *txnCommitter) closeLocked() {}
 
 func cloneWithStatus(txn *roachpb.Transaction, s roachpb.TransactionStatus) *roachpb.Transaction {
