@@ -640,3 +640,26 @@ query TTT
 INSERT INTO t35364 (x) VALUES (1.5) RETURNING *
 ----
 2  2  7
+
+# Regression test for #62270: make sure the fast path is used when not
+# providing values for some columns.
+statement ok
+CREATE TABLE t62270_parent (id INT PRIMARY KEY);
+CREATE TABLE t62270_child (c UUID DEFAULT (gen_random_uuid()), p INT REFERENCES t62270_parent (id));
+
+query T
+EXPLAIN (VERBOSE) INSERT INTO t62270_child (p) VALUES (1)
+----
+distribution: local
+vectorized: true
+·
+• insert fast path
+  columns: ()
+  estimated row count: 0 (missing stats)
+  into: t62270_child(c, p, rowid)
+  auto commit
+  FK check: t62270_parent@primary
+  size: 3 columns, 1 row
+  row 0, expr 0: gen_random_uuid()
+  row 0, expr 1: 1
+  row 0, expr 2: unique_rowid()
