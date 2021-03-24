@@ -165,7 +165,7 @@ func descriptorFromKeyValue(
 	} else {
 		desc = b.BuildImmutable()
 	}
-	err = catalog.Validate(ctx, dg, validationLevel, desc).CombinedError()
+	err = catalog.Validate(ctx, dg, catalog.ValidationReadTelemetry, validationLevel, desc).CombinedError()
 	if err != nil {
 		return nil, err
 	}

@@ -1469,7 +1469,13 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 		return nil
 	}
 	bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, tc.codec())
-	return catalog.Validate(ctx, bdg, catalog.ValidationLevelAllPreTxnCommit, descs...).CombinedError()
+	return catalog.Validate(
+		ctx,
+		bdg,
+		catalog.ValidationWriteTelemetry,
+		catalog.ValidationLevelAllPreTxnCommit,
+		descs...,
+	).CombinedError()
 }
 
 // User defined type accessors.

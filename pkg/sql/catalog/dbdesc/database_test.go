@@ -287,7 +287,8 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			descs.Namespace[namespaceKey] = desc.GetID()
 		}
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		if err := catalog.Validate(ctx, descs, catalog.ValidationLevelAllPreTxnCommit, desc).CombinedError(); err == nil {
+		results := catalog.Validate(ctx, descs, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
+		if err := results.CombinedError(); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)
 			}
