@@ -218,7 +218,11 @@ func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
 		jobDesc,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.DuplicateObject {
-			return errors.Newf("region %q already added to database", n.n.Region)
+			return pgerror.Newf(
+				pgcode.DuplicateObject,
+				"region %q already added to database",
+				n.n.Region,
+			)
 		}
 		return err
 	}
