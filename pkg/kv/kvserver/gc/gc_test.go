@@ -13,11 +13,14 @@ package gc
 import (
 	"bytes"
 	"context"
+	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -88,4 +91,67 @@ func TestBatchingInlineGCer(t *testing.T) {
 	// Reset itself properly.
 	require.Nil(t, m.gcKeys)
 	require.Zero(t, m.size)
+}
+
+// TestIntentAgeThresholdSetting test verifies that resolution threshold could be adjusted
+// it uses short and long threshold to verify that intents inserted between two thresholds
+// are not considered for resolution when threshold is high (1st attempt) and considered
+// when threshold is low (2nd attempt)
+func TestIntentAgeThresholdSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rng := rand.New(rand.NewSource(1))
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(42)
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey(tablePrefix),
+		EndKey:   roachpb.RKey(tablePrefix.PrefixEnd()),
+	}
+
+	now := 3 * time.Hour
+	intentShortThreshold := 5 * time.Minute
+	intentLongThreshold := 2 * time.Hour
+	nowTs := hlc.Timestamp{
+		WallTime: now.Nanoseconds(),
+	}
+
+	intentTs := now - (intentShortThreshold+intentLongThreshold)/2
+	distSpec := uniformDistSpec{
+		tsFrom:          int64(intentTs.Seconds()),
+		tsTo:            int64(intentTs.Seconds()) + 1000,
+		keysPerValueMin: 1,
+		keysPerValueMax: 1,
+		keySuffixMin:    1,
+		keySuffixMax:    10,
+		intentFrac:      1,
+	}
+	dist := distSpec.dist(10, rng)
+
+	dist.setupTest(t, eng, desc)
+
+	policy := zonepb.GCPolicy{TTLSeconds: 1}
+	snap := eng.NewSnapshot()
+	fakeGCer := makeFakeGCer()
+
+	info, err := Run(ctx, &desc, snap, nowTs, nowTs, intentLongThreshold, policy, &fakeGCer, fakeGCer.resolveIntents,
+		fakeGCer.resolveIntentsAsync)
+	if err != nil {
+		t.Errorf("GC failed with %v", err)
+	}
+	if info.IntentsConsidered > 0 {
+		t.Errorf("Expected no intents considered with default threshold, got %d", info.IntentsConsidered)
+	}
+
+	info, err = Run(ctx, &desc, snap, nowTs, nowTs, intentShortThreshold, policy, &fakeGCer, fakeGCer.resolveIntents,
+		fakeGCer.resolveIntentsAsync)
+	if err != nil {
+		t.Errorf("GC failed with %v", err)
+	}
+	if info.IntentsConsidered != 10 {
+		t.Errorf("Expected all 10 intents considered for resolution with default threshold, got %d",
+			info.IntentsConsidered)
+	}
 }
