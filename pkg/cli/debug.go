@@ -554,7 +554,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 }
 
 var debugGCCmd = &cobra.Command{
-	Use:   "estimate-gc <directory> [range id] [ttl-in-seconds]",
+	Use:   "estimate-gc <directory> [range id] [ttl-in-seconds] [intent-age-in-seconds]",
 	Short: "find out what a GC run would do",
 	Long: `
 Sets up (but does not run) a GC collection cycle, giving insight into how much
@@ -565,7 +565,7 @@ ranges individually.
 
 Uses a configurable GC policy, with a default 24 hour TTL, for old versions.
 `,
-	Args: cobra.RangeArgs(1, 2),
+	Args: cobra.RangeArgs(1, 3),
 	RunE: MaybeDecorateGRPCError(runDebugGCCmd),
 }
 
@@ -575,17 +575,21 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 
 	var rangeID roachpb.RangeID
 	gcTTLInSeconds := int64((24 * time.Hour).Seconds())
-	switch len(args) {
-	case 3:
+	intentAgeThresholdSeconds := int64((2 * time.Hour).Seconds())
+
+	if len(args) > 3 {
 		var err error
-		if rangeID, err = parseRangeID(args[1]); err != nil {
-			return errors.Wrapf(err, "unable to parse %v as range ID", args[1])
+		if intentAgeThresholdSeconds, err = parsePositiveInt(args[2]); err != nil {
+			return errors.Wrapf(err, "unable to parse %v as intent age threshold", args[2])
 		}
+	}
+	if len(args) > 2 {
+		var err error
 		if gcTTLInSeconds, err = parsePositiveInt(args[2]); err != nil {
 			return errors.Wrapf(err, "unable to parse %v as TTL", args[2])
 		}
-
-	case 2:
+	}
+	if len(args) > 1 {
 		var err error
 		if rangeID, err = parseRangeID(args[1]); err != nil {
 			return err
@@ -639,7 +643,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 		info, err := gc.Run(
 			context.Background(),
 			&desc, snap,
-			now, thresh, policy,
+			now, thresh, time.Second*time.Duration(intentAgeThresholdSeconds), policy,
 			gc.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction) error { return nil },
