@@ -615,3 +615,12 @@ func TestTracer_TracingVerbosityIndependentSemanticsIsActive(t *testing.T) {
 	tr.TracingVerbosityIndependentSemanticsIsActive = func() bool { return true }
 	require.NotNil(t, sp.GetRecording())
 }
+
+func TestNoopSpanFinish(t *testing.T) {
+	tr := NewTracer()
+	sp := tr.StartSpan("noop")
+	require.Equal(t, tr.noopSpan, sp)
+	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
+	sp.Finish()
+	require.EqualValues(t, 1, tr.noopSpan.numFinishCalled)
+}
