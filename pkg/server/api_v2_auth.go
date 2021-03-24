@@ -97,10 +97,52 @@ func (a *authenticationV2Server) createSessionFor(
 	return value, nil
 }
 
+// swagger:model loginResponse
 type loginResponse struct {
+	// Session string for a valid API session. Specify this in header for any API
+	// requests that require authentication.
 	Session string `json:"session"`
 }
 
+// swagger:operation POST /login/ login
+//
+// API Login
+//
+// Creates an API session for use with API endpoints that require
+// authentication.
+//
+// ---
+// parameters:
+// - name: credentials
+//   schema:
+//     type: object
+//     properties:
+//       username:
+//         type: string
+//       password:
+//         type: string
+//     required:
+//       - username
+//       - password
+//   in: body
+//   description: Credentials for login
+//   required: true
+// produces:
+// - application/json
+// - text/plain
+// consumes:
+// - application/x-www-form-urlencoded
+// responses:
+//   "200":
+//     description: Login response.
+//     schema:
+//       "$ref": "#/definitions/loginResponse"
+//   "400":
+//     description: Bad request, if required parameters absent.
+//     type: string
+//   "401":
+//     description: Unauthorized, if credentials don't match.
+//     type: string
 func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -145,10 +187,33 @@ func (a *authenticationV2Server) login(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(r.Context(), w, http.StatusOK, &loginResponse{Session: session})
 }
 
+// swagger:model logoutResponse
 type logoutResponse struct {
+	// Indicates whether logout was succeessful.
 	LoggedOut bool `json:"logged_out"`
 }
 
+// swagger:operation POST /logout/ logout
+//
+// API Logout
+//
+// Logs out on a previously-created API session.
+//
+// ---
+// produces:
+// - application/json
+// - text/plain
+// security:
+// - api_session: []
+// responses:
+//   "200":
+//     description: Logout response.
+//     schema:
+//       "$ref": "#/definitions/logoutResponse"
+//   "400":
+//     description: Bad request, if API session not present in headers, or
+//       invalid session.
+//     type: string
 func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "not found", http.StatusNotFound)
