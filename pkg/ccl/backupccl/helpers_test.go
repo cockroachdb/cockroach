@@ -56,8 +56,16 @@ func backupRestoreTestSetupWithParams(
 	ctx = context.Background()
 
 	dir, dirCleanupFn := testutils.TempDir(t)
-	params.ServerArgs.ExternalIODir = dir
-	params.ServerArgs.UseDatabase = "data"
+	if len(params.ServerArgsPerNode) > 0 {
+		for i, serverArg := range params.ServerArgsPerNode {
+			serverArg.ExternalIODir = dir
+			serverArg.UseDatabase = "data"
+			params.ServerArgsPerNode[i] = serverArg
+		}
+	} else {
+		params.ServerArgs.ExternalIODir = dir
+		params.ServerArgs.UseDatabase = "data"
+	}
 
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
@@ -353,4 +361,25 @@ func makeInsecureHTTPServer(t *testing.T) (*url.URL, func()) {
 	}
 	uri.Path = filepath.Join(uri.Path, "testing")
 	return uri, cleanup
+}
+
+// uriFmtStringAndArgs returns format strings like "$1" or "($1, $2, $3)" and
+// an []interface{} of URIs for the BACKUP/RESTORE queries.
+func uriFmtStringAndArgs(uris []string) (string, []interface{}) {
+	urisForFormat := make([]interface{}, len(uris))
+	var fmtString strings.Builder
+	if len(uris) > 1 {
+		fmtString.WriteString("(")
+	}
+	for i, uri := range uris {
+		if i > 0 {
+			fmtString.WriteString(", ")
+		}
+		fmtString.WriteString(fmt.Sprintf("$%d", i+1))
+		urisForFormat[i] = uri
+	}
+	if len(uris) > 1 {
+		fmtString.WriteString(")")
+	}
+	return fmtString.String(), urisForFormat
 }
