@@ -115,17 +115,17 @@ specialized hardware or number of cores (e.g. "gpu", "x16c"). For example:
 		Name: "locality",
 		Description: `
 An ordered, comma-separated list of key-value pairs that describe the topography
-of the machine. Topography might include country, datacenter or rack
-designations. Data is automatically replicated to maximize diversities of each
-tier. The order of tiers is used to determine the priority of the diversity, so
-the more inclusive localities like country should come before less inclusive
-localities like datacenter. The tiers and order must be the same on all nodes.
-Including more tiers is better than including fewer. For example:
+of the machine. Topography often includes cloud provider regions and availability
+zones, but can also refer to on-prem concepts like datacenter or rack. Data is
+automatically replicated to maximize diversities of each tier. The order of tiers
+is used to determine the priority of the diversity, so the more inclusive localities
+like region should come before less inclusive localities like availability zone. The
+tiers and order must be the same on all nodes. Including more tiers is better than
+including fewer. For example:
 <PRE>
 
-  --locality=country=us,region=us-west,datacenter=us-west-1b,rack=12
-  --locality=country=ca,region=ca-east,datacenter=ca-east-2,rack=4
-  --locality=planet=earth,province=manitoba,colo=secondary,power=3</PRE>`,
+  --locality=cloud=gce,region=us-west1,zone=us-west-1b
+  --locality=cloud=aws,region=us-east,zone=us-east-2</PRE>`,
 	}
 
 	Background = FlagInfo{
@@ -581,8 +581,8 @@ separated list of locality@address. Addresses can also include ports.
 For example:
 <PRE>
 
-  "region=us-west@127.0.0.1,datacenter=us-west-1b@127.0.0.1"
-  "region=us-west@127.0.0.1:26257,datacenter=us-west-1b@127.0.0.1:26258"</PRE>`,
+  "region=us-west@127.0.0.1,zone=us-west-1b@127.0.0.1"
+  "region=us-west@127.0.0.1:26257,zone=us-west-1b@127.0.0.1:26258"</PRE>`,
 	}
 
 	ListenHTTPAddrAlias = FlagInfo{
