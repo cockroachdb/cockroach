@@ -438,3 +438,24 @@ func getKVCount(ctx context.Context, kvDB *kv.DB, dbName, tableName string) (int
 	kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0)
 	return len(kvs), err
 }
+
+// uriFmtStringAndArgs returns format strings like "$1" or "($1, $2, $3)" and
+// an []interface{} of URIs for the BACKUP/RESTORE queries.
+func uriFmtStringAndArgs(uris []string) (string, []interface{}) {
+	urisForFormat := make([]interface{}, len(uris))
+	var fmtString strings.Builder
+	if len(uris) > 1 {
+		fmtString.WriteString("(")
+	}
+	for i, uri := range uris {
+		if i > 0 {
+			fmtString.WriteString(", ")
+		}
+		fmtString.WriteString(fmt.Sprintf("$%d", i+1))
+		urisForFormat[i] = uri
+	}
+	if len(uris) > 1 {
+		fmtString.WriteString(")")
+	}
+	return fmtString.String(), urisForFormat
+}
