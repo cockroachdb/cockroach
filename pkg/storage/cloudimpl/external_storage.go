@@ -215,7 +215,7 @@ func ExternalStorageConfFromURI(path, user string) (roachpb.ExternalStorage, err
 		// If the import statement does not specify a qualified table name then use
 		// the default to attempt to locate the file(s).
 		if qualifiedTableName == "" {
-			qualifiedTableName = DefaultQualifiedNamePrefix + user
+			qualifiedTableName = GetDefaultQualifiedTableName(user)
 		}
 
 		conf.Provider = roachpb.ExternalStorageProvider_FileTable
