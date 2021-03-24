@@ -12,6 +12,7 @@ package colexecjoin
 
 import (
 	"context"
+	"math"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -512,15 +513,9 @@ func (o *mergeJoinBase) Init() {
 	o.bufferedGroup.left.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
 		o.left.sourceTypes, 1, /* capacity */
 	).ColVecs()
-	o.bufferedGroup.left.scratchBatch = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
-		o.left.sourceTypes, coldata.BatchSize(),
-	)
 	o.bufferedGroup.right.firstTuple = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
 		o.right.sourceTypes, 1, /* capacity */
 	).ColVecs()
-	o.bufferedGroup.right.scratchBatch = o.unlimitedAllocator.NewMemBatchWithFixedCapacity(
-		o.right.sourceTypes, coldata.BatchSize(),
-	)
 	o.bufferedGroup.helper = newCrossJoinerBase(
 		o.unlimitedAllocator, o.joinType, o.left.sourceTypes, o.right.sourceTypes,
 		o.memoryLimit, o.diskQueueCfg, o.fdSemaphore, o.diskAcc,
@@ -605,7 +600,12 @@ func (o *mergeJoinBase) appendToBufferedGroup(
 		})
 	}
 
-	bufferedGroup.scratchBatch.ResetInternalBatch()
+	// For now, we don't enforce any footprint-based memory limit.
+	// TODO(yuzefovich): refactor this.
+	const maxBatchMemSize = math.MaxInt64
+	bufferedGroup.scratchBatch, _ = o.unlimitedAllocator.ResetMaybeReallocate(
+		input.sourceTypes, bufferedGroup.scratchBatch, groupLength, maxBatchMemSize,
+	)
 	o.unlimitedAllocator.PerformOperation(bufferedGroup.scratchBatch.ColVecs(), func() {
 		for colIdx := range input.sourceTypes {
 			bufferedGroup.scratchBatch.ColVec(colIdx).Copy(
