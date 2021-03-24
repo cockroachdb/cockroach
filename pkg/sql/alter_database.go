@@ -158,6 +158,16 @@ func (p *planner) AlterDatabaseAddRegion(
 		return nil, err
 	}
 
+	// Adding a region also involves repartitioning all REGIONAL BY ROW tables
+	// underneath the hood, so we must ensure the user has the requisite
+	// privileges.
+	if err := p.checkPrivilegesForRepartitioningRegionalByRowTables(
+		ctx,
+		&dbDesc.Immutable,
+	); err != nil {
+		return nil, err
+	}
+
 	return &alterDatabaseAddRegionNode{n: n, desc: dbDesc}, nil
 }
 
@@ -280,6 +290,15 @@ func (p *planner) AlterDatabaseDropRegion(
 	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
 		return nil, err
 	}
+	// Dropping a region also involves repartitioning all REGIONAL BY ROW tables
+	// underneath the hood, so we must ensure the user has the requisite
+	// privileges.
+	if err := p.checkPrivilegesForRepartitioningRegionalByRowTables(
+		ctx,
+		&dbDesc.Immutable,
+	); err != nil {
+		return nil, err
+	}
 
 	if err := p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		ctx,
@@ -398,6 +417,30 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 		return err
 	}
 	return nil
+}
+
+// checkPrivilegesForRepartitioningRegionalByRowTables returns an error if the
+// user does not have sufficient privileges to repartition any of the region by
+// row tables inside the given database.
+func (p *planner) checkPrivilegesForRepartitioningRegionalByRowTables(
+	ctx context.Context, dbDesc *dbdesc.Immutable,
+) error {
+	return p.forEachTableInMultiRegionDatabase(ctx, dbDesc,
+		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+			if tbDesc.IsLocalityRegionalByRow() {
+				err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc)
+				// Return a better error message here.
+				if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+					return errors.Wrapf(err,
+						"cannot repartition regional by row table",
+					)
+				}
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 }
 
 // removeLocalityConfigFromAllTablesInDB removes the locality config from all
