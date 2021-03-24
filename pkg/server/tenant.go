@@ -41,6 +41,11 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
+	s.execCfg.SQLStatusServer = newTenantStatusServer(
+		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
+		args.sessionRegistry, args.contentionRegistry, baseCfg.Settings, s,
+	)
+
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})

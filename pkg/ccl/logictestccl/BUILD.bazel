@@ -9,7 +9,7 @@ go_library(
 
 go_test(
     name = "logictestccl_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "logic_test.go",
         "main_test.go",

@@ -3269,6 +3269,13 @@ var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*EvalContextTestingKnobs) ModuleTestingKnobs() {}
 
+// SQLStatsResetter is an interface embedded in EvalCtx which can be used by
+// the builtins to reset SQL stats in the cluster. This interface is introduced
+// to avoid circular dependency.
+type SQLStatsResetter interface {
+	ResetClusterSQLStats(ctx context.Context) error
+}
+
 // EvalContext defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
@@ -3391,6 +3398,8 @@ type EvalContext struct {
 	SingleDatumAggMemAccount *mon.BoundAccount
 
 	SQLLivenessReader sqlliveness.Reader
+
+	SQLStatsResetter SQLStatsResetter
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

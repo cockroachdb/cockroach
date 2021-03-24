@@ -35,7 +35,7 @@ go_library(
 
 go_test(
     name = "allccl_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "all_test.go",
         "main_test.go",
