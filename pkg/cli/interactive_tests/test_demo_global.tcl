@@ -13,6 +13,13 @@ spawn $argv demo --no-example-database --nodes 9 --global
 # Ensure db is defaultdb.
 eexpect "defaultdb>"
 
+# Ensure regions display correctly.
+send "SELECT region, zones FROM \[SHOW REGIONS FROM CLUSTER\] ORDER BY region;\r"
+eexpect "  europe-west1 | {b,c,d}"
+eexpect "  us-east1     | {b,c,d}"
+eexpect "  us-west1     | {a,b,c}"
+eexpect "defaultdb>"
+
 interrupt
 eexpect eof
 end_test

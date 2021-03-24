@@ -36,6 +36,7 @@ func (d *delegator) delegateShowRegions(n *tree.ShowRegions) (tree.Statement, er
 							'zone=([^,]*)'
 						)
 					)
+					ORDER BY locality
 				),
 				NULL
 			)
