@@ -155,7 +155,8 @@ func distanceLineStringInternal(
 	default:
 		return geo.Geometry{}, errors.Newf("programmer error: unknown behavior")
 	}
-	lineString := geom.NewLineStringFlat(geom.XY, append(coordA, coordB...)).SetSRID(int(a.SRID()))
+	lineCoords := []float64{coordA.X(), coordA.Y(), coordB.X(), coordB.Y()}
+	lineString := geom.NewLineStringFlat(geom.XY, lineCoords).SetSRID(int(a.SRID()))
 	return geo.MakeGeometryFromGeomT(lineString)
 }
 
