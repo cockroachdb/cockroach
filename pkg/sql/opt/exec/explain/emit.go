@@ -338,6 +338,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if s.RowCount.HasValue() {
 			e.ob.AddField("actual row count", humanizeutil.Count(s.RowCount.Value()))
 		}
+		// Omit vectorized batches in non-verbose mode.
+		if e.ob.flags.Verbose {
+			if s.VectorizedBatchCount.HasValue() {
+				e.ob.AddField("vectorized batch count", humanizeutil.Count(s.VectorizedBatchCount.Value()))
+			}
+		}
 		if s.KVRowsRead.HasValue() {
 			e.ob.AddField("KV rows read", humanizeutil.Count(s.KVRowsRead.Value()))
 		}

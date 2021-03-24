@@ -253,6 +253,10 @@ type cFetcher struct {
 	// fetcher is the underlying fetcher that provides KVs.
 	fetcher *row.KVFetcher
 
+	// estimatedRowCount is the optimizer-derived number of expected rows that
+	// this fetch will produce, if non-zero.
+	estimatedRowCount uint64
+
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
 		// state is the queue of next states of the state machine. The 0th entry
@@ -268,6 +272,10 @@ type cFetcher struct {
 		nextKV roachpb.KeyValue
 		// seekPrefix is the prefix to seek to in stateSeekPrefix.
 		seekPrefix roachpb.Key
+
+		// limitHint is a hint as to the number of rows that the caller expects to
+		// be returned from this fetch.
+		limitHint int
 
 		// remainingValueColsByIdx is the set of value columns that are yet to be
 		// seen during the decoding of the current row.
@@ -306,12 +314,19 @@ type cFetcher struct {
 	}
 }
 
-const cFetcherBatchMinCapacity = 1
-
 func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 	var reallocated bool
+	var estimatedRowCount int
+	// We need to transform our rf.estimatedRowCount, which is a uint64, into
+	// an int. We have to be careful: if we just cast it directly, a giant
+	// estimate will wrap around and become negative.
+	if rf.estimatedRowCount > uint64(coldata.BatchSize()) {
+		estimatedRowCount = coldata.BatchSize()
+	} else {
+		estimatedRowCount = int(rf.estimatedRowCount)
+	}
 	rf.machine.batch, reallocated = rf.allocator.ResetMaybeReallocate(
-		rf.typs, rf.machine.batch, cFetcherBatchMinCapacity, rf.memoryLimit,
+		rf.typs, rf.machine.batch, estimatedRowCount, rf.memoryLimit,
 	)
 	if reallocated {
 		rf.machine.colvecs = rf.machine.batch.ColVecs()
@@ -649,6 +664,7 @@ func (rf *cFetcher) StartScan(
 	}
 	rf.fetcher = f
 	rf.machine.lastRowPrefix = nil
+	rf.machine.limitHint = int(limitHint)
 	rf.machine.state[0] = stateInitFetch
 	return nil
 }
@@ -1038,7 +1054,19 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
+
+			var emitBatch bool
 			if rf.machine.rowIdx >= rf.machine.batch.Capacity() {
+				// We have no more room in our batch, so output it immediately.
+				emitBatch = true
+			} else if rf.machine.limitHint > 0 && rf.machine.rowIdx >= rf.machine.limitHint {
+				// If we made it to our limit hint, output our batch early to make sure
+				// that we don't bother filling in extra data if we don't need to.
+				emitBatch = true
+				rf.machine.limitHint = 0
+			}
+
+			if emitBatch {
 				rf.pushState(stateResetBatch)
 				rf.machine.batch.SetLength(rf.machine.rowIdx)
 				rf.machine.rowIdx = 0
