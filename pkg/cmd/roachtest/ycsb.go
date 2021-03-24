@@ -49,7 +49,7 @@ func registerYCSB(r *testRegistry) {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			sfu := fmt.Sprintf(" --select-for-update=%t", t.IsBuildVersion("v19.2.0"))
-			ramp := " --ramp=" + ifLocal("0s", "1m")
+			ramp := " --ramp=" + ifLocal("0s", "2m")
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
 				"./workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
