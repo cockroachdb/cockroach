@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -276,19 +275,16 @@ func newZigzagJoiner(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (*zigzagJoiner, error) {
-	if len(spec.Tables) != 2 {
-		return nil, errors.AssertionFailedf("zigzag joins only of two tables (or indexes) are supported, %d requested", len(spec.Tables))
+	// TODO(ajwerner): Utilize a cached copy of these tables.
+	tables := spec.BuildTableDescriptors()
+	if len(tables) != 2 {
+		return nil, errors.AssertionFailedf("zigzag joins only of two tables (or indexes) are supported, %d requested", len(tables))
 	}
 	if spec.Type != descpb.InnerJoin {
 		return nil, errors.AssertionFailedf("only inner zigzag joins are supported, %s requested", spec.Type)
 	}
 	z := &zigzagJoiner{}
 
-	// TODO(ajwerner): Utilize a cached copy of these tables.
-	tables := make([]catalog.TableDescriptor, len(spec.Tables))
-	for i := range spec.Tables {
-		tables[i] = tabledesc.NewBuilder(&spec.Tables[i]).BuildImmutableTable()
-	}
 	leftColumnTypes := catalog.ColumnTypes(tables[0].PublicColumns())
 	rightColumnTypes := catalog.ColumnTypes(tables[1].PublicColumns())
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
@@ -321,7 +317,7 @@ func newZigzagJoiner(
 		return nil, err
 	}
 
-	z.numTables = len(spec.Tables)
+	z.numTables = len(tables)
 	z.infos = make([]*zigzagJoinerInfo, z.numTables)
 	for i := range z.infos {
 		z.infos[i] = &zigzagJoinerInfo{}

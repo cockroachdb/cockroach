@@ -13,7 +13,9 @@ package execinfrapb
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -496,4 +498,44 @@ func (spec *WindowerSpec_Frame) ConvertToAST() (*tree.WindowFrame, error) {
 		Bounds:    bounds,
 		Exclusion: exclusion,
 	}, nil
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *TableReaderSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *JoinReaderSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
+}
+
+// BuildTableDescriptors returns a catalog.TableDescriptor slice wrapping the
+// underlying Tables field.
+func (spec *ZigzagJoinerSpec) BuildTableDescriptors() []catalog.TableDescriptor {
+	ret := make([]catalog.TableDescriptor, len(spec.Tables))
+	for i := range spec.Tables {
+		ret[i] = tabledesc.NewUnsafeImmutable(&spec.Tables[i])
+	}
+	return ret
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *InvertedJoinerSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *BackfillerSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
+}
+
+// BuildTableDescriptor returns a catalog.TableDescriptor wrapping the
+// underlying Table field.
+func (spec *BulkRowWriterSpec) BuildTableDescriptor() catalog.TableDescriptor {
+	return tabledesc.NewUnsafeImmutable(&spec.Table)
 }
