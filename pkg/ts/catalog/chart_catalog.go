@@ -992,6 +992,14 @@ var charts = []sectionDescription{
 				Percentiles: true,
 				Metrics:     []string{"txn.restarts"},
 			},
+			{
+				Title:       "Intents condensing",
+				Downsampler: DescribeAggregator_MAX,
+				Metrics: []string{
+					"txn.condensed_intent_spans",
+					"txn.condensed_intent_spans_gauge",
+				},
+			},
 		},
 	},
 	{
