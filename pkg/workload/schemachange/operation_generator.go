@@ -187,7 +187,7 @@ var opWeights = []int{
 	addColumn:               1,
 	addConstraint:           0, // TODO(spaskob): unimplemented
 	addForeignKeyConstraint: 0,
-	addRegion:               1,
+	addRegion:               0, // TODO(otan): re-enable after fixing SHOW REGIONS FROM DATABASE
 	addUniqueConstraint:     0,
 	createIndex:             1,
 	createSequence:          1,

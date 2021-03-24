@@ -156,8 +156,8 @@ func (a *Allocator) NewMemBatchNoCols(typs []*types.T, capacity int) coldata.Bat
 // NOTE: if the reallocation occurs, then the memory under the old batch is
 // released, so it is expected that the caller will lose the references to the
 // old batch.
-// Note: the method assumes that minCapacity is at least 1 and will "truncate"
-// minCapacity if it is larger than coldata.BatchSize().
+// Note: the method assumes that minCapacity is at least 0 and will clamp
+// minCapacity to be between 1 and coldata.BatchSize() inclusive.
 // TODO(yuzefovich): change the contract so that maxBatchMemSize takes priority
 // over minCapacity.
 func (a *Allocator) ResetMaybeReallocate(
@@ -165,7 +165,9 @@ func (a *Allocator) ResetMaybeReallocate(
 ) (newBatch coldata.Batch, reallocated bool) {
 	if minCapacity < 0 {
 		colexecerror.InternalError(errors.AssertionFailedf("invalid minCapacity %d", minCapacity))
-	} else if minCapacity == 0 || minCapacity > coldata.BatchSize() {
+	} else if minCapacity == 0 {
+		minCapacity = 1
+	} else if minCapacity > coldata.BatchSize() {
 		minCapacity = coldata.BatchSize()
 	}
 	reallocated = true

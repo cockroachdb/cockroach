@@ -270,6 +270,8 @@ type Server struct {
 	InternalMetrics Metrics
 }
 
+var _ tree.SQLStatsResetter = &Server{}
+
 // Metrics collects timeseries data about SQL activity.
 type Metrics struct {
 	// EngineMetrics is exported as required by the metrics.Struct magic we use
@@ -761,6 +763,16 @@ func (s *Server) PeriodicallyClearSQLStats(
 			}
 		}
 	})
+}
+
+// ResetClusterSQLStats resets the collected cluster-wide SQL statistics by calling into the statusServer.
+func (s *Server) ResetClusterSQLStats(ctx context.Context) error {
+	req := &serverpb.ResetSQLStatsRequest{}
+	_, err := s.cfg.SQLStatusServer.ResetSQLStats(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 type closeType int
@@ -2192,6 +2204,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			InternalExecutor:   &ie,
 			DB:                 ex.server.cfg.DB,
 			SQLLivenessReader:  ex.server.cfg.SQLLivenessReader,
+			SQLStatsResetter:   ex.server,
 		},
 		SessionMutator:       ex.dataMutator,
 		VirtualSchemas:       ex.server.cfg.VirtualSchemas,
