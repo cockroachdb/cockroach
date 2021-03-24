@@ -6,6 +6,7 @@ import {
   StatementsSortedTable,
 } from "./statementsTable";
 import statementsPagePropsFixture from "src/statementsPage/statementsPage.fixture";
+import { calculateTotalWorkload } from "src/util";
 
 const { statements } = statementsPagePropsFixture;
 
@@ -15,7 +16,11 @@ storiesOf("StatementsSortedTable", module)
     <StatementsSortedTable
       className="statements-table"
       data={statements}
-      columns={makeStatementsColumns(statements, "(internal)")}
+      columns={makeStatementsColumns(
+        statements,
+        "(internal)",
+        calculateTotalWorkload(statements),
+      )}
       sortSetting={{
         ascending: false,
         sortKey: 3,
