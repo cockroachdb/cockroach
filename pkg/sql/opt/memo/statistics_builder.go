@@ -584,6 +584,11 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 					}
 				}
 
+				// Fetch the colStat again since it may now have a different address due
+				// to calling stats.ColStats.Add() on any inverted column statistics
+				// created above.
+				colStat, _ = stats.ColStats.Lookup(cols)
+
 				// Make sure the distinct count is at least 1, for the same reason as
 				// the row count above.
 				colStat.DistinctCount = max(colStat.DistinctCount, 1)

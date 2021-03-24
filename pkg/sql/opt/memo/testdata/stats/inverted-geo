@@ -529,3 +529,219 @@ project
       │              └── fd: (3)-->(5)
       └── filters
            └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable]
+
+# Regression test for #62289. Don't corrupt stats when there are a large number
+# of columns and an inverted index.
+exec-ddl
+CREATE TABLE t62289 (
+  a BIT(18) NOT NULL,
+  b GEOGRAPHY NULL,
+  c REGPROC NOT NULL,
+  d DATE NOT NULL,
+  e BYTES,
+  f INT2 NULL,
+  g UUID,
+  h REGCLASS,
+  i BIT(15) NOT NULL,
+  j TIME NULL,
+  k FLOAT4 NOT NULL,
+  l JSONB,
+  m STRING,
+  n INT,
+  o STRING,
+  p STRING,
+  INVERTED INDEX (b)
+);
+----
+
+exec-ddl
+ALTER TABLE t62289 INJECT STATISTICS e'[
+  {
+    "columns": ["e"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["n"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["g"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["o"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["p"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["f"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["h"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["m"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 2000000,
+        "num_range": 0,
+        "upper_bound": "0107000020E6100000010000000103000020E610000001000000040000008C7D4198BD2B574080A6FD3A111E4D40F0DF86928AA12BC03A59212197A35140CEA3CEE206B863C0FC7649EB60BA53408C7D4198BD2B574080A6FD3A111E4D40"
+      },
+      {
+        "distinct_range": 40000000000,
+        "num_eq": 3000000,
+        "num_range": 40000000000,
+        "upper_bound": "0102000020E61000000300000005D8E086BB6365C03F9E5737DD1A53C0C04ECDED673B55C06711C00C7C0240C0B8EABD96072856404A9D2C529FC74EC0"
+      }
+    ],
+    "histo_col_type": "GEOGRAPHY",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  },
+  {
+    "columns": ["l"],
+    "created_at": "2000-01-01 00:00:00+00:00",
+    "distinct_count": 0,
+    "histo_col_type": "",
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 0
+  }
+]':::JSONB;
+----
+
+opt
+SELECT count(*)
+FROM t62289
+GROUP BY b
+HAVING _st_dwithinexclusive(b, b, -0.38)::BOOL;
+----
+project
+ ├── columns: count:20(int!null)
+ ├── immutable
+ ├── stats: [rows=0.333333333]
+ └── group-by
+      ├── columns: b:2(geography) count_rows:20(int!null)
+      ├── grouping columns: b:2(geography)
+      ├── immutable
+      ├── stats: [rows=0.333333333, distinct(2)=0.333333333, null(2)=0]
+      ├── key: (2)
+      ├── fd: (2)-->(20)
+      ├── select
+      │    ├── columns: b:2(geography)
+      │    ├── immutable
+      │    ├── stats: [rows=0.333333333, distinct(2)=0.333333333, null(2)=0]
+      │    ├── scan t62289
+      │    │    ├── columns: b:2(geography)
+      │    │    └── stats: [rows=1, distinct(2)=1, null(2)=0]
+      │    └── filters
+      │         └── _st_dwithinexclusive(b:2, b:2, -0.38) [type=bool, outer=(2), immutable]
+      └── aggregations
+           └── count-rows [as=count_rows:20, type=int]
