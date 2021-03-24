@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -900,8 +901,9 @@ func (p *Pebble) SafeToWriteSeparatedIntents(ctx context.Context) (bool, error) 
 }
 
 // IsSeparatedIntentsEnabledForTesting implements the Engine interface.
-func (p *Pebble) IsSeparatedIntentsEnabledForTesting() bool {
-	return SeparatedIntentsEnabled.Get(&p.settings.SV)
+func (p *Pebble) IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool {
+	return !p.settings.Version.ActiveVersionOrEmpty(ctx).Less(
+		clusterversion.ByKey(clusterversion.SeparatedIntents)) && SeparatedIntentsEnabled.Get(&p.settings.SV)
 }
 
 func (p *Pebble) put(key MVCCKey, value []byte) error {
