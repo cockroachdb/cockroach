@@ -24,6 +24,94 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestConcurrentDropRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	firstDropAtSchemaChange := false
+	secondDropAtSchemaChange := false
+	waitForFirstDropRegionToReachSchemaChanger := make(chan struct{})
+	waitForSecondDropRegionToReachSchemaChanger := make(chan struct{})
+	waitForFirstDropRegionToFinish := make(chan struct{})
+	var mu syncutil.Mutex
+
+	// Pause the first drop region in the type schema changer before it does enum
+	// member promotion. Then release it when the second drop region gets to the
+	// same state. This validates that the second drop region can complete without
+	// requiring an override (something which was not possible before #62354).
+	knobs := base.TestingKnobs{
+		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+			RunBeforeEnumMemberPromotion: func() {
+				mu.Lock()
+				if !firstDropAtSchemaChange {
+					firstDropAtSchemaChange = true
+					close(waitForFirstDropRegionToReachSchemaChanger)
+					mu.Unlock()
+					<-waitForSecondDropRegionToReachSchemaChanger
+				} else if !secondDropAtSchemaChange {
+					secondDropAtSchemaChange = true
+					// We're the second DROP REGION, close the channel to free the first
+					// DROP REGION.
+					close(waitForSecondDropRegionToReachSchemaChanger)
+					mu.Unlock()
+				}
+			},
+		},
+	}
+
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, knobs, nil, /* baseDir */
+	)
+	defer cleanup()
+
+	_, err := sqlDB.Exec(`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"`)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Send the first DROP REGION statement on its way.
+	go func() {
+		if _, err := sqlDB.Exec(`ALTER DATABASE db DROP REGION "us-east2"`); err != nil {
+			t.Error(err)
+		}
+		close(waitForFirstDropRegionToFinish)
+	}()
+
+	// Wait for the first DROP REGION to make it to the schema changer.
+	<-waitForFirstDropRegionToReachSchemaChanger
+
+	// Issue the second DROP REGION statement.
+	_, err = sqlDB.Exec(`ALTER DATABASE db DROP REGION "us-east3"`)
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	<-waitForFirstDropRegionToFinish
+
+	// Validate that both DROP REGION statements completed.
+	rows, err := sqlDB.Query("SELECT region FROM [SHOW REGIONS FROM DATABASE db]")
+	if err != nil {
+		t.Error(err)
+	}
+	defer rows.Close()
+
+	const expectedRegion = "us-east1"
+	var region string
+	rows.Next()
+	if err := rows.Scan(&region); err != nil {
+		t.Error(err)
+	}
+
+	if region != expectedRegion {
+		t.Error(errors.Newf("expected region to be: %q, got %q", expectedRegion, region))
+	}
+
+	if rows.Next() {
+		t.Error(errors.New("unexpected number of rows returned"))
+	}
+}
+
 func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -68,14 +156,8 @@ func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	// read-only state.
 	<-dropRegionStarted
 
-	// Overriding this operation until we get a fix for #60620. When that fix is
-	// ready, we can construct the view of the zone config as it was at the
-	// beginning of the transaction, and the checks for override should work
-	// again, and we won't require an explicit override here.
 	_, err = sqlDB.Exec(`
-SET override_multi_region_zone_config = true;
 ALTER DATABASE db PRIMARY REGION "us-east2";
-SET override_multi_region_zone_config = false;
 `)
 
 	if err == nil {
@@ -227,17 +309,11 @@ func TestRollbackDuringAddDropRegionAsyncJobFailure(t *testing.T) {
 			"drop-region",
 			`ALTER DATABASE db DROP REGION "us-east2"`,
 		},
-		// Overriding this operation until we get a fix for #60620. When that fix is
-		// ready, we can construct the view of the zone config as it was at the
-		// beginning of the transaction, and the checks for override should work
-		// again, and we won't require an explicit override here.
 		{
 			"add-drop-region-in-txn",
 			`BEGIN;
-	SET override_multi_region_zone_config = true;
 	ALTER DATABASE db DROP REGION "us-east2";
 	ALTER DATABASE db ADD REGION "us-east3";
-	SET override_multi_region_zone_config = false;
 	COMMIT`,
 		},
 	}

@@ -1808,16 +1808,10 @@ CREATE TABLE regional_by_row_as (
   FAMILY (cr, pk, i)
 ) LOCALITY REGIONAL BY ROW AS "cr";
 
-# Overriding this operation until we get a fix for #60620. When that fix is
-# ready, we can construct the view of the zone config as it was at the
-# beginning of the transaction, and the checks for override should work
-# again, and we won't require an explicit override here.
 statement ok
 BEGIN;
-SET override_multi_region_zone_config = true;
 ALTER DATABASE add_regions_in_txn ADD REGION "us-east-1";
 ALTER DATABASE add_regions_in_txn ADD REGION "ap-southeast-2";
-SET override_multi_region_zone_config = false;
 COMMIT;
 
 
@@ -2067,16 +2061,10 @@ regional_by_row_as                CREATE TABLE public.regional_by_row_as (
 ) LOCALITY REGIONAL BY ROW AS cr
 
 
-# Overriding this operation until we get a fix for #60620. When that fix is
-# ready, we can construct the view of the zone config as it was at the
-# beginning of the transaction, and the checks for override should work
-# again, and we won't require an explicit override here.
 statement ok
 BEGIN;
-SET override_multi_region_zone_config = true;
 ALTER DATABASE drop_regions ADD REGION "us-east-1";
 ALTER DATABASE drop_regions DROP REGION "ap-southeast-2";
-SET override_multi_region_zone_config = false;
 COMMIT;
 
 query TTT

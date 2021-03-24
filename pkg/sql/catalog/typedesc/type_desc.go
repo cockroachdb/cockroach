@@ -196,6 +196,30 @@ func (desc *Immutable) RegionNames() (descpb.RegionNames, error) {
 	return regions, nil
 }
 
+// RegionNamesForZoneConfigValidation returns all regions on the multi-region
+// enum to make validation with the public zone configs possible. Since the zone
+// configs are only updated when a transaction commits, this must ignore all
+// regions being added (since they will not be reflected in the zone
+// configuration yet), but it must include all region being dropped (since they
+// will not be dropped from the zone configuration until they are fully removed
+// from the type descriptor, again, at the end of the transaction).
+func (desc *Immutable) RegionNamesForZoneConfigValidation() (descpb.RegionNames, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+	var regions descpb.RegionNames
+	for _, member := range desc.EnumMembers {
+		if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY &&
+			member.Direction == descpb.TypeDescriptor_EnumMember_ADD {
+			continue
+		}
+		regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+	}
+	return regions, nil
+}
+
 // RegionNamesIncludingTransitioning returns all the regions on a multi-region
 // enum, including `READ ONLY` regions which are in the process of transitioning.
 func (desc *Immutable) RegionNamesIncludingTransitioning() (descpb.RegionNames, error) {
