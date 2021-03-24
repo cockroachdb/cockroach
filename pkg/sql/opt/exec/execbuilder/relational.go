@@ -392,17 +392,13 @@ func (b *Builder) buildValues(values *memo.ValuesExpr) (execPlan, error) {
 func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, error) {
 	numCols := len(values.Cols)
 
-	rows := make([][]tree.TypedExpr, len(values.Rows))
-	rowBuf := make([]tree.TypedExpr, len(rows)*numCols)
+	rows := makeTypedExprMatrix(len(values.Rows), numCols)
 	scalarCtx := buildScalarCtx{}
 	for i := range rows {
 		tup := values.Rows[i].(*memo.TupleExpr)
 		if len(tup.Elems) != numCols {
 			return nil, fmt.Errorf("inconsistent row length %d vs %d", len(tup.Elems), numCols)
 		}
-		// Chop off prefix of rowBuf and limit its capacity.
-		rows[i] = rowBuf[:numCols:numCols]
-		rowBuf = rowBuf[numCols:]
 		var err error
 		for j := 0; j < numCols; j++ {
 			rows[i][j], err = b.buildScalar(&scalarCtx, tup.Elems[j])
@@ -412,6 +408,18 @@ func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, 
 		}
 	}
 	return rows, nil
+}
+
+// makeTypedExprMatrix allocates a TypedExpr matrix of the given size.
+func makeTypedExprMatrix(numRows, numCols int) [][]tree.TypedExpr {
+	rows := make([][]tree.TypedExpr, numRows)
+	rowBuf := make([]tree.TypedExpr, numRows*numCols)
+	for i := range rows {
+		// Chop off prefix of rowBuf and limit its capacity.
+		rows[i] = rowBuf[:numCols:numCols]
+		rowBuf = rowBuf[numCols:]
+	}
+	return rows
 }
 
 func (b *Builder) constructValues(rows [][]tree.TypedExpr, cols opt.ColList) (execPlan, error) {

@@ -51,16 +51,20 @@ go_test(
     srcs = [
         "builder_test.go",
         "main_test.go",
+        "mutation_test.go",
     ],
     data = glob(["testdata/**"]) + [
         "@cockroach//c-deps:libgeos",
     ],
+    embed = [":execbuilder"],
     deps = [
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/logictest",
+        "//pkg/sql/opt",
+        "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
