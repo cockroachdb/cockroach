@@ -1281,9 +1281,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if s.cfg.TestingKnobs.Server != nil {
 		knobs := s.cfg.TestingKnobs.Server.(*TestingKnobs)
 		if knobs.SignalAfterGettingRPCAddress != nil {
+			log.Infof(ctx, "signalling caller that RPC address is ready")
 			close(knobs.SignalAfterGettingRPCAddress)
 		}
 		if knobs.PauseAfterGettingRPCAddress != nil {
+			log.Infof(ctx, "waiting for signal from caller to proceed with initialization")
 			select {
 			case <-knobs.PauseAfterGettingRPCAddress:
 				// Normal case. Just continue below.
@@ -1291,13 +1293,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 			case <-ctx.Done():
 				// Test timeout or some other condition in the caller, by which
 				// we are instructed to stop.
-				return ctx.Err()
+				return errors.CombineErrors(errors.New("server stopping prematurely from context shutdown"), ctx.Err())
 
 			case <-s.stopper.ShouldQuiesce():
 				// The server is instructed to stop before it even finished
 				// starting up.
-				return nil
+				return errors.New("server stopping prematurely")
 			}
+			log.Infof(ctx, "caller is letting us proceed with initialization")
 		}
 	}
 
