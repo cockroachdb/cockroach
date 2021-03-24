@@ -2581,6 +2581,11 @@ func isCurrentMutationDiscarded(
 	if nextMutationIdx+1 > len(tableDesc.Mutations) {
 		return false, descpb.InvalidMutationID
 	}
+	// Drops will never get canceled out, since we need
+	// clean up.
+	if currentMutation.Direction == descpb.DescriptorMutation_DROP {
+		return false, descpb.InvalidMutationID
+	}
 
 	colToCheck := make([]descpb.ColumnID, 0, 1)
 	// Both NOT NULL related updates and check constraint updates

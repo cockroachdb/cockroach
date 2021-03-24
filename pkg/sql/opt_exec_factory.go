@@ -646,6 +646,9 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	if err != nil {
 		return nil, err
 	}
+	if !canQueryVirtualTable(ef.planner.EvalContext(), virtual) {
+		return nil, newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
+	}
 	if len(eqCols) > 1 {
 		return nil, errors.AssertionFailedf("vtable indexes with more than one column aren't supported yet")
 	}
