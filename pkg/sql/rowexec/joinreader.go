@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -189,11 +188,11 @@ func newJoinReader(
 	}
 
 	var lookupCols []uint32
+	tableDesc := spec.BuildTableDescriptor()
 	switch readerType {
 	case indexJoinReaderType:
-		pkIDs := spec.Table.PrimaryIndex.ColumnIDs
-		lookupCols = make([]uint32, len(pkIDs))
-		for i := range pkIDs {
+		lookupCols = make([]uint32, tableDesc.GetPrimaryIndex().NumColumns())
+		for i := range lookupCols {
 			lookupCols[i] = uint32(i)
 		}
 	case lookupJoinReaderType:
@@ -202,7 +201,7 @@ func newJoinReader(
 		return nil, errors.Errorf("unsupported joinReaderType")
 	}
 	jr := &joinReader{
-		desc:                              tabledesc.NewBuilder(&spec.Table).BuildImmutableTable(),
+		desc:                              tableDesc,
 		maintainOrdering:                  spec.MaintainOrdering,
 		input:                             input,
 		lookupCols:                        lookupCols,
