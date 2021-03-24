@@ -198,3 +198,7 @@ const (
 	PgExtensionSpatialRefSysTableID
 	MinVirtualID = PgExtensionSpatialRefSysTableID
 )
+
+// ValidationTelemetryKeyPrefix is the prefix of telemetry keys pertaining to
+// descriptor validation failures.
+const ValidationTelemetryKeyPrefix = "sql.schema.validation_errors."

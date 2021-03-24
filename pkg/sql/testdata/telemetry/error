@@ -4,6 +4,7 @@ feature-allowlist
 othererror.*
 errorcodes.*
 unimplemented.*
+sql.schema.validation_errors.*
 ----
 
 # 42601 is pgcode.Syntax.
@@ -65,3 +66,15 @@ SELECT 2/0
 ----
 error: pq: division by zero
 errorcodes.22012
+
+# Descriptor validation failure on transaction commit.
+feature-usage
+CREATE TABLE t (x INT PRIMARY KEY);
+BEGIN;
+ALTER TABLE t DROP CONSTRAINT "primary";
+COMMIT;
+----
+error: pq: relation "t" (53): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
+errorcodes.0A000
+sql.schema.validation_errors.write.pre_txn_commit.relation
+unimplemented.#48026
