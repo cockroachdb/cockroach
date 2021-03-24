@@ -14,6 +14,7 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -44,6 +45,7 @@ func runGCOld(
 	snap storage.Reader,
 	now hlc.Timestamp,
 	_ hlc.Timestamp, // exists to make signature match RunGC
+	intentAgeThreshold time.Duration,
 	policy zonepb.GCPolicy,
 	gcer GCer,
 	cleanupIntentsFn CleanupIntentsFunc,
@@ -55,7 +57,7 @@ func runGCOld(
 	defer iter.Close()
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
-	intentExp := now.Add(-IntentAgeThreshold.Nanoseconds(), 0)
+	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
 	txnExp := now.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
 
 	gc := MakeGarbageCollector(now, policy)

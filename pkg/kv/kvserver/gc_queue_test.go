@@ -409,15 +409,17 @@ func TestGCQueueProcess(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
+	const intentAgeThreshold = 2 * time.Hour
+
 	tc.manualClock.Increment(48 * 60 * 60 * 1e9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
 
-	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                        // 2d old (add one nanosecond so we're not using zero timestamp)
-	ts2 := makeTS(now-25*60*60*1e9, 0)                            // GC will occur at time=25 hours
-	ts2m1 := ts2.Prev()                                           // ts2 - 1 so we have something not right at the GC time
-	ts3 := makeTS(now-gc.IntentAgeThreshold.Nanoseconds(), 0)     // 2h old
-	ts4 := makeTS(now-(gc.IntentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
-	ts5 := makeTS(now-1e9, 0)                                     // 1s old
+	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
+	ts2 := makeTS(now-25*60*60*1e9, 0)                         // GC will occur at time=25 hours
+	ts2m1 := ts2.Prev()                                        // ts2 - 1 so we have something not right at the GC time
+	ts3 := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)     // 2h old
+	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
+	ts5 := makeTS(now-1e9, 0)                                  // 1s old
 	key1 := roachpb.Key("a")
 	key2 := roachpb.Key("b")
 	key3 := roachpb.Key("c")
@@ -548,7 +550,7 @@ func TestGCQueueProcess(t *testing.T) {
 
 		now := tc.Clock().Now()
 		newThreshold := gc.CalculateThreshold(now, *zone.GC)
-		return gc.Run(ctx, desc, snap, now, newThreshold, *zone.GC,
+		return gc.Run(ctx, desc, snap, now, newThreshold, intentAgeThreshold, *zone.GC,
 			gc.NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {
 				return nil
@@ -904,7 +906,8 @@ func TestGCQueueIntentResolution(t *testing.T) {
 		newTransaction("txn1", roachpb.Key("0-0"), 1, tc.Clock()),
 		newTransaction("txn2", roachpb.Key("1-0"), 1, tc.Clock()),
 	}
-	intentResolveTS := makeTS(now-gc.IntentAgeThreshold.Nanoseconds(), 0)
+	intentAgeThreshold := gc.IntentAgeThreshold.Get(&tc.repl.store.ClusterSettings().SV)
+	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
 	txns[0].ReadTimestamp = intentResolveTS
 	txns[0].WriteTimestamp = intentResolveTS
 	// The MinTimestamp is used by pushers that don't find a transaction record to

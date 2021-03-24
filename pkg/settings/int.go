@@ -47,11 +47,6 @@ func (*IntSetting) Typ() string {
 	return "i"
 }
 
-// Default returns default value for setting.
-func (i *IntSetting) Default() int64 {
-	return i.defaultValue
-}
-
 // Defeat the linter.
 var _ = (*IntSetting).Default
 
