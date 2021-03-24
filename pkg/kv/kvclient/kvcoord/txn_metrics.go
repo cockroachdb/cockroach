@@ -33,6 +33,9 @@ type TxnMetrics struct {
 
 	Durations *metric.Histogram
 
+	TxnsWithCondensedIntents      *metric.Counter
+	TxnsWithCondensedIntentsGauge *metric.Gauge
+
 	// Restarts is the number of times we had to restart the transaction.
 	Restarts *metric.Histogram
 
@@ -124,6 +127,22 @@ var (
 		Help:        "KV transaction durations",
 		Measurement: "KV Txn Duration",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaTxnsWithCondensedIntentSpans = metric.Metadata{
+		Name: "txn.condensed_intent_spans",
+		Help: "KV transactions that have exceeded their intent tracking " +
+			"memory budget (kv.transaction.max_intents_bytes). See also " +
+			"txn.condensed_intent_spans_gauge for a gauge of such transactions currently running.",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTxnsWithCondensedIntentSpansGauge = metric.Metadata{
+		Name: "txn.condensed_intent_spans_gauge",
+		Help: "KV transactions currently running that have exceeded their intent tracking " +
+			"memory budget (kv.transaction.max_intents_bytes). See also txn.condensed_intent_spans " +
+			"for a perpetual counter/rate.",
+		Measurement: "KV Transactions",
+		Unit:        metric.Unit_COUNT,
 	}
 	metaRestartsHistogram = metric.Metadata{
 		Name:        "txn.restarts",
@@ -223,6 +242,8 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		RefreshMemoryLimitExceeded:    metric.NewCounter(metaRefreshMemoryLimitExceeded),
 		RefreshAutoRetries:            metric.NewCounter(metaRefreshAutoRetries),
 		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
+		TxnsWithCondensedIntents:      metric.NewCounter(metaTxnsWithCondensedIntentSpans),
+		TxnsWithCondensedIntentsGauge: metric.NewGauge(metaTxnsWithCondensedIntentSpansGauge),
 		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
 		RestartsWriteTooOldMulti:      telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),
