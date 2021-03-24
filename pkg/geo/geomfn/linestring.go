@@ -91,8 +91,9 @@ func LineLocatePoint(line geo.Geometry, point geo.Geometry) (float64, error) {
 	}
 
 	p := closestT.(*geom.Point)
+	lineStart := geom.Coord{lineString.Coord(0).X(), lineString.Coord(0).Y()}
 	// build new line segment to the closest point we found
-	lineSegment := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{lineString.Coord(0), p.Coords()})
+	lineSegment := geom.NewLineString(geom.XY).MustSetCoords([]geom.Coord{lineStart, p.Coords()})
 
 	// compute fraction of new line segment compared to total line length
 	return lineSegment.Length() / lineString.Length(), nil
