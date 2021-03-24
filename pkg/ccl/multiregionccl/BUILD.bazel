@@ -21,6 +21,7 @@ go_library(
 
 go_test(
     name = "multiregionccl_test",
+    size = "enormous",
     srcs = [
         "main_test.go",
         "multiregion_test.go",

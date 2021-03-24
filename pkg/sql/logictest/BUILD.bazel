@@ -51,15 +51,17 @@ go_library(
 
 go_test(
     name = "logictest_test",
-    size = "large",
+    size = "enormous",
     srcs = [
         "logic_test.go",
         "main_test.go",
         "parallel_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = [
+        ":testdata",
+        "@cockroach//c-deps:libgeos",
+    ],
     embed = [":logictest"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
