@@ -997,12 +997,17 @@ func maybeShowTimes(
 		precision = 0
 	}
 
+	colour := "\033[32m" // green
+	if clientSideQueryLatency > 10*time.Millisecond {
+		colour = "\033[91m"
+	}
+
 	if sqlCtx.verboseTimings {
-		fmt.Fprintf(w, "Time: %s", clientSideQueryLatency)
+		fmt.Fprintf(w, "Time: %s%s\033[0m", colour, clientSideQueryLatency)
 	} else {
 		// Simplified displays: human users typically can't
 		// distinguish sub-millisecond latencies.
-		fmt.Fprintf(w, "Time: %.*f%s", precision, clientSideQueryLatency.Seconds()*multiplier, unit)
+		fmt.Fprintf(w, "Time: %s%.*f%s\033[0m", colour, precision, clientSideQueryLatency.Seconds()*multiplier, unit)
 	}
 
 	if !sqlCtx.enableServerExecutionTimings {
