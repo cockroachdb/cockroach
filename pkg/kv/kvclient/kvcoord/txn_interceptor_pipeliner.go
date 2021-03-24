@@ -635,7 +635,7 @@ func (tp *txnPipeliner) populateLeafFinalState(*roachpb.LeafTxnFinalState) {}
 // importLeafFinalState is part of the txnInterceptor interface.
 func (tp *txnPipeliner) importLeafFinalState(context.Context, *roachpb.LeafTxnFinalState) {}
 
-// epochBumpedLocked implements the txnReqInterceptor interface.
+// epochBumpedLocked implements the txnInterceptor interface.
 func (tp *txnPipeliner) epochBumpedLocked() {
 	// Move all in-flight writes into the lock footprint. These writes no longer
 	// need to be tracked precisely, but we don't want to forget about them and
@@ -649,10 +649,10 @@ func (tp *txnPipeliner) epochBumpedLocked() {
 	}
 }
 
-// createSavepointLocked is part of the txnReqInterceptor interface.
+// createSavepointLocked is part of the txnInterceptor interface.
 func (tp *txnPipeliner) createSavepointLocked(context.Context, *savepoint) {}
 
-// rollbackToSavepointLocked is part of the txnReqInterceptor interface.
+// rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
 	// Move all the writes in txnPipeliner that are not in the savepoint to the
 	// lock footprint. We no longer care if these write succeed or fail, so we're
@@ -681,7 +681,7 @@ func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoi
 	}
 }
 
-// closeLocked implements the txnReqInterceptor interface.
+// closeLocked implements the txnInterceptor interface.
 func (tp *txnPipeliner) closeLocked() {}
 
 // hasAcquiredLocks returns whether the interceptor has made an attempt to
