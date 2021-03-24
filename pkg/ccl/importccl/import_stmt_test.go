@@ -5873,10 +5873,8 @@ alter domain: could not be parsed
 create function: could not be parsed
 `,
 			`alter function: could not be parsed
-alter function: could not be parsed
 alter default privileges: could not be parsed
-`,
-			`alter table alter column add: could not be parsed
+alter table alter column add: could not be parsed
 copy from unsupported format: could not be parsed
 grant privileges on schema with: could not be parsed
 COMMENT ON TABLE t IS 'This should be skipped': unsupported by IMPORT
