@@ -311,6 +311,10 @@ type ExecutionStats struct {
 	// RowCount is the number of rows produced by the operator.
 	RowCount optional.Uint
 
+	// VectorizedBatchCount is the number of vectorized batches produced by the
+	// operator.
+	VectorizedBatchCount optional.Uint
+
 	KVBytesRead optional.Uint
 	KVRowsRead  optional.Uint
 
