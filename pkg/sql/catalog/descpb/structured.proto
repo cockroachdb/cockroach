@@ -956,6 +956,11 @@ message TableDescriptor {
   repeated uint32 dependsOn = 25 [(gogoproto.customname) = "DependsOn",
            (gogoproto.casttype) = "ID"];
 
+  // The IDs of all types that this depends on.
+  // Only ever populated if this descriptor is for a view.
+  repeated uint32 dependsOnTypes = 45 [(gogoproto.customname) = "DependsOnTypes",
+    (gogoproto.casttype) = "ID"];
+
   message Reference {
     option (gogoproto.equal) = true;
     // The ID of the relation that depends on this one.

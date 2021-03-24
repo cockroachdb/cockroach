@@ -102,6 +102,7 @@ var validationMap = []struct {
 			"DependsOn": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},
+			"DependsOnTypes": {status: iSolemnlySwearThisFieldIsValidated},
 			"DependedOnBy": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},

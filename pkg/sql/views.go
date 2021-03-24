@@ -62,6 +62,10 @@ func (d planDependencies) String() string {
 	return buf.String()
 }
 
+// typeDependencies contains a set of the IDs of types that
+// this view depends on.
+type typeDependencies map[descpb.ID]struct{}
+
 // checkViewMatchesMaterialized ensures that if a view is required, then the view
 // is materialized or not as desired.
 func checkViewMatchesMaterialized(

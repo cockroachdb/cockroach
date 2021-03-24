@@ -1671,6 +1671,7 @@ func (ef *execFactory) ConstructCreateView(
 	viewQuery string,
 	columns colinfo.ResultColumns,
 	deps opt.ViewDeps,
+	typeDeps opt.ViewTypeDeps,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
@@ -1704,6 +1705,11 @@ func (ef *execFactory) ConstructCreateView(
 		planDeps[desc.GetID()] = entry
 	}
 
+	typeDepSet := make(typeDependencies, typeDeps.Len())
+	typeDeps.ForEach(func(id int) {
+		typeDepSet[descpb.ID(id)] = struct{}{}
+	})
+
 	return &createViewNode{
 		viewName:     viewName,
 		ifNotExists:  ifNotExists,
@@ -1714,6 +1720,7 @@ func (ef *execFactory) ConstructCreateView(
 		dbDesc:       schema.(*optSchema).database,
 		columns:      columns,
 		planDeps:     planDeps,
+		typeDeps:     typeDepSet,
 	}, nil
 }
 

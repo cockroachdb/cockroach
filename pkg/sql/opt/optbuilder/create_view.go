@@ -35,6 +35,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.insideViewDef = false
 		b.trackViewDeps = false
 		b.viewDeps = nil
+		b.viewTypeDeps = util.FastIntSet{}
 		b.qualifyDataSourceNamesInAST = false
 	}()
 
@@ -69,6 +70,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			ViewQuery:    tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable),
 			Columns:      p,
 			Deps:         b.viewDeps,
+			TypeDeps:     b.viewTypeDeps,
 		},
 	)
 	return outScope
