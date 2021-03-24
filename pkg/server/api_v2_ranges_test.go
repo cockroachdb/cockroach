@@ -120,7 +120,7 @@ func TestNodeRangesV2(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 
 	require.Greater(t, len(rangeResp.Responses), 0)
-	nodeRangeResp := rangeResp.Responses[roachpb.NodeID(1)]
+	nodeRangeResp := rangeResp.Responses[roachpb.NodeID(1).String()]
 	require.NotZero(t, nodeRangeResp)
 	// The below comparison is from the response returned in the previous API call
 	// ("nodeRangesResp") vs the current one ("nodeRangeResp").
