@@ -1,0 +1,71 @@
+# Test the crdb_internal.force_delete_table_data function
+subtest force-delete-data
+
+statement ok
+CREATE TABLE forcedeletemydata (v int)
+
+statement ok
+INSERT INTO forcedeletemydata VALUES(5)
+
+statement ok
+INSERT INTO forcedeletemydata VALUES(7)
+
+query I
+SELECT * FROM forcedeletemydata ORDER BY v ASC
+----
+5
+7
+
+# Blocked since ID was not used
+statement error descriptor id was never used
+select * from crdb_internal.force_delete_table_data(6666)
+
+
+let $t_id
+select id from system.namespace where name='forcedeletemydata'
+
+# Descriptor exists so operation is blocked
+statement error descriptor still exists force deletion is blocked
+select * from crdb_internal.force_delete_table_data($t_id)
+
+query I
+SELECT * FROM forcedeletemydata ORDER BY v ASC
+----
+5
+7
+
+let $parentID
+select pid from system.namespace2 as n(pid,psid,name,id) where id=$t_id;
+
+let $parentSchemaID
+select psid from system.namespace2 as n(pid,psid,name,id)  where id=$t_id;
+
+let $json
+WITH descs AS (
+                SELECT id,
+                       crdb_internal.pb_to_json(
+                        'cockroach.sql.sqlbase.Descriptor',
+                        descriptor
+                       ) AS descriptor
+                  FROM system.descriptor
+             )
+select descriptor from descs where id=$t_id;
+
+
+# Force delete the descriptor
+query B
+select * from crdb_internal.unsafe_delete_descriptor($t_id);
+----
+true
+
+query B
+select * from crdb_internal.force_delete_table_data($t_id)
+----
+true
+
+statement ok
+select * from crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json'))
+
+query I
+SELECT * FROM forcedeletemydata ORDER BY v ASC
+----
