@@ -50,7 +50,8 @@ func TestHydratedCache(t *testing.T) {
 		// Show that the cache returned a new pointer and hydrated the UDT
 		// (user-defined type).
 		require.NotEqual(t, tableDescUDT, hydrated)
-		require.EqualValues(t, hydrated.PublicColumns()[0].GetType(), typ1T)
+		require.EqualValues(t, hydrated.PublicColumns()[0].GetType().TypeMeta.Name, typ1T.TypeMeta.Name)
+		require.EqualValues(t, hydrated.PublicColumns()[0].GetType().TypeMeta.Version, typ1T.TypeMeta.Version)
 
 		// Try again and ensure we get pointer-for-pointer the same descriptor.
 		res.calls = 0

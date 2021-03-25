@@ -30,7 +30,7 @@ type DatabaseDescriptorBuilder interface {
 }
 
 type databaseDescriptorBuilder struct {
-	original      *descpb.DatabaseDescriptor
+	originalDatabase
 	maybeModified *descpb.DatabaseDescriptor
 }
 
@@ -39,9 +39,7 @@ var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // database descriptors.
 func NewBuilder(desc *descpb.DatabaseDescriptor) DatabaseDescriptorBuilder {
-	return &databaseDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.DatabaseDescriptor),
-	}
+	return &databaseDescriptorBuilder{originalDatabase: newOriginalDatabase(desc)}
 }
 
 // DescriptorType implements the catalog.DescriptorBuilder interface.
@@ -57,7 +55,8 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 	// Fill in any incorrect privileges that may have been missed due to mixed-versions.
 	// TODO(mberhault): remove this in 2.1 (maybe 2.2) when privilege-fixing migrations have been
 	// run again and mixed-version clusters always write "good" descriptors.
-	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+	ddb.maybeModified = &descpb.DatabaseDescriptor{}
+	ddb.deepCopyInto(ddb.maybeModified)
 	descpb.MaybeFixPrivileges(ddb.maybeModified.ID, &ddb.maybeModified.Privileges)
 	return nil
 }
@@ -69,11 +68,13 @@ func (ddb *databaseDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 
 // BuildImmutableDatabase returns an immutable database descriptor.
 func (ddb *databaseDescriptorBuilder) BuildImmutableDatabase() *Immutable {
-	desc := ddb.maybeModified
-	if desc == nil {
-		desc = ddb.original
+	imm := &Immutable{}
+	if ddb.maybeModified != nil {
+		imm.DatabaseDescriptor = *ddb.maybeModified
+	} else {
+		ddb.deepCopyInto(&imm.DatabaseDescriptor)
 	}
-	return &Immutable{DatabaseDescriptor: *desc}
+	return imm
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
@@ -84,13 +85,15 @@ func (ddb *databaseDescriptorBuilder) BuildExistingMutable() catalog.MutableDesc
 // BuildExistingMutableDatabase returns a mutable descriptor for a database
 // which already exists.
 func (ddb *databaseDescriptorBuilder) BuildExistingMutableDatabase() *Mutable {
-	if ddb.maybeModified == nil {
-		ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
+	clusterVersion := &Immutable{}
+	ddb.deepCopyInto(&clusterVersion.DatabaseDescriptor)
+	m := &Mutable{ClusterVersion: clusterVersion}
+	if ddb.maybeModified != nil {
+		m.DatabaseDescriptor = *ddb.maybeModified
+	} else {
+		ddb.deepCopyInto(&m.DatabaseDescriptor)
 	}
-	return &Mutable{
-		Immutable:      Immutable{DatabaseDescriptor: *ddb.maybeModified},
-		ClusterVersion: &Immutable{DatabaseDescriptor: *ddb.original},
-	}
+	return m
 }
 
 // BuildCreatedMutable implements the catalog.DescriptorBuilder interface.
@@ -101,11 +104,13 @@ func (ddb *databaseDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescr
 // BuildCreatedMutableDatabase returns a mutable descriptor for a database
 // which is in the process of being created.
 func (ddb *databaseDescriptorBuilder) BuildCreatedMutableDatabase() *Mutable {
-	desc := ddb.maybeModified
-	if desc == nil {
-		desc = ddb.original
+	m := &Mutable{}
+	if ddb.maybeModified != nil {
+		m.DatabaseDescriptor = *ddb.maybeModified
+	} else {
+		ddb.deepCopyInto(&m.DatabaseDescriptor)
 	}
-	return &Mutable{Immutable: Immutable{DatabaseDescriptor: *desc}}
+	return m
 }
 
 // NewInitialOption is an optional argument for NewInitial.
@@ -155,4 +160,29 @@ func NewInitialWithPrivileges(
 		option(&ret)
 	}
 	return NewBuilder(&ret).BuildCreatedMutableDatabase()
+}
+
+type originalDatabase struct {
+	desc *descpb.DatabaseDescriptor
+	pb   []byte
+}
+
+func (o *originalDatabase) deepCopyInto(dst *descpb.DatabaseDescriptor) {
+	if o.pb != nil {
+		err := protoutil.Unmarshal(o.pb, dst)
+		if err != nil {
+			o.pb = nil
+		}
+	}
+	if o.pb == nil {
+		*dst = *protoutil.Clone(o.desc).(*descpb.DatabaseDescriptor)
+	}
+}
+
+func newOriginalDatabase(desc *descpb.DatabaseDescriptor) originalDatabase {
+	pb, err := protoutil.Marshal(desc)
+	if err != nil {
+		pb = nil
+	}
+	return originalDatabase{desc: desc, pb: pb}
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -29,7 +30,7 @@ type TableDescriptorBuilder interface {
 }
 
 type tableDescriptorBuilder struct {
-	original                   *descpb.TableDescriptor
+	originalTable
 	maybeModified              *descpb.TableDescriptor
 	changes                    PostDeserializationTableDescriptorChanges
 	skipFKsWithNoMatchingTable bool
@@ -77,14 +78,12 @@ func NewBuilderForFKUpgrade(
 // implemented in such a way that it can deep-copy the descpb.TableDescriptor
 // struct without reflection (which is what protoutil.Clone uses, sadly).
 func NewUnsafeImmutable(desc *descpb.TableDescriptor) catalog.TableDescriptor {
-	b := tableDescriptorBuilder{original: desc}
+	b := tableDescriptorBuilder{maybeModified: desc}
 	return b.BuildImmutableTable()
 }
 
 func newBuilder(desc *descpb.TableDescriptor) *tableDescriptorBuilder {
-	return &tableDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.TableDescriptor),
-	}
+	return &tableDescriptorBuilder{originalTable: newOriginalTable(desc)}
 }
 
 // DescriptorType implements the catalog.DescriptorBuilder interface.
@@ -97,7 +96,8 @@ func (tdb *tableDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges(
 	ctx context.Context, dg catalog.DescGetter,
 ) (err error) {
-	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
+	tdb.maybeModified = &descpb.TableDescriptor{}
+	tdb.deepCopyInto(tdb.maybeModified)
 	tdb.changes, err = maybeFillInDescriptor(ctx, dg, tdb.maybeModified, tdb.skipFKsWithNoMatchingTable)
 	return err
 }
@@ -109,11 +109,13 @@ func (tdb *tableDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 
 // BuildImmutableTable returns an immutable table descriptor.
 func (tdb *tableDescriptorBuilder) BuildImmutableTable() catalog.TableDescriptor {
-	desc := tdb.maybeModified
-	if desc == nil {
-		desc = tdb.original
+	desc := descpb.TableDescriptor{}
+	if tdb.maybeModified != nil {
+		desc = *tdb.maybeModified
+	} else {
+		tdb.deepCopyInto(&desc)
 	}
-	imm := makeImmutable(desc)
+	imm := makeImmutable(&desc)
 	imm.postDeserializationChanges = tdb.changes
 	imm.isUncommittedVersion = tdb.isUncommittedVersion
 	return imm
@@ -127,16 +129,15 @@ func (tdb *tableDescriptorBuilder) BuildExistingMutable() catalog.MutableDescrip
 // BuildExistingMutableTable returns a mutable descriptor for a table
 // which already exists.
 func (tdb *tableDescriptorBuilder) BuildExistingMutableTable() *Mutable {
-	if tdb.maybeModified == nil {
-		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
+	m := &Mutable{}
+	tdb.deepCopyInto(&m.ClusterVersion)
+	if tdb.maybeModified != nil {
+		m.TableDescriptor = *tdb.maybeModified
+	} else {
+		tdb.deepCopyInto(&m.TableDescriptor)
 	}
-	return &Mutable{
-		wrapper: wrapper{
-			TableDescriptor:            *tdb.maybeModified,
-			postDeserializationChanges: tdb.changes,
-		},
-		ClusterVersion: *tdb.original,
-	}
+	m.wrapper.postDeserializationChanges = tdb.changes
+	return m
 }
 
 // BuildCreatedMutable implements the catalog.DescriptorBuilder interface.
@@ -147,16 +148,14 @@ func (tdb *tableDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescript
 // BuildCreatedMutableTable returns a mutable descriptor for a table
 // which is in the process of being created.
 func (tdb *tableDescriptorBuilder) BuildCreatedMutableTable() *Mutable {
-	desc := tdb.maybeModified
-	if desc == nil {
-		desc = tdb.original
+	m := &Mutable{}
+	if tdb.maybeModified != nil {
+		m.TableDescriptor = *tdb.maybeModified
+	} else {
+		tdb.deepCopyInto(&m.TableDescriptor)
 	}
-	return &Mutable{
-		wrapper: wrapper{
-			TableDescriptor:            *desc,
-			postDeserializationChanges: tdb.changes,
-		},
-	}
+	m.wrapper.postDeserializationChanges = tdb.changes
+	return m
 }
 
 // makeImmutable returns an immutable from the given TableDescriptor.
@@ -446,4 +445,48 @@ func maybeUpgradeToFamilyFormatVersion(desc *descpb.TableDescriptor) bool {
 	desc.FormatVersion = descpb.FamilyFormatVersion
 
 	return true
+}
+
+type originalTable struct {
+	desc *descpb.TableDescriptor
+	pb   []byte
+}
+
+func (o *originalTable) deepCopyInto(dst *descpb.TableDescriptor) {
+	if o.pb != nil {
+		err := protoutil.Unmarshal(o.pb, dst)
+		if err != nil {
+			o.pb = nil
+		}
+	}
+	if o.pb == nil {
+		*dst = *protoutil.Clone(o.desc).(*descpb.TableDescriptor)
+	}
+	// Deep-copy type metadata that's not part of the proto message.
+	for i := range dst.Columns {
+		deepCopyTypeMeta(dst.Columns[i].Type, o.desc.Columns[i].Type)
+	}
+	for i := range dst.Mutations {
+		dstCol := dst.Mutations[i].GetColumn()
+		srcCol := o.desc.Mutations[i].GetColumn()
+		if srcCol != nil {
+			deepCopyTypeMeta(dstCol.Type, srcCol.Type)
+		}
+	}
+}
+
+func deepCopyTypeMeta(dst, src *types.T) {
+	if src == nil {
+		return
+	}
+	dst.TypeMeta = src.TypeMeta
+	deepCopyTypeMeta(dst.InternalType.ArrayContents, src.InternalType.ArrayContents)
+}
+
+func newOriginalTable(desc *descpb.TableDescriptor) originalTable {
+	pb, err := protoutil.Marshal(desc)
+	if err != nil {
+		pb = nil
+	}
+	return originalTable{desc: desc, pb: pb}
 }

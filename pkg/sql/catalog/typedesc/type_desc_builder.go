@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -28,7 +29,7 @@ type TypeDescriptorBuilder interface {
 }
 
 type typeDescriptorBuilder struct {
-	original *descpb.TypeDescriptor
+	originalType
 }
 
 var _ TypeDescriptorBuilder = &typeDescriptorBuilder{}
@@ -36,9 +37,7 @@ var _ TypeDescriptorBuilder = &typeDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // type descriptors.
 func NewBuilder(desc *descpb.TypeDescriptor) TypeDescriptorBuilder {
-	return &typeDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.TypeDescriptor),
-	}
+	return &typeDescriptorBuilder{originalType: newOriginalType(desc)}
 }
 
 // DescriptorType implements the catalog.DescriptorBuilder interface.
@@ -61,7 +60,9 @@ func (tdb *typeDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 
 // BuildImmutableType returns an immutable type descriptor.
 func (tdb *typeDescriptorBuilder) BuildImmutableType() *Immutable {
-	imm := makeImmutable(tdb.original)
+	desc := descpb.TypeDescriptor{}
+	tdb.deepCopyInto(&desc)
+	imm := makeImmutable(&desc)
 	return &imm
 }
 
@@ -73,8 +74,12 @@ func (tdb *typeDescriptorBuilder) BuildExistingMutable() catalog.MutableDescript
 // BuildExistingMutableType returns a mutable descriptor for a type
 // which already exists.
 func (tdb *typeDescriptorBuilder) BuildExistingMutableType() *Mutable {
-	clusterVersion := makeImmutable(protoutil.Clone(tdb.original).(*descpb.TypeDescriptor))
-	return &Mutable{Immutable: makeImmutable(tdb.original), ClusterVersion: &clusterVersion}
+	desc := descpb.TypeDescriptor{}
+	tdb.deepCopyInto(&desc)
+	clusterVersion := makeImmutable(&desc)
+	m := &Mutable{ClusterVersion: &clusterVersion}
+	tdb.deepCopyInto(&m.TypeDescriptor)
+	return m
 }
 
 // BuildCreatedMutable implements the catalog.DescriptorBuilder interface.
@@ -85,7 +90,9 @@ func (tdb *typeDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescripto
 // BuildCreatedMutableType returns a mutable descriptor for a type
 // which is in the process of being created.
 func (tdb *typeDescriptorBuilder) BuildCreatedMutableType() *Mutable {
-	return &Mutable{Immutable: makeImmutable(tdb.original)}
+	desc := descpb.TypeDescriptor{}
+	tdb.deepCopyInto(&desc)
+	return &Mutable{Immutable: makeImmutable(&desc)}
 }
 
 func makeImmutable(desc *descpb.TypeDescriptor) Immutable {
@@ -107,4 +114,39 @@ func makeImmutable(desc *descpb.TypeDescriptor) Immutable {
 	}
 
 	return immutDesc
+}
+
+type originalType struct {
+	desc *descpb.TypeDescriptor
+	pb   []byte
+}
+
+func (o *originalType) deepCopyInto(dst *descpb.TypeDescriptor) {
+	if o.pb != nil {
+		err := protoutil.Unmarshal(o.pb, dst)
+		if err != nil {
+			o.pb = nil
+		}
+	}
+	if o.pb == nil {
+		*dst = *protoutil.Clone(o.desc).(*descpb.TypeDescriptor)
+	}
+	// Deep-copy type metadata that's not part of the proto message.
+	deepCopyTypeMeta(dst.Alias, o.desc.Alias)
+}
+
+func deepCopyTypeMeta(dst, src *types.T) {
+	if src == nil {
+		return
+	}
+	dst.TypeMeta = src.TypeMeta
+	deepCopyTypeMeta(dst.InternalType.ArrayContents, src.InternalType.ArrayContents)
+}
+
+func newOriginalType(desc *descpb.TypeDescriptor) originalType {
+	pb, err := protoutil.Marshal(desc)
+	if err != nil {
+		pb = nil
+	}
+	return originalType{desc: desc, pb: pb}
 }
