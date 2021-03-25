@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/inverted",
+        "//pkg/sql/lex",
         "//pkg/sql/parser",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
