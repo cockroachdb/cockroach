@@ -243,18 +243,12 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
 	colList = appendColsWhenPresent(colList, ins.PartialIndexPutCols)
-	if !colList.Equals(values.Cols) {
-		// We have a Values input, but the columns are not in the right order. For
-		// example:
-		//   INSERT INTO ab (SELECT y, x FROM (VALUES (1, 10)) AS v (x, y))
-		//
-		// TODO(radu): we could rearrange the columns of the rows below, or add
-		// a normalization rule that adds a Project to rearrange the Values node
-		// columns.
-		return execPlan{}, false, nil
-	}
-
 	rows, err := b.buildValuesRows(values)
+	if err != nil {
+		return execPlan{}, false, err
+	}
+	// We may need to rearrange the columns.
+	rows, err = rearrangeColumns(values.Cols, rows, colList)
 	if err != nil {
 		return execPlan{}, false, err
 	}
@@ -281,6 +275,36 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 		ep.outputCols = mutationOutputColMap(ins)
 	}
 	return ep, true, nil
+}
+
+// rearrangeColumns rearranges the columns in a matrix of TypedExpr values.
+//
+// Each column in inRows corresponds to a column in inCols. The values in the
+// columns are rearranged so that they correspond to wantedCols. Note that
+// wantedCols can contain the same column multiple times, in which case the
+// values will be duplicated.
+//
+// Returns an error if wantedCols contains a column that isn't part of inCols.
+func rearrangeColumns(
+	inCols opt.ColList, inRows [][]tree.TypedExpr, wantedCols opt.ColList,
+) (outRows [][]tree.TypedExpr, _ error) {
+	if inCols.Equals(wantedCols) {
+		// Nothing to do.
+		return inRows, nil
+	}
+
+	outRows = makeTypedExprMatrix(len(inRows), len(wantedCols))
+	for i, wanted := range wantedCols {
+		j, ok := inCols.Find(wanted)
+		if !ok {
+			return nil, errors.AssertionFailedf("no column %d in input", wanted)
+		}
+		for rowIdx := range inRows {
+			outRows[rowIdx][i] = inRows[rowIdx][j]
+		}
+	}
+
+	return outRows, nil
 }
 
 func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {

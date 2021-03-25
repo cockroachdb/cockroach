@@ -81,16 +81,16 @@ go_repository(
     patches = [
         "@cockroach//build/patches:com_github_golang_protobuf.patch",
     ],
-    sum = "h1:+Z5KGCizgyZCbGh1KZqA0fcLLkwbsjIzS4aV2v7wJX0=",
-    version = "v1.4.2",
+    sum = "h1:JjCZWpVbqXDqFVmTfYWEVTMIYrL/NPdPSCHPJ0T/raM=",
+    version = "v1.4.3",
 )
 
 go_repository(
     name = "org_golang_google_genproto",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/genproto",
-    sum = "h1:jB9+PJSvu5tBfmJHy/OVapFdjDF3WvpkqRhxqrmzoEU=",
-    version = "v0.0.0-20200218151345-dad8c97a84f5",
+    sum = "h1:PDIOdWxZ8eRizhKa1AAvY53xsvLB1cWorMjslvY3VA8=",
+    version = "v0.0.0-20200825200019-8632dd797987",
 )
 
 # Load the go dependencies and invoke them.
