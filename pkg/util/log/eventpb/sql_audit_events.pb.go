@@ -49,7 +49,7 @@ func (m *CommonSQLExecDetails) Reset()         { *m = CommonSQLExecDetails{} }
 func (m *CommonSQLExecDetails) String() string { return proto.CompactTextString(m) }
 func (*CommonSQLExecDetails) ProtoMessage()    {}
 func (*CommonSQLExecDetails) Descriptor() ([]byte, []int) {
-	return fileDescriptor_sql_audit_events_7ba0d4abd0ee544b, []int{0}
+	return fileDescriptor_sql_audit_events_5d8019ee56817f41, []int{0}
 }
 func (m *CommonSQLExecDetails) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -90,7 +90,7 @@ func (m *SensitiveTableAccess) Reset()         { *m = SensitiveTableAccess{} }
 func (m *SensitiveTableAccess) String() string { return proto.CompactTextString(m) }
 func (*SensitiveTableAccess) ProtoMessage()    {}
 func (*SensitiveTableAccess) Descriptor() ([]byte, []int) {
-	return fileDescriptor_sql_audit_events_7ba0d4abd0ee544b, []int{1}
+	return fileDescriptor_sql_audit_events_5d8019ee56817f41, []int{1}
 }
 func (m *SensitiveTableAccess) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -127,7 +127,7 @@ func (m *AdminQuery) Reset()         { *m = AdminQuery{} }
 func (m *AdminQuery) String() string { return proto.CompactTextString(m) }
 func (*AdminQuery) ProtoMessage()    {}
 func (*AdminQuery) Descriptor() ([]byte, []int) {
-	return fileDescriptor_sql_audit_events_7ba0d4abd0ee544b, []int{2}
+	return fileDescriptor_sql_audit_events_5d8019ee56817f41, []int{2}
 }
 func (m *AdminQuery) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -170,7 +170,7 @@ func (m *SlowQuery) Reset()         { *m = SlowQuery{} }
 func (m *SlowQuery) String() string { return proto.CompactTextString(m) }
 func (*SlowQuery) ProtoMessage()    {}
 func (*SlowQuery) Descriptor() ([]byte, []int) {
-	return fileDescriptor_sql_audit_events_7ba0d4abd0ee544b, []int{3}
+	return fileDescriptor_sql_audit_events_5d8019ee56817f41, []int{3}
 }
 func (m *SlowQuery) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -210,7 +210,7 @@ func (m *SlowQueryInternal) Reset()         { *m = SlowQueryInternal{} }
 func (m *SlowQueryInternal) String() string { return proto.CompactTextString(m) }
 func (*SlowQueryInternal) ProtoMessage()    {}
 func (*SlowQueryInternal) Descriptor() ([]byte, []int) {
-	return fileDescriptor_sql_audit_events_7ba0d4abd0ee544b, []int{4}
+	return fileDescriptor_sql_audit_events_5d8019ee56817f41, []int{4}
 }
 func (m *SlowQueryInternal) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -247,7 +247,7 @@ func (m *QueryExecute) Reset()         { *m = QueryExecute{} }
 func (m *QueryExecute) String() string { return proto.CompactTextString(m) }
 func (*QueryExecute) ProtoMessage()    {}
 func (*QueryExecute) Descriptor() ([]byte, []int) {
-	return fileDescriptor_sql_audit_events_7ba0d4abd0ee544b, []int{5}
+	return fileDescriptor_sql_audit_events_5d8019ee56817f41, []int{5}
 }
 func (m *QueryExecute) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1832,10 +1832,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("util/log/eventpb/sql_audit_events.proto", fileDescriptor_sql_audit_events_7ba0d4abd0ee544b)
+	proto.RegisterFile("util/log/eventpb/sql_audit_events.proto", fileDescriptor_sql_audit_events_5d8019ee56817f41)
 }
 
-var fileDescriptor_sql_audit_events_7ba0d4abd0ee544b = []byte{
+var fileDescriptor_sql_audit_events_5d8019ee56817f41 = []byte{
 	// 612 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x95, 0xcf, 0x4f, 0x13, 0x4f,
 	0x18, 0xc6, 0xbb, 0x2d, 0x3f, 0xda, 0xb7, 0xf0, 0xfd, 0xc6, 0x09, 0x26, 0x1b, 0x12, 0xb7, 0xcd,

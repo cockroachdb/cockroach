@@ -126,16 +126,17 @@ type loggerDev struct{}
 
 // Dev is a logger that logs to the DEV channel.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 var Dev loggerDev
 
 // Dev and loggerDev implement ChannelLogger.
@@ -149,19 +150,20 @@ var _ ChannelLogger = Dev
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerDev) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
 }
@@ -172,19 +174,20 @@ func (loggerDev) Infof(ctx context.Context, format string, args ...interface{}) 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerDev) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
@@ -195,19 +198,20 @@ func (loggerDev) VInfof(ctx context.Context, level Level, format string, args ..
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerDev) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, msg)
 }
@@ -217,19 +221,20 @@ func (loggerDev) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerDev) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.DEV, format, args...)
 }
@@ -240,19 +245,20 @@ func (loggerDev) InfofDepth(ctx context.Context, depth int, format string, args 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
 }
@@ -261,19 +267,20 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
@@ -284,19 +291,20 @@ func VInfof(ctx context.Context, level Level, format string, args ...interface{}
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, msg)
 }
@@ -306,19 +314,20 @@ func Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.DEV, format, args...)
 }
@@ -327,19 +336,20 @@ func InfofDepth(ctx context.Context, depth int, format string, args ...interface
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerDev) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
 }
@@ -350,19 +360,20 @@ func (loggerDev) Warningf(ctx context.Context, format string, args ...interface{
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerDev) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
@@ -373,19 +384,20 @@ func (loggerDev) VWarningf(ctx context.Context, level Level, format string, args
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerDev) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.DEV, msg)
 }
@@ -395,19 +407,20 @@ func (loggerDev) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerDev) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.DEV, format, args...)
 }
@@ -418,19 +431,20 @@ func (loggerDev) WarningfDepth(ctx context.Context, depth int, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
 }
@@ -439,19 +453,20 @@ func Warningf(ctx context.Context, format string, args ...interface{}) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
@@ -462,19 +477,20 @@ func VWarningf(ctx context.Context, level Level, format string, args ...interfac
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.DEV, msg)
 }
@@ -484,19 +500,20 @@ func Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.DEV, format, args...)
 }
@@ -505,19 +522,20 @@ func WarningfDepth(ctx context.Context, depth int, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerDev) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
@@ -529,19 +547,20 @@ func (loggerDev) Errorf(ctx context.Context, format string, args ...interface{})
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerDev) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -553,19 +572,20 @@ func (loggerDev) VErrorf(ctx context.Context, level Level, format string, args .
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerDev) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.DEV, msg)
@@ -576,19 +596,20 @@ func (loggerDev) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerDev) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.DEV, format, args...)
@@ -600,19 +621,20 @@ func (loggerDev) ErrorfDepth(ctx context.Context, depth int, format string, args
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
@@ -622,19 +644,20 @@ func Errorf(ctx context.Context, format string, args ...interface{}) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -646,19 +669,20 @@ func VErrorf(ctx context.Context, level Level, format string, args ...interface{
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.DEV, msg)
@@ -669,19 +693,20 @@ func Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.DEV, format, args...)
@@ -691,18 +716,19 @@ func ErrorfDepth(ctx context.Context, depth int, format string, args ...interfac
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerDev) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -715,18 +741,19 @@ func (loggerDev) Fatalf(ctx context.Context, format string, args ...interface{})
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerDev) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -739,18 +766,19 @@ func (loggerDev) VFatalf(ctx context.Context, level Level, format string, args .
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerDev) Fatal(ctx context.Context, msg string) {
@@ -762,18 +790,19 @@ func (loggerDev) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerDev) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -786,18 +815,19 @@ func (loggerDev) FatalfDepth(ctx context.Context, depth int, format string, args
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -808,18 +838,19 @@ func Fatalf(ctx context.Context, format string, args ...interface{}) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -832,18 +863,19 @@ func VFatalf(ctx context.Context, level Level, format string, args ...interface{
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func Fatal(ctx context.Context, msg string) {
@@ -855,18 +887,19 @@ func Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -876,16 +909,17 @@ func FatalfDepth(ctx context.Context, depth int, format string, args ...interfac
 // Shout logs to channel DEV, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 func (loggerDev) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, msg)
 }
@@ -894,16 +928,17 @@ func (loggerDev) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 func (loggerDev) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
 }
@@ -911,16 +946,17 @@ func (loggerDev) Shoutf(ctx context.Context, sev Severity, format string, args .
 // Shout logs to channel DEV, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 func Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, msg)
 }
@@ -929,16 +965,17 @@ func Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The DEV channel is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// The `DEV` channel is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
 }
@@ -948,17 +985,17 @@ type loggerOps struct{}
 
 // Ops is a logger that logs to the OPS channel.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 var Ops loggerOps
 
 // Ops and loggerOps implement ChannelLogger.
@@ -972,20 +1009,20 @@ var _ ChannelLogger = Ops
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerOps) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.OPS, format, args...)
 }
@@ -996,20 +1033,20 @@ func (loggerOps) Infof(ctx context.Context, format string, args ...interface{}) 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerOps) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.OPS, format, args...)
@@ -1020,20 +1057,20 @@ func (loggerOps) VInfof(ctx context.Context, level Level, format string, args ..
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerOps) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.OPS, msg)
 }
@@ -1043,20 +1080,20 @@ func (loggerOps) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerOps) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.OPS, format, args...)
 }
@@ -1065,20 +1102,20 @@ func (loggerOps) InfofDepth(ctx context.Context, depth int, format string, args 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerOps) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.OPS, format, args...)
 }
@@ -1089,20 +1126,20 @@ func (loggerOps) Warningf(ctx context.Context, format string, args ...interface{
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerOps) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.OPS, format, args...)
@@ -1113,20 +1150,20 @@ func (loggerOps) VWarningf(ctx context.Context, level Level, format string, args
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerOps) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.OPS, msg)
 }
@@ -1136,20 +1173,20 @@ func (loggerOps) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerOps) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.OPS, format, args...)
 }
@@ -1158,20 +1195,20 @@ func (loggerOps) WarningfDepth(ctx context.Context, depth int, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerOps) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.OPS, format, args...)
@@ -1183,20 +1220,20 @@ func (loggerOps) Errorf(ctx context.Context, format string, args ...interface{})
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerOps) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -1208,20 +1245,20 @@ func (loggerOps) VErrorf(ctx context.Context, level Level, format string, args .
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerOps) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.OPS, msg)
@@ -1232,20 +1269,20 @@ func (loggerOps) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerOps) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.OPS, format, args...)
@@ -1255,19 +1292,19 @@ func (loggerOps) ErrorfDepth(ctx context.Context, depth int, format string, args
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerOps) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -1280,19 +1317,19 @@ func (loggerOps) Fatalf(ctx context.Context, format string, args ...interface{})
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerOps) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -1305,19 +1342,19 @@ func (loggerOps) VFatalf(ctx context.Context, level Level, format string, args .
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerOps) Fatal(ctx context.Context, msg string) {
@@ -1329,19 +1366,19 @@ func (loggerOps) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerOps) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -1351,17 +1388,17 @@ func (loggerOps) FatalfDepth(ctx context.Context, depth int, format string, args
 // Shout logs to channel OPS, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 func (loggerOps) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.OPS, msg)
 }
@@ -1370,17 +1407,17 @@ func (loggerOps) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The OPS channel is the channel used to report "point" operational events,
+// The `OPS` channel is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 func (loggerOps) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.OPS, format, args...)
 }
@@ -1390,14 +1427,14 @@ type loggerHealth struct{}
 
 // Health is a logger that logs to the HEALTH channel.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 var Health loggerHealth
 
 // Health and loggerHealth implement ChannelLogger.
@@ -1411,17 +1448,17 @@ var _ ChannelLogger = Health
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerHealth) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.HEALTH, format, args...)
 }
@@ -1432,17 +1469,17 @@ func (loggerHealth) Infof(ctx context.Context, format string, args ...interface{
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerHealth) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.HEALTH, format, args...)
@@ -1453,17 +1490,17 @@ func (loggerHealth) VInfof(ctx context.Context, level Level, format string, args
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerHealth) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.HEALTH, msg)
 }
@@ -1473,17 +1510,17 @@ func (loggerHealth) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerHealth) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.HEALTH, format, args...)
 }
@@ -1492,17 +1529,17 @@ func (loggerHealth) InfofDepth(ctx context.Context, depth int, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerHealth) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.HEALTH, format, args...)
 }
@@ -1513,17 +1550,17 @@ func (loggerHealth) Warningf(ctx context.Context, format string, args ...interfa
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerHealth) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.HEALTH, format, args...)
@@ -1534,17 +1571,17 @@ func (loggerHealth) VWarningf(ctx context.Context, level Level, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerHealth) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.HEALTH, msg)
 }
@@ -1554,17 +1591,17 @@ func (loggerHealth) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerHealth) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.HEALTH, format, args...)
 }
@@ -1573,17 +1610,17 @@ func (loggerHealth) WarningfDepth(ctx context.Context, depth int, format string,
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerHealth) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.HEALTH, format, args...)
@@ -1595,17 +1632,17 @@ func (loggerHealth) Errorf(ctx context.Context, format string, args ...interface
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerHealth) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -1617,17 +1654,17 @@ func (loggerHealth) VErrorf(ctx context.Context, level Level, format string, arg
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerHealth) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.HEALTH, msg)
@@ -1638,17 +1675,17 @@ func (loggerHealth) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerHealth) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.HEALTH, format, args...)
@@ -1658,16 +1695,16 @@ func (loggerHealth) ErrorfDepth(ctx context.Context, depth int, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerHealth) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -1680,16 +1717,16 @@ func (loggerHealth) Fatalf(ctx context.Context, format string, args ...interface
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerHealth) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -1702,16 +1739,16 @@ func (loggerHealth) VFatalf(ctx context.Context, level Level, format string, arg
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerHealth) Fatal(ctx context.Context, msg string) {
@@ -1723,16 +1760,16 @@ func (loggerHealth) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerHealth) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -1742,14 +1779,14 @@ func (loggerHealth) FatalfDepth(ctx context.Context, depth int, format string, a
 // Shout logs to channel HEALTH, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 func (loggerHealth) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.HEALTH, msg)
 }
@@ -1758,14 +1795,14 @@ func (loggerHealth) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The HEALTH channel is the channel used to report "background" operational
+// The `HEALTH` channel is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 func (loggerHealth) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.HEALTH, format, args...)
 }
@@ -1775,7 +1812,7 @@ type loggerStorage struct{}
 
 // Storage is a logger that logs to the STORAGE channel.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 var Storage loggerStorage
 
@@ -1790,11 +1827,11 @@ var _ ChannelLogger = Storage
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerStorage) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.STORAGE, format, args...)
 }
@@ -1805,11 +1842,11 @@ func (loggerStorage) Infof(ctx context.Context, format string, args ...interface
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerStorage) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.STORAGE, format, args...)
@@ -1820,11 +1857,11 @@ func (loggerStorage) VInfof(ctx context.Context, level Level, format string, arg
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerStorage) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.STORAGE, msg)
 }
@@ -1834,11 +1871,11 @@ func (loggerStorage) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerStorage) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.STORAGE, format, args...)
 }
@@ -1847,11 +1884,11 @@ func (loggerStorage) InfofDepth(ctx context.Context, depth int, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerStorage) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.STORAGE, format, args...)
 }
@@ -1862,11 +1899,11 @@ func (loggerStorage) Warningf(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerStorage) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.STORAGE, format, args...)
@@ -1877,11 +1914,11 @@ func (loggerStorage) VWarningf(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerStorage) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.STORAGE, msg)
 }
@@ -1891,11 +1928,11 @@ func (loggerStorage) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerStorage) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.STORAGE, format, args...)
 }
@@ -1904,11 +1941,11 @@ func (loggerStorage) WarningfDepth(ctx context.Context, depth int, format string
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerStorage) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.STORAGE, format, args...)
@@ -1920,11 +1957,11 @@ func (loggerStorage) Errorf(ctx context.Context, format string, args ...interfac
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerStorage) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -1936,11 +1973,11 @@ func (loggerStorage) VErrorf(ctx context.Context, level Level, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerStorage) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.STORAGE, msg)
@@ -1951,11 +1988,11 @@ func (loggerStorage) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerStorage) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.STORAGE, format, args...)
@@ -1965,10 +2002,10 @@ func (loggerStorage) ErrorfDepth(ctx context.Context, depth int, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerStorage) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -1981,10 +2018,10 @@ func (loggerStorage) Fatalf(ctx context.Context, format string, args ...interfac
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerStorage) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -1997,10 +2034,10 @@ func (loggerStorage) VFatalf(ctx context.Context, level Level, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerStorage) Fatal(ctx context.Context, msg string) {
@@ -2012,10 +2049,10 @@ func (loggerStorage) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerStorage) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -2025,7 +2062,7 @@ func (loggerStorage) FatalfDepth(ctx context.Context, depth int, format string, 
 // Shout logs to channel STORAGE, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 func (loggerStorage) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.STORAGE, msg)
@@ -2035,7 +2072,7 @@ func (loggerStorage) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The STORAGE channel is the channel used to report low-level storage
+// The `STORAGE` channel is used to report low-level storage
 // layer events (RocksDB/Pebble).
 func (loggerStorage) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.STORAGE, format, args...)
@@ -2046,11 +2083,14 @@ type loggerSessions struct{}
 
 // Sessions is a logger that logs to the SESSIONS channel.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -2067,17 +2107,20 @@ var _ ChannelLogger = Sessions
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSessions) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.SESSIONS, format, args...)
 }
@@ -2088,17 +2131,20 @@ func (loggerSessions) Infof(ctx context.Context, format string, args ...interfac
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSessions) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.SESSIONS, format, args...)
@@ -2109,17 +2155,20 @@ func (loggerSessions) VInfof(ctx context.Context, level Level, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSessions) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.SESSIONS, msg)
 }
@@ -2129,17 +2178,20 @@ func (loggerSessions) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSessions) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SESSIONS, format, args...)
 }
@@ -2148,17 +2200,20 @@ func (loggerSessions) InfofDepth(ctx context.Context, depth int, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSessions) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SESSIONS, format, args...)
 }
@@ -2169,17 +2224,20 @@ func (loggerSessions) Warningf(ctx context.Context, format string, args ...inter
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSessions) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SESSIONS, format, args...)
@@ -2190,17 +2248,20 @@ func (loggerSessions) VWarningf(ctx context.Context, level Level, format string,
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSessions) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SESSIONS, msg)
 }
@@ -2210,17 +2271,20 @@ func (loggerSessions) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSessions) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SESSIONS, format, args...)
 }
@@ -2229,17 +2293,20 @@ func (loggerSessions) WarningfDepth(ctx context.Context, depth int, format strin
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSessions) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SESSIONS, format, args...)
@@ -2251,17 +2318,20 @@ func (loggerSessions) Errorf(ctx context.Context, format string, args ...interfa
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSessions) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -2273,17 +2343,20 @@ func (loggerSessions) VErrorf(ctx context.Context, level Level, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSessions) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SESSIONS, msg)
@@ -2294,17 +2367,20 @@ func (loggerSessions) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSessions) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SESSIONS, format, args...)
@@ -2314,16 +2390,19 @@ func (loggerSessions) ErrorfDepth(ctx context.Context, depth int, format string,
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSessions) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -2336,16 +2415,19 @@ func (loggerSessions) Fatalf(ctx context.Context, format string, args ...interfa
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSessions) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -2358,16 +2440,19 @@ func (loggerSessions) VFatalf(ctx context.Context, level Level, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSessions) Fatal(ctx context.Context, msg string) {
@@ -2379,16 +2464,19 @@ func (loggerSessions) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSessions) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -2398,11 +2486,14 @@ func (loggerSessions) FatalfDepth(ctx context.Context, depth int, format string,
 // Shout logs to channel SESSIONS, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -2414,11 +2505,14 @@ func (loggerSessions) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The SESSIONS channel is the channel used to report client network activity:
+// The `SESSIONS` channel is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -2431,18 +2525,18 @@ type loggerSqlSchema struct{}
 
 // SqlSchema is a logger that logs to the SQL_SCHEMA channel.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 var SqlSchema loggerSqlSchema
 
@@ -2457,22 +2551,22 @@ var _ ChannelLogger = SqlSchema
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlSchema) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.SQL_SCHEMA, format, args...)
 }
@@ -2483,22 +2577,22 @@ func (loggerSqlSchema) Infof(ctx context.Context, format string, args ...interfa
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlSchema) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.SQL_SCHEMA, format, args...)
@@ -2509,22 +2603,22 @@ func (loggerSqlSchema) VInfof(ctx context.Context, level Level, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlSchema) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.SQL_SCHEMA, msg)
 }
@@ -2534,22 +2628,22 @@ func (loggerSqlSchema) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlSchema) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_SCHEMA, format, args...)
 }
@@ -2558,22 +2652,22 @@ func (loggerSqlSchema) InfofDepth(ctx context.Context, depth int, format string,
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlSchema) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SQL_SCHEMA, format, args...)
 }
@@ -2584,22 +2678,22 @@ func (loggerSqlSchema) Warningf(ctx context.Context, format string, args ...inte
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlSchema) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SQL_SCHEMA, format, args...)
@@ -2610,22 +2704,22 @@ func (loggerSqlSchema) VWarningf(ctx context.Context, level Level, format string
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlSchema) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SQL_SCHEMA, msg)
 }
@@ -2635,22 +2729,22 @@ func (loggerSqlSchema) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlSchema) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_SCHEMA, format, args...)
 }
@@ -2659,22 +2753,22 @@ func (loggerSqlSchema) WarningfDepth(ctx context.Context, depth int, format stri
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlSchema) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SQL_SCHEMA, format, args...)
@@ -2686,22 +2780,22 @@ func (loggerSqlSchema) Errorf(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlSchema) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -2713,22 +2807,22 @@ func (loggerSqlSchema) VErrorf(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlSchema) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SQL_SCHEMA, msg)
@@ -2739,22 +2833,22 @@ func (loggerSqlSchema) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlSchema) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_SCHEMA, format, args...)
@@ -2764,21 +2858,21 @@ func (loggerSqlSchema) ErrorfDepth(ctx context.Context, depth int, format string
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlSchema) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -2791,21 +2885,21 @@ func (loggerSqlSchema) Fatalf(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlSchema) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -2818,21 +2912,21 @@ func (loggerSqlSchema) VFatalf(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlSchema) Fatal(ctx context.Context, msg string) {
@@ -2844,21 +2938,21 @@ func (loggerSqlSchema) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlSchema) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -2868,18 +2962,18 @@ func (loggerSqlSchema) FatalfDepth(ctx context.Context, depth int, format string
 // Shout logs to channel SQL_SCHEMA, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 func (loggerSqlSchema) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_SCHEMA, msg)
@@ -2889,18 +2983,18 @@ func (loggerSqlSchema) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The SQL_SCHEMA channel is the channel used to report changes to the
+// The `SQL_SCHEMA` channel is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 func (loggerSqlSchema) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_SCHEMA, format, args...)
@@ -2911,13 +3005,13 @@ type loggerUserAdmin struct{}
 
 // UserAdmin is a logger that logs to the USER_ADMIN channel.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -2934,19 +3028,19 @@ var _ ChannelLogger = UserAdmin
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerUserAdmin) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.USER_ADMIN, format, args...)
 }
@@ -2957,19 +3051,19 @@ func (loggerUserAdmin) Infof(ctx context.Context, format string, args ...interfa
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerUserAdmin) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.USER_ADMIN, format, args...)
@@ -2980,19 +3074,19 @@ func (loggerUserAdmin) VInfof(ctx context.Context, level Level, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerUserAdmin) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.USER_ADMIN, msg)
 }
@@ -3002,19 +3096,19 @@ func (loggerUserAdmin) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerUserAdmin) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.USER_ADMIN, format, args...)
 }
@@ -3023,19 +3117,19 @@ func (loggerUserAdmin) InfofDepth(ctx context.Context, depth int, format string,
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerUserAdmin) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.USER_ADMIN, format, args...)
 }
@@ -3046,19 +3140,19 @@ func (loggerUserAdmin) Warningf(ctx context.Context, format string, args ...inte
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerUserAdmin) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.USER_ADMIN, format, args...)
@@ -3069,19 +3163,19 @@ func (loggerUserAdmin) VWarningf(ctx context.Context, level Level, format string
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerUserAdmin) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.USER_ADMIN, msg)
 }
@@ -3091,19 +3185,19 @@ func (loggerUserAdmin) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerUserAdmin) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.USER_ADMIN, format, args...)
 }
@@ -3112,19 +3206,19 @@ func (loggerUserAdmin) WarningfDepth(ctx context.Context, depth int, format stri
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerUserAdmin) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.USER_ADMIN, format, args...)
@@ -3136,19 +3230,19 @@ func (loggerUserAdmin) Errorf(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerUserAdmin) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -3160,19 +3254,19 @@ func (loggerUserAdmin) VErrorf(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerUserAdmin) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.USER_ADMIN, msg)
@@ -3183,19 +3277,19 @@ func (loggerUserAdmin) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerUserAdmin) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.USER_ADMIN, format, args...)
@@ -3205,18 +3299,18 @@ func (loggerUserAdmin) ErrorfDepth(ctx context.Context, depth int, format string
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerUserAdmin) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -3229,18 +3323,18 @@ func (loggerUserAdmin) Fatalf(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerUserAdmin) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -3253,18 +3347,18 @@ func (loggerUserAdmin) VFatalf(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerUserAdmin) Fatal(ctx context.Context, msg string) {
@@ -3276,18 +3370,18 @@ func (loggerUserAdmin) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerUserAdmin) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -3297,13 +3391,13 @@ func (loggerUserAdmin) FatalfDepth(ctx context.Context, depth int, format string
 // Shout logs to channel USER_ADMIN, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3315,13 +3409,13 @@ func (loggerUserAdmin) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The USER_ADMIN channel is the channel used to report changes
+// The `USER_ADMIN` channel is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3334,11 +3428,11 @@ type loggerPrivileges struct{}
 
 // Privileges is a logger that logs to the PRIVILEGES channel.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3355,17 +3449,17 @@ var _ ChannelLogger = Privileges
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerPrivileges) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.PRIVILEGES, format, args...)
 }
@@ -3376,17 +3470,17 @@ func (loggerPrivileges) Infof(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerPrivileges) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.PRIVILEGES, format, args...)
@@ -3397,17 +3491,17 @@ func (loggerPrivileges) VInfof(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerPrivileges) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.PRIVILEGES, msg)
 }
@@ -3417,17 +3511,17 @@ func (loggerPrivileges) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerPrivileges) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.PRIVILEGES, format, args...)
 }
@@ -3436,17 +3530,17 @@ func (loggerPrivileges) InfofDepth(ctx context.Context, depth int, format string
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerPrivileges) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.PRIVILEGES, format, args...)
 }
@@ -3457,17 +3551,17 @@ func (loggerPrivileges) Warningf(ctx context.Context, format string, args ...int
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerPrivileges) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.PRIVILEGES, format, args...)
@@ -3478,17 +3572,17 @@ func (loggerPrivileges) VWarningf(ctx context.Context, level Level, format strin
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerPrivileges) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.PRIVILEGES, msg)
 }
@@ -3498,17 +3592,17 @@ func (loggerPrivileges) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerPrivileges) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.PRIVILEGES, format, args...)
 }
@@ -3517,17 +3611,17 @@ func (loggerPrivileges) WarningfDepth(ctx context.Context, depth int, format str
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerPrivileges) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.PRIVILEGES, format, args...)
@@ -3539,17 +3633,17 @@ func (loggerPrivileges) Errorf(ctx context.Context, format string, args ...inter
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerPrivileges) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -3561,17 +3655,17 @@ func (loggerPrivileges) VErrorf(ctx context.Context, level Level, format string,
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerPrivileges) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.PRIVILEGES, msg)
@@ -3582,17 +3676,17 @@ func (loggerPrivileges) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerPrivileges) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.PRIVILEGES, format, args...)
@@ -3602,16 +3696,16 @@ func (loggerPrivileges) ErrorfDepth(ctx context.Context, depth int, format strin
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerPrivileges) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -3624,16 +3718,16 @@ func (loggerPrivileges) Fatalf(ctx context.Context, format string, args ...inter
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerPrivileges) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -3646,16 +3740,16 @@ func (loggerPrivileges) VFatalf(ctx context.Context, level Level, format string,
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerPrivileges) Fatal(ctx context.Context, msg string) {
@@ -3667,16 +3761,16 @@ func (loggerPrivileges) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerPrivileges) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -3686,11 +3780,11 @@ func (loggerPrivileges) FatalfDepth(ctx context.Context, depth int, format strin
 // Shout logs to channel PRIVILEGES, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3702,11 +3796,11 @@ func (loggerPrivileges) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The PRIVILEGES channel is the channel used to report data
+// The `PRIVILEGES` channel is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3719,12 +3813,13 @@ type loggerSensitiveAccess struct{}
 
 // SensitiveAccess is a logger that logs to the SENSITIVE_ACCESS channel.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -3741,18 +3836,19 @@ var _ ChannelLogger = SensitiveAccess
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSensitiveAccess) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.SENSITIVE_ACCESS, format, args...)
 }
@@ -3763,18 +3859,19 @@ func (loggerSensitiveAccess) Infof(ctx context.Context, format string, args ...i
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSensitiveAccess) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.SENSITIVE_ACCESS, format, args...)
@@ -3785,18 +3882,19 @@ func (loggerSensitiveAccess) VInfof(ctx context.Context, level Level, format str
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSensitiveAccess) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.SENSITIVE_ACCESS, msg)
 }
@@ -3806,18 +3904,19 @@ func (loggerSensitiveAccess) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSensitiveAccess) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SENSITIVE_ACCESS, format, args...)
 }
@@ -3826,18 +3925,19 @@ func (loggerSensitiveAccess) InfofDepth(ctx context.Context, depth int, format s
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSensitiveAccess) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SENSITIVE_ACCESS, format, args...)
 }
@@ -3848,18 +3948,19 @@ func (loggerSensitiveAccess) Warningf(ctx context.Context, format string, args .
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSensitiveAccess) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SENSITIVE_ACCESS, format, args...)
@@ -3870,18 +3971,19 @@ func (loggerSensitiveAccess) VWarningf(ctx context.Context, level Level, format 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSensitiveAccess) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SENSITIVE_ACCESS, msg)
 }
@@ -3891,18 +3993,19 @@ func (loggerSensitiveAccess) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSensitiveAccess) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SENSITIVE_ACCESS, format, args...)
 }
@@ -3911,18 +4014,19 @@ func (loggerSensitiveAccess) WarningfDepth(ctx context.Context, depth int, forma
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSensitiveAccess) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SENSITIVE_ACCESS, format, args...)
@@ -3934,18 +4038,19 @@ func (loggerSensitiveAccess) Errorf(ctx context.Context, format string, args ...
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSensitiveAccess) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -3957,18 +4062,19 @@ func (loggerSensitiveAccess) VErrorf(ctx context.Context, level Level, format st
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSensitiveAccess) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SENSITIVE_ACCESS, msg)
@@ -3979,18 +4085,19 @@ func (loggerSensitiveAccess) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSensitiveAccess) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SENSITIVE_ACCESS, format, args...)
@@ -4000,17 +4107,18 @@ func (loggerSensitiveAccess) ErrorfDepth(ctx context.Context, depth int, format 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -4023,17 +4131,18 @@ func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -4046,17 +4155,18 @@ func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format st
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
@@ -4068,17 +4178,18 @@ func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSensitiveAccess) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -4088,12 +4199,13 @@ func (loggerSensitiveAccess) FatalfDepth(ctx context.Context, depth int, format 
 // Shout logs to channel SENSITIVE_ACCESS, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4105,12 +4217,13 @@ func (loggerSensitiveAccess) Shout(ctx context.Context, sev Severity, msg string
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The SENSITIVE_ACCESS channel is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// The `SENSITIVE_ACCESS` channel is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
@@ -4123,11 +4236,12 @@ type loggerSqlExec struct{}
 
 // SqlExec is a logger that logs to the SQL_EXEC channel.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 var SqlExec loggerSqlExec
 
 // SqlExec and loggerSqlExec implement ChannelLogger.
@@ -4141,14 +4255,15 @@ var _ ChannelLogger = SqlExec
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlExec) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.SQL_EXEC, format, args...)
 }
@@ -4159,14 +4274,15 @@ func (loggerSqlExec) Infof(ctx context.Context, format string, args ...interface
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlExec) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.SQL_EXEC, format, args...)
@@ -4177,14 +4293,15 @@ func (loggerSqlExec) VInfof(ctx context.Context, level Level, format string, arg
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlExec) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.SQL_EXEC, msg)
 }
@@ -4194,14 +4311,15 @@ func (loggerSqlExec) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlExec) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_EXEC, format, args...)
 }
@@ -4210,14 +4328,15 @@ func (loggerSqlExec) InfofDepth(ctx context.Context, depth int, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlExec) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SQL_EXEC, format, args...)
 }
@@ -4228,14 +4347,15 @@ func (loggerSqlExec) Warningf(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlExec) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SQL_EXEC, format, args...)
@@ -4246,14 +4366,15 @@ func (loggerSqlExec) VWarningf(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlExec) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SQL_EXEC, msg)
 }
@@ -4263,14 +4384,15 @@ func (loggerSqlExec) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlExec) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_EXEC, format, args...)
 }
@@ -4279,14 +4401,15 @@ func (loggerSqlExec) WarningfDepth(ctx context.Context, depth int, format string
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlExec) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SQL_EXEC, format, args...)
@@ -4298,14 +4421,15 @@ func (loggerSqlExec) Errorf(ctx context.Context, format string, args ...interfac
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlExec) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -4317,14 +4441,15 @@ func (loggerSqlExec) VErrorf(ctx context.Context, level Level, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlExec) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SQL_EXEC, msg)
@@ -4335,14 +4460,15 @@ func (loggerSqlExec) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlExec) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_EXEC, format, args...)
@@ -4352,13 +4478,14 @@ func (loggerSqlExec) ErrorfDepth(ctx context.Context, depth int, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlExec) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -4371,13 +4498,14 @@ func (loggerSqlExec) Fatalf(ctx context.Context, format string, args ...interfac
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlExec) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -4390,13 +4518,14 @@ func (loggerSqlExec) VFatalf(ctx context.Context, level Level, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
@@ -4408,13 +4537,14 @@ func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlExec) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -4424,11 +4554,12 @@ func (loggerSqlExec) FatalfDepth(ctx context.Context, depth int, format string, 
 // Shout logs to channel SQL_EXEC, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, msg)
 }
@@ -4437,11 +4568,12 @@ func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The SQL_EXEC channel is the channel used to report SQL execution on
+// The `SQL_EXEC` channel is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, format, args...)
 }
@@ -4451,14 +4583,14 @@ type loggerSqlPerf struct{}
 
 // SqlPerf is a logger that logs to the SQL_PERF channel.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 var SqlPerf loggerSqlPerf
 
@@ -4473,18 +4605,18 @@ var _ ChannelLogger = SqlPerf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlPerf) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.SQL_PERF, format, args...)
 }
@@ -4495,18 +4627,18 @@ func (loggerSqlPerf) Infof(ctx context.Context, format string, args ...interface
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlPerf) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.SQL_PERF, format, args...)
@@ -4517,18 +4649,18 @@ func (loggerSqlPerf) VInfof(ctx context.Context, level Level, format string, arg
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlPerf) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.SQL_PERF, msg)
 }
@@ -4538,18 +4670,18 @@ func (loggerSqlPerf) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlPerf) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_PERF, format, args...)
 }
@@ -4558,18 +4690,18 @@ func (loggerSqlPerf) InfofDepth(ctx context.Context, depth int, format string, a
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlPerf) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SQL_PERF, format, args...)
 }
@@ -4580,18 +4712,18 @@ func (loggerSqlPerf) Warningf(ctx context.Context, format string, args ...interf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlPerf) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SQL_PERF, format, args...)
@@ -4602,18 +4734,18 @@ func (loggerSqlPerf) VWarningf(ctx context.Context, level Level, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlPerf) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SQL_PERF, msg)
 }
@@ -4623,18 +4755,18 @@ func (loggerSqlPerf) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlPerf) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_PERF, format, args...)
 }
@@ -4643,18 +4775,18 @@ func (loggerSqlPerf) WarningfDepth(ctx context.Context, depth int, format string
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlPerf) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SQL_PERF, format, args...)
@@ -4666,18 +4798,18 @@ func (loggerSqlPerf) Errorf(ctx context.Context, format string, args ...interfac
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlPerf) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -4689,18 +4821,18 @@ func (loggerSqlPerf) VErrorf(ctx context.Context, level Level, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlPerf) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SQL_PERF, msg)
@@ -4711,18 +4843,18 @@ func (loggerSqlPerf) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlPerf) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_PERF, format, args...)
@@ -4732,17 +4864,17 @@ func (loggerSqlPerf) ErrorfDepth(ctx context.Context, depth int, format string, 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlPerf) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -4755,17 +4887,17 @@ func (loggerSqlPerf) Fatalf(ctx context.Context, format string, args ...interfac
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlPerf) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -4778,17 +4910,17 @@ func (loggerSqlPerf) VFatalf(ctx context.Context, level Level, format string, ar
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlPerf) Fatal(ctx context.Context, msg string) {
@@ -4800,17 +4932,17 @@ func (loggerSqlPerf) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlPerf) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -4820,14 +4952,14 @@ func (loggerSqlPerf) FatalfDepth(ctx context.Context, depth int, format string, 
 // Shout logs to channel SQL_PERF, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 func (loggerSqlPerf) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_PERF, msg)
@@ -4837,14 +4969,14 @@ func (loggerSqlPerf) Shout(ctx context.Context, sev Severity, msg string) {
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The SQL_PERF channel is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// The `SQL_PERF` channel is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 func (loggerSqlPerf) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_PERF, format, args...)
@@ -4855,9 +4987,9 @@ type loggerSqlInternalPerf struct{}
 
 // SqlInternalPerf is a logger that logs to the SQL_INTERNAL_PERF channel.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 var SqlInternalPerf loggerSqlInternalPerf
 
@@ -4872,13 +5004,13 @@ var _ ChannelLogger = SqlInternalPerf
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlInternalPerf) Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.SQL_INTERNAL_PERF, format, args...)
 }
@@ -4889,13 +5021,13 @@ func (loggerSqlInternalPerf) Infof(ctx context.Context, format string, args ...i
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlInternalPerf) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.SQL_INTERNAL_PERF, format, args...)
@@ -4906,13 +5038,13 @@ func (loggerSqlInternalPerf) VInfof(ctx context.Context, level Level, format str
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlInternalPerf) Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.SQL_INTERNAL_PERF, msg)
 }
@@ -4922,13 +5054,13 @@ func (loggerSqlInternalPerf) Info(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The INFO severity is used for informational messages, when no action
-// is required as a result.
+// The `INFO` severity is used for informational messages that do not
+// require action.
 func (loggerSqlInternalPerf) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.SQL_INTERNAL_PERF, format, args...)
 }
@@ -4937,13 +5069,13 @@ func (loggerSqlInternalPerf) InfofDepth(ctx context.Context, depth int, format s
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlInternalPerf) Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SQL_INTERNAL_PERF, format, args...)
 }
@@ -4954,13 +5086,13 @@ func (loggerSqlInternalPerf) Warningf(ctx context.Context, format string, args .
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlInternalPerf) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.SQL_INTERNAL_PERF, format, args...)
@@ -4971,13 +5103,13 @@ func (loggerSqlInternalPerf) VWarningf(ctx context.Context, level Level, format 
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlInternalPerf) Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.SQL_INTERNAL_PERF, msg)
 }
@@ -4987,13 +5119,13 @@ func (loggerSqlInternalPerf) Warning(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The WARNING severity is used for situations which may require special handling,
-// while normal operation is expected to resume automatically.
+// The `WARNING` severity is used for situations which may require special handling,
+// where normal operation is expected to resume automatically.
 func (loggerSqlInternalPerf) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.SQL_INTERNAL_PERF, format, args...)
 }
@@ -5002,13 +5134,13 @@ func (loggerSqlInternalPerf) WarningfDepth(ctx context.Context, depth int, forma
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlInternalPerf) Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SQL_INTERNAL_PERF, format, args...)
@@ -5020,13 +5152,13 @@ func (loggerSqlInternalPerf) Errorf(ctx context.Context, format string, args ...
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlInternalPerf) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
@@ -5038,13 +5170,13 @@ func (loggerSqlInternalPerf) VErrorf(ctx context.Context, level Level, format st
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlInternalPerf) Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.SQL_INTERNAL_PERF, msg)
@@ -5055,13 +5187,13 @@ func (loggerSqlInternalPerf) Error(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The ERROR severity is used for situations that require special handling,
-// when normal operation could not proceed as expected.
+// The `ERROR` severity is used for situations that require special handling,
+// where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
 func (loggerSqlInternalPerf) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.SQL_INTERNAL_PERF, format, args...)
@@ -5071,12 +5203,12 @@ func (loggerSqlInternalPerf) ErrorfDepth(ctx context.Context, depth int, format 
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlInternalPerf) Fatalf(ctx context.Context, format string, args ...interface{}) {
@@ -5089,12 +5221,12 @@ func (loggerSqlInternalPerf) Fatalf(ctx context.Context, format string, args ...
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlInternalPerf) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
@@ -5107,12 +5239,12 @@ func (loggerSqlInternalPerf) VFatalf(ctx context.Context, level Level, format st
 // It extracts log tags from the context and logs them along with the given
 // message.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlInternalPerf) Fatal(ctx context.Context, msg string) {
@@ -5124,12 +5256,12 @@ func (loggerSqlInternalPerf) Fatal(ctx context.Context, msg string) {
 // It extracts log tags from the context and logs them along with the given
 // message. Arguments are handled in the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 //
-// The FATAL severity is used for situations that require an immedate, hard
+// The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
 func (loggerSqlInternalPerf) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
@@ -5139,9 +5271,9 @@ func (loggerSqlInternalPerf) FatalfDepth(ctx context.Context, depth int, format 
 // Shout logs to channel SQL_INTERNAL_PERF, and also to the real stderr if logging
 // is currently redirected to a file.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 func (loggerSqlInternalPerf) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_INTERNAL_PERF, msg)
@@ -5151,9 +5283,9 @@ func (loggerSqlInternalPerf) Shout(ctx context.Context, sev Severity, msg string
 // logging is currently redirected to a file. Arguments are handled in
 // the manner of fmt.Printf.
 //
-// The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+// The `SQL_INTERNAL_PERF` channel is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 func (loggerSqlInternalPerf) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_INTERNAL_PERF, format, args...)
