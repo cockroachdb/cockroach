@@ -1,0 +1,78 @@
+# LogicTest: !3node-tenant
+
+# Test the crdb_internal.force_delete_table_data function
+subtest force-delete-data
+
+statement ok
+CREATE TABLE forcedeletemydata (v int)
+
+statement ok
+INSERT INTO forcedeletemydata VALUES(5)
+
+statement ok
+INSERT INTO forcedeletemydata VALUES(7)
+
+query I
+SELECT * FROM forcedeletemydata ORDER BY v ASC
+----
+5
+7
+
+# Invalid drop attempt without waiver
+query B
+select * from crdb_internal.force_delete_table_data(6666, '')
+----
+false
+
+# Blocked since ID was not used
+query B
+select * from crdb_internal.force_delete_table_data(6666, 'I acknowledge this will irrevocably delete all revisions for table 6666')
+----
+false
+
+
+let $t_id
+select id from system.namespace where name='forcedeletemydata'
+
+# Valid table ID without waiver
+query B
+select * from crdb_internal.force_delete_table_data($t_id, '')
+----
+false
+
+query I
+SELECT * FROM forcedeletemydata ORDER BY v ASC
+----
+5
+7
+
+# Valid table ID with waiver, but descriptor exists
+query B
+select * from crdb_internal.force_delete_table_data($t_id, 'I acknowledge this will irrevocably delete all revisions for table $t_id')
+----
+false
+
+query I
+SELECT * FROM forcedeletemydata ORDER BY v ASC
+----
+5
+7
+
+statement ok
+DROP TABLE forcedeletemydata
+
+query I
+select id from system.namespace where name='forcedeletemydata'
+----
+
+# Force delete the descriptor
+query B
+select * from crdb_internal.unsafe_delete_descriptor($t_id);
+----
+true
+
+# Valid table ID with waiver, but descriptor does not exist
+query B
+select * from crdb_internal.force_delete_table_data($t_id, 'I acknowledge this will irrevocably delete all revisions for table $t_id')
+----
+true

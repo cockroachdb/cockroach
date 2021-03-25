@@ -5084,6 +5084,44 @@ table's zone configuration this will return NULL.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+	// Deletes the underlying spans backing a table, only
+	// if the user provides explicit acknowledgement of the
+	// form "I acknowledge this will irrevocably delete all revisions
+	// for table %d"
+	"crdb_internal.force_delete_table_data": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemRepair,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{{"id", types.Int},
+				{"accept", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+				agree := string(*args[1].(*tree.DString))
+				expectedAgree := fmt.Sprint("I acknowledge this will irrevocably delete all revisions for table ", id)
+
+				if expectedAgree != agree {
+					notice := pgnotice.NewWithSeverityf("WARNING",
+						"Force delete canceled, please provide an explicit acknowledgement of"+
+							"the following form as the second argument: %q", expectedAgree)
+					ctx.ClientNoticeSender.BufferClientNotice(ctx.Context, notice)
+					return tree.DBoolFalse, nil
+				}
+
+				err := ctx.Planner.ForceDeleteTableData(ctx.Context, id)
+				if err != nil {
+					notice := pgnotice.NewWithSeverityf("ERROR",
+						"Force delete failed with %s", err)
+					ctx.ClientNoticeSender.BufferClientNotice(ctx.Context, notice)
+					return tree.DBoolFalse, nil
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function can be used to clear the data belonging to a table, when the table cannot be dropped.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
