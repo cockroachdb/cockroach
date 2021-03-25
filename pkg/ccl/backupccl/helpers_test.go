@@ -12,18 +12,25 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"io/ioutil"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -294,4 +301,63 @@ func injectStatsWithRowCount(
 	}
 	]'`, tableName, columnName, rowCount, rowCount))
 	return sqlDB.QueryStr(t, getStatsQuery(tableName))
+}
+
+// thresholdBlocker is a small wrapper around channels that are commonly used to
+// block operations during testing.
+// For example, it can be used in conjection with the RunBeforeBackfillChunk and
+// BulkAdderFlushesEveryBatch cluster settings. The SQLSchemaChanger knob can be
+// used to control the chunk size.
+type thresholdBlocker struct {
+	threshold        int
+	reachedThreshold chan struct{}
+	canProceed       chan struct{}
+}
+
+func (t thresholdBlocker) maybeBlock(count int) {
+	if count == t.threshold {
+		close(t.reachedThreshold)
+		<-t.canProceed
+	}
+}
+
+func (t thresholdBlocker) waitUntilBlocked() {
+	<-t.reachedThreshold
+}
+
+func (t thresholdBlocker) allowToProceed() {
+	close(t.canProceed)
+}
+
+func makeThresholdBlocker(threshold int) thresholdBlocker {
+	return thresholdBlocker{
+		threshold:        threshold,
+		reachedThreshold: make(chan struct{}),
+		canProceed:       make(chan struct{}),
+	}
+}
+
+// getSpansFromManifest returns the spans that describe the data included in a
+// given backup.
+func getSpansFromManifest(t *testing.T, backupPath string) roachpb.Spans {
+	backupManifestBytes, err := ioutil.ReadFile(backupPath + "/" + backupManifestName)
+	require.NoError(t, err)
+	var backupManifest BackupManifest
+	decompressedBytes, err := decompressData(backupManifestBytes)
+	require.NoError(t, err)
+	require.NoError(t, protoutil.Unmarshal(decompressedBytes, &backupManifest))
+	spans := make(roachpb.Spans, 0, len(backupManifest.Files))
+	for _, file := range backupManifest.Files {
+		spans = append(spans, file.Span)
+	}
+	mergedSpans, _ := roachpb.MergeSpans(spans)
+	return mergedSpans
+}
+
+func getKVCount(ctx context.Context, kvDB *kv.DB, dbName, tableName string) (int, error) {
+	tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
+	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
+	tableEnd := tablePrefix.PrefixEnd()
+	kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0)
+	return len(kvs), err
 }
