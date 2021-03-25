@@ -19,9 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/snappy"
@@ -191,6 +193,14 @@ type diskQueue struct {
 	scratchDecompressedReadBytes []byte
 
 	diskAcc *mon.BoundAccount
+
+	// diskSpillingMetricsHelper keeps track of various disk spilling metrics.
+	diskSpillingMetricsHelper struct {
+		mu struct {
+			syncutil.Mutex
+			querySpilled bool
+		}
+	}
 }
 
 var _ RewindableQueue = &diskQueue{}
@@ -296,6 +306,9 @@ func GetPatherFunc(f func(ctx context.Context) string) GetPather {
 type DiskQueueCfg struct {
 	// FS is the filesystem interface to use.
 	FS fs.FS
+	// DistSQLMetrics contains metrics for monitoring DistSQL processing. This
+	// can be nil if these metrics are not needed.
+	DistSQLMetrics *execinfra.DistSQLMetrics
 	// GetPather returns where the temporary directory that will contain this
 	// DiskQueue's files has been created. The directory name will be a UUID.
 	// Note that the directory is created lazily on the first call to GetPath.
@@ -363,6 +376,15 @@ func NewRewindableDiskQueue(
 	return d, nil
 }
 
+func (d *diskQueue) querySpilled() {
+	d.diskSpillingMetricsHelper.mu.Lock()
+	defer d.diskSpillingMetricsHelper.mu.Unlock()
+	if d.cfg.DistSQLMetrics != nil && !d.diskSpillingMetricsHelper.mu.querySpilled {
+		d.diskSpillingMetricsHelper.mu.querySpilled = true
+		d.cfg.DistSQLMetrics.QueriesSpilled.Inc(1)
+	}
+}
+
 func newDiskQueue(
 	ctx context.Context, typs []*types.T, cfg DiskQueueCfg, diskAcc *mon.BoundAccount,
 ) (*diskQueue, error) {
@@ -385,6 +407,7 @@ func newDiskQueue(
 	if err := cfg.FS.MkdirAll(filepath.Join(cfg.GetPather.GetPath(ctx), d.dirName)); err != nil {
 		return nil, err
 	}
+	d.querySpilled()
 	// rotateFile will create a new file to write to.
 	return d, d.rotateFile(ctx)
 }
@@ -513,6 +536,9 @@ func (d *diskQueue) writeFooterAndFlush(ctx context.Context) (err error) {
 	}
 	d.numBufferedBatches = 0
 	d.files[d.writeFileIdx].totalSize += written
+	if d.cfg.DistSQLMetrics != nil {
+		d.cfg.DistSQLMetrics.SpilledBytesWritten.Inc(int64(written))
+	}
 	if err := d.diskAcc.Grow(ctx, int64(written)); err != nil {
 		return err
 	}
@@ -638,6 +664,9 @@ func (d *diskQueue) maybeInitDeserializer(ctx context.Context) (bool, error) {
 	n, err := d.readFile.ReadAt(d.writer.scratch.compressedBuf, int64(readRegionStart))
 	if err != nil && err != io.EOF {
 		return false, err
+	}
+	if d.cfg.DistSQLMetrics != nil {
+		d.cfg.DistSQLMetrics.SpilledBytesRead.Inc(int64(n))
 	}
 	if n != len(d.writer.scratch.compressedBuf) {
 		return false, errors.Errorf("expected to read %d bytes but read %d", len(d.writer.scratch.compressedBuf), n)
