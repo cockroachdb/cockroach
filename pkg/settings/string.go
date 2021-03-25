@@ -42,6 +42,11 @@ func (*StringSetting) Typ() string {
 	return "s"
 }
 
+// Get default value for setting
+func (s *StringSetting) Default() string {
+	return s.defaultValue
+}
+
 // Get retrieves the string value in the setting.
 func (s *StringSetting) Get(sv *Values) string {
 	loaded := sv.getGeneric(s.slotIdx)

@@ -51,6 +51,11 @@ func (*FloatSetting) Typ() string {
 	return "f"
 }
 
+// Get default value for setting
+func (f *FloatSetting) Default() float64 {
+	return f.defaultValue
+}
+
 // Override changes the setting panicking if validation fails and also overrides
 // the default value.
 //
