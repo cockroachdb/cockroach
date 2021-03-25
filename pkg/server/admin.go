@@ -2779,9 +2779,15 @@ func (c *adminPrivilegeChecker) hasAdminRole(
 	ctx context.Context, user security.SQLUsername,
 ) (bool, error) {
 	if user.IsRootUser() {
-		// Shortcut.
+		// Shortcut. This allows access when KV is not available.
 		return true, nil
 	}
+	ok, isAdmin, err := isAdminFromContext(ctx)
+	if ok || err != nil {
+		// Shortcut. This allows access when KV is not available.
+		return isAdmin, err
+	}
+
 	row, err := c.ie.QueryRowEx(
 		ctx, "check-is-admin", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},

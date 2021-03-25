@@ -348,7 +348,7 @@ func (s *authenticationServer) UserLogout(
 // validated), and an error for any internal errors which prevented validation.
 func (s *authenticationServer) verifySession(
 	ctx context.Context, cookie *serverpb.SessionCookie,
-) (bool, string, error) {
+) (isValid bool, user security.SQLUsername, isAdmin bool, err error) {
 	// Look up session in database and verify hashed secret value.
 	const sessionQuery = `
 SELECT "hashedSecret", "username", "expiresAt", "revokedAt"
@@ -369,14 +369,14 @@ WHERE id = $1`
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		sessionQuery, cookie.ID)
 	if row == nil || err != nil {
-		return false, "", err
+		return false, user, false, err
 	}
 
 	if row.Len() != 4 ||
 		row[0].ResolvedType().Family() != types.BytesFamily ||
 		row[1].ResolvedType().Family() != types.StringFamily ||
 		row[2].ResolvedType().Family() != types.TimestampFamily {
-		return false, "", errors.Errorf("values returned from auth session lookup do not match expectation")
+		return false, user, false, errors.Errorf("values returned from auth session lookup do not match expectation")
 	}
 
 	// Extract datum values.
@@ -386,21 +386,31 @@ WHERE id = $1`
 	isRevoked = row[3].ResolvedType().Family() != types.UnknownFamily
 
 	if isRevoked {
-		return false, "", nil
+		return false, user, false, nil
 	}
 
 	if now := s.server.clock.PhysicalTime(); !now.Before(expiresAt) {
-		return false, "", nil
+		return false, user, false, nil
 	}
 
 	hasher := sha256.New()
 	_, _ = hasher.Write(cookie.Secret)
 	hashedCookieSecret := hasher.Sum(nil)
 	if !bytes.Equal(hashedSecret, hashedCookieSecret) {
-		return false, "", nil
+		return false, user, false, nil
 	}
 
-	return true, username, nil
+	user, err = security.MakeSQLUsernameFromPreNormalizedStringChecked(username)
+	if err != nil {
+		return false, user, false, err
+	}
+
+	isAdmin, err = s.server.admin.hasAdminRole(ctx, user)
+	if err != nil {
+		return false, user, false, err
+	}
+
+	return true, user, isAdmin, nil
 }
 
 // verifyPassword verifies the passed username/password pair against the
@@ -536,16 +546,19 @@ func newAuthenticationMux(s *authenticationServer, inner http.Handler) *authenti
 
 type webSessionUserKey struct{}
 type webSessionIDKey struct{}
+type webSessionAdminKey struct{}
 
 const webSessionUserKeyStr = "websessionuser"
 const webSessionIDKeyStr = "websessionid"
+const webSessionAdminKeyStr = "websessionisadmin"
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, cookie, err := am.getSession(w, req)
+	username, isAdmin, cookie, err := am.getSession(w, req)
 	if err == nil {
 		ctx := req.Context()
-		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
+		ctx = context.WithValue(ctx, webSessionUserKey{}, username.Normalized())
 		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
+		ctx = context.WithValue(ctx, webSessionAdminKey{}, isAdmin)
 		req = req.WithContext(ctx)
 	} else if !am.allowAnonymous {
 		if log.V(1) {
@@ -583,35 +596,36 @@ func makeCookieWithValue(value string, forHTTPSOnly bool) *http.Cookie {
 	}
 }
 
-// getSession decodes the cookie from the request, looks up the corresponding session, and
-// returns the logged in user name. If there's an error, it returns an error value and the
-// HTTP error code.
+// getSession decodes the cookie from the request, looks up the
+// corresponding session, and returns the logged in user name and
+// admin status. If there's an error, it returns an error value and
+// the HTTP error code.
 func (am *authenticationMux) getSession(
 	w http.ResponseWriter, req *http.Request,
-) (string, *serverpb.SessionCookie, error) {
+) (username security.SQLUsername, isAdmin bool, cookie *serverpb.SessionCookie, err error) {
 	// Validate the returned cookie.
 	rawCookie, err := req.Cookie(SessionCookieName)
 	if err != nil {
-		return "", nil, err
+		return username, false, nil, err
 	}
 
-	cookie, err := decodeSessionCookie(rawCookie)
+	cookie, err = decodeSessionCookie(rawCookie)
 	if err != nil {
 		err = errors.Wrap(err, "a valid authentication cookie is required")
-		return "", nil, err
+		return username, false, nil, err
 	}
 
-	valid, username, err := am.server.verifySession(req.Context(), cookie)
+	valid, username, isAdmin, err := am.server.verifySession(req.Context(), cookie)
 	if err != nil {
 		err := apiInternalError(req.Context(), err)
-		return "", nil, err
+		return username, false, nil, err
 	}
 	if !valid {
 		err := errors.New("the provided authentication session could not be validated")
-		return "", nil, err
+		return username, false, nil, err
 	}
 
-	return username, cookie, nil
+	return username, isAdmin, cookie, nil
 }
 
 func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {
@@ -653,6 +667,9 @@ func forwardAuthenticationMetadata(ctx context.Context, _ *http.Request) metadat
 	}
 	if sessionID := ctx.Value(webSessionIDKey{}); sessionID != nil {
 		md.Set(webSessionIDKeyStr, fmt.Sprintf("%v", sessionID))
+	}
+	if isAdmin := ctx.Value(webSessionAdminKey{}); isAdmin != nil {
+		md.Set(webSessionAdminKeyStr, fmt.Sprintf("%v", isAdmin))
 	}
 	return md
 }

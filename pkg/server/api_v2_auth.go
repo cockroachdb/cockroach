@@ -217,49 +217,50 @@ func newAuthenticationV2Mux(s *authenticationV2Server, inner http.Handler) *auth
 // also sends the error over http using w.
 func (a *authenticationV2Mux) getSession(
 	w http.ResponseWriter, req *http.Request,
-) (string, *serverpb.SessionCookie, error) {
+) (username security.SQLUsername, isAdmin bool, cookie *serverpb.SessionCookie, err error) {
 	// Validate the returned cookie.
 	rawSession := req.Header.Get(apiV2AuthHeader)
 	if len(rawSession) == 0 {
 		err := errors.New("invalid session header")
 		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return "", nil, err
+		return username, false, nil, err
 	}
 	sessionCookie := &serverpb.SessionCookie{}
 	decoded, err := base64.StdEncoding.DecodeString(rawSession)
 	if err != nil {
 		err := errors.New("invalid session header")
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return "", nil, err
+		return username, false, nil, err
 	}
 	if err := protoutil.Unmarshal(decoded, sessionCookie); err != nil {
 		err := errors.New("invalid session header")
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return "", nil, err
+		return username, false, nil, err
 	}
 
-	valid, username, err := a.s.authServer.verifySession(req.Context(), sessionCookie)
+	valid, username, isAdmin, err := a.s.authServer.verifySession(req.Context(), sessionCookie)
 	if err != nil {
 		apiV2InternalError(req.Context(), err, w)
-		return "", nil, err
+		return username, false, nil, err
 	}
 	if !valid {
 		err := errors.New("the provided authentication session could not be validated")
 		http.Error(w, err.Error(), http.StatusUnauthorized)
-		return "", nil, err
+		return username, false, nil, err
 	}
 
-	return username, sessionCookie, nil
+	return username, isAdmin, sessionCookie, nil
 }
 
 func (a *authenticationV2Mux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	username, cookie, err := a.getSession(w, req)
+	username, isAdmin, cookie, err := a.getSession(w, req)
 	if err == nil {
 		// Valid session found. Set the username in the request context, so
 		// child http.Handlers can access it.
 		ctx := req.Context()
-		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
+		ctx = context.WithValue(ctx, webSessionUserKey{}, username.Normalized())
 		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
+		ctx = context.WithValue(ctx, webSessionAdminKey{}, isAdmin)
 		req = req.WithContext(ctx)
 	} else {
 		// getSession writes an error to w if err != nil.
