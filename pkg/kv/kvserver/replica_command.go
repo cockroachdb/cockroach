@@ -2405,7 +2405,8 @@ func (r *Replica) sendSnapshot(
 
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
 	if err != nil {
-		return errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
+		err = errors.Wrapf(err, "%s: failed to generate %s snapshot", r, snapType)
+		return errors.Mark(err, errMarkSnapshotError)
 	}
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
