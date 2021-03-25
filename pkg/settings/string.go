@@ -42,6 +42,14 @@ func (*StringSetting) Typ() string {
 	return "s"
 }
 
+// Default returns default value for setting.
+func (s *StringSetting) Default() string {
+	return s.defaultValue
+}
+
+// Defeat the linter.
+var _ = (*StringSetting).Default
+
 // Get retrieves the string value in the setting.
 func (s *StringSetting) Get(sv *Values) string {
 	loaded := sv.getGeneric(s.slotIdx)
