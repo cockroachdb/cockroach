@@ -2204,13 +2204,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	interestingTable.Store(descpb.ID(0))
 	blockLeaseAcquisitionOfInterestingTable := make(chan chan struct{})
 	unblockAll := make(chan struct{})
-	args := base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLLeaseManager: &lease.ManagerTestingKnobs{
-				AlwaysUseRangefeeds: true,
-			},
-		},
-	}
+	args := base.TestServerArgs{}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: args,
 	})
