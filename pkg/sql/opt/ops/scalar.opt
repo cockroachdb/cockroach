@@ -447,6 +447,12 @@ define Contains {
     Right ScalarExpr
 }
 
+[Scalar, Bool, Comparison, CompositeInsensitive]
+define ContainedBy {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
 [Scalar, Bool, Comparison]
 define JsonExists {
     Left ScalarExpr

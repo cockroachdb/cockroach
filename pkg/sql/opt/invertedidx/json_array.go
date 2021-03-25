@@ -42,49 +42,86 @@ func (j *jsonOrArrayJoinPlanner) extractInvertedJoinConditionFromLeaf(
 ) opt.ScalarExpr {
 	switch t := expr.(type) {
 	case *memo.ContainsExpr:
-		if j.canExtractJSONOrArrayJoinCondition(t.Left, t.Right) {
-			return t
-		}
-		return nil
-
+		return j.extractJSONOrArrayJoinCondition(t)
+	case *memo.ContainedByExpr:
+		return j.extractJSONOrArrayJoinCondition(t)
 	default:
 		return nil
 	}
 }
 
-// canExtractJSONOrArrayJoinCondition returns true if it is possible to extract
-// an inverted join condition from the given left and right expression
-// arguments. Returns false otherwise.
-func (j *jsonOrArrayJoinPlanner) canExtractJSONOrArrayJoinCondition(
-	left, right opt.ScalarExpr,
-) bool {
-	// The first argument should be a variable or expression corresponding to
-	// the index column.
-	// TODO(mgartner): The first argument could be an expression that matches a
-	// computed column expression if the computed column is indexed. Pass
-	// computedColumns to enable this.
-	if !isIndexColumn(j.tabID, j.index, left, nil /* computedColumns */) {
-		return false
+// extractJSONOrArrayJoinCondition returns a scalar expression if it is
+// possible to extract an inverted join condition from the left and right
+// arguments of the given expression. If the arguments need to be commuted,
+// it will construct a new expression. Returns nil otherwise.
+func (j *jsonOrArrayJoinPlanner) extractJSONOrArrayJoinCondition(
+	expr opt.ScalarExpr,
+) opt.ScalarExpr {
+	var left, right, indexCol, val opt.ScalarExpr
+	commuteArgs, containedBy := false, false
+	switch t := expr.(type) {
+	case *memo.ContainsExpr:
+		left = t.Left
+		right = t.Right
+	case *memo.ContainedByExpr:
+		left = t.Left
+		right = t.Right
+		containedBy = true
+	default:
+		return nil
 	}
-	if left.DataType().Family() == types.ArrayFamily &&
+	if isIndexColumn(j.tabID, j.index, left, nil /* computedColumns */) {
+		// When the first argument is a variable or expression corresponding to the
+		// index column, we keep the order of arguments as is and get the
+		// InvertedExpression for either left @> right or left <@ right.
+		// TODO(mgartner): The first argument could be an expression that matches a
+		// computed column expression if the computed column is indexed. Pass
+		// computedColumns to enable this.
+		indexCol, val = left, right
+	} else if isIndexColumn(j.tabID, j.index, right, nil /* computedColumns */) {
+		// When the second argument is a variable or expression corresponding to
+		// the index column, we must commute the right and left arguments and
+		// construct a new expression. We get the equivalent InvertedExpression for
+		// right <@ left or right @> left.
+		commuteArgs = true
+		indexCol, val = right, left
+	} else {
+		// If neither condition is met, we cannot create an InvertedExpression.
+		return nil
+	}
+	if indexCol.DataType().Family() == types.ArrayFamily &&
 		j.index.Version() < descpb.EmptyArraysInInvertedIndexesVersion {
 		// We cannot plan inverted joins on array indexes that do not include
 		// keys for empty arrays.
-		return false
+		return nil
 	}
-
 	// The second argument should either come from the input or be a constant.
 	var p props.Shared
-	memo.BuildSharedProps(right, &p)
+	memo.BuildSharedProps(val, &p)
 	if !p.OuterCols.Empty() {
 		if !p.OuterCols.SubsetOf(j.inputCols) {
-			return false
+			return nil
 		}
-	} else if !memo.CanExtractConstDatum(right) {
-		return false
+	} else if !memo.CanExtractConstDatum(val) {
+		return nil
 	}
 
-	return true
+	// If commuteArgs is true, we construct a new equivalent expression so that
+	// the left argument is the indexed column.
+	if commuteArgs {
+		if containedBy {
+			return &memo.ContainsExpr{
+				Left:  right,
+				Right: left,
+			}
+		} else {
+			return &memo.ContainedByExpr{
+				Left:  right,
+				Right: left,
+			}
+		}
+	}
+	return expr
 }
 
 // getInvertedExprForJSONOrArrayIndexForContaining gets an inverted.Expression that
@@ -185,10 +222,6 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 	getInvertedExprLeaf := func(expr tree.TypedExpr) (tree.TypedExpr, error) {
 		switch t := expr.(type) {
 		case *tree.ComparisonExpr:
-			if t.Operator != tree.Contains {
-				return nil, fmt.Errorf("%s cannot be index-accelerated", t)
-			}
-
 			// We know that the non-index param is the second param.
 			nonIndexParam := t.Right.(tree.TypedExpr)
 
@@ -196,7 +229,15 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 			// it for every row.
 			var spanExpr *inverted.SpanExpression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
-				invertedExpr := getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, d)
+				var invertedExpr inverted.Expression
+				switch t.Operator {
+				case tree.ContainedBy:
+					invertedExpr = getInvertedExprForJSONOrArrayIndexForContainedBy(evalCtx, d)
+				case tree.Contains:
+					invertedExpr = getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, d)
+				default:
+					return nil, fmt.Errorf("%s cannot be index-accelerated", t)
+				}
 				spanExpr, _ = invertedExpr.(*inverted.SpanExpression)
 			}
 
@@ -241,7 +282,16 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 			if d == tree.DNull {
 				return nil, nil
 			}
-			return getInvertedExprForJSONOrArrayIndexForContaining(g.evalCtx, d), nil
+			switch t.Operator {
+			case tree.Contains:
+				return getInvertedExprForJSONOrArrayIndexForContaining(g.evalCtx, d), nil
+
+			case tree.ContainedBy:
+				return getInvertedExprForJSONOrArrayIndexForContainedBy(g.evalCtx, d), nil
+
+			default:
+				return nil, fmt.Errorf("unsupported expression %v", t)
+			}
 
 		default:
 			return nil, fmt.Errorf("unsupported expression %v", t)
@@ -294,7 +344,9 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 ) {
 	switch t := expr.(type) {
 	case *memo.ContainsExpr:
-		invertedExpr = j.extractJSONOrArrayContainsCondition(evalCtx, t.Left, t.Right)
+		invertedExpr = j.extractJSONOrArrayContainsCondition(evalCtx, t.Left, t.Right, false /* containedBy */)
+	case *memo.ContainedByExpr:
+		invertedExpr = j.extractJSONOrArrayContainsCondition(evalCtx, t.Left, t.Right, true /* containedBy */)
 	case *memo.EqExpr:
 		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
 			invertedExpr = j.extractJSONFetchValEqCondition(evalCtx, fetch, t.Right)
@@ -322,21 +374,20 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 // on the given left and right expression arguments. Returns an empty
 // InvertedExpression if no inverted filter could be extracted.
 func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
-	evalCtx *tree.EvalContext, left, right opt.ScalarExpr,
+	evalCtx *tree.EvalContext, left, right opt.ScalarExpr, containedBy bool,
 ) inverted.Expression {
 	var indexColumn, constantVal opt.ScalarExpr
-	containedBy := false
 	if isIndexColumn(j.tabID, j.index, left, j.computedColumns) && memo.CanExtractConstDatum(right) {
 		// When the first argument is a variable or expression corresponding to the
 		// index column and the second argument is a constant, we get the
-		// InvertedExpression for left @> right.
+		// InvertedExpression for left @> right or left <@ right.
 		indexColumn, constantVal = left, right
 	} else if isIndexColumn(j.tabID, j.index, right, j.computedColumns) && memo.CanExtractConstDatum(left) {
 		// When the second argument is a variable or expression corresponding to
 		// the index column and the first argument is a constant, we get the
-		// equivalent InvertedExpression for right <@ left.
+		// equivalent InvertedExpression for right <@ left or right @> left.
 		indexColumn, constantVal = right, left
-		containedBy = true
+		containedBy = !containedBy
 	} else {
 		// If neither condition is met, we cannot create an InvertedExpression.
 		return inverted.NonInvertedColExpression{}

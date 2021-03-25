@@ -58,11 +58,12 @@ func TestTryJoinJsonOrArrayIndex(t *testing.T) {
 		invertedExpr string
 	}{
 		{
-			// Indexed column must be first with @>.
+			// Indexed column can be on either side of @>.
 			filters:      "json1 @> json2",
 			indexOrd:     jsonOrd,
-			invertedExpr: "",
+			invertedExpr: "json2 <@ json1",
 		},
+		// Indexed column can be on either side of <@.
 		{
 			filters:      "json1 <@ json2",
 			indexOrd:     jsonOrd,
@@ -74,16 +75,16 @@ func TestTryJoinJsonOrArrayIndex(t *testing.T) {
 			invertedExpr: "json2 @> json1",
 		},
 		{
-			// Indexed column must be first with @>.
+			// Indexed column can be on either side of @>.
 			filters:      "array1 @> array2",
 			indexOrd:     arrayOrd,
-			invertedExpr: "",
+			invertedExpr: "array2 <@ array1",
 		},
 		{
-			// Indexed column must be second with <@.
+			// Indexed column can be on either side of <@.
 			filters:      "array2 <@ array1",
 			indexOrd:     arrayOrd,
-			invertedExpr: "",
+			invertedExpr: "array2 <@ array1",
 		},
 		{
 			filters:      "array2 @> array1",
