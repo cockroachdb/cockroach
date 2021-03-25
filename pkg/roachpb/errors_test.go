@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type testError struct{}
@@ -197,4 +199,19 @@ func TestErrorDeprecatedFields(t *testing.T) {
 		require.EqualValues(t, err, pErr.GetDetail())
 		require.Equal(t, TransactionRestart_IMMEDIATE, pErr.deprecatedTransactionRestart)
 	})
+}
+
+func TestErrorGRPCStatus(t *testing.T) {
+	// Verify that gRPC status error en/decoding via
+	// github.com/cockroachdb/errors/extgrpc is set up correctly.
+
+	s := status.New(codes.PermissionDenied, "foo")
+	sErr := s.Err()
+	pbErr := NewError(sErr)
+	goErr := pbErr.GoError()
+
+	decoded, ok := status.FromError(goErr)
+	require.True(t, ok, "expected gRPC status error, got %T: %v", goErr, goErr)
+	require.Equal(t, s.Code(), decoded.Code())
+	require.Equal(t, s.Message(), decoded.Message())
 }
