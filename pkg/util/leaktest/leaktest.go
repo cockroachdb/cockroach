@@ -35,6 +35,19 @@ import (
 	"github.com/petermattis/goid"
 )
 
+var leakTestTimeout = 5 * time.Second
+
+// SetLeakTestTimeout sets the timeout for the leaktest, returning a defer
+// function that resets the timeout back to the original.
+// This is useful for tests that are slow to cleanup.
+func SetLeakTestTimeout(d time.Duration) func() {
+	oldLeakTestTimeout := leakTestTimeout
+	leakTestTimeout = d
+	return func() {
+		leakTestTimeout = oldLeakTestTimeout
+	}
+}
+
 // interestingGoroutines returns all goroutines we care about for the purpose
 // of leak checking. It excludes testing or runtime ones.
 func interestingGoroutines() map[int64]string {
@@ -128,7 +141,7 @@ func AfterTest(t testing.TB) func() {
 
 		// Loop, waiting for goroutines to shut down.
 		// Wait up to 5 seconds, but finish as quickly as possible.
-		deadline := timeutil.Now().Add(5 * time.Second)
+		deadline := timeutil.Now().Add(leakTestTimeout)
 		for {
 			if err := diffGoroutines(orig); err != nil {
 				if timeutil.Now().Before(deadline) {

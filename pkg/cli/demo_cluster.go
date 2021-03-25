@@ -262,6 +262,19 @@ func (c *transientCluster) start(
 				latencyMap[dst.ServingRPCAddr()] = latency
 			}
 		}
+
+		// Reset latency to zero during shutdown.
+		defer func() {
+			for i, src := range servers {
+				latencyMap := src.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
+				for j, dst := range servers {
+					if i == j {
+						continue
+					}
+					latencyMap[dst.ServingRPCAddr()] = 0
+				}
+			}
+		}()
 	}
 
 	// We've assembled our latency maps and are ready for all servers to proceed

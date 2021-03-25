@@ -900,7 +900,7 @@ func (d delayingConn) Read(b []byte) (n int, err error) {
 		}
 		// If we somehow don't get our expected magic, throw an error.
 		if hdr.Magic != magic {
-			panic(errors.New("didn't get expected magic bytes header"))
+			panic(errors.Newf("didn't get expected magic bytes header: %#v", hdr))
 			// TODO (rohany): I can't get this to work. I suspect that the problem
 			//  is with that maybe the improperly parsed struct is not written back
 			//  into the same binary format that it was read as. I tried this with sending
