@@ -174,7 +174,7 @@ func (m *CommonNodeDecommissionDetails) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_CommonNodeDecommissionDetails proto.InternalMessageInfo
 
-// NodeDecommissioned is recorded when a node is marked as
+// NodeDecommissioning is recorded when a node is marked as
 // decommissioning.
 type NodeDecommissioning struct {
 	CommonEventDetails            `protobuf:"bytes,1,opt,name=common,proto3,embedded=common" json:""`

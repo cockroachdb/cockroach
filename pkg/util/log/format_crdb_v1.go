@@ -65,32 +65,29 @@ followed by the text of the log entry.`)
 		buf.WriteString(`
 followed by:
 
-- The logging context tags enclosed between "[" and "]", if any. It is possible
+- The logging context tags enclosed between ` + "`[`" + ` and ` + "`]`" + `, if any. It is possible
   for this to be omitted if there were no context tags.
 - the text of the log entry.`)
 	}
 
 	buf.WriteString(`
 
-Beware that the text of the log entry can span multiple lines. In particular,
-the following caveats apply:
+Beware that the text of the log entry can span multiple lines. The following caveats apply:
 
 `)
 
 	if !withCounter {
 		// If there is no counter, the format is ambiguous. Explain that.
 		buf.WriteString(`
-- the text of the log entry can start with text enclosed between "[" and "]".
-  It is not possible to distinguish between logging context tag information
-  and a "[...]" string in the main text of the log entry, if there were
-  no logging tags to start with. This means that this format is ambiguous.
-  Consider ` + "`" + formatCrdbV1WithCounter{}.formatterName() + "`" + ` for an unambiguous alternative.
+- The text of the log entry can start with text enclosed between ` + "`[`" + ` and ` + "`]`" + `.
+  If there were no logging tags to start with, it is not possible to distinguish between logging context tag information and a ` + "`[...]`" + ` string in the main text of the log entry. This means that this format is ambiguous.
+  For an unambiguous alternative, consider ` + "`" + formatCrdbV1WithCounter{}.formatterName() + "`" + `.
 `)
 	}
 
 	// General disclaimer about the lack of boundaries.
 	buf.WriteString(`
-- the text of the log entry can embed arbitrary application-level strings,
+- The text of the log entry can embed arbitrary application-level strings,
   including strings that represent log entries. In particular, an accident
   of implementation can cause the common entry prefix (described below)
   to also appear on a line of its own, as part of the payload of a previous
@@ -112,10 +109,10 @@ regular log entries. This header reports when the file was created,
 which parameters were used to start the server, the server identifiers
 if known, and other metadata about the running process.
 
-This header appears to be logged at severity INFO (with an I prefix at the
-start of the line) even though it does not really have a severity. The
-header is printed unconditionally even when a filter is configured to
-omit entries at the INFO level.
+- This header appears to be logged at severity ` + "`INFO`" + ` (with an ` + "`I`" + ` prefix at the
+start of the line) even though it does not really have a severity.
+- The header is printed unconditionally even when a filter is configured to
+omit entries at the ` + "`INFO`" + ` level.
 
 ### Common log entry prefix
 
@@ -129,25 +126,23 @@ Each line of output starts with the following prefix:
 
 	buf.WriteString(`
 
-where the fields are defined as follows:
-
-| Field           | Description                                                       |
-|-----------------|------------------------------------------------------------------ |
-| L               | A single character, representing the log level (eg 'I' for INFO). |
-| yy              | The year (zero padded; ie 2016 is '16').                          |
-| mm              | The month (zero padded; ie May is '05').                          |
-| dd              | The day (zero padded).                                            |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.   |
-| goid            | The goroutine id (omitted if zero for use by tests).              |
-| chan            | The channel number (omitted if zero for backward-compatibility).  |
-| file            | The file name where the entry originated.                         |
-| line            | The line number where the entry originated.                       |
-| marker          | Redactability marker (see below for details).                     |`)
+| Field           | Description                                                                                                               |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., ` + "`I`" + ` for ` + "`INFO`" + `). |
+| yy              | The year (zero padded; i.e., 2016 is ` + "`16`" + `).                                                                     |
+| mm              | The month (zero padded; i.e., May is ` + "`05`" + `).                                                                     |
+| dd              | The day (zero padded).                                                                                                    |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
+| goid            | The goroutine id (omitted if zero for use by tests).                                                                      |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
+| file            | The file name where the entry originated.                                                                                 |
+| line            | The line number where the entry originated.                                                                               |
+| marker          | Redactability marker ` + "` + redactableIndicator + `" + ` (see below for details).                                       |`)
 
 	if withCounter {
 		buf.WriteString(`
-| tags            | The logging tags, enclosed between "[" and "]". May be absent.    |
-| counter         | The entry counter. Always present.                                |`)
+| tags    | The logging tags, enclosed between ` + "`[`" + ` and ` + "`]`" + `. May be absent. |
+| counter | The entry counter. Always present.                                                 |`)
 	}
 
 	buf.WriteString(`
@@ -155,10 +150,10 @@ where the fields are defined as follows:
 The redactability marker can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
 
-If the marker "` + redactableIndicator + `" is present, the remainder of the log entry
-contains delimiters (` + string(redact.StartMarker()) + `...` + string(redact.EndMarker()) + `) around
+If the marker ` + "` + redactableIndicator + `" + ` is present, the remainder of the log entry
+contains delimiters (` + string(redact.StartMarker()) + "..." + string(redact.EndMarker()) + `) around
 fields that are considered sensitive. These markers are automatically recognized
-by ` + "`" + `debug zip` + "`" + ` and ` + "`" + `debug merge-logs` + "`" + ` when log redaction is requested.
+by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` when log redaction is requested.
 `)
 
 	return buf.String()

@@ -45,52 +45,51 @@ Each line of output starts with the following prefix:
 
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker [tags...] counter cont
 
-| Field           | Description                                                         |
-|-----------------|---------------------------------------------------------------------|
-| L               | A single character, representing the log level (eg 'I' for INFO).   |
-| yy              | The year (zero padded; ie 2016 is '16').                            |
-| mm              | The month (zero padded; ie May is '05').                            |
-| dd              | The day (zero padded).                                              |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.     |
-| goid            | The goroutine id (zero when cannot be determined).                  |
-| chan            | The channel number (omitted if zero for backward-compatibility).    |
-| file            | The file name where the entry originated. Also see below.           |
-| line            | The line number where the entry originated.                         |
-| marker          | Redactability marker (see below for details).                       |
-| tags            | The logging tags, enclosed between "[" and "]". See below.          |
-| counter         | The optional entry counter (see below for details).                 |
-| cont            | Continuation mark for structured and multi-line entries. See below. |
+| Field           | Description                                                                                                               |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., ` + "`I`" + ` for ` + "`INFO`" + `). |
+| yy              | The year (zero padded; i.e., 2016 is ` + "`16`" + `).                                                                     |
+| mm              | The month (zero padded; i.e., May is ` + "`05`" + `).                                                                     |
+| dd              | The day (zero padded).                                                                                                    |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
+| goid            | The goroutine id (zero when cannot be determined).                                                                        |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
+| file            | The file name where the entry originated. Also see below.                                                                 |
+| line            | The line number where the entry originated.                                                                               |
+| marker          | Redactability marker "` + redactableIndicator + `" (see below for details).                                               |
+| tags            | The logging tags, enclosed between ` + "`[`" + ` and ` + "`]`" + `. See below.                                            |
+| counter         | The optional entry counter (see below for details).                                                                       |
+| cont            | Continuation mark for structured and multi-line entries. See below.                                                       |
 
 The ` + "`chan@`" + ` prefix before the file name indicates the logging channel,
-and is omitted if the channel is DEV.
+and is omitted if the channel is ` + "`DEV`" + `.
 
-The file name may be prefixed by the string "` + "`(gostd) `" + `" to indicate
+The file name may be prefixed by the string ` + "`(gostd) `" + ` to indicate
 that the log entry was produced inside the Go standard library, instead
 of a CockroachDB component. Entry parsers must be configured to ignore this prefix
 when present.
 
-The ` + "`marker`" + ` part is the redactability marker.
-The redactability marker can be empty; in this case, its position in the common prefix is
+` + "`marker`" + ` can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
-If the marker is "` + redactableIndicator + `", the remainder of the log entry
-contains delimiters (` + string(redact.StartMarker()) + `...` + string(redact.EndMarker()) + `) around
+If the marker "` + redactableIndicator + `" is present, the remainder of the log entry
+contains delimiters (` + string(redact.StartMarker()) + "..." + string(redact.EndMarker()) + `) around
 fields that are considered sensitive. These markers are automatically recognized
-by ` + "`" + `debug zip` + "`" + ` and ` + "`" + `debug merge-logs` + "`" + ` when log redaction is requested.
+by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` when log redaction is requested.
 
-The logging ` + "`tags`" + ` part is enclosed between square brackets ` + "`[...]`" + `,
+The logging ` + "`tags`" + ` are enclosed between square brackets ` + "`[...]`" + `,
 and the syntax ` + "`[-]`" + ` is used when there are no logging tags
 associated with the log entry.
 
-The ` + "`counter`" + ` part is numeric, and is incremented for every
+` + "`counter`" + ` is numeric, and is incremented for every
 log entry emitted to this sink. (There is thus one counter sequence per
 sink.) For entries that do not have a counter value
-associated, for example header entries in file sinks, the counter position
-in the common prefix is empty: the tags part that precedes is then
-followed by two ASCII space characters, instead of one space, the counter
+associated (e.g., header entries in file sinks), the counter position
+in the common prefix is empty: ` + "`tags`" + ` is then
+followed by two ASCII space characters, instead of one space; the ` + "`counter`" + `,
 and another space. The presence of the two ASCII spaces indicates
 reliably that no counter was present.
 
-The ` + "`cont`" + ` part is a format/continuation indicator:
+` + "`cont`" + ` is a format/continuation indicator:
 
 | Continuation indicator | ASCII | Description |
 |------------------------|-------|--|
@@ -125,23 +124,23 @@ Example long entries broken up into multiple lines:
 
 ### Backward-compatibility notes
 
-Entries in this format can be read by most crdb-v1 log parsers,
+Entries in this format can be read by most ` + "`crdb-v1`" + ` log parsers,
 in particular the one included in the DB console and
-also the ` + "`debug merge-logs`" + ` facility.
+also the ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` facility.
 
 However, implementers of previous version parsers must
 understand that the logging tags field is now always
 included, and the lack of logging tags is included
-by a tag string set to "` + "`[-]`" + `".
+by a tag string set to ` + "`[-]`" + `.
 
 Likewise, the entry counter is now also always included,
-and there is a special character after the entry counter
+and there is a special character after ` + "`counter`" + `
 to indicate whether the remainder of the line is a
 structured entry, or a continuation of a previous entry.
 
 Finally, in the previous format, structured entries
-were prefixed with the string "Structured entry:". In
-the new format, they are prefixed by the '=' continuation
+were prefixed with the string ` + "`Structured entry:`" + `. In
+the new format, they are prefixed by the ` + "`=`" + ` continuation
 indicator.
 `)
 
