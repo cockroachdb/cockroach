@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -4408,4 +4409,282 @@ schema_name`
 		}
 		return nil
 	})
+}
+
+func waitForSuccessfulJob(t *testing.T, tc *testcluster.TestCluster, id int64) {
+	// Force newly created job to be adopted and verify it succeeds.
+	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+	testutils.SucceedsSoon(t, func() error {
+		var unused int64
+		return tc.ServerConn(0).QueryRow(
+			"SELECT job_id FROM [SHOW JOBS] WHERE job_id = $1 AND status = $2",
+			id, jobs.StatusSucceeded).Scan(&unused)
+	})
+}
+
+// thresholdBlocker is a small wrapper around channels that are commonly used to
+// block operations during testing.
+// For example, it can be used in conjection with the RunBeforeBackfillChunk and
+// BulkAdderFlushesEveryBatch cluster settings. The SQLSchemaChanger knob can be
+// used to control the chunk size.
+type thresholdBlocker struct {
+	threshold        int
+	reachedThreshold chan struct{}
+	canProceed       chan struct{}
+}
+
+func (t thresholdBlocker) maybeBlock(count int) {
+	if count == t.threshold {
+		close(t.reachedThreshold)
+		<-t.canProceed
+	}
+}
+
+func (t thresholdBlocker) waitUntilBlocked() {
+	<-t.reachedThreshold
+}
+
+func (t thresholdBlocker) allowToProceed() {
+	close(t.canProceed)
+}
+
+func makeThresholdBlocker(threshold int) thresholdBlocker {
+	return thresholdBlocker{
+		threshold:        threshold,
+		reachedThreshold: make(chan struct{}),
+		canProceed:       make(chan struct{}),
+	}
+}
+
+// getSpansFromManifest returns the spans that describe the data included in a
+// given backup.
+func getSpansFromManifest(t *testing.T, backupPath string) roachpb.Spans {
+	backupManifestBytes, err := ioutil.ReadFile(backupPath + "/" + backupccl.BackupManifestName)
+	require.NoError(t, err)
+	var backupManifest backupccl.BackupManifest
+	require.NoError(t, protoutil.Unmarshal(backupManifestBytes, &backupManifest))
+	spans := make(roachpb.Spans, 0, len(backupManifest.Files))
+	for _, file := range backupManifest.Files {
+		spans = append(spans, file.Span)
+	}
+	mergedSpans, _ := roachpb.MergeSpans(spans)
+	return mergedSpans
+}
+
+func getKVCount(ctx context.Context, kvDB *kv.DB, dbName, tableName string) (int, error) {
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, dbName, tableName)
+	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
+	tableEnd := tablePrefix.PrefixEnd()
+	kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0)
+	return len(kvs), err
+}
+
+func TestBackupOnlyPublicIndexes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.UnderRace(t, "likely slow under race")
+
+	numAccounts := 1000
+	chunkSize := int64(100)
+
+	// Create 2 blockers that block the backfill after 3 and 6 chunks have been
+	// processed respectively.
+	// Expect there to be 10 chunks in an index backfill:
+	//  numAccounts / chunkSize = 1000 / 100 = 10 chunks.
+	backfillBlockers := []thresholdBlocker{
+		makeThresholdBlocker(3),
+		makeThresholdBlocker(6),
+	}
+
+	// Separately, make a coule of blockers that block all schema change jobs.
+	blockBackfills := make(chan struct{})
+	// By default allow backfills to proceed.
+	close(blockBackfills)
+
+	var chunkCount int32
+	serverArgs := base.TestServerArgs{}
+	serverArgs.Knobs = base.TestingKnobs{
+		// Configure knobs to block the index backfills.
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				curChunk := int(atomic.LoadInt32(&chunkCount))
+				for _, blocker := range backfillBlockers {
+					blocker.maybeBlock(curChunk)
+				}
+				atomic.AddInt32(&chunkCount, 1)
+
+				// Separately, block backfills.
+				<-blockBackfills
+
+				return nil
+			},
+			// Flush every chunk during the backfills.
+			BulkAdderFlushesEveryBatch: true,
+		},
+	}
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+
+	ctx, tc, sqlDB, rawDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, initNone, params)
+	defer cleanupFn()
+	kvDB := tc.Server(0).DB()
+
+	locationToDir := func(location string) string {
+		return strings.Replace(location, localFoo, filepath.Join(rawDir, "foo"), 1)
+	}
+
+	// Test timeline:
+	//  1. Full backup
+	//  2. Backfill started
+	//  3. Inc 1
+	//  4. Inc 2
+	//  5. Backfill completeed
+	//  6. Inc 3
+	//  7. Drop index
+	//  8. Inc 4
+
+	// First take a full backup.
+	fullBackup := localFoo + "/full"
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, fullBackup)
+
+	fullBackupSpans := getSpansFromManifest(t, locationToDir(fullBackup))
+	require.Equal(t, 1, len(fullBackupSpans))
+	require.Equal(t, "/Table/53/{1-2}", fullBackupSpans[0].String())
+
+	// Now we're going to add an index. We should only see the index
+	// appear in the backup once it is PUBLIC.
+	var g errgroup.Group
+	g.Go(func() error {
+		// We use the underlying DB since the goroutine should not call t.Fatal.
+		_, err := sqlDB.DB.ExecContext(ctx,
+			`CREATE INDEX new_balance_idx ON data.bank(balance)`)
+		return errors.Wrap(err, "creating index")
+	})
+
+	inc1Loc := localFoo + "/inc1"
+	inc2Loc := localFoo + "/inc2"
+
+	g.Go(func() error {
+		defer backfillBlockers[0].allowToProceed()
+		backfillBlockers[0].waitUntilBlocked()
+
+		// Take an incremental backup and assert that it doesn't contain any
+		// data. The only added data was from the backfill, which should not
+		// be included because they are historical writes.
+		_, err := sqlDB.DB.ExecContext(ctx, `BACKUP DATABASE data TO $1 INCREMENTAL FROM $2 WITH revision_history`,
+			inc1Loc, fullBackup)
+		return errors.Wrap(err, "running inc 1 backup")
+	})
+
+	g.Go(func() error {
+		defer backfillBlockers[1].allowToProceed()
+		backfillBlockers[1].waitUntilBlocked()
+
+		// Take an incremental backup and assert that it doesn't contain any
+		// data. The only added data was from the backfill, which should not be
+		// included because they are historical writes.
+		_, err := sqlDB.DB.ExecContext(ctx, `BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3 WITH revision_history`,
+			inc2Loc, fullBackup, inc1Loc)
+		return errors.Wrap(err, "running inc 2 backup")
+	})
+
+	// Wait for the backfill and incremental backup to complete.
+	require.NoError(t, g.Wait())
+
+	inc1Spans := getSpansFromManifest(t, locationToDir(inc1Loc))
+	require.Equalf(t, 0, len(inc1Spans), "expected inc1 to not have any data, found %v", inc1Spans)
+
+	inc2Spans := getSpansFromManifest(t, locationToDir(inc2Loc))
+	require.Equalf(t, 0, len(inc2Spans), "expected inc2 to not have any data, found %v", inc2Spans)
+
+	// Take another incremental backup that should only contain the newly added
+	// index.
+	inc3Loc := localFoo + "/inc3"
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3, $4 WITH revision_history`,
+		inc3Loc, fullBackup, inc1Loc, inc2Loc)
+	inc3Spans := getSpansFromManifest(t, locationToDir(inc3Loc))
+	require.Equal(t, 1, len(inc3Spans))
+	require.Equal(t, "/Table/53/{2-3}", inc3Spans[0].String())
+
+	// Drop the index.
+	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)
+
+	// Take another incremental backup.
+	inc4Loc := localFoo + "/inc4"
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3, $4, $5 WITH revision_history`,
+		inc4Loc, fullBackup, inc1Loc, inc2Loc, inc3Loc)
+
+	numAccountsStr := strconv.Itoa(numAccounts)
+
+	// Restore the entire chain and check that we got the full indexes.
+	{
+		sqlDB.Exec(t, `CREATE DATABASE restoredb;`)
+		sqlDB.Exec(t, `RESTORE data.bank FROM $1, $2, $3, $4 WITH into_db='restoredb'`,
+			fullBackup, inc1Loc, inc2Loc, inc3Loc)
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@[1]`, [][]string{{numAccountsStr}})
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@[2]`, [][]string{{numAccountsStr}})
+		kvCount, err := getKVCount(ctx, kvDB, "restoredb", "bank")
+		require.NoError(t, err)
+		require.Equal(t, 2*numAccounts, kvCount)
+
+		// Cleanup.
+		sqlDB.Exec(t, `DROP DATABASE restoredb CASCADE;`)
+	}
+
+	// Restore to a time where the index was being added and check that the
+	// second index was regenerated entirely.
+	{
+		blockBackfills = make(chan struct{}) // block the synthesized schema change job
+		sqlDB.Exec(t, `CREATE DATABASE restoredb;`)
+		sqlDB.Exec(t, `RESTORE data.bank FROM $1, $2, $3 WITH into_db='restoredb';`,
+			fullBackup, inc1Loc, inc2Loc)
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@[1]`, [][]string{{numAccountsStr}})
+		sqlDB.ExpectErr(t, "index .* not found", `SELECT count(*) FROM restoredb.bank@[2]`)
+
+		// Allow backfills to proceed.
+		close(blockBackfills)
+
+		// Wait for the synthesized schema change to finish, and assert that it
+		// finishes correctly.
+		scQueryRes := sqlDB.QueryStr(t, `SELECT job_id FROM [SHOW JOBS]
+		WHERE job_type = 'SCHEMA CHANGE' AND description LIKE 'RESTORING:%'`)
+		require.Equal(t, 1, len(scQueryRes),
+			`expected only 1 schema change to be generated by the restore`)
+		require.Equal(t, 1, len(scQueryRes[0]),
+			`expected only 1 column to be returned from query`)
+		scJobID, err := strconv.Atoi(scQueryRes[0][0])
+		require.NoError(t, err)
+		waitForSuccessfulJob(t, tc, int64(scJobID))
+
+		// The synthesized index addition has completed.
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@[2]`, [][]string{{numAccountsStr}})
+		kvCount, err := getKVCount(ctx, kvDB, "restoredb", "bank")
+		require.NoError(t, err)
+		require.Equal(t, 2*numAccounts, kvCount)
+
+		// Cleanup.
+		sqlDB.Exec(t, `DROP DATABASE restoredb CASCADE;`)
+	}
+
+	// Restore to a time aftere the index was dropped and double check that we
+	// didn't bring back any keys from the dropped index.
+	{
+		blockBackfills = make(chan struct{}) // block the synthesized schema change job
+		sqlDB.Exec(t, `CREATE DATABASE restoredb;`)
+		sqlDB.Exec(t, `RESTORE data.bank FROM $1, $2, $3, $4, $5 WITH into_db='restoredb';`,
+			fullBackup, inc1Loc, inc2Loc, inc3Loc, inc4Loc)
+		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@[1]`, [][]string{{numAccountsStr}})
+		sqlDB.ExpectErr(t, "index .* not found", `SELECT count(*) FROM restoredb.bank@[2]`)
+
+		// Allow backfills to proceed.
+		close(blockBackfills)
+		kvCount, err := getKVCount(ctx, kvDB, "restoredb", "bank")
+		require.NoError(t, err)
+		require.Equal(t, numAccounts, kvCount)
+
+		// Cleanup.
+		sqlDB.Exec(t, `DROP DATABASE restoredb CASCADE;`)
+	}
 }
