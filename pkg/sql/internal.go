@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -130,14 +129,17 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 //
 // If txn is not nil, the statement will be executed in the respective txn.
 //
-// ch is used by the connExecutor goroutine to send the rows and will be closed
-// once the goroutine exits its run() loop.
+// dataCh is used by the connExecutor goroutine to send the rows and will be
+// closed once the goroutine exits its run() loop.
+// waitCh is used by the reader goroutine to block the connExecutor goroutine
+// from proceeding with query execution.
 //
 // sd will constitute the executor's session state.
 func (ie *InternalExecutor) initConnEx(
 	ctx context.Context,
 	txn *kv.Txn,
-	ch chan ieIteratorResult,
+	dataCh chan<- ieIteratorResult,
+	waitCh <-chan struct{},
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
 	wg *sync.WaitGroup,
@@ -145,7 +147,8 @@ func (ie *InternalExecutor) initConnEx(
 	errCallback func(error),
 ) {
 	clientComm := &internalClientComm{
-		ch: ch,
+		dataCh: dataCh,
+		waitCh: waitCh,
 		// init lastDelivered below the position of the first result (0).
 		lastDelivered: -1,
 		sync:          syncCallback,
@@ -203,7 +206,7 @@ func (ie *InternalExecutor) initConnEx(
 			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
 		}
-		close(ch)
+		close(dataCh)
 		closeMode := normalClose
 		if txn != nil {
 			closeMode = externalTxnClose
@@ -222,14 +225,26 @@ type ieIteratorResult struct {
 }
 
 type rowsIterator struct {
-	// ch is the channel on which the connExecutor goroutine sends the rows (in
-	// streamingCommandResult.AddRow). The iterator goroutine receives rows (or
-	// other metadata) and will block on this channel if it is empty. The
-	// channel will be closed when the connExecutor goroutine exits its run()
-	// loop.
-	ch           chan ieIteratorResult
+	// dataCh is the channel on which the connExecutor goroutine sends the rows
+	// (in streamingCommandResult.AddRow) and will block on blockCh after each
+	// send. The iterator goroutine blocks on dataCh until there is something to
+	// receive (rows or other metadata) and will return the data to the caller.
+	// On the next call to Next(), the iterator goroutine unblocks the producer
+	// and will block itself again. dataCh will be closed when the connExecutor
+	// goroutine exits its run() loop whereas blockCh is closed when closing is
+	// the iterator.
+	dataCh  <-chan ieIteratorResult
+	blockCh chan<- struct{}
+
 	rowsAffected int
 	resultCols   colinfo.ResultColumns
+
+	// first, if non-nil, is the first object received on dataCh. We block the
+	// return of the created rowsIterator in execInternal() until the producer
+	// goroutine sends something on dataCh because this indicates that the query
+	// planning has been fully performed (we want to prohibit the concurrent
+	// usage of the transactions).
+	first *ieIteratorResult
 
 	lastRow tree.Datums
 	lastErr error
@@ -276,8 +291,40 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 		retErr = r.lastErr
 	}()
 
+	// TODO(yuzefovich): de-duplicate this with the code below.
+	if r.first != nil {
+		// This is the very first call to Next() and we have already buffered
+		// up the first piece of data before returning rowsIterator to the
+		// caller.
+		first := r.first
+		r.first = nil
+		if first.row != nil {
+			r.rowsAffected++
+			r.lastRow = first.row
+			return true, nil
+		}
+		if first.rowsAffectedIncrement != nil {
+			r.rowsAffected += *first.rowsAffectedIncrement
+		} else if first.cols != nil {
+			if r.resultCols == nil {
+				r.resultCols = first.cols
+			}
+		} else {
+			if first.err == nil {
+				first.err = errors.AssertionFailedf("unexpectedly empty ieIteratorResult object")
+			}
+			r.lastErr = first.err
+			r.done = true
+			return false, r.lastErr
+		}
+	}
+
+	// Currently, the connExecutor goroutine is blocked on the blockCh, so we
+	// will unblock it and then will block ourselves on dataCh.
+	r.blockCh <- struct{}{}
+
 	select {
-	case next, ok := <-r.ch:
+	case next, ok := <-r.dataCh:
 		if !ok {
 			r.done = true
 			return false, nil
@@ -336,14 +383,20 @@ func (r *rowsIterator) Close() error {
 			r.sp = nil
 		}
 	}()
+	// We no longer need to block the connExecutor goroutine because we will
+	// return from this method only after the connExecutor goroutine exits.
+	if r.blockCh != nil {
+		close(r.blockCh)
+		r.blockCh = nil
+	}
 
-	// We also need to exhaust the channel since the connExecutor goroutine
+	// We also need to exhaust the data channel since the connExecutor goroutine
 	// might be blocked on sending the row in AddRow().
 	// TODO(yuzefovich): at the moment, the connExecutor goroutine will not stop
 	// execution of the current command right away when the stmtBuf is closed
 	// (e.g. if it is currently executing ExecStmt command, all rows will still
 	// be pushed into the channel). Improve this.
-	for res := range r.ch {
+	for res := range r.dataCh {
 		// We are only interested in possible errors if we haven't already seen
 		// one. All other things are simply ignored.
 		if res.err != nil && r.lastErr == nil {
@@ -590,13 +643,6 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 	},
 }
 
-var ieIteratorChannelBufferSize = util.ConstantWithMetamorphicTestRange(
-	"iterator-channel-buffer-size",
-	32, /* defaultValue */
-	1,  /* min */
-	32, /* max */
-)
-
 // execInternal executes a statement.
 //
 // sessionDataOverride can be used to control select fields in the executor's
@@ -682,7 +728,8 @@ func (ie *InternalExecutor) execInternal(
 	// statement we care about before that command is sent for execution.
 	var resPos CmdPos
 
-	ch := make(chan ieIteratorResult, ieIteratorChannelBufferSize)
+	dataCh := make(chan ieIteratorResult)
+	waitCh := make(chan struct{})
 	syncCallback := func(results []resWithPos) {
 		// Close the stmtBuf so that the connExecutor exits its run() loop.
 		stmtBuf.Close()
@@ -691,14 +738,14 @@ func (ie *InternalExecutor) execInternal(
 				// If we encounter an error, there's no point in looking
 				// further; the rest of the commands in the batch have been
 				// skipped.
-				ch <- ieIteratorResult{err: res.Err()}
+				dataCh <- ieIteratorResult{err: res.Err()}
 				return
 			}
 			if res.pos == resPos {
 				return
 			}
 		}
-		ch <- ieIteratorResult{err: errors.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
+		dataCh <- ieIteratorResult{err: errors.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
 	}
 	// errCallback is called if an error is returned from the connExecutor's
 	// run() loop.
@@ -706,9 +753,9 @@ func (ie *InternalExecutor) execInternal(
 		// The connExecutor exited its run() loop, so the stmtBuf must have been
 		// closed. Still, since Close() is idempotent, we'll call it here too.
 		stmtBuf.Close()
-		ch <- ieIteratorResult{err: err}
+		dataCh <- ieIteratorResult{err: err}
 	}
-	ie.initConnEx(ctx, txn, ch, sd, stmtBuf, &wg, syncCallback, errCallback)
+	ie.initConnEx(ctx, txn, dataCh, waitCh, sd, stmtBuf, &wg, syncCallback, errCallback)
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
@@ -757,9 +804,23 @@ func (ie *InternalExecutor) execInternal(
 	if parsed.AST.StatementType() != tree.Rows {
 		resultColumns = rowsAffectedResultColumns
 	}
+	// Now we need to block the reader goroutine until the query planning has
+	// been performed by the connExecutor goroutine. We do so by waiting until
+	// the first object is sent on the data channel.
+	first, ok := <-dataCh
+	if ok && first.cols != nil {
+		if resultColumns == nil {
+			resultColumns = first.cols
+		}
+		waitCh <- struct{}{}
+		first, ok = <-dataCh
+	}
 	return &rowsIterator{
-		ch:         ch,
+		dataCh:     dataCh,
+		blockCh:    waitCh,
 		resultCols: resultColumns,
+		first:      &first,
+		done:       !ok,
 		stmtBuf:    stmtBuf,
 		wg:         &wg,
 	}, nil
@@ -772,9 +833,13 @@ type internalClientComm struct {
 	// InternalExecutor.
 	results []resWithPos
 
-	// ch is the channel on which the results of the query execution (ExecStmt
-	// or ExecPortal commands) are propagated to the consumer (the iterator).
-	ch chan ieIteratorResult
+	// dataCh is the channel on which the results of the query execution
+	// (ExecStmt or ExecPortal commands) are propagated to the consumer (the
+	// iterator).
+	dataCh chan<- ieIteratorResult
+	// The connExecutor goroutine (query runner) will block on waitCh until the
+	// consumer tells it to proceed.
+	waitCh <-chan struct{}
 
 	lastDelivered CmdPos
 
@@ -808,7 +873,8 @@ func (icc *internalClientComm) CreateStatementResult(
 // closed.
 func (icc *internalClientComm) createRes(pos CmdPos, onClose func()) *streamingCommandResult {
 	res := &streamingCommandResult{
-		ch: icc.ch,
+		dataCh: icc.dataCh,
+		waitCh: icc.waitCh,
 		closeCallback: func(res *streamingCommandResult, typ resCloseType) {
 			if typ == discarded {
 				return

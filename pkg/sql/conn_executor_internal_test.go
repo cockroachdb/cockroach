@@ -290,12 +290,19 @@ func startConnExecutor(
 	s := NewServer(cfg, pool)
 	buf := NewStmtBuf()
 	syncResults := make(chan []resWithPos, 1)
-	iteratorCh := make(chan ieIteratorResult, 16)
+	dataCh := make(chan ieIteratorResult, 16)
+	// TODO(yuzefovich): clean this up.
+	waitCh := make(chan struct{}, 16)
+	for i := 0; i < 16; i++ {
+		waitCh <- struct{}{}
+	}
+	close(waitCh)
 	var cc ClientComm = &internalClientComm{
 		sync: func(res []resWithPos) {
 			syncResults <- res
 		},
-		ch: iteratorCh,
+		dataCh: dataCh,
+		waitCh: waitCh,
 	}
 	sqlMetrics := MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
 
@@ -311,7 +318,7 @@ func startConnExecutor(
 	go func() {
 		finished <- s.ServeConn(ctx, conn, mon.BoundAccount{}, nil /* cancel */)
 	}()
-	return buf, syncResults, finished, stopper, iteratorCh, nil
+	return buf, syncResults, finished, stopper, dataCh, nil
 }
 
 // Test that a client session can close without deadlocking when the closing
