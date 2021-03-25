@@ -411,8 +411,8 @@ func TestClosedTimestampCantServeBasedOnUncertaintyLimit(t *testing.T) {
 	ctx := context.Background()
 	// Set up the target duration to be very long and rely on lease transfers to
 	// drive MaxClosed.
-	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, time.Hour, testingCloseFraction,
-		aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
+	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration,
+		testingCloseFraction, aggressiveResolvedTimestampClusterArgs, "cttest", "kv")
 	defer tc.Stopper().Stop(ctx)
 	repls := replsForRange(ctx, t, tc, desc, numNodes)
 
@@ -420,20 +420,15 @@ func TestClosedTimestampCantServeBasedOnUncertaintyLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Grab a timestamp before initiating a lease transfer, transfer the lease,
-	// then ensure that reads at that timestamp can occur from all the replicas.
+	// Verify that we can serve a follower read at a timestamp. Wait if necessary.
 	ts := tc.Server(0).Clock().Now()
-	lh := getCurrentLeaseholder(t, tc, desc)
-	target := pickRandomTarget(tc, lh, desc)
-	require.Nil(t, tc.TransferRangeLease(desc, target))
 	baRead := makeTxnReadBatchForDesc(desc, ts)
 	testutils.SucceedsSoon(t, func() error {
 		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
 	})
 
 	// Update the batch to simulate a transaction that has a global uncertainty
-	// limit after the lease transfer. Keep its read timestamp from before the
-	// lease transfer.
+	// limit after the current clock time. Keep its read timestamp the same.
 	baRead.Txn.GlobalUncertaintyLimit = tc.Server(0).Clock().Now().Add(time.Second.Nanoseconds(), 0)
 	// Send the request to all three replicas. One should succeed and
 	// the other two should return NotLeaseHolderErrors.

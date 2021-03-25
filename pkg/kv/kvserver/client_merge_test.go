@@ -1999,6 +1999,117 @@ func TestStoreRangeMergeRHSLeaseTransfers(t *testing.T) {
 	require.NoError(t, <-mergeErr)
 }
 
+// TestStoreRangeMergeLHSLeaseTransfersAfterFreezeTime verifies that in cases
+// where the lease start time on a LHS range is moved above the freeze time of a
+// range merge, the combined range after the merge does not broadcast a closed
+// timestamp that it then allows to be violated.
+//
+// This is a regression test for #60929. In that issue, which was discovered by
+// kvnemesis, we found that a range merge and a lease transfer could race in
+// such a way that the closed timestamp could later be violated by a write to
+// the subsumed portion of the joint range. The root cause of this was an
+// opportunistic optimization made in 7037b54 to consider a range's lease start
+// time as an input to its closed timestamp computation. This optimization did
+// not account for the possibility of serving writes to a newly subsumed
+// keyspace below a range's lease start time if that keyspace was merged into a
+// range under its current lease and with a freeze time below the current lease
+// start time. This bug was fixed by removing the optimization, which was on its
+// way out to allow for #61986 anyway.
+func TestStoreRangeMergeLHSLeaseTransfersAfterFreezeTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Install a hook to control when the merge transaction subsumes the RHS.
+	// Put this in a sync.Once to ignore retries.
+	var once sync.Once
+	subsumeReceived := make(chan struct{})
+	finishSubsume := make(chan struct{})
+	testingResponseFilter := func(_ context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+		if ba.IsSingleSubsumeRequest() {
+			once.Do(func() {
+				subsumeReceived <- struct{}{}
+				<-finishSubsume
+			})
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 2,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						TestingResponseFilter: testingResponseFilter,
+					},
+				},
+			},
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create the ranges to be merged. Put both ranges on both stores. Give the
+	// first store the lease on the LHS and the second store the lease on the
+	// RHS. Before the merge completes, we'll transfer the LHS's lease to the
+	// second store so that the two leaseholders are collocated.
+	lhsDesc, rhsDesc, err := tc.Servers[0].ScratchRangeEx()
+	require.NoError(t, err)
+
+	tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.TransferRangeLeaseOrFatal(t, lhsDesc, tc.Target(0))
+	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(1))
+
+	// Launch the merge.
+	mergeErr := make(chan error, 1)
+	_ = tc.Stopper().RunAsyncTask(ctx, "merge", func(context.Context) {
+		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+		_, pErr := kv.SendWrapped(ctx, tc.Servers[0].DistSender(), args)
+		mergeErr <- pErr.GoError()
+	})
+
+	// Wait for the merge transaction to send its Subsume request. It won't
+	// be able to complete just yet, thanks to the hook we installed above.
+	<-subsumeReceived
+
+	// Transfer the lease on the LHS to the second store. Doing this will
+	// increase the lease start time on the LHS past the freeze time of the
+	// range merge.
+	if err := tc.TransferRangeLease(lhsDesc, tc.Target(1)); err != nil {
+		close(finishSubsume) // don't abandon merge
+		t.Fatalf(`could transfer lease for range %s error is %+v`, lhsDesc, err)
+	}
+
+	store1 := tc.GetFirstStoreFromServer(t, 1)
+	lhsLeaseholder := store1.LookupReplica(lhsDesc.StartKey)
+	testutils.SucceedsSoon(t, func() error {
+		// Wait for the new leaseholder to notice that it received the lease.
+		now := tc.Servers[1].Clock().NowAsClockTimestamp()
+		if !lhsLeaseholder.OwnsValidLease(ctx, now) {
+			return errors.New("not leaseholder")
+		}
+		return nil
+	})
+	lhsClosedTS, ok := lhsLeaseholder.MaxClosed(ctx)
+	require.True(t, ok)
+
+	// Finally, allow the merge to complete. It should complete successfully.
+	close(finishSubsume)
+	require.NoError(t, <-mergeErr)
+
+	// Attempt to write below the closed timestamp, to the subsumed keyspace.
+	// The write's timestamp should be forwarded to after the closed timestamp.
+	// If it is not, we have violated the closed timestamp's promise!
+	var ba roachpb.BatchRequest
+	ba.Timestamp = lhsClosedTS.Prev()
+	ba.RangeID = lhsDesc.RangeID
+	ba.Add(incrementArgs(rhsDesc.StartKey.AsRawKey().Next(), 1))
+	br, pErr := tc.Servers[1].DistSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotEqual(t, ba.Timestamp, br.Timestamp, "write timestamp not bumped")
+	require.True(t, lhsClosedTS.Less(br.Timestamp), "write timestamp not bumped above closed timestamp")
+}
+
 // TestStoreRangeMergeCheckConsistencyAfterSubsumption verifies the following:
 // 1. While a range is subsumed, ComputeChecksum requests wait until the merge
 // is complete before proceeding.
