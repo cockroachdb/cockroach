@@ -26,6 +26,19 @@ func Covers(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
 		return false, nil
 	}
+
+	// Optimization for point in polygon calculations.
+	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
+	switch pointPolygonPair {
+	case PointAndPolygon:
+		// A point cannot cover a polygon.
+		return false, nil
+	case PolygonAndPoint:
+		// Computing whether a polygon covers a point is the same
+		// as computing whether a point is covered by the polygon.
+		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonCoveredBy)
+	}
+
 	return geos.Covers(a.EWKB(), b.EWKB())
 }
 
@@ -37,6 +50,17 @@ func CoveredBy(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if !b.CartesianBoundingBox().Covers(a.CartesianBoundingBox()) {
 		return false, nil
 	}
+
+	// Optimization for point in polygon calculations.
+	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
+	switch pointPolygonPair {
+	case PolygonAndPoint:
+		// A polygon cannot be covered by a point.
+		return false, nil
+	case PointAndPolygon:
+		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonCoveredBy)
+	}
+
 	return geos.CoveredBy(a.EWKB(), b.EWKB())
 }
 
@@ -109,7 +133,8 @@ func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 
 	// Optimization for point in polygon calculations.
 	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
-	if pointPolygonPair {
+	switch pointPolygonPair {
+	case PointAndPolygon, PolygonAndPoint:
 		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonIntersects)
 	}
 
@@ -233,23 +258,41 @@ func Overlaps(a geo.Geometry, b geo.Geometry) (bool, error) {
 	return geos.Overlaps(a.EWKB(), b.EWKB())
 }
 
+// PointPolygonOrder represents the order of a point and a polygon
+// in an ordered pair of geometries.
+type PointPolygonOrder int
+
+const (
+	// NotPointAndPolygon signifies that a pair of geometries is
+	// not a point and a polygon.
+	NotPointAndPolygon PointPolygonOrder = iota
+	// PointAndPolygon signifies that the point appears first
+	// in an ordered pair of a point and a polygon.
+	PointAndPolygon
+	// PolygonAndPoint signifies that the polygon appears first
+	// in an ordered pair of a point and a polygon.
+	PolygonAndPoint
+)
+
 // PointKindAndPolygonKind returns whether a pair of geometries contains
 // a (multi)point and a (multi)polygon. It is used to determine if the
 // point in polygon optimization can be applied.
-func PointKindAndPolygonKind(a geo.Geometry, b geo.Geometry) (bool, geo.Geometry, geo.Geometry) {
-	var validPoint, validPolygon bool
-	var pointKind, polygonKind geo.Geometry
-	for _, geometry := range []geo.Geometry{a, b} {
-		switch geometry.ShapeType2D() {
-		case geopb.ShapeType_Point, geopb.ShapeType_MultiPoint:
-			validPoint = true
-			pointKind = geometry
+func PointKindAndPolygonKind(
+	a geo.Geometry, b geo.Geometry,
+) (PointPolygonOrder, geo.Geometry, geo.Geometry) {
+	switch a.ShapeType2D() {
+	case geopb.ShapeType_Point, geopb.ShapeType_MultiPoint:
+		switch b.ShapeType2D() {
 		case geopb.ShapeType_Polygon, geopb.ShapeType_MultiPolygon:
-			validPolygon = true
-			polygonKind = geometry
+			return PointAndPolygon, a, b
+		}
+	case geopb.ShapeType_Polygon, geopb.ShapeType_MultiPolygon:
+		switch b.ShapeType2D() {
+		case geopb.ShapeType_Point, geopb.ShapeType_MultiPoint:
+			return PolygonAndPoint, b, a
 		}
 	}
-	return validPoint && validPolygon, pointKind, polygonKind
+	return NotPointAndPolygon, a, b
 }
 
 // Touches returns whether geometry A touches geometry B.
