@@ -236,6 +236,11 @@ func (p *Provider) Delete(vms vm.List) error {
 	return nil
 }
 
+// Reset implements the vm.Provider interface. It is a no-op.
+func (p *Provider) Reset(vms vm.List) error {
+	return nil
+}
+
 // DeleteCluster implements the vm.DeleteCluster interface, providing
 // a fast-path to tear down all resources associated with a cluster.
 func (p *Provider) DeleteCluster(name string) error {
