@@ -51,6 +51,27 @@ reloaded/rotated from disk.
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+### `emergency_auth_rule`
+
+An event of type `emergency_auth_rule` is recorded when an emergency authentication rule
+for the HTTP interface is added to a node.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `SessionID` | The ID of the emergency session. | no |
+| `Username` | The that the emergency session logs in at. | yes |
+| `IsAdmin` | Whether the user is considered as an admin or not when processing requests. | no |
+| `ExpiresAt` | When the emergency session expires. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ### `node_decommissioned`
 
 An event of type `node_decommissioned` is recorded when a node is marked as

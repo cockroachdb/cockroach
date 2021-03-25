@@ -1427,4 +1427,20 @@ exist. The interval is specified with a suffix of 's' for seconds,
 'm' for minutes, and 'h' for hours.
 `,
 	}
+
+	EmergencyAuthenticationSessions = FlagInfo{
+		Name: "emergency-authentication-sessions",
+		Description: `
+Path to a file containing emergency authentication sessions to gain
+HTTP access to the server in case the authentication mechanism
+is unavailable. The emergency session access mechanism is not
+enabled unless this file exists.
+
+If the flag is not specified, the path is configured to
+a file named "emergency_authentication" in the first store
+directory.
+
+To disable the mechanism entirely, pass the flag and set it
+to the empty string.`,
+	}
 )

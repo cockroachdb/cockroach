@@ -16,6 +16,7 @@ go_library(
         "config_windows.go",
         "doc.go",
         "drain.go",
+        "file_based_authentication.go",
         "grpc_server.go",
         "idle_monitor.go",
         "init.go",
@@ -167,6 +168,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
@@ -252,6 +254,7 @@ go_test(
         "config_test.go",
         "connectivity_test.go",
         "drain_test.go",
+        "file_based_authentication_test.go",
         "graphite_test.go",
         "idle_monitor_test.go",
         "init_handshake_test.go",
@@ -360,5 +363,49 @@ go_test(
         "@org_golang_google_grpc//credentials",
         "@org_golang_google_grpc//status",
         "@org_golang_x_crypto//bcrypt",
-    ],
+    ] + select({
+        "@io_bazel_rules_go//go/platform:aix": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:android": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:dragonfly": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:freebsd": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:illumos": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:js": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:nacl": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:netbsd": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:openbsd": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:plan9": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:solaris": [
+            "@org_golang_x_sys//unix",
+        ],
+        "//conditions:default": [],
+    }),
 )

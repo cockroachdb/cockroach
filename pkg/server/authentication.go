@@ -94,14 +94,16 @@ var webSessionTimeout = settings.RegisterDurationSetting(
 ).WithPublic()
 
 type authenticationServer struct {
-	server *Server
+	server          *Server
+	specialSessions *specialSessions
 }
 
 // newAuthenticationServer allocates and returns a new REST server for
 // authentication APIs.
 func newAuthenticationServer(s *Server) *authenticationServer {
 	return &authenticationServer{
-		server: s,
+		server:          s,
+		specialSessions: newSpecialSessions(),
 	}
 }
 
@@ -349,6 +351,11 @@ func (s *authenticationServer) UserLogout(
 func (s *authenticationServer) verifySession(
 	ctx context.Context, cookie *serverpb.SessionCookie,
 ) (isValid bool, user security.SQLUsername, isAdmin bool, err error) {
+	// Look up session in the in-RAM special session cache/store.
+	if hasSession, username, isAdmin, err := s.isValidCachedSession(ctx, cookie); hasSession || err != nil {
+		return hasSession, username, isAdmin, err
+	}
+
 	// Look up session in database and verify hashed secret value.
 	const sessionQuery = `
 SELECT "hashedSecret", "username", "expiresAt", "revokedAt"

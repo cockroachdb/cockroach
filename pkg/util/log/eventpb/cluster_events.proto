@@ -105,3 +105,17 @@ message CertsReload {
   // If an error was encountered, the text of the error.
   string error_message = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
+
+// EmergencyAuthRule is recorded when an emergency authentication rule
+// for the HTTP interface is added to a node.
+message EmergencyAuthRule {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The ID of the emergency session.
+  int64 session_id = 2  [(gogoproto.customname) = "SessionID", (gogoproto.jsontag) = ",omitempty"];
+  // The that the emergency session logs in at.
+  string username = 3  [(gogoproto.jsontag) = ",omitempty"];
+  // Whether the user is considered as an admin or not when processing requests.
+  bool is_admin = 4  [(gogoproto.jsontag) = ",omitempty"];
+  // When the emergency session expires.
+  int64 expires_at = 5  [(gogoproto.jsontag) = ",omitempty"];
+}
