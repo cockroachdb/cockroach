@@ -44,6 +44,11 @@ func (*BoolSetting) Typ() string {
 	return "b"
 }
 
+// Default returns default value for setting
+func (b *BoolSetting) Default() bool {
+	return b.defaultValue
+}
+
 // Override changes the setting without validation and also overrides the
 // default value.
 //

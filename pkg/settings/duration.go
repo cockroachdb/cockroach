@@ -64,6 +64,11 @@ func (*DurationSetting) Typ() string {
 	return "d"
 }
 
+// Default returns default value for setting
+func (d *DurationSetting) Default() time.Duration {
+	return d.defaultValue
+}
+
 // Validate that a value conforms with the validation function.
 func (d *DurationSetting) Validate(v time.Duration) error {
 	if d.validateFn != nil {
