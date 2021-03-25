@@ -139,6 +139,35 @@ func (p *planner) AlterDatabaseAddRegion(
 		return nil, err
 	}
 
+	// If we get to this point and the database is not a multi-region database, it means that
+	// the database doesn't yet have a primary region. Since we need a primary region before
+	// we can add a region, return an error here.
+	if !dbDesc.IsMultiRegion() {
+		return nil, errors.WithHintf(
+			pgerror.Newf(pgcode.InvalidDatabaseDefinition, "cannot add region %s to database %s",
+				n.Region.String(),
+				n.Name.String(),
+			),
+			"you must add a PRIMARY REGION first using ALTER DATABASE %s PRIMARY REGION %s",
+			n.Name.String(),
+			n.Region.String(),
+		)
+	}
+
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	// Adding a region also involves repartitioning all REGIONAL BY ROW tables
+	// underneath the hood, so we must ensure the user has the requisite
+	// privileges.
+	if err := p.checkPrivilegesForRepartitioningRegionalByRowTables(
+		ctx,
+		&dbDesc.Immutable,
+	); err != nil {
+		return nil, err
+	}
+
 	return &alterDatabaseAddRegionNode{n: n, desc: dbDesc}, nil
 }
 
@@ -154,25 +183,6 @@ var GetMultiRegionEnumAddValuePlacementCCL = func(
 }
 
 func (n *alterDatabaseAddRegionNode) startExec(params runParams) error {
-	if err := params.p.checkPrivilegesForMultiRegionOp(params.ctx, n.desc); err != nil {
-		return err
-	}
-
-	// If we get to this point and the database is not a multi-region database, it means that
-	// the database doesn't yet have a primary region. Since we need a primary region before
-	// we can add a region, return an error here.
-	if !n.desc.IsMultiRegion() {
-		return errors.WithHintf(
-			pgerror.Newf(pgcode.InvalidDatabaseDefinition, "cannot add region %s to database %s",
-				n.n.Region.String(),
-				n.n.Name.String(),
-			),
-			"you must add a PRIMARY REGION first using ALTER DATABASE %s PRIMARY REGION %s",
-			n.n.Name.String(),
-			n.n.Region.String(),
-		)
-	}
-
 	if err := params.p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		params.ctx,
 		&n.desc.Immutable,
@@ -273,12 +283,21 @@ func (p *planner) AlterDatabaseDropRegion(
 		return nil, err
 	}
 
+	if !dbDesc.IsMultiRegion() {
+		return nil, pgerror.New(pgcode.InvalidDatabaseDefinition, "database has no regions to drop")
+	}
+
 	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
 		return nil, err
 	}
-
-	if !dbDesc.IsMultiRegion() {
-		return nil, pgerror.New(pgcode.InvalidDatabaseDefinition, "database has no regions to drop")
+	// Dropping a region also involves repartitioning all REGIONAL BY ROW tables
+	// underneath the hood, so we must ensure the user has the requisite
+	// privileges.
+	if err := p.checkPrivilegesForRepartitioningRegionalByRowTables(
+		ctx,
+		&dbDesc.Immutable,
+	); err != nil {
+		return nil, err
 	}
 
 	if err := p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
@@ -398,6 +417,30 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 		return err
 	}
 	return nil
+}
+
+// checkPrivilegesForRepartitioningRegionalByRowTables returns an error if the
+// user does not have sufficient privileges to repartition any of the region by
+// row tables inside the given database.
+func (p *planner) checkPrivilegesForRepartitioningRegionalByRowTables(
+	ctx context.Context, dbDesc *dbdesc.Immutable,
+) error {
+	return p.forEachTableInMultiRegionDatabase(ctx, dbDesc,
+		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+			if tbDesc.IsLocalityRegionalByRow() {
+				err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc)
+				// Return a better error message here.
+				if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+					return errors.Wrapf(err,
+						"cannot repartition regional by row table",
+					)
+				}
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
 }
 
 // removeLocalityConfigFromAllTablesInDB removes the locality config from all
@@ -549,6 +592,10 @@ func (p *planner) AlterDatabasePrimaryRegion(
 		tree.DatabaseLookupFlags{Required: true},
 	)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
 		return nil, err
 	}
 
@@ -757,10 +804,6 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 }
 
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
-	if err := params.p.checkPrivilegesForMultiRegionOp(params.ctx, n.desc); err != nil {
-		return err
-	}
-
 	// Block adding a primary region to the system database. This ensures that the system
 	// database can never be made into a multi-region database.
 	if n.desc.GetID() == keys.SystemDatabaseID {
@@ -840,15 +883,14 @@ func (p *planner) AlterDatabaseSurvivalGoal(
 	if err != nil {
 		return nil, err
 	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
 
 	return &alterDatabaseSurvivalGoalNode{n: n, desc: dbDesc}, nil
 }
 
 func (n *alterDatabaseSurvivalGoalNode) startExec(params runParams) error {
-	if err := params.p.checkPrivilegesForMultiRegionOp(params.ctx, n.desc); err != nil {
-		return err
-	}
-
 	// If the database is not a multi-region database, the survival goal cannot be changed.
 	if !n.desc.IsMultiRegion() {
 		return errors.WithHintf(
