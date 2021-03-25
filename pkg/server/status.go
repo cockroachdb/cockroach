@@ -2404,6 +2404,13 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 // incoming via a RPC fan-out from a node which does not populate the
 // isAdmin status on the context. In that case, the caller is
 // responsible for calling hasAdminRole().
+//
+// Note: this function is unsafe to call *during* the authentication
+// handshake, because at that time we do not have the values inside
+// the session metadata even though the session is not known to be
+// admin or non-admin yet.
+// This limitation is a misdesign, see the following issue:
+// https://github.com/cockroachdb/cockroach/issues/45018
 func isAdminFromContext(ctx context.Context) (ok bool, isAdmin bool, err error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {

@@ -427,6 +427,9 @@ var startCtx struct {
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string
 
+	// emergency authentication sessions file, if enabled.
+	emergencyAuthenticationSessions string
+
 	// inBackground is set to true when restarting in the
 	// background after --background was processed.
 	inBackground bool
@@ -449,6 +452,7 @@ var startCtx struct {
 func setStartContextDefaults() {
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
+	startCtx.emergencyAuthenticationSessions = ""
 	startCtx.serverCertPrincipalMap = nil
 	startCtx.serverListenAddr = ""
 	startCtx.initToken = ""

@@ -466,6 +466,8 @@ func init() {
 		stringFlag(f, &startCtx.tempDir, cliflags.TempDir)
 		stringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
 
+		stringFlag(f, &startCtx.emergencyAuthenticationSessions, cliflags.EmergencyAuthenticationSessions)
+
 		if backgroundFlagDefined {
 			boolFlag(f, &startBackground, cliflags.Background)
 		}
@@ -585,6 +587,10 @@ func init() {
 		f := loginCmd.Flags()
 		durationFlag(f, &authCtx.validityPeriod, cliflags.AuthTokenValidityPeriod)
 		boolFlag(f, &authCtx.onlyCookie, cliflags.OnlyCookie)
+	}
+	{
+		f := emergencyLoginCmd.Flags()
+		durationFlag(f, &authCtx.validityPeriod, cliflags.AuthTokenValidityPeriod)
 	}
 
 	timeoutCmds := []*cobra.Command{
@@ -1057,6 +1063,19 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		localityAdvertiseHosts[i].Address.AddressField = net.JoinHostPort(host, port)
 	}
 	serverCfg.LocalityAddresses = localityAdvertiseHosts
+
+	// Fill in the default for the emergency session file if not passed on the command line.
+	if !changed(fs, cliflags.EmergencyAuthenticationSessions.Name) {
+		// Search for the first non-in-memory store.
+		for _, spec := range serverCfg.Stores.Specs {
+			if spec.InMemory {
+				continue
+			}
+			startCtx.emergencyAuthenticationSessions = filepath.Join(spec.Path, "emergency_sessions")
+			break
+		}
+	}
+	serverCfg.EmergencyAuthenticationSessions = startCtx.emergencyAuthenticationSessions
 
 	return nil
 }

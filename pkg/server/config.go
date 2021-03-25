@@ -133,6 +133,10 @@ type BaseConfig struct {
 	// CPUProfileDirName is the directory name for CPU profile dumps.
 	CPUProfileDirName string
 
+	// EmergencyAuthenticationSessions is the path to the file that may
+	// contain emergency authentication sessions.
+	EmergencyAuthenticationSessions string
+
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
 	// server testing knob.

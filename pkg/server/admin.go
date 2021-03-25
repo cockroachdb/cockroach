@@ -2775,6 +2775,14 @@ func (c *adminPrivilegeChecker) getUserAndRole(
 	return userName, isAdmin, err
 }
 
+// hasAdminRole determines whether the provided user has the admin
+// privilege. This function is only safe to call *after*
+// authentication has completed, because it can shortcut the
+// determination of the admin bit based on information populated
+// during authentication.
+//
+// This limitation can be lifted after the following issue
+// is addressed: https://github.com/cockroachdb/cockroach/issues/45018
 func (c *adminPrivilegeChecker) hasAdminRole(
 	ctx context.Context, user security.SQLUsername,
 ) (bool, error) {
@@ -2788,6 +2796,15 @@ func (c *adminPrivilegeChecker) hasAdminRole(
 		return isAdmin, err
 	}
 
+	return c.lookupAdminBitForUser(ctx, user)
+}
+
+// lookupAdminBitForUser goes to SQL to determine whether the given
+// user is an admin. This incurs a SQL and KV lookup to the system
+// tables. This is safe to use during the authentication handshake.
+func (c *adminPrivilegeChecker) lookupAdminBitForUser(
+	ctx context.Context, user security.SQLUsername,
+) (bool, error) {
 	row, err := c.ie.QueryRowEx(
 		ctx, "check-is-admin", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},

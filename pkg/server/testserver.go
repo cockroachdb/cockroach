@@ -277,6 +277,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	// this when we remove interleaved tables altogether.
 	sql.InterleavedTablesEnabled.Override(&cfg.Settings.SV, true)
 
+	if params.EmergencyAuthenticationSessions != "" {
+		cfg.EmergencyAuthenticationSessions = params.EmergencyAuthenticationSessions
+	}
+
 	return cfg
 }
 
