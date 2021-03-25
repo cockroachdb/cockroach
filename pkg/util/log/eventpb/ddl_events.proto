@@ -499,3 +499,9 @@ message UnsafeDeleteNamespaceEntry {
   string force_notice = 7 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+message ForceDeleteTableDataEntry {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  uint32 desc_id = 3 [(gogoproto.customname) = "DescriptorID", (gogoproto.jsontag) = ",omitempty"];
+}
+

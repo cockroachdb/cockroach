@@ -3074,6 +3074,10 @@ type EvalPlanner interface {
 	// circumstances. See the comment on the planner implementation.
 	UnsafeDeleteDescriptor(ctx context.Context, descID int64, force bool) error
 
+	// ForceDeleteTableData cleans up underlying data for a table
+	// descriptor ID. See the comment on the planner implementation.
+	ForceDeleteTableData(ctx context.Context, descID int64) error
+
 	// UnsafeUpsertNamespaceEntry is used to repair namespace entries in dire
 	// circumstances. See the comment on the planner implementation.
 	UnsafeUpsertNamespaceEntry(

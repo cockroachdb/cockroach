@@ -2747,6 +2747,15 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr></tbody>
 </table>
 
+### System repair functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="crdb_internal.force_delete_table_data"></a><code>crdb_internal.force_delete_table_data(id: <a href="int.html">int</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function can be used to clear the data belonging to a table, when the table cannot be dropped.</p>
+</span></td></tr></tbody>
+</table>
+
 ### TIMETZ functions
 
 <table>
