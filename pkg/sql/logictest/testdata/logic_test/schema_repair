@@ -1,3 +1,4 @@
+# Test the crdb_internal.force_delete_table_data function
 subtest lost-table-data
 
 statement ok
@@ -116,7 +117,6 @@ SELECT * FROM crdb_internal.unsafe_upsert_descriptor($corrupt_id, crdb_internal.
 statement ok
 SELECT * FROM corruptdesc;
 
-# Test the crdb_internal.force_delete_table_data function
 subtest force-delete-data
 
 statement ok
