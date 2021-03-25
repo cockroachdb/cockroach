@@ -18,16 +18,16 @@ import "util/log/eventpb/events.proto";
 // Category: Zone config events
 // Channel: OPS
 //
-// Events in this category pertain to zone config changes on
+// Events in this category pertain to zone configuration changes on
 // the SQL schema or system ranges.
 //
 // When zone configs apply to individual tables or other objects in a
 // SQL logical schema, they are relative to a particular SQL tenant.
 // In a multi-tenant setup, copies of these zone config events are preserved
-// in each tenant's own system.eventlog table.
+// in each tenant's own `system.eventlog` table.
 //
-// When they apply to cluster-level ranges (e.g.  the system zone config),
-// they are stored in the system tenant's own system.eventlog table.
+// When they apply to cluster-level ranges (e.g., the system zone config),
+// they are stored in the system tenant's own `system.eventlog` table.
 
 // TODO(knz): explore whether we should have separate notable event
 // types for table-level and cluster-level zone config changes.

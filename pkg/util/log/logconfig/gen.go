@@ -303,6 +303,7 @@ Configuration options shared across all sink types:
 {{end}}
 
 <a name="channel-format">
+
 ## Channel selection configuration
 
 Each sink can select multiple channels. The names of selected channels can
@@ -313,22 +314,22 @@ Example configurations:
     # Select just these two channels. Space is important.
     channels: [OPS, HEALTH]
 
-    # The selection is case insensitive.
+    # The selection is case-insensitive.
     channels: [ops, HeAlTh]
 
-    # same configuration, as a yaml string. Avoid space around comma
-    # if using the YAML "flowed" format.
+    # Same configuration, as a YAML string. Avoid space around comma
+    # if using the YAML "inline" format.
     channels: OPS,HEALTH
 
-    # same, as a quoted string.
+    # Same configuration, as a quoted string.
     channels: 'OPS, HEALTH'
 
-    # Same using a multi-line YAML array.
+    # Same configuration, as a multi-line YAML array.
     channels:
     - OPS
     - HEALTH
 
-It is also possible to select all channels, with the "all" keyword.
+It is also possible to select all channels, using the "all" keyword.
 For example:
 
     channels: all
@@ -344,5 +345,4 @@ that capture "everything else". For example:
     channels: all except [ops,health]
     channels: 'all except ops, health'
     channels: 'all except [ops, health]'
-
 `

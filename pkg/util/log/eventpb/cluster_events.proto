@@ -21,9 +21,9 @@ import "util/log/eventpb/events.proto";
 // Events in this category pertain to an entire cluster and are
 // not relative to any particular tenant.
 //
-// In a multi-tenant setup, the system.eventlog table for individual
+// In a multi-tenant setup, the `system.eventlog` table for individual
 // tenants cannot contain a copy of cluster-level events; conversely,
-// the system.eventlog table in the system tenant cannot contain the
+// the `system.eventlog` table in the system tenant cannot contain the
 // SQL-level events for individual tenants.
 
 // Notes to CockroachDB maintainers: refer to doc.go at the package
@@ -73,7 +73,7 @@ message CommonNodeDecommissionDetails {
   int32 target_node_id = 2 [(gogoproto.customname) = "TargetNodeID", (gogoproto.jsontag) = ",omitempty"];
 }
 
-// NodeDecommissioned is recorded when a node is marked as
+// NodeDecommissioning is recorded when a node is marked as
 // decommissioning.
 message NodeDecommissioning {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
