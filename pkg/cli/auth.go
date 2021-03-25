@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -76,11 +77,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(stderr, `#
 # Example uses:
 #
+#     Use the web log in form with user "%[2]s", and password "%[3]s=%[4]s".
+#
 #     curl [-k] --cookie '%[1]s' https://...
 #
 #     wget [--no-check-certificate] --header='Cookie: %[1]s' https://...
 #
-`, hC)
+`, hC, username, httpCookie.Name, httpCookie.Value)
 		}
 	}
 
@@ -267,16 +270,18 @@ func runEmergencyLogin(cmd *cobra.Command, args []string) error {
 	hC := httpCookie.String()
 
 	fmt.Fprintf(stderr, `#
-# Your authentication cookie is: %[1]s
-# It expires at: %[2]s
+# Your authentication cookie expires at: %[2]s
+# (Use --%[6]s to adjust the expiry.)
 #
 # Example uses:
+#
+#     Use the web log in form with user "%[3]s", and password "%[4]s=%[5]s".
 #
 #     curl [-k] --cookie '%[1]s' https://...
 #
 #     wget [--no-check-certificate] --header='Cookie: %[1]s' https://...
 #
-`, hC, expiresAt)
+`, hC, expiresAt, username, httpCookie.Name, httpCookie.Value, cliflags.AuthTokenValidityPeriod.Name)
 
 	return nil
 }

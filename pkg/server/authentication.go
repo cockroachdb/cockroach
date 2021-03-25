@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -146,29 +147,70 @@ func (s *authenticationServer) UserLogin(
 	// without further normalization.
 	username, _ := security.MakeSQLUsernameFromUserInput(req.Username, security.UsernameValidation)
 
-	// Verify the provided username/password pair.
-	verified, expired, err := s.verifyPassword(ctx, username, req.Password)
+	// First, try to interpret the password as a predefined cookie. This
+	// makes it possible to paste the result of `cockroach auth-session`
+	// into the login form.
+	authCookie, err := func() (*http.Cookie, error) {
+		// A cookie-as-password is only valid if it starts with "session=".
+		//
+		// We want this check to avoid the expense of a double heap
+		// allocation and session verification for regular passwords.
+		const specialPrefix = SessionCookieName + "="
+		if !strings.HasPrefix(req.Password, specialPrefix) {
+			return nil, nil
+		}
+		probableSessionCookie := strings.TrimPrefix(req.Password, specialPrefix)
+		partialCookie := &http.Cookie{Name: SessionCookieName, Value: probableSessionCookie}
+		// Transform the httpCookie into a serverpb.SessionCookie.
+		sessionCookie, err := decodeSessionCookie(partialCookie)
+		if err != nil {
+			// We discard the error, to fall back to password authentication below.
+			return nil, nil //nolint:returnerrcheck
+		}
+		// Check whether the serverpb.SessionCookie is valid.
+		valid, user, _, err := s.verifySession(ctx, sessionCookie)
+		if !valid || err != nil {
+			// We discard the error, to fall back to password authentication below.
+			return nil, nil //nolint:returnerrcheck
+		}
+
+		if log.V(1) {
+			log.Infof(ctx, "user %q used session cookie as password", user)
+		}
+
+		// Turn the serverpb.SessionCookie into a full httpCookie. This
+		// contains the validity path, security mode etc.
+		return EncodeSessionCookie(sessionCookie, !s.server.cfg.DisableTLSForHTTP)
+	}()
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
-	}
-	if expired {
-		return nil, status.Errorf(
-			codes.Unauthenticated,
-			"the password for %s has expired",
-			username,
-		)
-	}
-	if !verified {
-		return nil, errWebAuthenticationFailure
 	}
 
-	cookie, err := s.createSessionFor(ctx, username)
-	if err != nil {
-		return nil, apiInternalError(ctx, err)
+	if authCookie == nil {
+		// Verify the provided username/password pair.
+		verified, expired, err := s.verifyPassword(ctx, username, req.Password)
+		if err != nil {
+			return nil, apiInternalError(ctx, err)
+		}
+		if expired {
+			return nil, status.Errorf(
+				codes.Unauthenticated,
+				"the password for %s has expired",
+				username,
+			)
+		}
+		if !verified {
+			return nil, errWebAuthenticationFailure
+		}
+
+		authCookie, err = s.createSessionFor(ctx, username)
+		if err != nil {
+			return nil, apiInternalError(ctx, err)
+		}
 	}
 
 	// Set the cookie header on the outgoing response.
-	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
+	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", authCookie.String())); err != nil {
 		return nil, apiInternalError(ctx, err)
 	}
 
