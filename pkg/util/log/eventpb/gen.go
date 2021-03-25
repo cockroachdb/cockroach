@@ -540,33 +540,35 @@ func (m *{{.GoType}}) LoggingChannel() logpb.Channel { return logpb.Channel_{{.L
 {{end}}
 `,
 
-	"eventlog.md": `# Documentation for notable events
-
-Certain notable events are reported using a structured format.
+	"eventlog.md": `Certain notable events are reported using a structured format.
 Commonly, these notable events are also copied to the table
 ` + "`system.eventlog`" + `, unless the cluster setting
 ` + "`server.eventlog.enabled`" + ` is unset.
 
 Additionally, notable events are copied to specific external logging
-channels, where they can be collected for further processing.
+channels in log messages, where they can be collected for further processing.
 
 The sections below document the possible notable event types
 in this version of CockroachDB. For each event type, a table
 documents the possible fields. A field may be omitted from
 an event if its value is empty or zero.
 
-A field is also marked as “Sensitive” if it may contain
-application-specific information or PII. In that case,
+A field is also considered "Sensitive" if it may contain
+application-specific information or personally identifiable information (PII). In that case,
 the copy of the event sent to the external logging channel
-may contain redaction markers, in a way compatible
-with the redaction facilities in ` + "`debug zip` or `debug merge-log`" + `.
+will contain redaction markers in a format that is compatible
+with the redaction facilities in ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + `
+and ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + `,
+provided the ` + "`redactable`" + ` functionality is enabled on the logging sink.
+
+Events not documented on this page will have an unstructured format in log messages.
 
 {{range .Categories -}}
 ## {{.Title}}
 
 {{.Comment}}
 
-Events in this category are logged to channel {{.LogChannel}}.
+Events in this category are logged to the ` + "`" + `{{.LogChannel}}` + "`" + ` channel.
 
 {{range .Events}}
 ### ` + "`" + `{{.Type}}` + "`" + `
