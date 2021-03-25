@@ -47,6 +47,14 @@ func (*IntSetting) Typ() string {
 	return "i"
 }
 
+// Default returns default value for setting.
+func (i *IntSetting) Default() int64 {
+	return i.defaultValue
+}
+
+// Defeat the linter.
+var _ = (*IntSetting).Default
+
 // Validate that a value conforms with the validation function.
 func (i *IntSetting) Validate(v int64) error {
 	if i.validateFn != nil {
