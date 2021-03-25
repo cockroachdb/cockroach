@@ -192,6 +192,7 @@ func TryJoinInvertedIndex(
 		}
 	} else {
 		joinPlanner = &jsonOrArrayJoinPlanner{
+			factory:   factory,
 			tabID:     tabID,
 			index:     index,
 			inputCols: inputCols,

@@ -216,6 +216,102 @@ project
            ├── t1.a:3 @> t2.a:9 [type=bool, outer=(3,9), immutable]
            └── t1.j:2 @> t2.j:8 [type=bool, outer=(2,8), immutable]
 
+opt
+SELECT t1.k
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
+ON t1.j <@ t2.j
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=3333.33333]
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t1.k:1(int!null) t1.j:2(jsonb) t2.j:8(jsonb)
+      ├── key columns: [11] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── stats: [rows=3333.33333]
+      ├── fd: (1)-->(2)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.j:8(jsonb) t1.k:11(int!null)
+      │    ├── inverted-expr
+      │    │    └── t1.j:12 <@ t2.j:8 [type=bool]
+      │    ├── stats: [rows=100, distinct(11)=95.617925, null(11)=0]
+      │    ├── scan json_arr2 [as=t2]
+      │    │    ├── columns: t2.j:8(jsonb)
+      │    │    └── stats: [rows=10]
+      │    └── filters (true)
+      └── filters
+           └── t1.j:2 <@ t2.j:8 [type=bool, outer=(2,8), immutable]
+
+opt
+SELECT *
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
+ON t1.a <@ t2.a AND t1.a <@ '{"foo"}'::string[] AND t2.k > 5
+----
+inner-join (lookup json_arr1 [as=t1])
+ ├── columns: k:1(int!null) j:2(jsonb) a:3(string[]) k:7(int!null) j:8(jsonb) a:9(string[])
+ ├── key columns: [11] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── stats: [rows=370.37037]
+ ├── key: (1,7)
+ ├── fd: (1)-->(2,3), (7)-->(8,9)
+ ├── inner-join (inverted json_arr1@a_idx [as=t1])
+ │    ├── columns: t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[]) t1.k:11(int!null)
+ │    ├── inverted-expr
+ │    │    └── (t1.a:13 <@ t2.a:9) AND (t1.a:13 <@ ARRAY['foo']) [type=bool]
+ │    ├── stats: [rows=33.3333333, distinct(7)=3.33318943, null(7)=0, distinct(11)=32.9461714, null(11)=0]
+ │    ├── key: (7,11)
+ │    ├── fd: (7)-->(8,9)
+ │    ├── scan json_arr2 [as=t2]
+ │    │    ├── columns: t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
+ │    │    ├── constraint: /7: [/6 - ]
+ │    │    ├── stats: [rows=3.33333333, distinct(7)=3.33333333, null(7)=0]
+ │    │    ├── key: (7)
+ │    │    └── fd: (7)-->(8,9)
+ │    └── filters (true)
+ └── filters
+      ├── t1.a:3 <@ t2.a:9 [type=bool, outer=(3,9), immutable]
+      └── t1.a:3 <@ ARRAY['foo'] [type=bool, outer=(3), immutable]
+
+opt
+SELECT t2.k
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
+ON t1.a <@ t2.a AND t1.j <@ t2.j AND t2.k > 5
+----
+project
+ ├── columns: k:7(int!null)
+ ├── immutable
+ ├── stats: [rows=370.37037]
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t1.j:2(jsonb) t1.a:3(string[]) t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
+      ├── key columns: [11] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── stats: [rows=370.37037]
+      ├── fd: (7)-->(8,9)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[]) t1.k:11(int!null)
+      │    ├── inverted-expr
+      │    │    └── t1.j:12 <@ t2.j:8 [type=bool]
+      │    ├── stats: [rows=33.3333333, distinct(7)=3.33318943, null(7)=0, distinct(11)=32.9461714, null(11)=0]
+      │    ├── key: (7,11)
+      │    ├── fd: (7)-->(8,9)
+      │    ├── scan json_arr2 [as=t2]
+      │    │    ├── columns: t2.k:7(int!null) t2.j:8(jsonb) t2.a:9(string[])
+      │    │    ├── constraint: /7: [/6 - ]
+      │    │    ├── stats: [rows=3.33333333, distinct(7)=3.33333333, null(7)=0]
+      │    │    ├── key: (7)
+      │    │    └── fd: (7)-->(8,9)
+      │    └── filters (true)
+      └── filters
+           ├── t1.a:3 <@ t2.a:9 [type=bool, outer=(3,9), immutable]
+           └── t1.j:2 <@ t2.j:8 [type=bool, outer=(2,8), immutable]
+
 exec-ddl
 CREATE TABLE json_multi_col (
   k INT PRIMARY KEY,

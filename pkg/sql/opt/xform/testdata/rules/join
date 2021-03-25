@@ -5399,6 +5399,32 @@ opt expect=GenerateInvertedJoins
 SELECT t1.k
 FROM json_arr1 AS t1
 JOIN json_arr2 AS t2
+ON t1.j <@ t2.j
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t1.k:1!null t1.j:3 t2.j:10
+      ├── key columns: [13] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (1)-->(3)
+      ├── inner-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.j:10 t1.k:13!null
+      │    ├── inverted-expr
+      │    │    └── t1.j:15 <@ t2.j:10
+      │    ├── scan json_arr2 [as=t2]
+      │    │    └── columns: t2.j:10
+      │    └── filters (true)
+      └── filters
+           └── t1.j:3 <@ t2.j:10 [outer=(3,10), immutable]
+
+# Inner join with no additional filters.
+opt expect=GenerateInvertedJoins
+SELECT t1.k
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
 ON t1.a @> t2.a
 ----
 project
@@ -5419,6 +5445,32 @@ project
       │    └── filters (true)
       └── filters
            └── t1.a:4 @> t2.a:11 [outer=(4,11), immutable]
+
+# Inner join with no additional filters.
+opt expect=GenerateInvertedJoins
+SELECT t1.k
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
+ON t1.a <@ t2.a
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ └── inner-join (lookup json_arr1 [as=t1])
+      ├── columns: t1.k:1!null t1.a:4 t2.a:11
+      ├── key columns: [13] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (1)-->(4)
+      ├── inner-join (inverted json_arr1@a_idx [as=t1])
+      │    ├── columns: t2.a:11 t1.k:13!null
+      │    ├── inverted-expr
+      │    │    └── t1.a:16 <@ t2.a:11
+      │    ├── scan json_arr2 [as=t2]
+      │    │    └── columns: t2.a:11
+      │    └── filters (true)
+      └── filters
+           └── t1.a:4 <@ t2.a:11 [outer=(4,11), immutable]
 
 # Left join with no additional filters.
 opt expect=GenerateInvertedJoins
@@ -5448,6 +5500,35 @@ project
       │    └── filters (true)
       └── filters
            └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
+
+# Left join with no additional filters.
+opt expect=GenerateInvertedJoins
+SELECT t1.k
+FROM json_arr2 AS t2
+LEFT JOIN json_arr1 AS t1
+ON t1.j <@ t2.j
+----
+project
+ ├── columns: k:6
+ ├── immutable
+ └── left-join (lookup json_arr1 [as=t1])
+      ├── columns: t2.j:3 t1.k:6 t1.j:8
+      ├── key columns: [13] = [6]
+      ├── lookup columns are key
+      ├── second join in paired joiner
+      ├── immutable
+      ├── fd: (6)-->(8)
+      ├── left-join (inverted json_arr1@j_idx [as=t1])
+      │    ├── columns: t2.j:3 t1.k:13 continuation:20
+      │    ├── first join in paired joiner; continuation column: continuation:20
+      │    ├── inverted-expr
+      │    │    └── t1.j:15 <@ t2.j:3
+      │    ├── fd: (13)-->(20)
+      │    ├── scan json_arr2 [as=t2]
+      │    │    └── columns: t2.j:3
+      │    └── filters (true)
+      └── filters
+           └── t1.j:8 <@ t2.j:3 [outer=(3,8), immutable]
 
 # Left join not possible when the order of tables is switched.
 opt expect-not=GenerateInvertedJoins
@@ -5507,6 +5588,36 @@ opt expect=GenerateInvertedJoinsFromSelect
 SELECT *
 FROM json_arr1 AS t1
 JOIN json_arr2 AS t2
+ON t1.j <@ t2.j AND t1.j <@ '{"foo": "bar"}'::jsonb AND t2.k > 5
+----
+inner-join (lookup json_arr1 [as=t1])
+ ├── columns: k:1!null i:2 j:3 a:4 k:8!null l:9 j:10 a:11
+ ├── key columns: [13] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-4), (8)-->(9-11)
+ ├── inner-join (inverted json_arr1@j_idx [as=t1])
+ │    ├── columns: t2.k:8!null l:9 t2.j:10 t2.a:11 t1.k:13!null
+ │    ├── inverted-expr
+ │    │    └── (t1.j:15 <@ t2.j:10) AND (t1.j:15 <@ '{"foo": "bar"}')
+ │    ├── key: (8,13)
+ │    ├── fd: (8)-->(9-11)
+ │    ├── scan json_arr2 [as=t2]
+ │    │    ├── columns: t2.k:8!null l:9 t2.j:10 t2.a:11
+ │    │    ├── constraint: /8: [/6 - ]
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9-11)
+ │    └── filters (true)
+ └── filters
+      ├── t1.j:3 <@ t2.j:10 [outer=(3,10), immutable]
+      └── t1.j:3 <@ '{"foo": "bar"}' [outer=(3), immutable]
+
+# Inner join with additional filter.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT *
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
 ON t1.a @> t2.a AND t1.a @> '{"foo"}'::string[] AND t2.k > 5
 ----
 inner-join (lookup json_arr1 [as=t1])
@@ -5531,6 +5642,36 @@ inner-join (lookup json_arr1 [as=t1])
  └── filters
       ├── t1.a:4 @> t2.a:11 [outer=(4,11), immutable]
       └── t1.a:4 @> ARRAY['foo'] [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+
+# Inner join with additional filter.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT *
+FROM json_arr1 AS t1
+JOIN json_arr2 AS t2
+ON t1.a <@ t2.a AND t1.a <@ '{"foo"}'::string[] AND t2.k > 5
+----
+inner-join (lookup json_arr1 [as=t1])
+ ├── columns: k:1!null i:2 j:3 a:4 k:8!null l:9 j:10 a:11
+ ├── key columns: [13] = [1]
+ ├── lookup columns are key
+ ├── immutable
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-4), (8)-->(9-11)
+ ├── inner-join (inverted json_arr1@a_idx [as=t1])
+ │    ├── columns: t2.k:8!null l:9 t2.j:10 t2.a:11 t1.k:13!null
+ │    ├── inverted-expr
+ │    │    └── (t1.a:16 <@ t2.a:11) AND (t1.a:16 <@ ARRAY['foo'])
+ │    ├── key: (8,13)
+ │    ├── fd: (8)-->(9-11)
+ │    ├── scan json_arr2 [as=t2]
+ │    │    ├── columns: t2.k:8!null l:9 t2.j:10 t2.a:11
+ │    │    ├── constraint: /8: [/6 - ]
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9-11)
+ │    └── filters (true)
+ └── filters
+      ├── t1.a:4 <@ t2.a:11 [outer=(4,11), immutable]
+      └── t1.a:4 <@ ARRAY['foo'] [outer=(4), immutable]
 
 # Left join with additional filter.
 opt expect=GenerateInvertedJoinsFromSelect
@@ -5564,6 +5705,38 @@ left-join (lookup json_arr1 [as=t1])
       ├── t1.a:9 @> t2.a:4 [outer=(4,9), immutable]
       └── t1.a:9 @> ARRAY['foo'] [outer=(9), immutable, constraints=(/9: (/NULL - ])]
 
+# Left join with additional filter.
+opt expect=GenerateInvertedJoinsFromSelect
+SELECT *
+FROM json_arr2 AS t2
+LEFT JOIN json_arr1 AS t1
+ON t1.a <@ t2.a AND t1.a <@ '{"foo"}'::string[] AND t2.k > 5
+----
+left-join (lookup json_arr1 [as=t1])
+ ├── columns: k:1!null l:2 j:3 a:4 k:6 i:7 j:8 a:9
+ ├── key columns: [13] = [6]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── immutable
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-4), (6)-->(7-9)
+ ├── left-join (inverted json_arr1@a_idx [as=t1])
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:13 continuation:20
+ │    ├── first join in paired joiner; continuation column: continuation:20
+ │    ├── inverted-expr
+ │    │    └── (t1.a:16 <@ t2.a:4) AND (t1.a:16 <@ ARRAY['foo'])
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2-4), (13)-->(20)
+ │    ├── scan json_arr2 [as=t2]
+ │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    └── filters
+ │         └── t2.k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+ └── filters
+      ├── t1.a:9 <@ t2.a:4 [outer=(4,9), immutable]
+      └── t1.a:9 <@ ARRAY['foo'] [outer=(9), immutable]
+
 # Semi-join.
 opt expect=(GenerateInvertedJoins)
 SELECT * FROM json_arr2 AS t2
@@ -5594,6 +5767,36 @@ semi-join (lookup json_arr1 [as=t1])
  └── filters
       └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
 
+# Semi-join.
+opt expect=(GenerateInvertedJoins)
+SELECT * FROM json_arr2 AS t2
+WHERE EXISTS (
+  SELECT * FROM json_arr1 AS t1 WHERE t1.j <@ t2.j
+)
+----
+semi-join (lookup json_arr1 [as=t1])
+ ├── columns: k:1!null l:2 j:3 a:4
+ ├── key columns: [13] = [6]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── inner-join (inverted json_arr1@j_idx [as=t1])
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:13!null continuation:20
+ │    ├── first join in paired joiner; continuation column: continuation:20
+ │    ├── inverted-expr
+ │    │    └── t1.j:15 <@ t2.j:3
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2-4), (13)-->(20)
+ │    ├── scan json_arr2 [as=t2]
+ │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    └── filters (true)
+ └── filters
+      └── t1.j:8 <@ t2.j:3 [outer=(3,8), immutable]
+
 # Anti-join.
 opt expect=GenerateInvertedJoins
 SELECT * FROM json_arr2 AS t2
@@ -5623,6 +5826,36 @@ anti-join (lookup json_arr1 [as=t1])
  │    └── filters (true)
  └── filters
       └── t1.j:8 @> t2.j:3 [outer=(3,8), immutable]
+
+# Anti-join.
+opt expect=GenerateInvertedJoins
+SELECT * FROM json_arr2 AS t2
+WHERE NOT EXISTS (
+  SELECT * FROM json_arr1 AS t1 WHERE t1.j <@ t2.j
+)
+----
+anti-join (lookup json_arr1 [as=t1])
+ ├── columns: k:1!null l:2 j:3 a:4
+ ├── key columns: [13] = [6]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── left-join (inverted json_arr1@j_idx [as=t1])
+ │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4 t1.k:13 continuation:20
+ │    ├── first join in paired joiner; continuation column: continuation:20
+ │    ├── inverted-expr
+ │    │    └── t1.j:15 <@ t2.j:3
+ │    ├── key: (1,13)
+ │    ├── fd: (1)-->(2-4), (13)-->(20)
+ │    ├── scan json_arr2 [as=t2]
+ │    │    ├── columns: t2.k:1!null l:2 t2.j:3 t2.a:4
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4)
+ │    └── filters (true)
+ └── filters
+      └── t1.j:8 <@ t2.j:3 [outer=(3,8), immutable]
 
 # Tests for indexes with older descriptor versions.
 
