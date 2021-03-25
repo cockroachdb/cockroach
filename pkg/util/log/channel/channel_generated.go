@@ -4,123 +4,129 @@ package channel
 
 import "github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 
-// DEV is the channel used during development, to collect log
-// details useful for troubleshooting when it is unclear which other
-// channel to use. It is also the default logging channel in
-// CockroachDB, when the caller does not indicate a channel.
+// DEV is used during development to collect log
+// details useful for troubleshooting that fall outside the
+// scope of other channels. It is also the default logging
+// channel for events not associated with a channel.
 //
 // This channel is special in that there are no constraints as to
 // what may or may not be logged on it. Conversely, users in
-// production deployments are invited to not collect DEV logs in
+// production deployments are invited to not collect `DEV` logs in
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
+// See [Configure logs](configure-logs.html#dev-channel).
 const DEV = logpb.Channel_DEV
 
-// OPS is the channel used to report "point" operational events,
+// OPS is used to report "point" operational events,
 // initiated by user operators or automation:
 //
-// - operator or system actions on server processes: process starts,
+// - Operator or system actions on server processes: process starts,
 //   stops, shutdowns, crashes (if they can be logged),
-//   including each time: command-line parameters, current version being run.
-// - actions that impact the topology of a cluster: node additions,
+//   including each time: command-line parameters, current version being run
+// - Actions that impact the topology of a cluster: node additions,
 //   removals, decommissions, etc.
-// - job-related initiation or termination.
-// - cluster setting changes.
-// - zone configuration changes.
+// - Job-related initiation or termination
+// - [Cluster setting](cluster-settings.html) changes
+// - [Zone configuration](configure-replication-zones.html) changes
 const OPS = logpb.Channel_OPS
 
-// HEALTH is the channel used to report "background" operational
+// HEALTH is used to report "background" operational
 // events, initiated by CockroachDB or reporting on automatic processes:
 //
-// - current resource usage, including critical resource usage.
-// - node-node connection events, including connection errors and
-//   gossip details.
-// - range and table leasing events.
-// - up-, down-replication; range unavailability.
+// - Current resource usage, including critical resource usage
+// - Node-node connection events, including connection errors and
+//   gossip details
+// - Range and table leasing events
+// - Up- and down-replication, range unavailability
 const HEALTH = logpb.Channel_HEALTH
 
-// STORAGE is the channel used to report low-level storage
+// STORAGE is used to report low-level storage
 // layer events (RocksDB/Pebble).
 const STORAGE = logpb.Channel_STORAGE
 
-// SESSIONS is the channel used to report client network activity:
+// SESSIONS is used to report client network activity when enabled via
+// the `server.auth_log.sql_connections.enabled` and/or
+// `server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+// [cluster settings](cluster-settings.html):
 //
-// - connections opened/closed.
-// - authentication events: logins, failed attempts.
-// - session and query cancellation.
+// - Connections opened/closed
+// - Authentication events: logins, failed attempts
+// - Session and query cancellation
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 const SESSIONS = logpb.Channel_SESSIONS
 
-// SQL_SCHEMA is the channel used to report changes to the
+// SQL_SCHEMA is used to report changes to the
 // SQL logical schema, excluding privilege and ownership changes
-// (which are reported on the separate channel PRIVILEGES) and
-// zone config changes (which go to OPS).
+// (which are reported separately on the `PRIVILEGES` channel) and
+// zone configuration changes (which go to the `OPS` channel).
 //
 // This includes:
 //
-// - database/schema/table/sequence/view/type creation
-// - adding/removing/changing table columns
-// - changing sequence parameters
+// - Database/schema/table/sequence/view/type creation
+// - Adding/removing/changing table columns
+// - Changing sequence parameters
 //
-// etc., more generally changes to the schema that affect the
+// `SQL_SCHEMA` events generally comprise changes to the schema that affect the
 // functional behavior of client apps using stored objects.
 const SQL_SCHEMA = logpb.Channel_SQL_SCHEMA
 
-// USER_ADMIN is the channel used to report changes
+// USER_ADMIN is used to report changes
 // in users and roles, including:
 //
-// - users added/dropped.
-// - changes to authentication credentials, incl passwords, validity etc.
-// - role grants/revocations.
-// - role option grants/revocations.
+// - Users added/dropped
+// - Changes to authentication credentials (e.g., passwords, validity, etc.)
+// - Role grants/revocations
+// - Role option grants/revocations
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 const USER_ADMIN = logpb.Channel_USER_ADMIN
 
-// PRIVILEGES is the channel used to report data
+// PRIVILEGES is used to report data
 // authorization changes, including:
 //
-// - privilege grants/revocations on database, objects etc.
-// - object ownership changes.
+// - Privilege grants/revocations on database, objects, etc.
+// - Object ownership changes
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 const PRIVILEGES = logpb.Channel_PRIVILEGES
 
-// SENSITIVE_ACCESS is the channel used to report SQL
-// data access to sensitive data (when enabled):
+// SENSITIVE_ACCESS is used to report SQL
+// data access to sensitive data:
 //
-// - data access audit events (when table audit is enabled).
-// - SQL statements executed by users with the ADMIN bit.
-// - operations that write to `system` tables.
+// - Data access audit events (when table audit is enabled via
+//   [EXPERIMENTAL_AUDIT](experimental-audit.html))
+// - SQL statements executed by users with the admin role
+// - Operations that write to system tables
 //
 // This is typically configured in "audit" mode, with event
 // numbering and synchronous writes.
 const SENSITIVE_ACCESS = logpb.Channel_SENSITIVE_ACCESS
 
-// SQL_EXEC is the channel used to report SQL execution on
+// SQL_EXEC is used to report SQL execution on
 // behalf of client connections:
 //
-// - logical SQL statement executions (if enabled)
-// - pgwire events (if enabled)
+// - Logical SQL statement executions (when enabled via the
+//   `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+// - pgwire events (when enabled)
 const SQL_EXEC = logpb.Channel_SQL_EXEC
 
-// SQL_PERF is the channel used to report SQL executions
-// that are marked to be highlighted as "out of the ordinary"
+// SQL_PERF is used to report SQL executions
+// that are marked as "out of the ordinary"
 // to facilitate performance investigations.
-// This includes the "SQL slow query log".
+// This includes the SQL "slow query log".
 //
-// Arguably, this channel overlaps with SQL_EXEC defined above.
-// However, we keep them separate for backward-compatibility
-// with previous versions, where the corresponding events
+// Arguably, this channel overlaps with `SQL_EXEC`.
+// However, we keep both channels separate for backward compatibility
+// with versions prior to v21.1, where the corresponding events
 // were redirected to separate files.
 const SQL_PERF = logpb.Channel_SQL_PERF
 
-// SQL_INTERNAL_PERF is like the SQL perf channel above but aimed at
+// SQL_INTERNAL_PERF is like the `SQL_PERF` channel, but is aimed at
 // helping developers of CockroachDB itself. It exists as a separate
-// channel so as to not pollute the SQL perf logging output with
+// channel so as to not pollute the `SQL_PERF` logging output with
 // internal troubleshooting details.
 const SQL_INTERNAL_PERF = logpb.Channel_SQL_INTERNAL_PERF

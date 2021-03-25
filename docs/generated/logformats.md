@@ -32,21 +32,20 @@ This is the legacy file format used from CockroachDB v1.0.
 Each log entry is emitted using a common prefix, described below,
 followed by:
 
-- The logging context tags enclosed between "[" and "]", if any. It is possible
+- The logging context tags enclosed between `[` and `]`, if any. It is possible
   for this to be omitted if there were no context tags.
 - the text of the log entry.
 
-Beware that the text of the log entry can span multiple lines. In particular,
-the following caveats apply:
+Beware that the text of the log entry can span multiple lines. The following caveats apply:
 
 
-- the text of the log entry can start with text enclosed between "[" and "]".
-  It is not possible to distinguish between logging context tag information
-  and a "[...]" string in the main text of the log entry, if there were
-  no logging tags to start with. This means that this format is ambiguous.
-  Consider `crdb-v1-count` for an unambiguous alternative.
+- The text of the log entry can start with text enclosed between `[` and `]`.
+  If there were no logging tags to start with, it is not possible to distinguish between
+  logging context tag information and a `[...]` string in the main text of the
+  log entry. This means that this format is ambiguous. For an unambiguous alternative,
+  consider `crdb-v1-count`.
 
-- the text of the log entry can embed arbitrary application-level strings,
+- The text of the log entry can embed arbitrary application-level strings,
   including strings that represent log entries. In particular, an accident
   of implementation can cause the common entry prefix (described below)
   to also appear on a line of its own, as part of the payload of a previous
@@ -68,10 +67,10 @@ regular log entries. This header reports when the file was created,
 which parameters were used to start the server, the server identifiers
 if known, and other metadata about the running process.
 
-This header appears to be logged at severity INFO (with an I prefix at the
-start of the line) even though it does not really have a severity. The
-header is printed unconditionally even when a filter is configured to
-omit entries at the INFO level.
+- This header appears to be logged at severity `INFO` (with an `I` prefix
+  at the start of the line) even though it does not really have a severity.
+- The header is printed unconditionally even when a filter is configured to
+  omit entries at the `INFO` level.
 
 ### Common log entry prefix
 
@@ -79,28 +78,26 @@ Each line of output starts with the following prefix:
 
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker
 
-where the fields are defined as follows:
-
-| Field           | Description                                                       |
-|-----------------|------------------------------------------------------------------ |
-| L               | A single character, representing the log level (eg 'I' for INFO). |
-| yy              | The year (zero padded; ie 2016 is '16').                          |
-| mm              | The month (zero padded; ie May is '05').                          |
-| dd              | The day (zero padded).                                            |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.   |
-| goid            | The goroutine id (omitted if zero for use by tests).              |
-| chan            | The channel number (omitted if zero for backward-compatibility).  |
-| file            | The file name where the entry originated.                         |
-| line            | The line number where the entry originated.                       |
-| marker          | Redactability marker (see below for details).                     |
+| Field           | Description                                                                                                               |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., `I` for `INFO`). |
+| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                     |
+| mm              | The month (zero padded; i.e., May is `05`).                                                                     |
+| dd              | The day (zero padded).                                                                                                    |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
+| goid            | The goroutine id (omitted if zero for use by tests).                                                                      |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
+| file            | The file name where the entry originated.                                                                                 |
+| line            | The line number where the entry originated.                                                                               |
+| marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                       |
 
 The redactability marker can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
 
-If the marker "⋮" is present, the remainder of the log entry
+If the marker ` + redactableIndicator + ` is present, the remainder of the log entry
 contains delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
-by `debug zip` and `debug merge-logs` when log redaction is requested.
+by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
 
 ## Format `crdb-v1-count`
@@ -110,11 +107,10 @@ This is an alternative, backward-compatible legacy file format used from Cockroa
 Each log entry is emitted using a common prefix, described below,
 followed by the text of the log entry.
 
-Beware that the text of the log entry can span multiple lines. In particular,
-the following caveats apply:
+Beware that the text of the log entry can span multiple lines. The following caveats apply:
 
 
-- the text of the log entry can embed arbitrary application-level strings,
+- The text of the log entry can embed arbitrary application-level strings,
   including strings that represent log entries. In particular, an accident
   of implementation can cause the common entry prefix (described below)
   to also appear on a line of its own, as part of the payload of a previous
@@ -136,41 +132,39 @@ regular log entries. This header reports when the file was created,
 which parameters were used to start the server, the server identifiers
 if known, and other metadata about the running process.
 
-This header appears to be logged at severity INFO (with an I prefix at the
-start of the line) even though it does not really have a severity. The
-header is printed unconditionally even when a filter is configured to
-omit entries at the INFO level.
+- This header appears to be logged at severity `INFO` (with an `I` prefix
+  at the start of the line) even though it does not really have a severity.
+- The header is printed unconditionally even when a filter is configured to
+  omit entries at the `INFO` level.
 
 ### Common log entry prefix
 
 Each line of output starts with the following prefix:
 
-     Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line markertags counter
+     Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker tags counter
 
-where the fields are defined as follows:
-
-| Field           | Description                                                       |
-|-----------------|------------------------------------------------------------------ |
-| L               | A single character, representing the log level (eg 'I' for INFO). |
-| yy              | The year (zero padded; ie 2016 is '16').                          |
-| mm              | The month (zero padded; ie May is '05').                          |
-| dd              | The day (zero padded).                                            |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.   |
-| goid            | The goroutine id (omitted if zero for use by tests).              |
-| chan            | The channel number (omitted if zero for backward-compatibility).  |
-| file            | The file name where the entry originated.                         |
-| line            | The line number where the entry originated.                       |
-| marker          | Redactability marker (see below for details).                     |
-| tags            | The logging tags, enclosed between "[" and "]". May be absent.    |
-| counter         | The entry counter. Always present.                                |
+| Field           | Description                                                                                                               |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., `I` for `INFO`). |
+| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                     |
+| mm              | The month (zero padded; i.e., May is `05`).                                                                     |
+| dd              | The day (zero padded).                                                                                                    |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
+| goid            | The goroutine id (omitted if zero for use by tests).                                                                      |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
+| file            | The file name where the entry originated.                                                                                 |
+| line            | The line number where the entry originated.                                                                               |
+| marker          | Redactability marker ` + redactableIndicator + ` (see below for details).                                       |
+| tags    | The logging tags, enclosed between `[` and `]`. May be absent. |
+| counter | The entry counter. Always present.                                                 |
 
 The redactability marker can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
 
-If the marker "⋮" is present, the remainder of the log entry
+If the marker ` + redactableIndicator + ` is present, the remainder of the log entry
 contains delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
-by `debug zip` and `debug merge-logs` when log redaction is requested.
+by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
 
 ## Format `crdb-v1-tty`
@@ -202,52 +196,52 @@ Each line of output starts with the following prefix:
 
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker [tags...] counter cont
 
-| Field           | Description                                                         |
-|-----------------|---------------------------------------------------------------------|
-| L               | A single character, representing the log level (eg 'I' for INFO).   |
-| yy              | The year (zero padded; ie 2016 is '16').                            |
-| mm              | The month (zero padded; ie May is '05').                            |
-| dd              | The day (zero padded).                                              |
-| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.     |
-| goid            | The goroutine id (zero when cannot be determined).                  |
-| chan            | The channel number (omitted if zero for backward-compatibility).    |
-| file            | The file name where the entry originated. Also see below.           |
-| line            | The line number where the entry originated.                         |
-| marker          | Redactability marker (see below for details).                       |
-| tags            | The logging tags, enclosed between "[" and "]". See below.          |
-| counter         | The optional entry counter (see below for details).                 |
-| cont            | Continuation mark for structured and multi-line entries. See below. |
+| Field           | Description                                                                                                               |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------|
+| L               | A single character, representing the [log level](logging.html#logging-levels) (e.g., `I` for `INFO`). |
+| yy              | The year (zero padded; i.e., 2016 is `16`).                                                                     |
+| mm              | The month (zero padded; i.e., May is `05`).                                                                     |
+| dd              | The day (zero padded).                                                                                                    |
+| hh:mm:ss.uuuuuu | Time in hours, minutes and fractional seconds. Timezone is UTC.                                                           |
+| goid            | The goroutine id (zero when cannot be determined).                                                                        |
+| chan            | The channel number (omitted if zero for backward compatibility).                                                          |
+| file            | The file name where the entry originated. Also see below.                                                                 |
+| line            | The line number where the entry originated.                                                                               |
+| marker          | Redactability marker "⋮" (see below for details).                                               |
+| tags            | The logging tags, enclosed between `[` and `]`. See below.                                            |
+| counter         | The optional entry counter (see below for details).                                                                       |
+| cont            | Continuation mark for structured and multi-line entries. See below.                                                       |
 
 The `chan@` prefix before the file name indicates the logging channel,
-and is omitted if the channel is DEV.
+and is omitted if the channel is `DEV`.
 
-The file name may be prefixed by the string "`(gostd) `" to indicate
+The file name may be prefixed by the string `(gostd) ` to indicate
 that the log entry was produced inside the Go standard library, instead
 of a CockroachDB component. Entry parsers must be configured to ignore this prefix
 when present.
 
-The `marker` part is the redactability marker.
-The redactability marker can be empty; in this case, its position in the common prefix is
+`marker` can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
-If the marker is "⋮", the remainder of the log entry
-contains delimiters (‹...›) around
-fields that are considered sensitive. These markers are automatically recognized
-by `debug zip` and `debug merge-logs` when log redaction is requested.
+If the marker "⋮" is present, the remainder of the log entry
+contains delimiters (‹...›)
+around fields that are considered sensitive. These markers are automatically recognized
+by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)
+when log redaction is requested.
 
-The logging `tags` part is enclosed between square brackets `[...]`,
+The logging `tags` are enclosed between square brackets `[...]`,
 and the syntax `[-]` is used when there are no logging tags
 associated with the log entry.
 
-The `counter` part is numeric, and is incremented for every
+`counter` is numeric, and is incremented for every
 log entry emitted to this sink. (There is thus one counter sequence per
 sink.) For entries that do not have a counter value
-associated, for example header entries in file sinks, the counter position
-in the common prefix is empty: the tags part that precedes is then
-followed by two ASCII space characters, instead of one space, the counter
+associated (e.g., header entries in file sinks), the counter position
+in the common prefix is empty: `tags` is then
+followed by two ASCII space characters, instead of one space; the `counter`,
 and another space. The presence of the two ASCII spaces indicates
 reliably that no counter was present.
 
-The `cont` part is a format/continuation indicator:
+`cont` is a format/continuation indicator:
 
 | Continuation indicator | ASCII | Description |
 |------------------------|-------|--|
@@ -282,23 +276,24 @@ Example long entries broken up into multiple lines:
 
 ### Backward-compatibility notes
 
-Entries in this format can be read by most crdb-v1 log parsers,
+Entries in this format can be read by most `crdb-v1` log parsers,
 in particular the one included in the DB console and
-also the `debug merge-logs` facility.
+also the [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)
+facility.
 
 However, implementers of previous version parsers must
 understand that the logging tags field is now always
 included, and the lack of logging tags is included
-by a tag string set to "`[-]`".
+by a tag string set to `[-]`.
 
 Likewise, the entry counter is now also always included,
-and there is a special character after the entry counter
+and there is a special character after `counter`
 to indicate whether the remainder of the line is a
 structured entry, or a continuation of a previous entry.
 
 Finally, in the previous format, structured entries
-were prefixed with the string "Structured entry:". In
-the new format, they are prefixed by the '=' continuation
+were prefixed with the string `Structured entry:`. In
+the new format, they are prefixed by the `=` continuation
 indicator.
 
 
@@ -356,13 +351,13 @@ Additionally, the following fields are conditionally present:
 | `stacks`  | Goroutine stacks, for fatal events. |
 
 When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the reference
-documentation for structured events for a list of possible payloads.
+whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
+for structured events for a list of possible payloads.
 
-Then the entry is marked as "redactable", the `tags`, `message` and/or `event` payloads
+When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
 contain delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
-by `debug zip` and `debug merge-logs` when log redaction is requested.
+by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
 
 
@@ -413,13 +408,13 @@ Additionally, the following fields are conditionally present:
 | `stacks`  | Goroutine stacks, for fatal events. |
 
 When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the reference
-documentation for structured events for a list of possible payloads.
+whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
+for structured events for a list of possible payloads.
 
-Then the entry is marked as "redactable", the `tags`, `message` and/or `event` payloads
+When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
 contain delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
-by `debug zip` and `debug merge-logs` when log redaction is requested.
+by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
 
 
@@ -471,13 +466,13 @@ Additionally, the following fields are conditionally present:
 | `stacks`  | Goroutine stacks, for fatal events. |
 
 When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the reference
-documentation for structured events for a list of possible payloads.
+whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
+for structured events for a list of possible payloads.
 
-Then the entry is marked as "redactable", the `tags`, `message` and/or `event` payloads
+When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
 contain delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
-by `debug zip` and `debug merge-logs` when log redaction is requested.
+by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
 
 
@@ -529,13 +524,13 @@ Additionally, the following fields are conditionally present:
 | `stacks`  | Goroutine stacks, for fatal events. |
 
 When an entry is structured, the `event` field maps to a dictionary
-whose structure is one of the documented structured events. See the reference
-documentation for structured events for a list of possible payloads.
+whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
+for structured events for a list of possible payloads.
 
-Then the entry is marked as "redactable", the `tags`, `message` and/or `event` payloads
+When the entry is marked as `redactable`, the `tags`, `message`, and/or `event` payloads
 contain delimiters (‹...›) around
 fields that are considered sensitive. These markers are automatically recognized
-by `debug zip` and `debug merge-logs` when log redaction is requested.
+by [`cockroach debug zip`](cockroach-debug-zip.html) and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html) when log redaction is requested.
 
 
 

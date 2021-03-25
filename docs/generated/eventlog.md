@@ -1,35 +1,37 @@
-# Documentation for notable events
-
 Certain notable events are reported using a structured format.
 Commonly, these notable events are also copied to the table
 `system.eventlog`, unless the cluster setting
 `server.eventlog.enabled` is unset.
 
 Additionally, notable events are copied to specific external logging
-channels, where they can be collected for further processing.
+channels in log messages, where they can be collected for further processing.
 
 The sections below document the possible notable event types
 in this version of CockroachDB. For each event type, a table
 documents the possible fields. A field may be omitted from
 an event if its value is empty or zero.
 
-A field is also marked as “Sensitive” if it may contain
-application-specific information or PII. In that case,
+A field is also considered "Sensitive" if it may contain
+application-specific information or personally identifiable information (PII). In that case,
 the copy of the event sent to the external logging channel
-may contain redaction markers, in a way compatible
-with the redaction facilities in `debug zip` or `debug merge-log`.
+will contain redaction markers in a format that is compatible
+with the redaction facilities in [`cockroach debug zip`](cockroach-debug-zip.html)
+and [`cockroach debug merge-logs`](cockroach-debug-merge-logs.html),
+provided the `redactable` functionality is enabled on the logging sink.
+
+Events not documented on this page will have an unstructured format in log messages.
 
 ## Cluster-level events
 
 Events in this category pertain to an entire cluster and are
 not relative to any particular tenant.
 
-In a multi-tenant setup, the system.eventlog table for individual
+In a multi-tenant setup, the `system.eventlog` table for individual
 tenants cannot contain a copy of cluster-level events; conversely,
-the system.eventlog table in the system tenant cannot contain the
+the `system.eventlog` table in the system tenant cannot contain the
 SQL-level events for individual tenants.
 
-Events in this category are logged to channel OPS.
+Events in this category are logged to the `OPS` channel.
 
 
 ### `certs_reload`
@@ -70,7 +72,7 @@ decommissioned.
 
 ### `node_decommissioning`
 
-NodeDecommissioned is recorded when a node is marked as
+An event of type `node_decommissioning` is recorded when a node is marked as
 decommissioning.
 
 
@@ -149,7 +151,7 @@ Egs: IMPORT/RESTORE will emit events on job creation and successful
 completion. If the job fails, events will be emitted on job creation,
 failure, and successful revert.
 
-Events in this category are logged to channel OPS.
+Events in this category are logged to the `OPS` channel.
 
 
 ### `import`
@@ -204,7 +206,7 @@ They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of these miscellaneous events are
 preserved in each tenant's own system.eventlog table.
 
-Events in this category are logged to channel DEV.
+Events in this category are logged to the `DEV` channel.
 
 
 ### `set_cluster_setting`
@@ -233,15 +235,15 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 ## SQL Access Audit Events
 
 Events in this category are generated when a table has been
-marked as audited via `ALTER ... EXPERIMENTAL_AUDIT SET`.
+marked as audited via `ALTER TABLE ... EXPERIMENTAL_AUDIT SET`.
 
-This feature is experimental.
+{% include {{ page.version.version }}/misc/experimental-warning.md %}
 
-Note: these events are not written to `system.eventlog`, even
+Note: These events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-Events in this category are logged to channel SENSITIVE_ACCESS.
+Events in this category are logged to the `SENSITIVE_ACCESS` channel.
 
 
 ### `admin_query`
@@ -310,11 +312,11 @@ a table marked as audited.
 
 Events in this category report executed queries.
 
-Note: these events are not written to `system.eventlog`, even
+Note: These events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-Events in this category are logged to channel SQL_EXEC.
+Events in this category are logged to the `SQL_EXEC` channel.
 
 
 ### `query_execute`
@@ -354,9 +356,9 @@ schema.
 
 They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of DDL-related events are preserved
-in each tenant's own system.eventlog table.
+in each tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel SQL_SCHEMA.
+Events in this category are logged to the `SQL_SCHEMA` channel.
 
 
 ### `alter_database_add_region`
@@ -1355,9 +1357,9 @@ grants for stored objects.
 
 They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of DDL-related events are preserved
-in each tenant's own system.eventlog table.
+in each tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel PRIVILEGES.
+Events in this category are logged to the `PRIVILEGES` channel.
 
 
 ### `alter_database_owner`
@@ -1563,9 +1565,9 @@ and sessions.
 
 They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of these miscellaneous events are
-preserved in each tenant's own system.eventlog table.
+preserved in each tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel SESSIONS.
+Events in this category are logged to the `SESSIONS` channel.
 
 
 ### `client_authentication_failed`
@@ -1730,7 +1732,7 @@ Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-Events in this category are logged to channel SQL_PERF.
+Events in this category are logged to the `SQL_PERF` channel.
 
 
 ### `slow_query`
@@ -1771,14 +1773,14 @@ set to a non-zero value, AND
 ## SQL Slow Query Log (Internal)
 
 Events in this category report slow query execution by
-internal executors, i.e. when CockroachDB internally issues
+internal executors, i.e., when CockroachDB internally issues
 SQL statements.
 
 Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-Events in this category are logged to channel SQL_INTERNAL_PERF.
+Events in this category are logged to the `SQL_INTERNAL_PERF` channel.
 
 
 ### `slow_query_internal`
@@ -1820,9 +1822,9 @@ properties of users and roles.
 
 They are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of DDL-related events are preserved
-in each tenant's own system.eventlog table.
+in each tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel USER_ADMIN.
+Events in this category are logged to the `USER_ADMIN` channel.
 
 
 ### `alter_role`
@@ -1894,18 +1896,18 @@ An event of type `drop_role` is recorded when a role is dropped.
 
 ## Zone config events
 
-Events in this category pertain to zone config changes on
+Events in this category pertain to zone configuration changes on
 the SQL schema or system ranges.
 
 When zone configs apply to individual tables or other objects in a
 SQL logical schema, they are relative to a particular SQL tenant.
 In a multi-tenant setup, copies of these zone config events are preserved
-in each tenant's own system.eventlog table.
+in each tenant's own `system.eventlog` table.
 
-When they apply to cluster-level ranges (e.g.  the system zone config),
-they are stored in the system tenant's own system.eventlog table.
+When they apply to cluster-level ranges (e.g., the system zone config),
+they are stored in the system tenant's own `system.eventlog` table.
 
-Events in this category are logged to channel OPS.
+Events in this category are logged to the `OPS` channel.
 
 
 ### `remove_zone_config`
