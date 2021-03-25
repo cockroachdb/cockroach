@@ -60,6 +60,7 @@ const (
 	backupOptEncPassphrase   = "encryption_passphrase"
 	backupOptEncKMS          = "kms"
 	backupOptWithPrivileges  = "privileges"
+	backupOptAsJSON          = "as_json"
 	localityURLParam         = "COCKROACH_LOCALITY"
 	defaultLocalityValue     = "default"
 )
