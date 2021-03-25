@@ -2396,6 +2396,42 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 	return &serverpb.JSONResponse{Data: data}, nil
 }
 
+// isAdminFromContext determines whether the current logged-in
+// user is an admin.
+//
+// The first return value is false if the admin status could not be
+// determined from the context. This can occur e.g. if the query is
+// incoming via a RPC fan-out from a node which does not populate the
+// isAdmin status on the context. In that case, the caller is
+// responsible for calling hasAdminRole().
+func isAdminFromContext(ctx context.Context) (ok bool, isAdmin bool, err error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		// If the incoming context doesn't have the metadata fields,
+		// it's a gRPC / internal SQL connection which has root on the cluster.
+		return true, true, nil
+	}
+	isAdmins, ok := md[webSessionAdminKeyStr]
+	if !ok {
+		// If the incoming context has metadata but no attached admin bit,
+		// we may be serving a cross-version RPC. Simply report we don't know.
+		// TODO(knz): This case needs to be adjusted / removed when we
+		// are a few versions further.
+		return false, false, nil
+	}
+	if len(isAdmins) != 1 {
+		err := errors.Newf(
+			"context's incoming metadata contains unexpected number of admin bits: %+v ", md)
+		log.Warningf(ctx, "%v", err)
+		return false, false, err
+	}
+	isAdmin, err = strconv.ParseBool(isAdmins[0])
+	if err != nil {
+		return false, false, errors.Wrapf(err, "unexpected value for admin bit")
+	}
+	return true, isAdmin, nil
+}
+
 func userFromContext(ctx context.Context) (res security.SQLUsername, err error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
@@ -2410,9 +2446,10 @@ func userFromContext(ctx context.Context) (res security.SQLUsername, err error) 
 		return security.RootUserName(), nil
 	}
 	if len(usernames) != 1 {
-		log.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
-		return res, fmt.Errorf(
+		err := errors.Newf(
 			"context's incoming metadata contains unexpected number of usernames: %+v ", md)
+		log.Warningf(ctx, "%v", err)
+		return res, err
 	}
 	// At this point the user is already logged in, so we can assume
 	// the username has been normalized already.

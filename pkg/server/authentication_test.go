@@ -449,14 +449,14 @@ func TestVerifySession(t *testing.T) {
 		},
 	} {
 		t.Run(tc.testname, func(t *testing.T) {
-			valid, username, err := ts.authentication.verifySession(context.Background(), &tc.cookie)
+			valid, username, _, err := ts.authentication.verifySession(context.Background(), &tc.cookie)
 			if err != nil {
 				t.Fatalf("test got error %s, wanted no error", err)
 			}
 			if a, e := valid, tc.shouldVerify; a != e {
 				t.Fatalf("cookie %v verification = %t, wanted %t", tc.cookie, a, e)
 			}
-			if a, e := username, sessionUsername.Normalized(); tc.shouldVerify && a != e {
+			if a, e := username, sessionUsername; tc.shouldVerify && a != e {
 				t.Fatalf("cookie %v verification returned username %s, wanted %s", tc.cookie, a, e)
 			}
 		})
