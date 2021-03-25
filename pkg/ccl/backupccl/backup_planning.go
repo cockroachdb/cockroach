@@ -165,12 +165,26 @@ func spansForAllTableIndexes(
 
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
-	for _, table := range tables {
-		for _, index := range table.AllNonDropIndexes() {
+
+	addIndexToTree := func(table catalog.TableDescriptor, index descpb.IndexDescriptor) {
+		key := tableAndIndex{tableID: table.GetID(), indexID: index.ID}
+		if !added[key] {
 			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.ID)), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
-			added[tableAndIndex{tableID: table.GetID(), indexID: index.ID}] = true
+			added[key] = true
+		}
+	}
+
+	for _, table := range tables {
+		if !table.IsPhysicalTable() {
+			continue
+		}
+		if index := table.GetPrimaryIndex(); index != nil {
+			addIndexToTree(table, *index)
+		}
+		for _, index := range table.GetPublicNonPrimaryIndexes() {
+			addIndexToTree(table, index)
 		}
 	}
 	// If there are desc revisions, ensure that we also add any index spans
@@ -181,19 +195,15 @@ func spansForAllTableIndexes(
 		// at least 2 revisions, and the first one should have the table in a PUBLIC
 		// state. We want (and do) ignore tables that have been dropped for the
 		// entire interval. DROPPED tables should never later become PUBLIC.
-		// TODO(pbardea): Consider and test the interaction between revision_history
-		// backups and OFFLINE tables.
 		rawTbl := descpb.TableFromDescriptor(rev.Desc, hlc.Timestamp{})
-		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
+		if rawTbl != nil && rawTbl.State == descpb.DescriptorState_PUBLIC {
 			tbl := tabledesc.NewImmutable(*rawTbl)
-			for _, idx := range tbl.AllNonDropIndexes() {
-				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
-				if !added[key] {
-					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.ID)), false); err != nil {
-						panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
-					}
-					added[key] = true
-				}
+
+			if index := tbl.GetPrimaryIndex(); index != nil {
+				addIndexToTree(tbl, *index)
+			}
+			for _, index := range tbl.GetPublicNonPrimaryIndexes() {
+				addIndexToTree(tbl, index)
 			}
 		}
 	}
