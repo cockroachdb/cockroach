@@ -756,7 +756,7 @@ func (s *SQLServer) preStart(
 		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
 	}
 
-	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB, s.execCfg.Gossip)
+	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
 	// Only start the sqlliveness subsystem if we're already at the cluster
