@@ -1314,7 +1314,9 @@ func NewColOperator(
 	if len(args.Spec.ResultTypes) != len(r.ColumnTypes) {
 		return r, errors.AssertionFailedf("unexpectedly different number of columns are output: expected %v, actual %v", args.Spec.ResultTypes, r.ColumnTypes)
 	}
-	projection := make([]uint32, len(args.Spec.ResultTypes))
+	// projection is lazily allocated when the first column that needs an
+	// explicit cast is found. It'll remain nil if projection isn't necessary.
+	var projection []uint32
 	for i := range args.Spec.ResultTypes {
 		expected, actual := args.Spec.ResultTypes[i], r.ColumnTypes[i]
 		if !actual.Identical(expected) {
@@ -1342,12 +1344,23 @@ func NewColOperator(
 				}
 			}
 			r.ColumnTypes = resultTypes
+			if projection == nil {
+				// This is the first column that needs an explicit cast, so we
+				// need to actually allocate the slice and set all previous
+				// columns to be used as is.
+				projection = make([]uint32, len(args.Spec.ResultTypes))
+				for j := 0; j < i; j++ {
+					projection[j] = uint32(j)
+				}
+			}
 			projection[i] = uint32(castedIdx)
-		} else {
+		} else if projection != nil {
 			projection[i] = uint32(i)
 		}
 	}
-	r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, projection)
+	if projection != nil {
+		r.Op, r.ColumnTypes = addProjection(r.Op, r.ColumnTypes, projection)
+	}
 	if args.TestingKnobs.PlanInvariantsCheckers {
 		r.Op = colexec.NewInvariantsChecker(r.Op)
 	}
