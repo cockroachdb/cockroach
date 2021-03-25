@@ -418,7 +418,7 @@ select
  │    └── fd: (1)-->(2-5)
  └── filters
       ├── NOT ('[1, 2]' @> j:5) [outer=(5), immutable]
-      ├── NOT ('[3, 4]' @> j:5) [outer=(5), immutable]
+      ├── NOT (j:5 <@ '[3, 4]') [outer=(5), immutable]
       ├── NOT (j:5 ? 'foo') [outer=(5), immutable]
       ├── NOT (j:5 ?| ARRAY['foo']) [outer=(5), immutable]
       ├── NOT (j:5 ?& ARRAY['foo']) [outer=(5), immutable]
