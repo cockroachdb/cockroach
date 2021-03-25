@@ -910,7 +910,11 @@ func spansForAllRestoreTableIndexes(
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
-		for _, index := range table.NonDropIndexes() {
+		// We only import spans for physical tables.
+		if !table.IsPhysicalTable() {
+			continue
+		}
+		for _, index := range table.ActiveIndexes() {
 			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(codec, index.GetID())), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
@@ -930,7 +934,11 @@ func spansForAllRestoreTableIndexes(
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
 		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
-			for _, idx := range tbl.NonDropIndexes() {
+			// We only import spans for physical tables.
+			if !tbl.IsPhysicalTable() {
+				continue
+			}
+			for _, idx := range tbl.ActiveIndexes() {
 				key := tableAndIndex{tableID: tbl.GetID(), indexID: idx.GetID()}
 				if !added[key] {
 					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(codec, idx.GetID())), false); err != nil {
