@@ -136,6 +136,10 @@ func AfterTest(t testing.TB) func() {
 					continue
 				}
 				atomic.StoreUint32(&leakDetectorDisabled, 1)
+
+				buf := make([]byte, 2<<20)
+				buf = buf[:runtime.Stack(buf, true)]
+				fmt.Printf("goroutines:\n\n%s", buf)
 				t.Error(err)
 			}
 			break
