@@ -1667,6 +1667,18 @@ var charts = []sectionDescription{
 				Title:   "Disk Usage per Statement",
 				Metrics: []string{"sql.disk.distsql.max"},
 			},
+			{
+				Title:   "Number of Queries Spilled To Disk",
+				Metrics: []string{"sql.distsql.queries.spilled"},
+			},
+			{
+				Title:   "Number of Bytes Written Due to Disk Spilling",
+				Metrics: []string{"sql.disk.distsql.spilled.bytes.written"},
+			},
+			{
+				Title:   "Number of Bytes Read Due to Disk Spilling",
+				Metrics: []string{"sql.disk.distsql.spilled.bytes.read"},
+			},
 		},
 	},
 	{

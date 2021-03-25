@@ -183,8 +183,9 @@ func (f *vectorizedFlow) Setup(
 	helper := newVectorizedFlowCreatorHelper(f.FlowBase)
 
 	diskQueueCfg := colcontainer.DiskQueueCfg{
-		FS:        f.Cfg.TempFS,
-		GetPather: f,
+		FS:             f.Cfg.TempFS,
+		DistSQLMetrics: f.Cfg.Metrics,
+		GetPather:      f,
 	}
 	if err := diskQueueCfg.EnsureDefaults(); err != nil {
 		return ctx, err
