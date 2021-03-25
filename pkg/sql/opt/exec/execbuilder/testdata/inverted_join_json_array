@@ -65,6 +65,53 @@ vectorized: true
           table: json_tab@primary
           spans: FULL SCAN
 
+# This query performs an inverted join.
+query T
+EXPLAIN SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: json_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b <@ b
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: json_tab@primary
+              spans: FULL SCAN
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM json_tab@primary AS j1, json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY j1.a, j2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b <@ b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: json_tab@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: json_tab@primary
+          spans: FULL SCAN
+
 # This query performs an inverted join with an additional filter.
 query T
 EXPLAIN SELECT * FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
@@ -119,6 +166,60 @@ vectorized: true
               table: json_tab@primary
               spans: FULL SCAN
 
+# This query performs an inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 INNER INVERTED JOIN json_tab AS j1
+ON j1.b <@ j2.b AND j1.b <@ '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: json_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b <@ b) AND (b <@ '{"a": {}}')
+    │
+    └── • inverted join
+        │ table: json_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: json_tab@primary
+              spans: [ - /19]
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM json_tab@primary AS j1, json_tab AS j2
+WHERE j1.b <@ j2.b AND j1.b <@ '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b <@ b
+    │
+    ├── • filter
+    │   │ filter: b <@ '{"a": {}}'
+    │   │
+    │   └── • scan
+    │         missing stats
+    │         table: json_tab@primary
+    │         spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: json_tab@primary
+          spans: [ - /19]
+
 # This query performs a left inverted join with an additional filter.
 query T
 EXPLAIN SELECT * FROM json_tab AS j2 LEFT INVERTED JOIN json_tab AS j1
@@ -136,6 +237,33 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b @> b) AND (b @> '{"a": {}}')
+    │
+    └── • inverted join (left outer)
+        │ table: json_tab@foo_inv
+        │ on: a < 20
+        │
+        └── • scan
+              missing stats
+              table: json_tab@primary
+              spans: FULL SCAN
+
+# This query performs a left inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 LEFT INVERTED JOIN json_tab AS j1
+ON j1.b <@ j2.b AND j1.b <@ '{"a": {}}' AND j2.a < 20
+ORDER BY j1.a, j2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join (left outer)
+    │ table: json_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b <@ b) AND (b <@ '{"a": {}}')
     │
     └── • inverted join (left outer)
         │ table: json_tab@foo_inv
@@ -171,6 +299,31 @@ vectorized: true
           table: json_tab@primary
           spans: [ - /19]
 
+# This query performs a semi inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 WHERE EXISTS (
+  SELECT * FROM json_tab@foo_inv AS j1
+  WHERE j1.b <@ j2.b AND j2.a < 20
+)
+ORDER BY j2.a
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ table: json_tab@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b <@ b
+│
+└── • inverted join
+    │ table: json_tab@foo_inv
+    │
+    └── • scan
+          missing stats
+          table: json_tab@primary
+          spans: [ - /19]
+
 # This query performs an anti inverted join with an additional filter.
 query T
 EXPLAIN SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
@@ -187,6 +340,32 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> b
+│
+└── • inverted join (left outer)
+    │ table: json_tab@foo_inv
+    │ on: a < 20
+    │
+    └── • scan
+          missing stats
+          table: json_tab@primary
+          spans: FULL SCAN
+
+# This query performs an anti inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM json_tab AS j2 WHERE NOT EXISTS (
+  SELECT * FROM json_tab@foo_inv AS j1
+  WHERE j1.b <@ j2.b AND j2.a < 20
+)
+ORDER BY j2.a
+----
+distribution: local
+vectorized: true
+·
+• lookup join (anti)
+│ table: json_tab@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b <@ b
 │
 └── • inverted join (left outer)
     │ table: json_tab@foo_inv
@@ -233,6 +412,53 @@ vectorized: true
 │
 └── • cross join
     │ pred: b @> b
+    │
+    ├── • scan
+    │     missing stats
+    │     table: array_tab@primary
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: array_tab@primary
+          spans: FULL SCAN
+
+# This query performs an inverted join.
+query T
+EXPLAIN SELECT * FROM array_tab@foo_inv AS a1, array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: array_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: b <@ b
+    │
+    └── • inverted join
+        │ table: array_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: array_tab@primary
+              spans: FULL SCAN
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM array_tab@primary AS a1, array_tab AS a2 WHERE a1.b <@ a2.b ORDER BY a1.a, a2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b <@ b
     │
     ├── • scan
     │     missing stats
@@ -299,6 +525,61 @@ vectorized: true
               table: array_tab@primary
               spans: FULL SCAN
 
+# This query performs an inverted join with an additional filter.
+query T
+EXPLAIN SELECT * FROM array_tab@primary AS a2
+INNER INVERTED JOIN array_tab@foo_inv AS a1
+ON a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join
+    │ table: array_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b <@ b) AND (b <@ ARRAY[1])
+    │
+    └── • inverted join
+        │ table: array_tab@foo_inv
+        │
+        └── • scan
+              missing stats
+              table: array_tab@primary
+              spans: [ - /4]
+
+# This query performs a cross join followed by a filter.
+query T
+EXPLAIN SELECT * FROM array_tab@primary AS a1, array_tab AS a2
+WHERE a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • cross join
+    │ pred: b <@ b
+    │
+    ├── • filter
+    │   │ filter: b <@ ARRAY[1]
+    │   │
+    │   └── • scan
+    │         missing stats
+    │         table: array_tab@primary
+    │         spans: FULL SCAN
+    │
+    └── • scan
+          missing stats
+          table: array_tab@primary
+          spans: [ - /4]
+
 # This query performs a left inverted join with an additional filter.
 query T
 EXPLAIN SELECT a1.*, a2.* FROM array_tab@primary AS a2
@@ -317,6 +598,34 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b @> b) AND (b @> ARRAY[1])
+    │
+    └── • inverted join (left outer)
+        │ table: array_tab@foo_inv
+        │ on: a < 5
+        │
+        └── • scan
+              missing stats
+              table: array_tab@primary
+              spans: FULL SCAN
+
+# This query performs a left inverted join with an additional filter.
+query T
+EXPLAIN SELECT a1.*, a2.* FROM array_tab@primary AS a2
+LEFT INVERTED JOIN array_tab@foo_inv AS a1
+ON a1.b <@ a2.b AND a1.b <@ '{1}' AND a2.a < 5
+ORDER BY a1.a, a2.a
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +a,+a
+│
+└── • lookup join (left outer)
+    │ table: array_tab@primary
+    │ equality: (a) = (a)
+    │ equality cols are key
+    │ pred: (b <@ b) AND (b <@ ARRAY[1])
     │
     └── • inverted join (left outer)
         │ table: array_tab@foo_inv
@@ -352,6 +661,31 @@ vectorized: true
           table: array_tab@primary
           spans: FULL SCAN
 
+# This query performs a semi inverted join.
+query T
+EXPLAIN SELECT a2.* FROM array_tab@primary AS a2 WHERE EXISTS (
+  SELECT * FROM array_tab@foo_inv AS a1
+  WHERE a1.b <@ a2.b
+)
+ORDER BY a2.a
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ table: array_tab@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b <@ b
+│
+└── • inverted join
+    │ table: array_tab@foo_inv
+    │
+    └── • scan
+          missing stats
+          table: array_tab@primary
+          spans: FULL SCAN
+
 # This query performs an anti inverted join.
 query T
 EXPLAIN SELECT a2.* FROM array_tab@primary AS a2 WHERE NOT EXISTS (
@@ -368,6 +702,31 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> b
+│
+└── • inverted join (left outer)
+    │ table: array_tab@foo_inv
+    │
+    └── • scan
+          missing stats
+          table: array_tab@primary
+          spans: FULL SCAN
+
+# This query performs an anti inverted join.
+query T
+EXPLAIN SELECT a2.* FROM array_tab@primary AS a2 WHERE NOT EXISTS (
+  SELECT * FROM array_tab@foo_inv AS a1
+  WHERE a1.b <@ a2.b
+)
+ORDER BY a2.a
+----
+distribution: local
+vectorized: true
+·
+• lookup join (anti)
+│ table: array_tab@primary
+│ equality: (a) = (a)
+│ equality cols are key
+│ pred: b <@ b
 │
 └── • inverted join (left outer)
     │ table: array_tab@foo_inv

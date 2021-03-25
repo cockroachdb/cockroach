@@ -114,8 +114,8 @@ $input
 [NegateComparison, Normalize]
 (Not
     $input:(Comparison $left:* $right:*) &
-        ^(Contains | JsonExists | JsonSomeExists | JsonAllExists
-                | Overlaps
+        ^(Contains | ContainedBy | JsonExists | JsonSomeExists
+                | JsonAllExists | Overlaps
         )
 )
 =>
