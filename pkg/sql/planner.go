@@ -428,6 +428,7 @@ func internalExtendedEvalCtx(
 			StmtTimestamp:    stmtTimestamp,
 			TxnTimestamp:     txnTimestamp,
 			InternalExecutor: execCfg.InternalExecutor,
+			SQLStatsResetter: execCfg.DistSQLSrv.ServerConfig.SQLStatsResetter,
 		},
 		SessionMutator:    dataMutator,
 		VirtualSchemas:    execCfg.VirtualSchemas,
