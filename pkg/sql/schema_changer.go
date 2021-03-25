@@ -515,8 +515,8 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context, desc catalog.Descri
 		// descriptor, it seems possible for a job to be resumed after the mutation
 		// has already been removed. If there's a mutation provided, we should check
 		// whether it actually exists on the table descriptor and exit the job if not.
-		for i, mutation := range tableDesc.GetMutations() {
-			if mutation.MutationID == sc.mutationID {
+		for i, mutation := range tableDesc.AllMutations() {
+			if mutation.MutationID() == sc.mutationID {
 				if i != 0 {
 					log.Infof(ctx,
 						"schema change on %q (v%d): another change is still in progress",
@@ -785,25 +785,17 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 		}
 
 		var runStatus jobs.RunningStatus
-		for _, mutation := range desc.GetMutations() {
-			if mutation.MutationID != sc.mutationID {
+		for _, mutation := range desc.AllMutations() {
+			if mutation.MutationID() != sc.mutationID {
 				// Mutations are applied in a FIFO order. Only apply the first set of
 				// mutations if they have the mutation ID we're looking for.
 				break
 			}
 
-			switch mutation.Direction {
-			case descpb.DescriptorMutation_ADD:
-				switch mutation.State {
-				case descpb.DescriptorMutation_DELETE_ONLY:
-					runStatus = RunningStatusDeleteOnly
-				}
-
-			case descpb.DescriptorMutation_DROP:
-				switch mutation.State {
-				case descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY:
-					runStatus = RunningStatusDeleteAndWriteOnly
-				}
+			if mutation.Adding() && mutation.DeleteOnly() {
+				runStatus = RunningStatusDeleteOnly
+			} else if mutation.Dropped() && mutation.WriteAndDeleteOnly() {
+				runStatus = RunningStatusDeleteAndWriteOnly
 			}
 		}
 		if runStatus != "" && !desc.Dropped() {
@@ -1705,8 +1697,8 @@ func (sc *SchemaChanger) updateJobForRollback(
 	// Initialize refresh spans to scan the entire table.
 	span := tableDesc.PrimaryIndexSpan(sc.execCfg.Codec)
 	var spanList []jobspb.ResumeSpanList
-	for _, m := range tableDesc.GetMutations() {
-		if m.MutationID == sc.mutationID {
+	for _, m := range tableDesc.AllMutations() {
+		if m.MutationID() == sc.mutationID {
 			spanList = append(spanList,
 				jobspb.ResumeSpanList{
 					ResumeSpans: []roachpb.Span{span},

@@ -38,18 +38,17 @@ import (
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.
-type MutationFilter func(descpb.DescriptorMutation) bool
+type MutationFilter func(catalog.Mutation) bool
 
 // ColumnMutationFilter is a filter that allows mutations that add or drop
 // columns.
-func ColumnMutationFilter(m descpb.DescriptorMutation) bool {
-	return m.GetColumn() != nil &&
-		(m.Direction == descpb.DescriptorMutation_ADD || m.Direction == descpb.DescriptorMutation_DROP)
+func ColumnMutationFilter(m catalog.Mutation) bool {
+	return m.AsColumn() != nil && (m.Adding() || m.Dropped())
 }
 
 // IndexMutationFilter is a filter that allows mutations that add indexes.
-func IndexMutationFilter(m descpb.DescriptorMutation) bool {
-	return m.GetIndex() != nil && m.Direction == descpb.DescriptorMutation_ADD
+func IndexMutationFilter(m catalog.Mutation) bool {
+	return m.AsIndex() != nil && m.Adding()
 }
 
 // ColumnBackfiller is capable of running a column backfill for all
@@ -72,14 +71,13 @@ type ColumnBackfiller struct {
 
 // initCols is a helper to populate some column metadata on a ColumnBackfiller.
 func (cb *ColumnBackfiller) initCols(desc catalog.TableDescriptor) {
-	for _, m := range desc.GetMutations() {
+	for _, m := range desc.AllMutations() {
 		if ColumnMutationFilter(m) {
-			desc := *m.GetColumn()
-			switch m.Direction {
-			case descpb.DescriptorMutation_ADD:
-				cb.added = append(cb.added, desc)
-			case descpb.DescriptorMutation_DROP:
-				cb.dropped = append(cb.dropped, desc)
+			col := *m.AsColumn().ColumnDesc()
+			if m.Adding() {
+				cb.added = append(cb.added, col)
+			} else if m.Dropped() {
+				cb.dropped = append(cb.dropped, col)
 			}
 		}
 	}
@@ -692,16 +690,17 @@ func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) {
 // fetched in order to backfill the added indexes.
 func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor) util.FastIntSet {
 	var valNeededForCol util.FastIntSet
-	mutationID := desc.GetMutations()[0].MutationID
+	mutations := desc.AllMutations()
+	mutationID := mutations[0].MutationID()
 
 	// Mutations in the same transaction have the same ID. Loop through the
 	// mutations and collect all index mutations.
-	for _, m := range desc.GetMutations() {
-		if m.MutationID != mutationID {
+	for _, m := range mutations {
+		if m.MutationID() != mutationID {
 			break
 		}
 		if IndexMutationFilter(m) {
-			idx := m.GetIndex()
+			idx := m.AsIndex().IndexDesc()
 			ib.added = append(ib.added, idx)
 			for i := range ib.cols {
 				id := ib.cols[i].ID

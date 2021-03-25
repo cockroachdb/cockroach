@@ -147,11 +147,10 @@ func (tdb *tableDescriptorBuilder) BuildCreatedMutableTable() *Mutable {
 
 // makeImmutable returns an immutable from the given TableDescriptor.
 func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
-	desc := immutable{wrapper: wrapper{
-		TableDescriptor: *tbl,
-		indexCache:      newIndexCache(tbl),
-		columnCache:     newColumnCache(tbl),
-	}}
+	desc := immutable{wrapper: wrapper{TableDescriptor: *tbl}}
+	desc.mutationCache = newMutationCache(desc.TableDesc())
+	desc.indexCache = newIndexCache(desc.TableDesc(), desc.mutationCache)
+	desc.columnCache = newColumnCache(desc.TableDesc(), desc.mutationCache)
 
 	desc.allChecks = make([]descpb.TableDescriptor_CheckConstraint, len(tbl.Checks))
 	for i, c := range tbl.Checks {
