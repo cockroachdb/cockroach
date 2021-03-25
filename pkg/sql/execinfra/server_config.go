@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
@@ -151,6 +152,10 @@ type ServerConfig struct {
 	// HydratedTables is a node-level cache of table descriptors which utilize
 	// user-defined types.
 	HydratedTables *hydratedtables.Cache
+
+	// SQLStatsResetter is an interface used to reset SQL stats without the need to
+	// introduce dependency on the sql package.
+	SQLStatsResetter tree.SQLStatsResetter
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
