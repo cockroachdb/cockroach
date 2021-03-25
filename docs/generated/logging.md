@@ -2,18 +2,18 @@
 
 ## INFO
 
-The INFO severity is used for informational messages, when no action
-is required as a result.
+The INFO severity is used for informational messages that do not
+require action.
 
 ## WARNING
 
 The WARNING severity is used for situations which may require special handling,
-while normal operation is expected to resume automatically.
+where normal operation is expected to resume automatically.
 
 ## ERROR
 
 The ERROR severity is used for situations that require special handling,
-when normal operation could not proceed as expected.
+where normal operation could not proceed as expected.
 Other operations can continue mostly unaffected.
 
 ## FATAL
@@ -27,134 +27,140 @@ is enabled.
 
 ## DEV
 
-The DEV channel is the channel used during development, to collect log
-details useful for troubleshooting when it is unclear which other
-channel to use. It is also the default logging channel in
-CockroachDB, when the caller does not indicate a channel.
+The DEV channel is used during development to collect log
+details useful for troubleshooting that fall outside the
+scope of other channels. It is also the default logging
+channel for events not associated with a channel.
 
 This channel is special in that there are no constraints as to
 what may or may not be logged on it. Conversely, users in
-production deployments are invited to not collect DEV logs in
+production deployments are invited to not collect `DEV` logs in
 centralized logging facilities, because they likely contain
 sensitive operational data.
+See [Configure logs](configure-logs.html#dev-channel).
 
 ## OPS
 
-The OPS channel is the channel used to report "point" operational events,
+The OPS channel is used to report "point" operational events,
 initiated by user operators or automation:
 
-- operator or system actions on server processes: process starts,
+- Operator or system actions on server processes: process starts,
   stops, shutdowns, crashes (if they can be logged),
-  including each time: command-line parameters, current version being run.
-- actions that impact the topology of a cluster: node additions,
+  including each time: command-line parameters, current version being run
+- Actions that impact the topology of a cluster: node additions,
   removals, decommissions, etc.
-- job-related initiation or termination.
-- cluster setting changes.
-- zone configuration changes.
+- Job-related initiation or termination
+- [Cluster setting](cluster-settings.html) changes
+- [Zone configuration](configure-replication-zones.html) changes
 
 ## HEALTH
 
-The HEALTH channel is the channel used to report "background" operational
+The HEALTH channel is used to report "background" operational
 events, initiated by CockroachDB or reporting on automatic processes:
 
-- current resource usage, including critical resource usage.
-- node-node connection events, including connection errors and
-  gossip details.
-- range and table leasing events.
-- up-, down-replication; range unavailability.
+- Current resource usage, including critical resource usage
+- Node-node connection events, including connection errors and
+  gossip details
+- Range and table leasing events
+- Up- and down-replication, range unavailability
 
 ## STORAGE
 
-The STORAGE channel is the channel used to report low-level storage
+The STORAGE channel is used to report low-level storage
 layer events (RocksDB/Pebble).
 
 ## SESSIONS
 
-The SESSIONS channel is the channel used to report client network activity:
+The SESSIONS channel is used to report client network activity when enabled via
+the `server.auth_log.sql_connections.enabled` and/or
+`server.auth_log.sql_sessions.enabled` [cluster setting](cluster-settings.html)
+[cluster settings](cluster-settings.html):
 
-- connections opened/closed.
-- authentication events: logins, failed attempts.
-- session and query cancellation.
+- Connections opened/closed
+- Authentication events: logins, failed attempts
+- Session and query cancellation
 
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
 
 ## SQL_SCHEMA
 
-The SQL_SCHEMA channel is the channel used to report changes to the
+The SQL_SCHEMA channel is used to report changes to the
 SQL logical schema, excluding privilege and ownership changes
-(which are reported on the separate channel PRIVILEGES) and
-zone config changes (which go to OPS).
+(which are reported separately on the `PRIVILEGES` channel) and
+zone configuration changes (which go to the `OPS` channel).
 
 This includes:
 
-- database/schema/table/sequence/view/type creation
-- adding/removing/changing table columns
-- changing sequence parameters
+- Database/schema/table/sequence/view/type creation
+- Adding/removing/changing table columns
+- Changing sequence parameters
 
-etc., more generally changes to the schema that affect the
+`SQL_SCHEMA` events generally comprise changes to the schema that affect the
 functional behavior of client apps using stored objects.
 
 ## USER_ADMIN
 
-The USER_ADMIN channel is the channel used to report changes
+The USER_ADMIN channel is used to report changes
 in users and roles, including:
 
-- users added/dropped.
-- changes to authentication credentials, incl passwords, validity etc.
-- role grants/revocations.
-- role option grants/revocations.
+- Users added/dropped
+- Changes to authentication credentials (e.g., passwords, validity, etc.)
+- Role grants/revocations
+- Role option grants/revocations
 
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
 
 ## PRIVILEGES
 
-The PRIVILEGES channel is the channel used to report data
+The PRIVILEGES channel is used to report data
 authorization changes, including:
 
-- privilege grants/revocations on database, objects etc.
-- object ownership changes.
+- Privilege grants/revocations on database, objects, etc.
+- Object ownership changes
 
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
 
 ## SENSITIVE_ACCESS
 
-The SENSITIVE_ACCESS channel is the channel used to report SQL
-data access to sensitive data (when enabled):
+The SENSITIVE_ACCESS channel is used to report SQL
+data access to sensitive data:
 
-- data access audit events (when table audit is enabled).
-- SQL statements executed by users with the ADMIN bit.
-- operations that write to `system` tables.
+- Data access audit events (when table audit is enabled via
+  [EXPERIMENTAL_AUDIT](experimental-audit.html))
+- SQL statements executed by users with the admin role
+- Operations that write to system tables
 
 This is typically configured in "audit" mode, with event
 numbering and synchronous writes.
 
 ## SQL_EXEC
 
-The SQL_EXEC channel is the channel used to report SQL execution on
+The SQL_EXEC channel is used to report SQL execution on
 behalf of client connections:
 
-- logical SQL statement executions (if enabled)
-- pgwire events (if enabled)
+- Logical SQL statement executions (when enabled via the
+  `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+- pgwire events (when enabled)
 
 ## SQL_PERF
 
-The SQL_PERF channel is the channel used to report SQL executions
-that are marked to be highlighted as "out of the ordinary"
+The SQL_PERF channel is used to report SQL executions
+that are marked as "out of the ordinary"
 to facilitate performance investigations.
-This includes the "SQL slow query log".
+This includes the SQL "slow query log".
 
-Arguably, this channel overlaps with SQL_EXEC defined above.
-However, we keep them separate for backward-compatibility
-with previous versions, where the corresponding events
+Arguably, this channel overlaps with `SQL_EXEC`.
+However, we keep both channels separate for backward compatibility
+with versions prior to v21.1, where the corresponding events
 were redirected to separate files.
 
 ## SQL_INTERNAL_PERF
 
-The SQL_INTERNAL_PERF channel is like the SQL perf channel above but aimed at
+The SQL_INTERNAL_PERF channel is like the `SQL_PERF` channel, but is aimed at
 helping developers of CockroachDB itself. It exists as a separate
-channel so as to not pollute the SQL perf logging output with
+channel so as to not pollute the `SQL_PERF` logging output with
 internal troubleshooting details.
 
