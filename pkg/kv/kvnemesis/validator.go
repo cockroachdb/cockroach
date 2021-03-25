@@ -326,6 +326,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// Probably should be transparently retried.
 		} else if resultIsErrorStr(t.Result, `merge failed: range missing intent on its local descriptor`) {
 			// Probably should be transparently retried.
+		} else if resultIsErrorStr(t.Result, `merge failed: RHS range bounds do not match`) {
+			// Probably should be transparently retried.
 		} else {
 			v.failIfError(op, t.Result)
 		}
