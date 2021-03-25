@@ -48,6 +48,7 @@ go_library(
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_cockroachdb_errors//extgrpc",
         "@com_github_cockroachdb_redact//:redact",
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
