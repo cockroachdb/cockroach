@@ -51,7 +51,7 @@ func (p *provider) Delete(vms vm.List) error {
 	return errors.Newf("%s", p.unimplemented)
 }
 
-// Delete implements vm.Provider and is a no-op.
+// Reset implements vm.Provider and is a no-op.
 func (p *provider) Reset(vms vm.List) error {
 	return nil
 }

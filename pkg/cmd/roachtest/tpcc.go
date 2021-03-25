@@ -815,12 +815,17 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		// passing warehouse count, making the line search sensitive to the choice
 		// of starting warehouses. Do a best-effort at waiting for the cloud VM(s)
 		// to recover without failing the line search.
+		if err := c.Reset(ctx); err != nil {
+			t.Fatal(err)
+		}
 		var ok bool
 		for i := 0; i < 10; i++ {
 			if err := ctx.Err(); err != nil {
 				t.Fatal(err)
 			}
-			if err := c.StopE(ctx, roachNodes); err != nil {
+			shortCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			if err := c.StopE(shortCtx, roachNodes); err != nil {
+				cancel()
 				t.l.Printf("unable to stop cluster; retrying to allow vm to recover: %s", err)
 				// We usually spend a long time blocking in StopE anyway, but just in case
 				// of a fast-failure mode, we still want to spend a little bit of time over
@@ -832,6 +837,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				}
 				continue
 			}
+			cancel()
 			ok = true
 			break
 		}
