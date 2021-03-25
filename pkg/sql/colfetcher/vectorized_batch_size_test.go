@@ -12,12 +12,14 @@ package colfetcher_test
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -45,30 +47,38 @@ func TestScanBatchSize(t *testing.T) {
 
 	conn := tc.Conns[0]
 
-	_, err := conn.ExecContext(ctx, `CREATE TABLE t (a PRIMARY KEY) AS SELECT generate_series(1, 511)`)
+	_, err := conn.ExecContext(ctx, `CREATE TABLE t (a PRIMARY KEY) AS SELECT generate_series(1, 511); ANALYZE t`)
 	assert.NoError(t, err)
 
-	rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE, DISTSQL) SELECT * FROM t`)
-	assert.NoError(t, err)
-	batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
-	var found bool
-	var sb strings.Builder
-	for rows.Next() {
-		var res string
-		assert.NoError(t, rows.Scan(&res))
-		sb.WriteString(res)
-		sb.WriteByte('\n')
-		matches := batchCountRegex.FindStringSubmatch(res)
-		if len(matches) == 0 {
-			continue
-		}
-		foundBatches, err := strconv.Atoi(matches[1])
+	testutils.SucceedsSoon(t, func() error {
+		rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE, DISTSQL) SELECT * FROM t`)
 		assert.NoError(t, err)
-		assert.Equal(t, 1, foundBatches, "should use just 1 batch to scan 511 rows")
-		found = true
-		break
-	}
-	if !found {
-		t.Fatalf("expected to find a vectorized batch count; found nothing. text:\n%s", sb.String())
-	}
+		batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
+		var found, failed bool
+		var foundBatches int
+		var sb strings.Builder
+		for rows.Next() {
+			var res string
+			assert.NoError(t, rows.Scan(&res))
+			sb.WriteString(res)
+			sb.WriteByte('\n')
+			matches := batchCountRegex.FindStringSubmatch(res)
+			if len(matches) == 0 {
+				continue
+			}
+			foundBatches, err = strconv.Atoi(matches[1])
+			assert.NoError(t, err)
+			if foundBatches != 1 {
+				failed = true
+			}
+			found = true
+		}
+		if failed {
+			return fmt.Errorf("should use just 1 batch to scan 511 rows, found %d:\n%s", foundBatches, sb.String())
+		}
+		if !found {
+			t.Fatalf("expected to find a vectorized batch count; found nothing. text:\n%s", sb.String())
+		}
+		return nil
+	})
 }
