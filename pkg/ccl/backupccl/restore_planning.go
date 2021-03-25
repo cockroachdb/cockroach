@@ -802,6 +802,44 @@ func resolveTargetDB(
 	return database.Name, nil
 }
 
+// maybeUpgradeTableDescsInSlice updates the passed slice of table descriptors
+// to use the newer 19.2-style foreign key representation, if they are not
+// already upgraded. This requires resolving cross-table FK references, which is
+// done by looking up all table descriptors in the slice provided.
+//
+// if skipFKsWithNoMatchingTable is set, FKs whose "other" table is missing from
+// the set provided are omitted during the upgrade, instead of causing an error
+// to be returned.
+func maybeUpgradeTableDescsInSlice(
+	ctx context.Context, descs []catalog.Descriptor, skipFKsWithNoMatchingTable bool,
+) error {
+	descGetter := catalog.MapDescGetter{}
+
+	// Populate the protoGetter with all table descriptors in all backup
+	// descriptors so that they can be looked up.
+	for _, desc := range descs {
+		if table := descpb.TableFromDescriptor(desc.DescriptorProto(), hlc.Timestamp{}); table != nil {
+			descGetter[table.ID] = desc
+		}
+	}
+
+	for j := range descs {
+		table := descpb.TableFromDescriptor(descs[j].DescriptorProto(), hlc.Timestamp{})
+		if table == nil {
+			continue
+		}
+		if !tabledesc.TableHasDeprecatedForeignKeyRepresentation(table) {
+			continue
+		}
+		desc, err := tabledesc.NewFilledInExistingMutable(ctx, descGetter, skipFKsWithNoMatchingTable, table)
+		if err != nil {
+			return err
+		}
+		descs[j] = desc
+	}
+	return nil
+}
+
 // maybeUpgradeTableDescsInBackupManifests updates the backup descriptors'
 // table descriptors to use the newer 19.2-style foreign key representation,
 // if they are not already upgraded. This requires resolving cross-table FK
@@ -1550,17 +1588,15 @@ func doRestorePlan(
 		)
 	}
 
-	if err := maybeUpgradeTableDescsInBackupManifests(
-		ctx, mainBackupManifests, restoreStmt.Options.SkipMissingFKs,
-	); err != nil {
-		return err
-	}
-
 	sqlDescs, restoreDBs, tenants, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
 		return errors.Wrap(err,
 			"failed to resolve targets in the BACKUP location specified by the RESTORE stmt, "+
 				"use SHOW BACKUP to find correct targets")
+	}
+
+	if err := maybeUpgradeTableDescsInSlice(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
+		return err
 	}
 
 	if len(tenants) > 0 {
@@ -1585,6 +1621,7 @@ func doRestorePlan(
 	schemasByID := make(map[descpb.ID]*schemadesc.Mutable)
 	tablesByID := make(map[descpb.ID]*tabledesc.Mutable)
 	typesByID := make(map[descpb.ID]*typedesc.Mutable)
+
 	for _, desc := range sqlDescs {
 		switch desc := desc.(type) {
 		case *dbdesc.Mutable:
