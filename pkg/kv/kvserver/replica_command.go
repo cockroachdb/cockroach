@@ -2860,11 +2860,6 @@ func (s *Store) relocateOne(
 	// allocator about this because we want to respect the constraints. For
 	// example, it would be unfortunate if we put two replicas into the same zone
 	// despite having a locality- preserving option available.
-	//
-	// TODO(radu): we can't have multiple replicas on different stores on the
-	// same node, and this code doesn't do anything to specifically avoid that
-	// case (although the allocator will avoid even trying to send snapshots to
-	// such stores), so it could cause some failures.
 	args := getRelocationArgs()
 	existingVoters := desc.Replicas().VoterDescriptors()
 	existingNonVoters := desc.Replicas().NonVoterDescriptors()
