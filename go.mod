@@ -145,7 +145,7 @@ require (
 	github.com/twpayne/go-geom v1.3.6
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
-	go.etcd.io/etcd v0.0.0-00010101000000-000000000000
+	go.etcd.io/etcd/raft/v3 v3.0.0-20210216084308-73c50b869ab7
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/exp v0.0.0-20200901203048-c4f52b2c50aa
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
@@ -154,7 +154,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
-	golang.org/x/sys v0.0.0-20200824131525-c12d262b63d8
+	golang.org/x/sys v0.0.0-20201009025420-dfb3f7c4e634
 	golang.org/x/text v0.3.3
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.0.0-20200702044944-0cc1aa72b347
@@ -166,7 +166,7 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	gotest.tools v2.2.0+incompatible // indirect
-	honnef.co/go/tools v0.0.0-20190530104931-1f0868a609b7
+	honnef.co/go/tools v0.0.1-2019.2.3
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
@@ -182,4 +182,4 @@ replace vitess.io/vitess => github.com/cockroachdb/vitess v2.2.0-rc.1.0.20180830
 
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20180705215940-0e2822948641
 
-replace go.etcd.io/etcd => github.com/cockroachdb/etcd v0.4.7-0.20200615211340-a17df30d5955
+replace go.etcd.io/etcd/pkg/v3 => go.etcd.io/etcd/pkg/v3 v3.0.0-20210215124703-719f6ce06fbc

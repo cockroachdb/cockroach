@@ -16,7 +16,7 @@ import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "kv/kvserver/kvserverpb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
-import "etcd/raft/raftpb/raft.proto";
+import "etcd/raft/v3/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
 // RaftHeartbeat is a request that contains the barebones information for a
