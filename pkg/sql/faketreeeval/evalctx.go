@@ -153,6 +153,11 @@ func (ep *DummyEvalPlanner) UnsafeDeleteDescriptor(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// ForceDeleteTableData is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) ForceDeleteTableData(ctx context.Context, descID int64) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // UnsafeUpsertNamespaceEntry is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) UnsafeUpsertNamespaceEntry(
 	ctx context.Context, parentID, parentSchemaID int64, name string, descID int64, force bool,
