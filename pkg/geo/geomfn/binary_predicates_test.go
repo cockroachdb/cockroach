@@ -413,6 +413,9 @@ func TestWithin(t *testing.T) {
 		{leftRectPoint, leftRect, true},
 		{leftRectMultiPoint, leftRect, true},
 		{leftRectMultiPoint, leftRectWithHole, false},
+		{leftRectHoleEdgePoint, leftRectWithHole, false},
+		{leftRectEdgePoint, leftRectWithHole, false},
+		{leftRectEdgeMultiPoint, leftRectWithHole, true},
 	}
 
 	for i, tc := range testCases {
