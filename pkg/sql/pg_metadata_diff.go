@@ -36,6 +36,7 @@ const GetPGMetadataSQL = `
 	JOIN pg_namespace n ON n.oid = c.relnamespace
 	WHERE n.nspname = $1
 	AND a.attnum > 0
+  AND c.relkind != 'i'
 	ORDER BY 1, 2;
 `
 
