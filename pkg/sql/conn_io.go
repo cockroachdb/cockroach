@@ -861,7 +861,11 @@ const discarded resCloseType = false
 // streamingCommandResult is a CommandResult that streams rows on the channel
 // and can call a provided callback when closed.
 type streamingCommandResult struct {
-	ch           chan ieIteratorResult
+	// All the data (the rows and the metadata) are written into w. The
+	// goroutine writing into this streamingCommandResult might block depending
+	// on the synchronization strategy.
+	w ieResultWriter
+
 	err          error
 	rowsAffected int
 
@@ -879,7 +883,7 @@ func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.Re
 	if cols == nil {
 		cols = colinfo.ResultColumns{}
 	}
-	r.ch <- ieIteratorResult{cols: cols}
+	_ = r.w.addResult(ctx, ieIteratorResult{cols: cols})
 }
 
 // BufferParamStatusUpdate is part of the RestrictedCommandResult interface.
@@ -905,8 +909,7 @@ func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) er
 	r.rowsAffected++
 	rowCopy := make(tree.Datums, len(row))
 	copy(rowCopy, row)
-	r.ch <- ieIteratorResult{row: rowCopy}
-	return nil
+	return r.w.addResult(ctx, ieIteratorResult{row: rowCopy})
 }
 
 func (r *streamingCommandResult) DisableBuffering() {
@@ -930,10 +933,10 @@ func (r *streamingCommandResult) Err() error {
 // IncrementRowsAffected is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) IncrementRowsAffected(ctx context.Context, n int) {
 	r.rowsAffected += n
-	if r.ch != nil {
-		// streamingCommandResult might be used outside of the internal executor
-		// (i.e. not by rowsIterator) in which case the channel is not set.
-		r.ch <- ieIteratorResult{rowsAffectedIncrement: &n}
+	// streamingCommandResult might be used outside of the internal executor
+	// (i.e. not by rowsIterator) in which case the channel is not set.
+	if r.w != nil {
+		_ = r.w.addResult(ctx, ieIteratorResult{rowsAffectedIncrement: &n})
 	}
 }
 
