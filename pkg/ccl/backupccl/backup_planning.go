@@ -61,6 +61,7 @@ const (
 	backupOptIncludeInterleaves = "include_deprecated_interleaves"
 	backupOptEncKMS             = "kms"
 	backupOptWithPrivileges     = "privileges"
+	backupOptAsJSON             = "as_json"
 	localityURLParam            = "COCKROACH_LOCALITY"
 	defaultLocalityValue        = "default"
 )
