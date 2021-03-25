@@ -300,9 +300,6 @@ type planTop struct {
 	// flags is populated during planning and execution.
 	flags planFlags
 
-	// execErr retains the last execution error, if any.
-	execErr error
-
 	// avoidBuffering, when set, causes the execution to avoid buffering
 	// results.
 	avoidBuffering bool
