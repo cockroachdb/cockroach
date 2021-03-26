@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // LimitScanPrivate constructs a new ScanPrivate value that is based on the
@@ -93,14 +94,25 @@ func (c *CustomFuncs) GenerateLimitedScans(
 ) {
 	limitVal := int64(*limit.(*tree.DInt))
 
+	var pkCols opt.ColSet
 	var sb indexScanBuilder
-	sb.init(c, scanPrivate.Table)
+	sb.Init(c, scanPrivate.Table)
 
 	// Iterate over all non-inverted, non-partial indexes, looking for those
 	// that can be limited.
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectInvertedIndexes|rejectPartialIndexes)
-	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectInvertedIndexes|rejectPartialIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		// The iterator rejects partial indexes because there are no filters to
+		// imply a partial index predicate. constProj is a projection of
+		// constant values based on a partial index predicate. It should always
+		// be empty because we iterate only on non-partial indexes. If it is
+		// not, we panic to avoid performing a logically incorrect
+		// transformation.
+		if len(constProj) != 0 {
+			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
 
@@ -118,8 +130,8 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if isCovering {
-			sb.setScan(&newScanPrivate)
-			sb.build(grp)
+			sb.SetScan(&newScanPrivate)
+			sb.Build(grp)
 			return
 		}
 
@@ -129,18 +141,23 @@ func (c *CustomFuncs) GenerateLimitedScans(
 			return
 		}
 
+		// Calculate the PK columns once.
+		if pkCols.Empty() {
+			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
+		}
+
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(&newScanPrivate)
+		newScanPrivate.Cols.UnionWith(pkCols)
+		sb.SetScan(&newScanPrivate)
 
 		// The Scan operator will go into its own group (because it projects a
 		// different set of columns), and the IndexJoin operator will be added to
 		// the same group as the original Limit operator.
-		sb.addIndexJoin(scanPrivate.Cols)
+		sb.AddIndexJoin(scanPrivate.Cols)
 
-		sb.build(grp)
+		sb.Build(grp)
 	})
 }
 
