@@ -135,6 +135,30 @@ WHERE
   OR t.typinput = 'array_in(cstring,oid,integer)'::REGPROCEDURE
   OR t.typelem != 0`,
 		},
+
+		{
+			name:  "pg_type",
+			setup: `CREATE TABLE t1(a int primary key, b int);`,
+			stmt:  `SELECT * FROM pg_type`,
+		},
+
+		{
+			name:  "pg_class",
+			setup: `CREATE TABLE t1(a int primary key, b int);`,
+			stmt:  `SELECT * FROM pg_class`,
+		},
+
+		{
+			name:  "pg_namespace",
+			setup: `CREATE TABLE t1(a int primary key, b int);`,
+			stmt:  `SELECT * FROM pg_namespace`,
+		},
+
+		{
+			name:  "pg_attribute",
+			setup: `CREATE TABLE t1(a int primary key, b int);`,
+			stmt:  `SELECT * FROM pg_attribute`,
+		},
 	}
 
 	RunRoundTripBenchmark(b, tests)
