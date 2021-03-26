@@ -12,6 +12,7 @@ package stats
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -233,6 +236,7 @@ func TestCacheBasic(t *testing.T) {
 	// will result in the cache getting populated. When the stats cache size is
 	// exceeded, entries should be evicted according to the LRU policy.
 	sc := NewTableStatisticsCache(
+		ctx,
 		2, /* cacheSize */
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db,
@@ -240,6 +244,7 @@ func TestCacheBasic(t *testing.T) {
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -344,6 +349,7 @@ CREATE STATISTICS s FROM tt;
 	_ = kvDB
 	// Make a stats cache.
 	sc := NewTableStatisticsCache(
+		ctx,
 		1,
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
@@ -351,6 +357,7 @@ CREATE STATISTICS s FROM tt;
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	tbl := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
@@ -404,6 +411,7 @@ func TestCacheWait(t *testing.T) {
 	}
 	sort.Sort(tableIDs)
 	sc := NewTableStatisticsCache(
+		ctx,
 		len(tableIDs), /* cacheSize */
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db,
@@ -411,6 +419,7 @@ func TestCacheWait(t *testing.T) {
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	for _, tableID := range tableIDs {
 		checkStatsForTable(ctx, t, sc, expectedStats[tableID], tableID)
@@ -446,4 +455,65 @@ func TestCacheWait(t *testing.T) {
 			t.Fatalf("expected 1 query, got %d", num)
 		}
 	}
+}
+
+// TestCacheAutoRefresh verifies that the cache gets refreshed automatically
+// when new statistics are added (when using the range cache).
+func TestCacheAutoRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	s := tc.Server(0)
+	sc := NewTableStatisticsCache(
+		ctx,
+		10, /* cacheSize */
+		gossip.MakeOptionalGossip(nil),
+		s.DB(),
+		s.InternalExecutor().(sqlutil.InternalExecutor),
+		keys.SystemSQLCodec,
+		s.LeaseManager().(*lease.Manager),
+		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
+	)
+
+	sr0 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sr0.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
+	sr0.Exec(t, "CREATE DATABASE test")
+	sr0.Exec(t, "CREATE TABLE test.t (k INT PRIMARY KEY, v INT)")
+	sr0.Exec(t, "INSERT INTO test.t VALUES (1, 1), (2, 2), (3, 3)")
+
+	tableDesc := catalogkv.TestingGetTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
+	tableID := tableDesc.GetID()
+
+	expectNStats := func(n int) error {
+		stats, err := sc.GetTableStats(ctx, tableID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(stats) != n {
+			return fmt.Errorf("expected %d stats, got: %v", n, stats)
+		}
+		return nil
+	}
+
+	if err := expectNStats(0); err != nil {
+		t.Fatal(err)
+	}
+	sr1 := sqlutils.MakeSQLRunner(tc.ServerConn(1))
+	sr1.Exec(t, "CREATE STATISTICS k ON k FROM test.t")
+
+	testutils.SucceedsSoon(t, func() error {
+		return expectNStats(1)
+	})
+
+	sr2 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
+	sr2.Exec(t, "CREATE STATISTICS v ON v FROM test.t")
+
+	testutils.SucceedsSoon(t, func() error {
+		return expectNStats(2)
+	})
 }
