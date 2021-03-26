@@ -12,7 +12,7 @@
   }
 
   &__footer {
-    margin: $spacing-medium 0 0 $spacing-smaller;
+    margin-top: $spacing-medium;
   }
 
   &__content {
@@ -62,10 +62,20 @@
   @include text--body;
 }
 
-.summary--card__empty-state {
-  background-color: $colors--white;
-  background-image: url("./emptyTracingBackground.svg");
-  background-repeat: no-repeat;
-  background-position-x: right;
-  padding: 0;
+.empty-view {
+  &__footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    > * {
+      margin-bottom: $spacing-medium;
+    }
+  }
+}
+
+.download-bundle-button {
+  white-space: nowrap;
+  > svg {
+    margin-right: $spacing-x-small;
+  }
 }

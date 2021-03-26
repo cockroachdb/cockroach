@@ -1,8 +1,8 @@
 import React from "react";
 import classNames from "classnames/bind";
 import { isString } from "lodash";
+import { Heading, Text } from "@cockroachlabs/ui-components";
 import styles from "./emptyTable.module.scss";
-import { Text, TextTypes } from "src/text";
 
 export interface EmptyTableProps {
   icon?: string | React.ReactNode;
@@ -30,14 +30,8 @@ export const EmptyTable: React.FC<EmptyTableProps> = ({
         {isString(icon) ? <img src={icon} className={cx("icon")} /> : icon}
       </div>
     )}
-    <Text textType={TextTypes.Heading3} className={cx("title")}>
-      {title}
-    </Text>
-    {message && (
-      <Text textType={TextTypes.Body} className={cx("message")}>
-        {message}
-      </Text>
-    )}
+    <Heading type="h3">{title}</Heading>
+    {message && <Text className={cx("message")}>{message}</Text>}
     {footer && <div className={cx("footer")}>{footer}</div>}
   </div>
 );
