@@ -1482,7 +1482,7 @@ func (ds *DistSender) sendPartialBatch(
 				// order to return the most recent error when we are out of retries.
 				pErr = roachpb.NewError(err)
 				if !rangecache.IsRangeLookupErrorRetryable(err) {
-					return response{pErr: roachpb.NewError(err)}
+					return response{pErr: pErr}
 				}
 				continue
 			}

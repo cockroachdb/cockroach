@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -369,42 +370,31 @@ func TestDecommissionedNodeCannotConnect(t *testing.T) {
 			clusterSrv := tc.Server(idx)
 
 			// Within a short period of time, the cluster (n1, n2) will refuse to reach out to n3.
-			{
-				_, err := clusterSrv.RPCContext().GRPCDialNode(
-					decomSrv.RPCAddr(), decomSrv.NodeID(), rpc.DefaultClass,
-				).Connect(ctx)
-				s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
-				if !ok || s.Code() != codes.PermissionDenied {
-					return errors.Errorf("expected permission denied for n%d->n%d, got %v", clusterSrv.NodeID(), decomSrv.NodeID(), err)
-				}
+			_, err := clusterSrv.RPCContext().GRPCDialNode(
+				decomSrv.RPCAddr(), decomSrv.NodeID(), rpc.DefaultClass,
+			).Connect(ctx)
+			s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
+			if !ok || s.Code() != codes.PermissionDenied {
+				return errors.Errorf("expected permission denied for n%d->n%d, got %v", clusterSrv.NodeID(), decomSrv.NodeID(), err)
 			}
 
 			// And similarly, n3 will be refused by n1, n2.
-			{
-				_, err := decomSrv.RPCContext().GRPCDialNode(
-					clusterSrv.RPCAddr(), decomSrv.NodeID(), rpc.DefaultClass,
-				).Connect(ctx)
-				s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
-				if !ok || s.Code() != codes.PermissionDenied {
-					return errors.Errorf("expected permission denied for n%d->n%d, got %v", decomSrv.NodeID(), clusterSrv.NodeID(), err)
-				}
+			_, err = decomSrv.RPCContext().GRPCDialNode(
+				clusterSrv.RPCAddr(), decomSrv.NodeID(), rpc.DefaultClass,
+			).Connect(ctx)
+			s, ok = grpcstatus.FromError(errors.UnwrapAll(err))
+			if !ok || s.Code() != codes.PermissionDenied {
+				return errors.Errorf("expected permission denied for n%d->n%d, got %v", decomSrv.NodeID(), clusterSrv.NodeID(), err)
 			}
+		}
+
+		// Trying to scan the scratch range from the decommissioned node should
+		// now result in a permission denied error.
+		_, err := decomSrv.DB().Scan(ctx, scratchKey, keys.MaxKey, 1)
+		s, ok := grpcstatus.FromError(errors.UnwrapAll(err))
+		if !ok || s.Code() != codes.PermissionDenied {
+			return errors.Errorf("expected permission denied for scan, got %v", err)
 		}
 		return nil
 	})
-
-	// Trying to scan the scratch range via the decommissioned node should
-	// now result in a permission denied error.
-	//
-	// TODO(erikgrinaker): until cockroachdb/errors preserves grpcstatus.Error
-	// across errors.EncodeError() we'll have to disable this, since the return
-	// code isn't preserved, and since some internal calls (notably RangeLookup
-	// via RangeIterator) end up retrying indefinitely because it can't detect
-	// the error code. See: https://github.com/cockroachdb/cockroach/issues/61470
-	//_, err := decomSrv.DB().Scan(ctx, scratchKey, keys.MaxKey, 1)
-	//require.Error(t, err)
-	//err = errors.UnwrapAll(err)
-	//s, ok := grpcstatus.FromError(err)
-	//require.True(t, ok, "expected gRPC error, got %T (%v)", err, err)
-	//require.Equal(t, codes.PermissionDenied, s.Code(), "expected permission denied error")
 }
