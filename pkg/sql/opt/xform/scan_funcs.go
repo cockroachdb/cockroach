@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 // GenerateIndexScans enumerates all non-inverted secondary indexes on the given
@@ -39,9 +40,20 @@ import (
 //       index joins are introduced into the memo.
 func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
+	var pkCols opt.ColSet
 	var iter scanIndexIter
-	iter.Init(c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
-	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool) {
+	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
+	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
+		// The iterator only produces pseudo-partial indexes (the predicate is
+		// true) because no filters are passed to iter.Init to imply a partial
+		// index predicate. constProj is a projection of constant values based
+		// on a partial index predicate. It should always be empty because a
+		// pseudo-partial index cannot hold a column constant. If it is not, we
+		// panic to avoid performing a logically incorrect transformation.
+		if len(constProj) != 0 {
+			panic(errors.AssertionFailedf("expected constProj to be empty"))
+		}
+
 		// If the secondary index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if isCovering {
@@ -60,18 +72,23 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		}
 
 		var sb indexScanBuilder
-		sb.init(c, scanPrivate.Table)
+		sb.Init(c, scanPrivate.Table)
+
+		// Calculate the PK columns once.
+		if pkCols.Empty() {
+			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
+		}
 
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
-		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(&newScanPrivate)
+		newScanPrivate.Cols.UnionWith(pkCols)
+		sb.SetScan(&newScanPrivate)
 
-		sb.addIndexJoin(scanPrivate.Cols)
-		sb.build(grp)
+		sb.AddIndexJoin(scanPrivate.Cols)
+		sb.Build(grp)
 	})
 }
 
