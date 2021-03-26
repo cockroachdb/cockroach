@@ -184,6 +184,35 @@ const (
 	nonVoterTarget
 )
 
+// AddChangeType returns the roachpb.ReplicaChangeType corresponding to the
+// given targetReplicaType.
+//
+// TODO(aayush): Clean up usages of ADD_{NON_}VOTER. Use
+// targetReplicaType.{Add,Remove}ChangeType methods wherever possible.
+func (t targetReplicaType) AddChangeType() roachpb.ReplicaChangeType {
+	switch typ := t; typ {
+	case voterTarget:
+		return roachpb.ADD_VOTER
+	case nonVoterTarget:
+		return roachpb.ADD_NON_VOTER
+	default:
+		panic(fmt.Sprintf("unknown targetReplicaType %d", typ))
+	}
+}
+
+// RemoveChangeType returns the roachpb.ReplicaChangeType corresponding to the
+// given targetReplicaType.
+func (t targetReplicaType) RemoveChangeType() roachpb.ReplicaChangeType {
+	switch typ := t; typ {
+	case voterTarget:
+		return roachpb.REMOVE_VOTER
+	case nonVoterTarget:
+		return roachpb.REMOVE_NON_VOTER
+	default:
+		panic(fmt.Sprintf("unknown targetReplicaType %d", typ))
+	}
+}
+
 func (t targetReplicaType) String() string {
 	switch typ := t; typ {
 	case voterTarget:

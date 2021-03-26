@@ -18,7 +18,6 @@ import (
 	"math/rand"
 	"reflect"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
