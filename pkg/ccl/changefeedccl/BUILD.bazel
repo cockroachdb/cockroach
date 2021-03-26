@@ -101,7 +101,7 @@ go_library(
 
 go_test(
     name = "changefeedccl_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "avro_test.go",
         "bench_test.go",
