@@ -136,6 +136,10 @@ export function getEventDescription(e: Event$Properties): string {
       return `Role Dropped: User ${info.User} dropped role ${info.RoleName}`;
     case eventTypes.ALTER_ROLE:
       return `Role Altered: User ${info.User} altered role ${info.RoleName} with options ${info.Options}`;
+    case eventTypes.IMPORT:
+      return `Import Job: User ${info.User} has a job ${info.JobID} running with status ${info.Status}`;
+    case eventTypes.RESTORE:
+      return `Restore Job: User ${info.User} has a job ${info.JobID} running with status ${info.Status}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(
         info,
@@ -182,6 +186,8 @@ export interface EventInfo {
   DroppedSchemaObjects?: string[];
   Grantees?: string;
   NewDatabaseParent?: string;
+  JobID?: string;
+  Status?: string;
 }
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {
