@@ -57,6 +57,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -77,5 +78,7 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
     ],
 )

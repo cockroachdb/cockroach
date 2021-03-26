@@ -17,6 +17,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/storage",
         "//pkg/util/contextutil",
+        "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
