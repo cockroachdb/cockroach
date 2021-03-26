@@ -93,7 +93,7 @@ describe("StatementDetails page", () => {
 
       wrapper
         .find(DiagnosticsView)
-        .findWhere(n => n.prop("children") === "Activate")
+        .findWhere(n => n.prop("children") === "Activate Diagnostics")
         .first()
         .simulate("click");
 

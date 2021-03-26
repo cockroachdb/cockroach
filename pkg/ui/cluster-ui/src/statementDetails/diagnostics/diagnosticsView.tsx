@@ -1,24 +1,24 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { Link } from "react-router-dom";
 import moment from "moment";
 import classnames from "classnames/bind";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { Download } from "@cockroachlabs/icons";
-import { Button } from "src/button";
+import { Button, Icon } from "@cockroachlabs/ui-components";
 import { Text, TextTypes } from "src/text";
 import { Table, ColumnsConfig } from "src/table";
 import { SummaryCard } from "src/summaryCard";
 import { DiagnosticStatusBadge } from "src/statementsDiagnostics";
-import emptyTracingBackground from "src/assets/statementsPage/emptyTracingBackground.svg";
+import emptyListResultsImg from "src/assets/emptyState/empty-list-results.svg";
 import {
   getDiagnosticsStatus,
   sortByCompletedField,
   sortByRequestedAtField,
 } from "./diagnosticsUtils";
 import { statementDiagnostics } from "src/util/docs";
-import { EmptyPanel } from "src/empty";
+import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
 import { getBasePath } from "../../api";
+import { Anchor } from "../../anchor";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 
@@ -50,25 +50,49 @@ interface DiagnosticsViewState {
 
 const cx = classnames.bind(styles);
 
+const NavButton: React.FC = props => (
+  <Button {...props} as="a" intent="tertiary">
+    {props.children}
+  </Button>
+);
+
 export const EmptyDiagnosticsView = ({
   activate,
   statementFingerprint,
+  showDiagnosticsViewLink,
 }: DiagnosticsViewProps) => {
-  const onActivateButtonClick = () => {
+  const onActivateButtonClick = useCallback(() => {
     activate(statementFingerprint);
-  };
+  }, [activate, statementFingerprint]);
   return (
-    <EmptyPanel
+    <EmptyTable
+      icon={emptyListResultsImg}
       title="Activate statement diagnostics"
-      description="When you activate statement diagnostics, CockroachDB will wait for the next query that matches
-      this statement fingerprint. A download button will appear on the statement list and detail pages
-      when the query is ready. The statement diagnostic will include EXPLAIN plans,
-      table statistics, and traces."
-      anchor="Learn More"
-      link={statementDiagnostics}
-      label="Activate"
-      onClick={onActivateButtonClick}
-      backgroundImage={emptyTracingBackground}
+      message={
+        <span>
+          When you activate statement diagnostics, CockroachDB will wait for the
+          next query that matches this statement fingerprint. A download button
+          will appear on the statement list and detail pages when the query is
+          ready. The statement diagnostic will include EXPLAIN plans, table
+          statistics, and traces.{" "}
+          <Anchor href={statementDiagnostics}>Learn More</Anchor>
+        </span>
+      }
+      footer={
+        <footer className={cx("empty-view__footer")}>
+          <Button intent="primary" onClick={onActivateButtonClick}>
+            Activate Diagnostics
+          </Button>
+          {showDiagnosticsViewLink && (
+            <Link
+              component={NavButton}
+              to="/reports/statements/diagnosticshistory"
+            >
+              View all statement diagnostics
+            </Link>
+          )}
+        </footer>
+      }
     />
   );
 };
@@ -120,7 +144,10 @@ export class DiagnosticsView extends React.Component<
                   "crl-statements-diagnostics-view__actions-column",
                 )}
               >
-                <a
+                <Button
+                  as="a"
+                  size="small"
+                  intent="tertiary"
                   href={`${getBasePath()}/_admin/v1/stmtbundle/${
                     record.statement_diagnostics_id
                   }`}
@@ -130,16 +157,11 @@ export class DiagnosticsView extends React.Component<
                       record.statement_fingerprint,
                     )
                   }
+                  className={cx("download-bundle-button")}
                 >
-                  <Button
-                    size="small"
-                    type="flat"
-                    iconPosition="left"
-                    icon={<Download />}
-                  >
-                    Bundle (.zip)
-                  </Button>
-                </a>
+                  <Icon iconName="Download" />
+                  Bundle (.zip)
+                </Button>
               </div>
             );
           }
@@ -172,7 +194,7 @@ export class DiagnosticsView extends React.Component<
 
     if (!hasData) {
       return (
-        <SummaryCard className={cx("summary--card__empty-state")}>
+        <SummaryCard>
           <EmptyDiagnosticsView {...this.props} />
         </SummaryCard>
       );
@@ -186,10 +208,9 @@ export class DiagnosticsView extends React.Component<
             <Button
               onClick={this.onActivateButtonClick}
               disabled={!canRequestDiagnostics}
-              type="secondary"
-              className={cx("crl-statements-diagnostics-view__activate-button")}
+              intent="secondary"
             >
-              Activate
+              Activate diagnostics
             </Button>
           )}
         </div>
@@ -197,8 +218,8 @@ export class DiagnosticsView extends React.Component<
         {showDiagnosticsViewLink && (
           <div className={cx("crl-statements-diagnostics-view__footer")}>
             <Link
+              component={NavButton}
               to="/reports/statements/diagnosticshistory"
-              className={cx("anchor")}
             >
               All statement diagnostics
             </Link>

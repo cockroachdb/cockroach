@@ -88,7 +88,7 @@ describe("DiagnosticsView", () => {
 
     it("calls activate callback with statementId when click on Activate button", () => {
       const activateButtonComponent = wrapper
-        .findWhere(n => n.prop("children") === "Activate")
+        .findWhere(n => n.prop("children") === "Activate diagnostics")
         .first();
       activateButtonComponent.simulate("click");
       activateFn.calledOnceWith(statementFingerprint);
@@ -111,7 +111,7 @@ describe("DiagnosticsView", () => {
         </TestStoreProvider>,
       );
       const activateButtonComponent = wrapper
-        .findWhere(n => n.prop("children") === "Activate")
+        .findWhere(n => n.prop("children") === "Activate diagnostics")
         .first();
       assert.isFalse(activateButtonComponent.exists());
     });
