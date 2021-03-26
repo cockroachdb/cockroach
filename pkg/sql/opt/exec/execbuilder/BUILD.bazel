@@ -51,8 +51,10 @@ go_test(
     srcs = [
         "builder_test.go",
         "main_test.go",
+        "mutation_test.go",
     ],
     data = glob(["testdata/**"]),
+    embed = [":execbuilder"],
     tags = ["broken_in_bazel"],
     deps = [
         "//pkg/security",
@@ -60,6 +62,8 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/logictest",
+        "//pkg/sql/opt",
+        "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
