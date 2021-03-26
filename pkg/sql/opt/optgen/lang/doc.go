@@ -168,6 +168,39 @@ second child is a "True" node, then the "Select" node will be replaced by its
 input. Variables can also be passed as arguments to custom matchers, which are
 described below.
 
+Let Expression
+
+A let expression can be used for binding multiple variables to the result of a
+custom function with multiple return values. This expression consists of two
+elements, a binding and a result. The binding includes a list of variables to
+bind followed by a custom function to produce the bind values. The result is a
+variable reference which is the value of the expression when evaluated.
+
+For example:
+
+  [SplitSelect]
+  (Select
+    $input:*
+    $filters:* &
+      (Let ($filterA $filterB $ok):(SplitFilters $filters) $ok)
+  )
+  =>
+  (Select (Select $input $filterA) $filterB)
+
+The "($filtersA $filtersB $ok):(SplitFilters $filters)" part indicates that
+$filtersA $filtersB and $ok are bound to the three return values of
+(SplitFilters $filters). The let expression evaluates to the value of $ok.
+
+A let expression can also be used in a replace pattern. For example:
+
+  [AlterSelect]
+  (Select $input:* $filters:*)
+  =>
+  (Select
+    (Let ($newInput $newFilters):(AlterSelect $input $filters) $newInput)
+    $newFilters
+  )
+
 Matching Names
 
 In addition to simple name matching, a node matcher can match tag names. Any
@@ -520,12 +553,13 @@ grammar.
   names        = name ('|' name)*
   arg          = bind and | ref | and
   and          = expr ('&' and)
-  expr         = func | not | list | any | name | STRING | NUMBER
+  expr         = func | not | let | list | any | name | STRING | NUMBER
   not          = '^' expr
   list         = '[' list-child* ']'
   list-child   = list-any | arg
   list-any     = '...'
   bind         = '$' label ':' and
+  let          = '(' 'Let' '(' '$' label ('$' label)* ')' ':' func ref ')'
   ref          = '$' label
   any          = '*'
   name         = IDENT

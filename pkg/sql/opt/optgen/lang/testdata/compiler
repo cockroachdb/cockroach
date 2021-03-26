@@ -711,6 +711,149 @@ define Op {
 )
 
 #
+# Test let expressions.
+#
+compile
+define Op {
+    Input Expr
+}
+
+[Binding]
+(Op
+  $a:(Op *) &
+    (Let ($b $c $d):(Func $a) $d) &
+    (Func (Let ($e $f):(Func $a $b) $f)) &
+    (Func $g:(Func $e $f))
+)
+=>
+(Op (Func $a $b $c $d $e $f $g))
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="Binding"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="a"
+						Target=(And
+							Left=(Func
+								Name=Op
+								Args=(Slice (Any Typ=Expr))
+								Typ=Op
+								Src=<test.opt:7:6>
+							)
+							Right=(And
+								Left=(Let
+									Labels=(Strings "b" "c" "d")
+									Target=(CustomFunc
+										Name=Func
+										Args=(Slice
+											(Ref Label="a" Src=<test.opt:8:27>)
+										)
+										Src=<test.opt:8:21>
+									)
+									Result=(Ref Label="d" Src=<test.opt:8:31>)
+									Typ=Expr
+									Src=<test.opt:8:10>
+								)
+								Right=(And
+									Left=(CustomFunc
+										Name=Func
+										Args=(Slice
+											(Let
+												Labels=(Strings "e" "f")
+												Target=(CustomFunc
+													Name=Func
+													Args=(Slice
+														(Ref Label="a" Src=<test.opt:9:30>)
+														(Ref Label="b" Src=<test.opt:9:33>)
+													)
+													Src=<test.opt:9:24>
+												)
+												Result=(Ref Label="f" Src=<test.opt:9:37>)
+												Src=<test.opt:9:16>
+											)
+										)
+										Typ=Expr
+										Src=<test.opt:9:5>
+									)
+									Right=(CustomFunc
+										Name=Func
+										Args=(Slice
+											(Bind
+												Label="g"
+												Target=(CustomFunc
+													Name=Func
+													Args=(Slice
+														(Ref Label="e" Src=<test.opt:10:20>)
+														(Ref Label="f" Src=<test.opt:10:23>)
+													)
+													Src=<test.opt:10:14>
+												)
+												Src=<test.opt:10:11>
+											)
+										)
+										Typ=Expr
+										Src=<test.opt:10:5>
+									)
+									Typ=Expr
+									Src=<test.opt:9:5>
+								)
+								Typ=Expr
+								Src=<test.opt:8:5>
+							)
+							Typ=Op
+							Src=<test.opt:7:6>
+						)
+						Typ=Op
+						Src=<test.opt:7:3>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:6:1>
+			)
+			Replace=(Func
+				Name=Op
+				Args=(Slice
+					(CustomFunc
+						Name=Func
+						Args=(Slice
+							(Ref Label="a" Typ=Op Src=<test.opt:13:11>)
+							(Ref Label="b" Src=<test.opt:13:14>)
+							(Ref Label="c" Src=<test.opt:13:17>)
+							(Ref Label="d" Src=<test.opt:13:20>)
+							(Ref Label="e" Src=<test.opt:13:23>)
+							(Ref Label="f" Src=<test.opt:13:26>)
+							(Ref Label="g" Src=<test.opt:13:29>)
+						)
+						Typ=Expr
+						Src=<test.opt:13:5>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:13:1>
+			)
+			Src=<test.opt:5:1>
+		)
+	)
+)
+
+#
 # Test type inference.
 #
 compile
@@ -1127,6 +1270,24 @@ define Op {
 
 [NotEnoughMatchFields]
 (Op * * * *) => (Op)
+
+[LetUnrecognizedLabel]
+(Op $input:"foo" & (Let ($a $b):(Func $unknown) $a)) => (Op)
+
+[LetUnrecognizedLabel2]
+(Op $input:"foo" & (Let ($a $b):(Func $input) $unknown)) => (Op)
+
+[LetUnrecognizedLabel3]
+(Op $input:"foo" & (Let ($a $b):(Func $a) $b)) => (Op)
+
+[LetDuplicateLabel]
+(Op $input:"foo" & (Let ($a $b $a):(Func $input) $b)) => (Op)
+
+[LetDuplicateLabel2]
+(Op $input:"foo" & (Let ($a $input):(Func $input) $a)) => (Op)
+
+[LetNonCustomFunc]
+(Op $input:"foo" & (Let ($a $b):(Op $input) $b)) => (Op)
 ----
 test.opt:5:1: duplicate 'Op' define statement
 test.opt:12:1: unrecognized match name 'Unknown'
@@ -1155,6 +1316,13 @@ test.opt:81:25: list matcher cannot contain multiple expressions
 test.opt:84:13: list constructor cannot use '...'
 test.opt:87:9: constructor cannot have multiple names
 test.opt:90:1: Op has only 3 fields
+test.opt:93:39: unrecognized variable name 'unknown'
+test.opt:96:47: unrecognized variable name 'unknown'
+test.opt:99:39: unrecognized variable name 'a'
+test.opt:102:25: duplicate bind label 'a'
+test.opt:105:25: duplicate bind label 'input'
+test.opt:108:37: match pattern cannot use variable references
+test.opt:108:25: let target must be a custom function
 
 # Type inference errors.
 compile
