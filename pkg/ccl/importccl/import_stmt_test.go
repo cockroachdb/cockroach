@@ -1983,9 +1983,20 @@ func TestImportCSVStmt(t *testing.T) {
 
 			jobPrefix := fmt.Sprintf(`IMPORT TABLE %s.public.t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))`, intodb)
 
+			var intodbID descpb.ID
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s'`,
+				intodb)).Scan(&intodbID)
+			var publicSchemaID descpb.ID
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s'`,
+				tree.PublicSchema)).Scan(&publicSchemaID)
+			var tableID int64
+			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE "parentID" = $1 AND "parentSchemaID" = $2`,
+				intodbID, publicSchemaID).Scan(&tableID)
+
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUserName(),
-				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
+				Username:      security.RootUserName(),
+				Description:   fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
+				DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -2841,6 +2852,9 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
 
+			var tableID int64
+			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
+
 			var unused string
 			var restored struct {
 				rows, idx, bytes int
@@ -2868,8 +2882,9 @@ func TestImportIntoCSV(t *testing.T) {
 
 			jobPrefix := `IMPORT INTO defaultdb.public.t(a, b)`
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUserName(),
-				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
+				Username:      security.RootUserName(),
+				Description:   fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
+				DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -7002,4 +7017,72 @@ func TestDetachedImport(t *testing.T) {
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
+}
+
+func TestImportJobEventLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.ScopeWithoutShowLogs(t).Close(t)
+
+	defer jobs.TestingSetProgressThresholds()()
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+
+	const (
+		nodes = 1
+	)
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "avro")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	params := base.TestClusterArgs{ServerArgs: args}
+	tc := testcluster.StartTestCluster(t, nodes, params)
+	defer tc.Stopper().Stop(ctx)
+
+	var forceFailure bool
+	for i := range tc.Servers {
+		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*importResumer)
+				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+					if forceFailure {
+						return errors.New("testing injected failure")
+					}
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
+	connDB := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(connDB)
+
+	simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
+
+	// First, let's test the happy path. Start a job, allow it to succeed and check
+	// the event log for the entries.
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+	beforeImport := timeutil.Now()
+	importQuery := `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`
+
+	var jobID int64
+	var unused interface{}
+	sqlDB.QueryRow(t, importQuery, simpleOcf).Scan(&jobID, &unused, &unused, &unused, &unused,
+		&unused)
+
+	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
+	backupccl.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT")
+
+	sqlDB.Exec(t, `DROP TABLE simple`)
+
+	// Now let's test the events that are emitted when a job fails.
+	forceFailure = true
+	beforeSecondImport := timeutil.Now()
+	secondImport := `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`
+	sqlDB.ExpectErrSucceedsSoon(t, "testing injected failure", secondImport, simpleOcf)
+
+	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE status = 'failed'")
+	row.Scan(&jobID)
+
+	expectedStatus = []string{string(jobs.StatusFailed), string(jobs.StatusReverting),
+		string(jobs.StatusRunning)}
+	backupccl.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
 }

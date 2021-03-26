@@ -80,3 +80,15 @@ func (m *CommonSchemaChangeEventDetails) CommonSchemaChangeDetails() *CommonSche
 var _ EventWithCommonSchemaChangePayload = (*FinishSchemaChange)(nil)
 var _ EventWithCommonSchemaChangePayload = (*ReverseSchemaChange)(nil)
 var _ EventWithCommonSchemaChangePayload = (*FinishSchemaChangeRollback)(nil)
+
+// EventWithCommonJobPayload is implemented by CommonSQLEventDetails.
+type EventWithCommonJobPayload interface {
+	EventPayload
+	CommonJobDetails() *CommonJobEventDetails
+}
+
+// CommonJobDetails implements the EventWithCommonJobPayload interface.
+func (m *CommonJobEventDetails) CommonJobDetails() *CommonJobEventDetails { return m }
+
+var _ EventWithCommonJobPayload = (*Import)(nil)
+var _ EventWithCommonJobPayload = (*Restore)(nil)

@@ -7533,3 +7533,66 @@ table_name FROM [SHOW TABLES] ORDER BY schema_name, table_name`
 		return nil
 	})
 }
+
+func TestRestoreJobEventLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.ScopeWithoutShowLogs(t).Close(t)
+
+	defer jobs.TestingSetProgressThresholds()()
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+
+	baseDir := "testdata"
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	params := base.TestClusterArgs{ServerArgs: args}
+	_, tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
+		InitManualReplication, params)
+	defer cleanupFn()
+
+	var forceFailure bool
+	for i := range tc.Servers {
+		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*restoreResumer)
+				r.testingKnobs.beforePublishingDescriptors = func() error {
+					if forceFailure {
+						return errors.New("testing injected failure")
+					}
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDB.Exec(t, `CREATE DATABASE r1`)
+	sqlDB.Exec(t, `CREATE TABLE r1.foo (id INT)`)
+	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://0/eventlogging'`)
+	sqlDB.Exec(t, `DROP DATABASE r1`)
+
+	beforeRestore := timeutil.Now()
+	restoreQuery := `RESTORE DATABASE r1 FROM 'nodelocal://0/eventlogging'`
+
+	var jobID int64
+	var unused interface{}
+	sqlDB.QueryRow(t, restoreQuery).Scan(&jobID, &unused, &unused, &unused, &unused,
+		&unused)
+
+	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
+	CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, "restore",
+		"RESTORE")
+
+	sqlDB.Exec(t, `DROP DATABASE r1`)
+
+	// Now let's test the events that are emitted when a job fails.
+	forceFailure = true
+	beforeSecondRestore := timeutil.Now()
+	sqlDB.ExpectErrSucceedsSoon(t, "testing injected failure", restoreQuery)
+
+	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE status = 'failed'")
+	row.Scan(&jobID)
+
+	expectedStatus = []string{string(jobs.StatusFailed), string(jobs.StatusReverting),
+		string(jobs.StatusRunning)}
+	CheckEmittedEvents(t, expectedStatus, beforeSecondRestore.UnixNano(), jobID,
+		"restore", "RESTORE")
+}
