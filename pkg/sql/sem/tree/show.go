@@ -83,6 +83,8 @@ const (
 	BackupRangeDetails
 	// BackupFileDetails identifies a SHOW BACKUP FILES statement.
 	BackupFileDetails
+	// BackupManifestAsJSON displays full backup manifest as json
+	BackupManifestAsJSON
 )
 
 // ShowBackup represents a SHOW BACKUP statement.
