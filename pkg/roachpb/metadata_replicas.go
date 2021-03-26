@@ -334,18 +334,6 @@ func (d ReplicaSet) DeepCopy() ReplicaSet {
 	}
 }
 
-// Contains returns true if the set contains rDesc.
-func (d ReplicaSet) Contains(rDesc ReplicaDescriptor) bool {
-	descs := d.Descriptors()
-	for i := range descs {
-		repl := &descs[i]
-		if repl.StoreID == rDesc.StoreID && repl.NodeID == rDesc.NodeID {
-			return true
-		}
-	}
-	return false
-}
-
 // AddReplica adds the given replica to this set.
 func (d *ReplicaSet) AddReplica(r ReplicaDescriptor) {
 	d.wrapped = append(d.wrapped, r)
