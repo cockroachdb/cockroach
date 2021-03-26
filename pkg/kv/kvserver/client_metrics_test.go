@@ -13,6 +13,8 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,6 +56,8 @@ func checkGauge(t *testing.T, id string, g gaugeValuer, e int64) {
 func verifyStats(t *testing.T, tc *testcluster.TestCluster, storeIdxSlice ...int) {
 	t.Helper()
 	var stores []*kvserver.Store
+	var wg sync.WaitGroup
+
 	for _, storeIdx := range storeIdxSlice {
 		stores = append(stores, tc.GetFirstStoreFromServer(t, storeIdx))
 	}
@@ -70,6 +74,20 @@ func verifyStats(t *testing.T, tc *testcluster.TestCluster, storeIdxSlice ...int
 			return nil
 		})
 	}
+
+	wg.Add(len(storeIdxSlice))
+	// We actually stop *all* of the Servers. Stopping only a few is riddled
+	// with deadlocks since operations can span nodes, but stoppers don't
+	// know about this - taking all of them down at the same time is the
+	// only sane way of guaranteeing that nothing interesting happens, at
+	// least when bringing down the nodes jeopardizes majorities.
+	for _, storeIdx := range storeIdxSlice {
+		go func(i int) {
+			defer wg.Done()
+			tc.StopServer(i)
+		}(storeIdx)
+	}
+	wg.Wait()
 
 	for _, s := range stores {
 		idString := s.Ident.String()
@@ -106,6 +124,11 @@ func verifyStats(t *testing.T, tc *testcluster.TestCluster, storeIdxSlice ...int
 
 	if t.Failed() {
 		t.Fatalf("verifyStats failed, aborting test.")
+	}
+
+	// Restart all Stores.
+	for _, storeIdx := range storeIdxSlice {
+		require.NoError(t, tc.RestartServer(storeIdx))
 	}
 }
 
@@ -228,25 +251,36 @@ func TestStoreMetrics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				StoreSpecs: []base.StoreSpec{
-					{
-						InMemory: true,
-						// Specify a size to trigger the BlockCache in Pebble.
-						Size: base.SizeSpec{
-							InBytes: 1 << 20,
-						},
-					},
-				},
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						DisableRaftLogQueue: true,
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	const numServers int = 3
+	stickyServerArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numServers; i++ {
+		stickyServerArgs[i] = base.TestServerArgs{
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+					// Specify a size to trigger the BlockCache in Pebble.
+					Size: base.SizeSpec{
+						InBytes: 1 << 20,
 					},
 				},
 			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyEngineRegistry: stickyEngineRegistry,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					DisableRaftLogQueue: true,
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numServers,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
 
@@ -302,9 +336,7 @@ func TestStoreMetrics(t *testing.T) {
 	// Verify stats after addition.
 	verifyStats(t, tc, 1, 2)
 	checkGauge(t, "store 0", tc.GetFirstStoreFromServer(t, 0).Metrics().ReplicaCount, initialCount+1)
-
-	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
-	tc.RemoveVotersOrFatal(t, key, tc.Target(0))
+	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0), tc.Target(1))
 	testutils.SucceedsSoon(t, func() error {
 		_, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 		if err == nil {
