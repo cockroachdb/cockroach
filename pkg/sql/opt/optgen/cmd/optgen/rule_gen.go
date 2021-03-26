@@ -13,6 +13,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
@@ -247,6 +248,19 @@ func (g *newRuleGen) genMatch(match lang.Expr, context *contextDecl, noMatch boo
 		newContext.untypedAlias = newContext.code
 
 		g.genMatch(t.Target, newContext, noMatch)
+
+	case *lang.MultiBindExpr:
+		var vars strings.Builder
+		for i, label := range t.Labels {
+			if i > 0 {
+				vars.WriteString(", ")
+			}
+			vars.WriteString(string(label))
+		}
+		customFunc := t.Target.(*lang.CustomFuncExpr)
+		g.w.writeIndent("if %s, _ok := ", vars.String())
+		g.genCustomFunc(customFunc)
+		g.w.nestIndent("; _ok {\n")
 
 	case *lang.StringExpr:
 		// Delegate to custom function that matches String values.

@@ -1098,6 +1098,70 @@ func (e *BindExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 
+type MultiBindExpr struct {
+	Labels StringsExpr
+	Target Expr
+	Src    *SourceLoc
+}
+
+func (e *MultiBindExpr) Op() Operator {
+	return MultiBindOp
+}
+
+func (e *MultiBindExpr) ChildCount() int {
+	return 2
+}
+
+func (e *MultiBindExpr) Child(nth int) Expr {
+	switch nth {
+	case 0:
+		return &e.Labels
+	case 1:
+		return e.Target
+	}
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *MultiBindExpr) ChildName(nth int) string {
+	switch nth {
+	case 0:
+		return "Labels"
+	case 1:
+		return "Target"
+	}
+	return ""
+}
+
+func (e *MultiBindExpr) Value() interface{} {
+	return nil
+}
+
+func (e *MultiBindExpr) Visit(visit VisitFunc) Expr {
+	children := visitChildren(e, visit)
+	if children != nil {
+		return &MultiBindExpr{Labels: *children[0].(*StringsExpr), Target: children[1], Src: e.Source()}
+	}
+	return e
+}
+
+func (e *MultiBindExpr) Source() *SourceLoc {
+	return e.Src
+}
+
+func (e *MultiBindExpr) InferredType() DataType {
+	return AnyDataType
+}
+
+func (e *MultiBindExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *MultiBindExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
 type RefExpr struct {
 	Label StringExpr
 	Src   *SourceLoc
@@ -1295,6 +1359,58 @@ func (e *StringExpr) String() string {
 }
 
 func (e *StringExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
+type StringsExpr []StringExpr
+
+func (e *StringsExpr) Op() Operator {
+	return StringsOp
+}
+
+func (e *StringsExpr) ChildCount() int {
+	return len(*e)
+}
+
+func (e *StringsExpr) Child(nth int) Expr {
+	return &(*e)[nth]
+}
+
+func (e *StringsExpr) ChildName(nth int) string {
+	return ""
+}
+
+func (e *StringsExpr) Value() interface{} {
+	return nil
+}
+
+func (e *StringsExpr) Visit(visit VisitFunc) Expr {
+	children := visitChildren(e, visit)
+	if children != nil {
+		typedChildren := make(StringsExpr, len(children))
+		for i := 0; i < len(children); i++ {
+			typedChildren[i] = *children[i].(*StringExpr)
+		}
+		return &typedChildren
+	}
+	return e
+}
+
+func (e *StringsExpr) Source() *SourceLoc {
+	return nil
+}
+
+func (e *StringsExpr) InferredType() DataType {
+	return AnyDataType
+}
+
+func (e *StringsExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *StringsExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 

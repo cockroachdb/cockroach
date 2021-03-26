@@ -486,7 +486,7 @@ func (p *Parser) parseAnd() Expr {
 	return &AndExpr{Src: src, Left: left, Right: right}
 }
 
-// expr = func | not | list | any | name | STRING | NUMBER
+// expr = func | not | multi-bind | list | any | name | STRING | NUMBER
 func (p *Parser) parseExpr() Expr {
 	tok := p.scan()
 	comments := p.getComments()
@@ -499,6 +499,10 @@ func (p *Parser) parseExpr() Expr {
 	case CARET:
 		p.unscan()
 		e = p.parseNot()
+
+	case DOLLAR:
+		p.unscan()
+		e = p.parseMultiBind()
 
 	case LBRACKET:
 		p.unscan()
@@ -541,6 +545,58 @@ func (p *Parser) parseNot() Expr {
 		return nil
 	}
 	return &NotExpr{Src: &src, Input: input}
+}
+
+// multi-bind = '$' '(' label* ')' ':' func
+func (p *Parser) parseMultiBind() Expr {
+	if p.scan() != DOLLAR {
+		panic("caller should have checked for dollar")
+	}
+
+	if !p.scanToken(LPAREN, "'('") {
+		return nil
+	}
+
+	src := p.src
+
+	var labels StringsExpr
+	for {
+		if p.scan() == RPAREN {
+			if p.hasComments() {
+				p.addErr("comments not allowed before )")
+				return nil
+			}
+			break
+		}
+		p.unscan()
+
+		if !p.scanToken(IDENT, "label") {
+			return nil
+		}
+
+		label := StringExpr(p.s.Literal())
+		labels = append(labels, label)
+	}
+
+	if len(labels) < 2 {
+		p.addErr(fmt.Sprintf("multi-bind statement must have more than 1 variable: %s", labels))
+	}
+
+	if !p.scanToken(COLON, "':'") {
+		return nil
+	}
+
+	if !p.scanToken(LPAREN, "'('") {
+		return nil
+	}
+	p.unscan()
+
+	target := p.parseFunc()
+	if target == nil {
+		return nil
+	}
+
+	return &MultiBindExpr{Src: &src, Labels: labels, Target: target}
 }
 
 // list = '[' list-child* ']'

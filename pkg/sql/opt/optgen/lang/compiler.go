@@ -370,7 +370,7 @@ func (c *ruleCompiler) inferTypes(e Expr, suggested DataType) {
 		}
 
 	case *BindExpr:
-		// Set type of binding to type of its target.
+		// Set type of binding to the type of its target.
 		c.inferTypes(t.Target, suggested)
 		t.Typ = t.Target.InferredType()
 
@@ -410,7 +410,7 @@ func (c *ruleCompiler) inferTypes(e Expr, suggested DataType) {
 	case *AnyExpr:
 		t.Typ = suggested
 
-	case *StringExpr, *NumberExpr, *ListAnyExpr, *NameExpr, *NamesExpr:
+	case *StringExpr, *NumberExpr, *ListAnyExpr, *NameExpr, *NamesExpr, *MultiBindExpr:
 		// Type already known; nothing to infer.
 
 	default:
@@ -447,6 +447,9 @@ func (c *ruleContentCompiler) compile(e Expr) Expr {
 
 	case *BindExpr:
 		return c.compileBind(t)
+
+	case *MultiBindExpr:
+		return c.compileMultiBind(t)
 
 	case *RefExpr:
 		if c.matchPattern && !c.customFunc {
@@ -505,6 +508,24 @@ func (c *ruleContentCompiler) compileBind(bind *BindExpr) Expr {
 	//
 	c.compiler.bindings[bind.Label] = AnyDataType
 	newBind := bind.Visit(c.compile).(*BindExpr)
+
+	return newBind
+}
+
+func (c *ruleContentCompiler) compileMultiBind(bind *MultiBindExpr) Expr {
+	newBind := bind.Visit(c.compile).(*MultiBindExpr)
+
+	// Ensure that binding labels are unique.
+	for _, label := range bind.Labels {
+		// label := l.(*StringExpr)
+		_, ok := c.compiler.bindings[label]
+		if ok {
+			c.addErr(bind, fmt.Errorf("duplicate bind label '%s'", label))
+		}
+
+		// Initialize the binding.
+		c.compiler.bindings[label] = AnyDataType
+	}
 
 	return newBind
 }

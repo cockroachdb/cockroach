@@ -168,6 +168,31 @@ second child is a "True" node, then the "Select" node will be replaced by its
 input. Variables can also be passed as arguments to custom matchers, which are
 described below.
 
+Optgen also provides the ability to bind multiple return values of custom
+functions. The custom function's last return value must be a boolean indicating
+the success of the function. This boolean must be true for the rule to match,
+and the boolean cannot be bound to a variable. For example:
+
+  [SplitSelect]
+  (Select
+    $input:*
+    $filters:* &
+      $(filterA filterB):(SplitFilters $filters)
+  )
+  =>
+  (Select (Select $input $filterA) $filterB)
+
+The SplitFilters custom function signature would be:
+
+  func (c *CustomFuncs) SplitFilters(input RelExpr, filters memo.FiltersExpr) (
+    filterA memo.FiltersExpr,
+    filterB memo.FiltersExpr,
+    ok bool,
+  )
+
+Multi-variable bindings can only be present in boolean expressions in match
+patterns. They are not supported in replace patterns.
+
 Matching Names
 
 In addition to simple name matching, a node matcher can match tag names. Any
@@ -520,12 +545,13 @@ grammar.
   names        = name ('|' name)*
   arg          = bind and | ref | and
   and          = expr ('&' and)
-  expr         = func | not | list | any | name | STRING | NUMBER
+  expr         = func | not | multi-bind | list | any | name | STRING | NUMBER
   not          = '^' expr
   list         = '[' list-child* ']'
   list-child   = list-any | arg
   list-any     = '...'
   bind         = '$' label ':' and
+  multi-bind   = '$' '(' label* ')' ':' func
   ref          = '$' label
   any          = '*'
   name         = IDENT

@@ -711,6 +711,136 @@ define Op {
 )
 
 #
+# Test multi-value bind expressions.
+#
+compile
+define Op {
+    Input Expr
+}
+
+[Binding]
+(Op
+  $a:(Op *) &
+    $(b c d):(Func $a) &
+    $(e f):(Func $a $b) &
+    (Func $g:(Func $e $f))
+)
+=>
+(Op (Func $a $b $c $d))
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="Binding"
+			Tags=(Tags)
+			Match=(Func
+				Name=Op
+				Args=(Slice
+					(Bind
+						Label="a"
+						Target=(And
+							Left=(Func
+								Name=Op
+								Args=(Slice (Any Typ=Expr))
+								Typ=Op
+								Src=<test.opt:7:6>
+							)
+							Right=(And
+								Left=(MultiBind
+									Labels=(Strings "b" "c" "d")
+									Target=(CustomFunc
+										Name=Func
+										Args=(Slice
+											(Ref Label="a" Src=<test.opt:8:20>)
+										)
+										Src=<test.opt:8:14>
+									)
+									Src=<test.opt:8:6>
+								)
+								Right=(And
+									Left=(MultiBind
+										Labels=(Strings "e" "f")
+										Target=(CustomFunc
+											Name=Func
+											Args=(Slice
+												(Ref Label="a" Src=<test.opt:9:18>)
+												(Ref Label="b" Src=<test.opt:9:21>)
+											)
+											Src=<test.opt:9:12>
+										)
+										Src=<test.opt:9:6>
+									)
+									Right=(CustomFunc
+										Name=Func
+										Args=(Slice
+											(Bind
+												Label="g"
+												Target=(CustomFunc
+													Name=Func
+													Args=(Slice
+														(Ref Label="e" Src=<test.opt:10:20>)
+														(Ref Label="f" Src=<test.opt:10:23>)
+													)
+													Src=<test.opt:10:14>
+												)
+												Src=<test.opt:10:11>
+											)
+										)
+										Typ=Expr
+										Src=<test.opt:10:5>
+									)
+									Typ=Expr
+									Src=<test.opt:9:5>
+								)
+								Typ=Expr
+								Src=<test.opt:8:5>
+							)
+							Typ=Op
+							Src=<test.opt:7:6>
+						)
+						Typ=Op
+						Src=<test.opt:7:3>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:6:1>
+			)
+			Replace=(Func
+				Name=Op
+				Args=(Slice
+					(CustomFunc
+						Name=Func
+						Args=(Slice
+							(Ref Label="a" Typ=Op Src=<test.opt:13:11>)
+							(Ref Label="b" Src=<test.opt:13:14>)
+							(Ref Label="c" Src=<test.opt:13:17>)
+							(Ref Label="d" Src=<test.opt:13:20>)
+						)
+						Typ=Expr
+						Src=<test.opt:13:5>
+					)
+				)
+				Typ=Op
+				Src=<test.opt:13:1>
+			)
+			Src=<test.opt:5:1>
+		)
+	)
+)
+
+#
 # Test type inference.
 #
 compile
@@ -1062,6 +1192,12 @@ define Op {
 [DuplicateLabel2]
 (Op $input:"foo") => (Op $input:"bar")
 
+[DuplicateLabel3]
+(Op $input:"foo" & $(foo input):(Func)) => (Op $input)
+
+[DuplicateLabel4]
+(Op $input:"foo" & $(foo bar foo):(Func)) => (Op $input)
+
 [UnrecognizedLabel]
 (Op $input:* & (Func $unknown)) => (Op)
 
@@ -1134,27 +1270,29 @@ test.opt:15:10: too many arguments to OpName function
 test.opt:18:10: invalid OpName argument: argument must be a variable reference
 test.opt:21:18: duplicate bind label 'input'
 test.opt:24:26: duplicate bind label 'input'
-test.opt:27:22: unrecognized variable name 'unknown'
-test.opt:32:1: duplicate rule name 'DuplicateName'
-test.opt:36:5: match pattern cannot use variable references
-test.opt:39:5: custom function cannot have multiple names
-test.opt:42:11: custom match function cannot use lists
-test.opt:45:11: custom match function cannot use lists
-test.opt:48:11: custom match function cannot use boolean expressions
-test.opt:51:11: custom match function cannot use wildcard matcher
-test.opt:54:11: custom function name cannot be an operator name
-test.opt:57:9: construct name cannot be a tag
-test.opt:60:5: cannot match literal name 'Op'
-test.opt:63:16: Unknown is not an operator name
-test.opt:66:9: Unknown is not an operator name
-test.opt:69:1: cannot match dynamic name
-test.opt:72:5: cannot match dynamic name
-test.opt:75:5: custom function cannot have multiple names
-test.opt:78:13: constructor cannot have multiple names
-test.opt:81:25: list matcher cannot contain multiple expressions
-test.opt:84:13: list constructor cannot use '...'
-test.opt:87:9: constructor cannot have multiple names
-test.opt:90:1: Op has only 3 fields
+test.opt:27:21: duplicate bind label 'input'
+test.opt:30:21: duplicate bind label 'foo'
+test.opt:33:22: unrecognized variable name 'unknown'
+test.opt:38:1: duplicate rule name 'DuplicateName'
+test.opt:42:5: match pattern cannot use variable references
+test.opt:45:5: custom function cannot have multiple names
+test.opt:48:11: custom match function cannot use lists
+test.opt:51:11: custom match function cannot use lists
+test.opt:54:11: custom match function cannot use boolean expressions
+test.opt:57:11: custom match function cannot use wildcard matcher
+test.opt:60:11: custom function name cannot be an operator name
+test.opt:63:9: construct name cannot be a tag
+test.opt:66:5: cannot match literal name 'Op'
+test.opt:69:16: Unknown is not an operator name
+test.opt:72:9: Unknown is not an operator name
+test.opt:75:1: cannot match dynamic name
+test.opt:78:5: cannot match dynamic name
+test.opt:81:5: custom function cannot have multiple names
+test.opt:84:13: constructor cannot have multiple names
+test.opt:87:25: list matcher cannot contain multiple expressions
+test.opt:90:13: list constructor cannot use '...'
+test.opt:93:9: constructor cannot have multiple names
+test.opt:96:1: Op has only 3 fields
 
 # Type inference errors.
 compile

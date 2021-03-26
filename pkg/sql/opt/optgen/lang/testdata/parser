@@ -46,7 +46,7 @@ define Lt {
 # Define with tags.
 #
 parse
-# Comment on definition with a tag. 
+# Comment on definition with a tag.
 [Tag1, Tag2]
 define Not {
     Input Expr
@@ -55,7 +55,7 @@ define Not {
 (Root
 	Defines=(DefineSet
 		(Define
-			Comments=(Comments # Comment on definition with a tag. )
+			Comments=(Comments # Comment on definition with a tag.)
 			Tags=(Tags Tag1 Tag2)
 			Name="Not"
 			Fields=(DefineFields
@@ -330,6 +330,131 @@ parse
 				Src=<test.opt:10:1>
 			)
 			Src=<test.opt:1:1>
+		)
+	)
+)
+
+#
+# Test multi-value bind expressions.
+#
+# replace pattern.
+parse
+define Op {
+    Input Expr
+}
+
+[Binding]
+(Op
+  $a:(Op *) &
+    $(b c d):(Func $a) &
+    $(e f):(Func $a $b) &
+    (Func $g:(Func $e $f))
+)
+=>
+(Op (Func $a $b $c $d $e $f $g))
+----
+(Root
+	Defines=(DefineSet
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	Rules=(RuleSet
+		(Rule
+			Comments=(Comments)
+			Name="Binding"
+			Tags=(Tags)
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Bind
+						Label="a"
+						Target=(And
+							Left=(Func
+								Name=(Names Op)
+								Args=(Slice (Any))
+								Src=<test.opt:7:6>
+							)
+							Right=(And
+								Left=(MultiBind
+									Labels=(Strings "b" "c" "d")
+									Target=(Func
+										Name=(Names Func)
+										Args=(Slice
+											(Ref Label="a" Src=<test.opt:8:20>)
+										)
+										Src=<test.opt:8:14>
+									)
+									Src=<test.opt:8:6>
+								)
+								Right=(And
+									Left=(MultiBind
+										Labels=(Strings "e" "f")
+										Target=(Func
+											Name=(Names Func)
+											Args=(Slice
+												(Ref Label="a" Src=<test.opt:9:18>)
+												(Ref Label="b" Src=<test.opt:9:21>)
+											)
+											Src=<test.opt:9:12>
+										)
+										Src=<test.opt:9:6>
+									)
+									Right=(Func
+										Name=(Names Func)
+										Args=(Slice
+											(Bind
+												Label="g"
+												Target=(Func
+													Name=(Names Func)
+													Args=(Slice
+														(Ref Label="e" Src=<test.opt:10:20>)
+														(Ref Label="f" Src=<test.opt:10:23>)
+													)
+													Src=<test.opt:10:14>
+												)
+												Src=<test.opt:10:11>
+											)
+										)
+										Src=<test.opt:10:5>
+									)
+									Src=<test.opt:9:5>
+								)
+								Src=<test.opt:8:5>
+							)
+							Src=<test.opt:7:6>
+						)
+						Src=<test.opt:7:3>
+					)
+				)
+				Src=<test.opt:6:1>
+			)
+			Replace=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Func
+						Name=(Names Func)
+						Args=(Slice
+							(Ref Label="a" Src=<test.opt:13:11>)
+							(Ref Label="b" Src=<test.opt:13:14>)
+							(Ref Label="c" Src=<test.opt:13:17>)
+							(Ref Label="d" Src=<test.opt:13:20>)
+							(Ref Label="e" Src=<test.opt:13:23>)
+							(Ref Label="f" Src=<test.opt:13:26>)
+							(Ref Label="g" Src=<test.opt:13:29>)
+						)
+						Src=<test.opt:13:5>
+					)
+				)
+				Src=<test.opt:13:1>
+			)
+			Src=<test.opt:5:1>
 		)
 	)
 )
@@ -791,7 +916,7 @@ test.opt:2:1: expected define statement or rule, found '('
 test.opt:6:7: expected name, found '*'
 test.opt:10:6: expected label, found '*'
 test.opt:14:6: expected expression, found '.'
-test.opt:18:9: expected expression, found '$'
+test.opt:18:10: expected '(', found 'foo'
 test.opt:22:11: expected name, found '*'
 test.opt:26:13: expected expression, found '.'
 test.opt:30:16: expected expression, found ')'
@@ -851,3 +976,28 @@ parse unknown.opt
 define Empty {}
 ----
 unknown file 'unknown.opt'
+
+#
+# Multi-bind errors.
+#
+parse
+# Expected multiple labels.
+[Tag]
+(Op $a:* & $(b):(Func $a)) => (Op)
+
+# Expected multi-bind end paren.
+[Tag]
+(Op $a:* & $(b c:(Func $a)) => (Op)
+
+# Expected label, not multi-bind.
+[Tag]
+(Op $(a b):(Func "foo")) => (Op)
+
+# Multi-bind not allowed in replace pattern.
+[Tag]
+(Op) => (Op $(a b):(Func "foo"))
+----
+test.opt:3:15: multi-bind statement must have more than 1 variable: [b]
+test.opt:7:17: expected label, found ':'
+test.opt:11:6: expected label, found '('
+test.opt:15:14: expected label, found '('

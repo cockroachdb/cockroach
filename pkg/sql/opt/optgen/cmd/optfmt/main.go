@@ -341,6 +341,20 @@ func (p *pp) docSlice(e lang.SliceExpr) pretty.Doc {
 	return doc
 }
 
+// docMultiBindLabels returns a doc for the Labels field of a MultiBindExpr.
+func (p *pp) docMultiBindLabels(e lang.StringsExpr) pretty.Doc {
+	doc := pretty.Nil
+	for i, x := range e {
+		if i == 0 {
+			doc = pretty.Concat(doc, pretty.SoftBreak)
+		} else {
+			doc = pretty.Concat(doc, pretty.Line)
+		}
+		doc = pretty.Concat(doc, pretty.Text(fmt.Sprintf("%s", x)))
+	}
+	return doc
+}
+
 func (p *pp) docOnlyExpr(e lang.Expr) pretty.Doc {
 	switch e := e.(type) {
 	case *lang.ListExpr:
@@ -378,6 +392,14 @@ func (p *pp) docOnlyExpr(e lang.Expr) pretty.Doc {
 			pretty.Text(fmt.Sprintf("$%s:", e.Label)),
 			p.docExpr(e.Target),
 		)
+	case *lang.MultiBindExpr:
+		return pretty.Group(pretty.Fold(pretty.Concat,
+			pretty.Text("$("),
+			pretty.NestT(p.docMultiBindLabels(e.Labels)),
+			pretty.SoftBreak,
+			pretty.Text("):"),
+			p.docExpr(e.Target),
+		))
 	case *lang.AnyExpr:
 		return pretty.Text("*")
 	case *lang.ListAnyExpr:

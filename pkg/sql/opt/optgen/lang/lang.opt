@@ -135,6 +135,11 @@ define Bind {
     Target Expr
 }
 
+define MultiBind {
+    Labels Strings
+    Target Expr
+}
+
 [HasType]
 define Ref {
     Label String
@@ -154,6 +159,12 @@ define Slice {
 [Value]
 define String {
     Value string
+}
+
+# type StringExpr string
+[Slice]
+define Strings {
+    Element String
 }
 
 # type NumberExpr int
