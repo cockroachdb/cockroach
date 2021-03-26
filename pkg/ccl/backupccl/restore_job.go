@@ -604,6 +604,11 @@ func restore(
 		return emptyRowCount, nil
 	}
 
+	details := job.Details().(jobspb.RestoreDetails)
+	if alreadyMigrated := checkForMigratedData(details, dataToRestore); alreadyMigrated {
+		return emptyRowCount, nil
+	}
+
 	mu := struct {
 		syncutil.Mutex
 		highWaterMark     int
@@ -1649,8 +1654,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		}
 		// Reload the details as we may have updated the job.
 		details = r.job.Details().(jobspb.RestoreDetails)
-	}
-	if details.DescriptorCoverage == tree.AllDescriptors {
+
 		if err := r.cleanupTempSystemTables(ctx); err != nil {
 			return err
 		}

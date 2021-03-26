@@ -629,10 +629,9 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 					}
 				}
 
-				// The initial restore will fail, and restart.
+				// The initial restore will return an error, and restart.
 				sqlDBRestore.ExpectErr(t, `injected error: restarting in background`, `RESTORE FROM $1`, LocalFoo)
-				// Expect the job to succeed. If the job fails, it's likely due to
-				// attempting to restore the same system table data twice.
+				// Expect the restore to succeed.
 				sqlDBRestore.CheckQueryResultsRetry(t,
 					`SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE' AND status = 'succeeded'`,
 					[][]string{{"1"}})
