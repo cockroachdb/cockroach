@@ -371,7 +371,6 @@ func (dsp *DistSQLPlanner) Run(
 			// We need to close the planNode tree we translated into a DistSQL plan
 			// before flow.Cleanup, which closes memory accounts that expect to be
 			// emptied.
-			curPlan.execErr = recv.resultWriter.Err()
 			curPlan.close(ctx)
 			flow.Cleanup(ctx)
 		}
