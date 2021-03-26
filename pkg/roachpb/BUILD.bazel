@@ -1,3 +1,5 @@
+# gazelle:exclude string_test.go
+
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -116,17 +118,13 @@ go_test(
         "metadata_replicas_test.go",
         "metadata_test.go",
         "span_group_test.go",
-        "string_test.go",
         "tenant_test.go",
         "version_test.go",
     ],
     embed = [":roachpb"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/cli/exit",
-        "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/roachpb",
         "//pkg/storage/enginepb",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/zerofields",
@@ -152,6 +150,24 @@ go_test(
         "@io_etcd_go_etcd_raft_v3//quorum",
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@io_etcd_go_etcd_raft_v3//tracker",
+    ],
+)
+
+# keep
+go_test(
+    name = "string_test",
+    size = "small",
+    srcs = ["string_test.go"],
+    deps = [
+        ":roachpb",
+        "//pkg/cli/exit",
+        "//pkg/keys",
+        "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
