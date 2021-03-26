@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -277,10 +278,22 @@ func TestAdminRelocateRangeRandom(t *testing.T) {
 
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					DontIgnoreFailureToTransferLease: true,
+				},
+				NodeLiveness: kvserver.NodeLivenessTestingKnobs{
+					// Use a long liveness duration to avoid flakiness under stress on the
+					// lease check performed by `relocateAndCheck`.
+					LivenessDuration: 20 * time.Second,
+				},
+			},
+		},
 	}
-	numNodes, numIterations := 9, 10
+	numNodes, numIterations := 5, 10
 	if util.RaceEnabled {
-		numNodes, numIterations = 4, 1
+		numNodes, numIterations = 3, 1
 	}
 
 	randomRelocationTargets := func() (voterTargets, nonVoterTargets []int) {
