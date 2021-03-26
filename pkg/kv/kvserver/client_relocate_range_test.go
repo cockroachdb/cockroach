@@ -12,8 +12,10 @@ package kvserver_test
 
 import (
 	"context"
+	"math/rand"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -21,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -34,12 +37,16 @@ func relocateAndCheck(
 	voterTargets []roachpb.ReplicationTarget,
 	nonVoterTargets []roachpb.ReplicationTarget,
 ) (retries int) {
+	every := log.Every(1 * time.Second)
 	testutils.SucceedsSoon(t, func() error {
 		err := tc.Servers[0].DB().
 			AdminRelocateRange(
 				context.Background(), startKey.AsRawKey(), voterTargets, nonVoterTargets,
 			)
 		if err != nil {
+			if every.ShouldLog() {
+				log.Infof(context.Background(), "AdminRelocateRange failed with error: %s", err)
+			}
 			retries++
 		}
 		return err
@@ -96,6 +103,25 @@ func requireLeaseAt(
 	})
 }
 
+func usesAtomicReplicationChange(ops []roachpb.ReplicationChange) bool {
+	// There are 4 sets of operations that are executed atomically:
+	// 1. Voter rebalances (ADD_VOTER, REMOVE_VOTER)
+	// 2. Non-voter promoted to voter (ADD_VOTER, REMOVE_NON_VOTER)
+	// 3. Voter demoted to non-voter (ADD_NON_VOTER, REMOVE_VOTER)
+	// 4. Voter swapped with non-voter (ADD_VOTER, REMOVE_NON_VOTER,
+	// ADD_NON_VOTER, REMOVE_VOTER)
+	if len(ops) >= 2 {
+		if ops[0].ChangeType == roachpb.ADD_VOTER && ops[1].ChangeType.IsRemoval() {
+			return true
+		}
+	}
+	if len(ops) == 2 &&
+		ops[0].ChangeType == roachpb.ADD_NON_VOTER && ops[1].ChangeType == roachpb.REMOVE_VOTER {
+		return true
+	}
+	return false
+}
+
 func TestAdminRelocateRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -118,7 +144,7 @@ func TestAdminRelocateRange(t *testing.T) {
 			if ic.err != nil {
 				continue
 			}
-			if len(ic.ops) == 2 && ic.ops[0].ChangeType == roachpb.ADD_VOTER && ic.ops[1].ChangeType == roachpb.REMOVE_VOTER {
+			if usesAtomicReplicationChange(ic.ops) {
 				actAtomic++
 			} else {
 				actSingle += len(ic.ops)
@@ -206,10 +232,7 @@ func TestAdminRelocateRange(t *testing.T) {
 		})
 	}
 
-	// Relocation of non-voting replicas is not done atomically under any
-	// scenario.
-	// TODO(aayush): Update this comment and test once we support atomic swaps of
-	// more than 1 non-voter at a time.
+	// Simple non-voter relocations.
 	{
 		requireNumAtomic(0, 2, func() int {
 			return relocateAndCheck(t, tc, k, tc.Targets(2, 4), tc.Targets(1, 3))
@@ -222,5 +245,76 @@ func TestAdminRelocateRange(t *testing.T) {
 		requireNumAtomic(0, 4, func() int {
 			return relocateAndCheck(t, tc, k, tc.Targets(2, 4), tc.Targets(0, 3))
 		})
+	}
+
+	// Relocation scenarios that require swapping of voters with non-voters.
+	{
+		// Single swap of voter and non-voter.
+		requireNumAtomic(1, 0, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(0, 4), tc.Targets(2, 3))
+		})
+		// Multiple swaps.
+		requireNumAtomic(2, 0, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(2, 3), tc.Targets(0, 4))
+		})
+		// Single promotion of non-voter to a voter.
+		requireNumAtomic(1, 0, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(2, 3, 4), tc.Targets(0))
+		})
+		// Single demotion of voter to a non-voter.
+		requireNumAtomic(1, 0, func() int {
+			return relocateAndCheck(t, tc, k, tc.Targets(2, 4), tc.Targets(0, 3))
+		})
+	}
+}
+
+// TestAdminRelocateRangeRandom runs a series of random relocations on a scratch
+// range and checks to ensure that the relocations were successfully executed.
+func TestAdminRelocateRangeRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					DontIgnoreFailureToTransferLease: true,
+				},
+				NodeLiveness: kvserver.NodeLivenessTestingKnobs{
+					// Use a long liveness duration to avoid flakiness under stress on the
+					// lease check performed by `relocateAndCheck`.
+					LivenessDuration: 20 * time.Second,
+				},
+			},
+		},
+	}
+	numNodes, numIterations := 5, 10
+	if util.RaceEnabled {
+		numNodes, numIterations = 3, 1
+	}
+
+	randomRelocationTargets := func() (voterTargets, nonVoterTargets []int) {
+		targets := make([]int, numNodes)
+		for i := 0; i < numNodes; i++ {
+			targets[i] = i
+		}
+		numVoters := 1 + rand.Intn(numNodes) // Need at least one voter.
+		rand.Shuffle(numNodes, func(i, j int) {
+			targets[i], targets[j] = targets[j], targets[i]
+		})
+
+		return targets[:numVoters], targets[numVoters:]
+	}
+
+	tc := testcluster.StartTestCluster(t, numNodes, args)
+	defer tc.Stopper().Stop(ctx)
+
+	k := keys.MustAddr(tc.ScratchRange(t))
+	for i := 0; i < numIterations; i++ {
+		voters, nonVoters := randomRelocationTargets()
+		relocateAndCheck(t, tc, k, tc.Targets(voters...), tc.Targets(nonVoters...))
 	}
 }
