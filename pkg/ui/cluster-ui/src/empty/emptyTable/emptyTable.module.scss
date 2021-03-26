@@ -6,8 +6,12 @@
   padding: $spacing-large;
   align-items: center;
   text-align: center;
-  max-width: 600px;
+  max-width: 750px;
   margin: 0 auto;
+}
+
+.icon-container {
+  margin-bottom: $spacing-large;
 }
 
 .title {
@@ -15,6 +19,6 @@
 }
 
 .message {
-  color: $colors--title;
+  color: $colors--secondary-text;
   margin-bottom: $spacing-medium;
 }
