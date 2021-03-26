@@ -1069,7 +1069,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					// Don't include tables that aren't in the current database unless
 					// they're virtual, dropped tables, or ones that the user can't see.
-					canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, true /*allowAdding*/)
+					canSeeDescriptor, err := userCanSeeDescriptor(ctx, p, table, db, true /*allowAdding*/)
 					if err != nil {
 						return false, err
 					}
@@ -2480,14 +2480,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				}
 
 				// Now generate rows for user defined types in this database.
-				return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.Immutable, _ string, typDesc *typedesc.Immutable) error {
-					sc, err := p.Descriptors().GetImmutableSchemaByID(
-						ctx, p.txn, typDesc.ParentSchemaID, tree.SchemaLookupFlags{})
-					if err != nil {
-						return err
-					}
-					nspOid := h.NamespaceOid(db.GetID(), sc.Name)
-					typ, err := typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(tree.Name(typDesc.GetName())), p)
+				return forEachTypeDesc(ctx, p, db, func(_ *dbdesc.Immutable, scName string, typDesc *typedesc.Immutable) error {
+					nspOid := h.NamespaceOid(db.GetID(), scName)
+					typ, err := typDesc.MakeTypesT(ctx, tree.NewQualifiedTypeName(db.Name, scName, typDesc.GetName()), p)
 					if err != nil {
 						return err
 					}
