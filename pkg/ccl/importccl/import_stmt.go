@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1852,6 +1853,19 @@ type preparedSchemaMetadata struct {
 	queuedSchemaJobs      []jobspb.JobID
 }
 
+func (r *importResumer) emitImportJobEvent(
+	ctx context.Context, p sql.JobExecContext, status jobs.Status,
+) {
+	// Emit to the event log now that we have completed the prepare step.
+	var importEvent eventpb.Import
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return sql.LogEventForJobs(ctx, p.ExecCfg(), txn, &importEvent, int64(r.job.ID()),
+			r.job.Payload(), p.User(), status)
+	}); err != nil {
+		log.Warningf(ctx, "failed to log event: %v", err)
+	}
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
@@ -1906,7 +1920,36 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 					// Update the job details now that the schemas and table descs have
 					// been "prepared".
-					return r.job.SetDetails(ctx, txn, preparedDetails)
+					err = r.job.SetDetails(ctx, txn, preparedDetails)
+					if err != nil {
+						return err
+					}
+
+					// Update the job record with the schema and table IDs we will be
+					// ingesting into.
+					err = r.job.SetDescriptorIDs(ctx, txn, func(ctx context.Context,
+						descIDs []descpb.ID) ([]descpb.ID, error) {
+						var descriptorIDs []descpb.ID
+						if descIDs == nil {
+							for _, schema := range preparedDetails.Schemas {
+								descriptorIDs = append(descriptorIDs, schema.Desc.GetID())
+							}
+							for _, table := range preparedDetails.Tables {
+								descriptorIDs = append(descriptorIDs, table.Desc.GetID())
+							}
+							return descriptorIDs, nil
+						}
+						log.Warningf(ctx, "unexpected descriptor IDs %+v set in import job %d", descIDs,
+							r.job.ID())
+						return nil, nil
+					})
+					if err != nil {
+						// We don't want to fail the import if we fail to update the
+						// descriptor IDs as this is only for observability.
+						log.Warningf(ctx, "failed to update import job %d with target descriptor IDs",
+							r.job.ID())
+					}
+					return nil
 				})
 			if err != nil {
 				return err
@@ -1925,6 +1968,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 			// Re-initialize details after prepare step.
 			details = r.job.Details().(jobspb.ImportDetails)
+			r.emitImportJobEvent(ctx, p, jobs.StatusRunning)
 		}
 
 		// Create a mapping from schemaID to schemaName.
@@ -2038,6 +2082,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 		}
 	}
+
+	r.emitImportJobEvent(ctx, p, jobs.StatusSucceeded)
 
 	addToFileFormatTelemetry(details.Format.Format.String(), "succeeded")
 	telemetry.CountBucketed("import.rows", r.res.Rows)
@@ -2188,6 +2234,10 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
+
+	// Emit to the event log that the job has started reverting.
+	r.emitImportJobEvent(ctx, p, jobs.StatusReverting)
+
 	details := r.job.Details().(jobspb.ImportDetails)
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
@@ -2225,6 +2275,9 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 			return errors.Wrap(err, "failed to run jobs that drop the imported schemas")
 		}
 	}
+
+	// Emit to the event log that the job has completed reverting.
+	r.emitImportJobEvent(ctx, p, jobs.StatusFailed)
 
 	return nil
 }

@@ -15,6 +15,8 @@ import (
 	"encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -139,6 +141,44 @@ func logEventInternalForSQLStatements(
 		false, /* skipExternalLog */
 		event,
 		!writeToEventLog,
+	)
+}
+
+// LogEventForJobs emits a cluster event in the context of a job.
+func LogEventForJobs(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	txn *kv.Txn,
+	event eventpb.EventPayload,
+	jobID int64,
+	payload jobspb.Payload,
+	user security.SQLUsername,
+	status jobs.Status,
+) error {
+	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+	jobCommon, ok := event.(eventpb.EventWithCommonJobPayload)
+	if !ok {
+		return errors.AssertionFailedf("unknown event type: %T", event)
+	}
+	m := jobCommon.CommonJobDetails()
+	m.JobID = jobID
+	m.JobType = payload.Type().String()
+	m.User = user.Normalized()
+	m.Status = string(status)
+	for _, id := range payload.DescriptorIDs {
+		m.DescriptorIDs = append(m.DescriptorIDs, uint32(id))
+	}
+	m.Description = payload.Description
+
+	// Delegate the storing of the event to the regular event logic.
+	return InsertEventRecord(
+		ctx, execCfg.InternalExecutor,
+		txn,
+		0, /* targetID */
+		int32(execCfg.NodeID.SQLInstanceID()),
+		false, /* skipExternalLog */
+		event,
+		false, /* onlyLog */
 	)
 }
 
