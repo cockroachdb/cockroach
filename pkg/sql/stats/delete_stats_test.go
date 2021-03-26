@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -40,6 +41,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db,
@@ -47,6 +49,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 
 	// The test data must be ordered by CreatedAt DESC so the calculated set of

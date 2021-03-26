@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -41,6 +42,7 @@ func TestGossipInvalidation(t *testing.T) {
 
 	s := tc.Server(0)
 	sc := stats.NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
 		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		s.DB(),
@@ -48,6 +50,7 @@ func TestGossipInvalidation(t *testing.T) {
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 
 	sr0 := sqlutils.MakeSQLRunner(tc.ServerConn(0))
