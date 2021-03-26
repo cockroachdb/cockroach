@@ -378,6 +378,28 @@ func (p *pp) docOnlyExpr(e lang.Expr) pretty.Doc {
 			pretty.Text(fmt.Sprintf("$%s:", e.Label)),
 			p.docExpr(e.Target),
 		)
+	case *lang.LetExpr:
+		var docs []pretty.Doc
+		docs = append(docs, pretty.Text("(Let "))
+		docs = append(docs, pretty.Text("("))
+		for i, x := range e.Labels {
+			d := pretty.Text(fmt.Sprintf("$%s", x))
+			if i == len(e.Labels)-1 {
+				d = pretty.Concat(d, pretty.Text("):"))
+			} else {
+				d = pretty.Concat(d, pretty.Text(" "))
+			}
+			docs = append(docs, d)
+		}
+		docs = append(docs, pretty.SoftBreak)
+		docs = append(docs, p.docExpr(e.Target))
+		docs = append(docs, pretty.Line)
+		docs = append(docs, p.docExpr(e.Result))
+		return pretty.Group(pretty.Fold(pretty.Concat,
+			pretty.NestT(pretty.FillwordsWithSeparator(pretty.Nil, docs...)),
+			pretty.SoftBreak,
+			pretty.Text(")"),
+		))
 	case *lang.AnyExpr:
 		return pretty.Text("*")
 	case *lang.ListAnyExpr:

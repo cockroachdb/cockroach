@@ -13,6 +13,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
@@ -221,6 +222,9 @@ func (g *newRuleGen) genMatch(match lang.Expr, context *contextDecl, noMatch boo
 
 	case *lang.CustomFuncExpr:
 		g.genMatchCustom(t, noMatch)
+
+	case *lang.LetExpr:
+		g.genMatchLet(t, noMatch)
 
 	case *lang.AndExpr:
 		if noMatch {
@@ -685,6 +689,21 @@ func (g *newRuleGen) genMatchCustom(matchCustom *lang.CustomFuncExpr, noMatch bo
 	g.w.write(" {\n")
 }
 
+// genMatchLet generates code for let expression matching.
+func (g *newRuleGen) genMatchLet(let *lang.LetExpr, noMatch bool) {
+	g.genBoundStatements(let)
+
+	if noMatch {
+		g.w.nestIndent("if !")
+	} else {
+		g.w.nestIndent("if ")
+	}
+
+	g.genNestedExpr(let)
+
+	g.w.write(" {\n")
+}
+
 // genNormalizeReplace generates the replace pattern code for normalization
 // rules. Normalization rules recursively call other factory methods in order to
 // construct results. They also need to detect rule invocation cycles when the
@@ -852,6 +871,18 @@ func (g *newRuleGen) genBoundStatements(e lang.Expr) {
 				g.w.newline()
 				g.boundStmts[arg] = label
 			}
+		case *lang.LetExpr:
+			var vars strings.Builder
+			for i, label := range t.Labels {
+				if i != 0 {
+					vars.WriteString(", ")
+				}
+				vars.WriteString(string(label))
+			}
+			customFunc := t.Target.(*lang.CustomFuncExpr)
+			g.w.writeIndent("%s := ", vars.String())
+			g.genCustomFunc(customFunc)
+			g.w.newline()
 		}
 		return e
 	}
@@ -885,6 +916,9 @@ func (g *newRuleGen) genNestedExpr(e lang.Expr) {
 			varName = typed
 		}
 		g.w.write(varName)
+
+	case *lang.LetExpr:
+		g.w.write(string(t.Result.Label))
 
 	case *lang.StringExpr:
 		// Literal string expressions construct DString datums.
