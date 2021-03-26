@@ -11,10 +11,16 @@ package backupccl
 import (
 	"context"
 	fmt "fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -55,6 +61,10 @@ type systemBackupConfiguration struct {
 	// to support the restore (e.g. users that can run the restore, cluster settings
 	// that control how the restore runs, etc...).
 	restoreBeforeData bool
+	// migrationFunc performs the necessary migrations on the system table data in
+	// the crdb_temp staging table before it is loaded into the actual system
+	// table.
+	migrationFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string) error
 	// customRestoreFunc is responsible for restoring the data from a table that
 	// holds the restore system table data into the given system table. If none
 	// is provided then `defaultRestoreFunc` is used.
@@ -92,6 +102,77 @@ func defaultSystemTableRestoreFunc(
 }
 
 // Custom restore functions for different system tables.
+
+// jobsMigrationFunc resets the progress on schema change jobs, and marks all
+// other jobs as reverting.
+func jobsMigrationFunc(
+	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, tempTableName string,
+) (err error) {
+	executor := execCfg.InternalExecutor
+
+	const statesToRevert = `('` + string(jobs.StatusRunning) + `', ` +
+		`'` + string(jobs.StatusPauseRequested) + `', ` +
+		`'` + string(jobs.StatusPaused) + `')`
+
+	jobsToRevert := make([]int64, 0)
+	query := `SELECT id, payload FROM ` + tempTableName + ` WHERE status IN ` + statesToRevert
+	it, err := executor.QueryIteratorEx(
+		ctx, "restore-fetching-job-payloads", txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		query)
+	if err != nil {
+		return errors.Wrap(err, "fetching job payloads")
+	}
+	defer func() {
+		closeErr := it.Close()
+		if err == nil {
+			err = closeErr
+		}
+	}()
+	for {
+		ok, err := it.Next(ctx)
+		if !ok {
+			if err != nil {
+				return err
+			}
+			break
+		}
+
+		r := it.Cur()
+		id, payloadBytes := r[0], r[1]
+		rawJobID, ok := id.(*tree.DInt)
+		if !ok {
+			return errors.Errorf("job: failed to read job id as DInt (was %T)", id)
+		}
+		jobID := int64(*rawJobID)
+
+		payload, err := jobs.UnmarshalPayload(payloadBytes)
+		if err != nil {
+			return errors.Wrap(err, "failed to unmarshal job to restore")
+		}
+		if payload.Type() == jobspb.TypeImport || payload.Type() == jobspb.TypeRestore {
+			jobsToRevert = append(jobsToRevert, jobID)
+		}
+	}
+
+	// Update the status for other jobs.
+	var updateStatusQuery strings.Builder
+	fmt.Fprintf(&updateStatusQuery, "UPDATE %s SET status = $1 WHERE id IN ", tempTableName)
+	fmt.Fprint(&updateStatusQuery, "(")
+	for i, job := range jobsToRevert {
+		if i > 0 {
+			fmt.Fprint(&updateStatusQuery, ", ")
+		}
+		fmt.Fprintf(&updateStatusQuery, "'%d'", job)
+	}
+	fmt.Fprint(&updateStatusQuery, ")")
+
+	if _, err := executor.Exec(ctx, "updating-job-status", txn, updateStatusQuery.String(), jobs.StatusReverting); err != nil {
+		return errors.Wrap(err, "updating restored jobs as reverting")
+	}
+
+	return nil
+}
 
 // When restoring the jobs table we don't want to remove existing jobs, since
 // that includes the restore that we're running.
@@ -178,6 +259,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.JobsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup,
+		migrationFunc:                jobsMigrationFunc,
 		customRestoreFunc:            jobsRestoreFunc,
 	},
 	systemschema.ScheduledJobsTable.GetName(): {
