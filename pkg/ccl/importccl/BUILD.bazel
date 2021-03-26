@@ -73,6 +73,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/timeutil",

@@ -1,0 +1,45 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/eventpb/events.proto";
+
+// Category: Job events
+// Channel: OPS
+//
+// Events in this category pertain to long-running jobs that are orchestrated by
+// a node's job registry. These system processes can create and/or modify stored
+// objects during the course of their execution.
+//
+// A job might choose to emit multiple events during its execution when
+// transitioning from one "state" to another.
+// Egs: IMPORT/RESTORE will emit events on job creation and successful
+// completion. If the job fails, events will be emitted on job creation,
+// failure, and successful revert.
+
+// Import is recorded when an import job is created and successful completion.
+// If the job fails, events will be emitted on job creation, failure, and
+// successful revert.
+message Import {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonJobEventDetails job = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
+
+// Restore is recorded when a restore job is created and successful completion.
+// If the job fails, events will be emitted on job creation, failure, and
+// successful revert.
+message Restore {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonJobEventDetails job = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+}
