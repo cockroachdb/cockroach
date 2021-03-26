@@ -394,7 +394,22 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data, b coldata.Batch) 
 		if len(arrowBitmap) != 0 {
 			vec.Nulls().SetNullBitmap(arrowBitmap, n)
 		} else {
-			vec.Nulls().UnsetNulls()
+			// For types with the canonical type family of Bool, Bytes, Int, or
+			// Float, when there are no nulls, we have a null bitmap with zero
+			// length.
+			if vec.Nulls().MaxNumElements() < n {
+				// The current null bitmap doesn't have enough space, so we need
+				// to allocate a new one.
+				//
+				// Note that this has likely occurred because on the previous
+				// batch there were some nulls and we replaced the null bitmap
+				// with the arrowBitmap which happened to be of insufficient
+				// capacity for the current batch.
+				nulls := coldata.NewNulls(n)
+				vec.SetNulls(&nulls)
+			} else {
+				vec.Nulls().UnsetNulls()
+			}
 		}
 		b.SetSelection(false)
 	}

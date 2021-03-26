@@ -332,6 +332,12 @@ func (n *Nulls) Slice(start int, end int) Nulls {
 	return s
 }
 
+// MaxNumElements returns the maximum number of elements that this Nulls can
+// accommodate.
+func (n *Nulls) MaxNumElements() int {
+	return len(n.nulls) * 8
+}
+
 // NullBitmap returns the null bitmap.
 func (n *Nulls) NullBitmap() []byte {
 	return n.nulls
