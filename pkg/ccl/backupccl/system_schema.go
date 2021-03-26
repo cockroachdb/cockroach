@@ -11,11 +11,21 @@ package backupccl
 import (
 	"context"
 	fmt "fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -102,6 +112,114 @@ func jobsRestoreFunc(
 	systemTableName, tempTableName string,
 ) error {
 	executor := execCfg.InternalExecutor
+
+	const (
+		statesToRevert = `('` + string(jobs.StatusRunning) + `', ` +
+			`'` + string(jobs.StatusPauseRequested) + `', ` +
+			`'` + string(jobs.StatusPaused) + `')`
+	)
+
+	err := func() (err error) {
+		// makeJobsList writes the given jobs as a SQL tuple set to the
+		// given queryBuilder.
+		addJobsListTuple := func(jobIDs []int64, queryBuilder *strings.Builder) {
+			fmt.Fprint(queryBuilder, "(")
+			for i, job := range jobIDs {
+				if i > 0 {
+					fmt.Fprint(queryBuilder, ", ")
+				}
+				fmt.Fprintf(queryBuilder, "'%d'", job)
+			}
+			fmt.Fprint(queryBuilder, ")")
+		}
+
+		jobsToRevert := make([]int64, 0)
+		query := `SELECT id, payload FROM ` + tempTableName + ` WHERE status IN ` + statesToRevert
+		it, err := executor.QueryIteratorEx(
+			ctx, "restore-fetching-job-payloads", txn,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			query)
+		if err != nil {
+			return errors.Wrap(err, "fetching job payloads")
+		}
+		defer func() {
+			closeErr := it.Close()
+			if err == nil {
+				err = closeErr
+			}
+		}()
+		for {
+			ok, err := it.Next(ctx)
+			if !ok {
+				if err != nil {
+					return err
+				}
+				break
+			}
+
+			r := it.Cur()
+			id, payloadBytes := r[0], r[1]
+			rawJobID, ok := id.(*tree.DInt)
+			if !ok {
+				return errors.Errorf(
+					"job: failed to read job id as DInt (was %T)", id)
+			}
+			jobID := int64(*rawJobID)
+
+			payload, err := jobs.UnmarshalPayload(payloadBytes)
+			if err != nil {
+				return errors.Wrap(err, "failed to unmarshal job to restore")
+			}
+			if payload.Type() == jobspb.TypeSchemaChange {
+				details, ok := payload.UnwrapDetails().(jobspb.SchemaChangeDetails)
+				if !ok {
+					return errors.Newf("expected schema change job to have schema change details, got %t",
+						payload.UnwrapDetails())
+				}
+				if len(payload.DescriptorIDs) != 1 {
+					continue
+				}
+				descriptorID := payload.DescriptorIDs[0]
+				desc, err := catalogkv.GetDescriptorByID(ctx, txn, execCfg.Codec, descriptorID)
+				if err != nil {
+					return err
+				}
+				table, ok := desc.(catalog.TableDescriptor)
+				if !ok {
+					continue
+				}
+				allSpans := table.PrimaryIndexSpan(execCfg.Codec)
+				for i := range details.ResumeSpanList {
+					details.ResumeSpanList[i] = jobspb.ResumeSpanList{ResumeSpans: []roachpb.Span{allSpans}}
+				}
+				payload.Details = jobspb.WrapPayloadDetails(details)
+
+				payloadBytes, err := protoutil.Marshal(payload)
+				if err != nil {
+					return err
+				}
+				q := fmt.Sprintf("UPDATE %s SET payload = $1 WHERE id = $2", tempTableName)
+				if _, err := executor.Exec(ctx, "updating-job-progress", txn, q, payloadBytes, jobID); err != nil {
+					return errors.Wrapf(err, "resetting progress for job %d", jobID)
+				}
+			} else {
+				jobsToRevert = append(jobsToRevert, jobID)
+			}
+		}
+
+		// Update the status for other jobs.
+		var updateStatusQuery strings.Builder
+		fmt.Fprintf(&updateStatusQuery, "UPDATE %s SET status = $1 WHERE id IN ", tempTableName)
+		addJobsListTuple(jobsToRevert, &updateStatusQuery)
+		if _, err := executor.Exec(ctx, "updating-job-status", txn, updateStatusQuery.String(), jobs.StatusReverting); err != nil {
+			return errors.Wrap(err, "updating restored jobs as reverting")
+		}
+
+		return nil
+	}()
+	if err != nil {
+		return err
+	}
 
 	// When restoring jobs, don't clear the existing table.
 

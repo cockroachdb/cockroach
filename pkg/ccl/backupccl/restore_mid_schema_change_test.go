@@ -163,6 +163,7 @@ func validateTable(
 
 	var rowCount int
 	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s.%s`, dbName, tableName)).Scan(&rowCount)
+	require.Greater(t, rowCount, 0, "expected table to have some rows")
 	// The number of entries in all indexes should be the same.
 	for _, index := range desc.AllIndexes() {
 		var indexCount int
