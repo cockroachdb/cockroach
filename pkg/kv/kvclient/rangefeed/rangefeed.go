@@ -93,8 +93,13 @@ func newFactory(stopper *stop.Stopper, client kvDB, knobs *TestingKnobs) *Factor
 	}
 }
 
-// RangeFeed constructs a new RangeFeed. The only error which can be returned
-// will indicate that the server is being shut down.
+// RangeFeed constructs a new RangeFeed.
+//
+// The range feed can be stopped via Close(); otherwise, it will stop when the
+// server shuts down.
+//
+// The only error which can be returned will indicate that the server is being
+// shut down.
 func (f *Factory) RangeFeed(
 	ctx context.Context,
 	name string,
