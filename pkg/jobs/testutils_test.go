@@ -149,7 +149,10 @@ func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) fu
 			return ex, nil
 		})
 	return func() {
-		delete(registeredExecutorFactories, name)
+		executorRegistry.Lock()
+		defer executorRegistry.Unlock()
+		delete(executorRegistry.factories, name)
+		delete(executorRegistry.executors, name)
 	}
 }
 
