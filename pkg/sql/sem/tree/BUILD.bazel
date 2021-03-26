@@ -130,7 +130,6 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",

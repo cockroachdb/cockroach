@@ -205,7 +205,20 @@ func checkDistAggregationInfo(
 	txn := kv.NewTxn(ctx, srv.DB(), srv.NodeID())
 
 	// First run a flow that aggregates all the rows without any local stages.
-
+	nonDistFinalOutputTypes := finalOutputTypes
+	if info.FinalRendering != nil {
+		h := tree.MakeTypesOnlyIndexedVarHelper(finalOutputTypes)
+		renderExpr, err := info.FinalRendering(&h, varIdxs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var expr execinfrapb.Expression
+		expr, err = MakeExpression(renderExpr, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		nonDistFinalOutputTypes = []*types.T{expr.LocalExpr.ResolvedType()}
+	}
 	rowsNonDist := runTestFlow(
 		t, srv, txn,
 		makeTableReader(1, numRows+1, 0),
@@ -226,7 +239,7 @@ func checkDistAggregationInfo(
 					{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE},
 				},
 			}},
-			ResultTypes: finalOutputTypes,
+			ResultTypes: nonDistFinalOutputTypes,
 		},
 	)
 
@@ -308,7 +321,7 @@ func checkDistAggregationInfo(
 			t.Fatal(err)
 		}
 		finalProc.Post.RenderExprs = []execinfrapb.Expression{expr}
-
+		finalProc.ResultTypes = []*types.T{expr.LocalExpr.ResolvedType()}
 	}
 
 	procs = append(procs, finalProc)
