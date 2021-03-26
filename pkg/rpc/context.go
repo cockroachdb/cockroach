@@ -43,11 +43,9 @@ import (
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 func init() {
@@ -1059,7 +1057,7 @@ func (ctx *Context) grpcDialNodeInternal(
 			if err := ctx.Stopper.RunAsyncTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					err := ctx.runHeartbeat(conn, target, redialChan)
-					if err != nil && !grpcutil.IsClosedConnection(err) {
+					if err != nil && !grpcutil.IsClosedConnection(err) && !grpcutil.IsAuthError(err) {
 						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 					}
 					ctx.removeConn(conn, thisConnKeys...)
@@ -1175,7 +1173,7 @@ func (ctx *Context) runHeartbeat(
 				err = ping(goCtx)
 			}
 
-			if s, ok := grpcstatus.FromError(errors.UnwrapAll(err)); ok && s.Code() == codes.PermissionDenied {
+			if grpcutil.IsAuthError(err) {
 				returnErr = true
 			}
 
