@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -40,13 +40,14 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
-		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		db,
 		ex,
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 
 	// The test data must be ordered by CreatedAt DESC so the calculated set of
@@ -268,14 +269,6 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 			return DeleteOldStatsForColumns(ctx, ex, txn, tableID, columnIDs)
 		}); err != nil {
 			return err
-		}
-
-		cache.RefreshTableStats(ctx, tableID)
-		for i := range testData {
-			stat := &testData[i]
-			if stat.TableID != tableID {
-				cache.RefreshTableStats(ctx, stat.TableID)
-			}
 		}
 
 		return testutils.SucceedsSoonError(func() error {

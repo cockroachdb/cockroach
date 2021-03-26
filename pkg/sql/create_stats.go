@@ -565,12 +565,6 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	}); err != nil {
 		return err
 	}
-
-	// Refresh the local cache if Gossip is not available.
-	if _, ok := evalCtx.ExecCfg.Gossip.Optional(47925); !ok {
-		evalCtx.ExecCfg.TableStatsCache.RefreshTableStats(ctx, r.tableID)
-	}
-
 	// Record this statistics creation in the event log.
 	if !createStatsPostEvents.Get(&evalCtx.Settings.SV) {
 		return nil

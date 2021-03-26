@@ -100,6 +100,10 @@ type TestServerInterface interface {
 	// The real return type is *gossip.Gossip.
 	GossipI() interface{}
 
+	// RangeFeedFactory returns the range feed factory used by the TestServer.
+	// The real return type is *rangefeed.Factory.
+	RangeFeedFactory() interface{}
+
 	// Clock returns the clock used by the TestServer.
 	Clock() *hlc.Clock
 
