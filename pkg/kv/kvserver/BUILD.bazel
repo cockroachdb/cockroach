@@ -99,7 +99,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/build",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
