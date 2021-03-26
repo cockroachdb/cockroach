@@ -127,6 +127,7 @@ ALL_TESTS = [
     "//pkg/migration/migrationmanager:migrationmanager_test",
     "//pkg/migration/migrations:migrations_test",
     "//pkg/roachpb:roachpb_test",
+    "//pkg/roachpb:string_test",
     "//pkg/rpc/nodedialer:nodedialer_test",
     "//pkg/rpc:rpc_test",
     "//pkg/security:security_test",
