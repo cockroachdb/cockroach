@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,28 +76,6 @@ func TestRangeDescriptorFindReplica(t *testing.T) {
 		} else if a != e {
 			t.Errorf("%d: expected to find %+v in %+v for store %d; got %+v", i, e, desc, e.StoreID, a)
 		}
-	}
-}
-
-func TestRangeDescriptorSafeMessage(t *testing.T) {
-	desc := RangeDescriptor{
-		RangeID:  1,
-		StartKey: RKey("c"),
-		EndKey:   RKey("g"),
-		InternalReplicas: []ReplicaDescriptor{
-			{NodeID: 1, StoreID: 1},
-			{NodeID: 2, StoreID: 2},
-			{NodeID: 3, StoreID: 3},
-		},
-	}
-
-	const expStr = `r1:‹{c-g}› [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`
-
-	if str := redact.Sprint(desc); str != expStr {
-		t.Errorf(
-			"expected meta: %s\n"+
-				"got:          %s",
-			expStr, str)
 	}
 }
 
