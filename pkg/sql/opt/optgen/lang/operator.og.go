@@ -26,10 +26,12 @@ const (
 	ListOp
 	ListAnyOp
 	BindOp
+	MultiVarBindOp
 	RefOp
 	AnyOp
 	SliceOp
 	StringOp
+	StringsOp
 	NumberOp
 	CustomFuncOp
 )

@@ -71,6 +71,23 @@ define FiltersItem {
 )
 =>
 (False)
+
+[TestMultiVarBind]
+(Select
+	$input:*
+	$filters:* &
+	    ($a:(Foo $input); $a) &
+	    ($a,$b,$c,$ok:(SplitFilters $input $filters); $ok) &
+	    ($filtersA,$filtersB,$filtersC,$filtersD,$filtersE,$filtersF,$filtersG,$ok:(SplitFilters $input $filters); $ok) &
+	    ($a,$b,$c,$ok:(SplitFilters $input $filters $long $arg $list); $ok) &
+	    ($filtersA,$filtersB,$filtersC,$filtersD,$ok:(SplitFilters $input $filters $long $arg $list $longer); $ok) &
+	    (IsValid ($filtersX,$filtersY:(SplitFilters $input $filters); $filtersX)) &
+	    (OuterFunc (InnerFunc ($foo,$bar:(SplitFilters $input $filters); $foo))) &
+	    ($foo,$bar,$baz:(Split ($foo,$bar,$baz:(SplitAgain $a $b $c); $a)); $foo)
+)
+=>
+(False)
+
 ----
 ----
 #
@@ -149,6 +166,47 @@ define FiltersItem {
         ) &
         (IsUnorderedGrouping $groupingPrivate)
     $left:* & (Blah)
+)
+=>
+(False)
+
+[TestMultiVarBind]
+(Select
+    $input:*
+    $filters:* &
+        ($a:(Foo $input); $a) &
+        ($a,$b,$c,$ok:(SplitFilters $input $filters); $ok) &
+        ($filtersA,$filtersB,$filtersC,$filtersD,$filtersE,
+            $filtersF,$filtersG,$ok:
+            (SplitFilters $input $filters); $ok
+        ) &
+        ($a,$b,$c,$ok:
+            (SplitFilters $input $filters $long $arg $list); $ok
+        ) &
+        ($filtersA,$filtersB,$filtersC,$filtersD,$ok:
+            (SplitFilters
+                $input
+                $filters
+                $long
+                $arg
+                $list
+                $longer
+            ); $ok
+        ) &
+        (IsValid
+            ($filtersX,$filtersY:
+                (SplitFilters $input $filters); $filtersX
+            )
+        ) &
+        (OuterFunc
+            (InnerFunc
+                ($foo,$bar:(SplitFilters $input $filters); $foo)
+            )
+        ) &
+        ($foo,$bar,$baz:
+            (Split ($foo,$bar,$baz:(SplitAgain $a $b $c); $a));
+            $foo
+        )
 )
 =>
 (False)

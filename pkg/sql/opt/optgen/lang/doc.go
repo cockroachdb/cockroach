@@ -168,6 +168,42 @@ second child is a "True" node, then the "Select" node will be replaced by its
 input. Variables can also be passed as arguments to custom matchers, which are
 described below.
 
+Multi-Variable Binding
+
+A multi-variable bind expression can be used for binding multiple variables to
+the result of a custom function with multiple return values. This expression
+consists of two elements, a binding and a result, separated by a semicolon. The
+binding includes a list of variables to bind followed by a custom function to
+produce the bind values. The result is as variable reference which is the value
+of the expression when evaluated.
+
+For example:
+
+  [SplitSelect]
+  (Select
+    $input:*
+    $filters:* &
+      ($filterA $filterB $ok:(SplitFilters $filters); $ok)
+  )
+  =>
+  (Select (Select $input $filterA) $filterB)
+
+The "$filtersA $filtersB $ok:(SplitFilters $filters)" part indicates that
+$filtersA $filtersB and $ok are bound to the three return values of
+(SplitFilters $filters). The multi-variable bind expression evaluates to the
+value of $ok.
+
+A multi-variable bind expression can also be used in a replace pattern. For
+example:
+
+  [AlterSelect]
+  (Select $input:* $filters:*)
+  =>
+  (Select
+    ($newInput $newFilters:(AlterSelect $input $filters); $newInput)
+    $newFilters
+  )
+
 Matching Names
 
 In addition to simple name matching, a node matcher can match tag names. Any
@@ -503,33 +539,34 @@ terminals correspond to tokens returned by the scanner. Whitespace and
 comment tokens can be freely interleaved between other tokens in the
 grammar.
 
-  root         = tags (define | rule)
-  tags         = '[' IDENT (',' IDENT)* ']'
+  root           = tags (define | rule)
+  tags           = '[' IDENT (',' IDENT)* ']'
 
-  define       = 'define' define-name '{' define-field* '}'
-  define-name  = IDENT
-  define-field = field-name field-type
-  field-name   = IDENT
-  field-type   = IDENT
+  define         = 'define' define-name '{' define-field* '}'
+  define-name    = IDENT
+  define-field   = field-name field-type
+  field-name     = IDENT
+  field-type     = IDENT
 
-  rule         = func '=>' replace
-  match        = func
-  replace      = func | ref
-  func         = '(' func-name arg* ')'
-  func-name    = names | func
-  names        = name ('|' name)*
-  arg          = bind and | ref | and
-  and          = expr ('&' and)
-  expr         = func | not | list | any | name | STRING | NUMBER
-  not          = '^' expr
-  list         = '[' list-child* ']'
-  list-child   = list-any | arg
-  list-any     = '...'
-  bind         = '$' label ':' and
-  ref          = '$' label
-  any          = '*'
-  name         = IDENT
-  label        = IDENT
+  rule           = func '=>' replace
+  match          = func
+  replace        = func | ref
+  func           = '(' func-name arg* ')'
+  func-name      = names | func
+  names          = name ('|' name)*
+  arg            = bind and | ref | and
+  and            = expr ('&' and)
+  expr           = func | not | multi-var-bind | list | any | name | STRING | NUMBER
+  not            = '^' expr
+  list           = '[' list-child* ']'
+  list-child     = list-any | arg
+  list-any       = '...'
+  bind           = '$' label ':' and
+  multi-var-bind = '(' '$' label (',' '$' label)* ':' func ';' ref ')'
+  ref            = '$' label
+  any            = '*'
+  name           = IDENT
+  label          = IDENT
 
 Here are the pseudo-regex definitions for the lexical tokens that aren't
 represented as single-quoted strings above:

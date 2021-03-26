@@ -237,7 +237,7 @@ func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc
 
 	for {
 		if p.scan() == RBRACE {
-			if len(p.comments) > 0 {
+			if p.hasComments() {
 				p.addErr(fmt.Sprintf("comments not allowed before closing }: %v", p.comments))
 				return nil
 			}
@@ -353,12 +353,36 @@ func (p *Parser) parseReplace() Expr {
 }
 
 // func = '(' func-name arg* ')'
-func (p *Parser) parseFunc() Expr {
+// multi-var-bind = '(' '$' label (',' '$' label)* ':' func ';' ref ')'
+func (p *Parser) parseFuncOrMultiVarBind() Expr {
 	if p.scan() != LPAREN {
 		panic("caller should have checked for left parenthesis")
 	}
 
+	// Peek ahead to determine if its a function or a multi-variable bind
+	// expression.
+	tok := p.scan()
+	p.unscan()
+	if tok == DOLLAR {
+		return p.parseMultiVarBind()
+	}
+	return p.parseFuncImpl()
+}
+
+// func = '(' func-name arg* ')'
+func (p *Parser) parseFunc() Expr {
+	if p.scan() != LPAREN {
+		panic("caller should have checked for left parenthesis")
+	}
+	return p.parseFuncImpl()
+}
+
+// func = '(' func-name arg* ')'
+// Note: the leading '(' has already been scanned by parseFuncOrMultiVarBind or
+// parseFunc.
+func (p *Parser) parseFuncImpl() Expr {
 	src := p.src
+
 	name := p.parseFuncName()
 	if name == nil {
 		return nil
@@ -407,6 +431,76 @@ func (p *Parser) parseFuncName() Expr {
 	}
 	p.setComments(e, comments)
 	return e
+}
+
+// multi-var-bind = '(' '$' label (',' '$' label)* ':' func ';' ref ')'
+// Note: the leading '(' has already been scanned by parseFuncOrMultiVarBind.
+func (p *Parser) parseMultiVarBind() Expr {
+	src := p.src
+
+	var labels StringsExpr
+	for {
+		tok := p.scan()
+		p.unscan()
+		if tok == COLON {
+			if p.hasComments() {
+				p.addErr("comments not allowed before ':'")
+				return nil
+			}
+			p.scan()
+			break
+		}
+
+		if len(labels) > 0 && !p.scanToken(COMMA, "','") {
+			return nil
+		}
+
+		if !p.scanToken(DOLLAR, "'$'") {
+			return nil
+		}
+
+		if !p.scanToken(IDENT, "label") {
+			return nil
+		}
+
+		label := StringExpr(p.s.Literal())
+		labels = append(labels, label)
+	}
+
+	if len(labels) == 0 {
+		p.addErr("multi-variable bind expression must assign 1 or more variables")
+	}
+
+	if !p.scanToken(LPAREN, "function") {
+		return nil
+	}
+	p.unscan()
+
+	target := p.parseFunc().(*FuncExpr)
+	if target == nil {
+		return nil
+	}
+
+	if !p.scanToken(SEMICOLON, "';'") {
+		return nil
+	}
+
+	if !p.scanToken(DOLLAR, "ref") {
+		return nil
+	}
+	p.unscan()
+	result := p.parseRef()
+
+	if !p.scanToken(RPAREN, "')'") {
+		return nil
+	}
+
+	return &MultiVarBindExpr{
+		Src:    &src,
+		Labels: labels,
+		Target: target,
+		Result: result,
+	}
 }
 
 // names = name ('|' name)*
@@ -486,7 +580,7 @@ func (p *Parser) parseAnd() Expr {
 	return &AndExpr{Src: src, Left: left, Right: right}
 }
 
-// expr = func | not | list | any | name | STRING | NUMBER
+// expr = func | not | multi-var-bind | list | any | name | STRING | NUMBER
 func (p *Parser) parseExpr() Expr {
 	tok := p.scan()
 	comments := p.getComments()
@@ -494,7 +588,7 @@ func (p *Parser) parseExpr() Expr {
 	switch tok {
 	case LPAREN:
 		p.unscan()
-		e = p.parseFunc()
+		e = p.parseFuncOrMultiVarBind()
 
 	case CARET:
 		p.unscan()

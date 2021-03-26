@@ -46,7 +46,7 @@ define Lt {
 # Define with tags.
 #
 parse
-# Comment on definition with a tag. 
+# Comment on definition with a tag.
 [Tag1, Tag2]
 define Not {
     Input Expr
@@ -55,7 +55,7 @@ define Not {
 (Root
 	Defines=(DefineSet
 		(Define
-			Comments=(Comments # Comment on definition with a tag. )
+			Comments=(Comments # Comment on definition with a tag.)
 			Tags=(Tags Tag1 Tag2)
 			Name="Not"
 			Fields=(DefineFields
@@ -330,6 +330,162 @@ parse
 				Src=<test.opt:10:1>
 			)
 			Src=<test.opt:1:1>
+		)
+	)
+)
+
+#
+# Test multi-variable bind expressions.
+#
+# replace pattern.
+parse
+define Op {
+    Input Expr
+}
+
+[Binding]
+(Op
+  $a:(Op *) &
+    ($b,$c,$d:(Func $a); $d) &
+    (Func ($e,$f:(Func $a $b); $f)) &
+    (Func ($z:(Func $a $b); $z)) &
+    (Func $g:(Func $e $f))
+)
+=>
+(Op (Func $a $b $c $d $e $f $g))
+----
+(Root
+	Defines=(DefineSet
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Comments=(Comments) Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	Rules=(RuleSet
+		(Rule
+			Comments=(Comments)
+			Name="Binding"
+			Tags=(Tags)
+			Match=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Bind
+						Label="a"
+						Target=(And
+							Left=(Func
+								Name=(Names Op)
+								Args=(Slice (Any))
+								Src=<test.opt:7:6>
+							)
+							Right=(And
+								Left=(MultiVarBind
+									Labels=(Strings "b" "c" "d")
+									Target=(Func
+										Name=(Names Func)
+										Args=(Slice
+											(Ref Label="a" Src=<test.opt:8:21>)
+										)
+										Src=<test.opt:8:15>
+									)
+									Result=(Ref Label="d" Src=<test.opt:8:26>)
+									Src=<test.opt:8:5>
+								)
+								Right=(And
+									Left=(Func
+										Name=(Names Func)
+										Args=(Slice
+											(MultiVarBind
+												Labels=(Strings "e" "f")
+												Target=(Func
+													Name=(Names Func)
+													Args=(Slice
+														(Ref Label="a" Src=<test.opt:9:24>)
+														(Ref Label="b" Src=<test.opt:9:27>)
+													)
+													Src=<test.opt:9:18>
+												)
+												Result=(Ref Label="f" Src=<test.opt:9:32>)
+												Src=<test.opt:9:11>
+											)
+										)
+										Src=<test.opt:9:5>
+									)
+									Right=(And
+										Left=(Func
+											Name=(Names Func)
+											Args=(Slice
+												(MultiVarBind
+													Labels=(Strings "z")
+													Target=(Func
+														Name=(Names Func)
+														Args=(Slice
+															(Ref Label="a" Src=<test.opt:10:21>)
+															(Ref Label="b" Src=<test.opt:10:24>)
+														)
+														Src=<test.opt:10:15>
+													)
+													Result=(Ref Label="z" Src=<test.opt:10:29>)
+													Src=<test.opt:10:11>
+												)
+											)
+											Src=<test.opt:10:5>
+										)
+										Right=(Func
+											Name=(Names Func)
+											Args=(Slice
+												(Bind
+													Label="g"
+													Target=(Func
+														Name=(Names Func)
+														Args=(Slice
+															(Ref Label="e" Src=<test.opt:11:20>)
+															(Ref Label="f" Src=<test.opt:11:23>)
+														)
+														Src=<test.opt:11:14>
+													)
+													Src=<test.opt:11:11>
+												)
+											)
+											Src=<test.opt:11:5>
+										)
+										Src=<test.opt:10:5>
+									)
+									Src=<test.opt:9:5>
+								)
+								Src=<test.opt:8:5>
+							)
+							Src=<test.opt:7:6>
+						)
+						Src=<test.opt:7:3>
+					)
+				)
+				Src=<test.opt:6:1>
+			)
+			Replace=(Func
+				Name=(Names Op)
+				Args=(Slice
+					(Func
+						Name=(Names Func)
+						Args=(Slice
+							(Ref Label="a" Src=<test.opt:14:11>)
+							(Ref Label="b" Src=<test.opt:14:14>)
+							(Ref Label="c" Src=<test.opt:14:17>)
+							(Ref Label="d" Src=<test.opt:14:20>)
+							(Ref Label="e" Src=<test.opt:14:23>)
+							(Ref Label="f" Src=<test.opt:14:26>)
+							(Ref Label="g" Src=<test.opt:14:29>)
+						)
+						Src=<test.opt:14:5>
+					)
+				)
+				Src=<test.opt:14:1>
+			)
+			Src=<test.opt:5:1>
 		)
 	)
 )
@@ -851,3 +1007,50 @@ parse unknown.opt
 define Empty {}
 ----
 unknown file 'unknown.opt'
+
+#
+# Multi-variable bind errors.
+#
+parse
+# Expected comma.
+[Tag]
+(Op $a:* & ($a $b:(Func $a); $a)) => (Op)
+
+# Expected comma.
+[Tag]
+(Op $a:* & ($a|$b:(Func $a); $a)) => (Op)
+
+# Expected "$".
+[Tag]
+(Op $a:* & (,$b:(Func $a); $a)) => (Op)
+
+# Expected one or more variable bindings.
+[Tag]
+(Op $a:* & (:(Func $a); $a)) => (Op)
+
+# Expected function.
+[Tag]
+(Op $a:* & ($b,$c: ; $b)) => (Op)
+
+# Expected ref.
+[Tag]
+(Op $a:* & ($b,$c:(Func $a); (Func $b))) => (Op)
+
+# Expected right paren.
+[Tag]
+(Op $a:* & ($b,$c:(Func $a); $b]) => (Op)
+
+# Comments not allowed before ":".
+[Tag]
+(Op) => (Op ($a,
+  # Invalid comment
+  $b:(Func "foo"); $b))
+----
+test.opt:3:16: expected ',', found '$'
+test.opt:7:15: expected ',', found '|'
+test.opt:11:13: expected name, found ','
+test.opt:15:13: expected name, found ':'
+test.opt:19:20: expected function, found ';'
+test.opt:23:30: expected ref, found '('
+test.opt:27:32: expected ')', found ']'
+test.opt:33:4: comments not allowed before ':'

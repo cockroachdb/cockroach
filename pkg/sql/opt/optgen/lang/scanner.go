@@ -62,6 +62,8 @@ const (
 	DOLLAR
 	// COLON is the colon rune: :
 	COLON
+	// SEMICOLON is the semicolon rune: ;
+	SEMICOLON
 	// ASTERISK is the asterisk rune: *
 	ASTERISK
 	// EQUALS is the equals sign rune: =
@@ -196,6 +198,10 @@ func (s *Scanner) Scan() Token {
 	case ':':
 		s.tok = COLON
 		s.lit = ":"
+
+	case ';':
+		s.tok = SEMICOLON
+		s.lit = ";"
 
 	case '*':
 		s.tok = ASTERISK
