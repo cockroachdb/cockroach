@@ -874,6 +874,11 @@ var _ CommandResultClose = &streamingCommandResult{}
 
 // SetColumns is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
+	// The interface allows for cols to be nil, yet the iterator result expects
+	// non-nil value to indicate that it was the column metadata.
+	if cols == nil {
+		cols = colinfo.ResultColumns{}
+	}
 	r.ch <- ieIteratorResult{cols: cols}
 }
 
