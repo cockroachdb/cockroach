@@ -26,8 +26,8 @@ import {
 } from "src/statementsDiagnostics";
 import { ISortedTablePagination } from "../sortedtable";
 import styles from "./statementsPage.module.scss";
+import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { statementsTable } from "src/util/docs";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -296,15 +296,11 @@ export class StatementsPage extends React.Component<
             )}
             sortSetting={this.state.sortSetting}
             onChangeSortSetting={this.changeSortSetting}
-            empty={data.length === 0 && search.length === 0}
-            emptyProps={{
-              title:
-                "There are no statements since this page was last cleared.",
-              description:
-                "Statements help you identify frequently executed or high latency SQL statements. Statements are cleared every hour by default, or according to your configuration.",
-              label: "Learn more",
-              buttonHref: statementsTable,
-            }}
+            renderNoResult={
+              <EmptyStatementsPlaceholder
+                isEmptySearchResults={isEmptySearchResults}
+              />
+            }
             pagination={pagination}
           />
         </section>
