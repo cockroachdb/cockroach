@@ -701,7 +701,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLOGGED UNSPLIT
 %token <str> UPDATE UPSERT UNTIL USE USER USERS USING UUID
 
-%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIRTUAL VISIBLE
+%token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VIEW VARYING VIEWACTIVITY VIRTUAL VISIBLE VOTERS
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -1694,12 +1694,26 @@ alter_relocate_stmt:
       Rows: $5.slct(),
     }
   }
+| ALTER TABLE table_name relocate_kw VOTERS select_stmt
+  {
+    /* SKIP DOC */
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Relocate{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $6.slct(),
+    }
+  }
 
 alter_relocate_index_stmt:
   ALTER INDEX table_index_name relocate_kw select_stmt
   {
     /* SKIP DOC */
     $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $5.slct()}
+  }
+| ALTER INDEX table_index_name relocate_kw VOTERS select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
   }
 
 alter_relocate_lease_stmt:
@@ -12605,6 +12619,7 @@ unreserved_keyword:
 | VARYING
 | VIEW
 | VIEWACTIVITY
+| VOTERS
 | WITHIN
 | WITHOUT
 | WRITE
