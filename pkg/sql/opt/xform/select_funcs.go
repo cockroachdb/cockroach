@@ -1411,56 +1411,24 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 	})
 }
 
-// ExprPair stores a left and right ScalarExpr. ExprPairForSplitDisjunction
-// returns ExprPair, which can be deconstructed later, to avoid extra
-// computation in determining the left and right expression groups.
-type ExprPair struct {
-	left          opt.ScalarExpr
-	right         opt.ScalarExpr
-	itemToReplace *memo.FiltersItem
-}
-
-// ExprPairLeft returns the left ScalarExpr in an ExprPair.
-func (c *CustomFuncs) ExprPairLeft(ep ExprPair) opt.ScalarExpr {
-	return ep.left
-}
-
-// ExprPairRight returns the right ScalarExpr in an ExprPair.
-func (c *CustomFuncs) ExprPairRight(ep ExprPair) opt.ScalarExpr {
-	return ep.right
-}
-
-// ExprPairFiltersItemToReplace returns the original FiltersItem that the
-// ExprPair was generated from. This FiltersItem should be replaced by
-// ExprPairLeft and ExprPairRight in the newly generated filters in
-// SplitDisjunction(AddKey).
-func (c *CustomFuncs) ExprPairFiltersItemToReplace(ep ExprPair) *memo.FiltersItem {
-	return ep.itemToReplace
-}
-
-// ExprPairSucceeded returns true if the ExprPair is not nil.
-func (c *CustomFuncs) ExprPairSucceeded(ep ExprPair) bool {
-	return ep != ExprPair{}
-}
-
 // ExprPairForSplitDisjunction finds the first "interesting" ExprPair in the
 // filters and returns it. If an "interesting" ExprPair is not found, an empty
 // ExprPair is returned.
 //
 // For details on what makes an ExprPair "interesting", see
 // buildExprPairForSplitDisjunction.
-func (c *CustomFuncs) ExprPairForSplitDisjunction(
+func (c *CustomFuncs) SplitDisjunction(
 	sp *memo.ScanPrivate, filters memo.FiltersExpr,
-) ExprPair {
+) (left opt.ScalarExpr, right opt.ScalarExpr, itemToReplace *memo.FiltersItem, ok bool) {
 	for i := range filters {
 		if filters[i].Condition.Op() == opt.OrOp {
-			ep := c.buildExprPairForSplitDisjunction(sp, &filters[i])
-			if (ep != ExprPair{}) {
-				return ep
+			left, right, ok := c.splitDisjunction(sp, &filters[i])
+			if ok {
+				return left, right, &filters[i], true
 			}
 		}
 	}
-	return ExprPair{}
+	return nil, nil, nil, false
 }
 
 // buildExprPairForSplitDisjunction groups disjuction sub-expressions into an
@@ -1502,9 +1470,9 @@ func (c *CustomFuncs) ExprPairForSplitDisjunction(
 // either expression in the pair found is not likely to constrain an index
 // scan. See canMaybeConstrainIndexWithCols for details on how this is
 // determined.
-func (c *CustomFuncs) buildExprPairForSplitDisjunction(
+func (c *CustomFuncs) splitDisjunction(
 	sp *memo.ScanPrivate, filter *memo.FiltersItem,
-) ExprPair {
+) (left opt.ScalarExpr, right opt.ScalarExpr, ok bool) {
 	var leftExprs memo.ScalarListExpr
 	var rightExprs memo.ScalarListExpr
 	var leftColSet opt.ColSet
@@ -1545,14 +1513,10 @@ func (c *CustomFuncs) buildExprPairForSplitDisjunction(
 		len(rightExprs) == 0 ||
 		!c.canMaybeConstrainIndexWithCols(sp, leftColSet) ||
 		!c.canMaybeConstrainIndexWithCols(sp, rightColSet) {
-		return ExprPair{}
+		return nil, nil, false
 	}
 
-	return ExprPair{
-		left:          c.constructOr(leftExprs),
-		right:         c.constructOr(rightExprs),
-		itemToReplace: filter,
-	}
+	return c.constructOr(leftExprs), c.constructOr(rightExprs), true
 }
 
 // canMaybeConstrainIndexWithCols returns true if any indexes on the

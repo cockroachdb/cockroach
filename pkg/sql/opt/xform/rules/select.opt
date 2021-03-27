@@ -118,12 +118,11 @@
         ) &
         (HasStrictKey $input)
     $filters:* &
-        (ExprPairSucceeded
-            $pair:(ExprPairForSplitDisjunction
-                $scanPrivate
-                $filters
-            )
-        )
+        $(
+            leftFilter
+            rightFilter
+            itemToReplace
+        ):(SplitDisjunction $scanPrivate $filters)
 )
 =>
 (DistinctOn
@@ -133,8 +132,8 @@
             (MapFilterCols
                 (ReplaceFiltersItem
                     $filters
-                    (ExprPairFiltersItemToReplace $pair)
-                    (ExprPairLeft $pair)
+                    $itemToReplace
+                    $leftFilter
                 )
                 (OutputCols $input)
                 (OutputCols $leftScan)
@@ -145,8 +144,8 @@
             (MapFilterCols
                 (ReplaceFiltersItem
                     $filters
-                    (ExprPairFiltersItemToReplace $pair)
-                    (ExprPairRight $pair)
+                    $itemToReplace
+                    $rightFilter
                 )
                 (OutputCols $input)
                 (OutputCols $rightScan)
@@ -199,12 +198,11 @@
         ) &
         ^(HasStrictKey $input)
     $filters:* &
-        (ExprPairSucceeded
-            $pair:(ExprPairForSplitDisjunction
-                $scanPrivate
-                $filters
-            )
-        )
+        $(
+            leftFilter
+            rightFilter
+            itemToReplace
+        ):(SplitDisjunction $scanPrivate $filters)
 )
 =>
 (Project
@@ -219,8 +217,8 @@
                 (MapFilterCols
                     (ReplaceFiltersItem
                         $filters
-                        (ExprPairFiltersItemToReplace $pair)
-                        (ExprPairLeft $pair)
+                        $itemToReplace
+                        $leftFilter
                     )
                     $outCols:(UnionCols
                         (OutputCols $input)
@@ -240,8 +238,8 @@
                 (MapFilterCols
                     (ReplaceFiltersItem
                         $filters
-                        (ExprPairFiltersItemToReplace $pair)
-                        (ExprPairRight $pair)
+                        $itemToReplace
+                        $rightFilter
                     )
                     $outCols
                     (OutputCols $rightScan)
