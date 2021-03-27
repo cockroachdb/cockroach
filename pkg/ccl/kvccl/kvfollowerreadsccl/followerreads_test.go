@@ -540,7 +540,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n1 := sqlutils.MakeSQLRunner(tc.Conns[0])
 	n1.Exec(t, `CREATE DATABASE t`)
 	n1.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY)`)
-	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2], 1)`)
+	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1,2], 1)`)
 	// Speed up closing of timestamps, as we'll in order to be able to use
 	// follower_read_timestamp().
 	// Every 0.2s we'll close the timestamp from 0.4s ago. We'll attempt follower reads
@@ -574,7 +574,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	}, entry.Desc().Replicas().Descriptors())
 
 	// Relocate the follower. n2 will no longer have a replica.
-	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,3], 1)`)
+	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1,3], 1)`)
 
 	// Execute the query again and assert the cache is updated. This query will
 	// not be executed as a follower read since it attempts to use n2 which
