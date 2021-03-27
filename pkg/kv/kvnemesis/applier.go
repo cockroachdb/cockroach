@@ -269,16 +269,8 @@ func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.R
 
 func newGetReplicasFn(dbs ...*kv.DB) GetReplicasFn {
 	ctx := context.Background()
-	return func(key roachpb.Key) []roachpb.ReplicationTarget {
+	return func(key roachpb.Key) []roachpb.ReplicaDescriptor {
 		desc := getRangeDesc(ctx, key, dbs...)
-		replicas := desc.Replicas().Descriptors()
-		targets := make([]roachpb.ReplicationTarget, len(replicas))
-		for i, replica := range replicas {
-			targets[i] = roachpb.ReplicationTarget{
-				NodeID:  replica.NodeID,
-				StoreID: replica.StoreID,
-			}
-		}
-		return targets
+		return desc.Replicas().Descriptors()
 	}
 }

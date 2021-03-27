@@ -226,7 +226,7 @@ func GeneratorDataSpan() roachpb.Span {
 
 // GetReplicasFn is a function that returns the current replicas for the range
 // containing a key.
-type GetReplicasFn func(roachpb.Key) []roachpb.ReplicationTarget
+type GetReplicasFn func(roachpb.Key) []roachpb.ReplicaDescriptor
 
 // Generator incrementally constructs KV traffic designed to maximally test edge
 // cases.
@@ -332,12 +332,12 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	key := randKey(rng)
 	current := g.replicasFn(roachpb.Key(key))
 	if len(current) < g.Config.NumNodes {
-		addReplicaFn := makeAddReplicaFn(key, current, false /* atomicSwap */)
+		addReplicaFn := makeAddReplicaFn(key, current, false /* addAndRemove */)
 		addOpGen(&allowed, addReplicaFn, g.Config.Ops.ChangeReplicas.AddReplica)
 	}
 	if len(current) == g.Config.NumReplicas && len(current) < g.Config.NumNodes {
-		atomicSwapReplicaFn := makeAddReplicaFn(key, current, true /* atomicSwap */)
-		addOpGen(&allowed, atomicSwapReplicaFn, g.Config.Ops.ChangeReplicas.AtomicSwapReplica)
+		addAndRemoveReplicaFn := makeAddReplicaFn(key, current, true /* addAndRemove */)
+		addOpGen(&allowed, addAndRemoveReplicaFn, g.Config.Ops.ChangeReplicas.AtomicSwapReplica)
 	}
 	if len(current) > g.Config.NumReplicas {
 		removeReplicaFn := makeRemoveReplicaFn(key, current)
@@ -470,17 +470,19 @@ func randMergeIsSplit(g *generator, rng *rand.Rand) Operation {
 	return merge(key)
 }
 
-func makeRemoveReplicaFn(key string, current []roachpb.ReplicationTarget) opGenFunc {
+func makeRemoveReplicaFn(key string, current []roachpb.ReplicaDescriptor) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		change := roachpb.ReplicationChange{
-			ChangeType: roachpb.REMOVE_VOTER,
-			Target:     current[rng.Intn(len(current))],
+			ChangeType: current[rng.Intn(len(current))].GetRemoveOp(),
+			Target:     current[rng.Intn(len(current))].GetTarget(),
 		}
 		return changeReplicas(key, change)
 	}
 }
 
-func makeAddReplicaFn(key string, current []roachpb.ReplicationTarget, atomicSwap bool) opGenFunc {
+func makeAddReplicaFn(
+	key string, current []roachpb.ReplicaDescriptor, addAndRemove bool,
+) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		candidatesMap := make(map[roachpb.ReplicationTarget]struct{})
 		for i := 0; i < g.Config.NumNodes; i++ {
@@ -488,28 +490,33 @@ func makeAddReplicaFn(key string, current []roachpb.ReplicationTarget, atomicSwa
 			candidatesMap[t] = struct{}{}
 		}
 		for _, replica := range current {
-			delete(candidatesMap, replica)
+			delete(candidatesMap, replica.GetTarget())
 		}
 		var candidates []roachpb.ReplicationTarget
 		for candidate := range candidatesMap {
 			candidates = append(candidates, candidate)
 		}
 		candidate := candidates[rng.Intn(len(candidates))]
+		addOp := roachpb.ADD_VOTER
+		if rng.Intn(2) == 0 {
+			addOp = roachpb.ADD_NON_VOTER
+		}
+
 		changes := []roachpb.ReplicationChange{{
-			ChangeType: roachpb.ADD_VOTER,
+			ChangeType: addOp,
 			Target:     candidate,
 		}}
-		if atomicSwap {
+		if addAndRemove {
 			changes = append(changes, roachpb.ReplicationChange{
-				ChangeType: roachpb.REMOVE_VOTER,
-				Target:     current[rng.Intn(len(current))],
+				ChangeType: current[rng.Intn(len(current))].GetRemoveOp(),
+				Target:     current[rng.Intn(len(current))].GetTarget(),
 			})
 		}
 		return changeReplicas(key, changes...)
 	}
 }
 
-func makeTransferLeaseFn(key string, current []roachpb.ReplicationTarget) opGenFunc {
+func makeTransferLeaseFn(key string, current []roachpb.ReplicaDescriptor) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		target := current[rng.Intn(len(current))]
 		return transferLease(key, target.StoreID)

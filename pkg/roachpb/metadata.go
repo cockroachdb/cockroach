@@ -436,6 +436,23 @@ func (r ReplicaDescriptor) GetType() ReplicaType {
 	return *r.Type
 }
 
+// GetTarget returns the ReplicationTarget of this ReplicaDescriptor.
+func (r ReplicaDescriptor) GetTarget() ReplicationTarget {
+	return ReplicationTarget{
+		NodeID:  r.NodeID,
+		StoreID: r.StoreID,
+	}
+}
+
+// GetRemoveOp returns the ReplicaChangeType that would remove the replica
+// corresponding to this ReplicaDescriptor.
+func (r ReplicaDescriptor) GetRemoveOp() ReplicaChangeType {
+	if r.GetType() == NON_VOTER {
+		return REMOVE_NON_VOTER
+	}
+	return REMOVE_VOTER
+}
+
 // SafeValue implements the redact.SafeValue interface.
 func (r ReplicaType) SafeValue() {}
 
