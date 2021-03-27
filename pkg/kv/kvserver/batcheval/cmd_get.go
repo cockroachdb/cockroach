@@ -32,12 +32,31 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	val, intent, err := storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
+	var val *roachpb.Value
+	var intent *roachpb.Intent
+	var err error
+	if h.MaxSpanRequestKeys < 0 || h.TargetBytes < 0 {
+		// Receipt of a GetRequest with negative MaxSpanRequestKeys or TargetBytes
+		// indicates that the request was part of a batch that has already exhausted
+		// its limit, which means that we should *not* serve the request and return
+		// a ResumeSpan for this GetRequest.
+		//
+		// This mirrors the logic in MVCCScan, though the logic in MVCCScan is
+		// slightly lower in the stack.
+		reply.ResumeSpan = &roachpb.Span{Key: args.Key}
+		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		return result.Result{}, nil
+	}
+	val, intent, err = storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
 		Txn:                   h.Txn,
 		FailOnMoreRecent:      args.KeyLocking != lock.None,
 		LocalUncertaintyLimit: cArgs.LocalUncertaintyLimit,
 	})
+	if val != nil {
+		reply.NumKeys = 1
+		reply.NumBytes = int64(len(val.RawBytes))
+	}
 	if err != nil {
 		return result.Result{}, err
 	}
