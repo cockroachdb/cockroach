@@ -29,10 +29,11 @@ import (
 type relocateNode struct {
 	optColumnsSlot
 
-	relocateLease bool
-	tableDesc     catalog.TableDescriptor
-	index         *descpb.IndexDescriptor
-	rows          planNode
+	relocateLease     bool
+	relocateNonVoters bool
+	tableDesc         catalog.TableDescriptor
+	index             *descpb.IndexDescriptor
+	rows              planNode
 
 	run relocateRun
 }
@@ -82,7 +83,8 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			)
 		}
 		relocation := data[0].(*tree.DArray)
-		if len(relocation.Array) == 0 {
+		if !n.relocateNonVoters && len(relocation.Array) == 0 {
+			// We cannot remove all voters.
 			return false, errors.Errorf("empty relocation array for EXPERIMENTAL_RELOCATE")
 		}
 
@@ -131,6 +133,12 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 
 	if n.relocateLease {
 		if err := params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
+			return false, err
+		}
+	} else if n.relocateNonVoters {
+		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+			params.ctx, rowKey, rangeDesc.Replicas().Voters().ReplicationTargets(), relocationTargets,
+		); err != nil {
 			return false, err
 		}
 	} else {

@@ -61,7 +61,13 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 		b.semaCtx.Properties.Require(emptyScope.context.String(), tree.RejectSpecial)
 
 		texpr := emptyScope.resolveType(split.ExpireExpr, types.String)
-		expiration = b.buildScalar(texpr, emptyScope, nil /* outScope */, nil /* outCol */, nil /* colRefs */)
+		expiration = b.buildScalar(
+			texpr,
+			emptyScope,
+			nil, /* outScope */
+			nil, /* outCol */
+			nil, /* colRefs */
+		)
 	} else {
 		expiration = b.factory.ConstructNull(types.String)
 	}
@@ -175,7 +181,8 @@ func (b *Builder) buildAlterTableRelocate(
 	outScope.expr = b.factory.ConstructAlterTableRelocate(
 		inputScope.expr.(memo.RelExpr),
 		&memo.AlterTableRelocatePrivate{
-			RelocateLease: relocate.RelocateLease,
+			RelocateLease:     relocate.RelocateLease,
+			RelocateNonVoters: relocate.RelocateNonVoters,
 			AlterTableSplitPrivate: memo.AlterTableSplitPrivate{
 				Table:   b.factory.Metadata().AddTable(table, &tn),
 				Index:   index.Ordinal(),

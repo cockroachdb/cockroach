@@ -73,8 +73,9 @@ type Relocate struct {
 	// Each row contains an array with store ids and values for the columns in the
 	// PK or index (or a prefix of the columns).
 	// See docs/RFCS/sql_split_syntax.md.
-	Rows          *Select
-	RelocateLease bool
+	Rows              *Select
+	RelocateLease     bool
+	RelocateNonVoters bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -88,6 +89,8 @@ func (node *Relocate) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.TableOrIndex)
 	if node.RelocateLease {
 		ctx.WriteString(" EXPERIMENTAL_RELOCATE LEASE ")
+	} else if node.RelocateNonVoters {
+		ctx.WriteString(" EXPERIMENTAL_RELOCATE NON_VOTERS ")
 	} else {
 		ctx.WriteString(" EXPERIMENTAL_RELOCATE VOTERS ")
 	}
