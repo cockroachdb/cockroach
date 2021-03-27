@@ -951,7 +951,7 @@ func (e *distSQLSpecExecFactory) ConstructAlterTableUnsplitAll(index cat.Index) 
 }
 
 func (e *distSQLSpecExecFactory) ConstructAlterTableRelocate(
-	index cat.Index, input exec.Node, relocateLease bool,
+	index cat.Index, input exec.Node, relocateLease bool, relocateNonVoters bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: alter table relocate")
 }

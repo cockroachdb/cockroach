@@ -189,6 +189,7 @@ define AlterTableRelocate {
 [Private]
 define AlterTableRelocatePrivate {
     RelocateLease bool
+    RelocateNonVoters bool
     _ AlterTableSplitPrivate
 }
 

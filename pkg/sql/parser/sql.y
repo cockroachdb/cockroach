@@ -666,7 +666,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 
 %token <str> NAN NAME NAMES NATURAL NEVER NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED NOCONTROLJOB
 %token <str> NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING NO_INDEX_JOIN
-%token <str> NONE NORMAL NOT NOTHING NOTNULL NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
+%token <str> NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
@@ -1698,12 +1698,27 @@ alter_relocate_stmt:
       Rows: $6.slct(),
     }
   }
+| ALTER TABLE table_name relocate_kw NON_VOTERS select_stmt
+  {
+    /* SKIP DOC */
+    name := $3.unresolvedObjectName().ToTableName()
+    $$.val = &tree.Relocate{
+      TableOrIndex: tree.TableIndexName{Table: name},
+      Rows: $6.slct(),
+      RelocateNonVoters: true,
+    }
+  }
 
 alter_relocate_index_stmt:
   ALTER INDEX table_index_name relocate_kw voters_kw select_stmt
   {
     /* SKIP DOC */
     $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct()}
+  }
+| ALTER INDEX table_index_name relocate_kw NON_VOTERS select_stmt
+  {
+    /* SKIP DOC */
+    $$.val = &tree.Relocate{TableOrIndex: $3.tableIndexName(), Rows: $6.slct(), RelocateNonVoters: true}
   }
 
 alter_relocate_lease_stmt:
@@ -12441,6 +12456,7 @@ unreserved_keyword:
 | NOCONTROLJOB
 | NOLOGIN
 | NOMODIFYCLUSTERSETTING
+| NON_VOTERS
 | NOVIEWACTIVITY
 | NOWAIT
 | NULLS

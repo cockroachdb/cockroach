@@ -673,8 +673,10 @@ func (*Relocate) StatementType() StatementType { return Rows }
 func (n *Relocate) StatementTag() string {
 	if n.RelocateLease {
 		return "EXPERIMENTAL_RELOCATE LEASE"
+	} else if n.RelocateNonVoters {
+		return "EXPERIMENTAL_RELOCATE NON_VOTERS"
 	}
-	return "EXPERIMENTAL_RELOCATE"
+	return "EXPERIMENTAL_RELOCATE VOTERS"
 }
 
 // StatementType implements the Statement interface.
