@@ -1825,17 +1825,18 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 
 // ConstructAlterTableRelocate is part of the exec.Factory interface.
 func (ef *execFactory) ConstructAlterTableRelocate(
-	index cat.Index, input exec.Node, relocateLease bool,
+	index cat.Index, input exec.Node, relocateLease bool, relocateNonVoters bool,
 ) (exec.Node, error) {
 	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
 	}
 
 	return &relocateNode{
-		relocateLease: relocateLease,
-		tableDesc:     index.Table().(*optTable).desc,
-		index:         index.(*optIndex).desc,
-		rows:          input.(planNode),
+		relocateLease:     relocateLease,
+		relocateNonVoters: relocateNonVoters,
+		tableDesc:         index.Table().(*optTable).desc,
+		index:             index.(*optIndex).desc,
+		rows:              input.(planNode),
 	}, nil
 }
 

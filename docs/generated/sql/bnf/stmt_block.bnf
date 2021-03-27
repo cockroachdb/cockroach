@@ -968,6 +968,7 @@ unreserved_keyword ::=
 	| 'NOCONTROLJOB'
 	| 'NOLOGIN'
 	| 'NOMODIFYCLUSTERSETTING'
+	| 'NON_VOTERS'
 	| 'NOVIEWACTIVITY'
 	| 'NOWAIT'
 	| 'NULLS'

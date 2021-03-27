@@ -1427,6 +1427,10 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		FormatPrivate(f, &t.AlterTableSplitPrivate, nil)
 		if t.RelocateLease {
 			f.Buffer.WriteString(" [lease]")
+		} else if t.RelocateNonVoters {
+			f.Buffer.WriteString(" [non-voters]")
+		} else {
+			f.Buffer.WriteString(" [voters]")
 		}
 
 	case *ControlJobsPrivate:
