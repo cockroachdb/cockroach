@@ -86,9 +86,10 @@ func (node *Relocate) Format(ctx *FmtCtx) {
 		ctx.WriteString("TABLE ")
 	}
 	ctx.FormatNode(&node.TableOrIndex)
-	ctx.WriteString(" EXPERIMENTAL_RELOCATE ")
 	if node.RelocateLease {
-		ctx.WriteString("LEASE ")
+		ctx.WriteString(" EXPERIMENTAL_RELOCATE LEASE ")
+	} else {
+		ctx.WriteString(" EXPERIMENTAL_RELOCATE VOTERS ")
 	}
 	ctx.FormatNode(node.Rows)
 }

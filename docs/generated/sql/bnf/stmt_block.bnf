@@ -1120,6 +1120,7 @@ unreserved_keyword ::=
 	| 'VARYING'
 	| 'VIEW'
 	| 'VIEWACTIVITY'
+	| 'VOTERS'
 	| 'WITHIN'
 	| 'WITHOUT'
 	| 'WRITE'
