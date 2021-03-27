@@ -135,7 +135,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 		}
 	} else {
 		if err := params.p.ExecCfg().DB.AdminRelocateRange(
-			params.ctx, rowKey, relocationTargets, nil, /* nonVoterTargets */
+			params.ctx, rowKey, relocationTargets, rangeDesc.Replicas().NonVoters().ReplicationTargets(),
 		); err != nil {
 			return false, err
 		}
