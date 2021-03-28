@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"github.com/opentracing/opentracing-go/ext"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -1070,9 +1069,7 @@ func (n *Node) setupSpanForIncomingRPC(
 	var newSpan, grpcSpan *tracing.Span
 	if isLocalRequest := grpcutil.IsLocalRequestContext(ctx) && tenID == roachpb.SystemTenantID; isLocalRequest {
 		// This is a local request which circumvented gRPC. Start a span now.
-		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, opName)
-		// Set the same span.kind tag as the gRPC interceptor.
-		newSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
+		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, opName, tracing.WithServerSpanKind)
 	} else {
 		grpcSpan = tracing.SpanFromContext(ctx)
 		if grpcSpan == nil {
