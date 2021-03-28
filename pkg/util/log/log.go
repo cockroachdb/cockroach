@@ -53,8 +53,8 @@ func V(level Level) bool {
 //
 // NOTE: This doesn't take into consideration whether tracing is generally
 // enabled or whether a trace.EventLog or a trace.Trace (i.e. sp.netTr) is
-// attached to ctx. In particular, if some OpenTracing collection is enabled
-// (e.g. LightStep), that, by itself, does NOT cause the expensive messages to
+// attached to ctx. In particular, if OpenTelemetry collection is enabled,
+// that, by itself, does NOT cause the expensive messages to
 // be enabled. "SET tracing" and friends, on the other hand, does cause
 // these messages to be enabled, as it shows that a user has expressed
 // particular interest in a trace.
