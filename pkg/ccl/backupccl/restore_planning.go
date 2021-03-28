@@ -1588,11 +1588,51 @@ func doRestorePlan(
 		)
 	}
 
+	// wasOffline tracks which tables were in an offline or adding state at some
+	// point in the incremental chain, meaning their spans would be seeing
+	// non-transactional bulk-writes. If that backup exported those spans, then it
+	// can't be trusted for that table/index since those bulk-writes can fail to
+	// be caught by backups.
+	wasOffline := make(map[tableAndIndex]hlc.Timestamp)
+
+	for _, m := range mainBackupManifests {
+		spans := roachpb.Spans(m.Spans)
+		for i := range m.Descriptors {
+			if t := descpb.TableFromDescriptor(&m.Descriptors[i], hlc.Timestamp{}); t != nil {
+				for _, mut := range t.Mutations {
+					if idx := mut.GetIndex(); idx != nil {
+						if mut.Direction == descpb.DescriptorMutation_ADD && spans.ContainsKey(keys.TODOSQLCodec.IndexPrefix(uint32(t.ID), uint32(idx.ID))) {
+							k := tableAndIndex{tableID: t.ID, indexID: idx.ID}
+							if _, ok := wasOffline[k]; !ok {
+								wasOffline[k] = m.EndTime
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	sqlDescs, restoreDBs, tenants, err := selectTargets(ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime)
 	if err != nil {
 		return errors.Wrap(err,
 			"failed to resolve targets in the BACKUP location specified by the RESTORE stmt, "+
 				"use SHOW BACKUP to find correct targets")
+	}
+
+	var revalidateIndexes []jobspb.RestoreDetails_RevalidateIndex
+	for _, desc := range sqlDescs {
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		for _, idx := range tbl.GetPublicNonPrimaryIndexes() {
+			if _, ok := wasOffline[tableAndIndex{tableID: desc.GetID(), indexID: idx.ID}]; ok {
+				revalidateIndexes = append(revalidateIndexes, jobspb.RestoreDetails_RevalidateIndex{
+					TableID: desc.GetID(), IndexID: idx.ID,
+				})
+			}
+		}
 	}
 
 	if err := maybeUpgradeTableDescsInSlice(ctx, sqlDescs, restoreStmt.Options.SkipMissingFKs); err != nil {
@@ -1698,6 +1738,9 @@ func doRestorePlan(
 	if err := rewriteTypeDescs(types, descriptorRewrites); err != nil {
 		return err
 	}
+	for i := range revalidateIndexes {
+		revalidateIndexes[i].TableID = descriptorRewrites[revalidateIndexes[i].TableID].ID
+	}
 
 	// Collect telemetry.
 	collectTelemetry := func() {
@@ -1730,6 +1773,7 @@ func doRestorePlan(
 			OverrideDB:         intoDB,
 			DescriptorCoverage: restoreStmt.DescriptorCoverage,
 			Encryption:         encryption,
+			RevalidateIndexes:  revalidateIndexes,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}

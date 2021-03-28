@@ -174,7 +174,20 @@ message RestoreDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"
   ];
   BackupEncryptionOptions encryption = 12;
-  // NEXT ID: 18.
+
+  message RevalidateIndex {
+     uint32 id = 1 [
+      (gogoproto.customname) = "TableID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+    ];
+    uint32 parent_id = 2 [
+      (gogoproto.customname) = "IndexID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+    ];
+  }
+  repeated RevalidateIndex revalidate_indexes = 18 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 19.
 }
 
 message RestoreProgress {
