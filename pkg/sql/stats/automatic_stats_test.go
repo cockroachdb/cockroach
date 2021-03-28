@@ -18,9 +18,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -61,13 +61,14 @@ func TestMaybeRefreshStats(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	descA := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
-		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -140,13 +141,14 @@ func TestAverageRefreshTime(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	tableID := catalogkv.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a").GetID()
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
-		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -156,7 +158,6 @@ func TestAverageRefreshTime(t *testing.T) {
 	curTime := timeutil.Now()
 
 	checkAverageRefreshTime := func(expected time.Duration) error {
-		cache.RefreshTableStats(ctx, tableID)
 		return testutils.SucceedsSoonError(func() error {
 			stats, err := cache.GetTableStats(ctx, tableID)
 			if err != nil {
@@ -173,7 +174,6 @@ func TestAverageRefreshTime(t *testing.T) {
 	// Checks that the most recent statistic was created less than (greater than)
 	// expectedAge time ago if lessThan is true (false).
 	checkMostRecentStat := func(expectedAge time.Duration, lessThan bool) error {
-		cache.RefreshTableStats(ctx, tableID)
 		return testutils.SucceedsSoonError(func() error {
 			stats, err := cache.GetTableStats(ctx, tableID)
 			if err != nil {
@@ -388,13 +388,14 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
-		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	refresher := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -435,13 +436,14 @@ func TestNoRetryOnFailure(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
+		ctx,
 		10, /* cacheSize */
-		gossip.MakeOptionalGossip(s.GossipI().(*gossip.Gossip)),
 		kvDB,
 		executor,
 		keys.SystemSQLCodec,
 		s.LeaseManager().(*lease.Manager),
 		s.ClusterSettings(),
+		s.RangeFeedFactory().(*rangefeed.Factory),
 	)
 	r := MakeRefresher(st, executor, cache, time.Microsecond /* asOfTime */)
 
@@ -519,7 +521,6 @@ func TestDefaultColumns(t *testing.T) {
 func checkStatsCount(
 	ctx context.Context, cache *TableStatisticsCache, tableID descpb.ID, expected int,
 ) error {
-	cache.RefreshTableStats(ctx, tableID)
 	return testutils.SucceedsSoonError(func() error {
 		stats, err := cache.GetTableStats(ctx, tableID)
 		if err != nil {

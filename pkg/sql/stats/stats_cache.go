@@ -14,14 +14,15 @@ import (
 	"context"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -67,6 +69,9 @@ type TableStatisticsCache struct {
 
 	LeaseMgr *lease.Manager
 	Settings *cluster.Settings
+
+	// Used when decoding KV from the range feed.
+	datumAlloc rowenc.DatumAlloc
 }
 
 // The cache stores *cacheEntry objects. The fields are protected by the
@@ -78,18 +83,22 @@ type cacheEntry struct {
 	mustWait bool
 	waitCond sync.Cond
 
-	// If refreshing is true, the current statistics for this table are stale,
-	// and we are in the process of fetching the updated stats from the database.
-	// In the mean time, other callers can use the stale stats and do not need to
-	// wait.
+	// lastRefreshTimestamp is the timestamp at which the last refresh was
+	// requested; note that the refresh may be ongoing.
+	// It is zero for entries that were not refreshed since they were added to the
+	// cache.
+	lastRefreshTimestamp hlc.Timestamp
+
+	// If refreshing is true, we are in the process of fetching the updated stats
+	// from the database.  In the mean time, other callers can use the stale stats
+	// and do not need to wait.
 	//
-	// If a goroutine tries to perform a refresh when a refresh is already
-	// in progress, it will see that refreshing=true and will set the
-	// mustRefreshAgain flag to true before returning. When the original
-	// goroutine that was performing the refresh returns from the database and
-	// sees that mustRefreshAgain=true, it will trigger another refresh.
-	refreshing       bool
-	mustRefreshAgain bool
+	// If a goroutine tries to perform a refresh when a refresh is already in
+	// progress, it will see that refreshing=true and will just update
+	// lastRefreshTimestamp before returning. When the original goroutine that was
+	// performing the refresh returns from the database and sees that the
+	// timestamp was moved, it will trigger another refresh.
+	refreshing bool
 
 	stats []*TableStatistic
 
@@ -100,13 +109,14 @@ type cacheEntry struct {
 // NewTableStatisticsCache creates a new TableStatisticsCache that can hold
 // statistics for <cacheSize> tables.
 func NewTableStatisticsCache(
+	ctx context.Context,
 	cacheSize int,
-	gw gossip.OptionalGossip,
 	db *kv.DB,
 	sqlExecutor sqlutil.InternalExecutor,
 	codec keys.SQLCodec,
 	leaseManager *lease.Manager,
 	settings *cluster.Settings,
+	rangeFeedFactory *rangefeed.Factory,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
 		ClientDB:    db,
@@ -119,27 +129,81 @@ func NewTableStatisticsCache(
 		Policy:      cache.CacheLRU,
 		ShouldEvict: func(s int, key, value interface{}) bool { return s > cacheSize },
 	})
-	// The stat cache requires redundant callbacks as it is using gossip to
-	// signal the presence of new stats, not to actually propagate them.
-	if g, ok := gw.Optional(47925); ok {
-		g.RegisterCallback(
-			gossip.MakePrefixPattern(gossip.KeyTableStatAddedPrefix),
-			tableStatsCache.tableStatAddedGossipUpdate,
-			gossip.Redundant,
-		)
+
+	// Set up a range feed to watch for updates to system.table_statistics.
+
+	statsTablePrefix := codec.TablePrefix(keys.TableStatisticsTableID)
+	statsTableSpan := roachpb.Span{
+		Key:    statsTablePrefix,
+		EndKey: statsTablePrefix.PrefixEnd(),
 	}
+
+	var lastTableID descpb.ID
+	var lastTS hlc.Timestamp
+
+	handleEvent := func(ctx context.Context, kv *roachpb.RangeFeedValue) {
+		tableID, err := decodeTableStatisticsKV(codec, kv, &tableStatsCache.datumAlloc)
+		if err != nil {
+			log.Warningf(ctx, "failed to decode table statistics row %v: %v", kv.Key, err)
+			return
+		}
+		ts := kv.Value.Timestamp
+		// A statistics collection inserts multiple rows in one transaction. We
+		// don't want to call refreshTableStats for each row since it has
+		// non-trivial overhead.
+		if tableID == lastTableID && ts == lastTS {
+			return
+		}
+		lastTableID = tableID
+		lastTS = ts
+		tableStatsCache.refreshTableStats(ctx, tableID, ts)
+	}
+
+	// Notes:
+	//  - the range feed automatically stops on server shutdown, we don't need to
+	//    call Close() ourselves.
+	//  - an error here only happens if the server is already shutting down; we
+	//    can safely ignore it.
+	_, _ = rangeFeedFactory.RangeFeed(
+		ctx,
+		"table-stats-cache",
+		statsTableSpan,
+		db.Clock().Now(),
+		handleEvent,
+	)
+
 	return tableStatsCache
 }
 
-// tableStatAddedGossipUpdate is the gossip callback that fires when a new
-// statistic is available for a table.
-func (sc *TableStatisticsCache) tableStatAddedGossipUpdate(key string, value roachpb.Value) {
-	tableID, err := gossip.TableIDFromTableStatAddedKey(key)
+// decodeTableStatisticsKV decodes the table ID from a range feed event on
+// system.table_statistics.
+func decodeTableStatisticsKV(
+	codec keys.SQLCodec, kv *roachpb.RangeFeedValue, da *rowenc.DatumAlloc,
+) (tableDesc descpb.ID, err error) {
+	tbl := systemschema.TableStatisticsTable
+	// The primary key of table_statistics is (tableID INT, statisticID INT).
+	types := []*types.T{types.Int, types.Int}
+	dirs := []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC}
+	keyVals := make([]rowenc.EncDatum, 2)
+	_, matches, _, err := rowenc.DecodeIndexKey(
+		codec, tbl, tbl.GetPrimaryIndex().IndexDesc(), types, keyVals, dirs, kv.Key,
+	)
 	if err != nil {
-		log.Errorf(context.Background(), "tableStatAddedGossipUpdate(%s) error: %v", key, err)
-		return
+		return 0, err
 	}
-	sc.RefreshTableStats(context.Background(), descpb.ID(tableID))
+	if !matches {
+		return 0, errors.New("descriptor does not match")
+	}
+
+	if err := keyVals[0].EnsureDecoded(types[0], da); err != nil {
+		return 0, err
+	}
+
+	tableID, ok := keyVals[0].Datum.(*tree.DInt)
+	if !ok {
+		return 0, errors.New("invalid tableID value")
+	}
+	return descpb.ID(uint32(*tableID)), nil
 }
 
 // GetTableStats looks up statistics for the requested table ID in the cache,
@@ -267,7 +331,9 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 //  - stats are retrieved from database:
 //  - mutex is locked again and the entry is updated.
 //
-func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID descpb.ID) {
+func (sc *TableStatisticsCache) refreshCacheEntry(
+	ctx context.Context, tableID descpb.ID, ts hlc.Timestamp,
+) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
@@ -279,11 +345,16 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID d
 	if !found || e.err != nil {
 		return
 	}
+	if ts.LessEq(e.lastRefreshTimestamp) {
+		// We already refreshed at this (or a later) timestamp.
+		return
+	}
+	e.lastRefreshTimestamp = ts
 
-	// Don't perform a refresh if a refresh is already in progress, but let that
-	// goroutine know it needs to refresh again.
+	// Don't perform a refresh if a refresh is already in progress; that goroutine
+	// will know it needs to refresh again because we changed the
+	// lastRefreshTimestamp.
 	if e.refreshing {
-		e.mustRefreshAgain = true
 		return
 	}
 	e.refreshing = true
@@ -297,13 +368,15 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID d
 			defer sc.mu.Lock()
 
 			log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
+			// TODO(radu): pass the timestamp and use AS OF SYSTEM TIME.
 			stats, err = sc.getTableStatsFromDB(ctx, tableID)
 			log.VEventf(ctx, 1, "done refreshing statistics for table %d", tableID)
 		}()
-		if !e.mustRefreshAgain {
+		if e.lastRefreshTimestamp.Equal(ts) {
 			break
 		}
-		e.mustRefreshAgain = false
+		// The timestamp has changed; another refresh was requested.
+		ts = e.lastRefreshTimestamp
 	}
 
 	e.stats, e.err = stats, err
@@ -315,23 +388,21 @@ func (sc *TableStatisticsCache) refreshCacheEntry(ctx context.Context, tableID d
 	}
 }
 
-// RefreshTableStats refreshes the cached statistics for the given table ID
-// by fetching the new stats from the database.
-func (sc *TableStatisticsCache) RefreshTableStats(ctx context.Context, tableID descpb.ID) {
+// refreshTableStats refreshes the cached statistics for the given table ID by
+// fetching the new stats from the database.
+func (sc *TableStatisticsCache) refreshTableStats(
+	ctx context.Context, tableID descpb.ID, ts hlc.Timestamp,
+) {
 	log.VEventf(ctx, 1, "refreshing statistics for table %d", tableID)
 	ctx, span := tracing.ForkSpan(ctx, "refresh-table-stats")
 	// Perform an asynchronous refresh of the cache.
 	go func() {
 		defer span.Finish()
-		sc.refreshCacheEntry(ctx, tableID)
+		sc.refreshCacheEntry(ctx, tableID, ts)
 	}()
 }
 
 // InvalidateTableStats invalidates the cached statistics for the given table ID.
-//
-// Note that RefreshTableStats should normally be used instead of this function.
-// This function is used only when we want to guarantee that the next query
-// uses updated stats.
 func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableID descpb.ID) {
 	log.VEventf(ctx, 1, "evicting statistics for table %d", tableID)
 	sc.mu.Lock()
