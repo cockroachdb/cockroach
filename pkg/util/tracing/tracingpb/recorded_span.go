@@ -18,8 +18,7 @@ import (
 	types "github.com/gogo/protobuf/types"
 )
 
-// LogMessageField is the field name used for the opentracing.Span.LogFields()
-// for a log message.
+// LogMessageField is the field name used for the log message in a LogRecord.
 const LogMessageField = "event"
 
 func (s *RecordedSpan) String() string {
