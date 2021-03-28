@@ -1490,7 +1490,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-			return r.publishDescriptors(ctx, txn, descsCol, details)
+			return r.publishDescriptors(ctx, txn, descsCol, details, nil)
 		}
 		if err := descs.Txn(
 			ctx, r.execCfg.Settings, r.execCfg.LeaseManager, r.execCfg.InternalExecutor,
@@ -1570,8 +1570,23 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
 		return errors.Wrap(err, "inserting table statistics")
 	}
+
+	var devalidateIndexes map[descpb.ID][]descpb.IndexID
+	if toValidate := len(details.RevalidateIndexes); toValidate > 0 {
+		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus(fmt.Sprintf("re-validating %d indexes", toValidate)), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		}
+		bad, err := revalidateIndexes(ctx, p.ExecCfg(), r.job, details.TableDescs, details.RevalidateIndexes)
+		if err != nil {
+			return err
+		}
+		devalidateIndexes = bad
+	}
+
 	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-		err = r.publishDescriptors(ctx, txn, descsCol, details)
+		err = r.publishDescriptors(ctx, txn, descsCol, details, devalidateIndexes)
 		return err
 	}
 	if err := descs.Txn(
@@ -1648,6 +1663,72 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	return nil
 }
 
+func revalidateIndexes(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	job *jobs.Job,
+	tables []*descpb.TableDescriptor,
+	indexIDs []jobspb.RestoreDetails_RevalidateIndex,
+) (map[descpb.ID][]descpb.IndexID, error) {
+	indexIDsByTable := make(map[descpb.ID]map[descpb.IndexID]struct{})
+	for _, idx := range indexIDs {
+		if indexIDsByTable[idx.TableID] == nil {
+			indexIDsByTable[idx.TableID] = make(map[descpb.IndexID]struct{})
+		}
+		indexIDsByTable[idx.TableID][idx.IndexID] = struct{}{}
+	}
+
+	// We don't actually need the 'historical' read the way the schema change does
+	// since our table is offline.
+	var runner sql.HistoricalInternalExecTxnRunner = func(ctx context.Context, fn sql.InternalExecFn) error {
+		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			ie := job.MakeSessionBoundInternalExecutor(ctx, sql.NewFakeSessionData()).(*sql.InternalExecutor)
+			return fn(ctx, txn, ie)
+		})
+	}
+
+	invalidIndexes := make(map[descpb.ID][]descpb.IndexID)
+
+	for _, tbl := range tables {
+		indexes := indexIDsByTable[tbl.ID]
+		if len(indexes) == 0 {
+			continue
+		}
+		tableDesc := tabledesc.NewBuilder(tbl).BuildExistingMutableTable()
+
+		var forward, inverted []*descpb.IndexDescriptor
+		for _, idx := range tableDesc.AllIndexes() {
+			if _, ok := indexes[idx.GetID()]; ok {
+				switch idx.GetType() {
+				case descpb.IndexDescriptor_FORWARD:
+					forward = append(forward, idx.IndexDesc())
+				case descpb.IndexDescriptor_INVERTED:
+					inverted = append(inverted, idx.IndexDesc())
+				}
+			}
+		}
+		if len(forward) > 0 {
+			if err := sql.ValidateForwardIndexes(ctx, tableDesc.MakePublic(), forward, runner, false, true); err != nil {
+				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
+					invalidIndexes[tableDesc.ID] = invalid.Indexes
+				} else {
+					return nil, err
+				}
+			}
+		}
+		if len(inverted) > 0 {
+			if err := sql.ValidateInvertedIndexes(ctx, execCfg.Codec, tableDesc.MakePublic(), inverted, runner, true); err != nil {
+				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
+					invalidIndexes[tableDesc.ID] = append(invalidIndexes[tableDesc.ID], invalid.Indexes...)
+				} else {
+					return nil, err
+				}
+			}
+		}
+	}
+	return invalidIndexes, nil
+}
+
 // ReportResults implements JobResultsReporter interface.
 func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
 	select {
@@ -1713,7 +1794,11 @@ func insertStats(
 // from r.job as the call to r.job.SetDetails will overwrite the job details
 // with a new value even if this transaction does not commit.
 func (r *restoreResumer) publishDescriptors(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, details jobspb.RestoreDetails,
+	ctx context.Context,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	details jobspb.RestoreDetails,
+	devalidateIndexes map[descpb.ID][]descpb.IndexID,
 ) (err error) {
 	if details.DescriptorsPublished {
 		return nil
@@ -1741,7 +1826,6 @@ func (r *restoreResumer) publishDescriptors(
 		return errors.Errorf("version mismatch for descriptor %d, expected version %d, got %v",
 			read.GetID(), read.GetVersion(), exp)
 	}
-
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
 	for _, tbl := range details.TableDescs {
@@ -1752,12 +1836,24 @@ func (r *restoreResumer) publishDescriptors(
 		if err := checkVersion(mutTable, tbl.Version); err != nil {
 			return err
 		}
+		badIndexes := devalidateIndexes[mutTable.ID]
+		for _, badIdx := range badIndexes {
+			found, err := mutTable.FindIndexWithID(badIdx)
+			if err != nil {
+				return err
+			}
+			newIdx := protoutil.Clone(found.IndexDesc()).(*descpb.IndexDescriptor)
+			mutTable.RemovePublicNonPrimaryIndex(found.Ordinal())
+			if err := mutTable.AddIndexMutation(newIdx, descpb.DescriptorMutation_ADD); err != nil {
+				return err
+			}
+		}
 		allMutDescs = append(allMutDescs, mutTable)
 		newTables = append(newTables, mutTable.TableDesc())
 		// For cluster restores, all the jobs are restored directly from the jobs
 		// table, so there is no need to re-create ongoing schema change jobs,
 		// otherwise we'll create duplicate jobs.
-		if details.DescriptorCoverage != tree.AllDescriptors {
+		if details.DescriptorCoverage != tree.AllDescriptors || len(badIndexes) > 0 {
 			// Convert any mutations that were in progress on the table descriptor
 			// when the backup was taken, and convert them to schema change jobs.
 			if err := createSchemaChangeJobsFromMutations(ctx,

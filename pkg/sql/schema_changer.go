@@ -2012,7 +2012,7 @@ func (sc *SchemaChanger) txn(
 func (sc *SchemaChanger) txnWithModified(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) (descsWithNewVersions []lease.IDVersion, _ error) {
-	ie := sc.ieFactory(ctx, newFakeSessionData())
+	ie := sc.ieFactory(ctx, NewFakeSessionData())
 	if err := descs.Txn(ctx, sc.settings, sc.leaseMgr, ie, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
@@ -2041,7 +2041,7 @@ func createSchemaChangeEvalCtx(
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 ) extendedEvalContext {
 
-	sd := newFakeSessionData()
+	sd := NewFakeSessionData()
 
 	evalCtx := extendedEvalContext{
 		// Make a session tracing object on-the-fly. This is OK
@@ -2084,7 +2084,10 @@ func createSchemaChangeEvalCtx(
 	return evalCtx
 }
 
-func newFakeSessionData() *sessiondata.SessionData {
+// NewFakeSessionData returns "fake" session data for use in internal queries
+// that are not run on behalf of a user session, such as those run during the
+// steps of background jobs and schema changes.
+func NewFakeSessionData() *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
 		SessionData: sessiondatapb.SessionData{
 			// The database is not supposed to be needed in schema changes, as there
