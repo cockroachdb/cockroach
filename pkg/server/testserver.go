@@ -336,6 +336,14 @@ func (ts *TestServer) Gossip() *gossip.Gossip {
 	return nil
 }
 
+// RangeFeedFactory is part of serverutils.TestServerInterface.
+func (ts *TestServer) RangeFeedFactory() interface{} {
+	if ts != nil {
+		return ts.sqlServer.execCfg.RangeFeedFactory
+	}
+	return (*rangefeed.Factory)(nil)
+}
+
 // Clock returns the clock used by the TestServer.
 func (ts *TestServer) Clock() *hlc.Clock {
 	if ts != nil {

@@ -1853,6 +1853,8 @@ func (m *Manager) watchForRangefeedUpdates(
 		}
 	}
 	// Ignore errors here because they indicate that the server is shutting down.
+	// Also note that the range feed automatically shuts down when the server
+	// shuts down, so we don't need to call Close() ourselves.
 	_, _ = m.rangeFeedFactory.RangeFeed(
 		ctx, "lease", descriptorTableSpan, m.getResolvedTimestamp(), handleEvent,
 	)
