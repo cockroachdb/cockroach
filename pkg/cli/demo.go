@@ -105,14 +105,23 @@ func insertPair(pair regionPair, latency int) {
 	regionToLatency[pair.regionB] = latency
 }
 
+// Round-trip latencies collected from http://cloudping.co on 2019-09-11.
+var regionRoundTripLatencies = map[regionPair]int{
+	{regionA: "us-east1", regionB: "us-west1"}:     66,
+	{regionA: "us-east1", regionB: "europe-west1"}: 64,
+	{regionA: "us-west1", regionB: "europe-west1"}: 146,
+}
+
+var regionOneWayLatencies = make(map[regionPair]int)
+
 func init() {
+	// We record one-way latencies next, because the logic in our delayingConn
+	// and delayingListener is in terms of one-way network delays.
+	for pair, latency := range regionRoundTripLatencies {
+		regionOneWayLatencies[pair] = latency / 2
+	}
 	regionToRegionToLatency = make(map[string]map[string]int)
-	// Latencies collected from http://cloudping.co on 2019-09-11.
-	for pair, latency := range map[regionPair]int{
-		{regionA: "us-east1", regionB: "us-west1"}:     66,
-		{regionA: "us-east1", regionB: "europe-west1"}: 64,
-		{regionA: "us-west1", regionB: "europe-west1"}: 146,
-	} {
+	for pair, latency := range regionOneWayLatencies {
 		insertPair(pair, latency)
 		insertPair(regionPair{
 			regionA: pair.regionB,
