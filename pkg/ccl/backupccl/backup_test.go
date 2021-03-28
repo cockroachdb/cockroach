@@ -3254,11 +3254,39 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	defer jobs.TestingSetAdoptAndCancelIntervals(5*time.Millisecond, 5*time.Millisecond)()
+
 	const numAccounts = 10
 	const numBackups = 4
 	windowSize := int(numAccounts / 3)
 
-	_, tc, sqlDB, dir, cleanupFn := BackupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	blockBackfill := make(chan struct{})
+	defer close(blockBackfill)
+
+	backfillWaiting := make(chan struct{})
+	defer close(backfillWaiting)
+
+	ctx, tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(
+		t, singleNode, 0, InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+						select {
+						case backfillWaiting <- struct{}{}:
+						case <-time.After(time.Second * 5):
+							panic("timeout blocking in knob")
+						}
+						select {
+						case <-blockBackfill:
+						case <-time.After(time.Second * 5):
+							panic("timeout blocking in knob")
+						}
+						return nil
+					},
+				},
+			}},
+		},
+	)
 	defer cleanupFn()
 	args := base.TestServerArgs{ExternalIODir: dir}
 	rng, _ := randutil.NewPseudoRand()
@@ -3284,7 +3312,17 @@ func TestBackupRestoreIncremental(t *testing.T) {
 				fmt.Fprintf(&buf, `(%d, %d, '%s')`, id, backupNum, payload)
 			}
 			sqlDB.Exec(t, buf.String())
-
+			createErr := make(chan error)
+			go func() {
+				defer close(createErr)
+				_, err := sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`CREATE INDEX balance_idx_%d ON data.bank (balance)`, backupNum+1))
+				createErr <- err
+			}()
+			select {
+			case <-backfillWaiting:
+			case err := <-createErr:
+				t.Fatal(err)
+			}
 			checksums = append(checksums, checksumBankPayload(t, sqlDB))
 
 			backupDir := fmt.Sprintf("nodelocal://0/%d", backupNum)
@@ -3293,6 +3331,8 @@ func TestBackupRestoreIncremental(t *testing.T) {
 				from = fmt.Sprintf(` INCREMENTAL FROM %s`, strings.Join(backupDirs, `,`))
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE data.bank TO '%s' %s`, backupDir, from))
+			blockBackfill <- struct{}{}
+			require.NoError(t, <-createErr)
 
 			backupDirs = append(backupDirs, fmt.Sprintf(`'%s'`, backupDir))
 		}
@@ -3337,6 +3377,27 @@ func TestBackupRestoreIncremental(t *testing.T) {
 			if checksum != checksums[i-1] {
 				t.Fatalf("checksum mismatch at index %d: got %d expected %d",
 					i-1, checksum, checksums[i])
+			}
+			for j := i; j > 1; j-- {
+				var res int64
+				for i := 0; i < 5; i++ {
+					if err := sqlDBRestore.DB.QueryRowContext(ctx,
+						fmt.Sprintf(`SELECT count(*) FROM data.bank@balance_idx_%d`, j-1),
+					).Scan(&res); err != nil {
+						if !strings.Contains(err.Error(), `not found`) {
+							t.Fatal(err)
+						}
+						t.Log("index doesn't exist yet")
+						time.Sleep(time.Second)
+						continue
+					}
+					break
+				}
+				var expected int64
+				sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.bank@primary`).Scan(&expected)
+				if res != expected {
+					t.Fatalf("got %d, expected %d", res, expected)
+				}
 			}
 		}
 	}
@@ -6949,7 +7010,7 @@ func TestRestoreTypeDescriptorsRollBack(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `
-CREATE DATABASE db; 
+CREATE DATABASE db;
 CREATE TYPE db.typ AS ENUM();
 CREATE TABLE db.table (k INT PRIMARY KEY, v db.typ);
 `)

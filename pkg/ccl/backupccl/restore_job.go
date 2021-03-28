@@ -1438,7 +1438,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-			return r.publishDescriptors(ctx, txn, descsCol, details)
+			return r.publishDescriptors(ctx, txn, descsCol, details, nil)
 		}
 		if err := descs.Txn(
 			ctx, r.execCfg.Settings, r.execCfg.LeaseManager, r.execCfg.InternalExecutor,
@@ -1517,8 +1517,23 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
 		return errors.Wrap(err, "inserting table statistics")
 	}
+
+	var devalidateIndexes map[descpb.ID][]descpb.IndexID
+	if toValidate := len(details.RevalidateIndexes); toValidate > 0 {
+		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus(fmt.Sprintf("re-validating %d indexes", toValidate)), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		}
+		bad, err := revalidateIndexes(ctx, p.ExecCfg(), details.TableDescs, details.RevalidateIndexes)
+		if err != nil {
+			return err
+		}
+		devalidateIndexes = bad
+	}
+
 	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-		err = r.publishDescriptors(ctx, txn, descsCol, details)
+		err = r.publishDescriptors(ctx, txn, descsCol, details, devalidateIndexes)
 		return err
 	}
 	if err := descs.Txn(
@@ -1592,6 +1607,65 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	return nil
 }
 
+func revalidateIndexes(
+	ctx context.Context, execCfg *sql.ExecutorConfig, tables []*descpb.TableDescriptor, indexIDs []jobspb.RestoreDetails_RevalidateIndex,
+) (map[descpb.ID][]descpb.IndexID, error) {
+	indexIDsByTable := make(map[descpb.ID]map[descpb.IndexID]struct{})
+	for _, idx := range indexIDs {
+		if indexIDsByTable[idx.TableID] == nil {
+			indexIDsByTable[idx.TableID] = make(map[descpb.IndexID]struct{})
+		}
+		indexIDsByTable[idx.TableID][idx.IndexID] = struct{}{}
+	}
+
+	// We don't actually need the 'historical' read the way the schema change does
+	// since our table is offline.
+	var runner sql.HistoricalInternalExecTxnRunner = func(ctx context.Context, fn sql.InternalExecFn) error {
+		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return fn(ctx, txn, execCfg.InternalExecutor)
+		})
+	}
+
+	invalidIndexes := make(map[descpb.ID][]descpb.IndexID)
+
+	for _, tbl := range tables {
+		indexes := indexIDsByTable[tbl.ID]
+		if len(indexes) == 0 {
+			continue
+		}
+		tableDesc := tabledesc.NewBuilder(tbl).BuildExistingMutableTable()
+
+		var forward, inverted []*descpb.IndexDescriptor
+		for _, idx := range tableDesc.AllIndexes() {
+			if _, ok := indexes[idx.GetID()]; ok {
+				switch idx.GetType() {
+				case descpb.IndexDescriptor_FORWARD:
+					forward = append(forward, idx.IndexDesc())
+				case descpb.IndexDescriptor_INVERTED:
+					inverted = append(inverted, idx.IndexDesc())
+				}
+			}
+		}
+		if len(forward) > 0 {
+			if err := sql.ValidateForwardIndexes(ctx, tableDesc.MakePublic(), forward, runner, false, true); err != nil {
+				if invalid, ok := err.(sql.InvalidIndexesError); ok {
+					invalidIndexes[tableDesc.ID] = invalid.Indexes
+				} else {
+					return nil, err
+				}
+			}
+		}
+		if len(inverted) > 0 {
+			if err := sql.ValidateInvertedIndexes(ctx, execCfg.Codec, tableDesc, inverted, runner); err != nil {
+				// TODO(dt): collect the IDs of all indexes that fail instead of returning
+				// an error as soon as one fails, then mark just those for rebuilding.
+				return nil, err
+			}
+		}
+	}
+	return invalidIndexes, nil
+}
+
 // ReportResults implements JobResultsReporter interface.
 func (r *restoreResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
 	select {
@@ -1657,7 +1731,7 @@ func insertStats(
 // from r.job as the call to r.job.SetDetails will overwrite the job details
 // with a new value even if this transaction does not commit.
 func (r *restoreResumer) publishDescriptors(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, details jobspb.RestoreDetails,
+	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, details jobspb.RestoreDetails, devalidateIndexes map[descpb.ID][]descpb.IndexID,
 ) (err error) {
 	if details.DescriptorsPublished {
 		return nil
@@ -1695,6 +1769,15 @@ func (r *restoreResumer) publishDescriptors(
 		}
 		if err := checkVersion(mutTable, tbl.Version); err != nil {
 			return err
+		}
+		badIndexes := devalidateIndexes[mutTable.ID]
+		for _, badIdx := range badIndexes {
+			found, err := mutTable.FindIndexWithID(badIdx)
+			if err != nil {
+				return err
+			}
+			mutTable.RemovePublicNonPrimaryIndex(found.Ordinal())
+			mutTable.AddIndexMutation(found.IndexDesc(), descpb.DescriptorMutation_ADD)
 		}
 		allMutDescs = append(allMutDescs, mutTable)
 		newTables = append(newTables, mutTable.TableDesc())

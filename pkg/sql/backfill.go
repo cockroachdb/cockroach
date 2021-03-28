@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -135,6 +136,26 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 			// We need to re-create the evalCtx since the txn may retry.
 			evalCtx := createSchemaChangeEvalCtx(ctx, sc.execCfg, readAsOf, sc.ieFactory)
 			return retryable(ctx, txn, &evalCtx)
+		})
+	}
+	return runner
+}
+
+// InternalExecFn is the type of functions that operates using an internalExecutor.
+type InternalExecFn func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error
+
+// HistoricalInternalExecTxnRunner is like historicalTxnRunner except it only
+// passes the fn the exported InternalExecutor instead of the whole unexported
+// extendedEvalContenxt, so it can be implemented outside pkg/sql.
+type HistoricalInternalExecTxnRunner func(ctx context.Context, fn InternalExecFn) error
+
+// makeFixedTimestampRunner creates a HistoricalTxnRunner suitable for use by the helpers.
+func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(readAsOf hlc.Timestamp) HistoricalInternalExecTxnRunner {
+	runner := func(ctx context.Context, retryable InternalExecFn) error {
+		return sc.fixedTimestampTxn(ctx, readAsOf, func(ctx context.Context, txn *kv.Txn) error {
+			// We need to re-create the evalCtx since the txn may retry.
+			ie := createSchemaChangeEvalCtx(ctx, sc.execCfg, readAsOf, sc.ieFactory).InternalExecutor.(*InternalExecutor)
+			return retryable(ctx, txn, ie)
 		})
 	}
 	return runner
@@ -1452,16 +1473,16 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	}
 
 	grp := ctxgroup.WithContext(ctx)
-	runHistoricalTxn := sc.makeFixedTimestampRunner(readAsOf)
+	runHistoricalTxn := sc.makeFixedTimestampInternalExecRunner(readAsOf)
 
 	if len(forwardIndexes) > 0 {
 		grp.GoCtx(func(ctx context.Context) error {
-			return sc.validateForwardIndexes(ctx, tableDesc, forwardIndexes, runHistoricalTxn)
+			return ValidateForwardIndexes(ctx, tableDesc, forwardIndexes, runHistoricalTxn, true /* withFirstMutationPubic */, false /* gatherAllInvalid */)
 		})
 	}
 	if len(invertedIndexes) > 0 {
 		grp.GoCtx(func(ctx context.Context) error {
-			return sc.validateInvertedIndexes(ctx, tableDesc, invertedIndexes, runHistoricalTxn)
+			return ValidateInvertedIndexes(ctx, sc.execCfg.Codec, tableDesc, invertedIndexes, runHistoricalTxn)
 		})
 	}
 	if err := grp.Wait(); err != nil {
@@ -1471,20 +1492,32 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	return nil
 }
 
-// validateInvertedIndexes checks that the indexes have entries for
+type InvalidIndexesError struct {
+	Indexes []descpb.IndexID
+}
+
+func (e InvalidIndexesError) Error() string {
+	return fmt.Sprintf("found %d invalid indexes", len(e.Indexes))
+}
+
+// ValidateInvertedIndexes checks that the indexes have entries for
 // all the items of data in rows.
 //
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely.
 // Instead it uses the provided runHistoricalTxn which can operate
 // at the historical fixed timestamp for checks.
-func (sc *SchemaChanger) validateInvertedIndexes(
+func ValidateInvertedIndexes(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	indexes []*descpb.IndexDescriptor,
-	runHistoricalTxn historicalTxnRunner,
+	runHistoricalTxn HistoricalInternalExecTxnRunner,
 ) error {
 	grp := ctxgroup.WithContext(ctx)
+	sess := sessiondata.InternalExecutorOverride{
+		User: newFakeSessionData().User(),
+	}
 
 	expectedCount := make([]int64, len(indexes))
 	countReady := make([]chan struct{}, len(indexes))
@@ -1502,10 +1535,10 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			// distributed execution and avoid bypassing the SQL decoding
 			start := timeutil.Now()
 			var idxLen int64
-			span := tableDesc.IndexSpan(sc.execCfg.Codec, idx.ID)
+			span := tableDesc.IndexSpan(codec, idx.ID)
 			key := span.Key
 			endKey := span.EndKey
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ *extendedEvalContext) error {
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, _ *InternalExecutor) error {
 				for {
 					kvs, err := txn.Scan(ctx, key, endKey, 1000000)
 					if err != nil {
@@ -1545,8 +1578,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 			start := timeutil.Now()
 			col := idx.InvertedColumnName()
 
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
-				ie := evalCtx.InternalExecutor.(*InternalExecutor)
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
 				var stmt string
 				if geoindex.IsEmptyConfig(&idx.GeoConfig) {
 					stmt = fmt.Sprintf(
@@ -1564,8 +1596,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 				if idx.IsPartial() {
 					stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.Predicate)
 				}
-				row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn,
-					sessiondata.InternalExecutorOverride{}, stmt)
+				row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn, sess, stmt)
 				if err != nil {
 					return err
 				}
@@ -1586,20 +1617,29 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 	return grp.Wait()
 }
 
-// validateForwardIndexes checks that the indexes have entries for all the rows.
+// ValidateForwardIndexes checks that the indexes have entries for all the rows.
 //
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely.
 // Instead it uses the provided runHistoricalTxn which can operate
-// at the historical fixed timestamp for checks.
-func (sc *SchemaChanger) validateForwardIndexes(
+// at the historical fixed timestamp for checks. Typically it fails as soon as
+// any index fails validation as this usually means the schema change should
+// rollback. However, if gatherAllInvalid is true, it instead accumulates all
+// the indexes which fail and returns them together.
+func ValidateForwardIndexes(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	indexes []*descpb.IndexDescriptor,
-	runHistoricalTxn historicalTxnRunner,
+	runHistoricalTxn HistoricalInternalExecTxnRunner,
+	withFirstMutationPublic bool,
+	gatherAllInvalid bool,
 ) error {
 	grp := ctxgroup.WithContext(ctx)
+	sess := sessiondata.InternalExecutorOverride{
+		User: newFakeSessionData().User(),
+	}
 
+	invalid := make(chan descpb.IndexID, len(indexes))
 	var tableRowCount int64
 	partialIndexExpectedCounts := make(map[descpb.IndexID]int64, len(indexes))
 
@@ -1613,17 +1653,21 @@ func (sc *SchemaChanger) validateForwardIndexes(
 
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
-			// Make the mutations public in an in-memory copy of the descriptor and
-			// add it to the Collection's synthetic descriptors, so that we can use
-			// SQL below to perform the validation.
-			desc, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
-			if err != nil {
-				return err
+			var desc catalog.TableDescriptor = tableDesc
+			if withFirstMutationPublic {
+				// Make the mutations public in an in-memory copy of the descriptor and
+				// add it to the Collection's synthetic descriptors, so that we can use
+				// SQL below to perform the validation.
+				var err error
+				desc, err = tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
+				if err != nil {
+					return err
+				}
 			}
 
 			// Retrieve the row count in the index.
 			var idxLen int64
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
+			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
 				query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.ID)
 				// If the index is a partial index the predicate must be added
 				// as a filter to the query to force scanning the index.
@@ -1631,9 +1675,8 @@ func (sc *SchemaChanger) validateForwardIndexes(
 					query = fmt.Sprintf(`%s WHERE %s`, query, idx.Predicate)
 				}
 
-				ie := evalCtx.InternalExecutor.(*InternalExecutor)
 				return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-					row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, sessiondata.InternalExecutorOverride{}, query)
+					row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, sess, query)
 					if err != nil {
 						return err
 					}
@@ -1677,6 +1720,10 @@ func (sc *SchemaChanger) validateForwardIndexes(
 				}
 
 				if idxLen != expectedCount {
+					if gatherAllInvalid {
+						invalid <- idx.ID
+						return nil
+					}
 					// TODO(vivek): find the offending row and include it in the error.
 					return pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
 						"duplicate key value violates unique constraint %q",
@@ -1698,18 +1745,21 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		var tableRowCountTime time.Duration
 		start := timeutil.Now()
 
-		// The query to count the expected number of rows can reference columns
-		// added earlier in the same mutation. Make the mutations public in an
-		// in-memory copy of the descriptor and add it to the Collection's synthetic
-		// descriptors, so that we can use SQL below to perform the validation.
-		descI, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
-		if err != nil {
-			return err
+		var desc catalog.TableDescriptor = tableDesc
+		if withFirstMutationPublic {
+			// The query to count the expected number of rows can reference columns
+			// added earlier in the same mutation. Make the mutations public in an
+			// in-memory copy of the descriptor and add it to the Collection's synthetic
+			// descriptors, so that we can use SQL below to perform the validation.
+			descI, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
+			if err != nil {
+				return err
+			}
+			desc = descI.(*tabledesc.Mutable)
 		}
-		desc := descI.(*tabledesc.Mutable)
 
 		// Count the number of rows in the table.
-		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, evalCtx *extendedEvalContext) error {
+		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie *InternalExecutor) error {
 			var s strings.Builder
 			for _, idx := range indexes {
 				// For partial indexes, count the number of rows in the table
@@ -1724,9 +1774,8 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			// query plan that uses the indexes being backfilled.
 			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.GetID(), desc.GetPrimaryIndexID())
 
-			ie := evalCtx.InternalExecutor.(*InternalExecutor)
 			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-				cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sessiondata.InternalExecutorOverride{}, query)
+				cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, sess, query)
 				if err != nil {
 					return err
 				}
@@ -1755,7 +1804,18 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		return nil
 	})
 
-	return grp.Wait()
+	if err := grp.Wait(); err != nil {
+		return err
+	}
+	close(invalid)
+	invalidErr := InvalidIndexesError{}
+	for i := range invalid {
+		invalidErr.Indexes = append(invalidErr.Indexes, i)
+	}
+	if len(invalidErr.Indexes) > 0 {
+		return invalidErr
+	}
+	return nil
 }
 
 // backfillIndexes fills the missing columns in the indexes of the
