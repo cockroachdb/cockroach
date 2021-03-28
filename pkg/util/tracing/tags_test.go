@@ -14,22 +14,17 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
-	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	otelsdk "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
-
-type mockTracerManager struct{}
-
-func (*mockTracerManager) Name() string             { return "mock " }
-func (*mockTracerManager) Close(opentracing.Tracer) {}
 
 func TestLogTags(t *testing.T) {
 	tr := NewTracer()
-	rec := zipkin.NewInMemoryRecorder()
-	shadowTracer, err := zipkin.NewTracer(rec)
-	require.NoError(t, err)
-	tr.setShadowTracer(&mockTracerManager{}, shadowTracer)
+	sr := tracetest.NewSpanRecorder()
+	otelTr := otelsdk.NewTracerProvider(otelsdk.WithSpanProcessor(sr)).Tracer("test")
+	tr.SetOpenTelemetryTracer(otelTr)
 
 	l := logtags.SingleTagBuffer("tag1", "val1")
 	l = l.Add("tag2", "val2")
@@ -41,12 +36,13 @@ func TestLogTags(t *testing.T) {
 			tags: _verbose=1 tag1=val1 tag2=val2
 	`))
 	{
-		exp := opentracing.Tags(map[string]interface{}{"tag1": "val1", "tag2": "val2"})
-		require.Equal(t,
-			exp,
-			rec.GetSpans()[0].Tags,
-		)
-		rec.Reset()
+		require.Len(t, sr.Ended(), 1)
+		otelSpan := sr.Ended()[0]
+		exp := []attribute.KeyValue{
+			{Key: "tag1", Value: attribute.StringValue("val1")},
+			{Key: "tag2", Value: attribute.StringValue("val2")},
+		}
+		require.Equal(t, exp, otelSpan.Attributes())
 	}
 
 	RegisterTagRemapping("tag1", "one")
@@ -61,12 +57,13 @@ func TestLogTags(t *testing.T) {
 	`))
 
 	{
-		exp := opentracing.Tags(map[string]interface{}{"one": "val1", "two": "val2"})
-		require.Equal(t,
-			exp,
-			rec.GetSpans()[0].Tags,
-		)
-		rec.Reset()
+		require.Len(t, sr.Ended(), 2)
+		otelSpan := sr.Ended()[1]
+		exp := []attribute.KeyValue{
+			{Key: "one", Value: attribute.StringValue("val1")},
+			{Key: "two", Value: attribute.StringValue("val2")},
+		}
+		require.Equal(t, exp, otelSpan.Attributes())
 	}
 
 	sp3 := tr.StartSpan("baz", WithLogTags(l), WithForceRealSpan())
@@ -77,12 +74,12 @@ func TestLogTags(t *testing.T) {
 			tags: _verbose=1 one=val1 two=val2
 	`))
 	{
-		exp := opentracing.Tags(map[string]interface{}{"one": "val1", "two": "val2"})
-		require.Equal(t,
-			exp,
-			rec.GetSpans()[0].Tags,
-		)
-		rec.Reset()
+		require.Len(t, sr.Ended(), 3)
+		otelSpan := sr.Ended()[2]
+		exp := []attribute.KeyValue{
+			{Key: "one", Value: attribute.StringValue("val1")},
+			{Key: "two", Value: attribute.StringValue("val2")},
+		}
+		require.Equal(t, exp, otelSpan.Attributes())
 	}
-
 }
