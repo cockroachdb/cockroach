@@ -187,7 +187,7 @@ var opWeights = []int{
 	addColumn:               1,
 	addConstraint:           0, // TODO(spaskob): unimplemented
 	addForeignKeyConstraint: 0,
-	addRegion:               0, // TODO(otan): re-enable after fixing SHOW REGIONS FROM DATABASE
+	addRegion:               1,
 	addUniqueConstraint:     0,
 	createIndex:             1,
 	createSequence:          1,
@@ -487,12 +487,21 @@ func (og *operationGenerator) addRegion(tx *pgx.Tx) (string, error) {
 			regionResult.regionNamesInDatabase[idx],
 		), nil
 	}
-	// Choose a region not yet in the cluster and add it.
+	// Here we have a region that is not yet marked as public on the enum.
+	// Double check this first.
 	idx := og.params.rng.Intn(len(regionResult.regionNamesNotInDatabase))
+	region := regionResult.regionNamesNotInDatabase[idx]
+	valuePresent, err := enumMemberPresent(tx, tree.RegionEnum, string(region))
+	if err != nil {
+		return "", err
+	}
+	if valuePresent {
+		og.expectedExecErrors.add(pgcode.DuplicateObject)
+	}
 	return fmt.Sprintf(
 		`ALTER DATABASE %s ADD REGION "%s"`,
 		database,
-		regionResult.regionNamesNotInDatabase[idx],
+		region,
 	), nil
 }
 
