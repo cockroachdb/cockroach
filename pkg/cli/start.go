@@ -1075,6 +1075,9 @@ func getClientGRPCConn(
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
 	})
+	if cfg.TestingKnobs.Server != nil {
+		rpcContext.Knobs = cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs
+	}
 	addr, err := addrWithDefaultHost(cfg.AdvertiseAddr)
 	if err != nil {
 		stopper.Stop(ctx)
