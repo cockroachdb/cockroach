@@ -1145,8 +1145,8 @@ func synthesizeTargetsByChangeType(
 // maybeLeaveAtomicChangeReplicas transitions out of the joint configuration if
 // the descriptor indicates one. This involves running a distributed transaction
 // updating said descriptor, the result of which will be returned. The
-// descriptor returned from this method will contain replicas of type LEARNER
-// and VOTER_FULL only.
+// descriptor returned from this method will contain replicas of type LEARNER,
+// NON_VOTER, and VOTER_FULL only.
 func maybeLeaveAtomicChangeReplicas(
 	ctx context.Context, s *Store, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
@@ -1176,7 +1176,7 @@ func maybeLeaveAtomicChangeReplicas(
 
 // maybeLeaveAtomicChangeReplicasAndRemoveLearners transitions out of the joint
 // config (if there is one), and then removes all learners. After this function
-// returns, all remaining replicas will be of type VOTER_FULL.
+// returns, all remaining replicas will be of type VOTER_FULL or NON_VOTER.
 func maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor,
 ) (*roachpb.RangeDescriptor, error) {
