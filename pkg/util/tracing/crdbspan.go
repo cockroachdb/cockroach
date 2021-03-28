@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
-	"github.com/opentracing/opentracing-go"
 )
 
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
@@ -95,7 +94,7 @@ type crdbSpanMu struct {
 	// this Span.
 	// TODO(radu): perhaps we want a recording to capture all the tags (even
 	// those that were set before recording started)?
-	tags opentracing.Tags
+	tags map[string]interface{}
 
 	// The Span's associated baggage.
 	baggage map[string]string
@@ -298,7 +297,7 @@ func (s *crdbSpan) setTagLocked(key string, value interface{}) {
 	}
 
 	if s.mu.tags == nil {
-		s.mu.tags = make(opentracing.Tags)
+		s.mu.tags = make(map[string]interface{})
 	}
 	s.mu.tags[key] = value
 }

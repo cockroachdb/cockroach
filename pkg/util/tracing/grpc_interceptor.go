@@ -18,11 +18,8 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/ext"
+	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -40,6 +37,9 @@ func (w metadataCarrier) Set(key, val string) {
 	// As such, since the HTTP_HEADERS format is case-insensitive anyway, we
 	// blindly lowercase the key (which is guaranteed to work in the
 	// Inject/Extract sense per the OpenTracing spec).
+	//
+	// TODO(andrei): The comment above references the OpenTracing spec, but we
+	// don't use OpenTracing any more. See if this is still relevant.
 	key = strings.ToLower(key)
 	w.MD[key] = append(w.MD[key], val)
 }
@@ -66,7 +66,7 @@ func extractSpanMeta(ctx context.Context, tracer *Tracer) (SpanMeta, error) {
 }
 
 // spanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
-// of RPCs, deciding for which operations the gRPC opentracing interceptor should
+// of RPCs, deciding for which operations the gRPC tracing interceptor should
 // create a span.
 func spanInclusionFuncForServer(t *Tracer, spanMeta SpanMeta) bool {
 	// If there is an incoming trace on the RPC (spanMeta) or the tracer is
@@ -78,23 +78,13 @@ func spanInclusionFuncForServer(t *Tracer, spanMeta SpanMeta) bool {
 
 // setSpanTags sets one or more tags on the given span according to the
 // error.
-func setSpanTags(sp *Span, err error, client bool) {
-	c := otgrpc.ErrorClass(err)
-	code := codes.Unknown
-	if s, ok := status.FromError(err); ok {
-		code = s.Code()
-	}
-	sp.SetTag("response_code", code)
-	sp.SetTag("response_class", c)
+func setSpanTags(sp *Span, err error) {
+	s, _ := status.FromError(err)
+	sp.SetStatus(codes.Error, s.Message())
 	if err == nil {
 		return
 	}
-	if client || c == otgrpc.ServerError {
-		sp.SetTag(string(ext.Error), true)
-	}
 }
-
-var gRPCComponentTag = opentracing.Tag{Key: string(ext.Component), Value: "gRPC"}
 
 // ServerInterceptor returns a grpc.UnaryServerInterceptor suitable
 // for use in a grpc.NewServer call.
@@ -131,13 +121,11 @@ func ServerInterceptor(tracer *Tracer) grpc.UnaryServerInterceptor {
 			info.FullMethod,
 			WithParentAndManualCollection(spanMeta),
 		)
-		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
-		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 
 		resp, err = handler(ctx, req)
 		if err != nil {
-			setSpanTags(serverSpan, err, false)
+			setSpanTags(serverSpan, err)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return resp, err
@@ -175,8 +163,6 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 			info.FullMethod,
 			WithParentAndManualCollection(spanMeta),
 		)
-		serverSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
-		serverSpan.SetTag(ext.SpanKindRPCServer.Key, ext.SpanKindRPCServer.Value)
 		defer serverSpan.Finish()
 		ss = &tracingServerStream{
 			ServerStream: ss,
@@ -184,7 +170,7 @@ func StreamServerInterceptor(tracer *Tracer) grpc.StreamServerInterceptor {
 		}
 		err = handler(srv, ss)
 		if err != nil {
-			setSpanTags(serverSpan, err, false)
+			setSpanTags(serverSpan, err)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return err
@@ -201,7 +187,7 @@ func (ss *tracingServerStream) Context() context.Context {
 }
 
 // spanInclusionFuncForClient is used as a SpanInclusionFunc for the client-side
-// of RPCs, deciding for which operations the gRPC opentracing interceptor should
+// of RPCs, deciding for which operations the gRPC tracing interceptor should
 // create a span.
 //
 // We use this to circumvent the interceptor's work when tracing is
@@ -262,14 +248,12 @@ func ClientInterceptor(tracer *Tracer, init func(*Span)) grpc.UnaryClientInterce
 			method,
 			WithParentAndAutoCollection(parent),
 		)
-		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
-		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
 		defer clientSpan.Finish()
 		ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		err := invoker(ctx, method, req, resp, cc, opts...)
 		if err != nil {
-			setSpanTags(clientSpan, err, true)
+			setSpanTags(clientSpan, err)
 			clientSpan.Recordf("error: %s", err)
 		}
 		return err
@@ -312,14 +296,12 @@ func StreamClientInterceptor(tracer *Tracer, init func(*Span)) grpc.StreamClient
 			method,
 			WithParentAndAutoCollection(parent),
 		)
-		clientSpan.SetTag(gRPCComponentTag.Key, gRPCComponentTag.Value)
-		clientSpan.SetTag(ext.SpanKindRPCClient.Key, ext.SpanKindRPCClient.Value)
 		init(clientSpan)
 		ctx = injectSpanMeta(ctx, tracer, clientSpan)
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			setSpanTags(clientSpan, err, true)
+			setSpanTags(clientSpan, err)
 			clientSpan.Finish()
 			return cs, err
 		}
@@ -335,10 +317,9 @@ func newTracingClientStream(
 	isFinished := new(int32)
 	*isFinished = 0
 	finishFunc := func(err error) {
-		// The current OpenTracing specification forbids finishing a span more than
-		// once. Since we have multiple code paths that could concurrently call
-		// `finishFunc`, we need to add some sort of synchronization to guard against
-		// multiple finishing.
+		//  Since we have multiple code paths that could concurrently call
+		//  `finishFunc`, we need to add some sort of synchronization to guard
+		//  against multiple finishing.
 		if !atomic.CompareAndSwapInt32(isFinished, 0, 1) {
 			return
 		}
@@ -346,7 +327,7 @@ func newTracingClientStream(
 		defer clientSpan.Finish()
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			setSpanTags(clientSpan, err, true)
+			setSpanTags(clientSpan, err)
 		}
 	}
 	go func() {

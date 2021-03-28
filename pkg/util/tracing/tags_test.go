@@ -14,22 +14,16 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/logtags"
-	"github.com/opentracing/opentracing-go"
-	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/oteltest"
 )
-
-type mockTracerManager struct{}
-
-func (*mockTracerManager) Name() string             { return "mock " }
-func (*mockTracerManager) Close(opentracing.Tracer) {}
 
 func TestLogTags(t *testing.T) {
 	tr := NewTracer()
-	rec := zipkin.NewInMemoryRecorder()
-	shadowTracer, err := zipkin.NewTracer(rec)
-	require.NoError(t, err)
-	tr.setShadowTracer(&mockTracerManager{}, shadowTracer)
+	sr := oteltest.SpanRecorder{}
+	otelTr := oteltest.NewTracerProvider(oteltest.WithSpanRecorder(&sr)).Tracer("test")
+	tr.setShadowTracer(otelTr)
 
 	l := logtags.SingleTagBuffer("tag1", "val1")
 	l = l.Add("tag2", "val2")
@@ -41,12 +35,13 @@ func TestLogTags(t *testing.T) {
 			tags: _verbose=1 tag1=val1 tag2=val2
 	`))
 	{
-		exp := opentracing.Tags(map[string]interface{}{"tag1": "val1", "tag2": "val2"})
-		require.Equal(t,
-			exp,
-			rec.GetSpans()[0].Tags,
-		)
-		rec.Reset()
+		require.Len(t, sr.Completed(), 1)
+		otelSpan := sr.Completed()[0]
+		exp := map[attribute.Key]attribute.Value{
+			"tag1": attribute.StringValue("val1"),
+			"tag2": attribute.StringValue("val2"),
+		}
+		require.Equal(t, exp, otelSpan.Attributes())
 	}
 
 	RegisterTagRemapping("tag1", "one")
@@ -61,12 +56,13 @@ func TestLogTags(t *testing.T) {
 	`))
 
 	{
-		exp := opentracing.Tags(map[string]interface{}{"one": "val1", "two": "val2"})
-		require.Equal(t,
-			exp,
-			rec.GetSpans()[0].Tags,
-		)
-		rec.Reset()
+		require.Len(t, sr.Completed(), 2)
+		otelSpan := sr.Completed()[1]
+		exp := map[attribute.Key]attribute.Value{
+			"one": attribute.StringValue("val1"),
+			"two": attribute.StringValue("val2"),
+		}
+		require.Equal(t, exp, otelSpan.Attributes())
 	}
 
 	sp3 := tr.StartSpan("baz", WithLogTags(l), WithForceRealSpan())
@@ -77,12 +73,12 @@ func TestLogTags(t *testing.T) {
 			tags: _verbose=1 one=val1 two=val2
 	`))
 	{
-		exp := opentracing.Tags(map[string]interface{}{"one": "val1", "two": "val2"})
-		require.Equal(t,
-			exp,
-			rec.GetSpans()[0].Tags,
-		)
-		rec.Reset()
+		require.Len(t, sr.Completed(), 3)
+		otelSpan := sr.Completed()[2]
+		exp := map[attribute.Key]attribute.Value{
+			"one": attribute.StringValue("val1"),
+			"two": attribute.StringValue("val2"),
+		}
+		require.Equal(t, exp, otelSpan.Attributes())
 	}
-
 }

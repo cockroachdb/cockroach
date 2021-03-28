@@ -11,18 +11,17 @@ require (
 	github.com/Azure/go-autorest/autorest/to v0.3.0
 	github.com/Azure/go-autorest/autorest/validation v0.2.0 // indirect
 	github.com/BurntSushi/toml v0.3.1
-	github.com/DataDog/datadog-go v4.4.0+incompatible // indirect
 	github.com/DataDog/zstd v1.4.8 // indirect
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
 	github.com/PuerkitoBio/goquery v1.5.1
 	github.com/Shopify/sarama v1.27.2
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
+	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/VividCortex/ewma v1.1.1
 	github.com/abourget/teamcity v0.0.0-00010101000000-000000000000
 	github.com/andy-kimball/arenaskl v0.0.0-20200617143215-f701008588b9
 	github.com/andybalholm/cascadia v1.2.0 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20200610220642-670890229854
-	github.com/apache/thrift v0.0.0-20181211084444-2b7365c54f82 // indirect
 	github.com/armon/circbuf v0.0.0-20150827004946-bbbad097214e
 	github.com/aws/aws-sdk-go v1.36.33
 	github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e
@@ -60,6 +59,7 @@ require (
 	github.com/emicklei/dot v0.15.0
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
+	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/go-swagger/go-swagger v0.26.1
 	github.com/gofrs/uuid v3.3.0+incompatible // indirect
@@ -83,7 +83,6 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.3.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
-	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgconn v1.8.0
 	github.com/jackc/pgproto3/v2 v2.0.7
@@ -102,7 +101,6 @@ require (
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
 	github.com/lib/pq v1.8.0
 	github.com/lib/pq/auth/kerberos v0.0.0-20200720160335-984a6aa1ca46
-	github.com/lightstep/lightstep-tracer-go v0.24.0
 	github.com/linkedin/goavro/v2 v2.9.8
 	github.com/lufia/iostat v1.0.0
 	github.com/lusis/go-slackbot v0.0.0-20180109053408-401027ccfef5 // indirect
@@ -118,14 +116,13 @@ require (
 	github.com/nlopes/slack v0.4.0
 	github.com/olekukonko/tablewriter v0.0.5-0.20200416053754-163badb3bac6
 	github.com/opennota/wd v0.0.0-20180911144301-b446539ab1e7 // indirect
-	github.com/opentracing-contrib/go-observer v0.0.0-20170622124052-a52f23424492 // indirect
 	github.com/opentracing/opentracing-go v1.2.0
-	github.com/openzipkin-contrib/zipkin-go-opentracing v0.3.5
 	github.com/peterbourgon/g2s v0.0.0-20170223122336-d4e7ad98afea // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5
 	github.com/pierrec/lz4 v2.6.0+incompatible // indirect
 	github.com/pierrre/geohash v1.0.0
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
+	github.com/pkg/errors v0.9.1
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/prometheus/client_golang v1.4.1
 	github.com/prometheus/client_model v0.2.0
@@ -139,16 +136,21 @@ require (
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.1
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	github.com/twpayne/go-geom v1.3.7-0.20210228220813-9d9885b50d3e
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
 	go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8
+	go.opentelemetry.io/otel v0.20.0
+	go.opentelemetry.io/otel/exporters/otlp v0.20.0
+	go.opentelemetry.io/otel/oteltest v0.20.0
+	go.opentelemetry.io/otel/sdk v0.20.0
+	go.opentelemetry.io/otel/trace v0.20.0
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/exp v0.0.0-20210514180818-737f94c0881e
-	golang.org/x/lint v0.0.0-20200302205851-738671d3881b
-	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
+	golang.org/x/lint v0.0.0-20201208152925-83fdc39ff7b5
+	golang.org/x/net v0.0.0-20210316092652-d523dce5a7f4
 	golang.org/x/oauth2 v0.0.0-20201109201403-9fd604954f58
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
@@ -158,11 +160,10 @@ require (
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	golang.org/x/tools v0.1.0
 	google.golang.org/api v0.30.0
-	google.golang.org/genproto v0.0.0-20200825200019-8632dd797987
-	google.golang.org/grpc v1.33.1
+	google.golang.org/genproto v0.0.0-20210513213006-bf773b8c8384
+	google.golang.org/grpc v1.37.1
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	google.golang.org/protobuf v1.26.0
-	gopkg.in/DataDog/dd-trace-go.v1 v1.28.0
 	gopkg.in/yaml.v2 v2.4.0
 	honnef.co/go/tools v0.1.3
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
