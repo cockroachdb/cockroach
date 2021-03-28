@@ -328,6 +328,8 @@ func (t *Tracer) startSpanGeneric(
 			var shadowCtx opentracing.SpanContext
 			if opts.Parent != nil && opts.Parent.i.ot.shadowSpan != nil {
 				shadowCtx = opts.Parent.i.ot.shadowSpan.Context()
+			} else if opts.RemoteParent != nil && opts.RemoteParent.shadowCtx != nil {
+				shadowCtx = opts.RemoteParent.shadowCtx
 			}
 			ot = makeShadowSpan(shadowTr, shadowCtx, opts.RefType, opName, startTime)
 			// If LogTags are given, pass them as tags to the shadow span.
