@@ -108,6 +108,9 @@ var retiredSettings = map[string]struct{}{
 
 	// removed as of 22.1.
 	"sql.defaults.drop_enum_value.enabled": {},
+	"trace.lightstep.token":                {},
+	"trace.datadog.agent":                  {},
+	"trace.datadog.project":                {},
 }
 
 // register adds a setting to the registry.
