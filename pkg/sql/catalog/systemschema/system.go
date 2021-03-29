@@ -357,6 +357,14 @@ CREATE TABLE system.migrations (
     FAMILY "primary" (major, minor, patch, internal, completed_at),
     PRIMARY KEY (major, minor, patch, internal)
 )`
+
+	JoinTokensTableSchema = `
+CREATE TABLE system.join_tokens (
+    id           UUID NOT NULL PRIMARY KEY,
+    secret       BYTES NOT NULL,
+    expiration   TIMESTAMPTZ NOT NULL,
+    FAMILY "primary" (id, secret, expiration)
+)`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1753,6 +1761,49 @@ var (
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.JobsTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	// MigrationsTable is the descriptor for the migrations table. It stores facts
+	// about the completion state of long-running migrations. It is used to
+	// prevent migrations from running again after they have been completed.
+	JoinTokensTable = makeTable(descpb.TableDescriptor{
+		Name:                    "join_tokens",
+		ID:                      keys.JoinTokensTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Uuid, Nullable: false},
+			{Name: "secret", ID: 2, Type: types.Bytes, Nullable: false},
+			{Name: "expiration", ID: 3, Type: types.TimestampTZ, Nullable: false},
+		},
+		NextColumnID: 4,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:            "primary",
+				ID:              0,
+				ColumnNames:     []string{"id", "secret", "expiration"},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+				DefaultColumnID: 0,
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:        tabledesc.PrimaryKeyIndexName,
+			ID:          1,
+			Unique:      true,
+			ColumnNames: []string{"id"},
+			ColumnDirections: []descpb.IndexDescriptor_Direction{
+				descpb.IndexDescriptor_ASC,
+			},
+			ColumnIDs: []descpb.ColumnID{1},
+			Version:   descpb.EmptyArraysInInvertedIndexesVersion,
+		},
+		NextIndexID: 2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.JoinTokensTableID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})

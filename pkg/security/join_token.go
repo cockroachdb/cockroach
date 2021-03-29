@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package security
 
 import (
 	"bytes"
@@ -18,8 +18,8 @@ import (
 	"hash/crc32"
 	"io/ioutil"
 	"math/rand"
+	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -30,46 +30,45 @@ import (
 const (
 	// Length of the join token shared secret.
 	joinTokenSecretLen = 16
+
+	// JoinTokenExpiration is the default expiration time of newly created join
+	// tokens.
+	JoinTokenExpiration = 30 * time.Minute
 )
 
-// joinToken is a container for a tokenID and associated sharedSecret for use
+// JoinToken is a container for a TokenID and associated SharedSecret for use
 // in certificate-free add/join operations.
-type joinToken struct {
-	tokenID      uuid.UUID
-	sharedSecret []byte
+type JoinToken struct {
+	TokenID      uuid.UUID
+	SharedSecret []byte
 	fingerprint  []byte
 }
 
-// Generates a new join token, and signs it with the CA cert in sslCertsDir.
-func generateJoinToken(sslCertsDir string) (joinToken, error) {
-	var jt joinToken
+// GenerateJoinToken generates a new join token, and signs it with the CA cert
+// in the certificate manager.
+func GenerateJoinToken(cm *CertificateManager) (JoinToken, error) {
+	var jt JoinToken
 
-	jt.tokenID = uuid.MakeV4()
+	jt.TokenID = uuid.MakeV4()
 	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	jt.sharedSecret = randutil.RandBytes(r, joinTokenSecretLen)
-
-	certLocator := security.MakeCertsLocator(sslCertsDir)
-	caCert, err := loadCertificateFile(certLocator.CACertPath())
-	if err != nil {
-		return joinToken{}, errors.Wrap(err, "could not open CA cert")
-	}
-	jt.sign(caCert)
+	jt.SharedSecret = randutil.RandBytes(r, joinTokenSecretLen)
+	jt.sign(cm.CACert().FileContents)
 	return jt, nil
 }
 
 // sign signs the provided CA cert using the shared secret, and sets the
 // fingerprint field on the join token to the HMAC signature.
-func (j *joinToken) sign(caCert []byte) {
-	signer := hmac.New(sha256.New, j.sharedSecret)
+func (j *JoinToken) sign(caCert []byte) {
+	signer := hmac.New(sha256.New, j.SharedSecret)
 	_, _ = signer.Write(caCert)
 	j.fingerprint = signer.Sum(nil)
 }
 
-// verifySignature verifies that the fingerprint provided in the join token
+// VerifySignature verifies that the fingerprint provided in the join token
 // matches the signature of the provided CA cert with the join token's shared
 // secret.
-func (j *joinToken) verifySignature(caCert []byte) bool {
-	signer := hmac.New(sha256.New, j.sharedSecret)
+func (j *JoinToken) VerifySignature(caCert []byte) bool {
+	signer := hmac.New(sha256.New, j.SharedSecret)
 	_, _ = signer.Write(caCert)
 	// TODO(aaron-crl): Avoid timing attacks here.
 	return bytes.Equal(signer.Sum(nil), j.fingerprint)
@@ -78,8 +77,8 @@ func (j *joinToken) verifySignature(caCert []byte) bool {
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
 //
 // The format of the text (after base64-decoding) is:
-// <tokenID:uuid.Size><sharedSecret:joinTokenSecretLen><fingerprint:variable><crc:4>
-func (j *joinToken) UnmarshalText(text []byte) error {
+// <TokenID:uuid.Size><SharedSecret:joinTokenSecretLen><fingerprint:variable><crc:4>
+func (j *JoinToken) UnmarshalText(text []byte) error {
 	decoder := base64.NewDecoder(base64.URLEncoding, bytes.NewReader(text))
 	decoded, err := ioutil.ReadAll(decoder)
 	if err != nil {
@@ -96,28 +95,28 @@ func (j *joinToken) UnmarshalText(text []byte) error {
 	if cSum != expectedCSum {
 		return errors.New("invalid join token")
 	}
-	if err := j.tokenID.UnmarshalBinary(decoded[:uuid.Size]); err != nil {
+	if err := j.TokenID.UnmarshalBinary(decoded[:uuid.Size]); err != nil {
 		return err
 	}
 	decoded = decoded[uuid.Size:]
-	j.sharedSecret = decoded[:joinTokenSecretLen]
+	j.SharedSecret = decoded[:joinTokenSecretLen]
 	j.fingerprint = decoded[joinTokenSecretLen : len(decoded)-4]
 	return nil
 }
 
 // MarshalText implements the encoding.TextMarshaler interface.
-func (j *joinToken) MarshalText() ([]byte, error) {
-	tokenID, err := j.tokenID.MarshalBinary()
+func (j *JoinToken) MarshalText() ([]byte, error) {
+	tokenID, err := j.TokenID.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	if len(j.sharedSecret) != joinTokenSecretLen {
+	if len(j.SharedSecret) != joinTokenSecretLen {
 		return nil, errors.New("join token shared secret not of the right size")
 	}
-	token := make([]byte, 0, len(tokenID)+len(j.sharedSecret)+len(j.fingerprint)+4)
+	token := make([]byte, 0, len(tokenID)+len(j.SharedSecret)+len(j.fingerprint)+4)
 	token = append(token, tokenID...)
-	token = append(token, j.sharedSecret...)
+	token = append(token, j.SharedSecret...)
 	token = append(token, j.fingerprint...)
 	// Checksum.
 	cSum := crc32.ChecksumIEEE(token)

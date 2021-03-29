@@ -2192,6 +2192,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			ClientNoticeSender: p,
 			Sequence:           p,
 			Tenant:             p,
+			JoinTokenCreator:   p,
 			SessionData:        ex.sessionData,
 			Settings:           ex.server.cfg.Settings,
 			TestingKnobs:       ex.server.cfg.EvalContextTestingKnobs,

@@ -2523,22 +2523,3 @@ func (s *statusServer) JobStatus(
 
 	return &serverpb.JobStatusResponse{Job: res}, nil
 }
-
-// GenerateJoinToken generates a new ephemeral join token. For use by the sql
-// subsystem directly. The response is a base64 marshaled form of the join token
-// that can be shared to new nodes that want to join this cluster.
-func (s *statusServer) GenerateJoinToken(ctx context.Context) (string, error) {
-	if !sql.FeatureTLSAutoJoinEnabled.Get(&s.st.SV) {
-		return "", errors.New("join token generation disabled")
-	}
-
-	jt, err := generateJoinToken(s.cfg.SSLCertsDir)
-	if err != nil {
-		return "", errors.Wrap(err, "error when generating join token")
-	}
-	token, err := jt.MarshalText()
-	if err != nil {
-		return "", errors.Wrap(err, "error when marshaling join token")
-	}
-	return string(token), nil
-}

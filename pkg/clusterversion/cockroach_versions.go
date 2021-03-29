@@ -275,6 +275,9 @@ const (
 	// ProtectedTsMetaPrivilegesMigration is for the migration which fixes the
 	// privileges of the protected_ts_meta system table.
 	ProtectedTsMetaPrivilegesMigration
+	// JoinTokensTable adds the system table for storing ephemeral generated
+	// join tokens.
+	JoinTokensTable
 
 	// Step (1): Add new versions here.
 )
@@ -476,6 +479,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     ProtectedTsMetaPrivilegesMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 48},
+	},
+	{
+		Key:     JoinTokensTable,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 50},
 	},
 	// Step (2): Add new versions here.
 })

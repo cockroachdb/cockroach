@@ -244,6 +244,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.MigrationsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.JoinTokensTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that
