@@ -26,13 +26,13 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-var _ catalog.DatabaseDescriptor = (*Immutable)(nil)
+var _ catalog.DatabaseDescriptor = (*immutable)(nil)
 var _ catalog.DatabaseDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 
-// Immutable wraps a database descriptor and provides methods
+// immutable wraps a database descriptor and provides methods
 // on it.
-type Immutable struct {
+type immutable struct {
 	descpb.DatabaseDescriptor
 
 	// isUncommittedVersion is set to true if this descriptor was created from
@@ -43,14 +43,13 @@ type Immutable struct {
 // Mutable wraps a database descriptor and provides methods
 // on it. It can be mutated and generally has not been committed.
 type Mutable struct {
-	Immutable
-
-	ClusterVersion *Immutable
+	immutable
+	ClusterVersion *immutable
 }
 
-// SafeMessage makes Immutable a SafeMessager.
-func (desc *Immutable) SafeMessage() string {
-	return formatSafeMessage("dbdesc.Immutable", desc)
+// SafeMessage makes immutable a SafeMessager.
+func (desc *immutable) SafeMessage() string {
+	return formatSafeMessage("dbdesc.immutable", desc)
 }
 
 // SafeMessage makes Mutable a SafeMessager.
@@ -67,12 +66,12 @@ func formatSafeMessage(typeName string, desc catalog.DatabaseDescriptor) string 
 }
 
 // DescriptorType returns the plain type of this descriptor.
-func (desc *Immutable) DescriptorType() catalog.DescriptorType {
+func (desc *immutable) DescriptorType() catalog.DescriptorType {
 	return catalog.Database
 }
 
 // DatabaseDesc implements the Descriptor interface.
-func (desc *Immutable) DatabaseDesc() *descpb.DatabaseDescriptor {
+func (desc *immutable) DatabaseDesc() *descpb.DatabaseDescriptor {
 	return &desc.DatabaseDescriptor
 }
 
@@ -82,51 +81,51 @@ func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 }
 
 // GetParentID implements the Descriptor interface.
-func (desc *Immutable) GetParentID() descpb.ID {
+func (desc *immutable) GetParentID() descpb.ID {
 	return keys.RootNamespaceID
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
-func (desc *Immutable) IsUncommittedVersion() bool {
+func (desc *immutable) IsUncommittedVersion() bool {
 	return desc.isUncommittedVersion
 }
 
 // GetParentSchemaID implements the Descriptor interface.
-func (desc *Immutable) GetParentSchemaID() descpb.ID {
+func (desc *immutable) GetParentSchemaID() descpb.ID {
 	return keys.RootNamespaceID
 }
 
 // NameResolutionResult implements the Descriptor interface.
-func (desc *Immutable) NameResolutionResult() {}
+func (desc *immutable) NameResolutionResult() {}
 
 // GetAuditMode is part of the DescriptorProto interface.
 // This is a stub until per-database auditing is enabled.
-func (desc *Immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
+func (desc *immutable) GetAuditMode() descpb.TableDescriptor_AuditMode {
 	return descpb.TableDescriptor_DISABLED
 }
 
 // Public implements the Descriptor interface.
-func (desc *Immutable) Public() bool {
+func (desc *immutable) Public() bool {
 	return desc.State == descpb.DescriptorState_PUBLIC
 }
 
 // Adding implements the Descriptor interface.
-func (desc *Immutable) Adding() bool {
+func (desc *immutable) Adding() bool {
 	return false
 }
 
 // Offline implements the Descriptor interface.
-func (desc *Immutable) Offline() bool {
+func (desc *immutable) Offline() bool {
 	return desc.State == descpb.DescriptorState_OFFLINE
 }
 
 // Dropped implements the Descriptor interface.
-func (desc *Immutable) Dropped() bool {
+func (desc *immutable) Dropped() bool {
 	return desc.State == descpb.DescriptorState_DROP
 }
 
 // DescriptorProto wraps a DatabaseDescriptor in a Descriptor.
-func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
+func (desc *immutable) DescriptorProto() *descpb.Descriptor {
 	return &descpb.Descriptor{
 		Union: &descpb.Descriptor_Database{
 			Database: &desc.DatabaseDescriptor,
@@ -136,13 +135,13 @@ func (desc *Immutable) DescriptorProto() *descpb.Descriptor {
 
 // IsMultiRegion returns whether the database has multi-region properties
 // configured. If so, desc.RegionConfig can be used.
-func (desc *Immutable) IsMultiRegion() bool {
+func (desc *immutable) IsMultiRegion() bool {
 	return desc.RegionConfig != nil
 }
 
 // MultiRegionEnumID returns the ID of the multi-region enum if the database
 // is a multi-region database, and an error otherwise.
-func (desc *Immutable) MultiRegionEnumID() (descpb.ID, error) {
+func (desc *immutable) MultiRegionEnumID() (descpb.ID, error) {
 	if !desc.IsMultiRegion() {
 		return descpb.InvalidID, errors.AssertionFailedf(
 			"can not get multi-region enum ID of a non multi-region database")
@@ -151,7 +150,7 @@ func (desc *Immutable) MultiRegionEnumID() (descpb.ID, error) {
 }
 
 // PrimaryRegionName returns the primary region for a multi-region database.
-func (desc *Immutable) PrimaryRegionName() (descpb.RegionName, error) {
+func (desc *immutable) PrimaryRegionName() (descpb.RegionName, error) {
 	if !desc.IsMultiRegion() {
 		return "", errors.AssertionFailedf(
 			"can not get the primary region of a non multi-region database")
@@ -166,7 +165,7 @@ func (desc *Mutable) SetName(name string) {
 
 // ForEachSchemaInfo iterates f over each schema info mapping in the descriptor.
 // iterutil.StopIteration is supported.
-func (desc *Immutable) ForEachSchemaInfo(
+func (desc *immutable) ForEachSchemaInfo(
 	f func(id descpb.ID, name string, isDropped bool) error,
 ) error {
 	for name, info := range desc.Schemas {
@@ -180,10 +179,28 @@ func (desc *Immutable) ForEachSchemaInfo(
 	return nil
 }
 
+// GetSchemaID returns the ID in the schema mapping entry for the
+// given name, 0 otherwise.
+func (desc *immutable) GetSchemaID(name string) descpb.ID {
+	info := desc.Schemas[name]
+	return info.ID
+}
+
+// GetNonDroppedSchemaName returns the name in the schema mapping entry for the
+// given ID, if it's not marked as dropped, empty string otherwise.
+func (desc *immutable) GetNonDroppedSchemaName(schemaID descpb.ID) string {
+	for name, info := range desc.Schemas {
+		if !info.Dropped && info.ID == schemaID {
+			return name
+		}
+	}
+	return ""
+}
+
 // ValidateSelf validates that the database descriptor is well formed.
 // Checks include validate the database name, and verifying that there
 // is at least one read and write user.
-func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
+func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Validate local properties of the descriptor.
 	vea.Report(catalog.ValidateName(desc.GetName(), "descriptor"))
 	if desc.GetID() == descpb.InvalidID {
@@ -199,7 +216,7 @@ func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 }
 
 // validateMultiRegion performs checks specific to multi-region DBs.
-func (desc *Immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulator) {
+func (desc *immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulator) {
 	if desc.RegionConfig.PrimaryRegion == "" {
 		vea.Report(errors.AssertionFailedf(
 			"primary region unset on a multi-region db %d", desc.GetID()))
@@ -208,7 +225,7 @@ func (desc *Immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulato
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *Immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
+func (desc *immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID())
 	if id, err := desc.MultiRegionEnumID(); err == nil {
 		ids.Add(id)
@@ -220,7 +237,7 @@ func (desc *Immutable) GetReferencedDescIDs() catalog.DescriptorIDSet {
 }
 
 // ValidateCrossReferences implements the catalog.Descriptor interface.
-func (desc *Immutable) ValidateCrossReferences(
+func (desc *immutable) ValidateCrossReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Check multi-region enum type.
@@ -241,7 +258,7 @@ func (desc *Immutable) ValidateCrossReferences(
 }
 
 // ValidateTxnCommit implements the catalog.Descriptor interface.
-func (desc *Immutable) ValidateTxnCommit(
+func (desc *immutable) ValidateTxnCommit(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Check schema references.
@@ -275,16 +292,7 @@ func (desc *Immutable) ValidateTxnCommit(
 //  to have this implementation only visible there? Maybe by creating a type
 //  alias for database descriptor in the backupccl package, and then defining
 //  SchemaMeta on it?
-func (desc *Immutable) SchemaMeta() {}
-
-// LookupSchema returns a descpb.DatabaseDescriptor_SchemaInfo for the schema
-// with the provided name, if a schema with that name belongs to the database.
-func (desc *Immutable) LookupSchema(
-	name string,
-) (schemaInfo descpb.DatabaseDescriptor_SchemaInfo, found bool) {
-	schemaInfo, found = desc.Schemas[name]
-	return schemaInfo, found
-}
+func (desc *immutable) SchemaMeta() {}
 
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
@@ -323,7 +331,7 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
 	imm := NewBuilder(desc.DatabaseDesc()).BuildImmutableDatabase()
-	imm.isUncommittedVersion = desc.IsUncommittedVersion()
+	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
 }
 

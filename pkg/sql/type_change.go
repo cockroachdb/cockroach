@@ -755,7 +755,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			}
 			override := sessiondata.InternalExecutorOverride{
 				User:     security.RootUserName(),
-				Database: dbDesc.Name,
+				Database: dbDesc.GetName(),
 			}
 			rows, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
 			if err != nil {
@@ -855,7 +855,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		}
 		override := sessiondata.InternalExecutorOverride{
 			User:     security.RootUserName(),
-			Database: dbDesc.Name,
+			Database: dbDesc.GetName(),
 		}
 		rows, err := t.execCfg.InternalExecutor.QueryRowEx(
 			ctx,

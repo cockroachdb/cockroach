@@ -186,7 +186,7 @@ type Collection struct {
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
-	allDatabaseDescriptors []*dbdesc.Immutable
+	allDatabaseDescriptors []catalog.DatabaseDescriptor
 
 	// allSchemasForDatabase maps databaseID -> schemaID -> schemaName.
 	// For each databaseID, all schemas visible under the database can be
@@ -412,12 +412,8 @@ func (tc *Collection) GetMutableDatabaseByName(
 // properties according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (found bool, _ *dbdesc.Immutable, _ error) {
-	found, desc, err := tc.getDatabaseByName(ctx, txn, name, flags, false /* mutable */)
-	if err != nil || !found {
-		return false, nil, err
-	}
-	return true, desc.(*dbdesc.Immutable), nil
+) (found bool, _ catalog.DatabaseDescriptor, _ error) {
+	return tc.getDatabaseByName(ctx, txn, name, flags, false /* mutable */)
 }
 
 // getDatabaseByName returns a database descriptor with properties according to
@@ -723,16 +719,16 @@ func (tc *Collection) getUserDefinedSchemaByName(
 		if err != nil {
 			return false, nil, err
 		}
-		schemaInfo, found := dbDesc.LookupSchema(schemaName)
-		if !found {
+		schemaID := dbDesc.GetSchemaID(schemaName)
+		if schemaID == descpb.InvalidID {
 			return false, nil, nil
-		} else if schemaInfo.Dropped {
+		}
+		foundSchemaName := dbDesc.GetNonDroppedSchemaName(schemaID)
+		if foundSchemaName != schemaName {
 			// If there's another schema name entry with the same ID as this one, then
 			// the schema has been renamed, so don't return anything.
-			for name, info := range dbDesc.GetSchemas() {
-				if name != schemaName && info.ID == schemaInfo.ID {
-					return false, nil, nil
-				}
+			if foundSchemaName != "" {
+				return false, nil, nil
 			}
 			// Otherwise, the schema has been dropped. Return early, except in the
 			// specific case where flags.Required and flags.IncludeDropped are both
@@ -755,7 +751,7 @@ func (tc *Collection) getUserDefinedSchemaByName(
 		// the database which doesn't reflect the changes to the schema. But this
 		// isn't a problem for correctness; it can only happen on other sessions
 		// before the schema change has returned results.
-		desc, err := tc.getDescriptorByID(ctx, txn, schemaInfo.ID, flags, mutable)
+		desc, err := tc.getDescriptorByID(ctx, txn, schemaID, flags, mutable)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) ||
 				errors.Is(err, catalog.ErrDescriptorDropped) {
@@ -914,12 +910,8 @@ var _ = (*Collection)(nil).GetMutableDatabaseByID
 // properties according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
-) (bool, *dbdesc.Immutable, error) {
-	found, desc, err := tc.getDatabaseByID(ctx, txn, dbID, flags, false /* mutable */)
-	if err != nil || !found {
-		return false, nil, err
-	}
-	return true, desc.(*dbdesc.Immutable), nil
+) (bool, catalog.DatabaseDescriptor, error) {
+	return tc.getDatabaseByID(ctx, txn, dbID, flags, false /* mutable */)
 }
 
 func (tc *Collection) getDatabaseByID(
@@ -1286,7 +1278,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.GetName())
+			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.Name, desc.GetName())
 			return name, desc, nil
 		})
 
@@ -1731,12 +1723,12 @@ func (tc *Collection) GetAllDescriptors(
 // on sets of descriptors can hydrate a set of descriptors (i.e. on BACKUPs).
 func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) error {
 	// Collect the needed information to set up metadata in those types.
-	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
+	dbDescs := make(map[descpb.ID]catalog.DatabaseDescriptor)
 	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
 	schemaDescs := make(map[descpb.ID]catalog.SchemaDescriptor)
 	for _, desc := range descs {
 		switch desc := desc.(type) {
-		case *dbdesc.Immutable:
+		case catalog.DatabaseDescriptor:
 			dbDescs[desc.GetID()] = desc
 		case catalog.TypeDescriptor:
 			typDescs[desc.GetID()] = desc
@@ -1806,7 +1798,7 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 // missing database descriptors.
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]*dbdesc.Immutable, error) {
+) ([]catalog.DatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
 		dbDescIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
 		if err != nil {

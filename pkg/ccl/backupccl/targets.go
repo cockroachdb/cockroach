@@ -344,9 +344,9 @@ func fullClusterTargetsRestore(
 // full cluster backup, and all the user databases.
 func fullClusterTargets(
 	allDescs []catalog.Descriptor,
-) ([]catalog.Descriptor, []*dbdesc.Immutable, error) {
+) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, error) {
 	fullClusterDescs := make([]catalog.Descriptor, 0, len(allDescs))
-	fullClusterDBs := make([]*dbdesc.Immutable, 0)
+	fullClusterDBs := make([]catalog.DatabaseDescriptor, 0)
 
 	systemTablesToBackup := GetSystemTablesToIncludeInClusterBackup()
 
