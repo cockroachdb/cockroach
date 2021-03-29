@@ -34,7 +34,8 @@ func foreignKeyRepresentationUpgrade(
 ) error {
 	var lastUpgradedID descpb.ID
 	for {
-		done, idToUpgrade, err := findNextDescriptorToUpdate(ctx, d.InternalExecutor, lastUpgradedID)
+		done, idToUpgrade, err := findNextDescriptorToUpdate(
+			ctx, d.InternalExecutor, lastUpgradedID, true /* isFKUpgrade */)
 		if err != nil || done {
 			return err
 		}
@@ -64,7 +65,7 @@ func upgradeFKRepresentation(ctx context.Context, upgrade descpb.ID, d migration
 }
 
 func findNextDescriptorToUpdate(
-	ctx context.Context, ie sqlutil.InternalExecutor, lastScannedID descpb.ID,
+	ctx context.Context, ie sqlutil.InternalExecutor, lastScannedID descpb.ID, isFKUpgrade bool,
 ) (done bool, idToUpgrade descpb.ID, _ error) {
 	rows, err := ie.QueryIterator(ctx, "upgrade-fk-find-desc", nil, /* txn */
 		`
@@ -89,8 +90,11 @@ SELECT id, descriptor, crdb_internal_mvcc_timestamp FROM system.descriptor WHERE
 				"failed to unmarshal descriptor with ID %d", id)
 		}
 		t, _, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, ts)
-		if t != nil && !t.Dropped() && tableNeedsFKUpgrade(t) {
-			return false, id, nil
+
+		if t != nil && !t.Dropped() {
+			if !isFKUpgrade || (isFKUpgrade && tableNeedsFKUpgrade(t)) {
+				return false, id, nil
+			}
 		}
 	}
 	if err != nil {

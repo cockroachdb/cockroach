@@ -275,6 +275,9 @@ const (
 	// ProtectedTsMetaPrivilegesMigration is for the migration which fixes the
 	// privileges of the protected_ts_meta system table.
 	ProtectedTsMetaPrivilegesMigration
+	// SequenceMigration is for the migration which upgrades existing sequences
+	// to reference dependencies via ID instead of name.
+	SequenceMigration
 
 	// Step (1): Add new versions here.
 )
@@ -476,6 +479,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 	{
 		Key:     ProtectedTsMetaPrivilegesMigration,
 		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 48},
+	},
+	{
+		Key:     SequenceMigration,
+		Version: roachpb.Version{Major: 20, Minor: 2, Internal: 50}, // TODO: Not sure about the version.
 	},
 	// Step (2): Add new versions here.
 })

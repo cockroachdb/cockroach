@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -81,12 +83,25 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	case *migration.KVMigration:
 		err = m.Run(ctx, cv, mc.Cluster())
 	case *migration.SQLMigration:
+		plannerConstructor := func(txn *kv.Txn, descriptors *descs.Collection, currDb string) (interface{}, func()) {
+			return sql.NewInternalPlanner(
+				"sequence migration",
+				txn,
+				execCtx.User(),
+				&sql.MemoryMetrics{},
+				execCtx.ExecCfg(),
+				sessiondatapb.SessionData{
+					Database: currDb,
+				},
+				sql.WithDescCollection(descriptors))
+		}
 		err = m.Run(ctx, cv, migration.SQLDeps{
-			DB:               execCtx.ExecCfg().DB,
-			Codec:            execCtx.ExecCfg().Codec,
-			Settings:         execCtx.ExecCfg().Settings,
-			InternalExecutor: execCtx.ExecCfg().InternalExecutor,
-			LeaseManager:     execCtx.ExecCfg().LeaseManager,
+			DB:                         execCtx.ExecCfg().DB,
+			Codec:                      execCtx.ExecCfg().Codec,
+			Settings:                   execCtx.ExecCfg().Settings,
+			InternalExecutor:           execCtx.ExecCfg().InternalExecutor,
+			LeaseManager:               execCtx.ExecCfg().LeaseManager,
+			InternalPlannerConstructor: plannerConstructor,
 		})
 	default:
 		return errors.AssertionFailedf("unknown migration type %T", m)
