@@ -427,7 +427,7 @@ func (e *mutableVirtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type virtualTypeEntry struct {
-	desc    *typedesc.Immutable
+	desc    catalog.TypeDescriptor
 	mutable bool
 }
 

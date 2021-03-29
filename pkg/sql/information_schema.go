@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1149,12 +1148,12 @@ CREATE TABLE information_schema.type_privileges (
 				}
 
 				// And for all user defined types.
-				return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc *typedesc.Immutable) error {
+				return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc catalog.TypeDescriptor) error {
 					scNameStr := tree.NewDString(sc)
-					typeNameStr := tree.NewDString(typeDesc.Name)
+					typeNameStr := tree.NewDString(typeDesc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
-					privs := typeDesc.TypeDescriptor.GetPrivileges().Show(privilege.Type)
+					privs := typeDesc.GetPrivileges().Show(privilege.Type)
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
@@ -1888,7 +1887,7 @@ func forEachTypeDesc(
 	ctx context.Context,
 	p *planner,
 	dbContext *dbdesc.Immutable,
-	fn func(db *dbdesc.Immutable, sc string, typ *typedesc.Immutable) error,
+	fn func(db *dbdesc.Immutable, sc string, typ catalog.TypeDescriptor) error,
 ) error {
 	descs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {

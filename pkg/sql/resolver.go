@@ -296,16 +296,16 @@ func (p *planner) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	// Note that the value of required doesn't matter for lookups by ID.
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.ParentID, p.CommonLookupFlags(true /* required */))
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, desc.GetParentID(), p.CommonLookupFlags(true /* required */))
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
 	sc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.txn, desc.ParentSchemaID, tree.SchemaLookupFlags{})
+		ctx, p.txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{})
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.Name)
+	name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.GetName())
 	return name, desc, nil
 }
 
@@ -322,7 +322,7 @@ func (p *planner) ResolveType(
 		return nil, err
 	}
 	tn := tree.MakeNewQualifiedTypeName(prefix.Catalog(), prefix.Schema(), name.Object())
-	tdesc := desc.(*typedesc.Immutable)
+	tdesc := desc.(catalog.TypeDescriptor)
 
 	// Disllow cross-database type resolution. Note that we check
 	// p.contextDatabaseID != descpb.InvalidID when we have been restricted to
@@ -332,7 +332,7 @@ func (p *planner) ResolveType(
 	// when the type being resolved is a builtin type prefaced with a virtual
 	// schema like `pg_catalog.int`. Resolution for these types returns a dummy
 	// TypeDescriptor, so ignore those cases.
-	if p.contextDatabaseID != descpb.InvalidID && tdesc.ParentID != descpb.InvalidID && tdesc.ParentID != p.contextDatabaseID {
+	if p.contextDatabaseID != descpb.InvalidID && tdesc.GetParentID() != descpb.InvalidID && tdesc.GetParentID() != p.contextDatabaseID {
 		return nil, pgerror.Newf(
 			pgcode.FeatureNotSupported, "cross database type references are not supported: %s", tn.String())
 	}
@@ -836,7 +836,7 @@ type internalLookupCtx struct {
 	schemaIDs   []descpb.ID
 	tbDescs     map[descpb.ID]catalog.TableDescriptor
 	tbIDs       []descpb.ID
-	typDescs    map[descpb.ID]*typedesc.Immutable
+	typDescs    map[descpb.ID]catalog.TypeDescriptor
 	typIDs      []descpb.ID
 
 	// fallback is utilized in GetDesc and GetNamespaceEntry.
@@ -910,7 +910,7 @@ func newInternalLookupCtx(
 		keys.PublicSchemaID: tree.PublicSchema,
 	}
 	tbDescs := make(map[descpb.ID]catalog.TableDescriptor)
-	typDescs := make(map[descpb.ID]*typedesc.Immutable)
+	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
 	var tbIDs, typIDs, dbIDs, schemaIDs []descpb.ID
 	// Record descriptors for name lookups.
 	for i := range descs {
@@ -928,9 +928,9 @@ func newInternalLookupCtx(
 				// Only make the table visible for iteration if the prefix was included.
 				tbIDs = append(tbIDs, desc.GetID())
 			}
-		case *typedesc.Immutable:
+		case catalog.TypeDescriptor:
 			typDescs[desc.GetID()] = desc
-			if prefix == nil || prefix.GetID() == desc.ParentID {
+			if prefix == nil || prefix.GetID() == desc.GetParentID() {
 				// Only make the type visible for iteration if the prefix was included.
 				typIDs = append(typIDs, desc.GetID())
 			}
