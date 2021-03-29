@@ -363,7 +363,7 @@ CREATE TABLE system.join_tokens (
     id           UUID NOT NULL PRIMARY KEY,
     secret       BYTES NOT NULL,
     expiration   TIMESTAMPTZ NOT NULL,
-    FAMILY "primary" (id, secret, expiration),
+    FAMILY "primary" (id, secret, expiration)
 )`
 )
 
@@ -1776,7 +1776,7 @@ var (
 		Version:                 1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "id", ID: 1, Type: types.Uuid, Nullable: false},
-			{Name: "secret", ID: 2, Type: types.String, Nullable: false},
+			{Name: "secret", ID: 2, Type: types.Bytes, Nullable: false},
 			{Name: "expiration", ID: 3, Type: types.TimestampTZ, Nullable: false},
 		},
 		NextColumnID: 4,
@@ -1786,7 +1786,7 @@ var (
 				ID:              0,
 				ColumnNames:     []string{"id", "secret", "expiration"},
 				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
-				DefaultColumnID: 2,
+				DefaultColumnID: 0,
 			},
 		},
 		NextFamilyID: 1,

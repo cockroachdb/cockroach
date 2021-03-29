@@ -310,7 +310,8 @@ start_key                          start_pretty                   end_key       
 [173]                              /Table/37                      [174]                              /Table/38                      system         scheduled_jobs                   ·           {1}       1
 [174]                              /Table/38                      [175]                              /Table/39                      ·              ·                                ·           {1}       1
 [175]                              /Table/39                      [176]                              /Table/40                      system         sqlliveness                      ·           {1}       1
-[176]                              /Table/40                      [189 137]                          /Table/53/1                    system         migrations                       ·           {1}       1
+[176]                              /Table/40                      [177]                              /Table/41                      system         migrations                       ·           {1}       1
+[177]                              /Table/41                      [189 137]                          /Table/53/1                    system         join_tokens                      ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
@@ -369,7 +370,8 @@ start_key                          start_pretty                   end_key       
 [173]                              /Table/37                      [174]                              /Table/38                      system         scheduled_jobs                   ·           {1}       1
 [174]                              /Table/38                      [175]                              /Table/39                      ·              ·                                ·           {1}       1
 [175]                              /Table/39                      [176]                              /Table/40                      system         sqlliveness                      ·           {1}       1
-[176]                              /Table/40                      [189 137]                          /Table/53/1                    system         migrations                       ·           {1}       1
+[176]                              /Table/40                      [177]                              /Table/41                      system         migrations                       ·           {1}       1
+[177]                              /Table/41                      [189 137]                          /Table/53/1                    system         join_tokens                      ·           {1}       1
 [189 137]                          /Table/53/1                    [189 137 137]                      /Table/53/1/1                  test           t                                ·           {1}       1
 [189 137 137]                      /Table/53/1/1                  [189 137 141 137]                  /Table/53/1/5/1                test           t                                ·           {3,4}     3
 [189 137 141 137]                  /Table/53/1/5/1                [189 137 141 138]                  /Table/53/1/5/2                test           t                                ·           {1,2,3}   1
