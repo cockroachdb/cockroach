@@ -221,6 +221,10 @@ type StoreTestingKnobs struct {
 	// BeforeRelocateOne intercepts the return values of s.relocateOne before
 	// they're being put into effect.
 	BeforeRelocateOne func(_ []roachpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget, _ error)
+	// DontIgnoreFailureToTransferLease makes `AdminRelocateRange` return an error
+	// to its client if it failed to transfer the lease to the first voting
+	// replica in the set of relocation targets.
+	DontIgnoreFailureToTransferLease bool
 	// MaxApplicationBatchSize enforces a maximum size on application batches.
 	// This can be useful for testing conditions which require commands to be
 	// applied in separate batches.

@@ -304,10 +304,8 @@ func (mq *mergeQueue) process(
 		// these ranges and only try to collocate them if they're not in violation,
 		// which would help us make better guarantees about not transiently
 		// violating constraints during a merge.
-		voterTargets, nonVoterTargets, err := GetTargetsToCollocateRHSForMerge(ctx, lhsDesc.Replicas(), rhsDesc.Replicas())
-		if err != nil {
-			return false, err
-		}
+		voterTargets := lhsDesc.Replicas().Voters().ReplicationTargets()
+		nonVoterTargets := lhsDesc.Replicas().NonVoters().ReplicationTargets()
 
 		// AdminRelocateRange moves the lease to the first target in the list, so
 		// sort the existing leaseholder there to leave it unchanged.
