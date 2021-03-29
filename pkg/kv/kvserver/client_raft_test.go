@@ -2503,7 +2503,7 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
 
 outer:
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 50; i++ {
 		for leaderIdx := range tc.Servers {
 			repl := tc.GetFirstStoreFromServer(t, leaderIdx).LookupReplica(roachpb.RKey(key))
 			require.NotNil(t, repl)

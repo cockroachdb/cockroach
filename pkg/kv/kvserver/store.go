@@ -612,7 +612,7 @@ type Store struct {
 
 	counts struct {
 		// Number of placeholders removed due to error.
-		removedPlaceholders int32
+		failedPlaceholders int32
 		// Number of placeholders successfully filled by a snapshot.
 		filledPlaceholders int32
 		// Number of placeholders removed due to a snapshot that was dropped by

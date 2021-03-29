@@ -18,10 +18,9 @@ import (
 )
 
 // ReplicaPlaceholder represents a "lock" of a part of the keyspace on a given
-// *Store for the application of a (preemptive or Raft) snapshot. Placeholders
+// *Store for the receipt and application of a raft snapshot. Placeholders
 // are kept synchronously in two places in (*Store).mu, namely the
-// replicaPlaceholders and replicaByKey maps, and exist only while the Raft
-// scheduler tries to apply raft.Ready containing a snapshot to some Replica.
+// replicaPlaceholders and replicaByKey maps.
 //
 // To see why placeholders are necessary, consider the case in which two
 // snapshots arrive at a Store, one for r1 and bounds [a,c) and the other for r2
@@ -52,10 +51,30 @@ import (
 // existing placeholder (inserting its own atomically when none found), so that
 // g2 would later fail the overlap check on g1's placeholder.
 //
-// Placeholders are removed by the goroutine that inserted them at the end of
-// the respective Raft cycle, so they usually live only for as long as it takes
-// to write the snapshot to disk. See (*Store).processRaftSnapshotRequest for
-// details.
+// The rules for placeholders are as follows:
+//
+// - they can only be installed while holding the raftMu of a corresponding
+//   uninitialized replica.
+// - they do not overlap any initialized replica's key bounds. (This invariant
+//   is maintained via Store.mu.replicasByKey).
+// - a placeholder can only be removed by the operation that installed it, and
+//   that operation *must* eventually remove it. In practice, they are inserted
+//   before receiving the snapshot data, so they are fairly long-lived.
+//
+// In particular, when removing a placeholder we don't have to worry about
+// whether we're removing our own or someone else's. This is because they
+// can't overlap; and if we inserted one it's still there (since nobody else
+// can delete it).
+//
+// Note also that uninitialized replicas can get replicaGC'ed, so it is
+// legitimate to end up in a situation in which a snapshot is received under a
+// placeholder, but when the time comes to apply the snapshot no corresponding
+// replica can be found. This simply returns in not applying the snapshot (but
+// removing the placeholder regardless).
+//
+// See (*Store).receiveSnapshot for where placeholders are installed. This will
+// eventually call (*Store).processRaftSnapshotRequest which triggers the actual
+// application.
 type ReplicaPlaceholder struct {
 	rangeDesc roachpb.RangeDescriptor
 }

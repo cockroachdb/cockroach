@@ -231,14 +231,6 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 		log.Fatalf(ctx, "uninitialized replica %v was unexpectedly replaced", existing)
 	}
 
-	// Only an uninitialized replica can have a placeholder since, by
-	// definition, an initialized replica will be present in the
-	// replicasByKey map. While the replica will usually consume the
-	// placeholder itself, that isn't guaranteed and so this invocation
-	// here is crucial (i.e. don't remove it).
-	if s.removePlaceholderLocked(ctx, rep.RangeID) {
-		atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
-	}
 	s.unlinkReplicaByRangeIDLocked(ctx, rep.RangeID)
 }
 
@@ -258,30 +250,59 @@ func (s *Store) unlinkReplicaByRangeIDLocked(ctx context.Context, rangeID roachp
 	s.unregisterLeaseholderByID(ctx, rangeID)
 }
 
-// removePlaceholder removes a placeholder for the specified range if it
-// exists, returning true if a placeholder was present and removed and false
-// otherwise. Requires that the raftMu of the replica whose place is being held
-// is locked.
-func (s *Store) removePlaceholder(ctx context.Context, rngID roachpb.RangeID) bool {
+// removePlaceholder removes a placeholder for the specified range.
+// Requires that the raftMu of the replica whose place is being held
+// is locked. See removePlaceholderType for existence semantics.
+func (s *Store) removePlaceholder(
+	ctx context.Context, rngID roachpb.RangeID, typ removePlaceholderType,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.removePlaceholderLocked(ctx, rngID)
+	s.removePlaceholderLocked(ctx, rngID, typ)
 }
 
-// removePlaceholderLocked removes the specified placeholder. Requires that
-// Store.mu and the raftMu of the replica whose place is being held are locked.
-func (s *Store) removePlaceholderLocked(ctx context.Context, rngID roachpb.RangeID) bool {
+type removePlaceholderType byte
+
+const (
+	removePlaceholderFilled  removePlaceholderType = iota
+	removePlaceholderDropped                       // raft didn't apply snapshot
+	removePlaceholderFailed                        // snapshot never got to raft
+
+	// Checks that no placeholder exists. Careful - only use this when the locking
+	// guarantees that no new placeholder could have been inserted.
+	removePlaceholderAssertGone
+)
+
+// removePlaceholderLocked removes a placeholder for the specified range.
+// Requires that the raftMu of the replica whose place is being held
+// is locked. See removePlaceholderType for existence semantics.
+func (s *Store) removePlaceholderLocked(
+	ctx context.Context, rngID roachpb.RangeID, typ removePlaceholderType,
+) {
 	placeholder, ok := s.mu.replicaPlaceholders[rngID]
 	if !ok {
-		return false
+		if typ != removePlaceholderAssertGone {
+			log.Fatalf(ctx, "r%d: placeholder missing", rngID)
+		}
+		return
+	}
+	if ok && typ == removePlaceholderAssertGone {
+		log.Fatalf(ctx, "r%d: unexpected placeholder %+v", rngID, placeholder)
 	}
 	if it := s.mu.replicasByKey.DeletePlaceholder(ctx, placeholder); it.ph != placeholder {
 		log.Fatalf(ctx, "r%d: placeholder %v not found, got %+v", rngID, placeholder, it)
-		return true // unreachable
 	}
 	delete(s.mu.replicaPlaceholders, rngID)
 	if it := s.getOverlappingKeyRangeLocked(&placeholder.rangeDesc); it.item != nil {
 		log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", it.ph, it.item)
 	}
-	return true
+	switch typ {
+	case removePlaceholderDropped:
+		atomic.AddInt32(&s.counts.droppedPlaceholders, 1)
+	case removePlaceholderFailed:
+		atomic.AddInt32(&s.counts.failedPlaceholders, 1)
+	case removePlaceholderFilled:
+		atomic.AddInt32(&s.counts.filledPlaceholders, 1)
+	}
+	return
 }

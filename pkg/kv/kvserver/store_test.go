@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -2636,21 +2637,31 @@ func TestStoreRangePlaceholders(t *testing.T) {
 		},
 	}
 
+	check := func(exp string) {
+		exp = strings.TrimSpace(exp)
+		t.Helper()
+		act := strings.TrimSpace(s.mu.replicasByKey.String())
+		require.Equal(t, exp, act)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Test that simple insertion works.
-	if err := s.addPlaceholderLocked(placeholder1); err != nil {
-		t.Fatalf("could not add placeholder to empty store, got %s", err)
-	}
-	if err := s.addPlaceholderLocked(placeholder2); err != nil {
-		t.Fatalf("could not add non-overlapping placeholder, got %s", err)
-	}
+	require.NoError(t, s.addPlaceholderLocked(placeholder1))
+	require.NoError(t, s.addPlaceholderLocked(placeholder2))
+
+	check(`
+[] - [99] (/Min - "c")
+[99] - [100] ("c" - "d")
+[100] - [255 255] ("d" - /Max)`)
 
 	// Test that simple deletion works.
-	if !s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID) {
-		t.Fatalf("could not remove placeholder that was present")
-	}
+	s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID, removePlaceholderFailed)
+
+	check(`
+[] - [99] (/Min - "c")
+[100] - [255 255] ("d" - /Max)`)
 
 	// Test cannot double insert the same placeholder.
 	if err := s.addPlaceholderLocked(placeholder1); err != nil {
@@ -2661,12 +2672,13 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test cannot double delete a placeholder.
-	if !s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID) {
-		t.Fatalf("could not remove placeholder that was present")
-	}
-	if s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID) {
-		t.Fatalf("successfully removed placeholder that was not present")
-	}
+	s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID, removePlaceholderFailed)
+	// (Second removal avoids a fatal error by passing removePlaceholderAssertGone).
+	s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID, removePlaceholderAssertGone)
+
+	check(`
+[] - [99] (/Min - "c")
+[100] - [255 255] ("d" - /Max)`)
 
 	// This placeholder overlaps with an existing replica.
 	placeholder1 = &ReplicaPlaceholder{
@@ -2683,9 +2695,10 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test that Placeholder deletion doesn't delete replicas.
-	if s.removePlaceholderLocked(ctx, repID) {
-		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists")
-	}
+	s.removePlaceholderLocked(ctx, repID, removePlaceholderAssertGone)
+	check(`
+[] - [99] (/Min - "c")
+[100] - [255 255] ("d" - /Max)`)
 }
 
 // Test that we remove snapshot placeholders when raft ignores the
@@ -2763,11 +2776,23 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 			},
 		},
 	}
+
+	placeholder := &ReplicaPlaceholder{rangeDesc: *repl1.Desc()}
+
+	{
+		s.mu.Lock()
+		err := s.addPlaceholderLocked(placeholder)
+		s.mu.Unlock()
+		require.NoError(t, err)
+	}
+
 	if err := s.processRaftSnapshotRequest(ctx, req,
 		IncomingSnapshot{
-			SnapUUID: uuid.MakeV4(),
-			State:    &kvserverpb.ReplicaState{Desc: repl1.Desc()},
-		}); err != nil {
+			SnapUUID:    uuid.MakeV4(),
+			State:       &kvserverpb.ReplicaState{Desc: repl1.Desc()},
+			placeholder: placeholder,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 
