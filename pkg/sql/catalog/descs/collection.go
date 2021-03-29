@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -1742,14 +1741,14 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 	// Collect the needed information to set up metadata in those types.
 	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
 	typDescs := make(map[descpb.ID]*typedesc.Immutable)
-	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
+	schemaDescs := make(map[descpb.ID]catalog.SchemaDescriptor)
 	for _, desc := range descs {
 		switch desc := desc.(type) {
 		case *dbdesc.Immutable:
 			dbDescs[desc.GetID()] = desc
 		case *typedesc.Immutable:
 			typDescs[desc.GetID()] = desc
-		case *schemadesc.Immutable:
+		case catalog.SchemaDescriptor:
 			schemaDescs[desc.GetID()] = desc
 		}
 	}
@@ -1780,7 +1779,7 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 			case keys.PublicSchemaID:
 				scName = tree.PublicSchema
 			default:
-				scName = schemaDescs[typDesc.ParentSchemaID].Name
+				scName = schemaDescs[typDesc.ParentSchemaID].GetName()
 			}
 			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
 			return name, typDesc, nil

@@ -7161,7 +7161,7 @@ ALTER TYPE sc.typ ADD VALUE 'hi';
 	require.EqualValues(t, 2, dbDesc.Version)
 
 	schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
-	require.EqualValues(t, 2, schemaDesc.Version)
+	require.EqualValues(t, 2, schemaDesc.GetVersion())
 
 	tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
 	require.EqualValues(t, 2, tableDesc.GetVersion())
@@ -7256,7 +7256,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		require.Equal(t, descpb.DescriptorState_OFFLINE, dbDesc.State)
 
 		schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
-		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.State)
+		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.SchemaDesc().State)
 
 		tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.GetState())
@@ -7350,7 +7350,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
 		schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
-		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.State)
+		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.SchemaDesc().State)
 
 		publicTableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "newdb", "public", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, publicTableDesc.GetState())

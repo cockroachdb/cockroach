@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 )
@@ -109,7 +108,7 @@ func TestingGetDatabaseDescriptor(
 // layer.
 func TestingGetSchemaDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, dbID descpb.ID, schemaName string,
-) (schema *schemadesc.Immutable) {
+) (schema catalog.SchemaDescriptor) {
 	ctx := context.Background()
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		exists, schemaID, err := ResolveSchemaID(ctx, txn, codec, dbID, schemaName)

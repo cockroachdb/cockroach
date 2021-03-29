@@ -39,7 +39,7 @@ func TestSafeMessage(t *testing.T) {
 				State:         descpb.DescriptorState_OFFLINE,
 				OfflineReason: "foo",
 			}).BuildImmutable(),
-			exp: "schemadesc.Immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", ParentID: 2, State: OFFLINE, OfflineReason: \"foo\"}",
+			exp: "schemadesc.immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", ParentID: 2, State: OFFLINE, OfflineReason: \"foo\"}",
 		},
 		{
 			desc: schemadesc.NewBuilder(&descpb.SchemaDescriptor{

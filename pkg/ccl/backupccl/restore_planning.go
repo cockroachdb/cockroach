@@ -577,8 +577,8 @@ func allocateDescriptorRewrites(
 						return err
 					}
 					descriptorRewrites[sc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
-						ParentID:   desc.ParentID,
-						ID:         desc.ID,
+						ParentID:   desc.GetParentID(),
+						ID:         desc.GetID(),
 						ToExisting: true,
 					}
 				}

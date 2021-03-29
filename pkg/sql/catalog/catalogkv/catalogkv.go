@@ -485,12 +485,12 @@ func MustGetDatabaseDescByID(
 // returning an error if the descriptor is not found.
 func MustGetSchemaDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*schemadesc.Immutable, error) {
+) (catalog.SchemaDescriptor, error) {
 	desc, err := getDescriptorByID(ctx, txn, codec, id, immutable, catalog.Schema, mustGet)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*schemadesc.Immutable), nil
+	return desc.(catalog.SchemaDescriptor), nil
 }
 
 // GetDescriptorByID looks up the descriptor given its ID,
@@ -618,18 +618,18 @@ func GetDatabaseDescriptorsFromIDs(
 // a schema.
 func GetSchemaDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
-) ([]*schemadesc.Immutable, error) {
+) ([]catalog.SchemaDescriptor, error) {
 	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids, catalog.WrapSchemaDescRefErr)
 	if err != nil {
 		return nil, err
 	}
-	res := make([]*schemadesc.Immutable, len(descs))
+	res := make([]catalog.SchemaDescriptor, len(descs))
 	for i, id := range ids {
 		desc := descs[i]
 		if desc == nil {
 			return nil, catalog.WrapSchemaDescRefErr(id, catalog.ErrDescriptorNotFound)
 		}
-		schema, ok := desc.(*schemadesc.Immutable)
+		schema, ok := desc.(catalog.SchemaDescriptor)
 		if !ok {
 			return nil, catalog.WrapSchemaDescRefErr(id, catalog.NewDescriptorTypeError(desc))
 		}

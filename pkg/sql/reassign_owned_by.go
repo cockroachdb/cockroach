@@ -130,10 +130,10 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 }
 
 func (n *reassignOwnedByNode) reassignSchemaOwner(
-	schemaDesc *schemadesc.Immutable, params runParams,
+	schemaDesc catalog.SchemaDescriptor, params runParams,
 ) error {
 	mutableSchemaDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
-		params.ctx, schemaDesc.ID, params.p.txn)
+		params.ctx, schemaDesc.GetID(), params.p.txn)
 	if err != nil {
 		return err
 	}
