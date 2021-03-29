@@ -76,14 +76,20 @@ UPDATE bank.accounts
 
 type bankState struct {
 	// One error sent by each client. A successful client sends a nil error.
-	errChan   chan error
-	waitGroup sync.WaitGroup
-	// The number of times chaos monkey has run.
-	monkeyIteration uint64
+	errChan chan error
 	// Set to 1 if chaos monkey has stalled the writes.
 	stalled  int32
 	deadline time.Time
 	clients  []bankClient
+
+	cancel context.CancelFunc
+	// monkeyWaitGroup tracks the running of the split and chaos monkeys.
+	monkeyWaitGroup sync.WaitGroup
+	// Monkey errors can be read after waiting on monkeyWaitGroup.
+	chaosMonkeyErr error
+	splitMonkeyErr error
+	// The number of times chaos monkey has run.
+	monkeyIteration uint64
 }
 
 func (s *bankState) done(ctx context.Context) bool {
@@ -110,8 +116,15 @@ func (s *bankState) counts() []uint64 {
 	return counts
 }
 
-// Initialize the "accounts" table.
-func (s *bankState) initBank(ctx context.Context, t *test, c *cluster) {
+// initBannk initializes the "accounts" table and some other test state. Returns
+// a context that should be used by all of the test's operations and a cleanup
+// function. The context will be canceled by the splitMonkey or chaosMonkey on
+// errors. The cleanup function synchronizes with the monkeys and might call
+// t.Fatal() on monkey errors. For this reason, the cleanup function must be
+// called on the test's main goroutine.
+func (s *bankState) initBank(
+	ctx context.Context, t *test, c *cluster,
+) (_ context.Context, cleanup func()) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
@@ -145,6 +158,21 @@ CREATE TABLE bank.accounts (
 	stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + placeholders.String()
 	if _, err := db.ExecContext(ctx, stmt, values...); err != nil {
 		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	return ctx, func() {
+		cancel()
+		s.monkeyWaitGroup.Wait()
+		// Fail the test is any of the monkeys failed. Note that, on error,
+		// the monkeys also call cancel() to stop the test.
+		// TODO(andrei): The monkeys should have a way to register their error
+		// as the test failure's cause, even though they don't run on the main
+		// goroutine. The FatalIfErr here are not ideal because, if a monkey failed,
+		// the context cancelation likely leads to another error being passed first
+		// to t.Fatal(). Unfortunately t.Errorf() is just an alias for t.Fatalf().
+		FatalIfErr(t, s.chaosMonkeyErr)
+		FatalIfErr(t, s.splitMonkeyErr)
 	}
 }
 
@@ -206,9 +234,15 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 func (s *bankState) startChaosMonkey(
 	ctx context.Context, t *test, c *cluster, pickNodes func() []int, consistentIdx int,
 ) {
-	s.waitGroup.Add(1)
+	s.monkeyWaitGroup.Add(1)
 	go func() {
-		defer s.waitGroup.Done()
+		defer s.monkeyWaitGroup.Done()
+
+		onErr := func(err error) {
+			t.l.Errorf("chaos monkey failed; stopping test: %s", err)
+			s.cancel()
+			s.chaosMonkeyErr = errors.Wrap(err, "chaos monkey failed")
+		}
 
 		// Don't begin the chaos monkey until all nodes are serving SQL connections.
 		// This ensures that we don't test cluster initialization under chaos.
@@ -217,11 +251,13 @@ func (s *bankState) startChaosMonkey(
 			var res int
 			err := db.QueryRowContext(ctx, `SELECT 1`).Scan(&res)
 			if err != nil {
-				t.Fatal(err)
+				onErr(err)
+				return
 			}
 			err = db.Close()
 			if err != nil {
-				t.Fatal(err)
+				onErr(err)
+				return
 			}
 		}
 
@@ -237,7 +273,10 @@ func (s *bankState) startChaosMonkey(
 					break
 				}
 				t.l.Printf("round %d: restarting %d\n", curRound, i)
-				c.Restart(ctx, t, c.Node(i))
+				if err := c.Restart(ctx, c.Node(i)); err != nil {
+					onErr(err)
+					return
+				}
 			}
 
 			preCount := s.counts()
@@ -269,10 +308,16 @@ func (s *bankState) startChaosMonkey(
 	}()
 }
 
-func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cluster) {
-	s.waitGroup.Add(1)
+func (s *bankState) startSplitMonkey(ctx context.Context, t *test, d time.Duration, c *cluster) {
+	s.monkeyWaitGroup.Add(1)
 	go func() {
-		defer s.waitGroup.Done()
+		defer s.monkeyWaitGroup.Done()
+
+		onErr := func(err error) {
+			t.l.Errorf("chaos monkey failed; stopping test: %s", err)
+			s.cancel()
+			s.splitMonkeyErr = errors.Wrap(err, "split monkey failed")
+		}
 
 		r := newRand()
 		nodes := make([]string, c.spec.NodeCount)
@@ -296,7 +341,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 				_, err := client.db.ExecContext(ctx,
 					fmt.Sprintf(`ALTER TABLE bank.accounts SPLIT AT VALUES (%d)`, key))
 				if err != nil && !(pgerror.IsSQLRetryableError(err) || kv.IsExpectedRelocateError(err)) {
-					s.errChan <- err
+					onErr(err)
 				}
 				client.RUnlock()
 			case 1:
@@ -317,7 +362,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 
 				_, err := client.db.ExecContext(ctx, relocateQuery)
 				if err != nil && !(pgerror.IsSQLRetryableError(err) || kv.IsExpectedRelocateError(err)) {
-					s.errChan <- err
+					onErr(err)
 				}
 				for i := 0; i < len(s.clients); i++ {
 					s.clients[i].Unlock()
@@ -402,8 +447,8 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		deadline: start.Add(time.Minute),
 		clients:  make([]bankClient, c.spec.NodeCount),
 	}
-	s.initBank(ctx, t, c)
-	defer s.waitGroup.Wait()
+	ctx, cleanup := s.initBank(ctx, t, c)
+	defer cleanup()
 
 	for i := 0; i < c.spec.NodeCount; i++ {
 		s.clients[i].Lock()
@@ -423,7 +468,6 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		return nodes
 	}
 	s.startChaosMonkey(ctx, t, c, pickNodes, -1)
-
 	s.waitClientsStop(ctx, t, c, 45*time.Second)
 
 	// Verify accounts.
@@ -449,8 +493,8 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 		deadline: start.Add(time.Minute),
 		clients:  make([]bankClient, 1),
 	}
-	s.initBank(ctx, t, c)
-	defer s.waitGroup.Wait()
+	ctx, cleanup := s.initBank(ctx, t, c)
+	defer cleanup()
 
 	clientIdx := c.spec.NodeCount
 	client := &s.clients[0]
@@ -465,7 +509,6 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 		return []int{1 + rnd.Intn(clientIdx)}
 	}
 	s.startChaosMonkey(ctx, t, c, pickNodes, clientIdx)
-
 	s.waitClientsStop(ctx, t, c, 45*time.Second)
 
 	// Verify accounts.
@@ -486,8 +529,8 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 		deadline: start.Add(time.Minute),
 		clients:  make([]bankClient, c.spec.NodeCount),
 	}
-	s.initBank(ctx, t, c)
-	defer s.waitGroup.Wait()
+	ctx, cleanup := s.initBank(ctx, t, c)
+	defer cleanup()
 
 	for i := 0; i < c.spec.NodeCount; i++ {
 		s.clients[i].Lock()
@@ -496,7 +539,7 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 		go s.transferMoney(ctx, t.l, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
 
-	s.startSplitMonkey(ctx, 2*time.Second, c)
+	s.startSplitMonkey(ctx, t, 2*time.Second, c)
 	s.waitClientsStop(ctx, t, c, 45*time.Second)
 
 	s.verifyAccounts(ctx, t)
@@ -522,8 +565,8 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 		deadline: start.Add(time.Minute),
 		clients:  make([]bankClient, c.spec.NodeCount),
 	}
-	s.initBank(ctx, t, c)
-	defer s.waitGroup.Wait()
+	ctx, cleanup := s.initBank(ctx, t, c)
+	defer cleanup()
 
 	for i := 0; i < c.spec.NodeCount; i++ {
 		s.clients[i].Lock()
@@ -544,7 +587,7 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 
 	// Starting up the goroutines that restart and do splits and lease moves.
 	s.startChaosMonkey(ctx, t, c, pickNodes, -1)
-	s.startSplitMonkey(ctx, 2*time.Second, c)
+	s.startSplitMonkey(ctx, t, 2*time.Second, c)
 	s.waitClientsStop(ctx, t, c, 45*time.Second)
 
 	// Verify accounts.

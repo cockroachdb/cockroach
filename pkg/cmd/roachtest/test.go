@@ -268,7 +268,7 @@ func (t *test) Skipf(format string, args ...interface{}) {
 // stack traces and such.
 //
 // ATTENTION: Since this calls panic(errTestFatal), it should only be called
-// from a test's closure. The test runner itself should never call this.
+// from a test's main goroutine. The test runner itself should never call this.
 func (t *test) Fatal(args ...interface{}) {
 	t.fatalfInner("" /* format */, args...)
 }
@@ -283,7 +283,11 @@ func (t *test) FailNow() {
 	t.Fatal()
 }
 
-// Errorf implements the TestingT interface.
+// Errorf implements the TestingT interface. It calls t.Fatalf, so it needs to
+// be called on the test's main goroutine.
+//
+// TODO(andrei): It's bad that this calls t.Fatalf(); we should allow this
+// function to be called from any goroutine.
 func (t *test) Errorf(format string, args ...interface{}) {
 	t.Fatalf(format, args...)
 }

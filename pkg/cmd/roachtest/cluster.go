@@ -2123,9 +2123,8 @@ func roachprodArgs(opts []option) []string {
 	return args
 }
 
-// Restart restarts the specified cockroach node. It takes a test and, on error,
-// calls t.Fatal().
-func (c *cluster) Restart(ctx context.Context, t *test, node nodeListOption) {
+// Restart restarts the specified cockroach node(s).
+func (c *cluster) Restart(ctx context.Context, node nodeListOption) error {
 	// We bound the time taken to restart a node through roachprod. Because
 	// roachprod uses SSH, it's particularly vulnerable to network flakiness (as
 	// seen in #35326) and may stall indefinitely. Setting up timeouts better
@@ -2136,11 +2135,15 @@ func (c *cluster) Restart(ctx context.Context, t *test, node nodeListOption) {
 	// we're unable to retry them safely (the underlying commands are
 	// non-idempotent). Presently we simply fail the entire test, when really we
 	// should be able to retry the specific roachprod commands.
-	var cancel func()
-	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
-	c.Stop(ctx, node)
-	c.Start(ctx, t, node)
-	cancel()
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := c.StopE(ctx, node); err != nil {
+		return err
+	}
+	if err := c.StartE(ctx, node); err != nil {
+		return err
+	}
+	return nil
 }
 
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
