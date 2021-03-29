@@ -247,7 +247,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			},
 		},
 		{ // 9
-			err: `multi-region enum: referenced type ID 53: descriptor is a *schemadesc.Immutable: unexpected descriptor type`,
+			err: `multi-region enum: referenced type ID 53: descriptor is a *schemadesc.immutable: unexpected descriptor type`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
