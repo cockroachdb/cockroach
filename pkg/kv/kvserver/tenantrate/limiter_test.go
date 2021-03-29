@@ -48,9 +48,9 @@ func TestCloser(t *testing.T) {
 	limiter := factory.GetTenant(tenant, closer)
 	ctx := context.Background()
 	// First Wait call will not block.
-	require.NoError(t, limiter.Wait(ctx, false, 1))
+	require.NoError(t, limiter.Wait(ctx, true, 1))
 	errCh := make(chan error, 1)
-	go func() { errCh <- limiter.Wait(ctx, false, 1<<30) }()
+	go func() { errCh <- limiter.Wait(ctx, true, 1<<30) }()
 	testutils.SucceedsSoon(t, func() error {
 		if timers := timeSource.Timers(); len(timers) != 1 {
 			return errors.Errorf("expected 1 timer, found %d", len(timers))
@@ -142,9 +142,8 @@ func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 	ts.tenants = make(map[roachpb.TenantID][]tenantrate.Limiter)
 	ts.clock = timeutil.NewManualTime(t0)
 	ts.settings = cluster.MakeTestingClusterSettings()
-	limits := tenantrate.LimitConfigsFromSettings(ts.settings)
-	parseLimits(t, d, &limits)
-	tenantrate.OverrideSettingsWithRateLimits(ts.settings, limits)
+	settings := parseSettings(t, d)
+	tenantrate.OverrideSettings(&ts.settings.SV, settings)
 	ts.rl = tenantrate.NewLimiterFactory(ts.settings, &tenantrate.TestingKnobs{
 		TimeSource: ts.clock,
 	})
@@ -157,9 +156,8 @@ func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
 // yaml object representing the limits and updates accordingly. It returns
 // the current time. See init for more details as the semantics are the same.
 func (ts *testState) updateSettings(t *testing.T, d *datadriven.TestData) string {
-	limits := tenantrate.LimitConfigsFromSettings(ts.settings)
-	parseLimits(t, d, &limits)
-	tenantrate.OverrideSettingsWithRateLimits(ts.settings, limits)
+	settings := parseSettings(t, d)
+	tenantrate.OverrideSettings(&ts.settings.SV, settings)
 	return ts.formatTime()
 }
 
@@ -363,11 +361,11 @@ func (ts *testState) metrics(t *testing.T, d *datadriven.TestData) string {
 	if err := testutils.SucceedsSoonError(func() error {
 		got := ts.getMetricsText(t, d)
 		if got != exp {
-			return errors.Errorf("got: %q, exp: %q", got, exp)
+			return errors.Errorf("got:\n%s\nexp:\n%s\n", got, exp)
 		}
 		return nil
 	}); err != nil {
-		d.Fatalf(t, "failed to find expected timers: %v", err)
+		d.Fatalf(t, "failed to find expected metrics: %v", err)
 	}
 	return d.Expected
 }
@@ -516,10 +514,12 @@ func parseTenantIDs(t *testing.T, d *datadriven.TestData) []uint64 {
 	return tenantIDs
 }
 
-func parseLimits(t *testing.T, d *datadriven.TestData, limits *tenantrate.LimitConfigs) {
-	if err := yaml.UnmarshalStrict([]byte(d.Input), &limits); err != nil {
+func parseSettings(t *testing.T, d *datadriven.TestData) tenantrate.SettingValues {
+	var vals tenantrate.SettingValues
+	if err := yaml.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
 		d.Fatalf(t, "failed to unmarshal limits: %v", err)
 	}
+	return vals
 }
 
 func parseStrings(t *testing.T, d *datadriven.TestData) []string {

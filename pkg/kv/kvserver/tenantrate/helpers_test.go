@@ -10,17 +10,38 @@
 
 package tenantrate
 
-import "github.com/cockroachdb/cockroach/pkg/settings/cluster"
+import "github.com/cockroachdb/cockroach/pkg/settings"
 
-// OverrideSettingsWithRateLimits utilizes LimitConfigs from the values stored in the
-// settings.
-func OverrideSettingsWithRateLimits(settings *cluster.Settings, rl LimitConfigs) {
-	readRequestRateLimit.Override(&settings.SV, float64(rl.ReadRequests.Rate))
-	readRequestBurstLimit.Override(&settings.SV, rl.ReadRequests.Burst)
-	writeRequestRateLimit.Override(&settings.SV, float64(rl.WriteRequests.Rate))
-	writeRequestBurstLimit.Override(&settings.SV, rl.WriteRequests.Burst)
-	readRateLimit.Override(&settings.SV, int64(rl.ReadBytes.Rate))
-	readBurstLimit.Override(&settings.SV, rl.ReadBytes.Burst)
-	writeRateLimit.Override(&settings.SV, int64(rl.WriteBytes.Rate))
-	writeBurstLimit.Override(&settings.SV, rl.WriteBytes.Burst)
+// SettingValues is a struct that can be populated from test files, via YAML.
+type SettingValues struct {
+	Rate  float64
+	Burst float64
+
+	Read  Factors
+	Write Factors
+}
+
+// Factors for reads and writes.
+type Factors struct {
+	Base    float64
+	PerByte float64
+}
+
+// OverrideSettings sets the cluster setting according to the given
+// settingValues.
+//
+// Uninitialized (zero) values are ignored.
+func OverrideSettings(sv *settings.Values, vals SettingValues) {
+	override := func(setting *settings.FloatSetting, val float64) {
+		if val != 0 {
+			setting.Override(sv, val)
+		}
+	}
+	override(kvcuRateLimit, vals.Rate)
+	override(kvcuBurstLimitSeconds, vals.Burst/kvcuRateLimit.Get(sv))
+
+	override(readRequestCost, vals.Read.Base)
+	override(readCostPerMB, vals.Read.PerByte*1024*1024)
+	override(writeRequestCost, vals.Write.Base)
+	override(writeCostPerMB, vals.Write.PerByte*1024*1024)
 }
