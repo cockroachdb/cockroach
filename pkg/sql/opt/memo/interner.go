@@ -96,12 +96,6 @@ type interner struct {
 	cache internCache
 }
 
-// Clear clears all interned expressions. Expressions interned before the call
-// to Clear will not be connected to expressions interned after.
-func (in *interner) Clear() {
-	in.cache.Clear()
-}
-
 // Count returns the number of expressions that have been interned.
 func (in *interner) Count() int {
 	return in.cache.Count()
@@ -188,11 +182,6 @@ func (c *internCache) Item() interface{} {
 // Count returns the number of items in the cache.
 func (c *internCache) Count() int {
 	return len(c.cache)
-}
-
-// Clear clears all items in the cache.
-func (c *internCache) Clear() {
-	c.cache = nil
 }
 
 // Start prepares to look up an item in the cache by its hash value. It must be
