@@ -770,3 +770,33 @@ SELECT EXISTS(
            AND id NOT IN (SELECT id FROM dependent)
        );`, schemaName)
 }
+
+// enumMemberPresent determines whether val is a member of the enum.
+// This includes non-public members.
+func enumMemberPresent(tx *pgx.Tx, enum string, val string) (bool, error) {
+	return scanBool(tx, `
+WITH enum_members AS (
+	SELECT
+				json_array_elements(
+						crdb_internal.pb_to_json(
+								'cockroach.sql.sqlbase.Descriptor',
+								descriptor
+						)->'type'->'enumMembers'
+				)->>'logicalRepresentation'
+				AS v
+		FROM
+				system.descriptor
+		WHERE
+				id = ($1::REGTYPE::INT8 - 100000)
+)
+SELECT
+	CASE WHEN EXISTS (
+		SELECT v FROM enum_members WHERE v = $2::string
+	) THEN true
+	ELSE false
+	END AS exists
+`,
+		enum,
+		val,
+	)
+}
