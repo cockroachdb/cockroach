@@ -47,6 +47,9 @@ func TestCompare(t *testing.T) {
 			init: []string{
 				"drop schema if exists public cascade",
 				"create schema public",
+				"CREATE EXTENSION IF NOT EXISTS postgis",
+				"CREATE EXTENSION IF NOT EXISTS postgis_topology",
+				"CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;",
 			},
 		},
 		"cockroach1": {
