@@ -719,6 +719,15 @@ func postgresCreateTableMutator(
 		mutated = append(mutated, stmt)
 		switch stmt := stmt.(type) {
 		case *tree.CreateTable:
+			// Get all the column types first.
+			colTypes := make(map[string]*types.T)
+			for _, def := range stmt.Defs {
+				switch def := def.(type) {
+				case *tree.ColumnTableDef:
+					colTypes[string(def.Name)] = tree.MustBeStaticallyKnownType(def.Type)
+				}
+			}
+
 			var newdefs tree.TableDefs
 			for _, def := range stmt.Defs {
 				switch def := def.(type) {
@@ -768,6 +777,37 @@ func postgresCreateTableMutator(
 						Storing:  def.Storing,
 					})
 					changed = true
+				case *tree.ColumnTableDef:
+					if def.IsComputed() {
+						// Postgres has different cast volatility for timestamps and OID
+						// types. The substitution here is specific to the output of
+						// testutils.randComputedColumnTableDef.
+						if funcExpr, ok := def.Computed.Expr.(*tree.FuncExpr); ok {
+							if len(funcExpr.Exprs) == 1 {
+								if castExpr, ok := funcExpr.Exprs[0].(*tree.CastExpr); ok {
+									referencedType := colTypes[castExpr.Expr.(*tree.UnresolvedName).String()]
+									isContextDependentType := referencedType.Family() == types.TimestampFamily ||
+										referencedType.Family() == types.OidFamily
+									if isContextDependentType &&
+										tree.MustBeStaticallyKnownType(castExpr.Type) == types.String {
+										def.Computed.Expr = &tree.CaseExpr{
+											Whens: []*tree.When{
+												{
+													Cond: &tree.IsNullExpr{
+														Expr: castExpr.Expr,
+													},
+													Val: rowenc.RandDatum(rng, types.String, true /* nullOK */),
+												},
+											},
+											Else: rowenc.RandDatum(rng, types.String, true /* nullOK */),
+										}
+										changed = true
+									}
+								}
+							}
+						}
+					}
+					newdefs = append(newdefs, def)
 				default:
 					newdefs = append(newdefs, def)
 				}
