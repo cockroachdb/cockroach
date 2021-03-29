@@ -1751,7 +1751,10 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 			return c.CheckReplicaDivergenceOnDB(ctx, db)
 		},
 	); err != nil {
-		t.Fatal(err)
+		// NB: we don't call t.Fatal() here because this method is
+		// for use by the test harness beyond the point at which
+		// it can interpret `t.Fatal`.
+		t.printAndFail(0, err)
 	}
 }
 
