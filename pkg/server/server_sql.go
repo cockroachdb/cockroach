@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -602,6 +603,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	distSQLServer.ServerConfig.SQLStatsResetter = pgServer.SQLServer
 
+	execCfg.PgListenerRegistry = notify.NewRegistry(cfg.Settings, cfg.stopper, cfg.clock, cfg.distSender)
+
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
 	// SessionBoundInternalExecutorFactory. The same applies for setting a
@@ -886,6 +889,8 @@ func (s *SQLServer) preStart(
 		},
 		scheduledjobs.ProdJobSchedulerEnv,
 	)
+
+	s.execCfg.PgListenerRegistry.Start(ctx)
 
 	return nil
 }

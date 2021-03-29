@@ -877,6 +877,7 @@ system         public              statement_diagnostics                  BASE T
 system         public              scheduled_jobs                         BASE TABLE   YES                 1
 system         public              sqlliveness                            BASE TABLE   YES                 1
 system         public              migrations                             BASE TABLE   YES                 1
+system         public              pg_notifications                       BASE TABLE   YES                 1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -975,6 +976,10 @@ system              public             630200280_30_1_not_null   system         
 system              public             630200280_30_2_not_null   system         public        namespace2                       CHECK            NO             NO
 system              public             630200280_30_3_not_null   system         public        namespace2                       CHECK            NO             NO
 system              public             primary                   system         public        namespace2                       PRIMARY KEY      NO             NO
+system              public             630200280_41_1_not_null   system         public        pg_notifications                 CHECK            NO             NO
+system              public             630200280_41_2_not_null   system         public        pg_notifications                 CHECK            NO             NO
+system              public             630200280_41_3_not_null   system         public        pg_notifications                 CHECK            NO             NO
+system              public             primary                   system         public        pg_notifications                 PRIMARY KEY      NO             NO
 system              public             630200280_31_1_not_null   system         public        protected_ts_meta                CHECK            NO             NO
 system              public             630200280_31_2_not_null   system         public        protected_ts_meta                CHECK            NO             NO
 system              public             630200280_31_3_not_null   system         public        protected_ts_meta                CHECK            NO             NO
@@ -1203,6 +1208,9 @@ system              public             630200280_40_2_not_null   minor IS NOT NU
 system              public             630200280_40_3_not_null   patch IS NOT NULL
 system              public             630200280_40_4_not_null   internal IS NOT NULL
 system              public             630200280_40_5_not_null   completed_at IS NOT NULL
+system              public             630200280_41_1_not_null   chan_name IS NOT NULL
+system              public             630200280_41_2_not_null   message IS NOT NULL
+system              public             630200280_41_3_not_null   node_id IS NOT NULL
 system              public             630200280_4_1_not_null    username IS NOT NULL
 system              public             630200280_4_3_not_null    isRole IS NOT NULL
 system              public             630200280_5_1_not_null    id IS NOT NULL
@@ -1241,6 +1249,7 @@ system         public        namespace                        parentID        sy
 system         public        namespace2                       name            system              public             primary
 system         public        namespace2                       parentID        system              public             primary
 system         public        namespace2                       parentSchemaID  system              public             primary
+system         public        pg_notifications                 chan_name       system              public             primary
 system         public        protected_ts_meta                singleton       system              public             check_singleton
 system         public        protected_ts_meta                singleton       system              public             primary
 system         public        protected_ts_records             id              system              public             primary
@@ -1412,6 +1421,9 @@ system         public        namespace2                       id                
 system         public        namespace2                       name                      3
 system         public        namespace2                       parentID                  1
 system         public        namespace2                       parentSchemaID            2
+system         public        pg_notifications                 chan_name                 1
+system         public        pg_notifications                 message                   2
+system         public        pg_notifications                 node_id                   3
 system         public        protected_ts_meta                num_records               3
 system         public        protected_ts_meta                num_spans                 4
 system         public        protected_ts_meta                singleton                 1
@@ -2216,6 +2228,16 @@ NULL     admin    system         public              namespace2                 
 NULL     admin    system         public              namespace2                             SELECT          NULL          YES
 NULL     root     system         public              namespace2                             GRANT           NULL          NO
 NULL     root     system         public              namespace2                             SELECT          NULL          YES
+NULL     admin    system         public              pg_notifications                       DELETE          NULL          NO
+NULL     admin    system         public              pg_notifications                       GRANT           NULL          NO
+NULL     admin    system         public              pg_notifications                       INSERT          NULL          NO
+NULL     admin    system         public              pg_notifications                       SELECT          NULL          YES
+NULL     admin    system         public              pg_notifications                       UPDATE          NULL          NO
+NULL     root     system         public              pg_notifications                       DELETE          NULL          NO
+NULL     root     system         public              pg_notifications                       GRANT           NULL          NO
+NULL     root     system         public              pg_notifications                       INSERT          NULL          NO
+NULL     root     system         public              pg_notifications                       SELECT          NULL          YES
+NULL     root     system         public              pg_notifications                       UPDATE          NULL          NO
 NULL     admin    system         public              protected_ts_meta                      GRANT           NULL          NO
 NULL     admin    system         public              protected_ts_meta                      SELECT          NULL          YES
 NULL     root     system         public              protected_ts_meta                      GRANT           NULL          NO
@@ -2838,6 +2860,16 @@ NULL     root     system         public              migrations                 
 NULL     root     system         public              migrations                             INSERT          NULL          NO
 NULL     root     system         public              migrations                             SELECT          NULL          YES
 NULL     root     system         public              migrations                             UPDATE          NULL          NO
+NULL     admin    system         public              pg_notifications                       DELETE          NULL          NO
+NULL     admin    system         public              pg_notifications                       GRANT           NULL          NO
+NULL     admin    system         public              pg_notifications                       INSERT          NULL          NO
+NULL     admin    system         public              pg_notifications                       SELECT          NULL          YES
+NULL     admin    system         public              pg_notifications                       UPDATE          NULL          NO
+NULL     root     system         public              pg_notifications                       DELETE          NULL          NO
+NULL     root     system         public              pg_notifications                       GRANT           NULL          NO
+NULL     root     system         public              pg_notifications                       INSERT          NULL          NO
+NULL     root     system         public              pg_notifications                       SELECT          NULL          YES
+NULL     root     system         public              pg_notifications                       UPDATE          NULL          NO
 
 statement ok
 CREATE TABLE other_db.xyz (i INT)

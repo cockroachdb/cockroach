@@ -238,7 +238,7 @@ SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
 ----
-r37: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+r38: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 node received request: 1 CPut, 1 EndTxn
 
 # Temporarily disabled flaky test (#58202).

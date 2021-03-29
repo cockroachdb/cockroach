@@ -27,6 +27,7 @@ go_library(
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/pgwire/pgnotify",
         "//pkg/sql/row",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/notify"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -219,6 +220,9 @@ type planner struct {
 	// instead.
 	noticeSender noticeSender
 
+	// notificationSender allows the sending of LISTEN/NOTIFY notifications.
+	notificationSender notify.NotificationSender
+
 	queryCacheSession querycache.Session
 
 	// contextDatabaseID is the ID of a database. It is set during some name
@@ -226,6 +230,11 @@ type planner struct {
 	// the type resolution steps will disallow resolution of types that have a
 	// parentID != contextDatabaseID when it is set.
 	contextDatabaseID descpb.ID
+
+	// sessionLifetimeContext is a context that gets canceled exactly when the
+	// session ends. It's suitable for processes that must outlast a single
+	// statement, but not outlast the session that they were created from.
+	sessionLifetimeContext context.Context
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID ClusterWideID) {
@@ -337,6 +346,7 @@ func newInternalPlanner(
 	}
 
 	p := &planner{execCfg: execCfg, alloc: &rowenc.DatumAlloc{}}
+	p.sessionLifetimeContext = ctx
 
 	p.txn = txn
 	p.stmt = Statement{}

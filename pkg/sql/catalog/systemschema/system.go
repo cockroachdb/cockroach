@@ -357,6 +357,15 @@ CREATE TABLE system.migrations (
     FAMILY "primary" (major, minor, patch, internal, completed_at),
     PRIMARY KEY (major, minor, patch, internal)
 )`
+
+	PGNotificationsTableSchema = `
+CREATE TABLE system.pg_notifications(
+  chan_name STRING PRIMARY KEY,
+  message STRING NOT NULL,
+  node_id INT4 NOT NULL,
+
+  FAMILY "primary" (chan_name, message, node_id)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1753,6 +1762,34 @@ var (
 		NextIndexID: 2,
 		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
 			descpb.SystemAllowedPrivileges[keys.JobsTableID], security.NodeUserName()),
+		FormatVersion:  descpb.InterleavedFormatVersion,
+		NextMutationID: 1,
+	})
+
+	PGNotificationsTable = makeTable(descpb.TableDescriptor{
+		Name:                    "pg_notifications",
+		ID:                      keys.PGNotificationsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "chan_name", ID: 1, Type: types.String, Nullable: false},
+			{Name: "message", ID: 2, Type: types.String, Nullable: false},
+			{Name: "node_id", ID: 3, Type: types.Int4, Nullable: false},
+		},
+		NextColumnID: 4,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ColumnNames: []string{"chan_name", "message", "node_id"},
+				ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: pk("chan_name"),
+		NextIndexID:  2,
+		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			descpb.SystemAllowedPrivileges[keys.StatementDiagnosticsTableID], security.NodeUserName()),
 		FormatVersion:  descpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	})

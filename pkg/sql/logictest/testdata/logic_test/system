@@ -19,6 +19,7 @@ public  locations                        table  NULL  0  NULL
 public  migrations                       table  NULL  0  NULL
 public  namespace                        table  NULL  0  NULL
 public  namespace2                       table  NULL  0  NULL
+public  pg_notifications                 table  NULL  0  NULL
 public  protected_ts_meta                table  NULL  0  NULL
 public  protected_ts_records             table  NULL  0  NULL
 public  rangelog                         table  NULL  0  NULL
@@ -75,6 +76,7 @@ SELECT id FROM system.descriptor
 37
 39
 40
+41
 50
 51
 52
@@ -266,6 +268,16 @@ system  public  namespace2                       admin   GRANT
 system  public  namespace2                       admin   SELECT
 system  public  namespace2                       root    GRANT
 system  public  namespace2                       root    SELECT
+system  public  pg_notifications                 admin   DELETE
+system  public  pg_notifications                 admin   GRANT
+system  public  pg_notifications                 admin   INSERT
+system  public  pg_notifications                 admin   SELECT
+system  public  pg_notifications                 admin   UPDATE
+system  public  pg_notifications                 root    DELETE
+system  public  pg_notifications                 root    GRANT
+system  public  pg_notifications                 root    INSERT
+system  public  pg_notifications                 root    SELECT
+system  public  pg_notifications                 root    UPDATE
 system  public  protected_ts_meta                admin   GRANT
 system  public  protected_ts_meta                admin   SELECT
 system  public  protected_ts_meta                root    GRANT

@@ -17,6 +17,7 @@ stmt ::=
 	| reassign_owned_by_stmt
 	| drop_owned_by_stmt
 	| release_stmt
+	| listen_notify_stmt
 	| refresh_stmt
 	| nonpreparable_set_stmt
 	| transaction_stmt
@@ -99,6 +100,13 @@ drop_owned_by_stmt ::=
 
 release_stmt ::=
 	'RELEASE' savepoint_name
+
+listen_notify_stmt ::=
+	'NOTIFY' name
+	| 'NOTIFY' name ',' 'SCONST'
+	| 'LISTEN' name
+	| 'UNLISTEN' name
+	| 'UNLISTEN' '*'
 
 refresh_stmt ::=
 	'REFRESH' 'MATERIALIZED' 'VIEW' opt_concurrently view_name opt_clear_data
@@ -926,6 +934,7 @@ unreserved_keyword ::=
 	| 'LEVEL'
 	| 'LINESTRING'
 	| 'LIST'
+	| 'LISTEN'
 	| 'LOCAL'
 	| 'LOCKED'
 	| 'LOGIN'
@@ -968,6 +977,7 @@ unreserved_keyword ::=
 	| 'NOCONTROLJOB'
 	| 'NOLOGIN'
 	| 'NOMODIFYCLUSTERSETTING'
+	| 'NOTIFY'
 	| 'NOVIEWACTIVITY'
 	| 'NOWAIT'
 	| 'NULLS'
@@ -1107,6 +1117,7 @@ unreserved_keyword ::=
 	| 'UNBOUNDED'
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
+	| 'UNLISTEN'
 	| 'UNLOGGED'
 	| 'UNSPLIT'
 	| 'UNTIL'

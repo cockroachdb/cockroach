@@ -593,6 +593,23 @@ func (*Import) StatementTag() string { return "IMPORT" }
 
 func (*Import) cclOnlyStatement() {}
 
+// StatementTag returns a short string identifying the type of statement.
+func (n *Listen) StatementTag() string {
+	if n.Unlisten {
+		return "UNLISTEN"
+	}
+	return "LISTEN"
+}
+
+// StatementType implements the Statement interface.
+func (*Listen) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*Notify) StatementTag() string { return "NOTIFY" }
+
+// StatementType implements the Statement interface.
+func (*Notify) StatementType() StatementType { return Ack }
+
 // StatementType implements the Statement interface.
 func (*ParenSelect) StatementType() StatementType { return Rows }
 
@@ -1155,6 +1172,8 @@ func (n *Grant) String() string                          { return AsString(n) }
 func (n *GrantRole) String() string                      { return AsString(n) }
 func (n *Insert) String() string                         { return AsString(n) }
 func (n *Import) String() string                         { return AsString(n) }
+func (n *Listen) String() string                         { return AsString(n) }
+func (n *Notify) String() string                         { return AsString(n) }
 func (n *ParenSelect) String() string                    { return AsString(n) }
 func (n *Prepare) String() string                        { return AsString(n) }
 func (n *ReassignOwnedBy) String() string                { return AsString(n) }
