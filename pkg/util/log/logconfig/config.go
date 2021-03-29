@@ -37,7 +37,6 @@ const DefaultFluentFormat = `json-fluent-compact`
 // DefaultConfig returns a suitable default configuration when logging
 // is meant to primarily go to files.
 func DefaultConfig() (c Config) {
-	// TODO(knz): The default for 'stderr:exit-on-error' should probably be 'false'.
 	const defaultConfig = `
 file-defaults:
     filter: INFO
@@ -59,7 +58,7 @@ sinks:
     format: ` + DefaultStderrFormat + `
     redactable: true
     channels: all
-    exit-on-error: true
+    exit-on-error: false
 capture-stray-errors:
   enable: true
 `
