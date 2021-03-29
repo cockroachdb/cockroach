@@ -1029,14 +1029,18 @@ var specs = []stmtSpec{
 		name:   "restore",
 		stmt:   "restore_stmt",
 		inline: []string{"opt_as_of_clause", "as_of_clause", "opt_with_restore_options"},
+		match:   []*regexp.Regexp{regexp.MustCompile("'FROM'")},
 		replace: map[string]string{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
-			"targets":                                "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"targets":                                "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"string_or_placeholder":                  "subdirectory",
-			"list_of_string_or_placeholder_opt_list": "full_backup_location ( | partitioned_backup_location ( ',' partitioned_backup_location )*)",
+			"list_of_string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
 		},
 		unlink: []string{"timestamp", "full_backup_location", "incremental_backup_location"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'REPLICATION' 'STREAM' 'FROM'"),
+		},
 	},
 	{
 		name:    "resume_job",
