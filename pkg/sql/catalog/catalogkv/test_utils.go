@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 )
@@ -83,7 +82,7 @@ func TestingGetTypeDescriptor(
 // the kv layer.
 func TestingGetDatabaseDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string,
-) (db *dbdesc.Immutable) {
+) (db catalog.DatabaseDescriptor) {
 	ctx := context.Background()
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		found, id, err := LookupDatabaseID(ctx, txn, codec, database)
