@@ -721,11 +721,11 @@ func applyZoneConfigForMultiRegionDatabase(
 // dropped are skipped.
 func (p *planner) forEachTableInMultiRegionDatabase(
 	ctx context.Context,
-	dbDesc *dbdesc.Immutable,
+	dbDesc catalog.DatabaseDescriptor,
 	fn func(ctx context.Context, tbDesc *tabledesc.Mutable) error,
 ) error {
 	if !dbDesc.IsMultiRegion() {
-		return errors.AssertionFailedf("db %q is not multi-region", dbDesc.Name)
+		return errors.AssertionFailedf("db %q is not multi-region", dbDesc.GetName())
 	}
 	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
@@ -751,7 +751,7 @@ func (p *planner) forEachTableInMultiRegionDatabase(
 func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdesc.Mutable) error {
 	return p.forEachTableInMultiRegionDatabase(
 		ctx,
-		&desc.Immutable,
+		desc,
 		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
 			regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, desc.ID, p.Descriptors())
 			if err != nil {
@@ -875,8 +875,8 @@ func (p *planner) CurrentDatabaseRegionConfig(
 
 	return multiregion.MakeRegionConfig(
 		regionNames,
-		dbDesc.RegionConfig.PrimaryRegion,
-		dbDesc.RegionConfig.SurvivalGoal,
+		dbDesc.GetRegionConfig().PrimaryRegion,
+		dbDesc.GetRegionConfig().SurvivalGoal,
 		regionEnumID,
 	), nil
 }
@@ -990,8 +990,8 @@ func synthesizeRegionConfigImpl(
 
 	regionConfig = multiregion.MakeRegionConfig(
 		regionNames,
-		dbDesc.RegionConfig.PrimaryRegion,
-		dbDesc.RegionConfig.SurvivalGoal,
+		dbDesc.GetRegionConfig().PrimaryRegion,
+		dbDesc.GetRegionConfig().SurvivalGoal,
 		regionEnumID,
 	)
 
@@ -1025,7 +1025,7 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 		if err != nil {
 			return err
 		}
-		if dbDesc.RegionConfig == nil {
+		if dbDesc.GetRegionConfig() == nil {
 			// Not a multi-region database, we're done here.
 			return nil
 		}
@@ -1082,14 +1082,14 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 // database zone configuration and we wish to warn the user about that before
 // it occurs (and require the FORCE option to proceed).
 func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
-	ctx context.Context, dbDesc *dbdesc.Immutable,
+	ctx context.Context, dbDesc catalog.DatabaseDescriptor,
 ) error {
 	// If the user is overriding, our work here is done.
 	if p.SessionData().OverrideMultiRegionZoneConfigEnabled {
 		return nil
 	}
 
-	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.ID, p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
 	if err != nil {
 		return err
 	}
@@ -1098,7 +1098,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		return err
 	}
 
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, dbDesc.ID)
+	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -1129,7 +1129,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 // override_multi_region_zone_config session variable to be set).
 func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	ctx context.Context,
-	dbDesc *dbdesc.Immutable,
+	dbDesc catalog.DatabaseDescriptor,
 	desc *tabledesc.Mutable,
 	toRegionalByRow bool,
 	opts ...applyZoneConfigForMultiRegionTableOption,
@@ -1191,7 +1191,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		}
 	}
 
-	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
 	if err != nil {
 		return err
 	}
