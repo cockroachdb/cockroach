@@ -3383,3 +3383,29 @@ func TestChangefeedPrimaryKeyChangeMixedVersion(t *testing.T) {
 	))
 
 }
+
+func TestChangefeedInsertAndDeleteInTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE ephemera (a INT PRIMARY KEY, b STRING)`)
+
+		ephemeraFeed := feed(t, f, `CREATE CHANGEFEED FOR ephemera`)
+		defer closeFeed(t, ephemeraFeed)
+
+		sqlDB.Exec(t, `BEGIN TRANSACTION`)
+		sqlDB.Exec(t, `INSERT INTO ephemera values (1, 'mayfly')`)
+		sqlDB.Exec(t, `DELETE FROM ephemera where a=1`)
+		sqlDB.Exec(t, `COMMIT`)
+
+		assertPayloads(t, ephemeraFeed, []string{
+//			`ephemera: [1]->{"after": {"a": 1, "b": "mayfly"}}`, <-- this does not appear
+			`ephemera: [1]->{"after": null}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
