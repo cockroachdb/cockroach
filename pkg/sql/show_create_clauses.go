@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -107,24 +108,34 @@ func ShowCreateView(
 	f.WriteString(") AS ")
 
 	// Convert sequences referenced by ID in the view back to their names.
-	decodedViewQuery, err := formatViewQueryForDisplay(ctx, semaCtx, desc)
+	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, semaCtx, desc)
 	if err != nil {
 		log.Warningf(ctx,
-			"error converting sequence IDs to names for view %s (%v): %+v",
+			"error deserializing user defined types for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
 		f.WriteString(desc.GetViewQuery())
 	} else {
-		f.WriteString(decodedViewQuery)
+		// Deserialize user-defined types in the view query.
+		sequenceReplacedViewQuery, err := formatViewQuerySequencesForDisplay(
+			ctx, semaCtx, typeReplacedViewQuery)
+		if err != nil {
+			log.Warningf(ctx,
+				"error converting sequence IDs to names for view %s (%v): %+v",
+				desc.GetName(), desc.GetID(), err)
+			f.WriteString(typeReplacedViewQuery)
+		} else {
+			f.WriteString(sequenceReplacedViewQuery)
+		}
 	}
+
 	return f.CloseAndGetString(), nil
 }
 
-// formatViewQueryForDisplay formats the given viewQuery by
-// parsing it into a statement, walking the statement and
-// looking for any IDs in the statement, and replacing the
-// IDs with the descriptor's fully qualified name.
-func formatViewQueryForDisplay(
-	ctx context.Context, semaCtx *tree.SemaContext, desc catalog.TableDescriptor,
+// formatViewQuerySequencesForDisplay walks the view query and
+// looks for sequence IDs in the statement. If it finds any,
+// it will replace the IDs with the descriptor's fully qualified name.
+func formatViewQuerySequencesForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, viewQuery string,
 ) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		newExpr, err = schemaexpr.ReplaceIDsWithFQNames(ctx, expr, semaCtx)
@@ -132,6 +143,50 @@ func formatViewQueryForDisplay(
 			return false, expr, err
 		}
 		return false, newExpr, nil
+	}
+
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return "", err
+	}
+
+	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFunc)
+	if err != nil {
+		return "", err
+	}
+	return newStmt.String(), nil
+}
+
+// formatViewQueryTypesForDisplay walks the view query and
+// look for serialized user-defined types. If it finds any,
+// it will deserialize it to display its name.
+func formatViewQueryTypesForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, desc catalog.TableDescriptor,
+) (string, error) {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		switch n := expr.(type) {
+		case *tree.AnnotateTypeExpr, *tree.CastExpr:
+			texpr, err := tree.TypeCheck(ctx, n, semaCtx, types.Any)
+			if err != nil {
+				return false, expr, err
+			}
+			if !texpr.ResolvedType().UserDefined() {
+				return true, expr, nil
+			}
+
+			formattedExpr, err := schemaexpr.FormatExprForDisplay(
+				ctx, desc, expr.String(), semaCtx, tree.FmtParsable)
+			if err != nil {
+				return false, expr, err
+			}
+			newExpr, err = parser.ParseExpr(formattedExpr)
+			if err != nil {
+				return false, expr, err
+			}
+			return false, newExpr, nil
+		default:
+			return true, expr, nil
+		}
 	}
 
 	viewQuery := desc.GetViewQuery()

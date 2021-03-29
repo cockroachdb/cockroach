@@ -787,6 +787,53 @@ func findUsagesOfEnumValue(
 	return foundUsage, nil
 }
 
+// findUsagesOfEnumValueInViewQuery takes a view query, type ID and an
+// enum member of that type, and checks if the view query uses that enum member.
+func findUsagesOfEnumValueInViewQuery(
+	viewQuery string, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
+) (bool, error) {
+	var foundUsage bool
+	visitFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		annotateType, ok := expr.(*tree.AnnotateTypeExpr)
+		if !ok {
+			return true, expr, nil
+		}
+
+		// Check if this expr's type is the one we're dropping the enum value from.
+		typeOid, ok := annotateType.Type.(*tree.OIDTypeReference)
+		if !ok {
+			return true, expr, nil
+		}
+		id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+		if id != typeID {
+			return true, expr, nil
+		}
+
+		// Check if this expr uses the enum value we're dropping.
+		strVal, ok := annotateType.Expr.(*tree.StrVal)
+		if !ok {
+			return true, expr, nil
+		}
+		physicalRep := []byte(strVal.RawString())
+		if bytes.Equal(physicalRep, member.PhysicalRepresentation) {
+			foundUsage = true
+			return false, expr, nil
+		}
+
+		return false, expr, nil
+	}
+
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return false, err
+	}
+	_, err = tree.SimpleStmtVisit(stmt.AST, visitFunc)
+	if err != nil {
+		return false, err
+	}
+	return foundUsage, nil
+}
+
 // canRemoveEnumValue returns an error if the enum value is in use and therefore
 // can't be removed.
 func (t *typeSchemaChanger) canRemoveEnumValue(
@@ -802,6 +849,18 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			return errors.Wrapf(err,
 				"could not validate enum value removal for %q", member.LogicalRepresentation)
 		}
+		if desc.IsView() {
+			foundUsage, err := findUsagesOfEnumValueInViewQuery(desc.GetViewQuery(), member, typeDesc.ID)
+			if err != nil {
+				return err
+			}
+			if foundUsage {
+				return pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"could not remove enum value %q as it is being used in view %q",
+					member.LogicalRepresentation, desc.GetName())
+			}
+		}
+
 		var query strings.Builder
 		colSelectors := tabledesc.ColumnsSelectors(desc.PublicColumns())
 		columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)

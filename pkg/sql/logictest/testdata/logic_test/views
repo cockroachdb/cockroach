@@ -1002,3 +1002,107 @@ ALTER TYPE typ2 RENAME TO typ3
 
 statement error cannot drop type "typ3" because other objects \(\[db2.public.v3\]\) still depend on it
 DROP TYPE typ3
+
+
+# Test that user defined types used in views can be renamed without corrupting the view.
+subtest view_user_defined_types_renames
+
+statement ok
+CREATE TYPE view_typ AS ENUM('a', 'b')
+
+statement ok
+CREATE VIEW v8 AS SELECT 'a'::view_typ
+
+statement ok
+ALTER TYPE view_typ RENAME TO view_typ_new
+
+query TT
+SHOW CREATE VIEW v8
+----
+v8  CREATE VIEW public.v8 (view_typ) AS SELECT 'a':::public.view_typ_new
+
+query T
+SELECT * FROM v8
+----
+a
+
+statement ok
+CREATE VIEW v9 AS (SELECT 'a'::view_typ_new < 'a'::view_typ_new AS k)
+
+statement ok
+ALTER TYPE view_typ_new RENAME TO view_typ
+
+query TT
+SHOW CREATE VIEW v9
+----
+v9  CREATE VIEW public.v9 (k) AS (SELECT 'a':::public.view_typ < 'a':::public.view_typ AS k)
+
+query B
+SELECT * FROM v9
+----
+false
+
+statement ok
+CREATE VIEW v10 AS (SELECT k FROM (SELECT 'a'::view_typ AS k))
+
+statement ok
+ALTER TYPE view_typ RENAME TO view_type_new
+
+query TT
+SHOW CREATE VIEW v10
+----
+v10  CREATE VIEW public.v10 (k) AS (SELECT k FROM (SELECT 'a':::public.view_type_new AS k))
+
+query T
+SELECT * FROM v10
+----
+a
+
+statement ok
+CREATE VIEW v11 AS (SELECT 'a'::view_type_new AS k UNION SELECT 'b'::view_type_new)
+
+statement ok
+ALTER TYPE view_type_new RENAME TO view_type
+
+query TT
+SHOW CREATE VIEW v11
+----
+v11  CREATE VIEW public.v11 (k) AS (SELECT 'a':::public.view_type AS k UNION SELECT 'b':::public.view_type)
+
+query T
+SELECT * FROM v11 ORDER BY k
+----
+a
+b
+
+statement ok
+CREATE VIEW v12 AS (SELECT ARRAY['a'::view_type, 'b'::view_type])
+
+statement ok
+ALTER TYPE view_type RENAME TO view_type_new
+
+query TT
+SHOW CREATE VIEW v12
+----
+v12  CREATE VIEW public.v12 ("array") AS (SELECT ARRAY['a':::public.view_type_new, 'b':::public.view_type_new]:::public.view_type_new[])
+
+query T
+SELECT * FROM v12
+----
+{a,b}
+
+statement ok
+CREATE VIEW v13 AS (SELECT ('{a, b}'::view_type_new[])[2])
+
+statement ok
+ALTER TYPE view_type_new RENAME TO view_type
+
+query TT
+SHOW CREATE VIEW v13
+----
+v13  CREATE VIEW public.v13 (view_type_new) AS (SELECT ('{a, b}':::STRING::public.view_type[])[2:::INT8])
+
+query T
+SELECT * FROM v13
+----
+b
