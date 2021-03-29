@@ -72,9 +72,11 @@ when present.
 ` + "`marker`" + ` can be empty; in this case, its position in the common prefix is
 a double ASCII space character which can be used to reliably identify this situation.
 If the marker "` + redactableIndicator + `" is present, the remainder of the log entry
-contains delimiters (` + string(redact.StartMarker()) + "..." + string(redact.EndMarker()) + `) around
-fields that are considered sensitive. These markers are automatically recognized
-by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` when log redaction is requested.
+contains delimiters (` + string(redact.StartMarker()) + "..." + string(redact.EndMarker()) + `)
+around fields that are considered sensitive. These markers are automatically recognized
+by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` +
+"[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + `
+when log redaction is requested.
 
 The logging ` + "`tags`" + ` are enclosed between square brackets ` + "`[...]`" + `,
 and the syntax ` + "`[-]`" + ` is used when there are no logging tags
@@ -126,7 +128,8 @@ Example long entries broken up into multiple lines:
 
 Entries in this format can be read by most ` + "`crdb-v1`" + ` log parsers,
 in particular the one included in the DB console and
-also the ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` facility.
+also the ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)"
++ ` facility.
 
 However, implementers of previous version parsers must
 understand that the logging tags field is now always

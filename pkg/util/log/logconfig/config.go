@@ -188,12 +188,24 @@ type SinkConfig struct {
 //           channels: DEV
 //
 // {{site.data.alerts.callout_info}}
-// The server start-up messages are still emitted at the start of the standard error stream even when logging to `stderr` is enabled. This makes it generally difficult to automate integration of `stderr` with log analyzers. Generally, we recommend using [file logging](#output-to-files) or [network logging](#output-to-fluentd-compatible-log-collectors) instead of `stderr` when integrating with automated monitoring software.
+// The server start-up messages are still emitted at the start of the standard error
+// stream even when logging to `stderr` is enabled. This makes it generally difficult
+// to automate integration of `stderr` with log analyzers. Generally, we recommend using
+// [file logging](#output-to-files) or [network logging](#output-to-fluentd-compatible-log-collectors)
+// instead of `stderr` when integrating with automated monitoring software.
 // {{site.data.alerts.end}}
 //
-// It is not possible to enable the `redactable` parameter on the `stderr` sink if `capture-stray-errors` (i.e., capturing stray error information to files) is disabled. This is because when `capture-stray-errors` is disabled, the process's standard error stream can contain an arbitrary interleaving of [logging events](eventlog.html) and stray errors. It is possible for stray error output to interfere with redaction markers and remove the guarantees that information outside of redaction markers does not contain sensitive information.
+// It is not possible to enable the `redactable` parameter on the `stderr` sink if
+// `capture-stray-errors` (i.e., capturing stray error information to files) is disabled.
+// This is because when `capture-stray-errors` is disabled, the process's standard error stream
+// can contain an arbitrary interleaving of [logging events](eventlog.html) and stray
+// errors. It is possible for stray error output to interfere with redaction markers
+// and remove the guarantees that information outside of redaction markers does not
+// contain sensitive information.
 //
-// For a similar reason, no guarantee of parsability of the output format is available when `capture-stray-errors` is disabled, since the standard error stream can then contain an arbitrary interleaving of non-formatted error data.
+// For a similar reason, no guarantee of parsability of the output format is available
+// when `capture-stray-errors` is disabled, since the standard error stream can then
+// contain an arbitrary interleaving of non-formatted error data.
 //
 type StderrSinkConfig struct {
 	// Channels is the list of logging channels that use this sink.
@@ -226,7 +238,11 @@ type FluentDefaults struct {
 // [Fluentd](https://www.fluentd.org)-compatible protocol.
 //
 // {{site.data.alerts.callout_danger}}
-// TLS is not supported yet: the connection to the log collector is neither authenticated nor encrypted. Given that logging events may contain sensitive information, care should be taken to keep the log collector and the CockroachDB node close together on a private network, or connect them using a secure VPN. TLS support may be added at a later date.
+// TLS is not supported yet: the connection to the log collector is neither
+// authenticated nor encrypted. Given that logging events may contain sensitive
+// information, care should be taken to keep the log collector and the CockroachDB
+// node close together on a private network, or connect them using a secure VPN.
+// TLS support may be added at a later date.
 // {{site.data.alerts.end}}
 //
 // At the time of this writing, a Fluent sink buffers at most one log
@@ -330,7 +346,8 @@ type FileDefaults struct {
 // User-facing documentation follows.
 // TITLE: Output to files
 //
-// This sink type causes logging data to be captured into log files in a configurable logging directory.
+// This sink type causes logging data to be captured into log files in a
+// configurable logging directory.
 //
 // The configuration key under the `sinks` key in the YAML
 // configuration is `file-groups`. Example configuration:
@@ -340,14 +357,19 @@ type FileDefaults struct {
 //           health:             # defines one group called "health"
 //              channels: HEALTH
 //
-// Each generated log file is prefixed by the name of the process, followed by the name of the group, separated by a hyphen. For example, the group `health` will generate files named `cockroach-health.XXX.log`, assuming the process is named `cockroach`. (A user can influence the prefix by renaming the program executable.)
+// Each generated log file is prefixed by the name of the process,
+// followed by the name of the group, separated by a hyphen. For example,
+// the group `health` will generate files named `cockroach-health.XXX.log`,
+// assuming the process is named `cockroach`. (A user can influence the
+// prefix by renaming the program executable.)
 //
 // The files are named so that a lexicographical sort of the
 // directory contents presents the file in creation order.
 //
 // A symlink (e.g. `cockroach-health.log`) for each group points to the latest generated log file.
 // 
-// Every new file group sink configured automatically inherits the configurations set in the `file-defaults` section.
+// Every new file group sink configured automatically inherits
+// the configurations set in the `file-defaults` section.
 //
 // For example:
 //

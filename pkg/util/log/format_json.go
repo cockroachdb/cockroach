@@ -129,12 +129,14 @@ Additionally, the following fields are conditionally present:
 | ` + "`stacks`" + `  | Goroutine stacks, for fatal events. |
 
 When an entry is structured, the ` + "`event`" + ` field maps to a dictionary
-whose structure is one of the documented structured events. See the [reference documentation](eventlog.html) for structured events for a list of possible payloads.
+whose structure is one of the documented structured events. See the [reference documentation](eventlog.html)
+for structured events for a list of possible payloads.
 
 When the entry is marked as ` + "`redactable`" + `, the ` + "`tags`, `message`, and/or `event`" + ` payloads
 contain delimiters (` + string(redact.StartMarker()) + "..." + string(redact.EndMarker()) + `) around
 fields that are considered sensitive. These markers are automatically recognized
-by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` when log redaction is requested.
+by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` +
+"[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` when log redaction is requested.
 
 
 `)

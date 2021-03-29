@@ -80,8 +80,10 @@ Beware that the text of the log entry can span multiple lines. The following cav
 		// If there is no counter, the format is ambiguous. Explain that.
 		buf.WriteString(`
 - The text of the log entry can start with text enclosed between ` + "`[`" + ` and ` + "`]`" + `.
-  If there were no logging tags to start with, it is not possible to distinguish between logging context tag information and a ` + "`[...]`" + ` string in the main text of the log entry. This means that this format is ambiguous.
-  For an unambiguous alternative, consider ` + "`" + formatCrdbV1WithCounter{}.formatterName() + "`" + `.
+  If there were no logging tags to start with, it is not possible to distinguish between
+  logging context tag information and a ` + "`[...]`" + ` string in the main text of the
+  log entry. This means that this format is ambiguous. For an unambiguous alternative,
+  consider ` + "`" + formatCrdbV1WithCounter{}.formatterName() + "`" + `.
 `)
 	}
 
@@ -109,10 +111,10 @@ regular log entries. This header reports when the file was created,
 which parameters were used to start the server, the server identifiers
 if known, and other metadata about the running process.
 
-- This header appears to be logged at severity ` + "`INFO`" + ` (with an ` + "`I`" + ` prefix at the
-start of the line) even though it does not really have a severity.
+- This header appears to be logged at severity ` + "`INFO`" + ` (with an ` + "`I`" + ` prefix
+  at the start of the line) even though it does not really have a severity.
 - The header is printed unconditionally even when a filter is configured to
-omit entries at the ` + "`INFO`" + ` level.
+  omit entries at the ` + "`INFO`" + ` level.
 
 ### Common log entry prefix
 
@@ -121,7 +123,7 @@ Each line of output starts with the following prefix:
      Lyymmdd hh:mm:ss.uuuuuu goid [chan@]file:line marker`)
 
 	if withCounter {
-		buf.WriteString(`tags counter`)
+		buf.WriteString(` tags counter`)
 	}
 
 	buf.WriteString(`
@@ -153,7 +155,8 @@ a double ASCII space character which can be used to reliably identify this situa
 If the marker ` + "` + redactableIndicator + `" + ` is present, the remainder of the log entry
 contains delimiters (` + string(redact.StartMarker()) + "..." + string(redact.EndMarker()) + `) around
 fields that are considered sensitive. These markers are automatically recognized
-by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` when log redaction is requested.
+by ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` + 
+"[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + ` when log redaction is requested.
 `)
 
 	return buf.String()

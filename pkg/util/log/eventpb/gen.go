@@ -547,7 +547,8 @@ A field is also considered "Sensitive" if it may contain
 application-specific information or personally identifiable information (PII). In that case,
 the copy of the event sent to the external logging channel
 will contain redaction markers in a format that is compatible
-with the redaction facilities in ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + ` and ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + `, 
+with the redaction facilities in ` + "[`cockroach debug zip`](cockroach-debug-zip.html)" + `
+and ` + "[`cockroach debug merge-logs`](cockroach-debug-merge-logs.html)" + `,
 provided the ` + "`redactable`" + ` functionality is enabled on the logging sink.
 
 Events not documented on this page will have an unstructured format in log messages.
