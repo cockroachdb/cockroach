@@ -592,18 +592,41 @@ func (tc *TestCluster) Targets(serverIdxs ...int) []roachpb.ReplicationTarget {
 func (tc *TestCluster) changeReplicas(
 	changeType roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
+	tc.t.Helper()
 	ctx := context.TODO()
-	var beforeDesc roachpb.RangeDescriptor
-	if err := tc.Servers[0].DB().GetProto(
-		ctx, keys.RangeDescriptorKey(startKey), &beforeDesc,
-	); err != nil {
-		return roachpb.RangeDescriptor{}, errors.Wrap(err, "range descriptor lookup error")
+
+	var returnErr error
+	var desc *roachpb.RangeDescriptor
+	if err := testutils.SucceedsSoonError(func() error {
+		tc.t.Helper()
+		var beforeDesc roachpb.RangeDescriptor
+		if err := tc.Servers[0].DB().GetProto(
+			ctx, keys.RangeDescriptorKey(startKey), &beforeDesc,
+		); err != nil {
+			return errors.Wrap(err, "range descriptor lookup error")
+		}
+		var err error
+		desc, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, startKey.AsRawKey(), beforeDesc, roachpb.MakeReplicationChanges(changeType, targets...),
+		)
+		if kvserver.IsRetriableReplicationChangeError(err) {
+			tc.t.Logf("encountered retriable replication change error: %v", err)
+			return err
+		}
+		// Don't return blindly - if this isn't an error we think is related to a
+		// replication error that we can retry, save the error to the outer scope
+		// and return nil.
+		returnErr = err
+		return nil
+	}); err != nil {
+		returnErr = err
 	}
-	desc, err := tc.Servers[0].DB().AdminChangeReplicas(
-		ctx, startKey.AsRawKey(), beforeDesc, roachpb.MakeReplicationChanges(changeType, targets...),
-	)
-	if err != nil {
-		return roachpb.RangeDescriptor{}, errors.Wrap(err, "AdminChangeReplicas error")
+
+	if returnErr != nil {
+		// We mark the error as Handled so that tests that wanted the error in the
+		// first attempt but spent a while spinning in the retry loop above will
+		// fail. These should invoke ChangeReplicas directly.
+		return roachpb.RangeDescriptor{}, errors.Handled(errors.Wrap(returnErr, "AdminChangeReplicas error"))
 	}
 	return *desc, nil
 }
