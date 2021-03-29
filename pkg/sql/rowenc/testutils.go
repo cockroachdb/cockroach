@@ -1627,7 +1627,7 @@ func randComputedColumnTableDef(
 	//  - for string type, the expression is "lower(x)";
 	//  - for types that can be cast to string in computed columns, the expression
 	//    is "lower(x::string)";
-	//  - otherwise, the expression is "IF(x IS NULL, 'foo', 'bar')".
+	//  - otherwise, the expression is `CASE WHEN x IS NULL THEN 'foo' ELSE 'bar'`.
 	x := normalColDefs[randutil.RandIntInRange(rng, 0, len(normalColDefs))]
 	xTyp := x.Type.(*types.T)
 
@@ -1663,13 +1663,17 @@ func randComputedColumnTableDef(
 			}
 		} else {
 			// We cannot cast this type to string in a computed column expression.
-			// Use IF(x IS NULL, 'foo', 'bar').
+			// Use CASE WHEN x IS NULL THEN 'foo' ELSE 'bar'.
 			newDef.Type = types.String
-			newDef.Computed.Expr = &tree.IfExpr{
-				Cond: &tree.IsNullExpr{
-					Expr: tree.NewUnresolvedName(string(x.Name)),
+			newDef.Computed.Expr = &tree.CaseExpr{
+				Whens: []*tree.When{
+					{
+						Cond: &tree.IsNullExpr{
+							Expr: tree.NewUnresolvedName(string(x.Name)),
+						},
+						Val: RandDatum(rng, types.String, true /* nullOK */),
+					},
 				},
-				True: RandDatum(rng, types.String, true /* nullOK */),
 				Else: RandDatum(rng, types.String, true /* nullOK */),
 			}
 		}
