@@ -18,7 +18,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -207,58 +209,12 @@ func statisticsMutator(
 			if col == nil {
 				return
 			}
-			n := rng.Intn(10)
-			seen := map[string]bool{}
-			colType := tree.MustBeStaticallyKnownType(col.Type)
-			// The JSON family does not have a key encoding.
-			if colType.Family() == types.JsonFamily {
+			// Do not create a histogram 20% of the time.
+			if rng.Intn(5) == 0 {
 				return
 			}
-			h := stats.HistogramData{
-				ColumnType: colType,
-			}
-			for i := 0; i < n; i++ {
-				upper := rowenc.RandDatumWithNullChance(rng, colType, 0)
-				if upper == tree.DNull {
-					continue
-				}
-				enc, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
-				if err != nil {
-					panic(err)
-				}
-				if es := string(enc); seen[es] {
-					continue
-				} else {
-					seen[es] = true
-				}
-				numRange := randNonNegInt(rng)
-				var distinctRange float64
-				// distinctRange should be <= numRange.
-				switch rng.Intn(3) {
-				case 0:
-					// 0
-				case 1:
-					distinctRange = float64(numRange)
-				default:
-					distinctRange = rng.Float64() * float64(numRange)
-				}
-
-				h.Buckets = append(h.Buckets, stats.HistogramData_Bucket{
-					NumEq:         randNonNegInt(rng),
-					NumRange:      numRange,
-					DistinctRange: distinctRange,
-					UpperBound:    enc,
-				})
-			}
-			sort.Slice(h.Buckets, func(i, j int) bool {
-				return bytes.Compare(h.Buckets[i].UpperBound, h.Buckets[j].UpperBound) < 0
-			})
-			// The first bucket must have numrange = 0, and thus
-			// distinctrange = 0 as well.
-			if len(h.Buckets) > 0 {
-				h.Buckets[0].NumRange = 0
-				h.Buckets[0].DistinctRange = 0
-			}
+			colType := tree.MustBeStaticallyKnownType(col.Type)
+			h := randHistogram(rng, colType)
 			stat := colStats[col.Name]
 			if err := stat.SetHistogram(&h); err != nil {
 				panic(err)
@@ -287,9 +243,13 @@ func statisticsMutator(
 					makeHistogram(def)
 				}
 			case *tree.IndexTableDef:
+				// TODO(mgartner): We should make a histogram for each indexed
+				// column.
 				makeHistogram(cols[def.Columns[0].Column])
 			case *tree.UniqueConstraintTableDef:
 				if !def.WithoutIndex {
+					// TODO(mgartner): We should make a histogram for each
+					// column in the unique constraint.
 					makeHistogram(cols[def.Columns[0].Column])
 				}
 			}
@@ -316,6 +276,128 @@ func statisticsMutator(
 		}
 	}
 	return stmts, changed
+}
+
+// randHistogram generates a histogram for the given type with random histogram
+// buckets. If colType is inverted indexable then the histogram bucket upper
+// bounds are byte-encoded inverted index keys.
+func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
+	histogramColType := colType
+	if colinfo.ColumnTypeIsInvertedIndexable(colType) {
+		histogramColType = types.Bytes
+	}
+	h := stats.HistogramData{
+		ColumnType: histogramColType,
+	}
+
+	// Generate random values for histogram bucket upper bounds.
+	var encodedUpperBounds [][]byte
+	for i, numDatums := 0, rng.Intn(10); i < numDatums; i++ {
+		upper := rowenc.RandDatum(rng, colType, false /* nullOk */)
+		if colinfo.ColumnTypeIsInvertedIndexable(colType) {
+			encs := encodeInvertedIndexHistogramUpperBounds(colType, upper)
+			encodedUpperBounds = append(encodedUpperBounds, encs...)
+		} else {
+			enc, err := rowenc.EncodeTableKey(nil, upper, encoding.Ascending)
+			if err != nil {
+				panic(err)
+			}
+			encodedUpperBounds = append(encodedUpperBounds, enc)
+		}
+	}
+
+	// Return early if there are no upper-bounds.
+	if len(encodedUpperBounds) == 0 {
+		return h
+	}
+
+	// Sort the encoded upper-bounds.
+	sort.Slice(encodedUpperBounds, func(i, j int) bool {
+		return bytes.Compare(encodedUpperBounds[i], encodedUpperBounds[j]) < 0
+	})
+
+	// Remove duplicates.
+	dedupIdx := 1
+	for i := 1; i < len(encodedUpperBounds); i++ {
+		if !bytes.Equal(encodedUpperBounds[i], encodedUpperBounds[i-1]) {
+			encodedUpperBounds[dedupIdx] = encodedUpperBounds[i]
+			dedupIdx++
+		}
+	}
+	encodedUpperBounds = encodedUpperBounds[:dedupIdx]
+
+	// Create a histogram bucket for each encoded upper-bound.
+	for i := range encodedUpperBounds {
+		// The first bucket must have NumRange = 0, and thus DistinctRange = 0
+		// as well.
+		var numRange int64
+		var distinctRange float64
+		if i > 0 {
+			numRange, distinctRange = randNumRangeAndDistinctRange(rng)
+		}
+
+		h.Buckets = append(h.Buckets, stats.HistogramData_Bucket{
+			NumEq:         randNonNegInt(rng),
+			NumRange:      numRange,
+			DistinctRange: distinctRange,
+			UpperBound:    encodedUpperBounds[i],
+		})
+	}
+
+	return h
+}
+
+// encodeInvertedIndexHistogramUpperBounds returns a slice of byte-encoded
+// inverted index keys that are created from val.
+func encodeInvertedIndexHistogramUpperBounds(colType *types.T, val tree.Datum) (encs [][]byte) {
+	var keys [][]byte
+	var err error
+	switch colType.Family() {
+	case types.GeometryFamily:
+		tempIdx := descpb.IndexDescriptor{
+			GeoConfig: *geoindex.DefaultGeometryIndexConfig(),
+		}
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, &tempIdx)
+	case types.GeographyFamily:
+		tempIdx := descpb.IndexDescriptor{
+			GeoConfig: *geoindex.DefaultGeographyIndexConfig(),
+		}
+		keys, err = rowenc.EncodeGeoInvertedIndexTableKeys(val, nil, &tempIdx)
+	default:
+		keys, err = rowenc.EncodeInvertedIndexTableKeys(val, nil, descpb.EmptyArraysInInvertedIndexesVersion)
+	}
+
+	if err != nil {
+		panic(err)
+	}
+
+	var da rowenc.DatumAlloc
+	for i := range keys {
+		// Each key much be a byte-encoded datum so that it can be
+		// decoded in JSONStatistic.SetHistogram.
+		enc, err := rowenc.EncodeTableKey(nil, da.NewDBytes(tree.DBytes(keys[i])), encoding.Ascending)
+		if err != nil {
+			panic(err)
+		}
+		encs = append(encs, enc)
+	}
+	return encs
+}
+
+// randNumRangeAndDistinctRange returns two random numbers to be used for
+// NumRange and DistinctRange fields of a histogram bucket.
+func randNumRangeAndDistinctRange(rng *rand.Rand) (numRange int64, distinctRange float64) {
+	numRange = randNonNegInt(rng)
+	// distinctRange should be <= numRange.
+	switch rng.Intn(3) {
+	case 0:
+		distinctRange = 0
+	case 1:
+		distinctRange = float64(numRange)
+	default:
+		distinctRange = rng.Float64() * float64(numRange)
+	}
+	return numRange, distinctRange
 }
 
 // foreignKeyMutator is a MultiStatementMutation implementation which adds
