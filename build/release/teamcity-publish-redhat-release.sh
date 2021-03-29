@@ -8,7 +8,7 @@ source "$(dirname "${0}")/../shlib.sh"
 tc_start_block "Sanity Check"
 # Make sure that the version is a substring of TC branch name (e.g. v20.2.4-57-abcd345)
 # The "-" suffix makes sure we differentiate v20.2.4-57 and v20.2.4-5
-if [[ $TC_BUILD_BRANCH != "${NAME}-"* ]]; then
+if [[ $TC_BUILD_BRANCH != ${NAME} ]]; then
   echo "Release name \"$NAME\" cannot be built using \"$TC_BUILD_BRANCH\""
   exit 1
 fi
