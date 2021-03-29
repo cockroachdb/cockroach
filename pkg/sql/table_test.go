@@ -529,6 +529,68 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 	}
 }
 
+// TestSerializedUDTsInView tests that view queries containing
+// explicit type references and members of user defined types are serialized
+// in a way that is stable across changes to the type itself. For example,
+// we want to ensure that enum members are serialized in a way that is stable
+// across renames to the member itself.
+func TestSerializedUDTsInView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testdata := []struct {
+		viewQuery    string
+		expectedExpr string
+	}{
+		// Test simple UDT in the view query.
+		{
+			"SELECT 'hello':::greeting",
+			`(SELECT b'\x80':::@100053)`,
+		},
+		// Test when a UDT is used in a view query, but isn't the
+		// final type of the column.
+		{
+			"SELECT 'hello'::greeting < 'hello'::greeting",
+			`(SELECT b'\x80':::@100053 < b'\x80':::@100053)`,
+		},
+		// Test when a UDT is used in various parts of a view (subquery, CTE, etc.).
+		{
+			"SELECT k FROM (SELECT 'hello'::greeting AS k)",
+			`(SELECT k FROM (SELECT b'\x80':::@100053 AS k))`,
+		},
+		{
+			"WITH w AS (SELECT 'hello':::greeting AS k) SELECT k FROM w",
+			`(WITH w AS (SELECT b'\x80':::@100053 AS k) SELECT k FROM w)`,
+		},
+	}
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	if _, err := sqlDB.Exec(`
+	CREATE DATABASE test;
+	USE test;
+	CREATE TYPE greeting AS ENUM ('hello');
+`); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range testdata {
+		create := "CREATE VIEW v AS (" + tc.viewQuery + ")"
+		if _, err := sqlDB.Exec(create); err != nil {
+			t.Fatal(err)
+		}
+		desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "v")
+		foundViewQuery := desc.GetViewQuery()
+		if tc.expectedExpr != foundViewQuery {
+			t.Errorf("for view %s, found %s, expected %s", tc.viewQuery, foundViewQuery, tc.expectedExpr)
+		}
+		if _, err := sqlDB.Exec("DROP VIEW v"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // TestJobsCache verifies that a job for a given table gets cached and reused
 // for following schema changes in the same transaction.
 func TestJobsCache(t *testing.T) {
