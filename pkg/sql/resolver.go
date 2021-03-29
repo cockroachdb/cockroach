@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -832,7 +831,7 @@ type internalLookupCtx struct {
 	dbNames     map[descpb.ID]string
 	dbIDs       []descpb.ID
 	dbDescs     map[descpb.ID]*dbdesc.Immutable
-	schemaDescs map[descpb.ID]*schemadesc.Immutable
+	schemaDescs map[descpb.ID]catalog.SchemaDescriptor
 	schemaNames map[descpb.ID]string
 	schemaIDs   []descpb.ID
 	tbDescs     map[descpb.ID]catalog.TableDescriptor
@@ -906,7 +905,7 @@ func newInternalLookupCtx(
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
-	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
+	schemaDescs := make(map[descpb.ID]catalog.SchemaDescriptor)
 	schemaNames := map[descpb.ID]string{
 		keys.PublicSchemaID: tree.PublicSchema,
 	}
@@ -935,9 +934,9 @@ func newInternalLookupCtx(
 				// Only make the type visible for iteration if the prefix was included.
 				typIDs = append(typIDs, desc.GetID())
 			}
-		case *schemadesc.Immutable:
+		case catalog.SchemaDescriptor:
 			schemaDescs[desc.GetID()] = desc
-			if prefix == nil || prefix.GetID() == desc.ParentID {
+			if prefix == nil || prefix.GetID() == desc.GetParentID() {
 				// Only make the schema visible for iteration if the prefix was included.
 				schemaIDs = append(schemaIDs, desc.GetID())
 				schemaNames[desc.GetID()] = desc.GetName()
@@ -988,7 +987,7 @@ func (l *internalLookupCtx) getTypeByID(id descpb.ID) (catalog.TypeDescriptor, e
 	return typ, nil
 }
 
-func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error) {
+func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error) {
 	sc, ok := l.schemaDescs[id]
 	if !ok {
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
@@ -1051,7 +1050,7 @@ func getParentAsTableName(
 		if err != nil {
 			return tree.TableName{}, err
 		}
-		parentSchemaName = tree.Name(parentSchema.Name)
+		parentSchemaName = tree.Name(parentSchema.GetName())
 	}
 	parentDbDesc, err := l.getDatabaseByID(parentTable.GetParentID())
 	if err != nil {
@@ -1081,7 +1080,7 @@ func getTableNameFromTableDescriptor(
 		if err != nil {
 			return tree.TableName{}, err
 		}
-		parentSchemaName = tree.Name(parentSchema.Name)
+		parentSchemaName = tree.Name(parentSchema.GetName())
 	}
 	tableName = tree.MakeTableNameWithSchema(tree.Name(tableDbDesc.GetName()),
 		parentSchemaName, tree.Name(table.GetName()))
@@ -1107,7 +1106,7 @@ func getTypeNameFromTypeDescriptor(
 		if err != nil {
 			return typeName, err
 		}
-		parentSchemaName = parentSchema.Name
+		parentSchemaName = parentSchema.GetName()
 	}
 	typeName = tree.MakeNewQualifiedTypeName(tableDbDesc.GetName(),
 		parentSchemaName, typ.GetName())
@@ -1253,6 +1252,6 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 
 type simpleSchemaResolver interface {
 	getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error)
-	getSchemaByID(id descpb.ID) (*schemadesc.Immutable, error)
+	getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error)
 	getTableByID(id descpb.ID) (catalog.TableDescriptor, error)
 }

@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -318,7 +317,7 @@ CREATE TABLE crdb_internal.tables (
 				if dbDesc, ok := desc.(*dbdesc.Immutable); ok {
 					dbNames[dbDesc.GetID()] = dbDesc.GetName()
 				}
-				if scDesc, ok := desc.(*schemadesc.Immutable); ok {
+				if scDesc, ok := desc.(catalog.SchemaDescriptor); ok {
 					scNames[scDesc.GetID()] = scDesc.GetName()
 				}
 			}
@@ -2802,7 +2801,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				}
 			case *dbdesc.Immutable:
 				dbNames[id] = desc.GetName()
-			case *schemadesc.Immutable:
+			case catalog.SchemaDescriptor:
 				schemaNames[id] = desc.GetName()
 			}
 		}
