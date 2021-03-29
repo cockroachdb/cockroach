@@ -71,7 +71,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 	}
 
 	lCtx := newInternalLookupCtx(params.ctx, allDescs,
-		currentDbDesc.ImmutableCopy().(*dbdesc.Immutable), nil /* fallback */)
+		currentDbDesc.ImmutableCopy().(catalog.DatabaseDescriptor), nil /* fallback */)
 
 	// Iterate through each object, check for ownership by an old role.
 	for _, oldRole := range n.n.OldRoles {
@@ -109,9 +109,9 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 }
 
 func (n *reassignOwnedByNode) reassignDatabaseOwner(
-	dbDesc *dbdesc.Immutable, params runParams,
+	dbDesc catalog.DatabaseDescriptor, params runParams,
 ) error {
-	mutableDbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, dbDesc.ID, params.p.txn)
+	mutableDbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, dbDesc.GetID(), params.p.txn)
 	if err != nil {
 		return err
 	}

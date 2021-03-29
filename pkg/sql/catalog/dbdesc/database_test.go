@@ -40,7 +40,7 @@ func TestSafeMessage(t *testing.T) {
 				State:         descpb.DescriptorState_OFFLINE,
 				OfflineReason: "foo",
 			}).BuildImmutableDatabase(),
-			exp: "dbdesc.Immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", State: OFFLINE, OfflineReason: \"foo\"}",
+			exp: "dbdesc.immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", State: OFFLINE, OfflineReason: \"foo\"}",
 		},
 		{
 			desc: NewBuilder(&descpb.DatabaseDescriptor{

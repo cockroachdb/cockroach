@@ -1303,7 +1303,7 @@ func createImportingDescriptors(
 							if err != nil {
 								return err
 							}
-							if desc.RegionConfig == nil {
+							if desc.GetRegionConfig() == nil {
 								return errors.AssertionFailedf(
 									"found multi-region table %d in non-multi-region database %d",
 									table.ID, table.ParentID)
@@ -1314,7 +1314,7 @@ func createImportingDescriptors(
 								return err
 							}
 
-							regionConfig, err := sql.SynthesizeRegionConfigOffline(ctx, txn, desc.ID, descsCol)
+							regionConfig, err := sql.SynthesizeRegionConfigOffline(ctx, txn, desc.GetID(), descsCol)
 							if err != nil {
 								return err
 							}

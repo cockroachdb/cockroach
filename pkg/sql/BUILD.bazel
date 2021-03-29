@@ -526,7 +526,6 @@ go_test(
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/catconstants",
-        "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",

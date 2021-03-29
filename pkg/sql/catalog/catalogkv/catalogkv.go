@@ -425,12 +425,12 @@ func getDescriptorByID(
 // found" condition to return an error, use MustGetDatabaseDescByID instead.
 func GetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*dbdesc.Immutable, error) {
+) (catalog.DatabaseDescriptor, error) {
 	desc, err := getDescriptorByID(ctx, txn, codec, id, immutable, catalog.Database, bestEffort)
 	if err != nil || desc == nil {
 		return nil, err
 	}
-	return desc.(*dbdesc.Immutable), nil
+	return desc.(catalog.DatabaseDescriptor), nil
 }
 
 // MustGetTableDescByID looks up the table descriptor given its ID,
@@ -473,12 +473,12 @@ func MustGetTypeDescByID(
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*dbdesc.Immutable, error) {
+) (catalog.DatabaseDescriptor, error) {
 	desc, err := getDescriptorByID(ctx, txn, codec, id, immutable, catalog.Database, mustGet)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*dbdesc.Immutable), nil
+	return desc.(catalog.DatabaseDescriptor), nil
 }
 
 // MustGetSchemaDescByID looks up the schema descriptor given its ID,
@@ -593,18 +593,18 @@ func getDescriptorsFromIDs(
 // descriptors otherwise it will throw an error.
 func GetDatabaseDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
-) ([]*dbdesc.Immutable, error) {
+) ([]catalog.DatabaseDescriptor, error) {
 	descs, err := getDescriptorsFromIDs(ctx, txn, codec, ids, catalog.WrapDatabaseDescRefErr)
 	if err != nil {
 		return nil, err
 	}
-	res := make([]*dbdesc.Immutable, len(descs))
+	res := make([]catalog.DatabaseDescriptor, len(descs))
 	for i, id := range ids {
 		desc := descs[i]
 		if desc == nil {
 			return nil, catalog.WrapDatabaseDescRefErr(id, catalog.ErrDescriptorNotFound)
 		}
-		db, ok := desc.(*dbdesc.Immutable)
+		db, ok := desc.(catalog.DatabaseDescriptor)
 		if !ok {
 			return nil, catalog.WrapDatabaseDescRefErr(id, catalog.NewDescriptorTypeError(desc))
 		}

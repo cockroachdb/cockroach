@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -205,7 +204,7 @@ type vTableLookupJoinNode struct {
 	input planNode
 
 	dbName string
-	db     *dbdesc.Immutable
+	db     catalog.DatabaseDescriptor
 	table  catalog.TableDescriptor
 	index  *descpb.IndexDescriptor
 	// eqCol is the single equality column ordinal into the lookup table. Virtual

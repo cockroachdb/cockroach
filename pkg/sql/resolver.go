@@ -43,7 +43,7 @@ var _ resolver.SchemaResolver = &planner{}
 // the desc.Collection methods directly.
 func (p *planner) ResolveUncachedDatabaseByName(
 	ctx context.Context, dbName string, required bool,
-) (res *dbdesc.Immutable, err error) {
+) (res catalog.DatabaseDescriptor, err error) {
 	_, res, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, dbName,
 		tree.DatabaseLookupFlags{Required: required, AvoidCached: true})
 	return res, err
@@ -239,7 +239,7 @@ func (p *planner) IsTableVisible(
 		if err != nil {
 			return false, false, err
 		}
-		if dbDesc.Name != curDB {
+		if dbDesc.GetName() != curDB {
 			// If the table is in a different database, then it's considered to be
 			// "not existing" instead of just "not visible"; this matches PostgreSQL.
 			return false, false, nil
@@ -305,7 +305,7 @@ func (p *planner) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.GetName())
+	name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.Name, desc.GetName())
 	return name, desc, nil
 }
 
@@ -830,7 +830,7 @@ func (r *fkSelfResolver) LookupObject(
 type internalLookupCtx struct {
 	dbNames     map[descpb.ID]string
 	dbIDs       []descpb.ID
-	dbDescs     map[descpb.ID]*dbdesc.Immutable
+	dbDescs     map[descpb.ID]catalog.DatabaseDescriptor
 	schemaDescs map[descpb.ID]catalog.SchemaDescriptor
 	schemaNames map[descpb.ID]string
 	schemaIDs   []descpb.ID
@@ -882,7 +882,7 @@ type tableLookupFn = *internalLookupCtx
 // internalLookupCtx. It also hydrates any table descriptors with enum
 // information. It is intended only for use when dealing with backups.
 func newInternalLookupCtxFromDescriptors(
-	ctx context.Context, rawDescs []descpb.Descriptor, prefix *dbdesc.Immutable,
+	ctx context.Context, rawDescs []descpb.Descriptor, prefix catalog.DatabaseDescriptor,
 ) (*internalLookupCtx, error) {
 	descriptors := make([]catalog.Descriptor, len(rawDescs))
 	for i := range rawDescs {
@@ -900,11 +900,11 @@ func newInternalLookupCtxFromDescriptors(
 func newInternalLookupCtx(
 	ctx context.Context,
 	descs []catalog.Descriptor,
-	prefix *dbdesc.Immutable,
+	prefix catalog.DatabaseDescriptor,
 	fallback catalog.DescGetter,
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
-	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
+	dbDescs := make(map[descpb.ID]catalog.DatabaseDescriptor)
 	schemaDescs := make(map[descpb.ID]catalog.SchemaDescriptor)
 	schemaNames := map[descpb.ID]string{
 		keys.PublicSchemaID: tree.PublicSchema,
@@ -915,7 +915,7 @@ func newInternalLookupCtx(
 	// Record descriptors for name lookups.
 	for i := range descs {
 		switch desc := descs[i].(type) {
-		case *dbdesc.Immutable:
+		case catalog.DatabaseDescriptor:
 			dbNames[desc.GetID()] = desc.GetName()
 			dbDescs[desc.GetID()] = desc
 			if prefix == nil || prefix.GetID() == desc.GetID() {
@@ -961,7 +961,7 @@ func newInternalLookupCtx(
 
 var _ catalog.DescGetter = (*internalLookupCtx)(nil)
 
-func (l *internalLookupCtx) getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error) {
+func (l *internalLookupCtx) getDatabaseByID(id descpb.ID) (catalog.DatabaseDescriptor, error) {
 	db, ok := l.dbDescs[id]
 	if !ok {
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
@@ -1251,7 +1251,7 @@ func (p *planner) ResolvedName(u *tree.UnresolvedObjectName) tree.ObjectName {
 }
 
 type simpleSchemaResolver interface {
-	getDatabaseByID(id descpb.ID) (*dbdesc.Immutable, error)
+	getDatabaseByID(id descpb.ID) (catalog.DatabaseDescriptor, error)
 	getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error)
 	getTableByID(id descpb.ID) (catalog.TableDescriptor, error)
 }
