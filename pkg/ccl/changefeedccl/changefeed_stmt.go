@@ -273,6 +273,10 @@ func changefeedPlanHook(
 			details.Opts[changefeedbase.OptKeyInValue] = ``
 		}
 
+		if !unspecifiedSink && p.ExecCfg().ExternalIODirConfig.DisableOutbound {
+			return errors.Errorf("Outbound IO is disabled by configuration, cannot create changefeed into %s", parsedSink.Scheme)
+		}
+
 		// Feature telemetry
 		telemetrySink := parsedSink.Scheme
 		if telemetrySink == `` {
