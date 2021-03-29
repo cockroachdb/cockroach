@@ -126,7 +126,7 @@ export interface StatementDetailsStateProps {
   statementsError: Error | null;
   nodeNames: { [nodeId: string]: string };
   diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
-  uiConfig: UIConfigState["pages"]["statementDetails"];
+  uiConfig?: UIConfigState["pages"]["statementDetails"];
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -282,6 +282,9 @@ export class StatementDetails extends React.Component<
 
   static defaultProps: Partial<StatementDetailsProps> = {
     onDiagnosticBundleDownload: _.noop,
+    uiConfig: {
+      showStatementDiagnosticsLink: true,
+    },
   };
 
   changeSortSetting = (ss: SortSetting) => {
