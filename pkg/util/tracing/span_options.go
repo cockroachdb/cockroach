@@ -66,6 +66,16 @@ func (opts *spanOptions) shadowTrTyp() (string, bool) {
 	return "", false
 }
 
+func (opts *spanOptions) shadowContext() opentracing.SpanContext {
+	if opts.Parent != nil && opts.Parent.i.ot.shadowSpan != nil {
+		return opts.Parent.i.ot.shadowSpan.Context()
+	}
+	if opts.RemoteParent != nil && opts.RemoteParent.shadowCtx != nil {
+		return opts.RemoteParent.shadowCtx
+	}
+	return nil
+}
+
 // SpanOption is the interface satisfied by options to `Tracer.StartSpan`.
 // A synopsis of the options follows. For details, see their comments.
 //
