@@ -185,20 +185,21 @@ func PushTxn(
 
 	// If we're trying to move the timestamp forward, and it's already
 	// far enough forward, return success.
-	if args.PushType == roachpb.PUSH_TIMESTAMP && args.PushTo.LessEq(reply.PusheeTxn.WriteTimestamp) {
+	pushType := args.PushType
+	if pushType == roachpb.PUSH_TIMESTAMP && args.PushTo.LessEq(reply.PusheeTxn.WriteTimestamp) {
 		// Trivial noop.
 		return result.Result{}, nil
 	}
 
 	// The pusher might be aware of a newer version of the pushee.
-	increasedEpochOrTimestamp := false
+	var knownHigherTimestamp, knownHigherEpoch bool
 	if reply.PusheeTxn.WriteTimestamp.Less(args.PusheeTxn.WriteTimestamp) {
 		reply.PusheeTxn.WriteTimestamp = args.PusheeTxn.WriteTimestamp
-		increasedEpochOrTimestamp = true
+		knownHigherTimestamp = true
 	}
 	if reply.PusheeTxn.Epoch < args.PusheeTxn.Epoch {
 		reply.PusheeTxn.Epoch = args.PusheeTxn.Epoch
-		increasedEpochOrTimestamp = true
+		knownHigherEpoch = true
 	}
 	reply.PusheeTxn.UpgradePriority(args.PusheeTxn.Priority)
 
@@ -208,12 +209,32 @@ func PushTxn(
 	// a higher epoch than the parallel commit attempt, it should not consider
 	// the pushee to be performing a parallel commit. Its commit status is not
 	// indeterminate.
-	if increasedEpochOrTimestamp && reply.PusheeTxn.Status == roachpb.STAGING {
+	if (knownHigherTimestamp || knownHigherEpoch) && reply.PusheeTxn.Status == roachpb.STAGING {
 		reply.PusheeTxn.Status = roachpb.PENDING
 		reply.PusheeTxn.InFlightWrites = nil
+		// If the pusher is aware that the pushee's currently recorded attempt
+		// at a parallel commit failed but the transaction's epoch has not yet
+		// been incremented, upgrade PUSH_TIMESTAMPs to PUSH_ABORTs. We don't
+		// want to move the transaction back to PENDING in the same epoch, as
+		// this is not (currently) allowed by the recovery protocol. We also
+		// don't want to move the transaction to a new timestamp while retaining
+		// the STAGING status, as this could allow the transaction to enter an
+		// implicit commit state without its knowledge, leading to atomicity
+		// violations.
+		//
+		// This has no effect on pushes that fail with a TransactionPushError.
+		// Such pushes will still wait on the pushee to retry its commit and
+		// eventually commit or abort. It also has no effect on expired pushees,
+		// as they would have been aborted anyway. This only impacts pushes
+		// which would have succeeded due to priority mismatches. In these
+		// cases, the push acts the same as a short-circuited transaction
+		// recovery process, because the transaction recovery procedure always
+		// finalizes target transactions, even if initiated by a PUSH_TIMESTAMP.
+		if !knownHigherEpoch && pushType == roachpb.PUSH_TIMESTAMP {
+			pushType = roachpb.PUSH_ABORT
+		}
 	}
 
-	pushType := args.PushType
 	var pusherWins bool
 	var reason string
 
