@@ -199,6 +199,7 @@ SELECT * FROM [SHOW TABLES FROM system]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality
 public       namespace                        table  NULL   0                    NULL
+public       join_tokens                      table  NULL   0                    NULL
 public       migrations                       table  NULL   0                    NULL
 public       sqlliveness                      table  NULL   0                    NULL
 public       scheduled_jobs                   table  NULL   0                    NULL
@@ -234,6 +235,7 @@ SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 schema_name  table_name                       type   owner  estimated_row_count  locality  comment
 public       namespace                        table  NULL   0                    NULL      ·
+public       join_tokens                      table  NULL   0                    NULL      ·
 public       migrations                       table  NULL   0                    NULL      ·
 public       sqlliveness                      table  NULL   0                    NULL      ·
 public       scheduled_jobs                   table  NULL   0                    NULL      ·
