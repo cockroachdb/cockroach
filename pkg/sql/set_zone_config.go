@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -63,37 +64,86 @@ type setZoneConfigNode struct {
 var supportedZoneConfigOptions = map[tree.Name]struct {
 	requiredType *types.T
 	setter       func(*zonepb.ZoneConfig, tree.Datum)
+	checkAllowed func(context.Context, *ExecutorConfig, tree.Datum) error // optional
 }{
-	"range_min_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
-	"range_max_bytes": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
-	"global_reads":    {types.Bool, func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) }},
-	"num_replicas":    {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) }},
-	"num_voters":      {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumVoters = proto.Int32(int32(tree.MustBeDInt(d))) }},
-	"gc.ttlseconds": {types.Int, func(c *zonepb.ZoneConfig, d tree.Datum) {
-		c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
-	}},
-	"constraints": {types.String, func(c *zonepb.ZoneConfig, d tree.Datum) {
-		constraintsList := zonepb.ConstraintsList{
-			Constraints: c.Constraints,
-			Inherited:   c.InheritedConstraints,
-		}
-		loadYAML(&constraintsList, string(tree.MustBeDString(d)))
-		c.Constraints = constraintsList.Constraints
-		c.InheritedConstraints = false
-	}},
-	"voter_constraints": {types.String, func(c *zonepb.ZoneConfig, d tree.Datum) {
-		voterConstraintsList := zonepb.ConstraintsList{
-			Constraints: c.VoterConstraints,
-			Inherited:   c.InheritedVoterConstraints,
-		}
-		loadYAML(&voterConstraintsList, string(tree.MustBeDString(d)))
-		c.VoterConstraints = voterConstraintsList.Constraints
-		c.InheritedVoterConstraints = false
-	}},
-	"lease_preferences": {types.String, func(c *zonepb.ZoneConfig, d tree.Datum) {
-		loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
-		c.InheritedLeasePreferences = false
-	}},
+	"range_min_bytes": {
+		requiredType: types.Int,
+		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
+	},
+	"range_max_bytes": {
+		requiredType: types.Int,
+		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) },
+	},
+	"global_reads": {
+		requiredType: types.Bool,
+		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.GlobalReads = proto.Bool(bool(tree.MustBeDBool(d))) },
+		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, d tree.Datum) error {
+			if err := checkVersionActive(ctx, execCfg, clusterversion.NonVotingReplicas, "global_reads"); err != nil {
+				return err
+			}
+			if !tree.MustBeDBool(d) {
+				// Always allow the value to be unset.
+				return nil
+			}
+			return base.CheckEnterpriseEnabled(
+				execCfg.Settings,
+				execCfg.ClusterID(),
+				execCfg.Organization(),
+				"global_reads",
+			)
+		},
+	},
+	"num_replicas": {
+		requiredType: types.Int,
+		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) },
+	},
+	"num_voters": {
+		requiredType: types.Int,
+		setter:       func(c *zonepb.ZoneConfig, d tree.Datum) { c.NumVoters = proto.Int32(int32(tree.MustBeDInt(d))) },
+		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, _ tree.Datum) error {
+			return checkVersionActive(ctx, execCfg, clusterversion.NonVotingReplicas, "num_voters")
+		},
+	},
+	"gc.ttlseconds": {
+		requiredType: types.Int,
+		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+			c.GC = &zonepb.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
+		},
+	},
+	"constraints": {
+		requiredType: types.String,
+		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+			constraintsList := zonepb.ConstraintsList{
+				Constraints: c.Constraints,
+				Inherited:   c.InheritedConstraints,
+			}
+			loadYAML(&constraintsList, string(tree.MustBeDString(d)))
+			c.Constraints = constraintsList.Constraints
+			c.InheritedConstraints = false
+		},
+	},
+	"voter_constraints": {
+		requiredType: types.String,
+		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+			voterConstraintsList := zonepb.ConstraintsList{
+				Constraints: c.VoterConstraints,
+				Inherited:   c.InheritedVoterConstraints,
+			}
+			loadYAML(&voterConstraintsList, string(tree.MustBeDString(d)))
+			c.VoterConstraints = voterConstraintsList.Constraints
+			c.InheritedVoterConstraints = false
+		},
+		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, _ tree.Datum) error {
+			return checkVersionActive(ctx, execCfg, clusterversion.NonVotingReplicas, "voter_constraints")
+		},
+	},
+	"lease_preferences": {
+		requiredType: types.String,
+		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
+			loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
+			c.InheritedLeasePreferences = false
+		},
+	},
 }
 
 // zoneOptionKeys contains the keys from suportedZoneConfigOptions in
@@ -112,6 +162,16 @@ func loadYAML(dst interface{}, yamlString string) {
 	if err := yaml.UnmarshalStrict([]byte(yamlString), dst); err != nil {
 		panic(err)
 	}
+}
+
+func checkVersionActive(
+	ctx context.Context, execCfg *ExecutorConfig, minVersion clusterversion.Key, option string,
+) error {
+	if !execCfg.Settings.Version.IsActive(ctx, minVersion) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"%s cannot be used until cluster version is finalized", option)
+	}
+	return nil
 }
 
 func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (planNode, error) {
@@ -181,11 +241,6 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 			if !ok {
 				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported zone config parameter: %q", tree.ErrString(&opt.Key))
-			}
-			if (opt.Key == "num_voters" || opt.Key == "voter_constraints") &&
-				!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.NonVotingReplicas) {
-				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-					"num_voters and voter_constraints cannot be used until cluster version is finalized")
 			}
 			telemetry.Inc(
 				sqltelemetry.SchemaSetZoneConfigCounter(
@@ -337,7 +392,13 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported NULL value for %q", tree.ErrString(name))
 			}
-			setter := supportedZoneConfigOptions[*name].setter
+			opt := supportedZoneConfigOptions[*name]
+			if opt.checkAllowed != nil {
+				if err := opt.checkAllowed(params.ctx, params.ExecCfg(), datum); err != nil {
+					return err
+				}
+			}
+			setter := opt.setter
 			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			optionsStr = append(optionsStr, fmt.Sprintf("%s = %s", name, datum))
 		}
