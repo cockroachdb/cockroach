@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -382,13 +383,21 @@ func makeViewTableDesc(
 	version := st.Version.ActiveVersionOrEmpty(ctx)
 	byID := version != (clusterversion.ClusterVersion{}) &&
 		version.IsActive(clusterversion.SequencesRegclass)
-
 	if sc != nil && byID {
-		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery)
+		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery)
 		if err != nil {
 			return tabledesc.Mutable{}, err
 		}
-		desc.ViewQuery = updatedQuery
+		desc.ViewQuery = sequenceReplacedQuery
+	}
+
+	// Serialize user defined types used in the view if in 21.2.
+	if version != (clusterversion.ClusterVersion{}) && version.IsActive(clusterversion.SerializeViewUDTs) {
+		typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery)
+		if err != nil {
+			return tabledesc.Mutable{}, err
+		}
+		desc.ViewQuery = typeReplacedQuery
 	}
 
 	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
@@ -430,6 +439,45 @@ func replaceSeqNamesWithIDs(
 	}
 
 	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceSeqFunc)
+	if err != nil {
+		return "", err
+	}
+	return newStmt.String(), nil
+}
+
+// serializeUserDefinedTypes will walk the given view query
+// and serialize any user defined types, so that renaming the type
+// does not corrupt the view.
+func serializeUserDefinedTypes(
+	ctx context.Context, semaCtx *tree.SemaContext, viewQuery string,
+) (string, error) {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		switch n := expr.(type) {
+		case *tree.CastExpr, *tree.AnnotateTypeExpr:
+			texpr, err := tree.TypeCheck(ctx, n, semaCtx, types.Any)
+			if err != nil {
+				return false, expr, err
+			}
+			if !texpr.ResolvedType().UserDefined() {
+				return true, expr, nil
+			}
+
+			s := tree.Serialize(texpr)
+			parsedExpr, err := parser.ParseExpr(s)
+			if err != nil {
+				return false, expr, err
+			}
+			return false, parsedExpr, nil
+		}
+		return true, expr, nil
+	}
+
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse view query")
+	}
+
+	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFunc)
 	if err != nil {
 		return "", err
 	}
