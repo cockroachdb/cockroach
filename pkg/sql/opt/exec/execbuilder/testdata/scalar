@@ -626,7 +626,7 @@ vectorized: true
 • render
 │ columns: (r)
 │ estimated row count: 1,000 (missing stats)
-│ render r: j @> '{"a": 1}'
+│ render r: '{"a": 1}' <@ j
 │
 └── • scan
       columns: (j)

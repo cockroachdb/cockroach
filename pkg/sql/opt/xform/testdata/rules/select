@@ -2409,7 +2409,7 @@ select
  │         │    └── spans: ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
  │         └── key: (1)
  └── filters
-      └── '1' @> j:4 [outer=(4), immutable]
+      └── j:4 <@ '1' [outer=(4), immutable]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j <@ '{}'
@@ -2429,7 +2429,7 @@ select
  │         │    └── spans: ["7\x00\x019", "7\x00\x019"]
  │         └── key: (1)
  └── filters
-      └── '{}' @> j:4 [outer=(4), immutable]
+      └── j:4 <@ '{}' [outer=(4), immutable]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j <@ '[]'
@@ -2449,7 +2449,7 @@ select
  │         │    └── spans: ["7\x00\x018", "7\x00\x018"]
  │         └── key: (1)
  └── filters
-      └── '[]' @> j:4 [outer=(4), immutable]
+      └── j:4 <@ '[]' [outer=(4), immutable]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j <@ '{"a": []}'
@@ -2480,7 +2480,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(6)
  └── filters
-      └── '{"a": []}' @> j:4 [outer=(4), immutable]
+      └── j:4 <@ '{"a": []}' [outer=(4), immutable]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM b WHERE j <@ '[{"a": {"d": true}}, 1, "b"]'
@@ -2525,7 +2525,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(6)
  └── filters
-      └── '[{"a": {"d": true}}, 1, "b"]' @> j:4 [outer=(4), immutable]
+      └── j:4 <@ '[{"a": {"d": true}}, 1, "b"]' [outer=(4), immutable]
 
 # Disjunction using the contained by operator.
 opt expect=GenerateInvertedIndexScans
@@ -2573,7 +2573,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(6)
  └── filters
-      └── ('{"a": [3]}' @> j:4) OR ('[1, 2, 3]' @> j:4) [outer=(4), immutable]
+      └── (j:4 <@ '{"a": [3]}') OR (j:4 <@ '[1, 2, 3]') [outer=(4), immutable]
 
 # Conjunction using the contained by operator.
 opt expect=GenerateInvertedIndexScans
@@ -2629,8 +2629,8 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(6)
  └── filters
-      ├── '{"a": [3]}' @> j:4 [outer=(4), immutable]
-      └── '[1, 2, 3]' @> j:4 [outer=(4), immutable]
+      ├── j:4 <@ '{"a": [3]}' [outer=(4), immutable]
+      └── j:4 <@ '[1, 2, 3]' [outer=(4), immutable]
 
 # Query using the fetch val and equality operators.
 opt expect=GenerateInvertedIndexScans
@@ -2953,7 +2953,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(5)
  └── filters
-      └── ARRAY[1] @> a:2 [outer=(2), immutable]
+      └── a:2 <@ ARRAY[1] [outer=(2), immutable]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM c WHERE a <@ ARRAY[]::INT[]
@@ -2973,7 +2973,7 @@ select
  │         │    └── spans: ["C", "C"]
  │         └── key: (1)
  └── filters
-      └── ARRAY[] @> a:2 [outer=(2), immutable]
+      └── a:2 <@ ARRAY[] [outer=(2), immutable]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM c WHERE a <@ ARRAY[NULL]::INT[]
@@ -2993,7 +2993,7 @@ select
  │         │    └── spans: ["C", "C"]
  │         └── key: (1)
  └── filters
-      └── ARRAY[NULL] @> a:2 [outer=(2), immutable]
+      └── a:2 <@ ARRAY[NULL] [outer=(2), immutable]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM c WHERE a <@ ARRAY[1] OR a <@ ARRAY[2]
@@ -3024,7 +3024,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(5)
  └── filters
-      └── (ARRAY[1] @> a:2) OR (ARRAY[2] @> a:2) [outer=(2), immutable]
+      └── (a:2 <@ ARRAY[1]) OR (a:2 <@ ARRAY[2]) [outer=(2), immutable]
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM c WHERE a <@ ARRAY[1] AND a <@ ARRAY[2]
@@ -3060,8 +3060,8 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(5)
  └── filters
-      ├── ARRAY[1] @> a:2 [outer=(2), immutable]
-      └── ARRAY[2] @> a:2 [outer=(2), immutable]
+      ├── a:2 <@ ARRAY[1] [outer=(2), immutable]
+      └── a:2 <@ ARRAY[2] [outer=(2), immutable]
 
 # Tests for indexes with older descriptor versions.
 
@@ -3157,7 +3157,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters
-      └── ARRAY[2] @> a:2 [outer=(2), immutable]
+      └── a:2 <@ ARRAY[2] [outer=(2), immutable]
 
 exec-ddl
 DROP INDEX j_inv_idx

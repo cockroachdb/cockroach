@@ -310,9 +310,9 @@ contains [type=bool]
 build-scalar vars=(a jsonb)
 '{"a":1}' <@ a
 ----
-contains [type=bool]
- ├── variable: a:1 [type=jsonb]
- └── const: '{"a": 1}' [type=jsonb]
+contained-by [type=bool]
+ ├── const: '{"a": 1}' [type=jsonb]
+ └── variable: a:1 [type=jsonb]
 
 build-scalar vars=(a jsonb)
 a ? 'a'

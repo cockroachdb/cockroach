@@ -291,7 +291,7 @@ select
  │         │                <--- '\x37000138' --- '\x37000139'
  │         └── key: (1)
  └── filters
-      └── '[]' @> j:2 [type=bool, outer=(2), immutable]
+      └── j:2 <@ '[]' [type=bool, outer=(2), immutable]
 
 # An inverted index scan is preferred for containment of an indexed column
 # by an empty object. An additional filter is required.
@@ -318,7 +318,7 @@ select
  │         │                <--- '\x37000139' --- '\x3700013a'
  │         └── key: (1)
  └── filters
-      └── '{}' @> j:2 [type=bool, outer=(2), immutable]
+      └── j:2 <@ '{}' [type=bool, outer=(2), immutable]
 
 # An inverted index scan is preferred for a more selective filter. An
 # additional filter is required.
@@ -357,7 +357,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
  └── filters
-      └── '{"c": "d"}' @> j:2 [type=bool, outer=(2), immutable]
+      └── j:2 <@ '{"c": "d"}' [type=bool, outer=(2), immutable]
 
 # A disjunction requires scanning all entries that match either the left or the
 # right. An additional filter is required.
@@ -398,7 +398,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
  └── filters
-      └── ('{"c": "d"}' @> j:2) OR ('{"e": "f"}' @> j:2) [type=bool, outer=(2), immutable]
+      └── (j:2 <@ '{"c": "d"}') OR (j:2 <@ '{"e": "f"}') [type=bool, outer=(2), immutable]
 
 # A conjunction requires scanning all entries that match both the left and the
 # right. An additional filter is required.
@@ -443,8 +443,8 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
  └── filters
-      ├── '{"c": "d"}' @> j:2 [type=bool, outer=(2), immutable]
-      └── '{"e": "f"}' @> j:2 [type=bool, outer=(2), immutable]
+      ├── j:2 <@ '{"c": "d"}' [type=bool, outer=(2), immutable]
+      └── j:2 <@ '{"e": "f"}' [type=bool, outer=(2), immutable]
 
 # An inverted index scan is preferred for a more selective filter. An
 # additional filter is required.
@@ -485,7 +485,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
  └── filters
-      └── '[2]' @> j:2 [type=bool, outer=(2), immutable]
+      └── j:2 <@ '[2]' [type=bool, outer=(2), immutable]
 
 # A disjunction requires scanning all entries that match either the left or the
 # right. An additional filter is required.
@@ -530,7 +530,7 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
  └── filters
-      └── ('[2]' @> j:2) OR ('[3]' @> j:2) [type=bool, outer=(2), immutable]
+      └── (j:2 <@ '[2]') OR (j:2 <@ '[3]') [type=bool, outer=(2), immutable]
 
 # A conjunction requires scanning all entries that match both the left and the
 # right. An additional filter is required.
@@ -581,8 +581,8 @@ select
  │              ├── key: (1)
  │              └── fd: (1)-->(4)
  └── filters
-      ├── '[2]' @> j:2 [type=bool, outer=(2), immutable]
-      └── '[3]' @> j:2 [type=bool, outer=(2), immutable]
+      ├── j:2 <@ '[2]' [type=bool, outer=(2), immutable]
+      └── j:2 <@ '[3]' [type=bool, outer=(2), immutable]
 
 # Histogram boundaries are for JSON values `true`, `"foo"`, `22`, `[]`, and
 # `{}`.
