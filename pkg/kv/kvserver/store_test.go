@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -2636,37 +2637,62 @@ func TestStoreRangePlaceholders(t *testing.T) {
 		},
 	}
 
+	check := func(exp string) {
+		exp = strings.TrimSpace(exp)
+		t.Helper()
+		act := strings.TrimSpace(s.mu.replicasByKey.String())
+		require.Equal(t, exp, act)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Test that simple insertion works.
-	if err := s.addPlaceholderLocked(placeholder1); err != nil {
-		t.Fatalf("could not add placeholder to empty store, got %s", err)
-	}
-	if err := s.addPlaceholderLocked(placeholder2); err != nil {
-		t.Fatalf("could not add non-overlapping placeholder, got %s", err)
-	}
+	require.NoError(t, s.addPlaceholderLocked(placeholder1))
+	require.NoError(t, s.addPlaceholderLocked(placeholder2))
+
+	check(`
+[] - [99] (/Min - "c")
+[99] - [100] ("c" - "d")
+[100] - [255 255] ("d" - /Max)`)
 
 	// Test that simple deletion works.
-	if !s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID) {
-		t.Fatalf("could not remove placeholder that was present")
-	}
+	require.NoError(t, s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderFailed))
+
+	check(`
+[] - [99] (/Min - "c")
+[100] - [255 255] ("d" - /Max)`)
 
 	// Test cannot double insert the same placeholder.
-	if err := s.addPlaceholderLocked(placeholder1); err != nil {
-		t.Fatalf("could not re-add placeholder after removal, got %s", err)
-	}
+	placeholder1.tainted = 0 // reset for re-use
+	require.NoError(t, s.addPlaceholderLocked(placeholder1))
 	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing") {
 		t.Fatalf("should not be able to add ReplicaPlaceholder for the same key twice, got: %+v", err)
 	}
 
+	checkErr := func(t *testing.T, err error, re string) {
+		t.Helper()
+		require.True(t, testutils.IsError(err, re), "expected to match %s: %v", re, err)
+	}
+
+	checkErr(t, s.removePlaceholderLocked(
+		ctx, placeholder1, removePlaceholderAssertGone,
+	), `should not exist`)
 	// Test cannot double delete a placeholder.
-	if !s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID) {
-		t.Fatalf("could not remove placeholder that was present")
-	}
-	if s.removePlaceholderLocked(ctx, placeholder1.rangeDesc.RangeID) {
-		t.Fatalf("successfully removed placeholder that was not present")
-	}
+	require.NoError(t, s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderFailed))
+	// Can assert it's really gone.
+	require.NoError(t, s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderAssertGone))
+	checkErr(t, s.removePlaceholderLocked(
+		ctx, placeholder1, removePlaceholderFailed,
+	), `attempt to remove already removed placeholder`)
+	placeholder1.tainted = 0 // pretend it wasn't already deleted
+	checkErr(t, s.removePlaceholderLocked(
+		ctx, placeholder1, removePlaceholderDropped,
+	), `missing from store`)
+
+	check(`
+[] - [99] (/Min - "c")
+[100] - [255 255] ("d" - /Max)`)
 
 	// This placeholder overlaps with an existing replica.
 	placeholder1 = &ReplicaPlaceholder{
@@ -2678,14 +2704,14 @@ func TestStoreRangePlaceholders(t *testing.T) {
 	}
 
 	// Test that placeholder cannot clobber existing replica.
-	if err := s.addPlaceholderLocked(placeholder1); !testutils.IsError(err, ".*overlaps with existing") {
-		t.Fatalf("should not be able to add ReplicaPlaceholder when Replica already exists, got: %+v", err)
-	}
+	checkErr(t, s.addPlaceholderLocked(placeholder1), ".*overlaps with existing")
 
 	// Test that Placeholder deletion doesn't delete replicas.
-	if s.removePlaceholderLocked(ctx, repID) {
-		t.Fatalf("should not be able to process removeReplicaPlaceholder for a RangeID where a Replica exists")
-	}
+	placeholder1.tainted = 0
+	checkErr(t, s.removePlaceholderLocked(ctx, placeholder1, removePlaceholderFailed), `missing from store`)
+	check(`
+[] - [99] (/Min - "c")
+[100] - [255 255] ("d" - /Max)`)
 }
 
 // Test that we remove snapshot placeholders when raft ignores the
@@ -2763,11 +2789,23 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 			},
 		},
 	}
+
+	placeholder := &ReplicaPlaceholder{rangeDesc: *repl1.Desc()}
+
+	{
+		s.mu.Lock()
+		err := s.addPlaceholderLocked(placeholder)
+		s.mu.Unlock()
+		require.NoError(t, err)
+	}
+
 	if err := s.processRaftSnapshotRequest(ctx, req,
 		IncomingSnapshot{
-			SnapUUID: uuid.MakeV4(),
-			State:    &kvserverpb.ReplicaState{Desc: repl1.Desc()},
-		}); err != nil {
+			SnapUUID:    uuid.MakeV4(),
+			State:       &kvserverpb.ReplicaState{Desc: repl1.Desc()},
+			placeholder: placeholder,
+		},
+	); err != nil {
 		t.Fatal(err)
 	}
 
