@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
+	pgxv4 "github.com/jackc/pgx/v4"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
@@ -43,6 +44,8 @@ type tpcc struct {
 	interleaved      bool
 	nowString        []byte
 	numConns         int
+
+	idleConns int
 
 	// Used in non-uniform random data generation. cLoad is the value of C at load
 	// time. cCustomerID is the value of C for the customer id generator. cItemID
@@ -187,6 +190,7 @@ var tpccMeta = workload.Meta{
 			`Number of connections. Defaults to --warehouses * %d (except in nowait mode, where it defaults to --workers`,
 			numConnsPerWarehouse,
 		))
+		g.flags.IntVar(&g.idleConns, `idle-conns`, 0, `Number of idle connections. Defaults to 0`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
 		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
 		g.flags.IntSliceVar(&g.affinityPartitions, `partition-affinity`, nil, `Run load generator against specific partition (requires partitions). `+
@@ -622,6 +626,7 @@ func (w *tpcc) Ops(
 		MaxConnsPerPool: 50,
 	}
 	fmt.Printf("Initializing %d connections...\n", w.numConns)
+
 	dbs := make([]*workload.MultiConnPool, len(urls))
 	var g errgroup.Group
 	for i := range urls {
@@ -672,6 +677,17 @@ func (w *tpcc) Ops(
 		}
 	}
 
+	fmt.Printf("Initializing %d idle connections...\n", w.idleConns)
+	var conns []*pgxv4.Conn
+	for i := 0; i < w.idleConns; i++ {
+		for _, url := range urls {
+			conn, err := pgxv4.Connect(ctx, url)
+			if err != nil {
+				return workload.QueryLoad{}, err
+			}
+			conns = append(conns, conn)
+		}
+	}
 	fmt.Printf("Initializing %d workers and preparing statements...\n", w.workers)
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	ql.WorkerFns = make([]func(context.Context) error, 0, w.workers)
@@ -722,6 +738,15 @@ func (w *tpcc) Ops(
 	// Preregister all of the histograms so they always print.
 	for _, tx := range allTxs {
 		reg.GetHandle().Get(tx.name)
+	}
+
+	// Close idle connections.
+	ql.Close = func(context context.Context) {
+		for _, conn := range conns {
+			if err := conn.Close(ctx); err != nil {
+				log.Warningf(ctx, "%v", err)
+			}
+		}
 	}
 	return ql, nil
 }

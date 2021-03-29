@@ -36,6 +36,7 @@ go_library(
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_jackc_pgx//:pgx",
         "@com_github_jackc_pgx//pgtype",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_lib_pq//:pq",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_x_exp//rand",
