@@ -27,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/jackc/pgx/v4"
 )
 
 var (
@@ -102,6 +104,17 @@ func TestCompare(t *testing.T) {
 	}
 
 	ctx := context.Background()
+
+	// docker-compose requires us to manually check for when a container
+	// is ready to receive connections.
+	// See https://docs.docker.com/compose/startup-order/
+	for name, uri := range uris {
+		testutils.SucceedsSoon(t, func() error {
+			_, err := pgx.Connect(ctx, uri.addr)
+			return err
+		})
+	}
+
 	for confName, config := range configs {
 		t.Run(confName, func(t *testing.T) {
 			rng, _ := randutil.NewPseudoRand()
