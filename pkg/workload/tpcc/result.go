@@ -181,7 +181,7 @@ func (r *Result) FailureError() error {
 	var err error
 	if eff := r.Efficiency(); eff < PassingEfficiency {
 		err = errors.CombineErrors(err,
-			errors.Errorf("efficiency value of %v is below ppassing threshold of %v",
+			errors.Errorf("efficiency value of %v is below passing threshold of %v",
 				eff, PassingEfficiency))
 	}
 	for query, max90th := range passing90ThPercentile {
