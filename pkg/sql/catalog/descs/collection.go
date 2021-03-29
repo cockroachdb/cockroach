@@ -653,12 +653,8 @@ func (tc *Collection) GetMutableTypeByName(
 // according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableTypeByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (found bool, _ *typedesc.Immutable, _ error) {
-	found, desc, err := tc.getTypeByName(ctx, txn, name, flags, false /* mutable */)
-	if err != nil || !found {
-		return false, nil, err
-	}
-	return true, desc.(*typedesc.Immutable), nil
+) (found bool, _ catalog.TypeDescriptor, _ error) {
+	return tc.getTypeByName(ctx, txn, name, flags, false /* mutable */)
 }
 
 // getTypeByName returns a type descriptor with properties according to the
@@ -1280,17 +1276,17 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			_, dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.ParentID,
+			_, dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(),
 				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
 			sc, err := tc.GetImmutableSchemaByID(
-				ctx, txn, desc.ParentSchemaID, tree.SchemaLookupFlags{})
+				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.Name)
+			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.GetName())
 			return name, desc, nil
 		})
 
@@ -1568,12 +1564,8 @@ func (tc *Collection) GetMutableTypeByID(
 // the ID exists.
 func (tc *Collection) GetImmutableTypeByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
-) (*typedesc.Immutable, error) {
-	desc, err := tc.getTypeByID(ctx, txn, typeID, flags, false /* mutable */)
-	if err != nil {
-		return nil, err
-	}
-	return desc.(*typedesc.Immutable), nil
+) (catalog.TypeDescriptor, error) {
+	return tc.getTypeByID(ctx, txn, typeID, flags, false /* mutable */)
 }
 
 func (tc *Collection) getTypeByID(
@@ -1734,13 +1726,13 @@ func (tc *Collection) GetAllDescriptors(
 func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) error {
 	// Collect the needed information to set up metadata in those types.
 	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
-	typDescs := make(map[descpb.ID]*typedesc.Immutable)
+	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
 	schemaDescs := make(map[descpb.ID]catalog.SchemaDescriptor)
 	for _, desc := range descs {
 		switch desc := desc.(type) {
 		case *dbdesc.Immutable:
 			dbDescs[desc.GetID()] = desc
-		case *typedesc.Immutable:
+		case catalog.TypeDescriptor:
 			typDescs[desc.GetID()] = desc
 		case catalog.SchemaDescriptor:
 			schemaDescs[desc.GetID()] = desc
@@ -1759,9 +1751,9 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 				return tree.TypeName{}, nil, sqlerrors.NewUndefinedObjectError(&n,
 					tree.TypeObject)
 			}
-			dbDesc, ok := dbDescs[typDesc.ParentID]
+			dbDesc, ok := dbDescs[typDesc.GetParentID()]
 			if !ok {
-				n := fmt.Sprintf("[%d]", typDesc.ParentID)
+				n := fmt.Sprintf("[%d]", typDesc.GetParentID())
 				return tree.TypeName{}, nil, sqlerrors.NewUndefinedDatabaseError(n)
 			}
 			// We don't use the collection's ResolveSchemaByID method here because
@@ -1769,11 +1761,11 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 			// members of the public schema or a user defined schema, so those are
 			// the only cases we have to consider here.
 			var scName string
-			switch typDesc.ParentSchemaID {
+			switch typDesc.GetParentSchemaID() {
 			case keys.PublicSchemaID:
 				scName = tree.PublicSchema
 			default:
-				scName = schemaDescs[typDesc.ParentSchemaID].GetName()
+				scName = schemaDescs[typDesc.GetParentSchemaID()].GetName()
 			}
 			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
 			return name, typDesc, nil
@@ -2051,7 +2043,7 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
-	return name, desc.(*typedesc.Immutable), nil
+	return name, desc.(catalog.TypeDescriptor), nil
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.

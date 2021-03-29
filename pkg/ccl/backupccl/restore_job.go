@@ -1090,12 +1090,12 @@ func createImportingDescriptors(
 					if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
 						// Check to see if we've found more than one multi-region enum on any
 						// given database.
-						if id, ok := mrEnumsFound[typeDesc.ParentID]; ok {
+						if id, ok := mrEnumsFound[typeDesc.GetParentID()]; ok {
 							return errors.AssertionFailedf(
 								"unexpectedly found more than one MULTIREGION_ENUM (IDs = %d, %d) "+
-									"on database %d during restore", id, typeDesc.ID, typeDesc.ParentID)
+									"on database %d during restore", id, typeDesc.GetID(), typeDesc.GetParentID())
 						}
-						mrEnumsFound[typeDesc.ParentID] = typeDesc.ID
+						mrEnumsFound[typeDesc.GetParentID()] = typeDesc.GetID()
 
 						if db, ok := dbsByID[typeDesc.GetParentID()]; ok {
 							desc := db.DatabaseDesc()
@@ -2072,7 +2072,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 	details *jobspb.RestoreDetails,
 ) error {
 	// We first collect the restored types to be addressable by ID.
-	restoredTypes := make(map[descpb.ID]*typedesc.Immutable)
+	restoredTypes := make(map[descpb.ID]catalog.TypeDescriptor)
 	existingTypes := make(map[descpb.ID]*typedesc.Mutable)
 	for i := range details.TypeDescs {
 		typ := details.TypeDescs[i]

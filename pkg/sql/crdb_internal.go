@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1946,13 +1945,13 @@ CREATE TABLE crdb_internal.create_type_statements (
 )
 `,
 	populate: func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
-		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc *typedesc.Immutable) error {
-			switch typeDesc.Kind {
+		return forEachTypeDesc(ctx, p, db, func(db *dbdesc.Immutable, sc string, typeDesc catalog.TypeDescriptor) error {
+			switch typeDesc.GetKind() {
 			case descpb.TypeDescriptor_ENUM:
 				var enumLabels tree.EnumValueList
 				enumLabelsDatum := tree.NewDArray(types.String)
-				for i := range typeDesc.EnumMembers {
-					rep := typeDesc.EnumMembers[i].LogicalRepresentation
+				for i := 0; i < typeDesc.NumEnumMembers(); i++ {
+					rep := typeDesc.GetMemberLogicalRepresentation(i)
 					enumLabels = append(enumLabels, tree.EnumValue(rep))
 					if err := enumLabelsDatum.Append(tree.NewDString(rep)); err != nil {
 						return err
@@ -1985,7 +1984,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 			// Alias types are created implicitly, so we don't have create
 			// statements for them.
 			default:
-				return errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.Kind.String())
+				return errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind().String())
 			}
 			return nil
 		})

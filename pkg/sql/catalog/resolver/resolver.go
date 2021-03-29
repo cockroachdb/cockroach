@@ -169,14 +169,14 @@ func ResolveExistingObject(
 	obj := descI.(catalog.Descriptor)
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
-		_, isType := obj.(catalog.TypeDescriptor)
+		typ, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
 			return nil, prefix, sqlerrors.NewUndefinedTypeError(&resolvedTn)
 		}
 		if lookupFlags.RequireMutable {
 			return obj.(*typedesc.Mutable), prefix, nil
 		}
-		return obj.(*typedesc.Immutable), prefix, nil
+		return typ, prefix, nil
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
