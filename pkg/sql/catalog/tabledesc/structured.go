@@ -2816,7 +2816,6 @@ func (desc *Mutable) DropConstraint(
 				return nil
 			}
 		}
-		return errors.Errorf("constraint %q not found on table %q", name, desc.Name)
 
 	case descpb.ConstraintTypeFK:
 		if detail.FK.Validity == descpb.ConstraintValidity_Validating {
@@ -2849,13 +2848,29 @@ func (desc *Mutable) DropConstraint(
 				return nil
 			}
 		}
-		return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
 
 	default:
 		return unimplemented.Newf(fmt.Sprintf("drop-constraint-%s", detail.Kind),
 			"constraint %q has unsupported type", tree.ErrNameString(name))
 	}
 
+	// Check if the constraint can be found in a mutation, complain appropriately.
+	for i := range desc.Mutations {
+		m := &desc.Mutations[i]
+		if m.GetConstraint() != nil && m.GetConstraint().Name == name {
+			switch m.Direction {
+			case descpb.DescriptorMutation_ADD:
+				return unimplemented.NewWithIssueDetailf(42844,
+					"drop-constraint-mutation",
+					"constraint %q in the middle of being added, try again later", name)
+			case descpb.DescriptorMutation_DROP:
+				return unimplemented.NewWithIssueDetailf(42844,
+					"drop-constraint-mutation",
+					"constraint %q in the middle of being dropped", name)
+			}
+		}
+	}
+	return errors.AssertionFailedf("constraint %q not found on table %q", name, desc.Name)
 }
 
 // RenameConstraint renames a constraint.
