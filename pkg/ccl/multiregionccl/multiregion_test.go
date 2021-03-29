@@ -117,3 +117,46 @@ func TestMultiRegionAfterEnterpriseDisabled(t *testing.T) {
 		}
 	})
 }
+
+func TestGlobalReadsAfterEnterpriseDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 1 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+	)
+	defer cleanup()
+
+	for _, setupQuery := range []string{
+		`CREATE DATABASE test`,
+		`USE test`,
+		`CREATE TABLE t1 ()`,
+		`CREATE TABLE t2 ()`,
+	} {
+		_, err := sqlDB.Exec(setupQuery)
+		require.NoError(t, err)
+	}
+
+	// Can set global_reads with enterprise license enabled.
+	_, err := sqlDB.Exec(`ALTER TABLE t1 CONFIGURE ZONE USING global_reads = true`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER TABLE t2 CONFIGURE ZONE USING global_reads = true`)
+	require.NoError(t, err)
+
+	// Can unset global_reads with enterprise license enabled.
+	_, err = sqlDB.Exec(`ALTER TABLE t1 CONFIGURE ZONE USING global_reads = false`)
+	require.NoError(t, err)
+
+	defer utilccl.TestingDisableEnterprise()()
+
+	// Cannot set global_reads with enterprise license disabled.
+	_, err = sqlDB.Exec(`ALTER TABLE t1 CONFIGURE ZONE USING global_reads = true`)
+	require.Error(t, err)
+	require.Regexp(t, "use of global_reads requires an enterprise license", err)
+
+	// Can unset global_reads with enterprise license disabled.
+	_, err = sqlDB.Exec(`ALTER TABLE t2 CONFIGURE ZONE USING global_reads = false`)
+	require.NoError(t, err)
+}
