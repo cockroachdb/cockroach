@@ -109,6 +109,7 @@ func TestCompare(t *testing.T) {
 	// is ready to receive connections.
 	// See https://docs.docker.com/compose/startup-order/
 	for name, uri := range uris {
+		t.Logf("Checking connection to: %s", name)
 		testutils.SucceedsSoon(t, func() error {
 			_, err := pgx.Connect(ctx, uri.addr)
 			return err
