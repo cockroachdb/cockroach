@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1499,7 +1500,12 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	tc.AddAndStartServer(t, stickyServerArgs[2])
 
 	// Try to up-replicate the RHS of the split to store 2.
-	if _, err := tc.AddVoters(splitKey, tc.Target(3)); !testutils.IsError(err, kvserver.IntersectingSnapshotMsg) {
+	// Don't use tc.AddVoter because we expect a retriable error and want it
+	// returned to us.
+	if _, err := tc.Servers[0].DB().AdminChangeReplicas(
+		ctx, splitKey, tc.LookupRangeOrFatal(t, splitKey),
+		roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(3)),
+	); !kvserver.IsRetriableReplicationChangeError(err) {
 		t.Fatalf("unexpected error %v", err)
 	}
 
@@ -1507,6 +1513,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 	// to store 2 will cause the obsolete replica to be GC'd allowing a
 	// subsequent replication to succeed.
 	tc.GetFirstStoreFromServer(t, 3).SetReplicaGCQueueActive(true)
+	tc.AddVotersOrFatal(t, splitKey, tc.Target(3))
 }
 
 // Test that when a Raft group is not able to establish a quorum, its Raft log
@@ -2492,6 +2499,9 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	rng, seed := randutil.NewTestPseudoRand()
+	t.Logf("seed is %d", seed)
+
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
@@ -2502,54 +2512,78 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
 
-outer:
 	for i := 0; i < 5; i++ {
-		for leaderIdx := range tc.Servers {
-			repl := tc.GetFirstStoreFromServer(t, leaderIdx).LookupReplica(roachpb.RKey(key))
-			require.NotNil(t, repl)
-			if repl.RaftStatus().SoftState.RaftState == raft.StateLeader {
-				for replicaIdx := range tc.Servers {
-					if replicaIdx == leaderIdx {
-						continue
-					}
-					repDesc, err := repl.GetReplicaDescriptor()
-					if err != nil {
-						t.Fatal(err)
-					}
-					if lease, _ := repl.GetLease(); lease.Replica.Equal(repDesc) {
-						tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(replicaIdx))
-					}
-					tc.RemoveVotersOrFatal(t, key, tc.Target(leaderIdx))
-					// We want to stop all nodes from talking to the replicaIdx, so need
-					// to trip the breaker on all servers but it.
-					for i := range tc.Servers {
-						if i != replicaIdx {
-							cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(replicaIdx).NodeID, rpc.DefaultClass)
-							cb.Break()
-						}
-					}
-					time.Sleep(tc.GetFirstStoreFromServer(t, replicaIdx).GetStoreConfig().CoalescedHeartbeatsInterval)
-					for i := range tc.Servers {
-						if i != replicaIdx {
-							cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(replicaIdx).NodeID, rpc.DefaultClass)
-							cb.Reset()
-						}
-					}
-					// Make sure the old replica was actually removed, before we try to re-adding it.
-					testutils.SucceedsSoon(t, func() error {
-						if oldRepl := tc.GetFirstStoreFromServer(t, leaderIdx).LookupReplica(roachpb.RKey(key)); oldRepl != nil {
-							return errors.Errorf("Expected replica %s to be removed", oldRepl)
-						}
-						return nil
-					})
-					tc.AddVotersOrFatal(t, key, tc.Target(leaderIdx))
-					require.NoError(t, tc.WaitForVoters(key, tc.Target(leaderIdx)))
-					continue outer
+		// Find the Raft leader.
+		var leaderIdx int
+		var leaderRepl *kvserver.Replica
+		testutils.SucceedsSoon(t, func() error {
+			for idx := range tc.Servers {
+				repl := tc.GetFirstStoreFromServer(t, idx).LookupReplica(roachpb.RKey(key))
+				require.NotNil(t, repl)
+				if repl.RaftStatus().SoftState.RaftState == raft.StateLeader {
+					leaderIdx = idx
+					leaderRepl = repl
+					return nil
 				}
-				t.Fatal("could not find raft replica")
+			}
+			return errors.New("no Raft leader found")
+		})
+
+		// Raft leader found. Make sure it doesn't have the lease (transferring it
+		// away if necessary, which entails picking a random other node and sending
+		// the lease to it). We'll also partition this random node away from the rest
+		// as this was (way back) how we triggered problems with coalesced heartbeats.
+		partitionedMaybeLeaseholderIdx := (leaderIdx + 1 + rng.Intn(tc.NumServers()-1)) % tc.NumServers()
+		t.Logf("leader is idx=%d, partitioning idx=%d", leaderIdx, partitionedMaybeLeaseholderIdx)
+		leaderRepDesc, err := leaderRepl.GetReplicaDescriptor()
+		require.NoError(t, err)
+		if lease, _ := leaderRepl.GetLease(); lease.OwnedBy(leaderRepDesc.StoreID) {
+			tc.TransferRangeLeaseOrFatal(t, *leaderRepl.Desc(), tc.Target(partitionedMaybeLeaseholderIdx))
+		}
+
+		// Remove the raft leader.
+		t.Logf("removing leader")
+		tc.RemoveVotersOrFatal(t, key, tc.Target(leaderIdx))
+
+		// Pseudo-partition partitionedMaybeLeaseholderIdx away from everyone else. We do this by tripping
+		// the circuit breaker on all other nodes.
+		t.Logf("partitioning")
+		for i := range tc.Servers {
+			if i != partitionedMaybeLeaseholderIdx {
+				cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
+				cb.Break()
 			}
 		}
-		i-- // try again
+
+		// Wait out the heartbeat interval and resolve the partition.
+		heartbeatInterval := tc.GetFirstStoreFromServer(t, partitionedMaybeLeaseholderIdx).GetStoreConfig().CoalescedHeartbeatsInterval
+		time.Sleep(heartbeatInterval)
+		t.Logf("resolving partition")
+		for i := range tc.Servers {
+			if i != partitionedMaybeLeaseholderIdx {
+				cb := tc.Servers[i].RaftTransport().GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
+				cb.Reset()
+			}
+		}
+
+		t.Logf("waiting for replicaGC of removed leader replica")
+		// Make sure the old replica was actually removed by replicaGC, before we
+		// try to re-add it. Otherwise the addition below might fail. One shot here
+		// is often enough, but not always; in the worst case we need to wait out
+		// something on the order of a election timeout plus
+		// ReplicaGCQueueSuspectTimeout before replicaGC will be attempted (and will
+		// then succeed on the first try).
+		testutils.SucceedsSoon(t, func() error {
+			s := tc.GetFirstStoreFromServer(t, leaderIdx)
+			s.MustForceReplicaGCScanAndProcess()
+			if oldRepl := tc.GetFirstStoreFromServer(t, leaderIdx).LookupReplica(roachpb.RKey(key)); oldRepl != nil {
+				return errors.Errorf("Expected replica %s to be removed", oldRepl)
+			}
+			return nil
+		})
+		t.Logf("re-adding leader")
+		tc.AddVotersOrFatal(t, key, tc.Target(leaderIdx))
+		require.NoError(t, tc.WaitForVoters(key, tc.Target(leaderIdx)))
 	}
 }
 
@@ -4873,6 +4907,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		require.NoError(t, db.Run(ctx, b))
 	}
 	ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
+		t.Helper()
 		var tombstone roachpb.RangeTombstone
 		tombstoneKey := keys.RangeTombstoneKey(rangeID)
 		ok, err := storage.MVCCGetProto(
@@ -5040,7 +5075,10 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// Unsuccessful because the RHS will not accept the learner snapshot
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
-		_, err = tc.AddVoters(keyB, tc.Target(0))
+		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
+			roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+		)
 		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 
 		// Without a partitioned RHS we'll end up always writing a tombstone here because
@@ -5090,7 +5128,10 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// Unsuccessfuly because the RHS will not accept the learner snapshot
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
-		_, err = tc.AddVoters(keyB, tc.Target(0))
+		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
+			roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+		)
 		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 
 		// Without a partitioned RHS we'll end up always writing a tombstone here because
@@ -5158,10 +5199,15 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// Remove and re-add the RHS to create a new uninitialized replica at
 		// a higher replica ID. This will lead to a tombstone being written.
 		tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
-		// Unsuccessful because the RHS will not accept the learner snapshot
-		// and will be rolled back. Nevertheless it will have learned that it
-		// has been removed at the old replica ID.
-		_, err = tc.AddVoters(keyB, tc.Target(0))
+		// Unsuccessful because the RHS will not accept the learner snapshot and
+		// will be rolled back. Nevertheless it will have learned that it has been
+		// removed at the old replica ID. We don't use tc.AddVoters because that
+		// will retry until it runs out of time, since we're creating a
+		// retriable-looking situation here that will persist.
+		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
+			roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+		)
 		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 		// Ensure that the replica exists with the higher replica ID.
 		repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(rhsInfo.Desc.RangeID)
@@ -5219,7 +5265,13 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		// Unsuccessfuly because the RHS will not accept the learner snapshot
 		// and will be rolled back. Nevertheless it will have learned that it
 		// has been removed at the old replica ID.
-		_, err = tc.AddVoters(keyB, tc.Target(0))
+		//
+		// Not using tc.AddVoters because we expect an error, but that error
+		// would be retried internally.
+		_, err = tc.Servers[0].DB().AdminChangeReplicas(
+			ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
+			roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+		)
 		require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 		// Ensure that there's no tombstone.
 		// The RHS on store 0 never should have heard about its original ID.
