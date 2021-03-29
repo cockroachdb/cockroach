@@ -461,12 +461,12 @@ func MustGetMutableTableDescByID(
 // returning an error if the type is not found.
 func MustGetTypeDescByID(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
-) (*typedesc.Immutable, error) {
+) (catalog.TypeDescriptor, error) {
 	desc, err := getDescriptorByID(ctx, txn, codec, id, immutable, catalog.Type, mustGet)
 	if err != nil {
 		return nil, err
 	}
-	return desc.(*typedesc.Immutable), nil
+	return desc.(catalog.TypeDescriptor), nil
 }
 
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,

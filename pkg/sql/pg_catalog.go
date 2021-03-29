@@ -1423,8 +1423,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 
-		return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.Immutable, _ string, typDesc *typedesc.Immutable) error {
-			switch typDesc.Kind {
+		return forEachTypeDesc(ctx, p, dbContext, func(_ *dbdesc.Immutable, _ string, typDesc catalog.TypeDescriptor) error {
+			switch typDesc.GetKind() {
 			case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 			// We only want to iterate over ENUM types and multi-region enums.
 			default:
@@ -1434,12 +1434,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 			// internally using floats for ordering like Postgres, so just pick a
 			// float entry for the rows.
 			typOID := tree.NewDOid(tree.DInt(typedesc.TypeIDToOID(typDesc.GetID())))
-			for i, member := range typDesc.EnumMembers {
+			for i := 0; i < typDesc.NumEnumMembers(); i++ {
 				if err := addRow(
-					h.EnumEntryOid(typOID, member.PhysicalRepresentation),
+					h.EnumEntryOid(typOID, typDesc.GetMemberPhysicalRepresentation(i)),
 					typOID,
 					tree.NewDFloat(tree.DFloat(float64(i))),
-					tree.NewDString(member.LogicalRepresentation),
+					tree.NewDString(typDesc.GetMemberLogicalRepresentation(i)),
 				); err != nil {
 					return err
 				}
@@ -2479,7 +2479,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				}
 
 				// Now generate rows for user defined types in this database.
-				return forEachTypeDesc(ctx, p, db, func(_ *dbdesc.Immutable, scName string, typDesc *typedesc.Immutable) error {
+				return forEachTypeDesc(ctx, p, db, func(_ *dbdesc.Immutable, scName string, typDesc catalog.TypeDescriptor) error {
 					nspOid := h.NamespaceOid(db.GetID(), scName)
 					typ, err := typDesc.MakeTypesT(ctx, tree.NewQualifiedTypeName(db.Name, scName, typDesc.GetName()), p)
 					if err != nil {
@@ -2531,7 +2531,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return false, err
 				}
 				sc, err := p.Descriptors().GetImmutableSchemaByID(
-					ctx, p.txn, typDesc.ParentSchemaID, tree.SchemaLookupFlags{})
+					ctx, p.txn, typDesc.GetParentSchemaID(), tree.SchemaLookupFlags{})
 				if err != nil {
 					return false, err
 				}

@@ -47,7 +47,7 @@ func TestSafeMessage(t *testing.T) {
 				Kind:                     descpb.TypeDescriptor_ALIAS,
 				ReferencingDescriptorIDs: []descpb.ID{73, 37},
 			}).BuildImmutableType(),
-			exp: `typedesc.Immutable: {ID: 21, Version: 3, ModificationTime: "0,0", ` +
+			exp: `typedesc.immutable: {ID: 21, Version: 3, ModificationTime: "0,0", ` +
 				`ParentID: 2, ParentSchemaID: 29, State: PUBLIC, NumDrainingNames: 1, ` +
 				`Kind: ALIAS, ArrayTypeID: 117, ReferencingDescriptorIDs: [73, 37]}`,
 		},
@@ -74,7 +74,7 @@ func TestSafeMessage(t *testing.T) {
 					{},
 				},
 			}).BuildImmutableType(),
-			exp: `typedesc.Immutable: {ID: 21, Version: 3, ModificationTime: "0,0", ` +
+			exp: `typedesc.immutable: {ID: 21, Version: 3, ModificationTime: "0,0", ` +
 				`ParentID: 2, ParentSchemaID: 29, State: PUBLIC, NumDrainingNames: 1, ` +
 				`Kind: ENUM, NumEnumMembers: 1, ArrayTypeID: 117, ReferencingDescriptorIDs: [73, 37]}`,
 		},

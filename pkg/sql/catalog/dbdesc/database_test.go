@@ -233,7 +233,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			},
 		},
 		{ // 8
-			err: `schema mapping entry "schema1" (53): referenced schema ID 53: descriptor is a *typedesc.Immutable: unexpected descriptor type`,
+			err: `schema mapping entry "schema1" (53): referenced schema ID 53: descriptor is a *typedesc.immutable: unexpected descriptor type`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",

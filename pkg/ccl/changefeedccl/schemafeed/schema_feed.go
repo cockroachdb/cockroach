@@ -479,13 +479,13 @@ func (tf *SchemaFeed) validateDescriptor(
 	tf.mu.Lock()
 	defer tf.mu.Unlock()
 	switch desc := desc.(type) {
-	case *typedesc.Immutable:
+	case catalog.TypeDescriptor:
 		if !tf.mu.typeDeps.containsType(desc.GetID()) {
 			return nil
 		}
 		// If a interesting type changed, then we just want to force the lease
 		// manager to acquire the freshest version of the type.
-		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID)
+		return tf.leaseMgr.AcquireFreshestFromStore(ctx, desc.GetID())
 	case catalog.TableDescriptor:
 		if err := changefeedbase.ValidateTable(tf.targets, desc); err != nil {
 			return err

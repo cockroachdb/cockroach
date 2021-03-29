@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 )
 
 // TestingGetTableDescriptorFromSchema retrieves a table descriptor directly
@@ -68,15 +67,15 @@ func TestingGetMutableExistingTableDescriptor(
 // trivial change that just touches lots of lines.
 func TestingGetTypeDescriptorFromSchema(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, object string,
-) *typedesc.Immutable {
-	return testingGetObjectDescriptor(kvDB, codec, database, schema, object).(*typedesc.Immutable)
+) catalog.TypeDescriptor {
+	return testingGetObjectDescriptor(kvDB, codec, database, schema, object).(catalog.TypeDescriptor)
 }
 
 // TestingGetTypeDescriptor retrieves a type descriptor directly from the kv
 // layer.
 func TestingGetTypeDescriptor(
 	kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
-) *typedesc.Immutable {
+) catalog.TypeDescriptor {
 	return TestingGetTypeDescriptorFromSchema(kvDB, codec, database, "public", object)
 }
 
