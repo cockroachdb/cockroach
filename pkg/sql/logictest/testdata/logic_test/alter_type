@@ -367,7 +367,7 @@ statement ok
 CREATE VIEW v as SELECT 'd':::alphabets;
 CREATE TABLE uses_alphabets_2(k INT PRIMARY KEY, v alphabets DEFAULT 'e');
 
-statement error pq: could not validate removal of enum value "d": count-value-usage: enum value "d" is not yet public
+statement error pq: could not remove enum value "d" as it is being used by "v" in row: alphabets='d'
 ALTER TYPE alphabets DROP VALUE 'd'
 
 statement ok
@@ -514,7 +514,7 @@ ALTER TYPE enum_60004 DROP VALUE 'b'
 statement ok
 CREATE VIEW v_60004 AS SELECT ARRAY['c']:::_enum_60004 AS v;
 
-statement error count-array-type-value-usage: enum value "c" is not yet public
+statement error pq: could not remove enum value "c" as it is being used by table "test.public.v_60004"
 ALTER TYPE enum_60004 DROP VALUE 'c'
 
 subtest regression_60004_complex
