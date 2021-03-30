@@ -91,10 +91,11 @@ var validationMap = []struct {
 			"NextMutationID": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(schema): add validation"},
-			"FormatVersion": {status: thisFieldReferencesNoObjects},
-			"State":         {status: thisFieldReferencesNoObjects},
-			"OfflineReason": {status: thisFieldReferencesNoObjects},
-			"Checks":        {status: iSolemnlySwearThisFieldIsValidated},
+			"FormatVersion":     {status: thisFieldReferencesNoObjects},
+			"State":             {status: thisFieldReferencesNoObjects},
+			"OfflineReason":     {status: thisFieldReferencesNoObjects},
+			"LastWriteableTime": {status: thisFieldReferencesNoObjects},
+			"Checks":            {status: iSolemnlySwearThisFieldIsValidated},
 			"ViewQuery": {
 				status: todoIAmKnowinglyAddingTechDebt,
 				reason: "initial import: TODO(features): add validation"},

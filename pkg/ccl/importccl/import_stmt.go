@@ -1976,8 +1976,34 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		// Now that we know all the tables are offline, pick a walltime at which we
-		// will write.
+		// will write. The .Prev of this time would then be an upper-bound on when
+		// writes from when the table was online might have occurred.
 		details.Walltime = p.ExecCfg().Clock.Now().WallTime
+
+		lm, ie, db := p.ExecCfg().LeaseManager, p.ExecCfg().InternalExecutor, p.ExecCfg().DB
+		if err := descs.Txn(ctx, p.ExecCfg().Settings, lm, ie, db, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		) error {
+			b := txn.NewBatch()
+			for _, tbl := range details.Tables {
+				if !tbl.IsNew {
+					newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+					if err != nil {
+						return err
+					}
+					newTableDesc.LastWriteableTime = hlc.Timestamp{WallTime: details.Walltime}.Prev()
+					newTableDesc.Version++
+					if err := descsCol.WriteDescToBatch(
+						ctx, false /* kvTrace */, newTableDesc, b,
+					); err != nil {
+						return errors.Wrapf(err, "publishing table %d", newTableDesc.ID)
+					}
+				}
+			}
+			return errors.Wrap(txn.Run(ctx, b), "re-publishing tables with updated offline time")
+		}); err != nil {
+			return err
+		}
 
 		// Check if the tables being imported into are starting empty, in which
 		// case we can cheaply clear-range instead of revert-range to cleanup.
@@ -2125,6 +2151,7 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 			}
 			newTableDesc.State = descpb.DescriptorState_PUBLIC
 			newTableDesc.OfflineReason = ""
+			newTableDesc.LastWriteableTime = hlc.Timestamp{}
 
 			if !tbl.IsNew {
 				// NB: This is not using AllNonDropIndexes or directly mutating the
@@ -2390,6 +2417,7 @@ func (r *importResumer) dropTables(
 		// better to do the revert here so that the table comes back if and only if,
 		// it was rolled back to its pre-IMPORT state, and instead provide a manual
 		// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
+		// TODO(dt): use the LastWriteableTime per-table.
 		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
 
 		// disallowShadowing means no existing keys could have been covered by a key
@@ -2438,6 +2466,7 @@ func (r *importResumer) dropTables(
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
 			newTableDesc.State = descpb.DescriptorState_PUBLIC
+			newTableDesc.LastWriteableTime = hlc.Timestamp{}
 		}
 		if err := descsCol.WriteDescToBatch(
 			ctx, false /* kvTrace */, newTableDesc, b,
