@@ -6949,25 +6949,68 @@ project
  └── distinct-on
       ├── columns: k:1!null u:2!null v:3
       ├── grouping columns: k:1!null
+      ├── internal-ordering: +1 opt(2)
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3)
       ├── project
       │    ├── columns: k:1!null u:2!null v:3
       │    ├── key: (1)
       │    ├── fd: ()-->(2), (1)-->(3)
+      │    ├── ordering: +1 opt(2) [actual: +1]
       │    ├── index-join d
       │    │    ├── columns: k:6!null u:7!null v:8
       │    │    ├── key: (6)
       │    │    ├── fd: ()-->(7), (6)-->(8)
+      │    │    ├── ordering: +6 opt(7) [actual: +6]
       │    │    └── scan d@u
       │    │         ├── columns: k:6!null u:7!null
       │    │         ├── constraint: /7/6: [/2 - /2]
       │    │         ├── key: (6)
-      │    │         └── fd: ()-->(7)
+      │    │         ├── fd: ()-->(7)
+      │    │         └── ordering: +6 opt(7) [actual: +6]
       │    └── projections
       │         ├── k:6 [as=k:1, outer=(6)]
       │         ├── u:7 [as=u:2, outer=(7)]
       │         └── v:8 [as=v:3, outer=(8)]
+      └── aggregations
+           ├── const-agg [as=u:2, outer=(2)]
+           │    └── u:2
+           └── const-agg [as=v:3, outer=(3)]
+                └── v:3
+
+# Columns are passed-through correctly when EliminateUnionAllRight is applied.
+opt expect=SplitDisjunction
+SELECT k FROM d WHERE (u = 2 AND u = 4) OR v = 1
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── distinct-on
+      ├── columns: k:1!null u:2 v:3!null
+      ├── grouping columns: k:1!null
+      ├── internal-ordering: +1 opt(3)
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── project
+      │    ├── columns: k:1!null u:2 v:3!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(3), (1)-->(2)
+      │    ├── ordering: +1 opt(3) [actual: +1]
+      │    ├── index-join d
+      │    │    ├── columns: k:11!null u:12 v:13!null
+      │    │    ├── key: (11)
+      │    │    ├── fd: ()-->(13), (11)-->(12)
+      │    │    ├── ordering: +11 opt(13) [actual: +11]
+      │    │    └── scan d@v
+      │    │         ├── columns: k:11!null v:13!null
+      │    │         ├── constraint: /13/11: [/1 - /1]
+      │    │         ├── key: (11)
+      │    │         ├── fd: ()-->(13)
+      │    │         └── ordering: +11 opt(13) [actual: +11]
+      │    └── projections
+      │         ├── k:11 [as=k:1, outer=(11)]
+      │         ├── u:12 [as=u:2, outer=(12)]
+      │         └── v:13 [as=v:3, outer=(13)]
       └── aggregations
            ├── const-agg [as=u:2, outer=(2)]
            │    └── u:2
