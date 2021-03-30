@@ -182,7 +182,7 @@ func ShapeDistance(c DistanceCalculator, a Shape, b Shape) (bool, error) {
 // It will only check the V1 of each edge and assumes the first edge start does not need the distance
 // to be computed.
 func onPointToEdgesExceptFirstEdgeStart(c DistanceCalculator, a Point, b shapeWithEdges) bool {
-	for edgeIdx := 0; edgeIdx < b.NumEdges(); edgeIdx++ {
+	for edgeIdx, bNumEdges := 0, b.NumEdges(); edgeIdx < bNumEdges; edgeIdx++ {
 		edge := b.Edge(edgeIdx)
 		// Check against all V1 of every edge.
 		if c.DistanceUpdater().Update(a, edge.V1) {
@@ -253,7 +253,7 @@ func onPointToPolygon(c DistanceCalculator, a Point, b Polygon) bool {
 // only looking at the edges.
 // Returns true if the calling function should early exit.
 func onShapeEdgesToShapeEdges(c DistanceCalculator, a shapeWithEdges, b shapeWithEdges) bool {
-	for aEdgeIdx := 0; aEdgeIdx < a.NumEdges(); aEdgeIdx++ {
+	for aEdgeIdx, aNumEdges := 0, a.NumEdges(); aEdgeIdx < aNumEdges; aEdgeIdx++ {
 		aEdge := a.Edge(aEdgeIdx)
 		var crosser EdgeCrosser
 		// MaxDistance: the max distance between 2 edges is the maximum of the distance across
@@ -264,7 +264,7 @@ func onShapeEdgesToShapeEdges(c DistanceCalculator, a shapeWithEdges, b shapeWit
 		if !c.DistanceUpdater().IsMaxDistance() && c.BoundingBoxIntersects() {
 			crosser = c.NewEdgeCrosser(aEdge, b.Edge(0).V0)
 		}
-		for bEdgeIdx := 0; bEdgeIdx < b.NumEdges(); bEdgeIdx++ {
+		for bEdgeIdx, bNumEdges := 0, b.NumEdges(); bEdgeIdx < bNumEdges; bEdgeIdx++ {
 			bEdge := b.Edge(bEdgeIdx)
 			if crosser != nil {
 				// If the edges cross, the distance is 0.

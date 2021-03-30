@@ -94,7 +94,7 @@ func singleRegionIntersects(aRegion s2.Region, bRegion s2.Region) (bool, error) 
 // polylineIntersectsPolyline returns whether polyline a intersects with
 // polyline b.
 func polylineIntersectsPolyline(a *s2.Polyline, b *s2.Polyline) bool {
-	for aEdgeIdx := 0; aEdgeIdx < a.NumEdges(); aEdgeIdx++ {
+	for aEdgeIdx, aNumEdges := 0, a.NumEdges(); aEdgeIdx < aNumEdges; aEdgeIdx++ {
 		edge := a.Edge(aEdgeIdx)
 		crosser := s2.NewChainEdgeCrosser(edge.V0, edge.V1, (*b)[0])
 		for _, nextVertex := range (*b)[1:] {
@@ -122,7 +122,7 @@ func polygonIntersectsPolyline(a *s2.Polygon, b *s2.Polyline) bool {
 	// This technique works for holes touching, or holes touching the exterior
 	// as the point in which the holes touch is considered an intersection.
 	for _, loop := range a.Loops() {
-		for loopEdgeIdx := 0; loopEdgeIdx < loop.NumEdges(); loopEdgeIdx++ {
+		for loopEdgeIdx, loopNumEdges := 0, loop.NumEdges(); loopEdgeIdx < loopNumEdges; loopEdgeIdx++ {
 			loopEdge := loop.Edge(loopEdgeIdx)
 			crosser := s2.NewChainEdgeCrosser(loopEdge.V0, loopEdge.V1, (*b)[0])
 			for _, nextVertex := range (*b)[1:] {

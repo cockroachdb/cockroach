@@ -148,7 +148,7 @@ func polylineCoversPoint(a *s2.Polyline, b s2.Point) bool {
 // If true, it will also return an index of the start of the edge where there
 // was an intersection.
 func polylineCoversPointWithIdx(a *s2.Polyline, b s2.Point) (bool, int) {
-	for edgeIdx := 0; edgeIdx < a.NumEdges(); edgeIdx++ {
+	for edgeIdx, aNumEdges := 0, a.NumEdges(); edgeIdx < aNumEdges; edgeIdx++ {
 		if edgeCoversPoint(a.Edge(edgeIdx), b) {
 			return true, edgeIdx
 		}
@@ -283,7 +283,7 @@ func polygonCoversPolyline(a *s2.Polygon, b *s2.Polyline) bool {
 func polygonIntersectsPolylineEdge(a *s2.Polygon, b *s2.Polyline) bool {
 	// Avoid using NumEdges / Edge of the Polygon type as it is not O(1).
 	for _, loop := range a.Loops() {
-		for loopEdgeIdx := 0; loopEdgeIdx < loop.NumEdges(); loopEdgeIdx++ {
+		for loopEdgeIdx, loopNumEdges := 0, loop.NumEdges(); loopEdgeIdx < loopNumEdges; loopEdgeIdx++ {
 			loopEdge := loop.Edge(loopEdgeIdx)
 			crosser := s2.NewChainEdgeCrosser(loopEdge.V0, loopEdge.V1, (*b)[0])
 			for _, nextVertex := range (*b)[1:] {
