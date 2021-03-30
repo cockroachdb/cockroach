@@ -190,6 +190,9 @@ type StoreTestingKnobs struct {
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
 	ReceiveSnapshot func(*SnapshotRequest_Header) error
+	// AfterApplySnapshot is run after a snapshot is successfully applied by its
+	// recipient.
+	AfterApplySnapshot func(*IncomingSnapshot)
 	// ReplicaAddSkipRollback causes replica addition to skip the learner rollback
 	// that happens when promotion to a voter fails.
 	ReplicaAddSkipLearnerRollback func() bool

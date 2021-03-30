@@ -514,7 +514,9 @@ type IncomingSnapshot struct {
 	// point).
 	// See the comment on VersionUnreplicatedRaftTruncatedState for details.
 	UsesUnreplicatedTruncatedState bool
-	snapType                       SnapshotRequest_Type
+	// The type of the incoming snapshot. Used for metrics collection on the
+	// receiver.
+	SnapType SnapshotRequest_Type
 }
 
 func (s *IncomingSnapshot) String() string {
@@ -523,7 +525,7 @@ func (s *IncomingSnapshot) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s *IncomingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%s snapshot %s at applied index %d", s.snapType, s.SnapUUID.Short(), s.State.RaftAppliedIndex)
+	w.Printf("%s snapshot %s at applied index %d", s.SnapType, s.SnapUUID.Short(), s.State.RaftAppliedIndex)
 }
 
 // snapshot creates an OutgoingSnapshot containing a rocksdb snapshot for the
@@ -789,6 +791,10 @@ func (r *Replica) applySnapshot(
 					log.Fatalf(ctx, "unexpected replica type %s while applying snapshot", typ)
 				}
 			}
+
+			if fn := r.store.TestingKnobs().AfterApplySnapshot; fn != nil {
+				fn(&inSnap)
+			}
 		}
 	}()
 
@@ -819,7 +825,7 @@ func (r *Replica) applySnapshot(
 		// Time to ingest SSTs.
 		ingestion time.Time
 	}
-	log.Infof(ctx, "applying snapshot of type %s [id=%s index=%d]", inSnap.snapType,
+	log.Infof(ctx, "applying snapshot of type %s [id=%s index=%d]", inSnap.SnapType,
 		inSnap.SnapUUID.Short(), snap.Metadata.Index)
 	defer func(start time.Time) {
 		now := timeutil.Now()
@@ -841,7 +847,7 @@ func (r *Replica) applySnapshot(
 			stats.ingestion.Sub(stats.subsumedReplicas).Seconds()*1000,
 		)
 		log.Infof(
-			ctx, "applied snapshot of type %s [%s%s%sid=%s index=%d]", inSnap.snapType, totalLog,
+			ctx, "applied snapshot of type %s [%s%s%sid=%s index=%d]", inSnap.SnapType, totalLog,
 			subsumedReplicasLog, ingestionLog, inSnap.SnapUUID.Short(), snap.Metadata.Index,
 		)
 	}(timeutil.Now())
@@ -948,7 +954,7 @@ func (r *Replica) applySnapshot(
 
 	// Ingest all SSTs atomically.
 	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
-		if err := fn(inSnap, inSnap.snapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		if err := fn(inSnap, inSnap.SnapType, inSnap.SSTStorageScratch.SSTs()); err != nil {
 			return err
 		}
 	}

@@ -503,14 +503,29 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	recCh := make(chan tracing.Recording, 1)
 
 	var n2Addr, n3Addr syncutil.AtomicString
+	waitForSnapApplication := make(chan struct{})
 	tc := testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      base.TestServerArgs{UseDatabase: "t"},
-			// n4 pretends to have low latency to n2 and n3, so that it tries to use
-			// them for follower reads.
-			// Also, we're going to collect a trace of the test's final query.
 			ServerArgsPerNode: map[int]base.TestServerArgs{
+				2: {
+					Knobs: base.TestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
+							// We'll be adding a non-voter to n3 below. Non-voters upreplicate
+							// via snapshots sent by the raft snapshot queue. We'll use
+							// `waitForSnapApplication` to signal that.
+							AfterApplySnapshot: func(inSnap *kvserver.IncomingSnapshot) {
+								if inSnap.SnapType == kvserver.SnapshotRequest_VIA_SNAPSHOT_QUEUE {
+									close(waitForSnapApplication)
+								}
+							},
+						},
+					},
+				},
+				// n4 pretends to have low latency to n2 and n3, so that it tries to use
+				// them for follower reads.
+				// Also, we're going to collect a trace of the test's final query.
 				3: {
 					UseDatabase: "t",
 					Knobs: base.TestingKnobs{
@@ -540,8 +555,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n1 := sqlutils.MakeSQLRunner(tc.Conns[0])
 	n1.Exec(t, `CREATE DATABASE t`)
 	n1.Exec(t, `CREATE TABLE test (k INT PRIMARY KEY)`)
-	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1], 1)`)
-	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[2], 1)`)
+	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1,2], 1)`)
 	// Speed up closing of timestamps, as we'll in order to be able to use
 	// follower_read_timestamp().
 	// Every 0.2s we'll close the timestamp from 0.4s ago. We'll attempt follower reads
@@ -571,12 +585,23 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
-		{NodeID: 2, StoreID: 2, ReplicaID: 2, Type: roachpb.ReplicaTypeNonVoter()},
+		{NodeID: 2, StoreID: 2, ReplicaID: 2},
 	}, entry.Desc().Replicas().Descriptors())
 
-	// Relocate the follower. n2 will no longer have a replica.
-	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1,3], 1)`)
-	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[], 1)`)
+	// Remove the follower and add a new non-voter to n3. n2 will no longer have a
+	// replica.
+	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1], 1)`)
+	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[3], 1)`)
+
+	// Wait until the new non-voter receives its snapshot. This needs to be done
+	// in case of non-voters since they up-replicate via a snapshot sent by the
+	// raft snapshot queue and not through an out-of-band snapshot like LEARNERs
+	// do.
+	select {
+	case <-waitForSnapApplication:
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("snapshot for non-voter took too long")
+	}
 
 	// Execute the query again and assert the cache is updated. This query will
 	// not be executed as a follower read since it attempts to use n2 which
@@ -585,7 +610,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n4.Exec(t, historicalQuery)
 	// As a sanity check, verify that this was not a follower read.
 	rec := <-recCh
-	require.False(t, kv.OnlyFollowerReads(rec), "query was not served through follower reads: %s", rec)
+	require.False(t, kv.OnlyFollowerReads(rec), "query was served through follower reads: %s", rec)
 	// Check that the cache was properly updated.
 	entry = n4Cache.GetCached(ctx, tablePrefix, false /* inverted */)
 	require.NotNil(t, entry)
@@ -593,7 +618,7 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
 	require.Equal(t, []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1, ReplicaID: 1},
-		{NodeID: 3, StoreID: 3, ReplicaID: 3},
+		{NodeID: 3, StoreID: 3, ReplicaID: 3, Type: roachpb.ReplicaTypeNonVoter()},
 	}, entry.Desc().Replicas().Descriptors())
 
 	// Make a note of the follower reads metric on n3. We'll check that it was

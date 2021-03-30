@@ -302,7 +302,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				SSTStorageScratch:              kvSS.scratch,
 				LogEntries:                     logEntries,
 				State:                          &header.State,
-				snapType:                       header.Type,
+				SnapType:                       header.Type,
 			}
 
 			expLen := inSnap.State.RaftAppliedIndex - inSnap.State.TruncatedState.Index
