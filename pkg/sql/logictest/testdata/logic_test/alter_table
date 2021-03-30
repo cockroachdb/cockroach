@@ -1732,3 +1732,34 @@ ALTER TABLE t61762 ADD COLUMN v OIDVECTOR
 
 statement error VECTOR column types are unsupported
 ALTER TABLE t61762 ADD COLUMN v INT2VECTOR
+
+# Regression test for #60786. Handle in-transaction constraint ADD+DROP correctly.
+subtest regression_60786
+
+statement ok
+CREATE TABLE t60786(i INT PRIMARY KEY);
+
+statement error pgcode 0A000 constraint "fk" in the middle of being added, try again later
+BEGIN;
+CREATE TABLE child_60786(i INT PRIMARY KEY);
+ALTER TABLE t60786 ADD CONSTRAINT fk FOREIGN KEY (i) REFERENCES child_60786(i) NOT VALID;
+ALTER TABLE t60786 DROP CONSTRAINT fk CASCADE
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 constraint "ck" in the middle of being added, try again later
+BEGIN;
+ALTER TABLE t60786 ADD CONSTRAINT ck CHECK(i > 0) NOT VALID;
+ALTER TABLE t60786 DROP CONSTRAINT ck CASCADE
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 constraint "uq" in the middle of being added, try again later
+BEGIN;
+ALTER TABLE t60786 ADD CONSTRAINT uq UNIQUE WITHOUT INDEX(i) NOT VALID;
+ALTER TABLE t60786 DROP CONSTRAINT uq CASCADE
+
+statement ok
+ROLLBACK
