@@ -1333,11 +1333,95 @@ with &3 (cte)
       └── mapping:
            └──  a:5 => a:8
 
-# We don't support upcasting the "initial" query.
+# Verify the addition of casts to the "initial" query.
 build
 WITH RECURSIVE cte(x) AS (SELECT a FROM x UNION ALL SELECT x::FLOAT FROM cte WHERE x < 10) SELECT * FROM cte;
 ----
-error (42804): UNION types int and float cannot be matched for WITH RECURSIVE
+with &2 (cte)
+ ├── columns: x:9
+ ├── recursive-c-t-e
+ │    ├── columns: x:5
+ │    ├── working table binding: &1
+ │    ├── initial columns: a:8
+ │    ├── recursive columns: x:7
+ │    ├── fake-rel
+ │    │    └── columns: x.a:1
+ │    ├── project
+ │    │    ├── columns: a:8
+ │    │    ├── project
+ │    │    │    ├── columns: x.a:1
+ │    │    │    └── scan x
+ │    │    │         └── columns: x.a:1 b:2 rowid:3!null crdb_internal_mvcc_timestamp:4
+ │    │    └── projections
+ │    │         └── x.a:1::FLOAT8 [as=a:8]
+ │    └── project
+ │         ├── columns: x:7!null
+ │         ├── select
+ │         │    ├── columns: x:6!null
+ │         │    ├── with-scan &1 (cte)
+ │         │    │    ├── columns: x:6
+ │         │    │    └── mapping:
+ │         │    │         └──  x:5 => x:6
+ │         │    └── filters
+ │         │         └── x:6 < 10
+ │         └── projections
+ │              └── x:6::FLOAT8 [as=x:7]
+ └── with-scan &2 (cte)
+      ├── columns: x:9
+      └── mapping:
+           └──  x:5 => x:9
+
+exec-ddl
+CREATE TABLE graph_node (
+  id VARCHAR(16) PRIMARY KEY,
+  parent VARCHAR(16)
+)
+----
+
+# The 'A' in the initial query needs a cast to VARCHAR(16).
+build
+WITH RECURSIVE nodes AS (
+  SELECT 'A' AS id
+  UNION ALL
+  SELECT graph_node.id FROM graph_node JOIN nodes ON graph_node.parent = nodes.id
+)
+SELECT * FROM nodes;
+----
+with &2 (nodes)
+ ├── columns: id:8
+ ├── recursive-c-t-e
+ │    ├── columns: id:2
+ │    ├── working table binding: &1
+ │    ├── initial columns: id:7
+ │    ├── recursive columns: graph_node.id:3
+ │    ├── fake-rel
+ │    │    └── columns: id:1
+ │    ├── project
+ │    │    ├── columns: id:7!null
+ │    │    ├── project
+ │    │    │    ├── columns: id:1!null
+ │    │    │    ├── values
+ │    │    │    │    └── ()
+ │    │    │    └── projections
+ │    │    │         └── 'A' [as=id:1]
+ │    │    └── projections
+ │    │         └── id:1::VARCHAR(16) [as=id:7]
+ │    └── project
+ │         ├── columns: graph_node.id:3!null
+ │         └── inner-join (hash)
+ │              ├── columns: graph_node.id:3!null parent:4!null crdb_internal_mvcc_timestamp:5 id:6!null
+ │              ├── scan graph_node
+ │              │    └── columns: graph_node.id:3!null parent:4 crdb_internal_mvcc_timestamp:5
+ │              ├── with-scan &1 (nodes)
+ │              │    ├── columns: id:6
+ │              │    └── mapping:
+ │              │         └──  id:2 => id:6
+ │              └── filters
+ │                   └── parent:4 = id:6
+ └── with-scan &2 (nodes)
+      ├── columns: id:8
+      └── mapping:
+           └──  id:2 => id:8
 
 # Mutating WITHs not allowed at non-root positions.
 build
