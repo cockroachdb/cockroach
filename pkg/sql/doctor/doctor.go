@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/sortkeys"
 )
 
 // DescriptorTableRow represents a descriptor from table `system.descriptor`.
@@ -53,6 +52,17 @@ type NamespaceTable []NamespaceTableRow
 
 // JobsTable represents data read from `system.jobs`.
 type JobsTable []jobs.JobMetadata
+
+// GetJobMetadata implements the jobs.JobMetadataGetter interface.
+func (jt JobsTable) GetJobMetadata(jobID jobspb.JobID) (*jobs.JobMetadata, error) {
+	for i := range jt {
+		md := &jt[i]
+		if md.ID == jobID {
+			return md, nil
+		}
+	}
+	return nil, errors.Newf("job %d not found", jobID)
+}
 
 func newDescGetter(
 	descRows []DescriptorTableRow, nsRows []NamespaceTableRow,
@@ -86,7 +96,7 @@ func Examine(
 	verbose bool,
 	stdout io.Writer,
 ) (ok bool, err error) {
-	descOk, err := ExamineDescriptors(ctx, descTable, namespaceTable, verbose, stdout)
+	descOk, err := ExamineDescriptors(ctx, descTable, namespaceTable, jobsTable, verbose, stdout)
 	if err != nil {
 		return false, err
 	}
@@ -102,6 +112,7 @@ func ExamineDescriptors(
 	ctx context.Context,
 	descTable DescriptorTable,
 	namespaceTable NamespaceTable,
+	jobsTable JobsTable,
 	verbose bool,
 	stdout io.Writer,
 ) (ok bool, err error) {
@@ -126,10 +137,17 @@ func ExamineDescriptors(
 			problemsFound = true
 			continue
 		}
-		for _, err := range validateSafely(ctx, ddg, desc) {
+		ve := catalog.ValidateWithRecover(ctx, ddg, catalog.ValidationLevelAllPreTxnCommit, desc)
+		for _, err := range ve.Errors() {
 			problemsFound = true
 			descReport(stdout, desc, "%s", err)
 		}
+
+		jobs.ValidateJobReferencesInDescriptor(desc, jobsTable, func(err error) {
+			problemsFound = true
+			descReport(stdout, desc, "%s", err)
+		})
+
 		if verbose {
 			descReport(stdout, desc, "processed")
 		}
@@ -147,24 +165,6 @@ func ExamineDescriptors(
 	}
 
 	return !problemsFound, err
-}
-
-func validateSafely(
-	ctx context.Context, descGetter catalog.DescGetter, desc catalog.Descriptor,
-) (errs []error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err, ok := r.(error)
-			if !ok {
-				err = errors.Newf("%v", r)
-			}
-			err = errors.WithAssertionFailure(errors.Wrap(err, "validation"))
-			errs = append(errs, err)
-		}
-	}()
-	results := catalog.Validate(ctx, descGetter, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
-	errs = append(errs, results.Errors()...)
-	return errs
 }
 
 func validateNamespaceRow(row NamespaceTableRow, desc catalog.Descriptor) error {
@@ -210,7 +210,7 @@ func ExamineJobs(
 	verbose bool,
 	stdout io.Writer,
 ) (ok bool, err error) {
-	fmt.Fprintf(stdout, "Examining %d running jobs...\n", len(jobsTable))
+	fmt.Fprintf(stdout, "Examining %d jobs...\n", len(jobsTable))
 	ddg, err := newDescGetter(descTable, nil /* nsRows */)
 	if err != nil {
 		return false, err
@@ -220,33 +220,10 @@ func ExamineJobs(
 		if verbose {
 			fmt.Fprintf(stdout, "Processing job %d\n", j.ID)
 		}
-		if j.Payload.Type() != jobspb.TypeSchemaChangeGC {
-			continue
-		}
-		existingTables := make([]int64, 0)
-		missingTables := make([]int64, 0)
-		for _, table := range j.Progress.GetSchemaChangeGC().Tables {
-			if table.Status == jobspb.SchemaChangeGCProgress_DELETED {
-				continue
-			}
-			_, tableExists := ddg.Descriptors[table.ID]
-			if tableExists {
-				existingTables = append(existingTables, int64(table.ID))
-			} else {
-				missingTables = append(missingTables, int64(table.ID))
-			}
-		}
-
-		if len(missingTables) > 0 {
+		jobs.ValidateDescriptorReferencesInJob(j, ddg.Descriptors, func(err error) {
 			problemsFound = true
-			sortkeys.Int64s(missingTables)
-			fmt.Fprintf(stdout, "job %d: schema change GC refers to missing table descriptor(s) %+v\n"+
-				"\texisting descriptors that still need to be dropped %+v\n",
-				j.ID, missingTables, existingTables)
-			if len(existingTables) == 0 && len(j.Progress.GetSchemaChangeGC().Indexes) == 0 {
-				fmt.Fprintf(stdout, "\tjob %d can be safely deleted\n", j.ID)
-			}
-		}
+			fmt.Fprintf(stdout, "job %d: %s.\n", j.ID, err)
+		})
 	}
 	return !problemsFound, nil
 }
