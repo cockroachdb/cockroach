@@ -165,6 +165,7 @@ github.com/cenkalti/backoff v2.1.1+incompatible/go.mod h1:90ReRw6GdpyfrHakVjL/QH
 github.com/cenkalti/backoff/v3 v3.0.0/go.mod h1:cIeZDE3IrqwwJl6VUwCN6trj1oXrTS4rc0ij+ULvLYs=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/certifi/gocertifi v0.0.0-20191021191039-0944d244cd40/go.mod h1:sGbDF6GwGcLpkNXPUTkMRoywsNa/ol15pxFe6ERfguA=
+github.com/certifi/gocertifi v0.0.0-20200922220541-2c3bb06c6054/go.mod h1:sGbDF6GwGcLpkNXPUTkMRoywsNa/ol15pxFe6ERfguA=
 github.com/cespare/xxhash/v2 v2.1.1 h1:6MnRN8NT7+YBpUIWxHtefFZOKTAPgGjpQSxqLNn0+qY=
 github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible/go.mod h1:nmEj6Dob7S7YxXgwXpfOuvO54S+tGdZdw9fuRZt25Ag=
@@ -1007,8 +1008,8 @@ go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738 h1:VcrIfasaLFkyjk6KNlXQSzO+B0
 go.etcd.io/etcd v0.0.0-20191023171146-3cf2f69b5738/go.mod h1:dnLIgRNXwCJa5e+c6mIZCrds/GIG4ncV9HhK5PX7jPg=
 go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560 h1:U/PIBuOTa8JXLPKF81Xh7xhIjA0jbpyqFWUPIiT4Ilc=
 go.etcd.io/etcd/pkg/v3 v3.0.0-20201109164711-01844fd28560/go.mod h1:0HiXlybqS+XtfgnNkiEZWwGXYYEhWsWL8fDVdZzb7is=
-go.etcd.io/etcd/raft/v3 v3.0.0-20210215124703-719f6ce06fbc h1:W9sYVQfb5q8/WMnlTkjpYK8CwMfGCU6Tp9mR+Qm6NFU=
-go.etcd.io/etcd/raft/v3 v3.0.0-20210215124703-719f6ce06fbc/go.mod h1:lOAojD+joNvQ+1WBvyjLbjEwCDgymdjYYZdkI6uddZ4=
+go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8 h1:aRP8pJvbOsFy8SaZ0tcWeV4RYTlp8ZIWS49usJjO4Ac=
+go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8/go.mod h1:i+srOieUHQl4y/EwlGOpuYtoKG7nb2uhtA/hrFsFTsc=
 go.mongodb.org/mongo-driver v1.0.3/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.1/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=
 go.mongodb.org/mongo-driver v1.1.2/go.mod h1:u7ryQJ+DOzQmeO7zB6MHyr8jkEQvC8vH7qLUO4lqsUM=

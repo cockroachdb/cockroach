@@ -144,7 +144,7 @@ require (
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
-	go.etcd.io/etcd/raft/v3 v3.0.0-20210215124703-719f6ce06fbc
+	go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/exp v0.0.0-20210212053707-62dc52270d37
 	golang.org/x/lint v0.0.0-20200130185559-910be7a94367

@@ -387,8 +387,8 @@ def go_deps():
         name = "com_github_certifi_gocertifi",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/certifi/gocertifi",
-        sum = "h1:xvUo53O5MRZhVMJAxWCJcS5HHrqAiAG9SJ1LpMu6aAI=",
-        version = "v0.0.0-20191021191039-0944d244cd40",
+        sum = "h1:uH66TXeswKn5PW5zdZ39xEwfS9an067BirqA+P4QaLI=",
+        version = "v0.0.0-20200922220541-2c3bb06c6054",
     )
     go_repository(
         name = "com_github_cespare_xxhash_v2",
@@ -3730,8 +3730,8 @@ def go_deps():
         patches = [
             "@cockroach//build/patches:io_etcd_go_etcd_raft_v3.patch",
         ],
-        sum = "h1:W9sYVQfb5q8/WMnlTkjpYK8CwMfGCU6Tp9mR+Qm6NFU=",
-        version = "v3.0.0-20210215124703-719f6ce06fbc",
+        sum = "h1:aRP8pJvbOsFy8SaZ0tcWeV4RYTlp8ZIWS49usJjO4Ac=",
+        version = "v3.0.0-20210320072418-e51c697ec6e8",
     )
     go_repository(
         name = "io_k8s_api",
