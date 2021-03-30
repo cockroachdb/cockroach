@@ -1,25 +1,24 @@
 import React from "react";
 import { RouteComponentProps } from "react-router-dom";
 import { isNil, merge, forIn } from "lodash";
-import moment from "moment";
 import Helmet from "react-helmet";
 import classNames from "classnames/bind";
-
-import { Text } from "@cockroachlabs/ui-components";
-
-import { Dropdown } from "src/dropdown";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import { SortSetting } from "src/sortedtable";
 import { Search } from "src/search";
-import { Pagination, ResultsPerPageLabel } from "src/pagination";
-
+import { Pagination } from "src/pagination";
+import { TableStatistics } from "../tableStatistics";
 import {
-  DATE_FORMAT,
-  appAttr,
-  getMatchParamByName,
-  calculateTotalWorkload,
-} from "src/util";
+  Filter,
+  Filters,
+  defaultFilters,
+  calculateActiveFilters,
+  getFiltersFromQueryString,
+  getTimeValueInSeconds,
+} from "../queryFilter";
+
+import { appAttr, getMatchParamByName, calculateTotalWorkload } from "src/util";
 import {
   AggregateStatistics,
   makeStatementsColumns,
@@ -76,22 +75,25 @@ export interface StatementsPageState {
   sortSetting: SortSetting;
   search?: string;
   pagination: ISortedTablePagination;
-  fullScan: boolean;
+  filters?: Filters;
+  activeFilters?: number;
 }
 
 export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   StatementsPageOuterProps &
-  RouteComponentProps<any>;
+  RouteComponentProps<unknown>;
 
 export class StatementsPage extends React.Component<
   StatementsPageProps,
   StatementsPageState
 > {
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
-
   constructor(props: StatementsPageProps) {
     super(props);
+    const filters = getFiltersFromQueryString(
+      this.props.history.location.search,
+    );
     const defaultState = {
       sortSetting: {
         // Sort by Execution Count column as default option.
@@ -103,7 +105,8 @@ export class StatementsPage extends React.Component<
         current: 1,
       },
       search: "",
-      fullScan: false,
+      filters: filters,
+      activeFilters: calculateActiveFilters(filters),
     };
 
     const stateFromHistory = this.getStateFromHistory();
@@ -160,6 +163,7 @@ export class StatementsPage extends React.Component<
   };
 
   selectApp = (value: string) => {
+    if (value == "All") value = "";
     const { history } = this.props;
     history.location.pathname = `/statements/${encodeURIComponent(value)}`;
     history.replace(history.location);
@@ -211,6 +215,24 @@ export class StatementsPage extends React.Component<
     });
   };
 
+  onSubmitFilters = (filters: Filters) => {
+    this.setState({
+      filters: {
+        ...this.state.filters,
+        ...filters,
+      },
+      activeFilters: calculateActiveFilters(filters),
+    });
+
+    this.resetPagination();
+    this.syncHistory({
+      app: filters.app,
+      timeNumber: filters.timeNumber,
+      timeUnit: filters.timeUnit,
+    });
+    this.selectApp(filters.app);
+  };
+
   onClearSearchField = () => {
     this.setState({ search: "" });
     this.syncHistory({
@@ -218,37 +240,57 @@ export class StatementsPage extends React.Component<
     });
   };
 
+  onClearFilters = () => {
+    this.setState({
+      filters: {
+        ...defaultFilters,
+      },
+      activeFilters: 0,
+    });
+    this.resetPagination();
+    this.syncHistory({
+      app: undefined,
+      timeNumber: undefined,
+      timeUnit: undefined,
+    });
+    this.selectApp("");
+  };
+
   filteredStatementsData = () => {
-    const { search } = this.state;
+    const { search, filters } = this.state;
     const { statements } = this.props;
+    const timeValue = getTimeValueInSeconds(filters);
+
     return statements
-      .filter(statement => (this.state.fullScan ? statement.fullScan : true))
+      .filter(statement =>
+        this.state.filters.fullScan ? statement.fullScan : true,
+      )
       .filter(statement =>
         search
           .split(" ")
           .every(val =>
             statement.label.toLowerCase().includes(val.toLowerCase()),
           ),
+      )
+      .filter(
+        statement =>
+          statement.stats.service_lat.mean >= timeValue ||
+          timeValue === "empty",
       );
   };
 
-  fullScanChange = () => {
-    this.setState({ fullScan: !this.state.fullScan });
-  };
-
-  renderLastCleared = () => {
-    const { lastReset } = this.props;
-    return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
-  };
-
   renderStatements = () => {
-    const { pagination, search } = this.state;
-    const { statements, match, onDiagnosticsReportDownload } = this.props;
+    const { pagination, search, filters, activeFilters } = this.state;
+    const {
+      statements,
+      match,
+      lastReset,
+      onDiagnosticsReportDownload,
+    } = this.props;
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
-    const appOptions = [{ value: "", name: "All" }];
-    this.props.apps.forEach(app => appOptions.push({ value: app, name: app }));
-    const currentOption = appOptions.find(o => o.value === selectedApp);
+    const appOptions = [{ value: "All", label: "All" }];
+    this.props.apps.forEach(app => appOptions.push({ value: app, label: app }));
     const data = this.filteredStatementsData();
     const totalWorkload = calculateTotalWorkload(data);
     const totalCount = data.length;
@@ -265,52 +307,25 @@ export class StatementsPage extends React.Component<
             />
           </PageConfigItem>
           <PageConfigItem>
-            <Dropdown
-              items={appOptions}
-              onChange={this.selectApp}
-              itemsClassname={cx("app-filter-dropdown-item")}
-            >
-              <Text
-                type="body-strong"
-                noWrap={true}
-                className={cx("app-filter-dropdown")}
-              >
-                {`App: ${decodeURIComponent(currentOption.name)}`}
-              </Text>
-            </Dropdown>
-          </PageConfigItem>
-          <PageConfigItem>
-            <div>
-              <input
-                type="checkbox"
-                id="full-table-scan-toggle"
-                defaultChecked={this.state.fullScan}
-                onChange={this.fullScanChange}
-              />
-              <label
-                htmlFor="full-table-scan-toggle"
-                className={cx("full-table-scan-label")}
-              >
-                {"  "} Only show statements that contain queries with full table
-                scans
-              </label>
-            </div>
+            <Filter
+              onSubmitFilters={this.onSubmitFilters}
+              appNames={appOptions}
+              activeFilters={activeFilters}
+              filters={filters}
+              showScan={true}
+            />
           </PageConfigItem>
         </PageConfig>
         <section className={sortableTableCx("cl-table-container")}>
-          <div className={cx("cl-table-statistic")}>
-            <h4 className={cx("cl-count-title")}>
-              <ResultsPerPageLabel
-                pagination={{ ...pagination, total: totalCount }}
-                pageName={"statements"}
-                selectedApp={selectedApp}
-                search={search}
-              />
-            </h4>
-            <h4 className={cx("last-cleared-title")}>
-              {this.renderLastCleared()}
-            </h4>
-          </div>
+          <TableStatistics
+            pagination={pagination}
+            lastReset={lastReset}
+            search={search}
+            totalCount={totalCount}
+            arrayItemName="statements"
+            activeFilters={activeFilters}
+            onClearFilters={this.onClearFilters}
+          />
           <StatementsSortedTable
             className="statements-table"
             data={data}
