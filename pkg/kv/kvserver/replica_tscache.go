@@ -548,12 +548,12 @@ func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 
 // GetCurrentReadSummary returns a new ReadSummary reflecting all reads served
 // by the range to this point.
-func (r *Replica) GetCurrentReadSummary() (rspb.ReadSummary, hlc.Timestamp) {
+func (r *Replica) GetCurrentReadSummary(ctx context.Context) (rspb.ReadSummary, hlc.Timestamp) {
 	sum := collectReadSummaryFromTimestampCache(r.store.tsCache, r.Desc())
 	// Forward the read summary by the range's closed timestamp, because any
 	// replica could have served reads below this time. We also return the
 	// closed timestamp separately, in case callers want it split out.
-	closedTS := r.ClosedTimestampV2()
+	closedTS := r.ClosedTimestampV2(ctx)
 	sum.Merge(rspb.FromTimestamp(closedTS))
 	return sum, closedTS
 }

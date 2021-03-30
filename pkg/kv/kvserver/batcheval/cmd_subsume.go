@@ -175,7 +175,7 @@ func Subsume(
 	// leaseholder. This is used to instruct the LHS on how to update its
 	// timestamp cache to ensure that no future writes are allowed to invalidate
 	// prior reads performed to this point on the RHS range.
-	priorReadSum, closedTS := cArgs.EvalCtx.GetCurrentReadSummary()
+	priorReadSum, closedTS := cArgs.EvalCtx.GetCurrentReadSummary(ctx)
 	// For now, forward this summary to the freeze time. This may appear to
 	// undermine the benefit of the read summary, but it doesn't entirely. Until
 	// we ship higher-resolution read summaries, the read summary doesn't
