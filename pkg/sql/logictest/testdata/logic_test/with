@@ -647,3 +647,30 @@ WITH cte AS (SELECT x*10+y FROM xy ORDER BY x+y LIMIT 3) SELECT * FROM cte
 11
 12
 21
+
+# Test for recursive CTE which needs a cast in the initial expression.
+statement ok
+CREATE TABLE graph_node (
+  id VARCHAR(16) PRIMARY KEY,
+  parent VARCHAR(16)
+)
+
+statement ok
+INSERT INTO graph_node (id, parent) VALUES
+  ('A', null),
+  ('B', 'A'),
+  ('C', 'B'),
+  ('D', 'C')
+
+query T rowsort
+WITH RECURSIVE nodes AS (
+  SELECT 'A' AS id
+  UNION ALL
+  SELECT graph_node.id FROM graph_node JOIN nodes ON graph_node.parent = nodes.id
+)
+SELECT * FROM nodes
+----
+A
+B
+C
+D
