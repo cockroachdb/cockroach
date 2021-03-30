@@ -369,6 +369,10 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
+		// Postgres is picky about having Int4 arguments instead of Int8.
+		if s.postgres && argTyp.Family() == types.IntFamily {
+			argTyp = types.Int4
+		}
 		var arg tree.TypedExpr
 		// If we're a GROUP BY or window function, try to choose a col ref for the arguments.
 		if class == tree.AggregateClass || class == tree.WindowClass {
