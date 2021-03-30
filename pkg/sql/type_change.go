@@ -459,11 +459,6 @@ func performMultiRegionFinalization(
 // all REGIONAL BY ROW tables in the enclosing database such that there is a
 // partition and corresponding zone configuration for all PUBLIC enum members
 // (regions).
-// This currently doesn't work too well if there are READ ONLY member on the
-// type. This is because we create the partitioning clause based on the regions
-// on the database descriptor, which may include the READ ONLY member, and
-// partitioning on a READ ONLY member doesn't work. This will go away once
-// https://github.com/cockroachdb/cockroach/issues/60620 is fixed.
 func repartitionRegionalByRowTables(
 	ctx context.Context,
 	typeDesc *typedesc.Immutable,
