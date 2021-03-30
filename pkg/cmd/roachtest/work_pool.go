@@ -100,7 +100,8 @@ func (p *workPool) getTestToRun(
 			l.PrintfCtx(ctx,
 				"No tests that can reuse cluster %s found (or there are no further tests to run). "+
 					"Destroying.", c)
-			c.Destroy(ctx, closeLogger, l)
+			// !!! c.Destroy(ctx, closeLogger, l)
+			cr.ReleaseCluster(ctx, c, l)
 			onDestroy()
 		} else {
 			return ttr, nil
@@ -169,57 +170,66 @@ func (p *workPool) selectTestForCluster(
 func (p *workPool) selectTest(ctx context.Context, qp *quotapool.IntPool) (testToRunRes, error) {
 	var ttr testToRunRes
 	alloc, err := qp.AcquireFunc(ctx, func(ctx context.Context, pi quotapool.PoolInfo) (uint64, error) {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-
-		if len(p.mu.tests) == 0 {
-			ttr = testToRunRes{
-				noWork: true,
-			}
-			return 0, nil
-		}
-
-		candidateIdx := -1
-		candidateCount := 0
-		smallestTest := math.MaxInt64
-		for i, t := range p.mu.tests {
-			cpu := t.spec.Cluster.NodeCount * t.spec.Cluster.CPUs
-			if cpu < smallestTest {
-				smallestTest = cpu
-			}
-			if uint64(cpu) > pi.Available {
-				continue
-			}
-			if t.count > candidateCount {
-				candidateIdx = i
-				candidateCount = t.count
-			}
-		}
-
-		if candidateIdx == -1 {
-			if uint64(smallestTest) > pi.Capacity {
-				return 0, fmt.Errorf("not enough CPU quota to run any of the remaining tests")
-			}
-
-			return 0, quotapool.ErrNotEnoughQuota
-		}
-
-		tc := p.mu.tests[candidateIdx]
-		runNum := p.count - tc.count + 1
-		p.decTestLocked(ctx, tc.spec.Name)
-		ttr = testToRunRes{
-			spec:            tc.spec,
-			runNum:          runNum,
-			canReuseCluster: false,
-		}
-		cpu := tc.spec.Cluster.NodeCount * tc.spec.Cluster.CPUs
-		return uint64(cpu), nil
+		var alloc uint64
+		var err error
+		ttr, alloc, err = p.selectTestInternal(ctx, pi)
+		return alloc, err
 	})
 	if err != nil {
 		return testToRunRes{}, err
 	}
 	ttr.alloc = alloc
 	return ttr, nil
+}
+
+func (p *workPool) selectTestInternal(
+	ctx context.Context, pi quotapool.PoolInfo,
+) (testToRunRes, uint64, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if len(p.mu.tests) == 0 {
+		ttr := testToRunRes{
+			noWork: true,
+		}
+		return ttr, 0, nil
+	}
+
+	candidateIdx := -1
+	candidateCount := 0
+	smallestTest := math.MaxInt64
+	for i, t := range p.mu.tests {
+		cpu := t.spec.Cluster.NodeCount * t.spec.Cluster.CPUs
+		if cpu < smallestTest {
+			smallestTest = cpu
+		}
+		if uint64(cpu) > pi.Available {
+			continue
+		}
+		if t.count > candidateCount {
+			candidateIdx = i
+			candidateCount = t.count
+		}
+	}
+
+	if candidateIdx == -1 {
+		if uint64(smallestTest) > pi.Capacity {
+			return testToRunRes{}, 0, fmt.Errorf("not enough CPU quota to run any of the remaining tests")
+		}
+
+		return testToRunRes{}, 0, quotapool.ErrNotEnoughQuota
+	}
+
+	tc := p.mu.tests[candidateIdx]
+	runNum := p.count - tc.count + 1
+	p.decTestLocked(ctx, tc.spec.Name)
+	ttr := testToRunRes{
+		spec:            tc.spec,
+		runNum:          runNum,
+		canReuseCluster: false,
+	}
+	cpu := tc.spec.Cluster.NodeCount * tc.spec.Cluster.CPUs
+	return ttr, uint64(cpu), nil
 }
 
 // scoreTestAgainstCluster scores the suitability of running a test against a
