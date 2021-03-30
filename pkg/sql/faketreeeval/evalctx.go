@@ -51,6 +51,13 @@ func (so *DummySequenceOperators) CurrentDatabaseRegionConfig(
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
+// ValidateCurrentDatabaseMultiRegionZoneConfigs is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) ValidateCurrentDatabaseMultiRegionZoneConfigs(
+	_ context.Context,
+) error {
+	return errors.WithStack(errSequenceOperators)
+}
+
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.
 func (so *DummySequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return nil, errors.WithStack(errSequenceOperators)
@@ -184,6 +191,11 @@ func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig(
 	_ context.Context,
 ) (tree.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// ValidateCurrentDatabaseMultiRegionZoneConfigs is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) ValidateCurrentDatabaseMultiRegionZoneConfigs(_ context.Context) error {
+	return errors.WithStack(errEvalPlanner)
 }
 
 // ParseQualifiedTableName is part of the tree.EvalDatabase interface.

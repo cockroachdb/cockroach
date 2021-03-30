@@ -832,6 +832,44 @@ func partitionByForRegionalByRow(
 	}
 }
 
+// ValidateCurrentDatabaseMultiRegionZoneConfigs is part of the tree.EvalDatabase interface.
+// and as such is intended for DML use. It returns an empty DatabaseRegionConfig
+// if the current database is not multi-region enabled.
+func (p *planner) ValidateCurrentDatabaseMultiRegionZoneConfigs(ctx context.Context) error {
+	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
+		p.EvalContext().Ctx(),
+		p.txn,
+		p.CurrentDatabase(),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return err
+	}
+	if !dbDesc.IsMultiRegion() {
+		return nil
+	}
+
+	if err := p.validateZoneConfigForMultiRegionDatabase(
+		ctx,
+		dbDesc,
+		&validateZoneConfigForMultiRegionErrorHandlerValidation{},
+	); err != nil {
+		return err
+	}
+	return p.forEachTableInMultiRegionDatabase(
+		ctx,
+		dbDesc,
+		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+			return p.validateZoneConfigForMultiRegionTable(
+				ctx,
+				dbDesc,
+				tbDesc,
+				&validateZoneConfigForMultiRegionErrorHandlerValidation{},
+			)
+		},
+	)
+}
+
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
 // CurrentDatabaseRegionConfig uses the cache to synthesize the RegionConfig
 // and as such is intended for DML use. It returns an empty DatabaseRegionConfig
@@ -1076,6 +1114,54 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 	return nil
 }
 
+// validateZoneConfigForMultiRegionErrorHandler is an interface representing
+// an error to generate if validating a zone config for multi-region
+// fails.
+type validateZoneConfigForMultiRegionErrorHandler interface {
+	newError(descType string, descName string, field string) error
+}
+
+// validateZoneConfigForMultiRegionErrorHandlerModifiedByUser implements
+// interface validateZoneConfigForMultiRegionErrorHandler.
+type validateZoneConfigForMultiRegionErrorHandlerModifiedByUser struct{}
+
+func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newError(
+	descType string, descName string, field string,
+) error {
+	err := pgerror.Newf(
+		pgcode.InvalidObjectDefinition,
+		"attempting to update zone configuration for %s %q which contains modified field %q",
+		descType,
+		descName,
+		field,
+	)
+	err = errors.WithDetail(
+		err,
+		"the attempted operation will overwrite a user modified field",
+	)
+	return errors.WithHint(
+		err,
+		"to proceed with the overwrite, SET override_multi_region_zone_config = true, "+
+			"and reissue the statement",
+	)
+}
+
+// validateZoneConfigForMultiRegionErrorHandlerValidation implements
+// interface validateZoneConfigForMultiRegionErrorHandler.
+type validateZoneConfigForMultiRegionErrorHandlerValidation struct{}
+
+func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newError(
+	descType string, descName string, field string,
+) error {
+	return pgerror.Newf(
+		pgcode.InvalidObjectDefinition,
+		"zone configuration for %s %q contains incorrectly configured field %q",
+		descType,
+		descName,
+		field,
+	)
+}
+
 // validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser validates that
 // the zone configuration was not modified by the user. The function is intended
 // to be called in cases where a multi-region operation will overwrite the
@@ -1088,7 +1174,21 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 	if p.SessionData().OverrideMultiRegionZoneConfigEnabled {
 		return nil
 	}
+	return p.validateZoneConfigForMultiRegionDatabase(
+		ctx,
+		dbDesc,
+		&validateZoneConfigForMultiRegionErrorHandlerModifiedByUser{},
+	)
+}
 
+// validateZoneConfigForMultiRegionDatabase validates that the zone config
+//for the databases matches the exact expectations as the multi-region
+// database definition.
+func (p *planner) validateZoneConfigForMultiRegionDatabase(
+	ctx context.Context,
+	dbDesc *dbdesc.Immutable,
+	validateZoneConfigForMultiRegionErrorHandler validateZoneConfigForMultiRegionErrorHandler,
+) error {
 	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.ID, p.Descriptors())
 	if err != nil {
 		return err
@@ -1108,14 +1208,11 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		return err
 	}
 	if !same {
-		err := errors.Newf(
-			"attempting to update zone configuration for database %q which contains modified field %q ",
+		return validateZoneConfigForMultiRegionErrorHandler.newError(
+			"database",
 			dbDesc.GetName(),
 			field,
 		)
-		err = errors.WithDetail(err, "the attempted operation will overwrite "+
-			"a user modified field")
-		return errors.WithHint(err, "to proceed with the override, SET override_multi_region_zone_config = true, and reissue the statement")
 	}
 
 	return nil
@@ -1140,19 +1237,15 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		return nil
 	}
 
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
-	if err != nil {
-		return err
-	}
-	if currentZoneConfig == nil {
-		currentZoneConfig = zonepb.NewZoneConfig()
-	}
-
-	// The expected zone config starts from the same base config as the current
-	// zone config, so copy it over to be used down below.
-	expectedZoneConfig := currentZoneConfig
-
 	if toRegionalByRow {
+		currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
+		if err != nil {
+			return err
+		}
+		if currentZoneConfig == nil {
+			currentZoneConfig = zonepb.NewZoneConfig()
+		}
+
 		// We're going to REGIONAL BY ROW. Check to see if the to be applied zone
 		// configurations will override any existing zone configurations on the
 		// table's indexes. We say "override" here, and not "overwrite" because
@@ -1191,48 +1284,64 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		}
 	}
 
+	return p.validateZoneConfigForMultiRegionTable(
+		ctx,
+		dbDesc,
+		desc,
+		&validateZoneConfigForMultiRegionErrorHandlerModifiedByUser{},
+	)
+}
+
+// validateZoneConfigForMultiRegionTableOptions validates that
+// the table's zone configuration matches exactly what is expected.
+func (p *planner) validateZoneConfigForMultiRegionTable(
+	ctx context.Context,
+	dbDesc *dbdesc.Immutable,
+	desc catalog.TableDescriptor,
+	validateZoneConfigForMultiRegionErrorHandler validateZoneConfigForMultiRegionErrorHandler,
+) error {
+	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
+	if err != nil {
+		return err
+	}
+	if currentZoneConfig == nil {
+		currentZoneConfig = zonepb.NewZoneConfig()
+	}
+
 	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
 	if err != nil {
 		return err
 	}
 
-	// Fill in the expectedZoneConfig using the specified option.
-	for _, opt := range opts {
-		_, newZoneConfig, err := opt(
-			*expectedZoneConfig,
-			regionConfig,
-			desc,
-		)
-		if err != nil {
-			return err
-		}
-		expectedZoneConfig = &newZoneConfig
+	_, expectedZoneConfig, err := ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes(
+		*currentZoneConfig,
+		regionConfig,
+		desc,
+	)
+	if err != nil {
+		return err
 	}
 
 	// Mark the NumReplicas as 0 if we have subzones but no other features
 	// in the zone config. This signifies a placeholder.
-	if len(expectedZoneConfig.Subzones) > 0 && isPlaceholderZoneConfigForMultiRegion(*expectedZoneConfig) {
+	if len(expectedZoneConfig.Subzones) > 0 && isPlaceholderZoneConfigForMultiRegion(expectedZoneConfig) {
 		expectedZoneConfig.NumReplicas = proto.Int32(0)
 	}
 
 	// Compare the two zone configs to see if anything is amiss.
 	same, field, err := currentZoneConfig.DiffWithZone(
-		*expectedZoneConfig,
+		expectedZoneConfig,
 		zonepb.MultiRegionZoneConfigFields,
 	)
 	if err != nil {
 		return err
 	}
 	if !same {
-		err := errors.Newf(
-			"attempting to update zone configuration for table %q which contains modified field %q ",
+		return validateZoneConfigForMultiRegionErrorHandler.newError(
+			"table",
 			desc.GetName(),
 			field,
 		)
-		err = errors.WithDetail(err, "the attempted operation will overwrite "+
-			"a user modified field")
-		return errors.WithHint(err, "to proceed with the overwrite, SET "+
-			"override_multi_region_zone_config = true, and reissue the statement")
 	}
 
 	return nil

@@ -476,7 +476,6 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 		n.dbDesc,
 		n.tableDesc,
 		toRegionalByRow,
-		ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
 	); err != nil {
 		return err
 	}
