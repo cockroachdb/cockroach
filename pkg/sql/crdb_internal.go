@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
@@ -59,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -4044,6 +4046,98 @@ CREATE TABLE crdb_internal.predefined_comments (
 	},
 }
 
+type marshaledJobMetadata struct {
+	status                      *tree.DString
+	payloadBytes, progressBytes *tree.DBytes
+}
+
+func (mj marshaledJobMetadata) size() (n int64) {
+	return int64(8 + mj.status.Size() + mj.progressBytes.Size() + mj.payloadBytes.Size())
+}
+
+type marshaledJobMetadataMap map[jobspb.JobID]marshaledJobMetadata
+
+// GetJobMetadata implements the jobs.JobMetadataGetter interface.
+func (m marshaledJobMetadataMap) GetJobMetadata(
+	jobID jobspb.JobID,
+) (md *jobs.JobMetadata, err error) {
+	ujm, found := m[jobID]
+	if !found {
+		return nil, errors.New("job not found")
+	}
+	md = &jobs.JobMetadata{ID: jobID}
+	if ujm.status == nil {
+		return nil, errors.New("missing status")
+	}
+	md.Status = jobs.Status(*ujm.status)
+	md.Payload, err = jobs.UnmarshalPayload(ujm.payloadBytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "corrupt payload bytes")
+	}
+	md.Progress, err = jobs.UnmarshalProgress(ujm.progressBytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "corrupt progress bytes")
+	}
+	return md, nil
+}
+
+func collectMarshaledJobMetadataMap(
+	ctx context.Context, p *planner, acct *mon.BoundAccount, descs []catalog.Descriptor,
+) (marshaledJobMetadataMap, error) {
+	// Collect all job IDs referenced in descs.
+	referencedJobIDs := map[jobspb.JobID]struct{}{}
+	for _, desc := range descs {
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok {
+			continue
+		}
+		for _, j := range tbl.GetMutationJobs() {
+			referencedJobIDs[jobspb.JobID(j.JobID)] = struct{}{}
+		}
+	}
+	if len(referencedJobIDs) == 0 {
+		return nil, nil
+	}
+	// Build job map with referenced job IDs.
+	m := make(marshaledJobMetadataMap)
+	query := `SELECT id, status, payload, progress FROM system.jobs`
+	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+		ctx, "crdb-internal-jobs-table", p.Txn(),
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		query)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			break
+		}
+		r := it.Cur()
+		id, status, payloadBytes, progressBytes := r[0], r[1], r[2], r[3]
+		jobID := jobspb.JobID(*id.(*tree.DInt))
+		if _, isReferencedByDesc := referencedJobIDs[jobID]; !isReferencedByDesc {
+			continue
+		}
+		mj := marshaledJobMetadata{
+			status:        status.(*tree.DString),
+			payloadBytes:  payloadBytes.(*tree.DBytes),
+			progressBytes: progressBytes.(*tree.DBytes),
+		}
+		m[jobID] = mj
+		if err := acct.Grow(ctx, mj.size()); err != nil {
+			return nil, err
+		}
+	}
+	if err := it.Close(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 var crdbInternalInvalidDescriptorsTable = virtualSchemaTable{
 	comment: `virtual table to validate descriptors`,
 	schema: `
@@ -4059,33 +4153,52 @@ CREATE TABLE crdb_internal.invalid_objects (
 	) error {
 		// The internalLookupContext will only have descriptors in the current
 		// database. To deal with this, we fall through.
-		descs, err := catalogkv.GetAllDescriptorsUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
+		m, err := catalogkv.GetAllDescriptorsAndNamespaceEntriesUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
 		if err != nil {
 			return err
 		}
+		descs := m.OrderedDescriptors()
+		// Collect all marshaled job metadata and account for its memory usage.
+		acct := p.EvalContext().Mon.MakeBoundAccount()
+		defer acct.Close(ctx)
+		jmg, err := collectMarshaledJobMetadataMap(ctx, p, &acct, descs)
+		if err != nil {
+			return err
+		}
+
+		addRowsForObject := func(dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.Descriptor) (err error) {
+			if descriptor == nil {
+				return nil
+			}
+			var dbName string
+			if dbDesc != nil {
+				dbName = dbDesc.GetName()
+			}
+			addValidationErrorRow := func(validationError error) {
+				if err == nil {
+					err = addRow(
+						tree.NewDInt(tree.DInt(descriptor.GetID())),
+						tree.NewDString(dbName),
+						tree.NewDString(schema),
+						tree.NewDString(descriptor.GetName()),
+						tree.NewDString(validationError.Error()),
+					)
+				}
+			}
+			ve := catalog.ValidateWithRecover(ctx, m, catalog.ValidationLevelAllPreTxnCommit, descriptor)
+			for _, validationError := range ve.Errors() {
+				addValidationErrorRow(validationError)
+			}
+			jobs.ValidateJobReferencesInDescriptor(descriptor, jmg, addValidationErrorRow)
+			return err
+		}
+
 		const allowAdding = true
 		if err := forEachTableDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, hideVirtual, allowAdding, descs, func(
-				dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.TableDescriptor, fn tableLookupFn,
+				dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.TableDescriptor, _ tableLookupFn,
 			) error {
-				if descriptor == nil {
-					return nil
-				}
-				err := catalog.ValidateSelfAndCrossReferences(ctx, fn, descriptor)
-				if err == nil {
-					return nil
-				}
-				var dbName string
-				if dbDesc != nil {
-					dbName = dbDesc.GetName()
-				}
-				return addRow(
-					tree.NewDInt(tree.DInt(descriptor.GetID())),
-					tree.NewDString(dbName),
-					tree.NewDString(schema),
-					tree.NewDString(descriptor.GetName()),
-					tree.NewDString(err.Error()),
-				)
+				return addRowsForObject(dbDesc, schema, descriptor)
 			}); err != nil {
 			return err
 		}
@@ -4093,27 +4206,9 @@ CREATE TABLE crdb_internal.invalid_objects (
 		// Validate type descriptors.
 		return forEachTypeDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, allowAdding, descs, func(
-				dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.TypeDescriptor, fn tableLookupFn,
+				dbDesc catalog.DatabaseDescriptor, schema string, descriptor catalog.TypeDescriptor, _ tableLookupFn,
 			) error {
-				if descriptor == nil {
-					return nil
-				}
-				err := catalog.ValidateSelfAndCrossReferences(ctx, fn, descriptor)
-				if err == nil {
-					return nil
-				}
-				var dbName string
-				if dbDesc != nil {
-					dbName = dbDesc.GetName()
-				}
-
-				return addRow(
-					tree.NewDInt(tree.DInt(descriptor.GetID())),
-					tree.NewDString(dbName),
-					tree.NewDString(schema),
-					tree.NewDString(descriptor.GetName()),
-					tree.NewDString(err.Error()),
-				)
+				return addRowsForObject(dbDesc, schema, descriptor)
 			})
 	},
 }
@@ -4398,13 +4493,9 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		}
 		// Get all descriptors which will be used to determine
 		// which ones are missing.
-		descriptors, err := catalogkv.GetAllDescriptorsUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
+		dg, err := catalogkv.GetAllDescriptorsAndNamespaceEntriesUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
 		if err != nil {
 			return err
-		}
-		descriptorMap := make(map[descpb.ID]catalog.Descriptor)
-		for _, desc := range descriptors {
-			descriptorMap[desc.GetID()] = desc
 		}
 		// Generate large batches of scans over the keyspace,
 		// so that we minimize scans. We will issue individual
@@ -4460,7 +4551,7 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		// Loop over every possible descriptor ID
 		for id := keys.MinUserDescID; id < int(maxDescID); id++ {
 			// Skip over descriptors that are known
-			if _, ok := descriptorMap[descpb.ID(id)]; ok {
+			if _, ok := dg.Descriptors[descpb.ID(id)]; ok {
 				err := scanAndGenerateRows()
 				if err != nil {
 					return err
