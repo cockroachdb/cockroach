@@ -444,10 +444,10 @@ var specs = []stmtSpec{
 		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
 		replace: map[string]string{
-			"'INTO'": "'INTO' ( | subdirectory | 'LATEST') 'IN'",
-			"sconst_or_placeholder": "subdirectory",
+			"'INTO'":                         "'INTO' ( | subdirectory | 'LATEST') 'IN'",
+			"sconst_or_placeholder":          "subdirectory",
 			"string_or_placeholder_opt_list": "destination",
-			"a_expr": "timestamp",
+			"a_expr":                         "timestamp",
 		},
 		unlink:  []string{"targets", "subdirectory", "destination", "timestamp"},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
@@ -1029,7 +1029,7 @@ var specs = []stmtSpec{
 		name:   "restore",
 		stmt:   "restore_stmt",
 		inline: []string{"opt_as_of_clause", "as_of_clause", "opt_with_restore_options"},
-		match:   []*regexp.Regexp{regexp.MustCompile("'FROM'")},
+		match:  []*regexp.Regexp{regexp.MustCompile("'FROM'")},
 		replace: map[string]string{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
