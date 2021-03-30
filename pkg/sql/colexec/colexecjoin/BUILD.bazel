@@ -29,6 +29,7 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/duration",  # keep
         "//pkg/util/mon",
         "@com_github_cockroachdb_apd_v2//:apd",  # keep
