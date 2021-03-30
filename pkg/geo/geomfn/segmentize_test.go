@@ -12,6 +12,7 @@ package geomfn
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -124,6 +125,26 @@ func TestSegmentize(t *testing.T) {
 			wkt:              "MULTIPOINT ((0.0 0.0), (1.0 1.0))",
 			maxSegmentLength: -1,
 			expectedWKT:      "MULTIPOINT ((0.0 0.0), (1.0 1.0))",
+		},
+		{
+			wkt:              "LINESTRING(0 0, 1 1)",
+			maxSegmentLength: math.NaN(),
+			expectedWKT:      "LINESTRING(0 0, 1 1)",
+		},
+		{
+			wkt:              "LINESTRING M (0 0 0, 1 1 1)",
+			maxSegmentLength: math.Sqrt(-1),
+			expectedWKT:      "LINESTRING M (0 0 0, 1 1 1)",
+		},
+		{
+			wkt:              "LINESTRING ZM (0 0 0 0, 1 1 1 1)",
+			maxSegmentLength: -math.NaN(),
+			expectedWKT:      "LINESTRING(0 0 0 0, 1 1 1 1)",
+		},
+		{
+			wkt:              "LINESTRING(0 0, 1 1)",
+			maxSegmentLength: math.Inf(1),
+			expectedWKT:      "LINESTRING(0 0, 1 1)",
 		},
 	}
 	for _, test := range segmentizeTestCases {
