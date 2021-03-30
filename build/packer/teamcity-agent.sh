@@ -20,8 +20,6 @@ apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
 cat > /etc/apt/sources.list.d/docker.list <<EOF
 deb https://download.docker.com/linux/ubuntu bionic stable
 EOF
-# Per https://github.com/golang/go/wiki/Ubuntu
-add-apt-repository ppa:longsleep/golang-backports
 # Git 2.7, which ships with Xenial, has a bug where submodule metadata sometimes
 # uses absolute paths instead of relative paths, which means the affected
 # submodules cannot be mounted in Docker containers. Use the latest version of
@@ -32,25 +30,26 @@ apt-get update --yes
 # Install the sudo version patched for CVE-2021-3156
 apt-get install --yes sudo
 
-# Install the necessary dependencies. Keep this list small!
-GO_VERSION=1.15
-
 apt-get install --yes \
+  curl \
   docker-ce \
   docker-compose \
   gnome-keyring \
   gnupg2 \
   git \
-  golang-${GO_VERSION}-go \
   openjdk-11-jre-headless \
   pass \
   unzip
 
-# golang-X.Y-go does not install system wide symlinks, it's only done by the
-# golang-go package which points to the latest version. Explicitly symlink the
-# pinned version to /usr/bin.
-for f in go gofm; do
-    ln -s /usr/lib/go-${GO_VERSION}/bin/$f /usr/bin
+curl -fsSL https://dl.google.com/go/go1.15.10.linux-amd64.tar.gz > /tmp/go.tgz
+sha256sum -c - <<EOF
+4aa1267517df32f2bf1cc3d55dfc27d0c6b2c2b0989449c96dd19273ccca051d /tmp/go.tgz
+EOF
+tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
+
+# Explicitly symlink the pinned version to /usr/bin.
+for f in `ls /usr/local/go/bin`; do
+    ln -s /usr/local/go/bin/$f /usr/bin
 done
 
 # Installing gnome-keyring prevents the error described in
@@ -107,6 +106,8 @@ do
   git clean -dxf
 
   git checkout "$branch"
+  # Stupid submodules.
+  rm -rf vendor; git checkout vendor; git submodule update --init --recursive
   COCKROACH_BUILDER_CCACHE=1 build/builder.sh make test testrace TESTTIMEOUT=45m TESTS=-
   # TODO(benesch): store the acceptanceversion somewhere more accessible.
   docker pull $(git grep cockroachdb/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
