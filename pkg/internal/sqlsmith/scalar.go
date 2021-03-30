@@ -297,12 +297,14 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return nil, false
 		}
 	}
-	if s.postgres && (op.Operator == tree.Minus || op.Operator == tree.Plus) {
-		if op.LeftType == types.Int && op.RightType == types.Date {
-			op.LeftType = types.Int4
-		}
-		if op.LeftType == types.Date && op.RightType == types.Int {
-			op.RightType = types.Int4
+	if s.postgres {
+		if transform, needTransform := postgresBinOpTransformations[binOpTriple{
+			op.LeftType.Family(),
+			op.Operator,
+			op.RightType.Family(),
+		}]; needTransform {
+			op.LeftType = transform.leftType
+			op.RightType = transform.rightType
 		}
 	}
 	left := makeScalar(s, op.LeftType, refs)
@@ -322,6 +324,11 @@ type binOpTriple struct {
 	right types.Family
 }
 
+type binOpOperands struct {
+	leftType  *types.T
+	rightType *types.T
+}
+
 var ignorePostgresBinOps = map[binOpTriple]bool{
 	// Integer division in cockroach returns a different type.
 	{types.IntFamily, tree.Div, types.IntFamily}: true,
@@ -338,6 +345,17 @@ var ignorePostgresBinOps = map[binOpTriple]bool{
 	{types.IntFamily, tree.FloorDiv, types.DecimalFamily}:     true,
 
 	{types.FloatFamily, tree.Mod, types.FloatFamily}: true,
+}
+
+// For certain operations, Postgres is picky about the operand types.
+var postgresBinOpTransformations = map[binOpTriple]binOpOperands{
+	{types.IntFamily, tree.Plus, types.DateFamily}:          {types.Int4, types.Date},
+	{types.DateFamily, tree.Plus, types.IntFamily}:          {types.Date, types.Int4},
+	{types.IntFamily, tree.Minus, types.DateFamily}:         {types.Int4, types.Date},
+	{types.DateFamily, tree.Minus, types.IntFamily}:         {types.Date, types.Int4},
+	{types.JsonFamily, tree.JSONFetchVal, types.IntFamily}:  {types.Jsonb, types.Int4},
+	{types.JsonFamily, tree.JSONFetchText, types.IntFamily}: {types.Jsonb, types.Int4},
+	{types.JsonFamily, tree.Minus, types.IntFamily}:         {types.Jsonb, types.Int4},
 }
 
 func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
