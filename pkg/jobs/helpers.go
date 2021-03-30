@@ -101,21 +101,6 @@ func (nl *FakeNodeLiveness) IsLive(roachpb.NodeID) (bool, error) {
 	return false, errors.New("FakeNodeLiveness.IsLive is unimplemented")
 }
 
-// FakeIncrementEpoch increments the epoch for the node with the specified ID.
-func (nl *FakeNodeLiveness) FakeIncrementEpoch(id roachpb.NodeID) {
-	nl.mu.Lock()
-	defer nl.mu.Unlock()
-	nl.mu.livenessMap[id].Epoch++
-}
-
-// FakeSetExpiration sets the expiration time of the liveness for the node with
-// the specified ID to ts.
-func (nl *FakeNodeLiveness) FakeSetExpiration(id roachpb.NodeID, ts hlc.Timestamp) {
-	nl.mu.Lock()
-	defer nl.mu.Unlock()
-	nl.mu.livenessMap[id].Expiration = ts.ToLegacyTimestamp()
-}
-
 // ResetConstructors resets the registered Resumer constructors.
 func ResetConstructors() func() {
 	old := make(map[jobspb.Type]Constructor)

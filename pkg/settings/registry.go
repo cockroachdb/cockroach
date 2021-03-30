@@ -79,6 +79,7 @@ var retiredSettings = map[string]struct{}{
 	"kv.atomic_replication_changes.enabled": {},
 	// removed as of 21.2.
 	"sql.defaults.vectorize_row_count_threshold": {},
+	"jobs.registry.leniency":                     {},
 }
 
 // register adds a setting to the registry.

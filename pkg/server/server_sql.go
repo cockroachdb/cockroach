@@ -762,12 +762,8 @@ func (s *SQLServer) preStart(
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
-	// Only start the sqlliveness subsystem if we're already at the cluster
-	// version which relies on it.
-	sqllivenessActive := sqlliveness.IsActive(ctx, s.execCfg.Settings)
-	if sqllivenessActive {
-		s.sqlLivenessProvider.Start(ctx)
-	}
+	// Start the sqlliveness subsystem.
+	s.sqlLivenessProvider.Start(ctx)
 
 	migrationsExecutor := sql.MakeInternalExecutor(
 		ctx, s.pgServer.SQLServer, s.internalMemMetrics, s.execCfg.Settings)
@@ -841,21 +837,6 @@ func (s *SQLServer) preStart(
 	}
 
 	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
-
-	// Start the sqlLivenessProvider after we've run the SQL migrations that it
-	// relies on. Jobs used by sqlmigrations can't rely on having the
-	// sqlLivenessProvider running as it was introduced in 20.2.
-	//
-	// TODO(ajwerner): For 21.1 this call will need to be lifted above the call
-	// to EnsureMigrations so that migrations which launch jobs will work.
-	if !sqllivenessActive &&
-		// This clause exists to support sqlmigrations tests which intentionally
-		// inject a binary version below the one which includes the relevant
-		// migration. In this case we won't start the sqlliveness subsystem.
-		(!s.execCfg.Settings.Version.BinaryVersion().Less(clusterversion.ByKey(
-			clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable))) {
-		s.sqlLivenessProvider.Start(ctx)
-	}
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.

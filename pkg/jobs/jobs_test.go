@@ -2367,71 +2367,6 @@ func TestStartableJobTxnRetry(t *testing.T) {
 	require.NoError(t, sj.Start(ctx))
 }
 
-// TestUnmigratedSchemaChangeJobs tests that schema change jobs created in 19.2
-// that have not undergone a migration cannot be adopted, canceled, or paused.
-func TestUnmigratedSchemaChangeJobs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	defer jobs.ResetConstructors()()
-	defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
-
-	ctx := context.Background()
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	registry := s.JobRegistry().(*jobs.Registry)
-
-	// The default FormatVersion value in SchemaChangeDetails corresponds to a
-	// pre-20.1 job.
-	rec := jobs.Record{
-		DescriptorIDs: []descpb.ID{1},
-		Details:       jobspb.SchemaChangeDetails{},
-		Progress:      jobspb.SchemaChangeProgress{},
-	}
-
-	t.Run("job is not adopted", func(t *testing.T) {
-		defer jobs.ResetConstructors()()
-		resuming := make(chan struct{})
-		jobs.RegisterConstructor(jobspb.TypeSchemaChange, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-			return jobs.FakeResumer{
-				OnResume: func(ctx context.Context) error {
-					resuming <- struct{}{}
-					return nil
-				},
-			}
-		})
-		select {
-		case <-resuming:
-			t.Fatal("job was resumed")
-		case <-time.After(100 * time.Millisecond):
-			// With an adopt interval of 10 ms, within 100ms we can be reasonably sure
-			// that the job was not adopted. At the very least, the test would be
-			// flakey.
-		}
-	})
-
-	t.Run("pause not supported", func(t *testing.T) {
-		job, err := registry.CreateJobWithTxn(ctx, rec, registry.MakeJobID(), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := sqlDB.Exec("PAUSE JOB $1", job.ID()); !testutils.IsError(err, "cannot be paused in this version") {
-			t.Fatal(err)
-		}
-	})
-
-	t.Run("cancel not supported", func(t *testing.T) {
-		job, err := registry.CreateJobWithTxn(ctx, rec, registry.MakeJobID(), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := sqlDB.Exec("CANCEL JOB $1", job.ID()); !testutils.IsError(err, "cannot be canceled in this version") {
-			t.Fatal(err)
-		}
-	})
-}
-
 func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2443,8 +2378,6 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 
-	// The default FormatVersion value in SchemaChangeDetails corresponds to a
-	// pre-20.1 job.
 	rec := jobs.Record{
 		DescriptorIDs: []descpb.ID{1},
 		Details:       jobspb.BackupDetails{},
@@ -2699,8 +2632,6 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 
-	// The default FormatVersion value in SchemaChangeDetails corresponds to a
-	// pre-20.1 job.
 	rec := jobs.Record{
 		DescriptorIDs: []descpb.ID{1},
 		Details:       jobspb.BackupDetails{},

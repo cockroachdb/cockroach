@@ -19,8 +19,6 @@ import (
 	"context"
 	"encoding/hex"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -80,15 +78,6 @@ type Reader interface {
 	// IsAlive is used to query the liveness of a Session typically by another
 	// Instance that is attempting to claim expired resources.
 	IsAlive(context.Context, SessionID) (alive bool, err error)
-}
-
-// IsActive returns whether the sqlliveness subsystem's migration to has been
-// performed.
-func IsActive(ctx context.Context, settings *cluster.Settings) bool {
-	return settings.Version.IsActive(
-		ctx,
-		clusterversion.AlterSystemJobsAddSqllivenessColumnsAddNewSystemSqllivenessTable,
-	)
 }
 
 // NotStartedError can be returned from calls to the sqlliveness subsystem
