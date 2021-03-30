@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -164,6 +165,15 @@ func (c *replicatedCmd) AckSuccess(_ context.Context) error {
 
 // AckOutcomeAndFinish implements the apply.AppliedCommand interface.
 func (c *replicatedCmd) AckOutcomeAndFinish(ctx context.Context) error {
+	s, err := decodeWriteBatch(c.decodedRaftEntry.raftCmd.WriteBatch)
+	if err != nil {
+		s = fmt.Sprint(err)
+	}
+	log.Infof(ctx, "idx=%d mlai=%d forcedErr=%v: %v",
+		c.ent.Index,
+		c.decodedRaftEntry.raftCmd.MaxLeaseIndex,
+		c.forcedErr,
+		s)
 	if c.IsLocal() {
 		c.proposal.finishApplication(ctx, c.response)
 	}

@@ -443,7 +443,7 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	// This check is deterministic on all replicas, so if one replica decides to
 	// reject a command, all will.
 	if !b.r.shouldApplyCommand(ctx, cmd, &b.state) {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
+		log.Infof(ctx, "applying command with forced error: %s", cmd.forcedErr)
 
 		// Apply an empty command.
 		cmd.raftCmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}

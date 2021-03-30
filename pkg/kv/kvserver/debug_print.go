@@ -130,31 +130,28 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Delete: %s\n", SprintKey(mvccKey)))
+			sb.WriteString(fmt.Sprintf("Delete: %s ", SprintKey(mvccKey)))
 		case storage.BatchTypeValue:
 			mvccKey, err := r.MVCCKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintKeyValue(storage.MVCCKeyValue{
-				Key:   mvccKey,
-				Value: r.Value(),
-			}, true /* printKey */)))
+			sb.WriteString(fmt.Sprintf("Put: %s ", SprintKey(mvccKey)))
 		case storage.BatchTypeMerge:
-			mvccKey, err := r.MVCCKey()
-			if err != nil {
-				return sb.String(), err
-			}
-			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintKeyValue(storage.MVCCKeyValue{
-				Key:   mvccKey,
-				Value: r.Value(),
-			}, true /* printKey */)))
+			//mvccKey, err := r.MVCCKey()
+			//if err != nil {
+			//	return sb.String(), err
+			//}
+			//sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintKeyValue(storage.MVCCKeyValue{
+			//	Key:   mvccKey,
+			//	Value: r.Value(),
+			//}, true /* printKey */)))
 		case storage.BatchTypeSingleDeletion:
 			mvccKey, err := r.MVCCKey()
 			if err != nil {
 				return sb.String(), err
 			}
-			sb.WriteString(fmt.Sprintf("Single Delete: %s\n", SprintKey(mvccKey)))
+			sb.WriteString(fmt.Sprintf("Single Delete: %s ", SprintKey(mvccKey)))
 		case storage.BatchTypeRangeDeletion:
 			mvccStartKey, err := r.MVCCKey()
 			if err != nil {
@@ -165,10 +162,10 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf(
-				"Delete Range: [%s, %s)\n", SprintKey(mvccStartKey), SprintKey(mvccEndKey),
+				"Delete Range: [%s, %s) ", SprintKey(mvccStartKey), SprintKey(mvccEndKey),
 			))
 		default:
-			sb.WriteString(fmt.Sprintf("unsupported batch type: %d\n", r.BatchType()))
+			sb.WriteString(fmt.Sprintf("unsupported batch type: %d", r.BatchType()))
 		}
 	}
 	return sb.String(), r.Error()
