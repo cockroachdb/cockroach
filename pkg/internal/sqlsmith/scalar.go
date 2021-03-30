@@ -297,6 +297,14 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return nil, false
 		}
 	}
+	if s.postgres && (op.Operator == tree.Minus || op.Operator == tree.Plus) {
+		if op.LeftType == types.Int && op.RightType == types.Date {
+			op.LeftType = types.Int4
+		}
+		if op.LeftType == types.Date && op.RightType == types.Int {
+			op.RightType = types.Int4
+		}
+	}
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
 	return castType(
