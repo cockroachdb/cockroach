@@ -104,6 +104,7 @@ func registerTests(r *testRegistry) {
 	registerYCSB(r)
 	registerTPCHBench(r)
 	registerOverload(r)
+	registerExample(r)
 }
 
 func registerBenchmarks(r *testRegistry) {
