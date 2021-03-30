@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -161,6 +162,17 @@ func validateSafely(
 			errs = append(errs, err)
 		}
 	}()
+	// If this is a table, attempt to upgrade its representation so that
+	// validation works as expected.
+	if table, ok := desc.(catalog.TableDescriptor); ok {
+		b := tabledesc.
+			NewBuilderForFKUpgrade(table.TableDesc(), false)
+		if err := b.RunPostDeserializationChanges(ctx, descGetter); err != nil {
+			errs = append(errs, err)
+		} else {
+			desc = b.BuildImmutable()
+		}
+	}
 	errs = append(errs, catalog.Validate(ctx, descGetter, catalog.ValidationLevelNamespace, desc).Errors()...)
 	return errs
 }
