@@ -25,6 +25,9 @@ import (
 // This works by dividing each segment by a power of 2 to find the
 // smallest power less than or equal to the segmentMaxLength.
 func Segmentize(geography geo.Geography, segmentMaxLength float64) (geo.Geography, error) {
+	if math.IsNaN(segmentMaxLength) || math.IsInf(segmentMaxLength, 1 /* sign */) {
+		return geography, nil
+	}
 	geometry, err := geography.AsGeomT()
 	if err != nil {
 		return geo.Geography{}, err

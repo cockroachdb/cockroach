@@ -12,6 +12,7 @@ package geogfn
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -99,6 +100,26 @@ func TestSegmentize(t *testing.T) {
 			wkt:              "LINESTRING(0 0 25, 0 1 0, 2 5 100)",
 			maxSegmentLength: 150000.0,
 			expectedWKT:      "LINESTRING Z (0 0 25,0 1 0,0.49878052093921765 2.0003038990352664 25,0.9981696941692514 3.0004561476391296 50,1.4984735304805308 4.000380457593079 75,2 5 100)",
+		},
+		{
+			wkt:              "LINESTRING(0 0, 1 1)",
+			maxSegmentLength: math.NaN(),
+			expectedWKT:      "LINESTRING(0 0, 1 1)",
+		},
+		{
+			wkt:              "LINESTRING M (0 0 0, 1 1 1)",
+			maxSegmentLength: math.Sqrt(-1),
+			expectedWKT:      "LINESTRING M (0 0 0, 1 1 1)",
+		},
+		{
+			wkt:              "LINESTRING ZM (0 0 0 0, 1 1 1 1)",
+			maxSegmentLength: -math.NaN(),
+			expectedWKT:      "LINESTRING(0 0 0 0, 1 1 1 1)",
+		},
+		{
+			wkt:              "LINESTRING(0 0, 1 1)",
+			maxSegmentLength: math.Inf(1),
+			expectedWKT:      "LINESTRING(0 0, 1 1)",
 		},
 	}
 	for _, test := range segmentizeTestCases {
