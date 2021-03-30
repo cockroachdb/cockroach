@@ -1,3 +1,121 @@
+subtest lost-table-data
+
+statement ok
+CREATE TABLE corruptdesc (v INT8)
+
+statement ok
+CREATE TABLE lostdata (v INT8)
+
+statement ok
+INSERT INTO lostdata VALUES (3);
+
+statement ok
+INSERT INTO lostdata VALUES (5);
+
+statement ok
+INSERT INTO lostdata VALUES (23);
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'lostdata';
+
+let $corrupt_id
+SELECT id FROM system.namespace WHERE name = 'corruptdesc';
+
+let $parentID
+select pid from system.namespace2 as n(pid,psid,name,id) where id=$t_id;
+
+let $parentSchemaID
+select psid from system.namespace2 as n(pid,psid,name,id)  where id=$t_id;
+
+query I
+SELECT * FROM crdb_internal.lost_descriptors_with_data;
+----
+
+# Lost descriptor
+let $json_t
+WITH
+	descs
+		AS (
+			SELECT
+				id,
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)
+					AS descriptor
+			FROM
+				system.descriptor
+		)
+SELECT
+	descriptor
+FROM
+	descs
+WHERE
+	id = $t_id;
+
+# Intentionally corrupt descriptor
+let $json_corrupt
+WITH
+  descs
+    AS (
+      SELECT
+        id,
+        crdb_internal.pb_to_json(
+          'cockroach.sql.sqlbase.Descriptor',
+          descriptor
+        )
+          AS descriptor
+      FROM
+        system.descriptor
+    )
+SELECT
+  descriptor
+FROM
+  descs
+WHERE
+  id = $corrupt_id;
+
+# Delete our corrupt descriptor
+query B
+SELECT * FROM ROWS FROM (crdb_internal.unsafe_delete_descriptor($corrupt_id));
+----
+true
+
+# Force delete the descriptor
+query B
+SELECT * FROM ROWS FROM (crdb_internal.unsafe_delete_descriptor($t_id));
+----
+true
+
+# Corrupt the descriptor with fake ID's
+let $json_t_corrupt
+SELECT CAST(REPLACE('$json_corrupt','"name": "corruptdesc",', '') AS JSONB)
+
+# Inject our corrupt descriptor with the wrong ID
+statement ok
+SELECT * FROM crdb_internal.unsafe_upsert_descriptor($corrupt_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json_t_corrupt'), true)
+
+
+query I
+SELECT count(*) FROM crdb_internal.lost_descriptors_with_data WHERE descid = $t_id;
+----
+1
+
+query I
+SELECT count(*) FROM crdb_internal.lost_descriptors_with_data WHERE descid != $t_id
+----
+0
+
+statement ok
+SELECT * FROM crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json_t'))
+
+# Recover the corrupted descriptor
+statement ok
+SELECT * FROM crdb_internal.unsafe_upsert_descriptor($corrupt_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json_corrupt'), true)
+
+statement ok
+SELECT * FROM corruptdesc;
+
 # Test the crdb_internal.force_delete_table_data function
 subtest force-delete-data
 
