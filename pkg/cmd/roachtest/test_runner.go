@@ -486,6 +486,7 @@ func (r *testRunner) runWorker(
 		}
 		testL.close()
 		if err != nil || t.Failed() {
+			l.Printf("failed 1")
 			failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
 			if err != nil {
 				failureMsg += fmt.Sprintf("%+v", err)
@@ -494,12 +495,14 @@ func (r *testRunner) runWorker(
 			}
 
 			if debug {
+				l.Printf("failed -debug")
 				// Save the cluster for future debugging.
 				c.Save(ctx, failureMsg, l)
 
 				// Continue with a fresh cluster.
 				c = nil
 			} else {
+				l.Printf("failed - destroy")
 				// On any test failure or error, we destroy the cluster. We could be
 				// more selective, but this sounds safer.
 				l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
