@@ -635,7 +635,7 @@ func findPointSideOfLinearRing(point geodist.Point, linearRing geodist.LinearRin
 	// See also: https://en.wikipedia.org/wiki/Nonzero-rule
 	windingNumber := 0
 	p := point.GeomPoint
-	for edgeIdx := 0; edgeIdx < linearRing.NumEdges(); edgeIdx++ {
+	for edgeIdx, numEdges := 0, linearRing.NumEdges(); edgeIdx < numEdges; edgeIdx++ {
 		e := linearRing.Edge(edgeIdx)
 		eV0 := e.V0.GeomPoint
 		eV1 := e.V1.GeomPoint
@@ -834,125 +834,6 @@ func verifyDensifyFrac(f float64) error {
 		return errors.Newf("fraction %f is too small, must be at least %f", f, fracTooSmall)
 	}
 	return nil
-}
-
-// PointPolygonRelationType defines a relationship type between
-// a (multi)point and a (multi)polygon.
-type PointPolygonRelationType int
-
-const (
-	// PointPolygonIntersects is the relationship where a (multi)point
-	// intersects a (multi)polygon.
-	PointPolygonIntersects PointPolygonRelationType = iota + 1
-	// PointPolygonCoveredBy is the relationship where a (multi)point
-	// is covered by a (multi)polygon.
-	PointPolygonCoveredBy
-	// PointPolygonWithin is the relationship where a (multi)point
-	// is contained within a (multi)polygon.
-	PointPolygonWithin
-)
-
-// PointKindRelatesToPolygonKind returns whether a (multi)point and
-// a (multi)polygon have the given relationship.
-func PointKindRelatesToPolygonKind(
-	pointKind geo.Geometry, polygonKind geo.Geometry, relationType PointPolygonRelationType,
-) (bool, error) {
-	pointKindBaseT, err := pointKind.AsGeomT()
-	if err != nil {
-		return false, err
-	}
-	polygonKindBaseT, err := polygonKind.AsGeomT()
-	if err != nil {
-		return false, err
-	}
-	pointKindIterator := geo.NewGeomTIterator(pointKindBaseT, geo.EmptyBehaviorOmit)
-	polygonKindIterator := geo.NewGeomTIterator(polygonKindBaseT, geo.EmptyBehaviorOmit)
-
-	// TODO(ayang): Think about how to refactor these nested for loops
-	// Check whether each point intersects with at least one polygon.
-	// - For Intersects, at least one point must intersect with at least one polygon.
-	// - For CoveredBy, every point must intersect with at least one polygon.
-	// - For Within, every point must intersect with at least one polygon
-	//   and at least one point must be inside at least one polygon.
-	intersectsOnce := false
-	insideOnce := false
-pointOuterLoop:
-	for {
-		point, hasPoint, err := pointKindIterator.Next()
-		if err != nil {
-			return false, err
-		}
-		if !hasPoint {
-			break
-		}
-		// Reset the polygon iterator on each iteration of the point iterator.
-		polygonKindIterator.Reset()
-		curIntersects := false
-		for {
-			polygon, hasPolygon, err := polygonKindIterator.Next()
-			if err != nil {
-				return false, err
-			}
-			if !hasPolygon {
-				break
-			}
-			pointSide, err := findPointSideOfPolygon(point, polygon)
-			if err != nil {
-				return false, err
-			}
-			switch pointSide {
-			case insideLinearRing:
-				insideOnce = true
-				switch relationType {
-				case PointPolygonWithin:
-					continue pointOuterLoop
-				}
-				fallthrough
-			case onLinearRing:
-				intersectsOnce = true
-				curIntersects = true
-				switch relationType {
-				case PointPolygonIntersects:
-					// A single intersection is sufficient.
-					return true, nil
-				case PointPolygonCoveredBy:
-					// If the current point intersects, check the next point.
-					continue pointOuterLoop
-				case PointPolygonWithin:
-					// We can only skip to the next point if we have already seen a point
-					// that is inside the (multi)polygon.
-					if insideOnce {
-						continue pointOuterLoop
-					}
-				default:
-					return false, errors.Newf("unknown PointPolygonRelationType")
-				}
-			case outsideLinearRing:
-			default:
-				return false, errors.Newf("findPointSideOfPolygon returned unknown linearRingSide %d", pointSide)
-			}
-		}
-		// Case where a point in the (multi)point does not intersect
-		// a polygon in the (multi)polygon.
-		switch relationType {
-		case PointPolygonCoveredBy:
-			// Each point in a (multi)point must intersect a polygon in the
-			// (multi)point to be covered by it.
-			return false, nil
-		case PointPolygonWithin:
-			if !curIntersects {
-				return false, nil
-			}
-		}
-	}
-	switch relationType {
-	case PointPolygonCoveredBy:
-		return intersectsOnce, nil
-	case PointPolygonWithin:
-		return insideOnce, nil
-	default:
-		return false, nil
-	}
 }
 
 // findPointSideOfPolygon returns whether a point intersects with a polygon.
