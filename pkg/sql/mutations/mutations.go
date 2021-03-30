@@ -637,6 +637,10 @@ func postgresCreateTableMutator(
 		mutated = append(mutated, stmt)
 		switch stmt := stmt.(type) {
 		case *tree.CreateTable:
+			if stmt.Interleave != nil {
+				stmt.Interleave = nil
+				changed = true
+			}
 			// Get all the column types first.
 			colTypes := make(map[string]*types.T)
 			for _, def := range stmt.Defs {
@@ -652,34 +656,61 @@ func postgresCreateTableMutator(
 				case *tree.IndexTableDef:
 					// Postgres doesn't support indexes in CREATE TABLE, so split them out
 					// to their own statement.
+					var newCols tree.IndexElemList
+					for _, col := range def.Columns {
+						// Postgres doesn't support box2d as a btree index key.
+						colTypeFamily := colTypes[string(col.Column)].Family()
+						if colTypeFamily == types.Box2DFamily {
+							changed = true
+						} else {
+							newCols = append(newCols, col)
+						}
+					}
+					if len(newCols) == 0 {
+						// Break without adding this index at all.
+						break
+					}
+					def.Columns = newCols
 					// TODO(rafi): Postgres supports inverted indexes with a different
 					// syntax than Cockroach. Maybe we could add it later.
-					// The syntax is `CREATE INDEX name ON table USING gin(column`.
+					// The syntax is `CREATE INDEX name ON table USING gin(column)`.
 					if !def.Inverted {
 						mutated = append(mutated, &tree.CreateIndex{
 							Name:     def.Name,
 							Table:    stmt.Table,
 							Inverted: def.Inverted,
-							Columns:  def.Columns,
+							Columns:  newCols,
 							Storing:  def.Storing,
 						})
 						changed = true
 					}
 				case *tree.UniqueConstraintTableDef:
+					var newCols tree.IndexElemList
+					for _, col := range def.Columns {
+						// Postgres doesn't support box2d as a btree index key.
+						colTypeFamily := colTypes[string(col.Column)].Family()
+						if colTypeFamily == types.Box2DFamily {
+							changed = true
+						} else {
+							newCols = append(newCols, col)
+						}
+					}
+					if len(newCols) == 0 {
+						// Break without adding this index at all.
+						break
+					}
+					def.Columns = newCols
 					if def.PrimaryKey {
-						// Postgres doesn't support descending PKs.
-						for i, col := range def.Columns {
+						for _, col := range def.Columns {
+							// Postgres doesn't support descending PKs.
 							if col.Direction != tree.DefaultDirection {
-								def.Columns[i].Direction = tree.DefaultDirection
+								col.Direction = tree.DefaultDirection
 								changed = true
 							}
 						}
 						if def.Name != "" {
-							// Unset Name here because
-							// constraint names cannot
-							// be shared among tables,
-							// so multiple PK constraints
-							// named "primary" is an error.
+							// Unset Name here because constraint names cannot be shared among
+							// tables, so multiple PK constraints named "primary" is an error.
 							def.Name = ""
 							changed = true
 						}
@@ -691,7 +722,7 @@ func postgresCreateTableMutator(
 						Table:    stmt.Table,
 						Unique:   true,
 						Inverted: def.Inverted,
-						Columns:  def.Columns,
+						Columns:  newCols,
 						Storing:  def.Storing,
 					})
 					changed = true
