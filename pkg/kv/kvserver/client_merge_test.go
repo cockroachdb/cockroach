@@ -18,7 +18,6 @@ import (
 	"math/rand"
 	"reflect"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -4175,137 +4174,117 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 	type test struct {
 		name                                                   string
 		leftVoters, rightVoters, leftNonVoters, rightNonVoters []int
-		expectedRightVoters, expectedRightNonVoters            []int
 	}
 
 	// NB: The test setup code places a single voter replica on (n1,s1) for both
 	// left and right range, which we remove after setting the test up.
 	tests := []test{
 		{
-			name:                   "collocated-per-type",
-			leftVoters:             []int{2, 3, 4},
-			rightVoters:            []int{2, 3, 4},
-			leftNonVoters:          []int{1},
-			rightNonVoters:         []int{1},
-			expectedRightVoters:    []int{2, 3, 4},
-			expectedRightNonVoters: []int{1},
+			name:           "collocated-per-type",
+			leftVoters:     []int{2, 3, 4},
+			rightVoters:    []int{2, 3, 4},
+			leftNonVoters:  []int{1},
+			rightNonVoters: []int{1},
 		},
 		{
-			name:                   "collocated-overall",
-			leftVoters:             []int{3, 4},
-			rightVoters:            []int{1, 2},
-			leftNonVoters:          []int{1, 2},
-			rightNonVoters:         []int{3, 4},
-			expectedRightVoters:    []int{1, 2},
-			expectedRightNonVoters: []int{3, 4},
+			name:           "collocated-overall",
+			leftVoters:     []int{3, 4},
+			rightVoters:    []int{1, 2},
+			leftNonVoters:  []int{1, 2},
+			rightNonVoters: []int{3, 4},
 		},
 		{
-			name:                   "collocated-voters-only",
-			leftVoters:             []int{3, 4},
-			rightVoters:            []int{3, 4},
-			leftNonVoters:          []int{2},
-			rightNonVoters:         []int{1},
-			expectedRightVoters:    []int{3, 4},
-			expectedRightNonVoters: []int{2},
+			name:           "collocated-voters-only",
+			leftVoters:     []int{3, 4},
+			rightVoters:    []int{3, 4},
+			leftNonVoters:  []int{2},
+			rightNonVoters: []int{1},
 		},
 		{
-			name:                   "collocated-non-voters-only",
-			leftVoters:             []int{3},
-			rightVoters:            []int{4},
-			leftNonVoters:          []int{1, 2},
-			rightNonVoters:         []int{1, 2},
-			expectedRightVoters:    []int{3},
-			expectedRightNonVoters: []int{1, 2},
+			name:           "collocated-non-voters-only",
+			leftVoters:     []int{3},
+			rightVoters:    []int{4},
+			leftNonVoters:  []int{1, 2},
+			rightNonVoters: []int{1, 2},
 		},
 		{
-			name:                   "not-collocated",
-			leftVoters:             []int{3},
-			rightVoters:            []int{4},
-			leftNonVoters:          []int{2},
-			rightNonVoters:         []int{1},
-			expectedRightVoters:    []int{3},
-			expectedRightNonVoters: []int{2},
+			name:           "not-collocated",
+			leftVoters:     []int{3},
+			rightVoters:    []int{4},
+			leftNonVoters:  []int{2},
+			rightNonVoters: []int{1},
 		},
 		{
-			name:                   "partially-collocated-voters-only",
-			leftVoters:             []int{2, 3},
-			rightVoters:            []int{1, 4},
-			leftNonVoters:          []int{1},
-			rightNonVoters:         []int{2},
-			expectedRightVoters:    []int{1, 3},
-			expectedRightNonVoters: []int{2},
+			name:           "partially-collocated-voters-only",
+			leftVoters:     []int{2, 3},
+			rightVoters:    []int{1, 4},
+			leftNonVoters:  []int{1},
+			rightNonVoters: []int{2},
 		},
 		{
-			name:                   "partially-collocated-non-voters-only",
-			leftVoters:             []int{4},
-			rightVoters:            []int{4},
-			leftNonVoters:          []int{1, 3},
-			rightNonVoters:         []int{1, 2},
-			expectedRightVoters:    []int{4},
-			expectedRightNonVoters: []int{1, 3},
+			name:           "partially-collocated-non-voters-only",
+			leftVoters:     []int{4},
+			rightVoters:    []int{4},
+			leftNonVoters:  []int{1, 3},
+			rightNonVoters: []int{1, 2},
 		},
 		{
-			name:                   "partially-collocated",
-			leftVoters:             []int{2},
-			rightVoters:            []int{4},
-			leftNonVoters:          []int{1, 3},
-			rightNonVoters:         []int{1, 2},
-			expectedRightVoters:    []int{3},
-			expectedRightNonVoters: []int{1, 2},
+			name:           "partially-collocated",
+			leftVoters:     []int{2},
+			rightVoters:    []int{4},
+			leftNonVoters:  []int{1, 3},
+			rightNonVoters: []int{1, 2},
 		},
 		{
-			name:                   "collocated-rhs-being-reconfigured-1",
-			leftVoters:             []int{1, 2, 3},
-			rightVoters:            []int{1, 2, 3, 4, 5, 6},
-			leftNonVoters:          []int{4, 5, 6},
-			rightNonVoters:         []int{},
-			expectedRightVoters:    []int{1, 2, 3, 4, 5, 6},
-			expectedRightNonVoters: []int{},
+			name:           "collocated-rhs-being-reconfigured-1",
+			leftVoters:     []int{1, 2, 3},
+			rightVoters:    []int{1, 2, 3, 4, 5, 6},
+			leftNonVoters:  []int{4, 5, 6},
+			rightNonVoters: []int{},
 		},
 		{
-			name:                   "collocated-rhs-being-reconfigured-2",
-			leftVoters:             []int{1, 2, 3},
-			rightVoters:            []int{1, 2, 3, 4},
-			leftNonVoters:          []int{4, 5, 6},
-			rightNonVoters:         []int{},
-			expectedRightVoters:    []int{1, 2, 3, 4},
-			expectedRightNonVoters: []int{5, 6},
+			name:           "collocated-rhs-being-reconfigured-2",
+			leftVoters:     []int{1, 2, 3},
+			rightVoters:    []int{1, 2, 3, 4},
+			leftNonVoters:  []int{4, 5, 6},
+			rightNonVoters: []int{},
 		},
 		{
-			name:                   "collocated-rhs-being-reconfigured-3",
-			leftVoters:             []int{1, 2, 3},
-			rightVoters:            []int{1},
-			leftNonVoters:          []int{4, 5, 6},
-			rightNonVoters:         []int{2, 3, 4, 5, 6},
-			expectedRightVoters:    []int{1},
-			expectedRightNonVoters: []int{2, 3, 4, 5, 6},
+			name:           "collocated-rhs-being-reconfigured-3",
+			leftVoters:     []int{1, 2, 3},
+			rightVoters:    []int{1},
+			leftNonVoters:  []int{4, 5, 6},
+			rightNonVoters: []int{2, 3, 4, 5, 6},
 		},
 		{
-			name:                   "non-collocated-rhs-being-reconfigured",
-			leftVoters:             []int{1, 2, 3},
-			rightVoters:            []int{5},
-			leftNonVoters:          []int{4, 6},
-			rightNonVoters:         []int{},
-			expectedRightVoters:    []int{1, 2, 3},
-			expectedRightNonVoters: []int{4, 6},
+			name:           "non-collocated-rhs-being-reconfigured",
+			leftVoters:     []int{1, 2, 3},
+			rightVoters:    []int{5},
+			leftNonVoters:  []int{4, 6},
+			rightNonVoters: []int{},
 		},
 		{
-			name:                   "partially-collocated-rhs-being-downreplicated",
-			leftVoters:             []int{1, 2, 3},
-			rightVoters:            []int{1, 2, 3, 4, 5, 6},
-			leftNonVoters:          []int{4, 5},
-			rightNonVoters:         []int{},
-			expectedRightVoters:    []int{1, 2, 3, 4, 5},
-			expectedRightNonVoters: []int{},
+			name:           "partially-collocated-rhs-being-downreplicated",
+			leftVoters:     []int{1, 2, 3},
+			rightVoters:    []int{1, 2, 3, 4, 5, 6},
+			leftNonVoters:  []int{4, 5},
+			rightNonVoters: []int{},
 		},
 		{
-			name:                   "partially-collocated-rhs-being-upreplicated",
-			leftVoters:             []int{1, 2, 3},
-			rightVoters:            []int{1},
-			leftNonVoters:          []int{4, 5, 6},
-			rightNonVoters:         []int{},
-			expectedRightVoters:    []int{1, 2, 3},
-			expectedRightNonVoters: []int{4, 5, 6},
+			name:           "partially-collocated-rhs-being-upreplicated",
+			leftVoters:     []int{1, 2, 3},
+			rightVoters:    []int{1},
+			leftNonVoters:  []int{4, 5, 6},
+			rightNonVoters: []int{},
+		},
+		{
+			// This is a subtest that should trigger at least 3 voter<->non-voter
+			// swaps.
+			name:           "lhs-voters-collocated-with-rhs-non-voters",
+			leftVoters:     []int{1, 2, 3},
+			rightVoters:    []int{4},
+			leftNonVoters:  []int{},
+			rightNonVoters: []int{1, 2, 3},
 		},
 	}
 
@@ -4373,24 +4352,6 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 			leftDesc = tc.LookupRangeOrFatal(t, leftDesc.StartKey.AsRawKey())
 			tc.RemoveVotersOrFatal(t, rightDesc.StartKey.AsRawKey(), tc.Target(0))
 			rightDesc = tc.LookupRangeOrFatal(t, rightDesc.StartKey.AsRawKey())
-
-			// Check that we're avoiding superfluous data movement.
-			voterTargets, nonVoterTargets, err := kvserver.GetTargetsToCollocateRHSForMerge(ctx, leftDesc.Replicas(), rightDesc.Replicas())
-			require.NoError(t, err)
-			require.Equal(t, len(subtest.expectedRightVoters), len(voterTargets))
-			require.Equal(t, len(subtest.expectedRightNonVoters), len(nonVoterTargets))
-			sort.Slice(voterTargets, func(i, j int) bool {
-				return voterTargets[i].NodeID < voterTargets[j].NodeID
-			})
-			sort.Slice(nonVoterTargets, func(i, j int) bool {
-				return nonVoterTargets[i].NodeID < nonVoterTargets[j].NodeID
-			})
-			for i := range subtest.expectedRightVoters {
-				require.Equal(t, tc.Target(subtest.expectedRightVoters[i]), voterTargets[i])
-			}
-			for i := range subtest.expectedRightNonVoters {
-				require.Equal(t, tc.Target(subtest.expectedRightNonVoters[i]), nonVoterTargets[i])
-			}
 
 			store.SetMergeQueueActive(true)
 			store.MustForceMergeScanAndProcess()
