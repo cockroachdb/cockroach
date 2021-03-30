@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -703,6 +704,54 @@ func convertToSQLStringRepresentation(bytes []byte) (string, error) {
 	return byteRep.String(), nil
 }
 
+// findUsagesOfEnumValue takes an expr, type ID and a enum member of that type,
+// and checks if the expr uses that enum member.
+func findUsagesOfEnumValue(
+	exprStr string, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
+) (bool, error) {
+	expr, err := parser.ParseExpr(exprStr)
+	if err != nil {
+		return false, err
+	}
+	var foundUsage bool
+
+	visitFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		annotateType, ok := expr.(*tree.AnnotateTypeExpr)
+		if !ok {
+			return true, expr, nil
+		}
+
+		// Check if this expr's type is the one we're dropping the enum value from.
+		typeOid, ok := annotateType.Type.(*tree.OIDTypeReference)
+		if !ok {
+			return true, expr, nil
+		}
+		id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+		if id != typeID {
+			return true, expr, nil
+		}
+
+		// Check if this expr uses the enum value we're dropping.
+		strVal, ok := annotateType.Expr.(*tree.StrVal)
+		if !ok {
+			return true, expr, nil
+		}
+		physicalRep := []byte(strVal.RawString())
+		if bytes.Equal(physicalRep, member.PhysicalRepresentation) {
+			foundUsage = true
+			return false, expr, nil
+		}
+
+		return false, expr, nil
+	}
+
+	_, err = tree.SimpleVisit(expr, visitFunc)
+	if err != nil {
+		return false, err
+	}
+	return foundUsage, nil
+}
+
 // canRemoveEnumValue returns an error if the enum value is in use and therefore
 // can't be removed.
 func (t *typeSchemaChanger) canRemoveEnumValue(
@@ -725,6 +774,32 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 		firstClause := true
 		validationQueryConstructed := false
 		for _, col := range desc.PublicColumns() {
+			// If this column has a default expression, check if it uses the enum member being dropped.
+			if col.HasDefault() {
+				foundUsage, err := findUsagesOfEnumValue(col.GetDefaultExpr(), member, typeDesc.ID)
+				if err != nil {
+					return err
+				}
+				if foundUsage {
+					return pgerror.Newf(pgcode.DependentObjectsStillExist,
+						"could not remove enum value %q as it is being used in a default expresion of %q",
+						member.LogicalRepresentation, desc.GetName())
+				}
+			}
+
+			// If this column is computed, check if it uses the enum member being dropped.
+			if col.IsComputed() {
+				foundUsage, err := findUsagesOfEnumValue(col.GetComputeExpr(), member, typeDesc.ID)
+				if err != nil {
+					return err
+				}
+				if foundUsage {
+					return pgerror.Newf(pgcode.DependentObjectsStillExist,
+						"could not remove enum value %q as it is being used in a computed column of %q",
+						member.LogicalRepresentation, desc.GetName())
+				}
+			}
+
 			if typeDesc.ID == typedesc.GetTypeDescID(col.GetType()) {
 				if !firstClause {
 					query.WriteString(" OR")
