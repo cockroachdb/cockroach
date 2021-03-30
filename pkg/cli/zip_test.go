@@ -73,6 +73,7 @@ table_name NOT IN (
 	'forward_dependencies',
 	'index_columns',
 	'interleaved',
+  'lost_descriptors_with_data',
 	'table_columns',
 	'table_indexes',
 	'table_row_statistics',

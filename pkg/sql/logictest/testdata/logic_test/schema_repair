@@ -1,0 +1,61 @@
+subtest lost-table-data
+
+statement ok 
+CREATE TABLE lostdata (v INT8)
+
+statement ok
+INSERT INTO lostdata VALUES (3);
+
+statement ok
+INSERT INTO lostdata VALUES (5);
+
+statement ok
+INSERT INTO lostdata VALUES (23);
+
+let $t_id
+SELECT id FROM system.namespace WHERE name = 'lostdata';
+
+query I
+SELECT * FROM crdb_internal.lost_descriptors_with_data;
+----
+
+let $json
+WITH
+	descs
+		AS (
+			SELECT
+				id,
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor
+				)
+					AS descriptor
+			FROM
+				system.descriptor
+		)
+SELECT
+	descriptor
+FROM
+	descs
+WHERE
+	id = $t_id;
+
+# Force delete the descriptor
+query B
+SELECT * FROM ROWS FROM (crdb_internal.unsafe_delete_descriptor($t_id));
+----
+true
+
+query I
+SELECT count(*) FROM crdb_internal.lost_descriptors_with_data WHERE descid = $t_id;
+----
+1
+
+query I
+SELECT count(*) FROM crdb_internal.lost_descriptors_with_data WHERE descid != $t_id
+----
+0
+
+statement ok
+SELECT * FROM crdb_internal.unsafe_upsert_descriptor($t_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json'))
+

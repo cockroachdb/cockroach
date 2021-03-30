@@ -560,6 +560,7 @@ jobs                                   NULL
 kv_node_status                         NULL
 kv_store_status                        NULL
 leases                                 NULL
+lost_descriptors_with_data             NULL
 node_build_info                        NULL
 node_contention_events                 NULL
 node_inflight_trace_spans              NULL
