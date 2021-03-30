@@ -329,6 +329,15 @@ var ignorePostgresBinOps = map[binOpTriple]bool{
 	{types.FloatFamily, tree.Mult, types.DateFamily}: true,
 	{types.DateFamily, tree.Mult, types.FloatFamily}: true,
 	{types.DateFamily, tree.Div, types.FloatFamily}:  true,
+
+	// Postgres does not have separate floor division operator.
+	{types.IntFamily, tree.FloorDiv, types.IntFamily}:         true,
+	{types.FloatFamily, tree.FloorDiv, types.FloatFamily}:     true,
+	{types.DecimalFamily, tree.FloorDiv, types.DecimalFamily}: true,
+	{types.DecimalFamily, tree.FloorDiv, types.IntFamily}:     true,
+	{types.IntFamily, tree.FloorDiv, types.DecimalFamily}:     true,
+
+	{types.FloatFamily, tree.Mod, types.FloatFamily}: true,
 }
 
 func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
