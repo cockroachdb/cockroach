@@ -554,3 +554,25 @@ func validateNamespace(
 		}
 	}
 }
+
+// ValidateWithRecover is like Validate but which recovers from panics.
+// This is useful when we're validating many descriptors separately and we don't
+// want a corrupt descriptor to prevent validating the others.
+func ValidateWithRecover(
+	ctx context.Context, descGetter DescGetter, level ValidationLevel, desc Descriptor,
+) (ve ValidationErrors) {
+	ve = &validationErrors{}
+	defer func() {
+		if r := recover(); r != nil {
+			err, ok := r.(error)
+			if !ok {
+				err = errors.Newf("%v", r)
+			}
+			err = errors.WithAssertionFailure(errors.Wrap(err, "validation"))
+			ve.(*validationErrors).errors = append(ve.Errors(), err)
+		}
+	}()
+	errors := Validate(ctx, descGetter, NoValidationTelemetry, level, desc).Errors()
+	ve.(*validationErrors).errors = append(ve.Errors(), errors...)
+	return ve
+}

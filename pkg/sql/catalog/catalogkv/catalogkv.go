@@ -151,7 +151,7 @@ func descriptorFromKeyValue(
 	dg catalog.DescGetter,
 	validationLevel catalog.ValidationLevel,
 ) (catalog.Descriptor, error) {
-	b, err := builderFromKeyValue(codec, kv, expectedType, required)
+	id, b, err := builderFromKeyValue(codec, kv, expectedType, required)
 	if err != nil || b == nil {
 		return nil, err
 	}
@@ -165,6 +165,9 @@ func descriptorFromKeyValue(
 	} else {
 		desc = b.BuildImmutable()
 	}
+	if id != desc.GetID() {
+		return nil, errors.AssertionFailedf("descriptor with ID %d has ID %d", id, desc.GetID())
+	}
 	err = catalog.Validate(ctx, dg, catalog.ValidationReadTelemetry, validationLevel, desc).CombinedError()
 	if err != nil {
 		return nil, err
@@ -177,10 +180,15 @@ func descriptorFromKeyValue(
 // expected descriptor subtype. It returns it wrapped in a DescriptorBuilder.
 func builderFromKeyValue(
 	codec keys.SQLCodec, kv kv.KeyValue, expectedType catalog.DescriptorType, required required,
-) (catalog.DescriptorBuilder, error) {
+) (descpb.ID, catalog.DescriptorBuilder, error) {
+	u32ID, err := codec.DecodeDescMetadataID(kv.Key)
+	if err != nil {
+		return descpb.InvalidID, nil, err
+	}
+	id := descpb.ID(u32ID)
 	var descProto descpb.Descriptor
 	if err := kv.ValueProto(&descProto); err != nil {
-		return nil, err
+		return id, nil, err
 	}
 	var ts hlc.Timestamp
 	if kv.Value != nil {
@@ -189,23 +197,15 @@ func builderFromKeyValue(
 	b := NewBuilderWithMVCCTimestamp(&descProto, ts)
 	if b == nil {
 		if required {
-			id, err := codec.DecodeDescMetadataID(kv.Key)
-			if err != nil {
-				return nil, err
-			}
-			return nil, requiredError(expectedType, descpb.ID(id))
+			return id, nil, requiredError(expectedType, id)
 		}
-		return nil, nil
+		return id, nil, nil
 	}
 	if expectedType != catalog.Any && b.DescriptorType() != expectedType {
-		id, err := codec.DecodeDescMetadataID(kv.Key)
-		if err != nil {
-			return nil, err
-		}
-		return nil, pgerror.Newf(pgcode.WrongObjectType,
+		return descpb.InvalidID, nil, pgerror.Newf(pgcode.WrongObjectType,
 			"descriptor with ID %d is not a %s, instead is a %s", id, expectedType, b.DescriptorType())
 	}
-	return b, nil
+	return id, b, nil
 }
 
 // requiredError returns an appropriate error when a descriptor which was
@@ -251,53 +251,93 @@ func CountUserDescriptors(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec)
 	return count, nil
 }
 
-// GetAllDescriptorsUnvalidated looks up and returns all available descriptors
-// but does not validate them. It is exported solely to be used by functions
-// which want to perform explicit validation to detect corruption.
-func GetAllDescriptorsUnvalidated(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
-) ([]catalog.Descriptor, error) {
-	log.Eventf(ctx, "fetching all descriptors")
-	descsKey := catalogkeys.MakeAllDescsMetadataKey(codec)
-	kvs, err := txn.Scan(ctx, descsKey, descsKey.PrefixEnd(), 0)
-	if err != nil {
-		return nil, err
+func getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, withNamespace bool,
+) (m catalog.MapDescGetter, err error) {
+	if withNamespace {
+		log.Eventf(ctx, "fetching all descriptors and namespace entries")
+	} else {
+		log.Eventf(ctx, "fetching all descriptors")
 	}
-	descs := make([]catalog.Descriptor, len(kvs))
+	b := txn.NewBatch()
+	{ // Batch results index 0.
+		descsKey := catalogkeys.MakeAllDescsMetadataKey(codec)
+		b.Scan(descsKey, descsKey.PrefixEnd())
+	}
+	if withNamespace {
+		// Batch results index 1.
+		prefixDeprecated := codec.IndexPrefix(
+			uint32(systemschema.DeprecatedNamespaceTable.GetID()),
+			uint32(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()))
+		b.Scan(prefixDeprecated, prefixDeprecated.PrefixEnd())
+		// Batch results index 2.
+		prefix := codec.IndexPrefix(
+			uint32(systemschema.NamespaceTable.GetID()),
+			uint32(systemschema.NamespaceTable.GetPrimaryIndexID()))
+		b.Scan(prefix, prefix.PrefixEnd())
+	}
+	err = txn.Run(ctx, b)
+	if err != nil {
+		return m, err
+	}
+	m.Descriptors = make(map[descpb.ID]catalog.Descriptor, len(b.Results[0].Rows))
+	if withNamespace {
+		m.Namespace = make(map[descpb.NameInfo]descpb.ID, len(b.Results[1].Rows)+len(b.Results[2].Rows))
+	}
 	dg := NewOneLevelUncachedDescGetter(txn, codec)
-	for i, kv := range kvs {
-		descs[i], err = descriptorFromKeyValue(
-			ctx,
-			codec,
-			kv,
-			immutable,
-			catalog.Any,
-			bestEffort,
-			dg,
-			catalog.NoValidation,
-		)
-		if err != nil {
-			return nil, err
+	for queryIndex, results := range b.Results {
+		if results.Err != nil {
+			return m, results.Err
+		}
+		for _, row := range results.Rows {
+			if !row.Exists() {
+				continue
+			}
+			var k descpb.NameInfo
+			switch queryIndex {
+			case 0:
+				var desc catalog.Descriptor
+				desc, err = descriptorFromKeyValue(ctx, codec, row, immutable, catalog.Any, bestEffort, dg, catalog.NoValidation)
+				if desc != nil {
+					m.Descriptors[desc.GetID()] = desc
+				}
+			case 1:
+				k.ParentID, k.Name, err = catalogkeys.DecodeDeprecatedNameMetadataKey(codec, row.Key)
+				m.Namespace[k] = descpb.ID(row.ValueInt())
+			case 2:
+				k.ParentID, k.ParentSchemaID, k.Name, err = catalogkeys.DecodeNameMetadataKey(codec, row.Key)
+				m.Namespace[k] = descpb.ID(row.ValueInt())
+			default:
+				panic("missing switch case")
+			}
+			if err != nil {
+				return m, err
+			}
 		}
 	}
-	return descs, nil
+	return m, nil
+}
+
+// GetAllDescriptorsAndNamespaceEntriesUnvalidated looks up and returns all
+// available descriptors and namespace entries but does not validate anything.
+// It is exported solely to be used by functions which want to perform explicit
+// validation to detect corruption.
+func GetAllDescriptorsAndNamespaceEntriesUnvalidated(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) (m catalog.MapDescGetter, err error) {
+	return getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(ctx, txn, codec, true /* withNamespace */)
 }
 
 // GetAllDescriptors looks up and returns all available descriptors.
 func GetAllDescriptors(
 	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 ) ([]catalog.Descriptor, error) {
-	descs, err := GetAllDescriptorsUnvalidated(ctx, txn, codec)
+	m, err := getAllDescriptorsAndMaybeNamespaceEntriesUnvalidated(ctx, txn, codec, false /* withNamespace */)
 	if err != nil {
 		return nil, err
 	}
-	dg := catalog.MapDescGetter{
-		Descriptors: make(map[descpb.ID]catalog.Descriptor, len(descs)),
-	}
-	for _, desc := range descs {
-		dg.Descriptors[desc.GetID()] = desc
-	}
-	if err := catalog.ValidateSelfAndCrossReferences(ctx, dg, descs...); err != nil {
+	descs := m.OrderedDescriptors()
+	if err := catalog.ValidateSelfAndCrossReferences(ctx, m, descs...); err != nil {
 		return nil, err
 	}
 	return descs, nil
