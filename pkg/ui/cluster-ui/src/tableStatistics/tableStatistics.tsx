@@ -1,8 +1,8 @@
 import React from "react";
 import moment from "moment";
 import { DATE_FORMAT } from "src/util";
-import { statisticsClasses } from "../transactionsPageClasses";
-import { ISortedTablePagination } from "../../sortedtable";
+import { statisticsClasses } from "../transactionsPage/transactionsPageClasses";
+import { ISortedTablePagination } from "../sortedtable";
 import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
 
@@ -22,7 +22,7 @@ const renderLastCleared = (lastReset: string | Date) => {
   return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
 };
 
-export const TransactionsPageStatistic: React.FC<TableStatistics> = ({
+export const TableStatistics: React.FC<TableStatistics> = ({
   pagination,
   totalCount,
   lastReset,

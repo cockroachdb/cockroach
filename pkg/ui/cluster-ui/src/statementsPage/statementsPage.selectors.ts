@@ -115,7 +115,7 @@ export const selectStatements = createSelector(
     const isInternal = (statement: ExecutionStatistics) =>
       statement.app.startsWith(state.data.internal_app_name_prefix);
 
-    if (app) {
+    if (app && app !== "All") {
       let criteria = decodeURIComponent(app);
       let showInternal = false;
       if (criteria === "(unset)") {
@@ -127,10 +127,6 @@ export const selectStatements = createSelector(
       statements = statements.filter(
         (statement: ExecutionStatistics) =>
           (showInternal && isInternal(statement)) || statement.app === criteria,
-      );
-    } else {
-      statements = statements.filter(
-        (statement: ExecutionStatistics) => !isInternal(statement),
       );
     }
 

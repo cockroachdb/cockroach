@@ -4,8 +4,11 @@ import styles from "./filter.module.scss";
 const cx = classNames.bind(styles);
 
 export const dropdownButton = cx("dropdown-btn");
-
 export const dropdownContentWrapper = cx("dropdown-content-wrapper");
+export const dropdown = cx("dropdown-area");
+export const hidden = cx("hide");
+export const caretDown = cx("caret-down");
+export const dropdownSelect = cx("dropdown-select");
 
 export const timePair = {
   wrapper: cx("time-pair-wrapper"),
@@ -14,14 +17,12 @@ export const timePair = {
 };
 
 export const filterLabel = {
-  app: cx("filter-label"),
-  type: cx("filter-label", "filter-label__transaction-type"),
-  query: cx("filter-label", "filter-label__query"),
+  top: cx("filter-label"),
+  margin: cx("filter-label", "filter-label__margin-top"),
 };
 
 export const checkbox = {
-  fullScansWrapper: cx("checkbox__wrapper", "checkbox__full-scans"),
-  distributedWrapper: cx("checkbox__wrapper", "checkbox__distributed"),
+  input: cx("checkbox__input"),
   label: cx("checkbox__label"),
 };
 
@@ -29,11 +30,3 @@ export const applyBtn = {
   wrapper: cx("apply-btn__wrapper"),
   btn: cx("apply-btn__btn"),
 };
-
-export const dropdown = cx("dropdown-area");
-
-export const hidden = cx("hide");
-
-export const caretDown = cx("caret-down");
-
-export const dropdownSelect = cx("dropdown-select");
