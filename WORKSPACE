@@ -163,3 +163,8 @@ git_repository(
 load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
 
 rules_foreign_cc_dependencies()
+
+# Load custom toolchains.
+load("//build:toolchains/REPOSITORIES.bzl", "toolchain_dependencies")
+
+toolchain_dependencies()
