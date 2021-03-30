@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
@@ -4044,6 +4045,49 @@ CREATE TABLE crdb_internal.predefined_comments (
 	},
 }
 
+func collectJobMap(ctx context.Context, p *planner) (map[int64]jobs.JobMetadata, error) {
+	jobMap := map[int64]jobs.JobMetadata{}
+	query := `SELECT id, status, payload, progress FROM system.jobs`
+	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+		ctx, "crdb-internal-jobs-table", p.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		query)
+	if err != nil {
+		return nil, err
+	}
+	for {
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			break
+		}
+		r := it.Cur()
+		md := jobs.JobMetadata{}
+		id, status, payloadBytes, progressBytes := r[0], r[1], r[2], r[3]
+		if i, ok := id.(*tree.DInt); ok {
+			md.ID = jobspb.JobID(*i)
+		}
+		if s, ok := status.(*tree.DString); ok {
+			md.Status = jobs.Status(*s)
+		}
+		md.Payload, err = jobs.UnmarshalPayload(payloadBytes)
+		if err != nil {
+			return nil, err
+		}
+		md.Progress, err = jobs.UnmarshalProgress(progressBytes)
+		if err != nil {
+			return nil, err
+		}
+		jobMap[int64(md.ID)] = md
+	}
+	if err := it.Close(); err != nil {
+		return nil, err
+	}
+	return jobMap, nil
+}
+
 var crdbInternalInvalidDescriptorsTable = virtualSchemaTable{
 	comment: `virtual table to validate descriptors`,
 	schema: `
@@ -4059,33 +4103,50 @@ CREATE TABLE crdb_internal.invalid_objects (
 	) error {
 		// The internalLookupContext will only have descriptors in the current
 		// database. To deal with this, we fall through.
-		descs, err := catalogkv.GetAllDescriptorsUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
+		m, err := catalogkv.GetAllDescriptorsAndNamespaceEntriesUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
 		if err != nil {
 			return err
 		}
+		descs := m.OrderedDescriptors()
+		// Collect all job metadata.
+		jobMap, err := collectJobMap(ctx, p)
+		if err != nil {
+			return err
+		}
+
+		addRowsForObject := func(dbDesc *dbdesc.Immutable, schema string, descriptor catalog.Descriptor) (err error) {
+			if descriptor == nil {
+				return nil
+			}
+			var dbName string
+			if dbDesc != nil {
+				dbName = dbDesc.GetName()
+			}
+			addValidationErrorRow := func(validationError error) {
+				if err == nil {
+					err = addRow(
+						tree.NewDInt(tree.DInt(descriptor.GetID())),
+						tree.NewDString(dbName),
+						tree.NewDString(schema),
+						tree.NewDString(descriptor.GetName()),
+						tree.NewDString(validationError.Error()),
+					)
+				}
+			}
+			ve := catalog.ValidateWithRecover(ctx, m, catalog.ValidationLevelAllPreTxnCommit, descriptor)
+			for _, validationError := range ve.Errors() {
+				addValidationErrorRow(validationError)
+			}
+			jobs.ValidateJobReferencesInDescriptor(descriptor, jobMap, addValidationErrorRow)
+			return err
+		}
+
 		const allowAdding = true
 		if err := forEachTableDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, hideVirtual, allowAdding, descs, func(
-				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, fn tableLookupFn,
+				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, _ tableLookupFn,
 			) error {
-				if descriptor == nil {
-					return nil
-				}
-				err := catalog.ValidateSelfAndCrossReferences(ctx, fn, descriptor)
-				if err == nil {
-					return nil
-				}
-				var dbName string
-				if dbDesc != nil {
-					dbName = dbDesc.GetName()
-				}
-				return addRow(
-					tree.NewDInt(tree.DInt(descriptor.GetID())),
-					tree.NewDString(dbName),
-					tree.NewDString(schema),
-					tree.NewDString(descriptor.GetName()),
-					tree.NewDString(err.Error()),
-				)
+				return addRowsForObject(dbDesc, schema, descriptor)
 			}); err != nil {
 			return err
 		}
@@ -4093,27 +4154,9 @@ CREATE TABLE crdb_internal.invalid_objects (
 		// Validate type descriptors.
 		return forEachTypeDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, allowAdding, descs, func(
-				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TypeDescriptor, fn tableLookupFn,
+				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TypeDescriptor, _ tableLookupFn,
 			) error {
-				if descriptor == nil {
-					return nil
-				}
-				err := catalog.ValidateSelfAndCrossReferences(ctx, fn, descriptor)
-				if err == nil {
-					return nil
-				}
-				var dbName string
-				if dbDesc != nil {
-					dbName = dbDesc.GetName()
-				}
-
-				return addRow(
-					tree.NewDInt(tree.DInt(descriptor.GetID())),
-					tree.NewDString(dbName),
-					tree.NewDString(schema),
-					tree.NewDString(descriptor.GetName()),
-					tree.NewDString(err.Error()),
-				)
+				return addRowsForObject(dbDesc, schema, descriptor)
 			})
 	},
 }

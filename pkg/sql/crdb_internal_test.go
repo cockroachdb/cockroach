@@ -407,25 +407,52 @@ func TestInvalidObjects(t *testing.T) {
 	require.Error(t, sqlDB.QueryRow(`SELECT * FROM "".crdb_internal.invalid_objects`).
 		Scan(&id, dbName, schemaName, objName, errStr))
 
-	// Now introduce an inconsistency.
+	// Now introduce some inconsistencies.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT);
-CREATE TABLE fktbl (id INT PRIMARY KEY);
-CREATE TABLE tbl (customer INT NOT NULL REFERENCES fktbl (id));
+CREATE TABLE t.test (k INT8);
+CREATE TABLE fktbl (id INT8 PRIMARY KEY);
+CREATE TABLE tbl (
+	customer INT8 NOT NULL REFERENCES fktbl (id)
+);
+CREATE TABLE nojob (k INT8);
 INSERT INTO system.users VALUES ('node', NULL, true);
 GRANT node TO root;
-DELETE FROM system.descriptor WHERE id=52;
-DELETE FROM system.descriptor WHERE id=54;
+DELETE FROM system.descriptor WHERE id = 52;
+DELETE FROM system.descriptor WHERE id = 54;
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				crdb_internal.pb_to_json(
+					'cockroach.sql.sqlbase.Descriptor',
+					descriptor,
+					false
+				),
+				ARRAY['table', 'mutationJobs'],
+				jsonb_build_array(
+					jsonb_build_object('job_id', 123456)
+				),
+				true
+			)
+		)
+	)
+FROM
+	system.descriptor
+WHERE
+	id = 56;
+UPDATE system.namespace SET id = 12345 WHERE id = 53;
 `); err != nil {
 		t.Fatal(err)
 	}
 
 	require.NoError(t, sqlDB.QueryRow(`SELECT id FROM system.descriptor ORDER BY id DESC LIMIT 1`).
 		Scan(&id))
-	require.Equal(t, 55, id)
+	require.Equal(t, 56, id)
 
-	rows, err := sqlDB.Query(`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
+	rows, err := sqlDB.Query(`SELECT * FROM "".crdb_internal.invalid_objects`)
 	require.NoError(t, err)
 	defer rows.Close()
 
@@ -438,10 +465,25 @@ DELETE FROM system.descriptor WHERE id=54;
 
 	require.True(t, rows.Next())
 	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
+	require.Equal(t, 53, id)
+	require.Equal(t, "", dbName)
+	require.Equal(t, "", schemaName)
+	require.Equal(t, `relation "test" (53): expected matching namespace entry value, instead found 12345`, errStr)
+
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
 	require.Equal(t, 55, id)
 	require.Equal(t, "defaultdb", dbName)
 	require.Equal(t, "public", schemaName)
 	require.Equal(t, `relation "tbl" (55): invalid foreign key: missing table=54: referenced table ID 54: descriptor not found`, errStr)
+
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
+	require.Equal(t, 56, id)
+	require.Equal(t, "defaultdb", dbName)
+	require.Equal(t, "public", schemaName)
+	require.Equal(t, "nojob", objName)
+	require.Equal(t, `mutation job 123456 not found in system.jobs`, errStr)
 
 	require.False(t, rows.Next())
 }

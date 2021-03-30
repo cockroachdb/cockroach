@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
-        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkv",
@@ -16,7 +15,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//sortkeys",
     ],
 )
 
@@ -26,6 +24,7 @@ go_test(
     srcs = ["doctor_test.go"],
     deps = [
         ":doctor",
+        "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/security",
