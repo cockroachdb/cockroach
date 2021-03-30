@@ -8,10 +8,16 @@ ca-central-1    {ca-az1,ca-az2,ca-az3}  {}  {}
 us-east-1       {us-az1,us-az2,us-az3}  {}  {}
 
 statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
 CREATE DATABASE "mr-zone-configs" primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
 
 statement ok
 use "mr-zone-configs"
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
 
 statement ok
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING gc.ttlseconds = 5
@@ -31,6 +37,9 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
                             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                             voter_constraints = '[+region=ca-central-1]',
                             lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
 
 statement error attempting to modify protected field "num_voters" of a multi-region zone configuration
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_voters = 5
@@ -52,6 +61,9 @@ statement ok
 SET override_multi_region_zone_config = true;
 ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING num_voters = 5;
 SET override_multi_region_zone_config = false
+
+statement error zone configuration for database "mr-zone-configs" contains incorrectly configured field "num_voters"
+SELECT crdb_internal.validate_multi_region_zone_configs()
 
 query TT
 SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
@@ -308,6 +320,9 @@ CREATE TABLE regional_by_table (
 statement ok
 ALTER table regional_by_row CONFIGURE ZONE USING gc.ttlseconds = 10
 
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
 statement error attempting to modify protected field "num_replicas" of a multi-region zone configuration
 ALTER table regional_by_row CONFIGURE ZONE USING num_replicas = 10
 
@@ -315,6 +330,9 @@ statement ok
 SET override_multi_region_zone_config = true;
 ALTER table regional_by_row CONFIGURE ZONE USING num_replicas = 10;
 SET override_multi_region_zone_config = false
+
+statement error zone configuration for table regional_by_row contains incorrectly configured field "num_replicas"
+SELECT crdb_internal.validate_multi_region_zone_configs()
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
@@ -361,7 +379,7 @@ num_voters = 3,
 voter_constraints = '[+region=us-east-1]',
 lease_preferences = '[[+region=us-east-1]]'  regional_by_row@regional_by_row_i_idx  us-east-1
 
-statement error attempting to update zone configuration for table "regional_by_row" which contains modified field "num_replicas"
+statement error attempting to update zone configuration for table regional_by_row which contains modified field "num_replicas"
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE
 
 statement ok
@@ -423,6 +441,9 @@ statement ok
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL
 
 statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
 SET override_multi_region_zone_config = true;
 ALTER index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10;
 SET override_multi_region_zone_config = false
@@ -430,7 +451,10 @@ SET override_multi_region_zone_config = false
 statement ok
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL
 
-statement error attempting to update zone configuration for table "regional_by_row" which contains a zone configuration on index "primary"
+statement error zone configuration for index regional_by_row@"primary" contains incorrectly configured field "num_replicas"
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement error attempting to update zone configuration for index regional_by_row@"primary" which contains modified field "num_replicas"
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
 
 statement ok
@@ -465,7 +489,7 @@ INDEX regional_by_row_as@primary  ALTER INDEX regional_by_row_as@primary CONFIGU
                                   voter_constraints = '[+region=us-east-1]',
                                   lease_preferences = '[[+region=us-east-1]]'
 
-statement error attempting to update zone configuration for table "regional_by_row_as" which contains a zone configuration on index "primary" with multi-region field "num_replicas" set
+statement error attempting to update zone configuration for index regional_by_row_as@"primary" which contains modified field "num_replicas"
 ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW
 
 statement ok
