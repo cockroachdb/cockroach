@@ -223,6 +223,13 @@ func (so *importSequenceOperators) CurrentDatabaseRegionConfig(
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
+// ValidateCurrentDatabaseMultiRegionZoneConfigs is part of the tree.EvalDatabase interface.
+func (so *importSequenceOperators) ValidateCurrentDatabaseMultiRegionZoneConfigs(
+	_ context.Context,
+) error {
+	return errors.WithStack(errSequenceOperators)
+}
+
 // Implements the tree.EvalDatabase interface.
 func (so *importSequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	name, err := parser.ParseTableName(sql)
