@@ -717,7 +717,7 @@ type RestrictedCommandResult interface {
 
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
-	IncrementRowsAffected(n int)
+	IncrementRowsAffected(ctx context.Context, n int)
 
 	// RowsAffected returns either the number of times AddRow was called, or the
 	// sum of all n passed into IncrementRowsAffected.
@@ -928,7 +928,7 @@ func (r *streamingCommandResult) Err() error {
 }
 
 // IncrementRowsAffected is part of the RestrictedCommandResult interface.
-func (r *streamingCommandResult) IncrementRowsAffected(n int) {
+func (r *streamingCommandResult) IncrementRowsAffected(ctx context.Context, n int) {
 	r.rowsAffected += n
 	if r.ch != nil {
 		// streamingCommandResult might be used outside of the internal executor
