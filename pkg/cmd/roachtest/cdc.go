@@ -237,8 +237,13 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		c.Run(ctx, kafka.nodes, `echo "advertised.listeners=PLAINTEXT://`+kafka.consumerURL(ctx)+`" >> `+
 			kafka.basePath()+`/confluent-4.0.0/etc/kafka/server.properties`)
 	}
-	kafka.start(ctx)
+	kafka.start(ctx, "kafka")
 	defer kafka.stop(ctx)
+
+	t.Status("creating kafka topic")
+	if err := kafka.createTopic(ctx, "bank"); err != nil {
+		t.Fatal(err)
+	}
 
 	c.Run(ctx, workloadNode, `./workload init bank {pgurl:1}`)
 	db := c.Conn(ctx, 1)
@@ -297,10 +302,11 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		}
 		defer l.close()
 
-		tc, err := kafka.consumer(ctx, `bank`)
+		tc, err := kafka.consumer(ctx, "bank")
 		if err != nil {
-			return err
+			return errors.Wrap(err, "could not create kafka consumer")
 		}
+
 		defer tc.Close()
 
 		if _, err := db.Exec(
@@ -1205,6 +1211,19 @@ func (k kafkaManager) schemaRegistryURL(ctx context.Context) string {
 	return `http://` + k.c.InternalIP(ctx, k.nodes)[0] + `:8081`
 }
 
+func (k kafkaManager) createTopic(ctx context.Context, topic string) error {
+	kafkaAddrs := []string{k.consumerURL(ctx)}
+	config := sarama.NewConfig()
+	admin, err := sarama.NewClusterAdmin(kafkaAddrs, config)
+	if err != nil {
+		return errors.Wrap(err, "admin client")
+	}
+	return admin.CreateTopic(topic, &sarama.TopicDetail{
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+	}, false)
+}
+
 func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsumer, error) {
 	kafkaAddrs := []string{k.consumerURL(ctx)}
 	config := sarama.NewConfig()
@@ -1219,7 +1238,7 @@ func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsume
 	if err != nil {
 		return nil, err
 	}
-	tc, err := makeTopicConsumer(consumer, `bank`)
+	tc, err := makeTopicConsumer(consumer, topic)
 	if err != nil {
 		_ = consumer.Close()
 		return nil, err
