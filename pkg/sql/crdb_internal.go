@@ -134,6 +134,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalClusterDatabasePrivilegesTableID: crdbInternalClusterDatabasePrivilegesTable,
 		catconstants.CrdbInternalInterleaved:                      crdbInternalInterleaved,
 		catconstants.CrdbInternalCrossDbRefrences:                 crdbInternalCrossDbReferences,
+		catconstants.CrdbInternalLostTableDescriptors:             crdbLostTableDescriptors,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -4377,5 +4378,63 @@ CREATE TABLE crdb_internal.cross_db_references (
 				}
 				return nil
 			})
+	},
+}
+
+var crdbLostTableDescriptors = virtualSchemaTable{
+	comment: `virtual table with table descriptors that still have data`,
+	schema: `
+CREATE TABLE crdb_internal.lost_descriptors_with_data (
+	descID
+		INTEGER NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, dbContext *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+		maxDescIDKeyVal, err := p.extendedEvalCtx.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
+		if err != nil {
+			return err
+		}
+		maxDescID, err := maxDescIDKeyVal.Value.GetInt()
+		if err != nil {
+			return err
+		}
+		// Get all descriptors which will be used to determine
+		// which ones are missing
+		descriptors, err := catalogkv.GetAllDescriptorsUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
+		if err != nil {
+			return err
+		}
+		descriptorMap := make(map[descpb.ID]*catalog.Descriptor)
+		for _, desc := range descriptors {
+			descriptorMap[desc.GetID()] = &desc
+		}
+		// Loop over every possible descriptor ID
+		for id := int64(1); id < maxDescID; id++ {
+			// Skip over descriptors that are known
+			if _, ok := descriptorMap[descpb.ID(id)]; ok {
+				continue
+			}
+			// Generate a scan over the key space of the table to see
+			// if any data exists.
+			b := kv.Batch{}
+			prefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(id))
+			tableSpans := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+			scanRequest := roachpb.NewScan(tableSpans.Key, tableSpans.EndKey, false).(*roachpb.ScanRequest)
+			scanRequest.ScanFormat = roachpb.BATCH_RESPONSE
+			b.Header.MaxSpanRequestKeys = 1
+			b.AddRawRequest(scanRequest)
+			err = p.extendedEvalCtx.DB.Run(ctx, &b)
+			if err != nil {
+				return err
+			}
+			res := b.RawResponse().Responses[0].GetScan()
+			if res.NumKeys == 0 {
+				continue
+			}
+			// Add a row if any key came back
+			if err := addRow(tree.NewDInt(tree.DInt(id))); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
