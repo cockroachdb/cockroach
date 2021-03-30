@@ -36,7 +36,7 @@ func Covers(a geo.Geometry, b geo.Geometry) (bool, error) {
 	case PolygonAndPoint:
 		// Computing whether a polygon covers a point is equivalent
 		// to computing whether the point is covered by the polygon.
-		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonCoveredBy)
+		return PointKindCoveredByPolygonKind(pointKind, polygonKind)
 	}
 
 	return geos.Covers(a.EWKB(), b.EWKB())
@@ -58,7 +58,7 @@ func CoveredBy(a geo.Geometry, b geo.Geometry) (bool, error) {
 		// A polygon cannot be covered by a point.
 		return false, nil
 	case PointAndPolygon:
-		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonCoveredBy)
+		return PointKindCoveredByPolygonKind(pointKind, polygonKind)
 	}
 
 	return geos.CoveredBy(a.EWKB(), b.EWKB())
@@ -82,7 +82,7 @@ func Contains(a geo.Geometry, b geo.Geometry) (bool, error) {
 	case PolygonAndPoint:
 		// Computing whether a polygon contains a point is equivalent
 		// to computing whether the point is contained within the polygon.
-		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonWithin)
+		return PointKindWithinPolygonKind(pointKind, polygonKind)
 	}
 
 	return geos.Contains(a.EWKB(), b.EWKB())
@@ -148,7 +148,7 @@ func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
 	switch pointPolygonPair {
 	case PointAndPolygon, PolygonAndPoint:
-		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonIntersects)
+		return PointKindIntersectsPolygonKind(pointKind, polygonKind)
 	}
 
 	return geos.Intersects(a.EWKB(), b.EWKB())
@@ -335,7 +335,7 @@ func Within(a geo.Geometry, b geo.Geometry) (bool, error) {
 		// A polygon cannot be contained within a point.
 		return false, nil
 	case PointAndPolygon:
-		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonWithin)
+		return PointKindWithinPolygonKind(pointKind, polygonKind)
 	}
 
 	return geos.Within(a.EWKB(), b.EWKB())

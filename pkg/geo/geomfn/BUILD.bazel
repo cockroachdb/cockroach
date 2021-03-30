@@ -23,6 +23,7 @@ go_library(
         "make_geometry.go",
         "node.go",
         "orientation.go",
+        "point_polygon_optimization.go",
         "remove_repeated_points.go",
         "reverse.go",
         "segmentize.go",
