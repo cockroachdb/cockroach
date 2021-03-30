@@ -218,6 +218,7 @@ project
  │    │    ├── key: (11)
  │    │    ├── fd: (11)-->(2)
  │    │    ├── prune: (2,11)
+ │    │    ├── interesting orderings: (+11)
  │    │    ├── scan xyzs
  │    │    │    ├── columns: xyzs.x:1(int!null) xyzs.y:2(int) z:3(float!null) s:4(string) xyzs.crdb_internal_mvcc_timestamp:5(decimal)
  │    │    │    ├── key: (1)
