@@ -184,7 +184,7 @@ func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datum
 }
 
 // IncrementRowsAffected implements the sql.rowResultWriter interface.
-func (s *streamIngestionResultWriter) IncrementRowsAffected(n int) {
+func (s *streamIngestionResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	s.rowsAffected += n
 }
 

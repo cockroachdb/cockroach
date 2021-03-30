@@ -50,7 +50,7 @@ func NewRowResultWriter(rowContainer *rowcontainer.RowContainer) *RowResultWrite
 }
 
 // IncrementRowsAffected implements the rowResultWriter interface.
-func (b *RowResultWriter) IncrementRowsAffected(n int) {
+func (b *RowResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	b.rowsAffected += n
 }
 
@@ -87,7 +87,7 @@ func newCallbackResultWriter(
 	return &callbackResultWriter{fn: fn}
 }
 
-func (c *callbackResultWriter) IncrementRowsAffected(n int) {
+func (c *callbackResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	c.rowsAffected += n
 }
 
