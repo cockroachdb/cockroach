@@ -26,3 +26,21 @@ CREATE TABLE t()
 
 statement error cannot alter a table's LOCALITY if its database is not multi-region enabled
 ALTER TABLE t SET LOCALITY REGIONAL BY ROW
+
+statement error pgcode 0A000 global_reads cannot be used until cluster version is finalized
+ALTER TABLE t CONFIGURE ZONE USING global_reads = true
+
+statement error pgcode 0A000 global_reads cannot be used until cluster version is finalized
+ALTER TABLE t CONFIGURE ZONE USING global_reads = false
+
+statement error pgcode 0A000 num_voters cannot be used until cluster version is finalized
+ALTER TABLE t CONFIGURE ZONE USING num_voters = 3
+
+statement error pgcode 0A000 num_voters cannot be used until cluster version is finalized
+ALTER TABLE t CONFIGURE ZONE USING num_voters = 0
+
+statement error pgcode 0A000 voter_constraints cannot be used until cluster version is finalized
+ALTER TABLE t CONFIGURE ZONE USING voter_constraints = '[+region=us-east-1]'
+
+statement error pgcode 0A000 voter_constraints cannot be used until cluster version is finalized
+ALTER TABLE t CONFIGURE ZONE USING voter_constraints = ''

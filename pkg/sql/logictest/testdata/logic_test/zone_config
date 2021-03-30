@@ -75,7 +75,6 @@ ALTER TABLE a CONFIGURE ZONE USING
   range_min_bytes = 200000 + 1,
   range_max_bytes = 300000 + 1,
   gc.ttlseconds = 3000 + 600,
-  global_reads = true,
   num_replicas = floor(1.2)::int,
   constraints = '[+region=test]',
   lease_preferences = '[[+region=test]]'
@@ -87,14 +86,12 @@ WHERE feature_name IN (
   'sql.schema.zone_config.table.range_min_bytes',
   'sql.schema.zone_config.table.range_max_bytes',
   'sql.schema.zone_config.table.gc.ttlseconds',
-  'sql.schema.zone_config.table.global_reads',
   'sql.schema.zone_config.table.num_replicas',
   'sql.schema.zone_config.table.constraints'
 ) AND usage_count > 0 ORDER BY feature_name
 ----
 sql.schema.zone_config.table.constraints
 sql.schema.zone_config.table.gc.ttlseconds
-sql.schema.zone_config.table.global_reads
 sql.schema.zone_config.table.num_replicas
 sql.schema.zone_config.table.range_max_bytes
 sql.schema.zone_config.table.range_min_bytes
@@ -106,7 +103,6 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
     range_min_bytes = 200001,
     range_max_bytes = 300001,
     gc.ttlseconds = 3600,
-    global_reads = true,
     num_replicas = 1,
     constraints = '[+region=test]',
     lease_preferences = '[[+region=test]]'
@@ -122,7 +118,6 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
     range_min_bytes = 200001,
     range_max_bytes = 400000,
     gc.ttlseconds = 3600,
-    global_reads = true,
     num_replicas = 1,
     constraints = '[+region=test]',
     lease_preferences = '[[+region=test]]'
@@ -159,7 +154,6 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
     range_min_bytes = 200001,
     range_max_bytes = 400000,
     gc.ttlseconds = 3600,
-    global_reads = true,
     num_replicas = 1,
     constraints = '[+region=test]',
     lease_preferences = '[[+region=test]]'
@@ -265,6 +259,10 @@ SELECT zone_id, raw_config_sql FROM [SHOW ZONE CONFIGURATION FOR TABLE a]
     constraints = '[]',
     voter_constraints = '{+region=test: 1}',
     lease_preferences = '[]'
+
+# Check that global_reads cannot be set without a CCL binary and enterprise license.
+statement error OSS binaries do not include enterprise features
+ALTER TABLE a CONFIGURE ZONE USING global_reads = true
 
 # Check entities for which we can set zone configs.
 subtest test_entity_validity
