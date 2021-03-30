@@ -510,6 +510,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		cfg.Opts = DefaultPebbleOptions()
 	}
 	cfg.Opts.EnsureDefaults()
+	cfg.Opts.Cleaner = pebble.ArchiveCleaner{}
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
 	if settings := cfg.Settings; settings != nil {
 		cfg.Opts.WALMinSyncInterval = func() time.Duration {
