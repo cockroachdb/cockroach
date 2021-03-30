@@ -63,6 +63,20 @@ func MakeMapDescGetter() MapDescGetter {
 	}
 }
 
+// OrderedDescriptors returns the descriptors ordered by ID.
+func (m MapDescGetter) OrderedDescriptors() []Descriptor {
+	set := MakeDescriptorIDSet()
+	for id := range m.Descriptors {
+		set.Add(id)
+	}
+	ids := set.Ordered()
+	ret := make([]Descriptor, len(ids))
+	for j, id := range ids {
+		ret[j] = m.Descriptors[id]
+	}
+	return ret
+}
+
 // GetDesc implements the DescGetter interface.
 func (m MapDescGetter) GetDesc(_ context.Context, id descpb.ID) (Descriptor, error) {
 	desc := m.Descriptors[id]

@@ -407,7 +407,7 @@ func TestInvalidObjects(t *testing.T) {
 	require.Error(t, sqlDB.QueryRow(`SELECT * FROM "".crdb_internal.invalid_objects`).
 		Scan(&id, dbName, schemaName, objName, errStr))
 
-	// Now introduce an inconsistency.
+	// Now introduce some inconsistencies.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT);
@@ -417,6 +417,7 @@ INSERT INTO system.users VALUES ('node', NULL, true);
 GRANT node TO root;
 DELETE FROM system.descriptor WHERE id=52;
 DELETE FROM system.descriptor WHERE id=54;
+UPDATE system.namespace SET id=12345 WHERE id=53;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -435,6 +436,13 @@ DELETE FROM system.descriptor WHERE id=54;
 	require.Equal(t, "", dbName)
 	require.Equal(t, "", schemaName)
 	require.Equal(t, `relation "test" (53): referenced database ID 52: descriptor not found`, errStr)
+
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
+	require.Equal(t, 53, id)
+	require.Equal(t, "", dbName)
+	require.Equal(t, "", schemaName)
+	require.Equal(t, `relation "test" (53): expected matching namespace entry value, instead found 12345`, errStr)
 
 	require.True(t, rows.Next())
 	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))

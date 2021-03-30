@@ -125,7 +125,8 @@ func ExamineDescriptors(
 			problemsFound = true
 			continue
 		}
-		for _, err := range validateSafely(ctx, ddg, desc) {
+		ve := catalog.ValidateWithRecover(ctx, ddg, catalog.ValidationLevelNamespace, desc)
+		for _, err := range ve.Errors() {
 			problemsFound = true
 			descReport(stdout, desc, "%s", err)
 		}
@@ -146,23 +147,6 @@ func ExamineDescriptors(
 	}
 
 	return !problemsFound, err
-}
-
-func validateSafely(
-	ctx context.Context, descGetter catalog.DescGetter, desc catalog.Descriptor,
-) (errs []error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err, ok := r.(error)
-			if !ok {
-				err = errors.Newf("%v", r)
-			}
-			err = errors.WithAssertionFailure(errors.Wrap(err, "validation"))
-			errs = append(errs, err)
-		}
-	}()
-	errs = append(errs, catalog.Validate(ctx, descGetter, catalog.ValidationLevelNamespace, desc).Errors()...)
-	return errs
 }
 
 func validateNamespaceRow(row NamespaceTableRow, desc catalog.Descriptor) error {

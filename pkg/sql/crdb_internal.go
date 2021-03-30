@@ -4059,33 +4059,42 @@ CREATE TABLE crdb_internal.invalid_objects (
 	) error {
 		// The internalLookupContext will only have descriptors in the current
 		// database. To deal with this, we fall through.
-		descs, err := catalogkv.GetAllDescriptorsUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
+		m, err := catalogkv.GetAllDescriptorsAndNamespaceEntriesUnvalidated(ctx, p.txn, p.extendedEvalCtx.Codec)
 		if err != nil {
 			return err
 		}
-		const allowAdding = true
-		if err := forEachTableDescWithTableLookupInternalFromDescriptors(
-			ctx, p, dbContext, hideVirtual, allowAdding, descs, func(
-				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, fn tableLookupFn,
-			) error {
-				if descriptor == nil {
-					return nil
-				}
-				err := catalog.ValidateSelfAndCrossReferences(ctx, fn, descriptor)
-				if err == nil {
-					return nil
-				}
-				var dbName string
-				if dbDesc != nil {
-					dbName = dbDesc.GetName()
-				}
-				return addRow(
+		descs := m.OrderedDescriptors()
+
+		addRowsForObject := func(dbDesc *dbdesc.Immutable, schema string, descriptor catalog.Descriptor) error {
+			if descriptor == nil {
+				return nil
+			}
+			var dbName string
+			if dbDesc != nil {
+				dbName = dbDesc.GetName()
+			}
+			ve := catalog.ValidateWithRecover(ctx, m, catalog.ValidationLevelNamespace, descriptor)
+			for _, validationError := range ve.Errors() {
+				err := addRow(
 					tree.NewDInt(tree.DInt(descriptor.GetID())),
 					tree.NewDString(dbName),
 					tree.NewDString(schema),
 					tree.NewDString(descriptor.GetName()),
-					tree.NewDString(err.Error()),
+					tree.NewDString(validationError.Error()),
 				)
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
+		const allowAdding = true
+		if err := forEachTableDescWithTableLookupInternalFromDescriptors(
+			ctx, p, dbContext, hideVirtual, allowAdding, descs, func(
+				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TableDescriptor, _ tableLookupFn,
+			) error {
+				return addRowsForObject(dbDesc, schema, descriptor)
 			}); err != nil {
 			return err
 		}
@@ -4093,27 +4102,9 @@ CREATE TABLE crdb_internal.invalid_objects (
 		// Validate type descriptors.
 		return forEachTypeDescWithTableLookupInternalFromDescriptors(
 			ctx, p, dbContext, allowAdding, descs, func(
-				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TypeDescriptor, fn tableLookupFn,
+				dbDesc *dbdesc.Immutable, schema string, descriptor catalog.TypeDescriptor, _ tableLookupFn,
 			) error {
-				if descriptor == nil {
-					return nil
-				}
-				err := catalog.ValidateSelfAndCrossReferences(ctx, fn, descriptor)
-				if err == nil {
-					return nil
-				}
-				var dbName string
-				if dbDesc != nil {
-					dbName = dbDesc.GetName()
-				}
-
-				return addRow(
-					tree.NewDInt(tree.DInt(descriptor.GetID())),
-					tree.NewDString(dbName),
-					tree.NewDString(schema),
-					tree.NewDString(descriptor.GetName()),
-					tree.NewDString(err.Error()),
-				)
+				return addRowsForObject(dbDesc, schema, descriptor)
 			})
 	},
 }
