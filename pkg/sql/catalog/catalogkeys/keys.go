@@ -343,6 +343,41 @@ func MakeDeprecatedNameMetadataKey(
 	return k
 }
 
+// DecodeDeprecatedNameMetadataKey returns the components that make up the
+// NameMetadataKey for version < 20.1.
+func DecodeDeprecatedNameMetadataKey(
+	codec keys.SQLCodec, k roachpb.Key,
+) (parentID descpb.ID, name string, err error) {
+	k, _, err = codec.DecodeTablePrefix(k)
+	if err != nil {
+		return 0, "", err
+	}
+
+	var buf uint64
+	k, buf, err = encoding.DecodeUvarintAscending(k)
+	if err != nil {
+		return 0, "", err
+	}
+	if buf != uint64(systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID()) {
+		return 0, "", errors.Newf("tried get table %d, but got %d", systemschema.DeprecatedNamespaceTable.GetPrimaryIndexID(), buf)
+	}
+
+	k, buf, err = encoding.DecodeUvarintAscending(k)
+	if err != nil {
+		return 0, "", err
+	}
+	parentID = descpb.ID(buf)
+
+	var bytesBuf []byte
+	_, bytesBuf, err = encoding.DecodeBytesAscending(k, nil)
+	if err != nil {
+		return 0, "", err
+	}
+	name = string(bytesBuf)
+
+	return parentID, name, nil
+}
+
 // MakeAllDescsMetadataKey returns the key for all descriptors.
 func MakeAllDescsMetadataKey(codec keys.SQLCodec) roachpb.Key {
 	return codec.DescMetadataPrefix()

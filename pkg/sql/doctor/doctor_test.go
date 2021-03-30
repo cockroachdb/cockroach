@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -105,6 +106,7 @@ func TestExamineDescriptors(t *testing.T) {
 	tests := []struct {
 		descTable      doctor.DescriptorTable
 		namespaceTable doctor.NamespaceTable
+		jobsTable      doctor.JobsTable
 		valid          bool
 		errStr         string
 		expected       string
@@ -486,12 +488,42 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID  57, ParentSchemaID 29: relation "c" (60): missing fk back reference "fk_i_ref_b" to "c" from "a"
 `,
 		},
+		{ // 21
+			descTable: doctor.DescriptorTable{
+				{ID: 1, DescBytes: toBytes(t, func() *descpb.Descriptor {
+					desc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
+					tbl, _, _, _ := descpb.FromDescriptor(desc)
+					tbl.MutationJobs = []descpb.TableDescriptor_MutationJob{{MutationID: 1, JobID: 123}}
+					return desc
+				}())},
+				{
+					ID: 2,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+					}}),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+			},
+			jobsTable: doctor.JobsTable{
+				{
+					ID:      123,
+					Payload: &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.SchemaChangeDetails{})},
+					Status:  jobs.StatusCanceled,
+				},
+			},
+			expected: `Examining 2 descriptors and 2 namespace entries...
+  ParentID   2, ParentSchemaID 29: relation "t" (1): mutation job 123 has terminal status (canceled)
+`,
+		},
 	}
 
 	for i, test := range tests {
 		var buf bytes.Buffer
 		valid, err := doctor.ExamineDescriptors(
-			context.Background(), test.descTable, test.namespaceTable, false, &buf)
+			context.Background(), test.descTable, test.namespaceTable, test.jobsTable, false, &buf)
 		msg := fmt.Sprintf("Test %d failed!", i+1)
 		if test.errStr != "" {
 			require.Containsf(t, err.Error(), test.errStr, msg)
@@ -519,10 +551,11 @@ func TestExamineJobs(t *testing.T) {
 				{
 					ID:      1,
 					Payload: &jobspb.Payload{Details: jobspb.WrapPayloadDetails(jobspb.BackupDetails{})},
+					Status:  jobs.StatusRunning,
 				},
 			},
 			valid:    true,
-			expected: "Examining 1 running jobs...\n",
+			expected: "Examining 1 jobs...\n",
 		},
 		{
 			descTable: doctor.DescriptorTable{
@@ -545,6 +578,7 @@ func TestExamineJobs(t *testing.T) {
 								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
 							},
 						})},
+					Status: jobs.StatusRunning,
 				},
 				{
 					ID:      200,
@@ -556,6 +590,7 @@ func TestExamineJobs(t *testing.T) {
 								{ID: 3, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
 							},
 						})},
+					Status: jobs.StatusRunning,
 				},
 				{
 					ID:      300,
@@ -570,16 +605,13 @@ func TestExamineJobs(t *testing.T) {
 								{IndexID: 10, Status: jobspb.SchemaChangeGCProgress_WAITING_FOR_GC},
 							},
 						})},
+					Status: jobs.StatusRunning,
 				},
 			},
-			expected: `Examining 3 running jobs...
-job 100: schema change GC refers to missing table descriptor(s) [3]
-	existing descriptors that still need to be dropped [2]
-job 200: schema change GC refers to missing table descriptor(s) [3]
-	existing descriptors that still need to be dropped []
-	job 200 can be safely deleted
-job 300: schema change GC refers to missing table descriptor(s) [3]
-	existing descriptors that still need to be dropped []
+			expected: `Examining 3 jobs...
+job 100: schema change GC refers to missing table descriptor(s) [3]; existing descriptors that still need to be dropped [2]; job safe to delete: false.
+job 200: schema change GC refers to missing table descriptor(s) [3]; existing descriptors that still need to be dropped []; job safe to delete: true.
+job 300: schema change GC refers to missing table descriptor(s) [3]; existing descriptors that still need to be dropped []; job safe to delete: false.
 `,
 		},
 	}
