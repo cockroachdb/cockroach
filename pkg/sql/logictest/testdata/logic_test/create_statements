@@ -535,6 +535,11 @@ CREATE TABLE crdb_internal.leases (
    expiration TIMESTAMP NOT NULL,
    deleted BOOL NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.lost_descriptors_with_data (
+   descid INT8 NOT NULL
+)  CREATE TABLE crdb_internal.lost_descriptors_with_data (
+   descid INT8 NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.node_build_info (
    node_id INT8 NOT NULL,
    field STRING NOT NULL,
