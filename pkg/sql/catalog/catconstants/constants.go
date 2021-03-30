@@ -81,6 +81,7 @@ const (
 	CrdbInternalClusterDatabasePrivilegesTableID
 	CrdbInternalInterleaved
 	CrdbInternalCrossDbRefrences
+	CrdbInternalLostTableDescriptors
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
