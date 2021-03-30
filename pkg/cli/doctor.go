@@ -300,9 +300,7 @@ FROM system.namespace`
 		if err := protoutil.Unmarshal(progressBytes, md.Progress); err != nil {
 			return err
 		}
-		if md.Status == jobs.StatusRunning {
-			jobsTable = append(jobsTable, md)
-		}
+		jobsTable = append(jobsTable, md)
 		return nil
 	}); err != nil {
 		return nil, nil, nil, err
@@ -405,9 +403,6 @@ func fromZipDir(
 		fields := strings.Fields(row)
 		md := jobs.JobMetadata{}
 		md.Status = jobs.Status(fields[1])
-		if md.Status != jobs.StatusRunning {
-			return nil
-		}
 
 		id, err := strconv.Atoi(fields[0])
 		if err != nil {

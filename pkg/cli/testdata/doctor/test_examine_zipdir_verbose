@@ -92,9 +92,8 @@ Examining 38 descriptors and 43 namespace entries...
   ParentID  52, ParentSchemaID 29: namespace entry "users" (53): processed
   ParentID  52, ParentSchemaID 29: namespace entry "vehicle_location_histories" (56): processed
   ParentID  52, ParentSchemaID 29: namespace entry "vehicles" (54): processed
-Examining 1 running jobs...
+Examining 2 jobs...
+Processing job 587337426939772929
 Processing job 587337426984566785
-job 587337426984566785: schema change GC refers to missing table descriptor(s) [59]
-	existing descriptors that still need to be dropped []
-	job 587337426984566785 can be safely deleted
+job 587337426984566785: running schema change GC refers to missing table descriptor(s) [59]; existing descriptors that still need to be dropped []; job safe to delete: true.
 ERROR: validation failed
