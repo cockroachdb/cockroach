@@ -79,6 +79,7 @@ const (
 	CrdbInternalZonesTableID
 	CrdbInternalInvalidDescriptorsTableID
 	CrdbInternalClusterDatabasePrivilegesTableID
+	CrdbInternalLostTableDescriptors
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
