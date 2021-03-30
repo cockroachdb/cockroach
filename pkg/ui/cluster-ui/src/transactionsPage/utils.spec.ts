@@ -1,6 +1,6 @@
 import { assert } from "chai";
 import { filterTransactions, getStatementsById } from "./utils";
-import { Filters } from ".";
+import { Filters } from "../queryFilter/filter";
 import { data } from "./transactions.fixture";
 import Long from "long";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";

@@ -94,7 +94,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
         <Form.Item>
           <Input
             className={className}
-            placeholder="Search Statement"
+            placeholder="Search Statements"
             onChange={this.onChange}
             prefix={<SearchIcon className={cx("prefix-icon")} />}
             suffix={this.renderSuffix()}

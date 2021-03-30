@@ -1,6 +1,5 @@
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { Filters } from "./";
-import { SelectOptions } from "./filter";
+import { Filters, SelectOptions, getTimeValueInSeconds } from "../queryFilter";
 import { AggregateStatistics } from "../statementsTable";
 import Long from "long";
 import _ from "lodash";
@@ -9,7 +8,6 @@ import { addExecStats, aggregateNumericStats, FixLong } from "../util";
 type Statement = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 type Transaction = protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
-type ExecStats = protos.cockroach.sql.IExecStats;
 
 export const getTrxAppFilterOptions = (
   transactions: Transaction[],
@@ -66,13 +64,6 @@ export const searchTransactionsData = (
   );
 };
 
-function getTimeValue(timeNumber: string, timeUnit: string): number | "empty" {
-  if (arguments.length < 2 || timeNumber === "0") return "empty";
-  return timeUnit === "seconds"
-    ? Number(timeNumber)
-    : Number(timeNumber) / 1000;
-}
-
 export const filterTransactions = (
   data: Transaction[],
   filters: Filters,
@@ -83,8 +74,7 @@ export const filterTransactions = (
       transactions: data,
       activeFilters: 0,
     };
-  const { timeNumber, timeUnit } = filters;
-  const timeValue = getTimeValue(timeNumber, timeUnit);
+  const timeValue = getTimeValueInSeconds(filters);
   const filtersStatus = [
     timeValue && timeValue !== "empty",
     filters.app !== "All",
@@ -185,7 +175,7 @@ const mergeTransactionStats = function(txns: Transaction[]): Transaction {
   return txn;
 };
 
-// aggregateAcrossNodeIDs takes a list of transactions and a list of statemenst that those
+// aggregateAcrossNodeIDs takes a list of transactions and a list of statements that those
 // transactions reference and returns a list of transactions that have been grouped by their
 // fingerprints and had their statistics aggregated across copies of the transaction. This is used
 // to deduplicate identical copies of the transaction that are run on different nodes. CRDB returns

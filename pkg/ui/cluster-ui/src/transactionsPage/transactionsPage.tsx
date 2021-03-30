@@ -1,11 +1,13 @@
 import React from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
+import classNames from "classnames/bind";
+import styles from "../statementsPage/statementsPage.module.scss";
 import { RouteComponentProps } from "react-router-dom";
 import { TransactionsTable } from "../transactionsTable";
 import { TransactionDetails } from "../transactionDetails";
 import { ISortedTablePagination, SortSetting } from "../sortedtable";
 import { Pagination } from "../pagination";
-import { TransactionsPageStatistic } from "./transactionsPageStatistic";
+import { TableStatistics } from "../tableStatistics";
 import {
   baseHeadingClasses,
   statisticsClasses,
@@ -23,25 +25,17 @@ import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
 import { PageConfig, PageConfigItem } from "../pageConfig";
 import { Search } from "../search";
-import { Filter } from "./filter";
+import {
+  Filter,
+  Filters,
+  defaultFilters,
+  getFiltersFromQueryString,
+} from "../queryFilter";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 type TransactionStats = protos.cockroach.sql.ITransactionStatistics;
 
-export interface Filters {
-  app?: string;
-  transactionsType?: string;
-  timeNumber?: string;
-  timeUnit?: string;
-  fullScans?: boolean;
-  distributed?: boolean;
-}
-
-const defaultFilters = {
-  app: "All",
-  timeNumber: "0",
-  timeUnit: "seconds",
-};
+const cx = classNames.bind(styles);
 
 interface TState {
   sortSetting: SortSetting;
@@ -63,6 +57,7 @@ export class TransactionsPage extends React.Component<
   RouteComponentProps & TransactionsPageProps
 > {
   trxSearchParams = getSearchParams(this.props.history.location.search);
+  filters = getFiltersFromQueryString(this.props.history.location.search);
 
   state: TState = {
     sortSetting: {
@@ -74,12 +69,8 @@ export class TransactionsPage extends React.Component<
       pageSize: this.props.pageSize || 20,
       current: 1,
     },
-    search: this.trxSearchParams("q", ""),
-    filters: {
-      app: this.trxSearchParams("app", defaultFilters.app),
-      timeNumber: this.trxSearchParams("timeNumber", defaultFilters.timeNumber),
-      timeUnit: this.trxSearchParams("timeUnit", defaultFilters.timeUnit),
-    },
+    search: this.trxSearchParams("q", "").toString(),
+    filters: this.filters,
     statementIds: null,
     transactionStats: null,
   };
@@ -190,7 +181,7 @@ export class TransactionsPage extends React.Component<
 
   renderTransactionsList() {
     return (
-      <div>
+      <div className={cx("table-area")}>
         <section className={baseHeadingClasses.wrapper}>
           <h1 className={baseHeadingClasses.tableName}>Transactions</h1>
         </section>
@@ -233,7 +224,7 @@ export class TransactionsPage extends React.Component<
                       onSubmit={this.onSubmitSearchField as any}
                       onClear={this.onClearSearchField}
                       defaultValue={search}
-                      placeholder={"Search transactions"}
+                      placeholder={"Search Transactions"}
                     />
                   </PageConfigItem>
                   <PageConfigItem>
@@ -246,7 +237,7 @@ export class TransactionsPage extends React.Component<
                   </PageConfigItem>
                 </PageConfig>
                 <section className={statisticsClasses.tableContainerClass}>
-                  <TransactionsPageStatistic
+                  <TableStatistics
                     pagination={pagination}
                     lastReset={this.lastReset()}
                     search={search}
