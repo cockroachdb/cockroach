@@ -51,6 +51,7 @@ test           crdb_internal       jobs                                   public
 test           crdb_internal       kv_node_status                         public   SELECT
 test           crdb_internal       kv_store_status                        public   SELECT
 test           crdb_internal       leases                                 public   SELECT
+test           crdb_internal       lost_descriptors_with_data             public   SELECT
 test           crdb_internal       node_build_info                        public   SELECT
 test           crdb_internal       node_contention_events                 public   SELECT
 test           crdb_internal       node_inflight_trace_spans              public   SELECT
