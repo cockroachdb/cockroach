@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -363,14 +362,11 @@ func (r *Registry) deprecatedResume(ctx context.Context, resumer Resumer, job *J
 	return nil
 }
 
-func (j *Job) deprecatedInsert(
-	ctx context.Context,
-	txn *kv.Txn,
-	id jobspb.JobID,
-	lease *jobspb.Lease,
-	session sqlliveness.Session,
-) error {
-	j.mu.payload.Lease = lease
+// deprecatedInsert inserts the job into the system table according to now
+// deprecated semantics. This method exists only in order to delete all the
+// deprecated stuff together.
+func (j *Job) deprecatedInsert(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
+	j.mu.payload.Lease = j.registry.deprecatedNewLease()
 
 	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
 		// Note: although the following uses ReadTimestamp and
@@ -388,11 +384,7 @@ func (j *Job) deprecatedInsert(
 		if err != nil {
 			return err
 		}
-		// If there's no session then we know that the sqlliveness subsystem hasn't
-		// been started and thus there's no claim that the corresponding columns
-		// exist.
-		if session == nil && !j.registry.startUsingSQLLivenessAdoption(ctx) {
-			const stmt = `INSERT
+		const stmt = `INSERT
   INTO system.jobs (
                     id,
                     status,
@@ -400,38 +392,8 @@ func (j *Job) deprecatedInsert(
                     progress
                    )
 VALUES ($1, $2, $3, $4);`
-			_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
-				id, StatusRunning, payloadBytes, progressBytes)
-			return err
-		}
-
-		var claimInstanceID, sessionID, createdByType, createdByID interface{}
-		if session != nil {
-			j.sessionID = session.ID()
-			sessionID = j.sessionID.UnsafeBytes()
-			claimInstanceID = int64(j.registry.ID())
-		}
-		if j.createdBy != nil {
-			createdByType = j.createdBy.Name
-			createdByID = j.createdBy.ID
-		}
-		const stmt = `
-INSERT
-  INTO system.jobs (
-                    id,
-                    status,
-                    payload,
-                    progress,
-                    created_by_type,
-                    created_by_id,
-                    claim_session_id,
-                    claim_instance_id
-                   )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8);`
 		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
-			id, StatusRunning, payloadBytes, progressBytes,
-			createdByType, createdByID,
-			sessionID, claimInstanceID)
+			id, StatusRunning, payloadBytes, progressBytes)
 		return err
 	}); err != nil {
 		return err

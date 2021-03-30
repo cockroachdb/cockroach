@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -270,7 +269,7 @@ func (r *Registry) CurrentlyRunningJobs() []jobspb.JobID {
 	return jobs
 }
 
-// ID returns a unique during the lifetume of the registry id that is
+// ID returns a unique during the lifetime of the registry id that is
 // used for keying sqlliveness claims held by the registry.
 func (r *Registry) ID() base.SQLInstanceID {
 	return r.nodeID.SQLInstanceID()
@@ -422,43 +421,17 @@ func (r *Registry) CreateJobWithTxn(
 		if r.startUsingSQLLivenessAdoption(ctx) {
 			err = errors.WithAssertionFailure(err)
 		} else {
+			s = nil
 			err = nil
 		}
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting live session")
 	}
-	if !r.startUsingSQLLivenessAdoption(ctx) {
-		// TODO(spaskob): remove in 20.2 as this code path is only needed while
-		// migrating to 20.2 cluster.
-		if err := j.deprecatedInsert(
-			ctx, txn, jobID, r.deprecatedNewLease(), s,
-		); err != nil {
-			return nil, err
-		}
-		return j, nil
-	}
-	j.sessionID = s.ID()
-	start := timeutil.Now()
-	if txn != nil {
-		start = txn.ReadTimestamp().GoTime()
-	}
-	j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(start)
-	payloadBytes, err := protoutil.Marshal(&j.mu.payload)
-	if err != nil {
+	// TODO(yuzefovich): is using nil lease correct here?
+	if err := j.insert(ctx, txn, jobID, nil /* lease */, s); err != nil {
 		return nil, err
 	}
-	progressBytes, err := protoutil.Marshal(&j.mu.progress)
-	if err != nil {
-		return nil, err
-	}
-	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, `
-INSERT INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
-VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(),
-	); err != nil {
-		return nil, err
-	}
-
 	return j, nil
 }
 
@@ -475,8 +448,8 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 	// in the cluster) to adopt this job at a later time.
 	lease := &jobspb.Lease{NodeID: invalidNodeID}
 
-	if err := j.deprecatedInsert(
-		ctx, txn, jobID, lease, nil,
+	if err := j.insert(
+		ctx, txn, jobID, lease, nil, /* session */
 	); err != nil {
 		return nil, err
 	}

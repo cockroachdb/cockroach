@@ -929,3 +929,77 @@ func (sj *StartableJob) Cancel(ctx context.Context) error {
 	defer sj.registry.unregister(sj.ID())
 	return sj.registry.CancelRequested(ctx, nil, sj.ID())
 }
+
+func (j *Job) insert(
+	ctx context.Context,
+	txn *kv.Txn,
+	id jobspb.JobID,
+	lease *jobspb.Lease,
+	session sqlliveness.Session,
+) error {
+	// If there's no session then we know that the sqlliveness subsystem hasn't
+	// been started and thus there's no claim that the corresponding columns
+	// exist.
+	// TODO(yuzefovich): remove this when removing all of the deprecated jobs
+	// stuff.
+	if session == nil && !j.registry.startUsingSQLLivenessAdoption(ctx) {
+		return j.deprecatedInsert(ctx, txn, id)
+	}
+
+	j.mu.payload.Lease = lease
+
+	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
+		// Note: although the following uses ReadTimestamp and
+		// ReadTimestamp can diverge from the value of now() throughout a
+		// transaction, this may be OK -- we merely required ModifiedMicro
+		// to be equal *or greater* than previously inserted timestamps
+		// computed by now(). For now ReadTimestamp can only move forward
+		// and the assertion ReadTimestamp >= now() holds at all times.
+		start := timeutil.Now()
+		if txn != nil {
+			start = txn.ReadTimestamp().GoTime()
+		}
+		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(start)
+		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
+		if err != nil {
+			return err
+		}
+		progressBytes, err := protoutil.Marshal(&j.mu.progress)
+		if err != nil {
+			return err
+		}
+
+		var claimInstanceID, sessionID, createdByType, createdByID interface{}
+		if session != nil {
+			j.sessionID = session.ID()
+			sessionID = j.sessionID.UnsafeBytes()
+			claimInstanceID = int64(j.registry.ID())
+		}
+		if j.createdBy != nil {
+			createdByType = j.createdBy.Name
+			createdByID = j.createdBy.ID
+		}
+		const stmt = `
+INSERT
+  INTO system.jobs (
+                    id,
+                    status,
+                    payload,
+                    progress,
+                    created_by_type,
+                    created_by_id,
+                    claim_session_id,
+                    claim_instance_id
+                   )
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8);`
+		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
+			id, StatusRunning, payloadBytes, progressBytes,
+			createdByType, createdByID,
+			sessionID, claimInstanceID)
+		return err
+	}); err != nil {
+		return err
+	}
+	j.id = id
+	return nil
+}
