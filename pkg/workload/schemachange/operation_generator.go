@@ -99,6 +99,8 @@ const (
 	addRegion                             // ALTER DATABASE <db> ADD REGION <region>
 	addUniqueConstraint                   // ALTER TABLE <table> ADD CONSTRAINT <constraint> UNIQUE (<column>)
 
+	alterTableLocality // ALTER TABLE <table> LOCALITY <locality>
+
 	createIndex    // CREATE INDEX <index> ON <table> <def>
 	createSequence // CREATE SEQUENCE <sequence> <def>
 	createTable    // CREATE TABLE <table> <def>
@@ -145,6 +147,7 @@ var opFuncs = map[opType]func(*operationGenerator, *pgx.Tx) (string, error){
 	addForeignKeyConstraint: (*operationGenerator).addForeignKeyConstraint,
 	addRegion:               (*operationGenerator).addRegion,
 	addUniqueConstraint:     (*operationGenerator).addUniqueConstraint,
+	alterTableLocality:      (*operationGenerator).alterTableLocality,
 	createIndex:             (*operationGenerator).createIndex,
 	createSequence:          (*operationGenerator).createSequence,
 	createTable:             (*operationGenerator).createTable,
@@ -189,6 +192,7 @@ var opWeights = []int{
 	addForeignKeyConstraint: 0,
 	addRegion:               1,
 	addUniqueConstraint:     0,
+	alterTableLocality:      1,
 	createIndex:             1,
 	createSequence:          1,
 	createTable:             1,
@@ -380,6 +384,47 @@ func (og *operationGenerator) addUniqueConstraint(tx *pgx.Tx) (string, error) {
 	}
 
 	return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)`, tableName, constaintName, columnForConstraint.name), nil
+}
+
+func (og *operationGenerator) alterTableLocality(tx *pgx.Tx) (string, error) {
+	tableName, err := og.randTable(tx, og.pctExisting(true), "")
+	if err != nil {
+		return "", err
+	}
+	tableExists, err := tableExists(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW`, tableName), nil
+	}
+
+	databaseRegionNames, err := getDatabaseRegionNames(tx)
+	if err != nil {
+		return "", err
+	}
+	if len(databaseRegionNames) == 0 {
+		og.expectedExecErrors.add(pgcode.InvalidTableDefinition)
+		return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW`, tableName), nil
+	}
+
+	localityOptions := []func() string{
+		func() string {
+			return "REGIONAL BY TABLE"
+		},
+		func() string {
+			idx := og.params.rng.Intn(len(databaseRegionNames))
+			regionName := tree.Name(databaseRegionNames[idx])
+			return fmt.Sprintf(`REGIONAL BY TABLE IN %s`, regionName.String())
+		},
+		func() string {
+			return "GLOBAL"
+		},
+		// TODO(#62191): do REGIONAL BY ROW and REGIONAL BY ROW AS <column>
+	}
+	idx := og.params.rng.Intn(len(localityOptions))
+	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, localityOptions[idx]()), nil
 }
 
 func getClusterRegionNames(tx *pgx.Tx) (descpb.RegionNames, error) {
