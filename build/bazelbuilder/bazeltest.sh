@@ -2,7 +2,7 @@
 
 set -xuo pipefail
 
-bazel test //pkg:small_tests //pkg:medium_tests //pkg:large_tests //pkg:enormous_tests
+bazel test //pkg:small_tests
 EXIT_CODE=$?
 # Stage artifacts.
 cp -r $(bazel info bazel-testlogs) /artifacts/bazel-testlogs

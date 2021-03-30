@@ -19,5 +19,5 @@ docker run -i ${tty-} --rm --init \
        --workdir="/go/src/github.com/cockroachdb/cockroach" \
        -v "$root:/go/src/github.com/cockroachdb/cockroach:ro" \
        -v "$TMPDIR:/artifacts" \
-       $BAZEL_IMAGE bazeltest.sh
+       $BAZEL_IMAGE ./build/bazelbuilder/bazeltest.sh
 tc_end_block "Run Bazel test"
