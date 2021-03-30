@@ -24,91 +24,136 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestConcurrentDropRegion(t *testing.T) {
+// TestConcurrentAddDropRegions tests all combinations of add/drop as if they
+// were executed by two concurrent sessions. The general sketch of the test is
+// as follows:
+// - First operation is executed and blocks before the enum members are promoted.
+// - The second operation starts once the first operation has reached the type
+//   schema changer. It continues to completion.
+// - The first operation is resumed and allowed to complete.
+// - Verify database regions are as expected.
+// Operations act on a multi-region database that contains a REGIONAL BY ROW
+// table, so as to exercise the repartitioning semantics.
+func TestConcurrentAddDropRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	firstDropAtSchemaChange := false
-	secondDropAtSchemaChange := false
-	waitForFirstDropRegionToReachSchemaChanger := make(chan struct{})
-	waitForSecondDropRegionToReachSchemaChanger := make(chan struct{})
-	waitForFirstDropRegionToFinish := make(chan struct{})
-	var mu syncutil.Mutex
+	skip.UnderRace(t, "times out under race")
 
-	// Pause the first drop region in the type schema changer before it does enum
-	// member promotion. Then release it when the second drop region gets to the
-	// same state. This validates that the second drop region can complete without
-	// requiring an override (something which was not possible before #62354).
-	knobs := base.TestingKnobs{
-		SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-			RunBeforeEnumMemberPromotion: func() {
-				mu.Lock()
-				if !firstDropAtSchemaChange {
-					firstDropAtSchemaChange = true
-					close(waitForFirstDropRegionToReachSchemaChanger)
-					mu.Unlock()
-					<-waitForSecondDropRegionToReachSchemaChanger
-				} else if !secondDropAtSchemaChange {
-					secondDropAtSchemaChange = true
-					// We're the second DROP REGION, close the channel to free the first
-					// DROP REGION.
-					close(waitForSecondDropRegionToReachSchemaChanger)
-					mu.Unlock()
-				}
-			},
+	testCases := []struct {
+		name            string
+		firstOp         string
+		secondOp        string
+		expectedRegions []string
+	}{
+		{
+			"concurrent-drops",
+			`ALTER DATABASE db DROP REGION "us-east2"`,
+			`ALTER DATABASE db DROP REGION "us-east3"`,
+			[]string{"us-east1"},
+		},
+		{
+			"concurrent-adds",
+			`ALTER DATABASE db ADD REGION "us-east4"`,
+			`ALTER DATABASE db ADD REGION "us-east5"`,
+			[]string{"us-east1", "us-east2", "us-east3", "us-east4", "us-east5"},
+		},
+		{
+			"concurrent-add-drop",
+			`ALTER DATABASE db ADD REGION "us-east4"`,
+			`ALTER DATABASE db DROP REGION "us-east3"`,
+			[]string{"us-east1", "us-east2", "us-east4"},
+		},
+		{
+			"concurrent-drop-add",
+			`ALTER DATABASE db DROP REGION "us-east2"`,
+			`ALTER DATABASE db ADD REGION "us-east5"`,
+			[]string{"us-east1", "us-east3", "us-east5"},
 		},
 	}
 
-	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, knobs, nil, /* baseDir */
-	)
-	defer cleanup()
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			firstOp := true
+			firstOpStarted := make(chan struct{})
+			secondOpFinished := make(chan struct{})
+			firstOpFinished := make(chan struct{})
+			var mu syncutil.Mutex
 
-	_, err := sqlDB.Exec(`CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"`)
-	if err != nil {
-		t.Error(err)
-	}
+			knobs := base.TestingKnobs{
+				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+					RunBeforeEnumMemberPromotion: func() {
+						mu.Lock()
+						if firstOp {
+							firstOp = false
+							close(firstOpStarted)
+							mu.Unlock()
+							// Don't promote any members before the second operation reaches
+							// the schema changer as well.
+							<-secondOpFinished
+						} else {
+							mu.Unlock()
+						}
+					},
+				},
+			}
 
-	// Send the first DROP REGION statement on its way.
-	go func() {
-		if _, err := sqlDB.Exec(`ALTER DATABASE db DROP REGION "us-east2"`); err != nil {
-			t.Error(err)
-		}
-		close(waitForFirstDropRegionToFinish)
-	}()
+			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+				t, 5 /* numServers */, knobs, nil, /* baseDir */
+			)
+			defer cleanup()
 
-	// Wait for the first DROP REGION to make it to the schema changer.
-	<-waitForFirstDropRegionToReachSchemaChanger
+			// Create a multi-region database with a REGIONAL BY ROW table inside of it
+			// which needs to be re-partitioned on add/drop operations.
+			_, err := sqlDB.Exec(`
+CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"; 
+CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
+			require.NoError(t, err)
 
-	// Issue the second DROP REGION statement.
-	_, err = sqlDB.Exec(`ALTER DATABASE db DROP REGION "us-east3"`)
+			go func() {
+				if _, err := sqlDB.Exec(tc.firstOp); err != nil {
+					t.Error(err)
+				}
+				close(firstOpFinished)
+			}()
 
-	if err != nil {
-		t.Error(err)
-	}
+			// Wait for the first operation to reach the type schema changer.
+			<-firstOpStarted
 
-	<-waitForFirstDropRegionToFinish
+			// Start with the second operation.
+			_, err = sqlDB.Exec(tc.secondOp)
+			require.NoError(t, err)
+			close(secondOpFinished)
 
-	// Validate that both DROP REGION statements completed.
-	rows, err := sqlDB.Query("SELECT region FROM [SHOW REGIONS FROM DATABASE db]")
-	if err != nil {
-		t.Error(err)
-	}
-	defer rows.Close()
+			<-firstOpFinished
 
-	const expectedRegion = "us-east1"
-	var region string
-	rows.Next()
-	if err := rows.Scan(&region); err != nil {
-		t.Error(err)
-	}
+			rows, err := sqlDB.Query("SELECT count(*) FROM [SHOW REGIONS FROM DATABASE db]")
+			require.NoError(t, err)
 
-	if region != expectedRegion {
-		t.Error(errors.Newf("expected region to be: %q, got %q", expectedRegion, region))
-	}
+			rows.Next()
+			var numRegions int
+			err = rows.Scan(&numRegions)
+			require.NoError(t, err)
+			if numRegions != len(tc.expectedRegions) {
+				t.Fatalf("unexpected number of regions, expected: %d found %d",
+					len(tc.expectedRegions),
+					numRegions,
+				)
+			}
 
-	if rows.Next() {
-		t.Error(errors.New("unexpected number of rows returned"))
+			rows, err = sqlDB.Query("SELECT region FROM [SHOW REGIONS FROM DATABASE db]")
+			require.NoError(t, err)
+			for _, expectedRegion := range tc.expectedRegions {
+				rows.Next()
+				var region string
+				err := rows.Scan(&region)
+				require.NoError(t, err)
+
+				if expectedRegion != region {
+					t.Fatalf("unexpected region, expected: %q found %q", expectedRegion, region)
+				}
+			}
+		})
 	}
 }
 
