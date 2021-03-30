@@ -151,42 +151,45 @@ func (n *MDDepName) equals(other *MDDepName) bool {
 func (md *Metadata) Init() {
 	// Clear the metadata objects to release memory (this clearing pattern is
 	// optimized by Go).
-	// TODO(mgartner): determine if the new clearing pattern is still optimized
-	// by Go. Look at original commit message and assembly.
-	for i := range md.schemas {
-		md.schemas[i] = nil
+	schemas := md.schemas
+	for i := range schemas {
+		schemas[i] = nil
 	}
 
-	for i := range md.cols {
-		md.cols[i] = ColumnMeta{}
+	cols := md.cols
+	for i := range cols {
+		cols[i] = ColumnMeta{}
 	}
 
-	for i := range md.tables {
-		md.tables[i] = TableMeta{}
+	tables := md.tables
+	for i := range tables {
+		tables[i] = TableMeta{}
 	}
 
-	for i := range md.sequences {
-		md.sequences[i] = nil
+	sequences := md.sequences
+	for i := range sequences {
+		sequences[i] = nil
 	}
 
-	for i := range md.deps {
-		md.deps[i] = mdDep{}
+	deps := md.deps
+	for i := range deps {
+		deps[i] = mdDep{}
 	}
 
-	for i := range md.views {
-		md.views[i] = nil
+	views := md.views
+	for i := range views {
+		views[i] = nil
 	}
 
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
-	*md = Metadata{
-		schemas:   md.schemas[:0],
-		cols:      md.cols[:0],
-		tables:    md.tables[:0],
-		sequences: md.sequences[:0],
-		deps:      md.deps[:0],
-		views:     md.views[:0],
-	}
+	*md = Metadata{}
+	md.schemas = schemas[:0]
+	md.cols = cols[:0]
+	md.tables = tables[:0]
+	md.sequences = sequences[:0]
+	md.deps = deps[:0]
+	md.views = views[:0]
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
