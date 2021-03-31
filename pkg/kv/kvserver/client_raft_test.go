@@ -2491,6 +2491,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 func TestReportUnreachableRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+  t.Skip("#59209")
 
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 3,
