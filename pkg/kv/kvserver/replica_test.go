@@ -5594,7 +5594,7 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 // heartbeat within its transaction liveness threshold can be pushed/aborted.
 func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 62860, "flaky test")
+	skip.UnderBazelWithIssue(t, 62860, "flaky test")
 	defer log.Scope(t).Close(t)
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
