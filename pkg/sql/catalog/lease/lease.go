@@ -216,7 +216,7 @@ func (s storage) acquire(
 			return err
 		}
 		if err := catalog.FilterDescriptorState(
-			desc, tree.CommonLookupFlags{IncludeOffline: true}, // filter dropped only
+			desc, tree.CommonLookupFlags{}, // filter all non-public state
 		); err != nil {
 			return err
 		}
@@ -981,7 +981,7 @@ func purgeOldVersions(
 	ctx context.Context,
 	db *kv.DB,
 	id descpb.ID,
-	dropped bool,
+	takenOffline bool,
 	minVersion descpb.DescriptorVersion,
 	m *Manager,
 ) error {
@@ -995,15 +995,15 @@ func purgeOldVersions(
 	}
 	empty := len(t.mu.active.data) == 0 && t.mu.acquisitionsInProgress == 0
 	t.mu.Unlock()
-	if empty && !dropped {
+	if empty && !takenOffline {
 		// We don't currently have a version on this descriptor, so no need to refresh
 		// anything.
 		return nil
 	}
 
-	removeInactives := func(dropped bool) {
+	removeInactives := func(takenOffline bool) {
 		t.mu.Lock()
-		t.mu.takenOffline = dropped
+		t.mu.takenOffline = takenOffline
 		leases := t.removeInactiveVersions()
 		t.mu.Unlock()
 		for _, l := range leases {
@@ -1011,8 +1011,8 @@ func purgeOldVersions(
 		}
 	}
 
-	if dropped {
-		removeInactives(true /* dropped */)
+	if takenOffline {
+		removeInactives(true /* takenOffline */)
 		return nil
 	}
 
@@ -1028,7 +1028,7 @@ func purgeOldVersions(
 		return errRenewLease
 	}
 	newest.incRefcount()
-	removeInactives(false /* dropped */)
+	removeInactives(false /* takenOffline */)
 	s, err := t.release(newest.Descriptor, m.removeOnceDereferenced())
 	if err != nil {
 		return err
@@ -1398,28 +1398,6 @@ func (m *Manager) AcquireByName(
 	parentSchemaID descpb.ID,
 	name string,
 ) (catalog.Descriptor, hlc.Timestamp, error) {
-	// When offline descriptor leases were not allowed to be cached,
-	// attempt to acquire a lease on them would generate a descriptor
-	// offline error. Recent changes allow offline descriptor leases
-	// to be cached, but callers still need the offline error generated.
-	// This logic will release the lease (the lease manager will still
-	// cache it), and generate the offline descriptor error.
-	validateDescriptorForReturn := func(desc catalog.Descriptor,
-		expiration hlc.Timestamp) (catalog.Descriptor, hlc.Timestamp, error) {
-		if desc.Offline() {
-			if err := catalog.FilterDescriptorState(
-				desc, tree.CommonLookupFlags{},
-			); err != nil {
-				err2 := m.Release(desc)
-				if err2 != nil {
-					log.Warningf(ctx, "error releasing lease: %s", err2)
-				}
-				return nil, hlc.Timestamp{}, err
-			}
-		}
-		return desc, expiration, nil
-	}
-
 	// Check if we have cached an ID for this name.
 	descVersion := m.names.get(parentID, parentSchemaID, name, timestamp)
 	if descVersion != nil {
@@ -1434,7 +1412,7 @@ func (m *Manager) AcquireByName(
 					}
 				}
 			}
-			return validateDescriptorForReturn(descVersion.Descriptor, descVersion.expiration)
+			return descVersion.Descriptor, descVersion.expiration, nil
 		}
 		if err := m.Release(descVersion); err != nil {
 			return nil, hlc.Timestamp{}, err
@@ -1444,7 +1422,7 @@ func (m *Manager) AcquireByName(
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
-		return validateDescriptorForReturn(desc, expiration)
+		return desc, expiration, nil
 	}
 
 	// We failed to find something in the cache, or what we found is not
@@ -1513,7 +1491,7 @@ func (m *Manager) AcquireByName(
 			return nil, hlc.Timestamp{}, catalog.ErrDescriptorNotFound
 		}
 	}
-	return validateDescriptorForReturn(desc, expiration)
+	return desc, expiration, nil
 }
 
 // resolveName resolves a descriptor name to a descriptor ID at a particular
@@ -1716,11 +1694,11 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 				}
 
 				id, version, name, state := descpb.GetDescriptorMetadata(desc)
-				dropped := state == descpb.DescriptorState_DROP
+				goingOffline := state == descpb.DescriptorState_DROP || state == descpb.DescriptorState_OFFLINE
 				// Try to refresh the lease to one >= this version.
-				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (dropped %v)",
-					id, version, dropped)
-				if err := purgeOldVersions(ctx, db, id, dropped, version, m); err != nil {
+				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (offline %v)",
+					id, version, goingOffline)
+				if err := purgeOldVersions(ctx, db, id, goingOffline, version, m); err != nil {
 					log.Warningf(ctx, "error purging leases for descriptor %d(%s): %s",
 						id, name, err)
 				}

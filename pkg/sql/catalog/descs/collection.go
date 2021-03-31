@@ -282,7 +282,7 @@ func (tc *Collection) getLeasedDescriptorByName(
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
-		if (catalog.HasInactiveDescriptorError(err) && errors.Is(err, catalog.ErrDescriptorDropped)) ||
+		if catalog.HasInactiveDescriptorError(err) ||
 			errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, true, nil
 		}
