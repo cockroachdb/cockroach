@@ -415,6 +415,34 @@ func TestExamineDescriptors(t *testing.T) {
   ParentID   2, ParentSchemaID 29: namespace entry "t" (1): no matching name info in draining names of dropped relation
 `,
 		},
+		{ // 19
+			descTable: doctor.DescriptorTable{
+				{ID: 1, DescBytes: toBytes(t, func() *descpb.Descriptor {
+					desc := protoutil.Clone(validTableDesc).(*descpb.Descriptor)
+					tbl, _, _, _ := descpb.FromDescriptor(desc)
+					tbl.PrimaryIndex.Disabled = true
+					tbl.PrimaryIndex.InterleavedBy = make([]descpb.ForeignKeyReference, 1)
+					tbl.PrimaryIndex.InterleavedBy[0].Name = "bad_backref"
+					tbl.PrimaryIndex.InterleavedBy[0].Table = 500
+					tbl.PrimaryIndex.InterleavedBy[0].Index = 1
+					return desc
+				}())},
+				{
+					ID: 2,
+					DescBytes: toBytes(t, &descpb.Descriptor{Union: &descpb.Descriptor_Database{
+						Database: &descpb.DatabaseDescriptor{Name: "db", ID: 2},
+					}}),
+				},
+			},
+			namespaceTable: doctor.NamespaceTable{
+				{NameInfo: descpb.NameInfo{ParentID: 2, ParentSchemaID: 29, Name: "t"}, ID: 1},
+				{NameInfo: descpb.NameInfo{Name: "db"}, ID: 2},
+			},
+			expected: `Examining 2 descriptors and 2 namespace entries...
+  ParentID   2, ParentSchemaID 29: relation "t" (1): invalid interleave backreference table=500 index=1: referenced table ID 500: descriptor not found
+  ParentID   2, ParentSchemaID 29: relation "t" (1): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
+`,
+		},
 	}
 
 	for i, test := range tests {
