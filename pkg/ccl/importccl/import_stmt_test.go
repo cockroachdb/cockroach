@@ -1700,6 +1700,7 @@ func TestImportRowLimit(t *testing.T) {
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+  t.Skip("#62853")
 	skip.UnderShort(t)
 	skip.UnderRace(t, "takes >1min under race")
 
