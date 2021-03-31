@@ -9,7 +9,9 @@
 package cliccl
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"net/url"
 	"os"
@@ -51,6 +53,9 @@ import (
 
 var externalIODir string
 var readTime string
+var destination string
+var format string
+var nullas string
 
 func init() {
 
@@ -120,6 +125,27 @@ func init() {
 		"", /*value*/
 		cliflags.ReadTime.Usage())
 
+	loadShowDataCmd.Flags().StringVarP(
+		&destination,
+		cliflags.ExportDestination.Name,
+		cliflags.ExportDestination.Shorthand,
+		"", /*value*/
+		cliflags.ExportDestination.Usage())
+
+	loadShowDataCmd.Flags().StringVarP(
+		&format,
+		cliflags.ExportTableFormat.Name,
+		cliflags.ExportTableFormat.Shorthand,
+		"csv", /*value*/
+		cliflags.ExportTableFormat.Usage())
+
+	loadShowDataCmd.Flags().StringVarP(
+		&nullas,
+		cliflags.ExportCSVNullas.Name,
+		cliflags.ExportCSVNullas.Shorthand,
+		"null", /*value*/
+		cliflags.ExportCSVNullas.Usage())
+
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadShowCmds)
 
@@ -146,23 +172,24 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 	return blobs.NewLocalClient(externalIODir)
 }
 
+func externalStorageFromURIFactory(
+	ctx context.Context, uri string, user security.SQLUsername,
+) (cloud.ExternalStorage, error) {
+	return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
+		cluster.NoSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
+}
+
 func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManifest, error) {
 
 	if !strings.Contains(path, "://") {
 		path = cloudimpl.MakeLocalStorageURI(path)
-	}
-
-	externalStorageFromURI := func(ctx context.Context, uri string,
-		user security.SQLUsername) (cloud.ExternalStorage, error) {
-		return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
-			cluster.NoSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
 	}
 	// This reads the raw backup descriptor (with table descriptors possibly not
 	// upgraded from the old FK representation, or even older formats). If more
 	// fields are added to the output, the table descriptors may need to be
 	// upgraded.
 	backupManifest, err := backupccl.ReadBackupManifestFromURI(ctx, path, security.RootUserName(),
-		externalStorageFromURI, nil)
+		externalStorageFromURIFactory, nil)
 	if err != nil {
 		return backupccl.BackupManifest{}, err
 	}
@@ -191,8 +218,7 @@ func runLoadShowBackups(cmd *cobra.Command, args []string) error {
 		path = cloudimpl.MakeLocalStorageURI(path)
 	}
 	ctx := context.Background()
-	store, err := cloudimpl.ExternalStorageFromURI(ctx, path, base.ExternalIODirConfig{},
-		cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+	store, err := externalStorageFromURIFactory(ctx, path, security.RootUserName())
 	if err != nil {
 		return errors.Wrapf(err, "connect to external storage")
 	}
@@ -227,8 +253,7 @@ func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	store, err := cloudimpl.ExternalStorageFromURI(ctx, uri.String(), base.ExternalIODirConfig{},
-		cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+	store, err := externalStorageFromURIFactory(ctx, uri.String(), security.RootUserName())
 	if err != nil {
 		return errors.Wrapf(err, "connect to external storage")
 	}
@@ -249,8 +274,7 @@ func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
 
 		if i > 0 {
 			uri.Path = filepath.Join(basepath, manifestPaths[i])
-			stores[i], err = cloudimpl.ExternalStorageFromURI(ctx, uri.String(), base.ExternalIODirConfig{},
-				cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+			stores[i], err = externalStorageFromURIFactory(ctx, uri.String(), security.RootUserName())
 			if err != nil {
 				return errors.Wrapf(err, "connect to external storage")
 			}
@@ -422,8 +446,8 @@ func runLoadShowData(cmd *cobra.Command, args []string) error {
 		return errors.Wrapf(err, "fetching entry")
 	}
 
-	if err = showDatum(ctx, entry, endTime, codec); err != nil {
-		return errors.Wrapf(err, "showing key-value pairs")
+	if err = showData(ctx, entry, endTime, codec); err != nil {
+		return errors.Wrapf(err, "show data")
 	}
 	return nil
 }
@@ -448,7 +472,7 @@ func evalAsOfTimestamp(readTime string) (hlc.Timestamp, error) {
 	return hlc.Timestamp{}, err
 }
 
-func showDatum(
+func showData(
 	ctx context.Context, entry backupccl.BackupTableEntry, endTime hlc.Timestamp, codec keys.SQLCodec,
 ) (err error) {
 
@@ -457,10 +481,9 @@ func showDatum(
 		return errors.Wrapf(err, "make iters")
 	}
 	defer func() {
-		if err != nil {
-			_ = cleanup()
-		} else {
-			err = cleanup()
+		cleanupErr := cleanup()
+		if err == nil {
+			err = cleanupErr
 		}
 	}()
 
@@ -471,6 +494,7 @@ func showDatum(
 	if err != nil {
 		return errors.Wrapf(err, "make row fetcher")
 	}
+	defer rf.Close(ctx)
 
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key}, storage.MVCCKey{Key: entry.Span.EndKey}
 	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, endTime)
@@ -478,6 +502,19 @@ func showDatum(
 	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {
 		return errors.Wrapf(err, "row fetcher starts scan")
 	}
+
+	var writer *csv.Writer
+	if format != "csv" {
+		return errors.Newf("only exporting to csv format is supported")
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	if destination == "" {
+		writer = csv.NewWriter(os.Stdout)
+	} else {
+		writer = csv.NewWriter(buf)
+	}
+
 	for {
 		datums, _, _, err := rf.NextRowDecoded(ctx)
 		if err != nil {
@@ -486,7 +523,31 @@ func showDatum(
 		if datums == nil {
 			break
 		}
-		fmt.Println(datums)
+		row := make([]string, datums.Len())
+		for i, datum := range datums {
+			if datum == tree.DNull {
+				row[i] = nullas
+			} else {
+				row[i] = datum.String()
+			}
+		}
+		if err := writer.Write(row); err != nil {
+			return err
+		}
+		writer.Flush()
+	}
+
+	if destination != "" {
+		dir, file := filepath.Split(destination)
+		store, err := externalStorageFromURIFactory(ctx, dir, security.RootUserName())
+		if err != nil {
+			return errors.Wrapf(err, "unable to open store to write files: %s", destination)
+		}
+		if err = store.WriteFile(ctx, file, bytes.NewReader(buf.Bytes())); err != nil {
+			_ = store.Close()
+			return err
+		}
+		return store.Close()
 	}
 	return err
 }

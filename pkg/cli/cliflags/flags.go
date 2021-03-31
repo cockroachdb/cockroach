@@ -1427,4 +1427,26 @@ exist. The interval is specified with a suffix of 's' for seconds,
 'm' for minutes, and 'h' for hours.
 `,
 	}
+
+	ExportDestination = FlagInfo{
+		Name: "destination",
+		Description: `
+The destination to export data. 
+If the export format is readable and this flag left specified,
+defaults to displays the exported data in the terminal output.
+`,
+	}
+
+	ExportTableFormat = FlagInfo{
+		Name: "format",
+		Description: `
+Selects the format to export table rows from backups. 
+Only csv is supported at the moment.
+`,
+	}
+
+	ExportCSVNullas = FlagInfo{
+		Name:        "nullas",
+		Description: `The string that should be used to represent NULL values. `,
+	}
 )
