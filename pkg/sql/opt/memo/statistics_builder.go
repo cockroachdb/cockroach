@@ -782,7 +782,7 @@ func (sb *statisticsBuilder) constrainScan(
 	// Calculate distinct counts and histograms for the partial index predicate
 	// ------------------------------------------------------------------------
 	if pred != nil {
-		predUnappliedConjucts, predConstrainedCols, predHistCols := sb.applyFilter(pred, scan, relProps)
+		predUnappliedConjucts, predConstrainedCols, predHistCols := sb.applyFilters(pred, scan, relProps)
 		numUnappliedConjuncts += predUnappliedConjucts
 		constrainedCols.UnionWith(predConstrainedCols)
 		constrainedCols = sb.tryReduceCols(constrainedCols, s, MakeTableFuncDep(sb.md, scan.Table))
@@ -1111,7 +1111,7 @@ func (sb *statisticsBuilder) buildJoin(
 
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
-	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilter(h.filters, join, relProps)
+	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilters(h.filters, join, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -1638,7 +1638,7 @@ func (sb *statisticsBuilder) buildZigzagJoin(
 	// to iterate through FixedCols here if we are already processing the ON
 	// clause.
 	// TODO(rytaft): use histogram for zig zag join.
-	numUnappliedConjuncts, constrainedCols, _ := sb.applyFilter(zigzag.On, zigzag, relProps)
+	numUnappliedConjuncts, constrainedCols, _ := sb.applyFilters(zigzag.On, zigzag, relProps)
 
 	// Application of constraints on inverted indexes needs to be handled a
 	// little differently since a constraint on an inverted index key column
@@ -2844,7 +2844,7 @@ func (sb *statisticsBuilder) filterRelExpr(
 
 	// Calculate distinct counts and histograms for constrained columns
 	// ----------------------------------------------------------------
-	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilter(filters, e, relProps)
+	numUnappliedConjuncts, constrainedCols, histCols := sb.applyFilters(filters, e, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -2871,25 +2871,13 @@ func (sb *statisticsBuilder) filterRelExpr(
 	sb.applyEquivalencies(equivReps, &equivFD, e, notNullCols, s)
 }
 
-// applyFilter uses constraints to update the distinct counts and histograms
+// applyFilters uses constraints to update the distinct counts and histograms
 // for the constrained columns in the filter. The changes in the distinct
 // counts and histograms will be used later to determine the selectivity of
 // the filter.
 //
-// Some filters can be translated directly to distinct counts using the
-// constraint set. For example, the tight constraint `/a: [/1 - /1]` indicates
-// that column `a` has exactly one distinct value.  Other filters, such as
-// `a % 2 = 0` may not have a tight constraint. In this case, it is not
-// possible to determine the distinct count for column `a`, so instead we
-// increment numUnappliedConjuncts, which will be used later for selectivity
-// calculation. See comments in applyConstraintSet and
-// updateDistinctCountsFromConstraint for more details about how distinct
-// counts are calculated from constraints.
-//
-// Equalities between two variables (e.g., var1=var2) are handled separately.
-// See applyEquivalencies and selectivityFromEquivalencies for details.
-//
-func (sb *statisticsBuilder) applyFilter(
+// See applyFiltersItem for more details.
+func (sb *statisticsBuilder) applyFilters(
 	filters FiltersExpr, e RelExpr, relProps *props.Relational,
 ) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
 	// Special hack for lookup and inverted joins. Add constant filters from the
@@ -2904,70 +2892,98 @@ func (sb *statisticsBuilder) applyFilter(
 		filters = append(filters, t.ConstFilters...)
 	}
 
-	applyConjunct := func(conjunct *FiltersItem) {
-		if isEqualityWithTwoVars(conjunct.Condition) {
-			// We'll handle equalities later.
-			return
-		}
-
-		// Special case: The current conjunct is an inverted join condition.
-		if isInvertedJoinCond(conjunct.Condition) {
-			// We'll handle this case later.
-			return
-		}
-
-		// Special case: The current conjunct is a JSON or Array Contains
-		// operator, or an equality operator with a JSON fetch value operator on
-		// the left (for example j->'a' = '1'). If so, count every path to a
-		// leaf node in the RHS as a separate conjunct. If for whatever reason
-		// we can't get to the JSON or Array datum or enumerate its paths, count
-		// the whole operator as one conjunct.
-		if conjunct.Condition.Op() == opt.ContainsOp ||
-			(conjunct.Condition.Op() == opt.EqOp && conjunct.Condition.Child(0).Op() == opt.FetchValOp) {
-			numPaths := countPaths(conjunct)
-			if numPaths == 0 {
-				numUnappliedConjuncts++
-			} else {
-				// Multiply the number of paths by 2 to mimic the logic in
-				// numConjunctsInConstraint, for constraints like
-				// /1: [/'{"a":"b"}' - /'{"a":"b"}'] . That function counts
-				// this as 2 conjuncts, and to keep row counts as consistent
-				// as possible between competing filtered selects and
-				// constrained scans, we apply the same logic here.
-				numUnappliedConjuncts += 2 * float64(numPaths)
-			}
-			return
-		}
-
-		// Update constrainedCols after the above check for isEqualityWithTwoVars.
-		// We will use constrainedCols later to determine which columns to use for
-		// selectivity calculation in selectivityFromMultiColDistinctCounts, and we
-		// want to make sure that we don't include columns that were only present in
-		// equality conjuncts such as var1=var2. The selectivity of these conjuncts
-		// will be accounted for in selectivityFromEquivalencies.
-		scalarProps := conjunct.ScalarProps()
-		constrainedCols.UnionWith(scalarProps.OuterCols)
-		if scalarProps.Constraints != nil {
-			histColsLocal := sb.applyConstraintSet(
-				scalarProps.Constraints, scalarProps.TightConstraints, e, relProps,
-			)
-			histCols.UnionWith(histColsLocal)
-			if !scalarProps.TightConstraints {
-				numUnappliedConjuncts++
-				// Mimic constrainScan in the case of no histogram information
-				// that assumes a geo function is a single closed span that
-				// corresponds to two "conjuncts".
-				if isGeoIndexScanCond(conjunct.Condition) {
-					numUnappliedConjuncts++
-				}
-			}
-		} else {
-			numUnappliedConjuncts++
-		}
+	for i := range filters {
+		numUnappliedConjunctsLocal, constrainedColsLocal, histColsLocal :=
+			sb.applyFiltersItem(&filters[i], e, relProps)
+		numUnappliedConjuncts += numUnappliedConjunctsLocal
+		constrainedCols.UnionWith(constrainedColsLocal)
+		histCols.UnionWith(histColsLocal)
 	}
 
-	for i := range filters {
-		applyConjunct(&filters[i])
+	return numUnappliedConjuncts, constrainedCols, histCols
+}
+
+// applyFiltersItem uses constraints to update the distinct counts and
+// histograms for the constrained columns in the filters item. The changes in
+// the distinct counts and histograms will be used later to determine the
+// selectivity of the filter.
+//
+// Some filters can be translated directly to distinct counts using the
+// constraint set. For example, the tight constraint `/a: [/1 - /1]` indicates
+// that column `a` has exactly one distinct value.  Other filters, such as
+// `a % 2 = 0` may not have a tight constraint. In this case, it is not
+// possible to determine the distinct count for column `a`, so instead we
+// increment numUnappliedConjuncts, which will be used later for selectivity
+// calculation. See comments in applyConstraintSet and
+// updateDistinctCountsFromConstraint for more details about how distinct
+// counts are calculated from constraints.
+//
+// Equalities between two variables (e.g., var1=var2) are handled separately.
+// See applyEquivalencies and selectivityFromEquivalencies for details.
+//
+// Inverted join conditions are handled separately. See
+// selectivityFromInvertedJoinCondition.
+func (sb *statisticsBuilder) applyFiltersItem(
+	filter *FiltersItem, e RelExpr, relProps *props.Relational,
+) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
+	if isEqualityWithTwoVars(filter.Condition) {
+		// Equalities are handled by applyEquivalencies.
+		return 0, opt.ColSet{}, opt.ColSet{}
+	}
+
+	// Special case: The current conjunct is an inverted join condition which is
+	// handled by selectivityFromInvertedJoinCondition.
+	if isInvertedJoinCond(filter.Condition) {
+		return 0, opt.ColSet{}, opt.ColSet{}
+	}
+
+	// Special case: The current conjunct is a JSON or Array Contains
+	// operator, or an equality operator with a JSON fetch value operator on
+	// the left (for example j->'a' = '1'). If so, count every path to a
+	// leaf node in the RHS as a separate conjunct. If for whatever reason
+	// we can't get to the JSON or Array datum or enumerate its paths, count
+	// the whole operator as one conjunct.
+	if filter.Condition.Op() == opt.ContainsOp ||
+		(filter.Condition.Op() == opt.EqOp && filter.Condition.Child(0).Op() == opt.FetchValOp) {
+		numPaths := countPaths(filter)
+		if numPaths == 0 {
+			numUnappliedConjuncts++
+		} else {
+			// Multiply the number of paths by 2 to mimic the logic in
+			// numConjunctsInConstraint, for constraints like
+			// /1: [/'{"a":"b"}' - /'{"a":"b"}'] . That function counts
+			// this as 2 conjuncts, and to keep row counts as consistent
+			// as possible between competing filtered selects and
+			// constrained scans, we apply the same logic here.
+			numUnappliedConjuncts += 2 * float64(numPaths)
+		}
+		return numUnappliedConjuncts, opt.ColSet{}, opt.ColSet{}
+	}
+
+	// Update constrainedCols after the above check for isEqualityWithTwoVars.
+	// We will use constrainedCols later to determine which columns to use for
+	// selectivity calculation in selectivityFromMultiColDistinctCounts, and we
+	// want to make sure that we don't include columns that were only present in
+	// equality conjuncts such as var1=var2. The selectivity of these conjuncts
+	// will be accounted for in selectivityFromEquivalencies.
+	scalarProps := filter.ScalarProps()
+	constrainedCols.UnionWith(scalarProps.OuterCols)
+	if scalarProps.Constraints != nil {
+		histColsLocal := sb.applyConstraintSet(
+			scalarProps.Constraints, scalarProps.TightConstraints, e, relProps,
+		)
+		histCols.UnionWith(histColsLocal)
+		if !scalarProps.TightConstraints {
+			numUnappliedConjuncts++
+			// Mimic constrainScan in the case of no histogram information
+			// that assumes a geo function is a single closed span that
+			// corresponds to two "conjuncts".
+			if isGeoIndexScanCond(filter.Condition) {
+				numUnappliedConjuncts++
+			}
+		}
+	} else {
+		numUnappliedConjuncts++
 	}
 
 	return numUnappliedConjuncts, constrainedCols, histCols
