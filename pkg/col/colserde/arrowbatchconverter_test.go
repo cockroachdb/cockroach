@@ -61,35 +61,27 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	coldata.AssertEquivalentBatches(t, expected, actual)
 }
 
-// roundTripBatch is a helper function that round trips a batch through the
-// ArrowBatchConverter and RecordBatchSerializer. Make sure to copy the input
-// batch before passing it to this function to assert equality.
+// roundTripBatch is a helper function that pushes the source batch through the
+// ArrowBatchConverter and RecordBatchSerializer. The result is written to dest.
 func roundTripBatch(
-	b coldata.Batch,
-	c *colserde.ArrowBatchConverter,
-	r *colserde.RecordBatchSerializer,
-	typs []*types.T,
-) (coldata.Batch, error) {
+	src, dest coldata.Batch, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
+) error {
 	var buf bytes.Buffer
-	arrowDataIn, err := c.BatchToArrow(b)
+	arrowDataIn, err := c.BatchToArrow(src)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	_, _, err = r.Serialize(&buf, arrowDataIn, b.Length())
+	_, _, err = r.Serialize(&buf, arrowDataIn, src.Length())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	var arrowDataOut []*array.Data
 	batchLength, err := r.Deserialize(&arrowDataOut, buf.Bytes())
 	if err != nil {
-		return nil, err
+		return err
 	}
-	actual := testAllocator.NewMemBatchWithFixedCapacity(typs, batchLength)
-	if err := c.ArrowToBatch(arrowDataOut, batchLength, actual); err != nil {
-		return nil, err
-	}
-	return actual, nil
+	return c.ArrowToBatch(arrowDataOut, batchLength, dest)
 }
 
 func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
@@ -98,26 +90,45 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	for run := 0; run < 10; run++ {
 		var typs []*types.T
-		var b coldata.Batch
+		var src coldata.Batch
 		if rng.Float64() < 0.1 {
 			// In 10% of cases we'll use a zero length schema.
-			b = testAllocator.NewMemBatchWithFixedCapacity(typs, rng.Intn(coldata.BatchSize())+1)
-			b.SetLength(b.Capacity())
+			src = testAllocator.NewMemBatchWithFixedCapacity(typs, rng.Intn(coldata.BatchSize())+1)
+			src.SetLength(src.Capacity())
 		} else {
-			typs, b = randomBatch(testAllocator)
+			typs, src = randomBatch(testAllocator)
 		}
+		dest := testAllocator.NewMemBatchWithMaxCapacity(typs)
 		c, err := colserde.NewArrowBatchConverter(typs)
 		require.NoError(t, err)
 		r, err := colserde.NewRecordBatchSerializer(typs)
 		require.NoError(t, err)
 
-		// Make a copy of the original batch because the converter modifies and
-		// casts data without copying for performance reasons.
-		expected := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
-		actual, err := roundTripBatch(b, c, r, typs)
-		require.NoError(t, err)
+		// Reuse the same destination batch as well as the ArrowBatchConverter
+		// and RecordBatchSerializer in order to simulate how these things are
+		// used in the production setting.
+		for i := 0; i < 10; i++ {
+			require.NoError(t, roundTripBatch(src, dest, c, r))
 
-		coldata.AssertEquivalentBatches(t, expected, actual)
+			coldata.AssertEquivalentBatches(t, src, dest)
+			// Check that we can actually read each tuple from the destination
+			// batch.
+			for _, vec := range dest.ColVecs() {
+				for tupleIdx := 0; tupleIdx < dest.Length(); tupleIdx++ {
+					coldata.GetValueAt(vec, tupleIdx)
+				}
+			}
+
+			// Generate the new source batch.
+			nullProbability := rng.Float64()
+			if rng.Float64() < 0.1 {
+				// In some cases, make sure that there are no nulls at all.
+				nullProbability = 0
+			}
+			capacity := rng.Intn(coldata.BatchSize()) + 1
+			length := rng.Intn(capacity)
+			src = coldatatestutils.RandomBatch(testAllocator, rng, typs, capacity, length, nullProbability)
+		}
 	}
 }
 
