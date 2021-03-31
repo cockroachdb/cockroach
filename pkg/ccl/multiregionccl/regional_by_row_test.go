@@ -552,37 +552,50 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 	// Decrease the adopt loop interval so that retries happen quickly.
 	defer sqltestutils.SetTestJobsAdoptInterval()()
 
-	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
-		t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
-	)
-	defer cleanup()
+	for _, tc := range []struct {
+		locality string
+	}{
+		{locality: "REGIONAL BY TABLE"},
+		{locality: "GLOBAL"},
+		{locality: "REGIONAL BY ROW AS region_col"},
+	} {
+		t.Run(tc.locality, func(t *testing.T) {
+			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+				t, 3 /* numServers */, base.TestingKnobs{}, nil, /* baseDir */
+			)
+			defer cleanup()
 
-	_, err := sqlDB.Exec(
-		`CREATE DATABASE "mr-zone-configs" WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+			_, err := sqlDB.Exec(
+				`CREATE DATABASE "mr-zone-configs" WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
 USE "mr-zone-configs";
 CREATE TABLE regional_by_row (
   pk INT PRIMARY KEY,
+	region_col crdb_internal_region NOT NULL,
   i INT,
-  INDEX(i),
-  FAMILY (pk, i)
+  INDEX(i)
 ) LOCALITY REGIONAL BY ROW`)
-	require.NoError(t, err)
+			require.NoError(t, err)
 
-	// Alter the table to REGIONAL BY TABLE, and then back to REGIONAL BY ROW, to
-	// create some indexes that need cleaning up.
-	_, err = sqlDB.Exec(`ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY TABLE;
-ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW`)
-	require.NoError(t, err)
+			// Alter the table to REGIONAL BY TABLE, and then back to REGIONAL BY ROW, to
+			// create some indexes that need cleaning up.
+			_, err = sqlDB.Exec(
+				fmt.Sprintf(
+					`ALTER TABLE regional_by_row SET LOCALITY %s;
+						ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW`,
+					tc.locality,
+				),
+			)
+			require.NoError(t, err)
 
-	// Validate that the indexes requiring cleanup exist.
-	type row struct {
-		status  string
-		details string
-	}
+			// Validate that the indexes requiring cleanup exist.
+			type row struct {
+				status  string
+				details string
+			}
 
-	for {
-		// First confirm that the schema change job has completed
-		res := sqlDB.QueryRow(`WITH jobs AS (
+			for {
+				// First confirm that the schema change job has completed
+				res := sqlDB.QueryRow(`WITH jobs AS (
       SELECT status, crdb_internal.pb_to_json(
 			'cockroach.sql.jobs.jobspb.Payload',
 			payload,
@@ -594,18 +607,18 @@ ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW`)
     FROM jobs
     WHERE (job->>'schemaChange') IS NOT NULL AND status = 'running'`)
 
-		require.NoError(t, res.Err())
+				require.NoError(t, res.Err())
 
-		numJobs := 0
-		err = res.Scan(&numJobs)
-		require.NoError(t, err)
-		if numJobs == 0 {
-			break
-		}
-	}
+				numJobs := 0
+				err = res.Scan(&numJobs)
+				require.NoError(t, err)
+				if numJobs == 0 {
+					break
+				}
+			}
 
-	queryIndexGCJobsAndValidateCount := func(status string, expectedCount int) error {
-		query := `WITH jobs AS (
+			queryIndexGCJobsAndValidateCount := func(status string, expectedCount int) error {
+				query := `WITH jobs AS (
       SELECT status, crdb_internal.pb_to_json(
 			'cockroach.sql.jobs.jobspb.Payload',
 			payload,
@@ -617,42 +630,44 @@ ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW`)
     FROM jobs
     WHERE (job->>'schemaChangeGC') IS NOT NULL AND status = '%s'`
 
-		res, err := sqlDB.Query(fmt.Sprintf(query, status))
-		require.NoError(t, err)
+				res, err := sqlDB.Query(fmt.Sprintf(query, status))
+				require.NoError(t, err)
 
-		var rows []row
-		for res.Next() {
-			r := row{}
-			err = res.Scan(&r.status, &r.details)
+				var rows []row
+				for res.Next() {
+					r := row{}
+					err = res.Scan(&r.status, &r.details)
+					require.NoError(t, err)
+					rows = append(rows, r)
+				}
+				actualCount := len(rows)
+				if actualCount != expectedCount {
+					return errors.Newf("expected %d jobs with status %q, found %d. Jobs found: %v",
+						expectedCount,
+						status,
+						actualCount,
+						rows)
+				}
+				return nil
+			}
+
+			// Now check that we have the right number of index GC jobs pending.
+			err = queryIndexGCJobsAndValidateCount(`running`, 4)
 			require.NoError(t, err)
-			rows = append(rows, r)
-		}
-		actualCount := len(rows)
-		if actualCount != expectedCount {
-			return errors.Newf("expected %d jobs with status %q, found %d. Jobs found: %v",
-				expectedCount,
-				status,
-				actualCount,
-				rows)
-		}
-		return nil
+			err = queryIndexGCJobsAndValidateCount(`succeeded`, 0)
+			require.NoError(t, err)
+
+			// Change gc.ttlseconds to speed up the cleanup.
+			_, err = sqlDB.Exec(`ALTER TABLE regional_by_row CONFIGURE ZONE USING gc.ttlseconds = 1`)
+			require.NoError(t, err)
+
+			// Validate that indexes are cleaned up.
+			queryAndEnsureThatFourIndexGCJobsSucceeded := func() error {
+				return queryIndexGCJobsAndValidateCount(`succeeded`, 4)
+			}
+			testutils.SucceedsSoon(t, queryAndEnsureThatFourIndexGCJobsSucceeded)
+			err = queryIndexGCJobsAndValidateCount(`running`, 0)
+			require.NoError(t, err)
+		})
 	}
-
-	// Now check that we have the right number of index GC jobs pending.
-	err = queryIndexGCJobsAndValidateCount(`running`, 4)
-	require.NoError(t, err)
-	err = queryIndexGCJobsAndValidateCount(`succeeded`, 0)
-	require.NoError(t, err)
-
-	// Change gc.ttlseconds to speed up the cleanup.
-	_, err = sqlDB.Exec(`ALTER TABLE regional_by_row CONFIGURE ZONE USING gc.ttlseconds = 1`)
-	require.NoError(t, err)
-
-	// Validate that indexes are cleaned up.
-	queryAndEnsureThatFourIndexGCJobsSucceeded := func() error {
-		return queryIndexGCJobsAndValidateCount(`succeeded`, 4)
-	}
-	testutils.SucceedsSoon(t, queryAndEnsureThatFourIndexGCJobsSucceeded)
-	err = queryIndexGCJobsAndValidateCount(`running`, 0)
-	require.NoError(t, err)
 }
