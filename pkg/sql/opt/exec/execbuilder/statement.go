@@ -200,6 +200,7 @@ func (b *Builder) buildAlterTableRelocate(relocate *memo.AlterTableRelocateExpr)
 		table.Index(relocate.Index),
 		input.root,
 		relocate.RelocateLease,
+		relocate.RelocateNonVoters,
 	)
 	if err != nil {
 		return execPlan{}, err

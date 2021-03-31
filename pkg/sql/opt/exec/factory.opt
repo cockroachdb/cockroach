@@ -608,6 +608,7 @@ define AlterTableRelocate {
     Index cat.Index
     input exec.Node
     relocateLease bool
+    relocateNonVoters bool
 }
 
 # Buffer passes through the input rows but also saves them in a buffer, which
