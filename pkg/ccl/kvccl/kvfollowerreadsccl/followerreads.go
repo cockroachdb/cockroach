@@ -77,16 +77,26 @@ func getGlobalReadsLead(clock *hlc.Clock) time.Duration {
 	return clock.MaxOffset()
 }
 
+// checkEnterpriseEnabled checks whether the enterprise feature for follower
+// reads is enabled, returning a detailed error if not. It is not suitable for
+// use in hot paths since a new error may be instantiated on each call.
 func checkEnterpriseEnabled(clusterID uuid.UUID, st *cluster.Settings) error {
 	org := sql.ClusterOrganization.Get(&st.SV)
 	return utilccl.CheckEnterpriseEnabled(st, clusterID, org, "follower reads")
+}
+
+// isEnterpriseEnabled is faster than checkEnterpriseEnabled, and suitable
+// for hot paths.
+func isEnterpriseEnabled(clusterID uuid.UUID, st *cluster.Settings) bool {
+	org := sql.ClusterOrganization.Get(&st.SV)
+	return utilccl.IsEnterpriseEnabled(st, clusterID, org, "follower reads")
 }
 
 func checkFollowerReadsEnabled(clusterID uuid.UUID, st *cluster.Settings) bool {
 	if !kvserver.FollowerReadsEnabled.Get(&st.SV) {
 		return false
 	}
-	return checkEnterpriseEnabled(clusterID, st) == nil
+	return isEnterpriseEnabled(clusterID, st)
 }
 
 func evalFollowerReadOffset(clusterID uuid.UUID, st *cluster.Settings) (time.Duration, error) {

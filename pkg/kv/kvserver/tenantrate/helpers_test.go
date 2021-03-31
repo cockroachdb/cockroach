@@ -24,3 +24,26 @@ func OverrideSettingsWithRateLimits(settings *cluster.Settings, rl LimitConfigs)
 	writeRateLimit.Override(&settings.SV, int64(rl.WriteBytes.Rate))
 	writeBurstLimit.Override(&settings.SV, rl.WriteBytes.Burst)
 }
+
+// DefaultLimitConfigs returns the configuration that corresponds to the default
+// setting values.
+func DefaultLimitConfigs() LimitConfigs {
+	return LimitConfigs{
+		ReadRequests: LimitConfig{
+			Rate:  Limit(readRequestRateLimit.Default()),
+			Burst: readRequestBurstLimit.Default(),
+		},
+		WriteRequests: LimitConfig{
+			Rate:  Limit(writeRequestRateLimit.Default()),
+			Burst: writeRequestBurstLimit.Default(),
+		},
+		ReadBytes: LimitConfig{
+			Rate:  Limit(readRateLimit.Default()),
+			Burst: readBurstLimit.Default(),
+		},
+		WriteBytes: LimitConfig{
+			Rate:  Limit(writeRateLimit.Default()),
+			Burst: writeBurstLimit.Default(),
+		},
+	}
+}

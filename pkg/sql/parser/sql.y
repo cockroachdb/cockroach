@@ -2279,7 +2279,7 @@ username_or_sconst:
   {
     // We use UsernameValidation because username_or_sconst and role_spec
     // are only used for usernames of existing accounts, not when
-    // creating new users or roles.	
+    // creating new users or roles.
     $$.val, _ = security.MakeSQLUsernameFromUserInput($1, security.UsernameValidation)
   }
 
@@ -6838,8 +6838,7 @@ sequence_option_elem:
                                              return 1
                                      }
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptOwnedBy, ColumnItemVal: columnItem} }
-| CACHE signed_iconst64        { /* SKIP DOC */
-                                 x := $2.int64()
+| CACHE signed_iconst64        { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &x} }
 | INCREMENT signed_iconst64    { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }

@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -105,10 +107,11 @@ var testStateCommands = map[string]func(*testState, *testing.T, *datadriven.Test
 	"metrics":         (*testState).metrics,
 	"get_tenants":     (*testState).getTenants,
 	"release_tenants": (*testState).releaseTenants,
+	"estimate_iops":   (*testState).estimateIOPS,
 }
 
 func (ts *testState) run(t *testing.T, d *datadriven.TestData) string {
-	if !ts.initialized && d.Cmd != "init" {
+	if !ts.initialized && d.Cmd != "init" && d.Cmd != "estimate_iops" {
 		d.Fatalf(t, "expected init as first command, got %q", d.Cmd)
 	}
 	if f, ok := testStateCommands[d.Cmd]; ok {
@@ -484,6 +487,79 @@ func (ts *testState) releaseTenants(t *testing.T, d *datadriven.TestData) string
 		}
 	}
 	return ts.FormatTenants()
+}
+
+// estimateIOPS takes in the description of a workload and produces an estimate
+// of the IOPS for that workload (under the default settings).
+//
+// For example:
+//
+//  estimate_iops
+//  readpercentage: 50
+//  readsize: 4096
+//  writesize: 4096
+//  ----
+//  Mixed workload (50% reads; 4.0 KiB reads; 4.0 KiB writes): 256 sustained IOPS, 256 burst.
+//
+func (ts *testState) estimateIOPS(t *testing.T, d *datadriven.TestData) string {
+	var workload struct {
+		ReadPercentage int
+		ReadSize       int
+		WriteSize      int
+	}
+	if err := yaml.UnmarshalStrict([]byte(d.Input), &workload); err != nil {
+		d.Fatalf(t, "failed to parse workload information: %v", err)
+	}
+	if workload.ReadPercentage < 0 || workload.ReadPercentage > 100 {
+		d.Fatalf(t, "Invalid read percentage %d", workload.ReadPercentage)
+	}
+	limits := tenantrate.DefaultLimitConfigs()
+
+	calculateIOPS := func(readRate, readBytesRate, writeRate, writeBytesRate float64) float64 {
+		readIOPS := math.Min(readRate, readBytesRate/float64(workload.ReadSize))
+		writeIOPS := math.Min(writeRate, writeBytesRate/float64(workload.WriteSize))
+		// The reads and writes are rate-limited separately; our workload will be
+		// bottlenecked on one of them.
+		return math.Min(
+			writeIOPS*100.0/float64(100-workload.ReadPercentage),
+			readIOPS*100.0/float64(workload.ReadPercentage),
+		)
+	}
+
+	sustained := calculateIOPS(
+		float64(limits.ReadRequests.Rate), float64(limits.ReadBytes.Rate),
+		float64(limits.WriteRequests.Rate), float64(limits.WriteBytes.Rate),
+	)
+
+	burst := calculateIOPS(
+		float64(limits.ReadRequests.Burst), float64(limits.ReadBytes.Burst),
+		float64(limits.WriteRequests.Burst), float64(limits.WriteBytes.Burst),
+	)
+	fmtFloat := func(val float64) string {
+		if val < 10 {
+			return fmt.Sprintf("%.1f", val)
+		}
+		return fmt.Sprintf("%.0f", val)
+	}
+	switch workload.ReadPercentage {
+	case 0:
+		return fmt.Sprintf(
+			"Write-only workload (%s writes): %s sustained IOPS, %s burst.",
+			humanize.IBytes(uint64(workload.WriteSize)), fmtFloat(sustained), fmtFloat(burst),
+		)
+	case 100:
+		return fmt.Sprintf(
+			"Read-only workload (%s reads): %s sustained IOPS, %s burst.",
+			humanize.IBytes(uint64(workload.ReadSize)), fmtFloat(sustained), fmtFloat(burst),
+		)
+	default:
+		return fmt.Sprintf(
+			"Mixed workload (%d%% reads; %s reads; %s writes): %s sustained IOPS, %s burst.",
+			workload.ReadPercentage,
+			humanize.IBytes(uint64(workload.ReadSize)), humanize.IBytes(uint64(workload.WriteSize)),
+			fmtFloat(sustained), fmtFloat(burst),
+		)
+	}
 }
 
 func (rs *testState) FormatRunning() string {

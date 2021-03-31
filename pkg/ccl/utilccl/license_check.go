@@ -57,6 +57,15 @@ const (
 	testingEnterpriseEnabled  = 1
 )
 
+// errEnterpriseRequired is returned by check() when the caller does
+// not request detailed errors.
+var errEnterpriseRequired = pgerror.New(pgcode.CCLValidLicenseRequired,
+	"a valid enterprise license is required")
+
+// licenseCacheKey is used to cache licenses in cluster.Settings.Cache,
+// keeping the entries private.
+type licenseCacheKey string
+
 // TestingEnableEnterprise allows overriding the license check in tests.
 func TestingEnableEnterprise() func() {
 	before := atomic.LoadInt32(&testingEnterprise)
@@ -78,11 +87,21 @@ func TestingDisableEnterprise() func() {
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
 // feature is not enabled, including information or a link explaining how to
 // enable it.
+//
+// This should not be used in hot paths, since an unavailable feature will
+// result in a new error being instantiated for every call -- use
+// IsEnterpriseEnabled() instead.
 func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature string) error {
-	if atomic.LoadInt32(&testingEnterprise) == testingEnterpriseEnabled {
-		return nil
-	}
-	return checkEnterpriseEnabledAt(st, timeutil.Now(), cluster, org, feature)
+	return checkEnterpriseEnabledAt(st, timeutil.Now(), cluster, org, feature, true /* withDetails */)
+}
+
+// IsEnterpriseEnabled returns whether the requested enterprise feature is
+// enabled. It is faster than CheckEnterpriseEnabled, since it does not return
+// details about why the feature is unavailable, and can therefore be used in
+// hot paths.
+func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, feature string) bool {
+	return checkEnterpriseEnabledAt(
+		st, timeutil.Now(), cluster, org, feature, false /* withDetails */) == nil
 }
 
 func init() {
@@ -97,47 +116,56 @@ func init() {
 func TimeToEnterpriseLicenseExpiry(
 	ctx context.Context, st *cluster.Settings, asOf time.Time,
 ) (time.Duration, error) {
-	var lic *licenseccl.License
-	// FIXME(tschottdorf): see whether it makes sense to cache the decoded
-	// license.
-	if str := enterpriseLicense.Get(&st.SV); str != "" {
-		var err error
-		if lic, err = decode(str); err != nil {
-			return 0, err
-		}
-	} else {
-		return 0, nil
+	license, err := getLicense(st)
+	if err != nil || license == nil {
+		return 0, err
 	}
 
-	expiration := timeutil.Unix(lic.ValidUntilUnixSec, 0)
+	expiration := timeutil.Unix(license.ValidUntilUnixSec, 0)
 	return expiration.Sub(asOf), nil
 }
 
 func checkEnterpriseEnabledAt(
-	st *cluster.Settings, at time.Time, cluster uuid.UUID, org, feature string,
+	st *cluster.Settings, at time.Time, cluster uuid.UUID, org, feature string, withDetails bool,
 ) error {
-	var lic *licenseccl.License
-	// FIXME(tschottdorf): see whether it makes sense to cache the decoded
-	// license.
-	if str := enterpriseLicense.Get(&st.SV); str != "" {
-		var err error
-		if lic, err = decode(str); err != nil {
-			return err
-		}
+	if atomic.LoadInt32(&testingEnterprise) == testingEnterpriseEnabled {
+		return nil
 	}
-	return check(lic, at, cluster, org, feature)
+	license, err := getLicense(st)
+	if err != nil {
+		return err
+	}
+	return check(license, at, cluster, org, feature, withDetails)
+}
+
+// getLicense fetches the license from the given settings, using Settings.Cache
+// to cache the decoded license (if any). The returned license must not be
+// modified by the caller.
+func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
+	str := enterpriseLicense.Get(&st.SV)
+	if str == "" {
+		return nil, nil
+	}
+	cacheKey := licenseCacheKey(str)
+	if cachedLicense, ok := st.Cache.Load(cacheKey); ok {
+		return cachedLicense.(*licenseccl.License), nil
+	}
+	license, err := decode(str)
+	if err != nil {
+		return nil, err
+	}
+	st.Cache.Store(cacheKey, license)
+	return license, nil
 }
 
 func getLicenseType(st *cluster.Settings) (string, error) {
-	str := enterpriseLicense.Get(&st.SV)
-	if str == "" {
-		return "None", nil
-	}
-	lic, err := decode(str)
+	license, err := getLicense(st)
 	if err != nil {
 		return "", err
+	} else if license == nil {
+		return "None", nil
 	}
-	return lic.Type.String(), nil
+	return license.Type.String(), nil
 }
 
 // decode attempts to read a base64 encoded License.
@@ -146,12 +174,18 @@ func decode(s string) (*licenseccl.License, error) {
 	if err != nil {
 		return nil, pgerror.WithCandidateCode(err, pgcode.Syntax)
 	}
-	return lic, err
+	return lic, nil
 }
 
-// check returns an error if the license is empty or not currently valid.
-func check(l *licenseccl.License, at time.Time, cluster uuid.UUID, org, feature string) error {
+// check returns an error if the license is empty or not currently valid. If
+// withDetails is false, a generic error message is returned for performance.
+func check(
+	l *licenseccl.License, at time.Time, cluster uuid.UUID, org, feature string, withDetails bool,
+) error {
 	if l == nil {
+		if !withDetails {
+			return errEnterpriseRequired
+		}
 		// TODO(dt): link to some stable URL that then redirects to a helpful page
 		// that explains what to do here.
 		link := "https://cockroachlabs.com/pricing?cluster="
@@ -168,6 +202,9 @@ func check(l *licenseccl.License, at time.Time, cluster uuid.UUID, org, feature 
 	// suddenly throwing errors at them.
 	if l.ValidUntilUnixSec > 0 && l.Type != licenseccl.License_Enterprise {
 		if expiration := timeutil.Unix(l.ValidUntilUnixSec, 0); at.After(expiration) {
+			if !withDetails {
+				return errEnterpriseRequired
+			}
 			licensePrefix := redact.SafeString("")
 			switch l.Type {
 			case licenseccl.License_NonCommercial:
@@ -190,6 +227,9 @@ func check(l *licenseccl.License, at time.Time, cluster uuid.UUID, org, feature 
 		if strings.EqualFold(l.OrganizationName, org) {
 			return nil
 		}
+		if !withDetails {
+			return errEnterpriseRequired
+		}
 		return pgerror.Newf(pgcode.CCLValidLicenseRequired,
 			"license valid only for %q", l.OrganizationName)
 	}
@@ -201,6 +241,9 @@ func check(l *licenseccl.License, at time.Time, cluster uuid.UUID, org, feature 
 	}
 
 	// no match, so compose an error message.
+	if !withDetails {
+		return errEnterpriseRequired
+	}
 	var matches bytes.Buffer
 	for i, c := range l.ClusterID {
 		if i > 0 {
