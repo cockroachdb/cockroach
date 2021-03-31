@@ -4823,6 +4823,53 @@ select
  └── filters
       └── st_intersects(g:2, '0103000020E610000000000000') [outer=(2), immutable, constraints=(/2: (/NULL - ])]
 
+# Regression test for #60527. Do not panic when a geospatial function has a NULL
+# GEOMETRY/GEOGRAPHY argument.
+exec-ddl
+CREATE TABLE t60527 (
+  g GEOGRAPHY,
+  INVERTED INDEX (g)
+)
+----
+
+# TODO(mgartner): Functions with NullableArgs=false and a NULL argument can be
+# normalized to NULL. This would simplify this query plan to an empty Values
+# expression.
+opt
+SELECT * FROM t60527 WHERE (ST_Covers(NULL::GEOGRAPHY, g) AND ST_DWithin(NULL::GEOGRAPHY, g, 1))
+----
+select
+ ├── columns: g:1!null
+ ├── immutable
+ ├── scan t60527
+ │    └── columns: g:1
+ └── filters
+      ├── st_covers(CAST(NULL AS GEOGRAPHY), g:1) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+      └── st_dwithin(CAST(NULL AS GEOGRAPHY), g:1, 1.0) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+
+# Regression test for #62686. Do not panic when a geospatial function has a NULL
+# additional argument.
+exec-ddl
+CREATE TABLE t62686 (
+  c GEOMETRY NULL,
+  INVERTED INDEX (c ASC)
+)
+----
+
+# TODO(mgartner): Functions with NullableArgs=false and a NULL argument can be
+# normalized to NULL. This would simplify this query plan to an empty Values
+# expression.
+opt
+SELECT * FROM t62686 WHERE ST_DFullyWithin(c, ST_GeomFromText('POINT(1 1)'), NULL::FLOAT8)
+----
+select
+ ├── columns: c:1!null
+ ├── immutable
+ ├── scan t62686
+ │    └── columns: c:1
+ └── filters
+      └── st_dfullywithin(c:1, '0101000000000000000000F03F000000000000F03F', CAST(NULL AS FLOAT8)) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+
 # --------------------------------------------------
 # GenerateZigzagJoins
 # --------------------------------------------------
