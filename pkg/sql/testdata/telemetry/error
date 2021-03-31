@@ -4,7 +4,54 @@ feature-allowlist
 othererror.*
 errorcodes.*
 unimplemented.*
+sql.schema.validation_errors.*
 ----
+
+# Table descriptor validation failure on read.
+feature-usage
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT);
+CREATE TABLE fktbl (id INT PRIMARY KEY);
+CREATE TABLE tbl (customer INT NOT NULL REFERENCES fktbl (id));
+INSERT INTO system.users VALUES ('node', NULL, true);
+GRANT node TO root;
+DELETE FROM system.descriptor WHERE id=52;
+DELETE FROM system.descriptor WHERE id=54;
+REVOKE node FROM root;
+DELETE FROM system.users WHERE username = 'node';
+SELECT * FROM tbl;
+----
+error: pq: relation "tbl" (55): invalid foreign key: missing table=54: referenced table ID 54: descriptor not found
+errorcodes.XXUUU
+othererror.XXUUU
+sql.schema.validation_errors.read.cross_references.relation
+
+# Type descriptor validation failure on read.
+feature-usage
+CREATE TYPE greeting AS ENUM('hello', 'hi');
+INSERT INTO system.users VALUES ('node', NULL, true);
+GRANT node TO root;
+DELETE FROM system.descriptor WHERE id=57;
+REVOKE node FROM root;
+DELETE FROM system.users WHERE username = 'node';
+SELECT 'hello'::greeting;
+----
+error: pq: type "greeting" (56): arrayTypeID 57 does not exist for "ENUM": referenced type ID 57: descriptor not found
+errorcodes.XXUUU
+othererror.XXUUU
+sql.schema.validation_errors.read.cross_references.type
+
+# Table descriptor validation failure on transaction commit.
+feature-usage
+CREATE TABLE t (x INT PRIMARY KEY);
+BEGIN;
+ALTER TABLE t DROP CONSTRAINT "primary";
+COMMIT;
+----
+error: pq: relation "t" (58): unimplemented: primary key dropped without subsequent addition of new primary key in same transaction
+errorcodes.0A000
+sql.schema.validation_errors.write.pre_txn_commit.relation
+unimplemented.#48026
 
 # 42601 is pgcode.Syntax.
 feature-usage
