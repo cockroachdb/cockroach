@@ -1601,6 +1601,9 @@ DATABASE add_regions  ALTER DATABASE add_regions CONFIGURE ZONE USING
 statement ok
 ALTER DATABASE add_regions ADD REGION "us-east-1"
 
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
 query TT
 SHOW CREATE TABLE regional_by_row
 ----
