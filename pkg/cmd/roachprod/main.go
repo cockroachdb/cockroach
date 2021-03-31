@@ -11,10 +11,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -39,7 +43,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
 	"golang.org/x/term"
@@ -1496,6 +1504,150 @@ var pgurlCmd = &cobra.Command{
 	}),
 }
 
+var pprofOptions = struct {
+	heap         bool
+	open         bool
+	startingPort int
+	duration     time.Duration
+}{}
+
+var pprofCmd = &cobra.Command{
+	Use:     "pprof <cluster>",
+	Args:    cobra.ExactArgs(1),
+	Aliases: []string{"pprof-heap"},
+	Short:   "capture a pprof profile from the specified nodes",
+	Long: `Capture a pprof profile from the specified nodes.
+
+Examples:
+
+    # Capture CPU profile for all nodes in the cluster
+    roachprod pprof CLUSTERNAME
+    # Capture CPU profile for the first node in the cluster for 60 seconds
+    roachprod pprof CLUSTERNAME:1 --duration 60s
+    # Capture a Heap profile for the first node in the cluster
+    roachprod pprof CLUSTERNAME:1 --heap
+    # Same as above
+    roachprod pprof-heap CLUSTERNAME:1
+`,
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		c, err := newCluster(args[0])
+		if err != nil {
+			return err
+		}
+
+		var profType string
+		var description string
+		if cmd.CalledAs() == "pprof-heap" || pprofOptions.heap {
+			description = "capturing heap profile"
+			profType = "heap"
+		} else {
+			description = "capturing CPU profile"
+			profType = "profile"
+		}
+
+		outputFiles := []string{}
+		mu := &syncutil.Mutex{}
+		pprofPath := fmt.Sprintf("debug/pprof/%s?seconds=%d", profType, int(pprofOptions.duration.Seconds()))
+
+		minTimeout := 30 * time.Second
+		timeout := 2 * pprofOptions.duration
+		if timeout < minTimeout {
+			timeout = minTimeout
+		}
+
+		httpClient := httputil.NewClientWithTimeout(timeout)
+		startTime := timeutil.Now().Unix()
+		failed, err := c.ParallelE(description, len(c.ServerNodes()), 0, func(i int) ([]byte, error) {
+			host := c.VMs[i]
+			port := install.GetAdminUIPort(c.Impl.NodePort(c, i))
+			scheme := "http"
+			if c.Secure {
+				scheme = "https"
+			}
+			outputFile := fmt.Sprintf("pprof-%s-%d-%s-%04d.out", profType, startTime, c.Name, i+1)
+			outputDir := filepath.Dir(outputFile)
+			file, err := ioutil.TempFile(outputDir, ".pprof")
+			if err != nil {
+				return nil, errors.Wrap(err, "create tmpfile for pprof download")
+			}
+
+			defer func() {
+				err := file.Close()
+				if err != nil && !errors.Is(err, oserror.ErrClosed) {
+					fmt.Fprintf(os.Stderr, "warning: could not close temporary file")
+				}
+				err = os.Remove(file.Name())
+				if err != nil && !oserror.IsNotExist(err) {
+					fmt.Fprintf(os.Stderr, "warning: could not remove temporary file")
+				}
+			}()
+
+			pprofURL := fmt.Sprintf("%s://%s:%d/%s", scheme, host, port, pprofPath)
+			resp, err := httpClient.Get(context.Background(), pprofURL)
+			if err != nil {
+				return nil, err
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				return nil, errors.Newf("unexpected status from pprof endpoint: %s", resp.Status)
+			}
+
+			if _, err := io.Copy(file, resp.Body); err != nil {
+				return nil, err
+			}
+			if err := file.Sync(); err != nil {
+				return nil, err
+			}
+			if err := file.Close(); err != nil {
+				return nil, err
+			}
+			if err := os.Rename(file.Name(), outputFile); err != nil {
+				return nil, err
+			}
+
+			mu.Lock()
+			outputFiles = append(outputFiles, outputFile)
+			mu.Unlock()
+			return nil, nil
+		})
+
+		for _, s := range outputFiles {
+			fmt.Printf("Created %s\n", s)
+		}
+
+		if err != nil {
+			sort.Slice(failed, func(i, j int) bool { return failed[i].Index < failed[j].Index })
+			for _, f := range failed {
+				fmt.Fprintf(os.Stderr, "%d: %+v: %s\n", f.Index, f.Err, f.Out)
+			}
+			os.Exit(1)
+		}
+
+		if pprofOptions.open {
+			waitCommands := []*exec.Cmd{}
+			for i, file := range outputFiles {
+				port := pprofOptions.startingPort + i
+				cmd := exec.Command("go", "tool", "pprof",
+					"-http", fmt.Sprintf(":%d", port),
+					file)
+				waitCommands = append(waitCommands, cmd)
+				if err := cmd.Start(); err != nil {
+					return err
+				}
+			}
+
+			for _, cmd := range waitCommands {
+				err := cmd.Wait()
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}),
+}
+
 var adminurlCmd = &cobra.Command{
 	Use:     "adminurl <cluster>",
 	Aliases: []string{"admin", "adminui"},
@@ -1610,7 +1762,7 @@ func main() {
 		pgurlCmd,
 		adminurlCmd,
 		logsCmd,
-
+		pprofCmd,
 		cachedHostsCmd,
 	)
 	rootCmd.BashCompletionFunction = fmt.Sprintf(`__custom_func()
@@ -1714,6 +1866,15 @@ func main() {
 
 	pgurlCmd.Flags().BoolVar(
 		&external, "external", false, "return pgurls for external connections")
+
+	pprofCmd.Flags().DurationVar(
+		&pprofOptions.duration, "duration", 30*time.Second, "Duration of profile to capture")
+	pprofCmd.Flags().BoolVar(
+		&pprofOptions.heap, "heap", false, "Capture a heap profile instead of a CPU profile")
+	pprofCmd.Flags().BoolVar(
+		&pprofOptions.open, "open", false, "Open the profile using `go tool pprof -http`")
+	pprofCmd.Flags().IntVar(
+		&pprofOptions.startingPort, "starting-port", 9000, "Initial port to use when opening pprof's HTTP interface")
 
 	ipCmd.Flags().BoolVar(
 		&external, "external", false, "return external IP addresses")
