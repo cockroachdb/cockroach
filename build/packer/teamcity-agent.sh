@@ -31,6 +31,7 @@ apt-get update --yes
 apt-get install --yes sudo
 
 apt-get install --yes \
+  build-essential \
   curl \
   docker-ce \
   docker-compose \
