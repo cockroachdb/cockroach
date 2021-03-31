@@ -2600,6 +2600,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 // -> Rollback of a failed IMPORT INTO
 func TestImportIntoCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 62853, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
