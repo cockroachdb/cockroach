@@ -435,10 +435,46 @@ TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
                        lease_preferences = '[[+region=us-east-1]]'
 
 statement ok
-ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
+DROP TABLE regional_by_row; CREATE TABLE regional_by_row (
+  pk INT PRIMARY KEY,
+  i INT,
+  INDEX idx(i),
+  FAMILY (pk, i)
+) LOCALITY REGIONAL BY ROW
 
 statement ok
+ALTER PARTITION "ap-southeast-2" OF INDEX regional_by_row@idx CONFIGURE ZONE USING gc.ttlseconds = 10;
+ALTER INDEX regional_by_row@idx CONFIGURE ZONE USING gc.ttlseconds = 10
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER PARTITION "ap-southeast-2" OF INDEX regional_by_row@idx CONFIGURE ZONE USING num_replicas = 10;
+SET override_multi_region_zone_config = false
+
+statement error zone configuration for partition "ap-southeast-2" of regional_by_row@idx contains incorrectly configured field "num_replicas"
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement error attempting to update zone configuration for partition "ap-southeast-2" of regional_by_row@idx which contains modified field "num_replicas"
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER PARTITION "ap-southeast-2" OF INDEX regional_by_row@idx CONFIGURE ZONE DISCARD;
+SET override_multi_region_zone_config = false
+
+statement error missing zone configuration for partition "ap-southeast-2" of regional_by_row@idx
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement error attempting to update zone config which is missing an expected zone configuration for partition "ap-southeast-2" of regional_by_row@idx
+ALTER TABLE regional_by_row SET LOCALITY GLOBAL
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE regional_by_row SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
 
 statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
@@ -448,13 +484,13 @@ SET override_multi_region_zone_config = true;
 ALTER index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10;
 SET override_multi_region_zone_config = false
 
-statement ok
+statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@"primary"
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL
 
-statement error zone configuration for index regional_by_row@"primary" contains incorrectly configured field "num_replicas"
+statement error extraneous zone configuration for index regional_by_row@"primary"
 SELECT crdb_internal.validate_multi_region_zone_configs()
 
-statement error attempting to update zone configuration for index regional_by_row@"primary" which contains modified field "num_replicas"
+statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@"primary"
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
 
 statement ok
@@ -489,7 +525,7 @@ INDEX regional_by_row_as@primary  ALTER INDEX regional_by_row_as@primary CONFIGU
                                   voter_constraints = '[+region=us-east-1]',
                                   lease_preferences = '[[+region=us-east-1]]'
 
-statement error attempting to update zone configuration for index regional_by_row_as@"primary" which contains modified field "num_replicas"
+statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row_as@"primary"
 ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW
 
 statement ok

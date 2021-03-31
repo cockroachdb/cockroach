@@ -452,6 +452,10 @@ func dropZoneConfigsForMultiRegionIndexes(
 // should be marked as a placeholder config for a multi-region object.
 // See zonepb.IsSubzonePlaceholder for why this is necessary.
 func isPlaceholderZoneConfigForMultiRegion(zc zonepb.ZoneConfig) bool {
+	// Placeholders must have at least 1 subzone.
+	if len(zc.Subzones) == 0 {
+		return false
+	}
 	// Strip Subzones / SubzoneSpans, as these may contain items if migrating
 	// from one REGIONAL BY ROW table to another.
 	strippedZC := zc
@@ -567,7 +571,7 @@ func ApplyZoneConfigForMultiRegionTable(
 	// in the zone config. This signifies a placeholder.
 	// Note we do not use hasNewSubzones here as there may be existing subzones
 	// on the zone config which may still be a placeholder.
-	if len(newZoneConfig.Subzones) > 0 && isPlaceholderZoneConfigForMultiRegion(newZoneConfig) {
+	if isPlaceholderZoneConfigForMultiRegion(newZoneConfig) {
 		newZoneConfig.NumReplicas = proto.Int32(0)
 	}
 
@@ -863,7 +867,6 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 				ctx,
 				dbDesc,
 				tbDesc,
-				true, /* checkIndexZoneConfig */
 				&validateZoneConfigForMultiRegionErrorHandlerValidation{},
 			)
 		},
@@ -1120,23 +1123,30 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 // an error to generate if validating a zone config for multi-region
 // fails.
 type validateZoneConfigForMultiRegionErrorHandler interface {
-	newError(descType string, descName string, field string) error
+	newMismatchFieldError(descType string, descName string, field string) error
+	newMissingSubzoneError(descType string, descName string) error
+	newExtraSubzoneError(descType string, descName string) error
 }
 
 // validateZoneConfigForMultiRegionErrorHandlerModifiedByUser implements
 // interface validateZoneConfigForMultiRegionErrorHandler.
 type validateZoneConfigForMultiRegionErrorHandlerModifiedByUser struct{}
 
-func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newError(
+func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newMismatchFieldError(
 	descType string, descName string, field string,
 ) error {
-	err := pgerror.Newf(
-		pgcode.InvalidObjectDefinition,
-		"attempting to update zone configuration for %s %s which contains modified field %q",
-		descType,
-		descName,
-		field,
+	return v.wrapErr(
+		pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"attempting to update zone configuration for %s %s which contains modified field %q",
+			descType,
+			descName,
+			field,
+		),
 	)
+}
+
+func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) wrapErr(err error) error {
 	err = errors.WithDetail(
 		err,
 		"the attempted operation will overwrite a user modified field",
@@ -1148,11 +1158,37 @@ func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newError(
 	)
 }
 
+func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newMissingSubzoneError(
+	descType string, descName string,
+) error {
+	return v.wrapErr(
+		pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"attempting to update zone config which is missing an expected zone configuration for %s %s",
+			descType,
+			descName,
+		),
+	)
+}
+
+func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newExtraSubzoneError(
+	descType string, descName string,
+) error {
+	return v.wrapErr(
+		pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"attempting to update zone config which contains an extra zone configuration for %s %s",
+			descType,
+			descName,
+		),
+	)
+}
+
 // validateZoneConfigForMultiRegionErrorHandlerValidation implements
 // interface validateZoneConfigForMultiRegionErrorHandler.
 type validateZoneConfigForMultiRegionErrorHandlerValidation struct{}
 
-func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newError(
+func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newMismatchFieldError(
 	descType string, descName string, field string,
 ) error {
 	return pgerror.Newf(
@@ -1161,6 +1197,28 @@ func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newError(
 		descType,
 		descName,
 		field,
+	)
+}
+
+func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newMissingSubzoneError(
+	descType string, descName string,
+) error {
+	return pgerror.Newf(
+		pgcode.InvalidObjectDefinition,
+		"missing zone configuration for %s %s",
+		descType,
+		descName,
+	)
+}
+
+func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newExtraSubzoneError(
+	descType string, descName string,
+) error {
+	return pgerror.Newf(
+		pgcode.InvalidObjectDefinition,
+		"extraneous zone configuration for %s %s",
+		descType,
+		descName,
 	)
 }
 
@@ -1204,16 +1262,19 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 		return err
 	}
 
-	same, field, err := currentZoneConfig.DiffWithZone(*expectedZoneConfig, zonepb.MultiRegionZoneConfigFields)
+	same, mismatch, err := currentZoneConfig.DiffWithZone(
+		*expectedZoneConfig,
+		zonepb.MultiRegionZoneConfigFields,
+	)
 	if err != nil {
 		return err
 	}
 	if !same {
 		dbName := tree.Name(dbDesc.GetName())
-		return validateZoneConfigForMultiRegionErrorHandler.newError(
+		return validateZoneConfigForMultiRegionErrorHandler.newMismatchFieldError(
 			"database",
 			dbName.String(),
-			field,
+			mismatch.Field,
 		)
 	}
 
@@ -1242,7 +1303,6 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		ctx,
 		dbDesc,
 		desc,
-		checkIndexZoneConfigs,
 		&validateZoneConfigForMultiRegionErrorHandlerModifiedByUser{},
 	)
 }
@@ -1253,7 +1313,6 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	dbDesc *dbdesc.Immutable,
 	desc catalog.TableDescriptor,
-	checkIndexZoneConfigs bool,
 	validateZoneConfigForMultiRegionErrorHandler validateZoneConfigForMultiRegionErrorHandler,
 ) error {
 	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
@@ -1271,43 +1330,8 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 
 	tableName := tree.Name(desc.GetName())
 
-	// TODO(#62790): we should check partition zone configs match on the
-	// validate zone config case.
-	if checkIndexZoneConfigs {
-		// Check to see if the to be applied zone configurations will override
-		// any existing zone configurations on the table's indexes.
-		// We say "override" here, and not "overwrite" because
-		// REGIONAL BY ROW tables will not write zone configs at the index level,
-		// but instead, at the index partition level. That being said, application
-		// of a partition-level zone config will override any applied index-level
-		// zone config, so it's important that we warn the user of that.
-		for _, s := range currentZoneConfig.Subzones {
-			if s.PartitionName == "" {
-				// Found a zone config on an index. Check to see if any of its
-				// multi-region fields are set.
-				if isSet, field := s.Config.IsAnyMultiRegionFieldSet(); isSet {
-					// Find the name of the offending index to use in the message below.
-					// In the case where we can't find the name, do our best and return
-					// the ID.
-					indexName := fmt.Sprintf("[%d]", s.IndexID)
-					for _, i := range desc.ActiveIndexes() {
-						if uint32(i.GetID()) == s.IndexID {
-							indexTreeName := tree.Name(i.GetName())
-							indexName = indexTreeName.String()
-						}
-					}
-					return validateZoneConfigForMultiRegionErrorHandler.newError(
-						"index",
-						fmt.Sprintf("%s@%s", tableName.String(), indexName),
-						field,
-					)
-				}
-			}
-		}
-	}
-
 	_, expectedZoneConfig, err := ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes(
-		*currentZoneConfig,
+		*zonepb.NewZoneConfig(),
 		regionConfig,
 		desc,
 	)
@@ -1315,14 +1339,42 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		return err
 	}
 
-	// Mark the NumReplicas as 0 if we have subzones but no other features
-	// in the zone config. This signifies a placeholder.
-	if len(expectedZoneConfig.Subzones) > 0 && isPlaceholderZoneConfigForMultiRegion(expectedZoneConfig) {
+	// Some inactive subzones may remain on the zone configuration until it is cleaned up
+	// at a later step. Keep track of all active indexes from the descriptor.
+	activeSubzoneIndexIDs := make(map[uint32]tree.Name, len(desc.ActiveIndexes()))
+	for _, idx := range desc.ActiveIndexes() {
+		activeSubzoneIndexIDs[uint32(idx.GetID())] = tree.Name(idx.GetName())
+	}
+
+	// Remove inactive subzones from the comparison.
+	filteredSubzones := currentZoneConfig.Subzones[:0]
+	for _, c := range currentZoneConfig.Subzones {
+		if _, ok := activeSubzoneIndexIDs[c.IndexID]; ok {
+			filteredSubzones = append(filteredSubzones, c)
+		}
+	}
+	currentZoneConfig.Subzones = filteredSubzones
+	// Strip the placeholder status if there are no active subzones on the current
+	// zone config.
+	if len(filteredSubzones) == 0 && currentZoneConfig.IsSubzonePlaceholder() {
+		currentZoneConfig.NumReplicas = nil
+	}
+	// Mark the expected NumReplicas as 0 if we have a placeholder
+	// and the current zone config is also a placeholder.
+	// The latter check is required as in cases where non-multiregion fields
+	// are set on the current zone config, the expected zone config needs
+	// the placeholder marked so that DiffWithZone does not error when
+	// num_replicas is expectedly different.
+	// e.g. if current zone config has gc.ttlseconds set, then we
+	// do not fudge num replicas to be equal to 0 -- otherwise the
+	// check fails when num_replicas is different, but that is
+	// expected as the current zone config is no longer a placeholder.
+	if currentZoneConfig.IsSubzonePlaceholder() && isPlaceholderZoneConfigForMultiRegion(expectedZoneConfig) {
 		expectedZoneConfig.NumReplicas = proto.Int32(0)
 	}
 
 	// Compare the two zone configs to see if anything is amiss.
-	same, field, err := currentZoneConfig.DiffWithZone(
+	same, mismatch, err := currentZoneConfig.DiffWithZone(
 		expectedZoneConfig,
 		zonepb.MultiRegionZoneConfigFields,
 	)
@@ -1330,10 +1382,49 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		return err
 	}
 	if !same {
-		return validateZoneConfigForMultiRegionErrorHandler.newError(
-			"table",
-			tableName.String(),
-			field,
+		descType := "table"
+		name := tableName.String()
+		if mismatch.IndexID != 0 {
+			indexName, ok := activeSubzoneIndexIDs[mismatch.IndexID]
+			if !ok {
+				return errors.AssertionFailedf(
+					"unexpected unknown index id %d on table %s",
+					mismatch.IndexID,
+					tableName,
+				)
+			}
+
+			if mismatch.PartitionName != "" {
+				descType = "partition"
+				partitionName := tree.Name(mismatch.PartitionName)
+				name = fmt.Sprintf(
+					"%s of %s@%s",
+					partitionName.String(),
+					tableName.String(),
+					indexName.String(),
+				)
+			} else {
+				descType = "index"
+				name = fmt.Sprintf("%s@%s", tableName.String(), indexName.String())
+			}
+		}
+
+		if mismatch.IsMissingSubzone {
+			return validateZoneConfigForMultiRegionErrorHandler.newMissingSubzoneError(
+				descType,
+				name,
+			)
+		}
+		if mismatch.IsExtraSubzone {
+			return validateZoneConfigForMultiRegionErrorHandler.newExtraSubzoneError(
+				descType,
+				name,
+			)
+		}
+		return validateZoneConfigForMultiRegionErrorHandler.newMismatchFieldError(
+			descType,
+			name,
+			mismatch.Field,
 		)
 	}
 
