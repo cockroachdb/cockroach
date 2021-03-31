@@ -397,10 +397,9 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 			var ok bool
 			arg, ok = makeColRef(s, argTyp, refs)
 			if !ok {
-				// If we can't find a col ref for our
-				// aggregate function, try again with
-				// a non-aggregate.
-				return makeFunc(s, emptyCtx, typ, refs)
+				// If we can't find a col ref for our aggregate function, just use a
+				// constant.
+				arg = makeConstExpr(s, typ, refs)
 			}
 		}
 		if arg == nil {
