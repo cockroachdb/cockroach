@@ -32,6 +32,7 @@ var StartOpts struct {
 	Encrypt    bool
 	Sequential bool
 	SkipInit   bool
+	NewKVServer bool
 	StoreCount int
 }
 
@@ -161,8 +162,9 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 		}
 
 		// We reserve a few special operations (bootstrapping, and setting
-		// cluster settings) for node 1.
-		if node := nodes[nodeIdx]; node != 1 {
+		// cluster settings) for node 1 and for nodes that are started with
+		// --new-kv-server.
+		if node := nodes[nodeIdx]; node != 1 && !StartOpts.NewKVServer {
 			return nil, nil
 		}
 
@@ -171,16 +173,12 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 		// 1. We don't init invoked using `--skip-init`.
 		// 2. We don't init when invoking with `start-single-node`.
-		// 3. For nodes running <20.1, the --join flags are constructed in a
-		//    manner such that the first node doesn't have any (see
-		//   `generateStartArgs`),which prompts CRDB to auto-initialize. For
-		//    nodes running >=20.1, we need to explicitly initialize.
 
 		if StartOpts.SkipInit {
 			return nil, nil
 		}
 
-		shouldInit := !h.useStartSingleNode(vers) && vers.AtLeast(version.MustParse("v20.1.0"))
+		shouldInit := !h.useStartSingleNode(vers)
 		if shouldInit {
 			fmt.Printf("%s: initializing cluster\n", h.c.Name)
 			initOut, err := h.initializeCluster(nodeIdx)
@@ -190,26 +188,6 @@ func (r Cockroach) Start(c *SyncedCluster, extraArgs []string) {
 
 			if initOut != "" {
 				fmt.Println(initOut)
-			}
-		}
-
-		if !vers.AtLeast(version.MustParse("v20.1.0")) {
-			// Given #51897 remains unresolved, master-built roachprod is used
-			// to run roachtests against the 20.1 branch. Some of those
-			// roachtests test mixed-version clusters that start off at 19.2.
-			// Consequently, we manually add this `cluster-bootstrapped` file
-			// where roachprod expects to find it for already-initialized
-			// clusters. This is a pretty gross hack, that we should address by
-			// addressing #51897.
-			//
-			// TODO(irfansharif): Remove this once #51897 is resolved.
-			markBootstrap := fmt.Sprintf("touch %s/%s", h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */), "cluster-bootstrapped")
-			cmdOut, err := h.run(nodeIdx, markBootstrap)
-			if err != nil {
-				log.Fatalf("unable to run cmd: %v", err)
-			}
-			if cmdOut != "" {
-				fmt.Println(cmdOut)
 			}
 		}
 
@@ -488,16 +466,27 @@ func (h *crdbInstallHelper) generateStartArgs(
 		}
 	}
 
+	// --join flags are unsupported/unnecessary in `cockroach start-single-node`.
 	if !h.useStartSingleNode(vers) {
-		// --join flags are unsupported/unnecessary in `cockroach
-		// start-single-node`. That aside, setting up --join flags is a bit
-		// precise. We have every node point to node 1. For clusters running
-		// <20.1, we have node 1 not point to anything (which in turn is used to
-		// trigger auto-initialization node 1). For clusters running >=20.1,
-		// node 1 also points to itself, and an explicit `cockroach init` is
-		// needed.
-		if nodes[nodeIdx] != 1 || vers.AtLeast(version.MustParse("v20.1.0")) {
-			args = append(args, fmt.Sprintf("--join=%s:%d", h.c.host(1), h.r.NodePort(h.c, 1)))
+		if idx := argExists(extraArgs, "--join"); idx == -1 {
+			// If --join is not specified, have every node point to node 1 and node 1
+			// also points to itself, and an explicit `cockroach init` is needed.
+			if !StartOpts.NewKVServer {
+				args = append(args, fmt.Sprintf("--join=%s:%d", h.c.host(1),
+					h.r.NodePort(h.c, 1)))
+			} else {
+				// If --new-kv-server is set, the node points to itself as the first
+				// node in the new cluster.
+				args = append(args, fmt.Sprintf("--join=%s:%d", h.c.host(nodes[nodeIdx]),
+					h.r.NodePort(h.c, nodes[nodeIdx])))
+			}
+		} else {
+			// --join cannot be specified in conjunction with --new-kv-server since
+			// the latter implies the node will join itself as the first node in a new
+			// cluster.
+			if StartOpts.NewKVServer {
+				return nil, errors.New("cannot specify --join addresses with --new-kv-server")
+			}
 		}
 	}
 

@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"net/url"
 	"os"
@@ -34,36 +35,36 @@ const (
 	KMSKeyARNBEnvVar = "AWS_KMS_KEY_ARN_B"
 )
 
-func registerBackup(r *testRegistry) {
-	importBankData := func(ctx context.Context, rows int, t *test, c *cluster) string {
-		dest := c.name
-		// Randomize starting with encryption-at-rest enabled.
-		c.encryptAtRandom = true
+func importBankData(ctx context.Context, rows int, t *test, c *cluster) string {
+	dest := c.name
+	// Randomize starting with encryption-at-rest enabled.
+	c.encryptAtRandom = true
 
-		if local {
-			rows = 100
-			dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
-		}
-
-		c.Put(ctx, workload, "./workload")
-		c.Put(ctx, cockroach, "./cockroach")
-
-		// NB: starting the cluster creates the logs dir as a side effect,
-		// needed below.
-		c.Start(ctx, t)
-		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
-		time.Sleep(time.Second) // wait for csv server to open listener
-
-		importArgs := []string{
-			"./workload", "fixtures", "import", "bank",
-			"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
-			fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
-		}
-		c.Run(ctx, c.Node(1), importArgs...)
-
-		return dest
+	if local {
+		rows = 100
+		dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 	}
 
+	c.Put(ctx, workload, "./workload")
+	c.Put(ctx, cockroach, "./cockroach")
+
+	// NB: starting the cluster creates the logs dir as a side effect,
+	// needed below.
+	c.Start(ctx, t)
+	c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+	time.Sleep(time.Second) // wait for csv server to open listener
+
+	importArgs := []string{
+		"./workload", "fixtures", "import", "bank",
+		"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
+		fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}",
+	}
+	c.Run(ctx, c.Node(1), importArgs...)
+
+	return dest
+}
+
+func registerBackup(r *testRegistry) {
 	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
@@ -332,64 +333,20 @@ func registerBackup(r *testRegistry) {
 				}
 
 				t.Status(`fingerprint`)
-				// TODO(adityamaru): Pull the fingerprint logic into a utility method
-				// which can be shared by multiple roachtests.
-				fingerprint := func(db string, asof string) (string, error) {
-					var b strings.Builder
 
-					var tables []string
-					rows, err := conn.QueryContext(
-						ctx,
-						fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s] ORDER BY table_name", db),
-					)
-					if err != nil {
-						return "", err
-					}
-					defer rows.Close()
-					for rows.Next() {
-						var name string
-						if err := rows.Scan(&name); err != nil {
-							return "", err
-						}
-						tables = append(tables, name)
-					}
-
-					for _, table := range tables {
-						fmt.Fprintf(&b, "table %s\n", table)
-						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table)
-						if asof != "" {
-							query = fmt.Sprintf("SELECT * FROM [%s] AS OF SYSTEM TIME %s", query, asof)
-						}
-						rows, err = conn.QueryContext(ctx, query)
-						if err != nil {
-							return "", err
-						}
-						defer rows.Close()
-						for rows.Next() {
-							var name, fp string
-							if err := rows.Scan(&name, &fp); err != nil {
-								return "", err
-							}
-							fmt.Fprintf(&b, "%s: %s\n", name, fp)
-						}
-					}
-
-					return b.String(), rows.Err()
-				}
-
-				tpccFull, err := fingerprint("tpcc", tFull)
+				tpccFull, err := fingerprint(ctx, conn, "tpcc", tFull)
 				if err != nil {
 					return err
 				}
-				tpccInc, err := fingerprint("tpcc", tInc)
+				tpccInc, err := fingerprint(ctx, conn, "tpcc", tInc)
 				if err != nil {
 					return err
 				}
-				restoreFull, err := fingerprint("restore_full", "")
+				restoreFull, err := fingerprint(ctx, conn, "restore_full", "")
 				if err != nil {
 					return err
 				}
-				restoreInc, err := fingerprint("restore_inc", "")
+				restoreInc, err := fingerprint(ctx, conn, "restore_inc", "")
 				if err != nil {
 					return err
 				}
@@ -406,7 +363,57 @@ func registerBackup(r *testRegistry) {
 			m.Wait()
 		},
 	})
+}
 
+func fingerprint(ctx context.Context, conn *sql.DB, db string, asof string) (string, error) {
+	var b strings.Builder
+
+	var tables []string
+	rows, err := conn.QueryContext(
+		ctx,
+		fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s] ORDER BY table_name", db),
+	)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return "", err
+		}
+		tables = append(tables, name)
+	}
+
+	for _, table := range tables {
+		fmt.Fprintf(&b, "table %s\n", table)
+		query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table)
+		if asof != "" {
+			query = fmt.Sprintf("SELECT * FROM [%s] AS OF SYSTEM TIME %s", query, asof)
+		}
+		rows, err = conn.QueryContext(ctx, query)
+		if err != nil {
+			return "", err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var name, fp string
+			if err := rows.Scan(&name, &fp); err != nil {
+				return "", err
+			}
+			fmt.Fprintf(&b, "%s: %s\n", name, fp)
+		}
+
+		var numRows int
+		err := conn.QueryRow(`SELECT count(*) from bank`).Scan(&numRows)
+		if err != nil {
+			return "", err
+		}
+		fmt.Println("NUMBER OF ROWS")
+		fmt.Println(numRows)
+	}
+
+	return b.String(), rows.Err()
 }
 
 func getAWSKMSURI(regionEnvVariable, keyIDEnvVariable string) (string, error) {

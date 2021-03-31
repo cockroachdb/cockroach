@@ -91,6 +91,7 @@ func registerTests(r *testRegistry) {
 	registerSequenceUpgrade(r)
 	registerSQLAlchemy(r)
 	registerSQLSmith(r)
+	registerStreaming(r)
 	registerSyncTest(r)
 	registerSysbench(r)
 	registerTPCC(r)
