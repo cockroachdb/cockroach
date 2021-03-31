@@ -31,7 +31,7 @@ import {SessionsResponseMessage} from "src/util/api";
 import TerminateSessionModal, {TerminateSessionModalRef} from "src/views/sessions/terminateSessionModal";
 import TerminateQueryModal, {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
 import {showSessions} from "src/util/docs";
-import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/admin-ui-components";
+import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/cluster-ui";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 const cx = classNames.bind(styles);

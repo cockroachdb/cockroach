@@ -47,7 +47,7 @@ import classNames from "classnames/bind";
 import {
   selectDiagnosticsReportsCountByStatementFingerprint,
 } from "src/redux/statements/statementsSelectors";
-import { Button } from "@cockroachlabs/admin-ui-components";
+import { Button } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { trackSubnavSelection } from "src/util/analytics";
 import styles from "./statementDetails.module.styl";

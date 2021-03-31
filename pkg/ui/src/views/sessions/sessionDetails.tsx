@@ -33,7 +33,7 @@ import {nodeDisplayNameByIDSelector} from "src/redux/nodes";
 import {NodeLink, StatementLinkTarget} from "src/views/statements/statementsTableContent";
 import TerminateSessionModal, {TerminateSessionModalRef} from "src/views/sessions/terminateSessionModal";
 import TerminateQueryModal, {TerminateQueryModalRef} from "src/views/sessions/terminateQueryModal";
-import { Button } from "@cockroachlabs/admin-ui-components";
+import { Button } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Text, TextTypes } from "src/components";
 
