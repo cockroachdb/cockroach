@@ -1,7 +1,7 @@
 backup_stmt ::=
-	'BACKUP' targets 'INTO' ( | subdirectory | 'LATEST') 'IN' destination 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' backup_options ( ( ',' backup_options ) )*
-	| 'BACKUP' targets 'INTO' ( | subdirectory | 'LATEST') 'IN' destination 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' backup_options ( ( ',' backup_options ) )* ')'
-	| 'BACKUP' targets 'INTO' ( | subdirectory | 'LATEST') 'IN' destination 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
-	| 'BACKUP' targets 'INTO' ( | subdirectory | 'LATEST') 'IN' destination  'WITH' backup_options ( ( ',' backup_options ) )*
-	| 'BACKUP' targets 'INTO' ( | subdirectory | 'LATEST') 'IN' destination  'WITH' 'OPTIONS' '(' backup_options ( ( ',' backup_options ) )* ')'
-	| 'BACKUP' targets 'INTO' ( | subdirectory | 'LATEST') 'IN' destination  
+	'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' backup_options ( ( ',' backup_options ) )*
+	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' backup_options ( ( ',' backup_options ) )* ')'
+	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
+	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination  'WITH' backup_options ( ( ',' backup_options ) )*
+	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination  'WITH' 'OPTIONS' '(' backup_options ( ( ',' backup_options ) )* ')'
+	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination  
