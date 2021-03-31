@@ -100,7 +100,6 @@ func (p *workPool) getTestToRun(
 			l.PrintfCtx(ctx,
 				"No tests that can reuse cluster %s found (or there are no further tests to run). "+
 					"Destroying.", c)
-			// !!! c.Destroy(ctx, closeLogger, l)
 			cr.ReleaseCluster(ctx, c, l)
 			onDestroy()
 		} else {
@@ -108,7 +107,10 @@ func (p *workPool) getTestToRun(
 		}
 	}
 
-	return p.selectTest(ctx, qp)
+	if qp != nil {
+		return p.selectTest(ctx, qp)
+	}
+	return p.selectTestNoQuota(ctx)
 }
 
 // selectTestForCluster selects a test to run on a cluster with a given spec.
@@ -180,6 +182,14 @@ func (p *workPool) selectTest(ctx context.Context, qp *quotapool.IntPool) (testT
 	}
 	ttr.alloc = alloc
 	return ttr, nil
+}
+
+func (p *workPool) selectTestNoQuota(ctx context.Context) (testToRunRes, error) {
+	ttr, _, err := p.selectTestInternal(ctx, quotapool.PoolInfo{
+		Available: math.MaxUint64,
+		Capacity:  math.MaxUint64,
+	})
+	return ttr, err
 }
 
 func (p *workPool) selectTestInternal(

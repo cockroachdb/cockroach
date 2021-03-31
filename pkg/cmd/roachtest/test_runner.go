@@ -108,6 +108,12 @@ type clustersOpt struct {
 	// If set, all the tests will run against this roachprod cluster.
 	clusterName string
 
+	// existingClusterPattern specifies the prefix of the name of clusters to use.
+	// The clusters need to be named <existingClusterPatter>[1-n] where n is
+	// numExistingClusters.
+	existingClusterPattern string
+	numExistingClusters    int
+
 	// If set, all the clusters will use this ID as part of their name. When
 	// roachtests is invoked by TeamCity, this will be the build id.
 	clusterID string
@@ -119,6 +125,11 @@ type clustersOpt struct {
 	// test runner will wait for other tests to finish and their cluster to be
 	// destroyed (or reused). Note that this limit is global, not per zone.
 	cpuQuota int
+
+	// wipeClustersBeforeReuse, if set (the default), causes clusters to be
+	// stopped and wiped after a successful test run, before they're reused by the
+	// next run.
+	wipeClustersBeforeReuse bool
 	// If set, clusters will not be wiped or destroyed when a test using the
 	// respective cluster fails. These cluster will linger around and they'll
 	// continue counting towards the cpuQuota.
@@ -137,6 +148,8 @@ func (c clustersOpt) validate() error {
 	return nil
 }
 
+var errNoAvailablePreexistingCluster = errors.Errorf("no available pre-existing cluster")
+
 // Run runs tests.
 //
 // Args:
@@ -154,7 +167,6 @@ func (r *testRunner) Run(
 	count int,
 	parallelism int,
 	clustersOpt clustersOpt,
-	artifactsDir string,
 	lopt loggingOpt,
 ) error {
 	// Validate options.
@@ -204,44 +216,69 @@ func (r *testRunner) Run(
 	clusterFactory := newClusterFactory(
 		clustersOpt.user, clustersOpt.clusterID, lopt.artifactsDir, r.cr, numConcurrentClusterCreations)
 
-	// allocateCluster will be used by workers to create new clusters (or to attach
-	// to an existing one).
-	allocateCluster := func(
-		ctx context.Context,
-		t testSpec,
-		alloc *quotapool.IntAlloc,
-		artifactsDir string,
-		wStatus *workerStatus,
-	) (*cluster, error) {
-		wStatus.SetStatus("creating cluster")
-		defer wStatus.SetStatus("")
-
-		lopt.l.PrintfCtx(ctx, "Creating new cluster for test %s: %s", t.Name, t.Cluster)
-
-		existingClusterName := clustersOpt.clusterName
-		if existingClusterName != "" {
-			// Logs for attaching to a cluster go to a dedicated log file.
-			logPath := filepath.Join(artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
-			clusterL, err := rootLogger(logPath, lopt.tee)
-			defer clusterL.close()
-			if err != nil {
-				return nil, err
-			}
-			opt := attachOpt{
-				skipValidation: r.config.skipClusterValidationOnAttach,
-				skipStop:       r.config.skipClusterStopOnAttach,
-				skipWipe:       r.config.skipClusterWipeOnAttach,
-			}
-			return attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
+	var allocateCluster clusterAllocatorFn
+	var qp *quotapool.IntPool
+	if clustersOpt.existingClusterPattern != "" {
+		if err := r.cr.loadExistingClusters(
+			ctx, clustersOpt.existingClusterPattern, clustersOpt.numExistingClusters, lopt.l,
+		); err != nil {
+			return err
 		}
 
-		cfg := clusterConfig{
-			spec:         t.Cluster,
-			artifactsDir: artifactsDir,
-			localCluster: clustersOpt.typ == localCluster,
-			alloc:        alloc,
+		allocateCluster = func(
+			ctx context.Context,
+			t testSpec,
+			alloc *quotapool.IntAlloc,
+			artifactsDir string,
+			wStatus *workerStatus,
+		) (*cluster, error) {
+			c := r.cr.AllocateCluster(ctx, t.Cluster)
+			if c == nil {
+				return nil, errNoAvailablePreexistingCluster
+			}
+			return c, nil
 		}
-		return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
+	} else {
+		qp = quotapool.NewIntPool("cloud cpu", uint64(clustersOpt.cpuQuota))
+		// allocateCluster will be used by workers to create new clusters (or to attach
+		// to an existing one).
+		allocateCluster = func(
+			ctx context.Context,
+			t testSpec,
+			alloc *quotapool.IntAlloc,
+			artifactsDir string,
+			wStatus *workerStatus,
+		) (*cluster, error) {
+			wStatus.SetStatus("creating cluster")
+			defer wStatus.SetStatus("")
+
+			lopt.l.PrintfCtx(ctx, "Creating new cluster for test %s: %s", t.Name, t.Cluster)
+
+			existingClusterName := clustersOpt.clusterName
+			if existingClusterName != "" {
+				// Logs for attaching to a cluster go to a dedicated log file.
+				logPath := filepath.Join(artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
+				clusterL, err := rootLogger(logPath, lopt.tee)
+				defer clusterL.close()
+				if err != nil {
+					return nil, err
+				}
+				opt := attachOpt{
+					skipValidation: r.config.skipClusterValidationOnAttach,
+					skipStop:       r.config.skipClusterStopOnAttach,
+					skipWipe:       r.config.skipClusterWipeOnAttach,
+				}
+				return attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr)
+			}
+
+			cfg := clusterConfig{
+				spec:         t.Cluster,
+				artifactsDir: artifactsDir,
+				localCluster: clustersOpt.typ == localCluster,
+				alloc:        alloc,
+			}
+			return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
+		}
 	}
 
 	// Seed the default rand source so that different runs get different cluster
@@ -263,7 +300,6 @@ func (r *testRunner) Run(
 	stopper := stop.NewStopper()
 	errs := &workerErrors{}
 
-	qp := quotapool.NewIntPool("cloud cpu", uint64(clustersOpt.cpuQuota))
 	l := lopt.l
 
 	var wg sync.WaitGroup
@@ -274,13 +310,24 @@ func (r *testRunner) Run(
 			defer wg.Done()
 
 			if err := r.runWorker(
-				ctx, fmt.Sprintf("w%d", i) /* name */, r.work, qp,
+				ctx, fmt.Sprintf("w%d", i) /* name */, r.work,
+				clusterArgs{
+					allocateCluster:         allocateCluster,
+					wipeClustersBeforeReuse: clustersOpt.wipeClustersBeforeReuse,
+					keepClustersOnFailure:   clustersOpt.keepClustersOnTestFailure,
+				},
+				qp,
 				stopper.ShouldQuiesce(),
-				clustersOpt.keepClustersOnTestFailure,
 				lopt.artifactsDir, lopt.runnerLogPath, lopt.tee, lopt.stdout,
-				allocateCluster,
 				l,
 			); err != nil {
+				if err == errNoAvailablePreexistingCluster {
+					shout(ctx, l, lopt.stdout,
+						"Worker %s couldn't find an available pre-existing cluster. "+
+							"Worker shutting down; other workers will continue.", fmt.Sprintf("w%d", i))
+					return
+				}
+
 				// A worker returned an error. Let's shut down.
 				msg := fmt.Sprintf("Worker %d returned with error. Quiescing. Error: %+v", i, err)
 				shout(ctx, l, lopt.stdout, msg)
@@ -327,6 +374,12 @@ type clusterAllocatorFn func(
 	wStatus *workerStatus,
 ) (*cluster, error)
 
+type clusterArgs struct {
+	allocateCluster         clusterAllocatorFn
+	wipeClustersBeforeReuse bool
+	keepClustersOnFailure   bool
+}
+
 // runWorker runs tests in a loop until work is exhausted.
 //
 // Errors are returned in exceptional circumstances, like when a cluster failed
@@ -352,14 +405,13 @@ func (r *testRunner) runWorker(
 	ctx context.Context,
 	name string,
 	work *workPool,
+	clusterArgs clusterArgs,
 	qp *quotapool.IntPool,
 	interrupt <-chan struct{},
-	debug bool,
 	artifactsRootDir string,
 	testRunnerLogPath string,
 	teeOpt teeOptType,
 	stdout io.Writer,
-	allocateCluster clusterAllocatorFn,
 	l *logger,
 ) error {
 	ctx = logtags.AddTag(ctx, name, nil /* value */)
@@ -384,7 +436,7 @@ func (r *testRunner) runWorker(
 		doDestroy := ctx.Err() == nil
 		if doDestroy {
 			l.PrintfCtx(ctx, "Worker exiting; destroying cluster.")
-			c.Destroy(context.Background(), closeLogger, l)
+			r.cr.ReleaseCluster(ctx, c, l)
 		} else {
 			l.PrintfCtx(ctx, "Worker exiting with canceled ctx. Not destroying cluster.")
 		}
@@ -407,8 +459,8 @@ func (r *testRunner) runWorker(
 		if c != nil {
 			if _, ok := c.spec.ReusePolicy.(reusePolicyNone); ok {
 				wStatus.SetStatus("destroying cluster")
-				// We use a context that can't be canceled for the Destroy().
-				c.Destroy(context.Background(), closeLogger, l)
+				// We use a context that can't be canceled for ReleaseCluster().
+				r.cr.ReleaseCluster(context.Background(), c, l)
 				c = nil
 			}
 		}
@@ -416,11 +468,14 @@ func (r *testRunner) runWorker(
 		wStatus.SetTest(nil /* test */, testToRunRes{})
 		wStatus.SetStatus("getting work")
 		testToRun, c, err = r.getWork(
-			ctx, work, qp, c, interrupt, l,
+			ctx, work, qp,
+			getWorkClusterArgs{c: c, wipeBeforeReuse: clusterArgs.wipeClustersBeforeReuse},
+			interrupt, l,
 			getWorkCallbacks{
 				createCluster: func(ctx context.Context, ttr testToRunRes) (*cluster, error) {
 					wStatus.SetTest(nil /* test */, ttr)
-					return allocateCluster(ctx, ttr.spec, ttr.alloc, artifactsRootDir, wStatus)
+					l.PrintfCtx(ctx, "creating cluster")
+					return clusterArgs.allocateCluster(ctx, ttr.spec, ttr.alloc, artifactsRootDir, wStatus)
 				},
 				onDestroy: func() {
 					wStatus.SetCluster(nil)
@@ -486,7 +541,6 @@ func (r *testRunner) runWorker(
 		}
 		testL.close()
 		if err != nil || t.Failed() {
-			l.Printf("failed 1")
 			failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
 			if err != nil {
 				failureMsg += fmt.Sprintf("%+v", err)
@@ -494,19 +548,17 @@ func (r *testRunner) runWorker(
 				failureMsg += t.FailureMsg()
 			}
 
-			if debug {
-				l.Printf("failed -debug")
+			if clusterArgs.keepClustersOnFailure {
 				// Save the cluster for future debugging.
 				c.Save(ctx, failureMsg, l)
 
 				// Continue with a fresh cluster.
 				c = nil
 			} else {
-				l.Printf("failed - destroy")
 				// On any test failure or error, we destroy the cluster. We could be
 				// more selective, but this sounds safer.
 				l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
-				c.Destroy(context.Background(), closeLogger, l)
+				r.cr.ReleaseCluster(context.Background(), c, l)
 				c = nil
 			}
 
@@ -940,6 +992,13 @@ type getWorkCallbacks struct {
 	onDestroy     func()
 }
 
+type wipeOption bool
+
+type getWorkClusterArgs struct {
+	c               *cluster
+	wipeBeforeReuse bool
+}
+
 // getWork selects the next test to run and creates a suitable cluster for it if
 // need be. If a new cluster needs to be created, the method blocks until there
 // are enough resources available to run it.
@@ -952,7 +1011,7 @@ func (r *testRunner) getWork(
 	ctx context.Context,
 	work *workPool,
 	qp *quotapool.IntPool,
-	c *cluster,
+	copt getWorkClusterArgs,
 	interrupt <-chan struct{},
 	l *logger,
 	callbacks getWorkCallbacks,
@@ -964,7 +1023,7 @@ func (r *testRunner) getWork(
 	default:
 	}
 
-	testToRun, err := work.getTestToRun(ctx, c, qp, r.cr, callbacks.onDestroy, l)
+	testToRun, err := work.getTestToRun(ctx, copt.c, qp, r.cr, callbacks.onDestroy, l)
 	if err != nil {
 		return testToRunRes{}, nil, err
 	}
@@ -976,14 +1035,18 @@ func (r *testRunner) getWork(
 		return testToRun, nil, nil
 	}
 
-	// Create a cluster, if we no longer have one.
+	// Decide if we're going to reuse the passed-in cluster (if any) or if we need
+	// to create a new one.
+	c := copt.c
 	if testToRun.canReuseCluster {
-		l.PrintfCtx(ctx, "Using existing cluster: %s. Wiping", c.name)
-		if err := c.WipeE(ctx, l); err != nil {
-			return testToRunRes{}, nil, err
-		}
-		if err := c.RunL(ctx, l, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
-			return testToRunRes{}, nil, errors.Wrapf(err, "failed to remove perf artifacts dir")
+		if copt.wipeBeforeReuse {
+			l.PrintfCtx(ctx, "Using existing cluster: %s. Wiping", c.name)
+			if err := c.WipeE(ctx, l); err != nil {
+				return testToRunRes{}, nil, err
+			}
+			if err := c.RunL(ctx, l, c.All(), "rm -rf "+perfArtifactsDir); err != nil {
+				return testToRunRes{}, nil, errors.Wrapf(err, "failed to remove perf artifacts dir")
+			}
 		}
 		// Overwrite the spec of the cluster with the one coming from the test. In
 		// particular, this overwrites the reuse policy to reflect what the test

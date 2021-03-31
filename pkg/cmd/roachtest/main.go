@@ -55,11 +55,19 @@ func main() {
 				return nil
 			}
 
-			if clusterName != "" && local {
-				return fmt.Errorf(
-					"cannot specify both an existing cluster (%s) and --local. However, if a local cluster "+
-						"already exists, --clusters=local will use it",
-					clusterName)
+			if clusterName != "" {
+				if local {
+					return fmt.Errorf(
+						"cannot specify both an existing cluster (%s) and --local. However, if a local cluster "+
+							"already exists, --clusters=local will use it",
+						clusterName)
+				}
+				if existingClustersPrefix != "" {
+					return fmt.Errorf("cannot specify for --cluster and --existing-clusters-name")
+				}
+			}
+			if existingClustersPrefix != "" && existingClustersCount == 0 {
+				return fmt.Errorf("--existing-clusters-name needs --existing-clusters-count")
 			}
 			switch cmd.Name() {
 			case "run", "bench", "store-gen":
@@ -72,6 +80,14 @@ func main() {
 	rootCmd.PersistentFlags().StringVarP(
 		&clusterName, "cluster", "c", "",
 		"Name of existing cluster to use for running tests. --parallelism=1 must be set.")
+	rootCmd.PersistentFlags().StringVar(
+		&existingClustersPrefix, "existing-clusters-name", "",
+		"Prefix of the name of the clusters to use. The clusters are expected to be named <prefix>[1-n],"+
+			"where n is --existing-clusters-count. If set, only these clusters are used for running tests; "+
+			"new clusters are not created. Each test will look for a cluster with a compatible spec.")
+	rootCmd.PersistentFlags().IntVar(
+		&existingClustersCount, "existing-clusters-count", 0,
+		"Count of existing clusters to use. See --existing-clusters-name.")
 	rootCmd.PersistentFlags().BoolVarP(
 		&local, "local", "l", local, "run tests locally")
 	rootCmd.PersistentFlags().StringVarP(
@@ -85,6 +101,11 @@ func main() {
 	f := rootCmd.PersistentFlags().VarPF(
 		&encrypt, "encrypt", "", "start cluster with encryption at rest turned on")
 	f.NoOptDefVal = "true"
+	rootCmd.PersistentFlags().StringVar(
+		&testFlags, "test-flags", "", "flags passed to each running test")
+	rootCmd.PersistentFlags().BoolVar(
+		&wipeClustersBeforeReuse, "wipe-before-reuse", true, "Wipe clusters before reuse. Only unset if you know what you're doing - "+
+			"the tests need to be prepared for a running cluster.")
 
 	var listBench bool
 
@@ -146,15 +167,16 @@ the test tags.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runTests(registerTests, cliCfg{
-				args:         args,
-				count:        count,
-				cpuQuota:     cpuQuota,
-				debugEnabled: debugEnabled,
-				httpPort:     httpPort,
-				parallelism:  parallelism,
-				artifactsDir: artifacts,
-				user:         username,
-				clusterID:    clusterID,
+				args:                    args,
+				count:                   count,
+				cpuQuota:                cpuQuota,
+				wipeClustersBeforeReuse: wipeClustersBeforeReuse,
+				debugEnabled:            debugEnabled,
+				httpPort:                httpPort,
+				parallelism:             parallelism,
+				artifactsDir:            artifacts,
+				user:                    username,
+				clusterID:               clusterID,
 			})
 		},
 	}
@@ -178,15 +200,16 @@ the test tags.
 		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runTests(registerBenchmarks, cliCfg{
-				args:         args,
-				count:        count,
-				cpuQuota:     cpuQuota,
-				debugEnabled: debugEnabled,
-				httpPort:     httpPort,
-				parallelism:  parallelism,
-				artifactsDir: artifacts,
-				user:         username,
-				clusterID:    clusterID,
+				args:                    args,
+				count:                   count,
+				cpuQuota:                cpuQuota,
+				wipeClustersBeforeReuse: wipeClustersBeforeReuse,
+				debugEnabled:            debugEnabled,
+				httpPort:                httpPort,
+				parallelism:             parallelism,
+				artifactsDir:            artifacts,
+				user:                    username,
+				clusterID:               clusterID,
 			})
 		},
 	}
@@ -239,15 +262,16 @@ the test tags.
 }
 
 type cliCfg struct {
-	args         []string
-	count        int
-	cpuQuota     int
-	debugEnabled bool
-	httpPort     int
-	parallelism  int
-	artifactsDir string
-	user         string
-	clusterID    string
+	args                    []string
+	count                   int
+	cpuQuota                int
+	debugEnabled            bool
+	wipeClustersBeforeReuse bool
+	httpPort                int
+	parallelism             int
+	artifactsDir            string
+	user                    string
+	clusterID               string
 }
 
 func runTests(register func(*testRegistry), cfg cliCfg) error {
@@ -274,6 +298,8 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 	opt := clustersOpt{
 		typ:                       clusterType,
 		clusterName:               clusterName,
+		existingClusterPattern:    existingClustersPrefix,
+		numExistingClusters:       existingClustersCount,
 		user:                      getUser(cfg.user),
 		cpuQuota:                  cfg.cpuQuota,
 		keepClustersOnTestFailure: cfg.debugEnabled,
@@ -310,7 +336,7 @@ func runTests(register func(*testRegistry), cfg cliCfg) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	CtrlC(ctx, l, cancel, cr)
-	err = runner.Run(ctx, tests, cfg.count, cfg.parallelism, opt, cfg.artifactsDir, lopt)
+	err = runner.Run(ctx, tests, cfg.count, cfg.parallelism, opt, lopt)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's
