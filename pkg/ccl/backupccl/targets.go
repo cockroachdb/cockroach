@@ -468,17 +468,21 @@ func MakeBackupTableEntry(
 		return BackupTableEntry{}, errors.Newf("table name should be specified in format databaseName.schemaName.tableName")
 	}
 
-	ok := false
 	if !endTime.IsEmpty() {
-		for _, b := range backupManifests {
+		ind := -1
+		for i, b := range backupManifests {
 			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
-				ok = true
+				if endTime != b.EndTime {
+					return BackupTableEntry{}, errors.Newf("should specify the exact backup time, next backup timestamp is %s", b.EndTime.AsOfSystemTime())
+				}
+				ind = i
 				break
 			}
 		}
-		if !ok {
-			return BackupTableEntry{}, errors.Newf("invalid --as-of timestamp: supplied backups do not cover requested time")
+		if ind == -1 {
+			return BackupTableEntry{}, errors.Newf("supplied backups do not cover requested time %s", endTime.AsOfSystemTime())
 		}
+		backupManifests = backupManifests[:ind+1]
 	}
 
 	allDescs, _ := loadSQLDescsFromBackupsAtTime(backupManifests, endTime)
@@ -503,10 +507,10 @@ func MakeBackupTableEntry(
 		return BackupTableEntry{}, errors.Wrapf(err, "fetching table %s descriptor", fullyQualifiedTableName)
 	}
 
-	span := tbDesc.PrimaryIndexSpan(backupCodec)
+	tablePrimaryIndexSpan := tbDesc.PrimaryIndexSpan(backupCodec)
 
 	entry, _, err := makeImportSpans(
-		[]roachpb.Span{span},
+		[]roachpb.Span{tablePrimaryIndexSpan},
 		backupManifests,
 		nil,           /*backupLocalityInfo*/
 		roachpb.Key{}, /*lowWaterMark*/
@@ -518,7 +522,7 @@ func MakeBackupTableEntry(
 
 	res := BackupTableEntry{
 		tbDesc,
-		span,
+		tablePrimaryIndexSpan,
 		entry[0].Files,
 	}
 

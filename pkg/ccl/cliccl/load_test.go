@@ -267,18 +267,18 @@ func TestLoadShowData(t *testing.T) {
 			"show-data-with-qualified-table-name-of-user-defined-schema",
 			"testDB.testschema.fooTable",
 			[]string{backupTestSchemaPath},
-			"[2 223 'dog']\n",
+			"2,223,'dog'\n",
 		},
 		{
 			"show-data-with-qualified-table-name-of-public-schema",
 			"testDB.public.fooTable",
 			[]string{backupPublicSchemaPath},
-			"[1 123 'cat']\n",
+			"1,123,'cat'\n",
 		}, {
 			"show-data-of-incremental-backup",
 			"testDB.testschema.fooTable",
 			[]string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName)},
-			"[2 223 'dog']\n[3 333 'mickey mouse']\n",
+			"2,223,'dog'\n3,333,'mickey mouse'\n",
 		},
 	}
 
@@ -313,7 +313,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE fooTable (id INT PRIMARY KEY, value INT, tag STRING)`)
 
 	sqlDB.Exec(t, `CREATE SCHEMA fooschema`)
-	sqlDB.Exec(t, `CREATE TABLE fooschema.fooTable (id INT PRIMARY KEY, value INT, tag STRING)`)
+	sqlDB.Exec(t, `CREATE TABLE fooschema.fooTable (id INT PRIMARY KEY, value INT, tag STRING, FAMILY f1 (value, tag))`)
 
 	const backupPath = "nodelocal://0/fooFolder"
 
@@ -327,14 +327,17 @@ func TestLoadShowDataAOST(t *testing.T) {
 
 	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (3, 323, 'mickey mouse')`)
 	sqlDB.Exec(t, `INSERT INTO fooschema.fooTable VALUES (3, 323, 'foo mickey mouse')`)
+	sqlDB.Exec(t, `ALTER TABLE fooTable ADD COLUMN active BOOL`)
 	ts2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO $1 AS OF SYSTEM TIME '%s'`, ts2.AsOfSystemTime()), backupPath)
 
 	sqlDB.Exec(t, `DELETE FROM fooTable WHERE id=3`)
+	sqlDB.Exec(t, `UPDATE fooTable SET active=(TRUE) WHERE id = 1`)
 	ts3 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO $1 AS OF SYSTEM TIME '%s'`, ts3.AsOfSystemTime()), backupPath)
 
 	tsNotCovered := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
 	t.Run("show-data-as-of-a-uncovered-timestamp", func(t *testing.T) {
 		out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --as-of=%s --external-io-dir=%s",
 			"testDB.public.fooTable",
@@ -342,7 +345,22 @@ func TestLoadShowDataAOST(t *testing.T) {
 			tsNotCovered.AsOfSystemTime(),
 			dir))
 		require.NoError(t, err)
-		expectedError := "ERROR: fetching entry: invalid --as-of timestamp: supplied backups do not cover requested time\n"
+		expectedError := fmt.Sprintf(
+			"ERROR: fetching entry: supplied backups do not cover requested time %s\n",
+			tsNotCovered.AsOfSystemTime())
+		checkExpectedOutput(t, expectedError, out)
+	})
+
+	t.Run("show-data-as-of-non-backup-ts-should-return-error", func(t *testing.T) {
+		out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --as-of=%s --external-io-dir=%s",
+			"testDB.public.fooTable",
+			backupPath,
+			ts.AsOfSystemTime(),
+			dir))
+		require.NoError(t, err)
+		expectedError := fmt.Sprintf(
+			"ERROR: fetching entry: should specify the exact backup time, next backup timestamp is %s\n",
+			ts1.AsOfSystemTime())
 		checkExpectedOutput(t, expectedError, out)
 	})
 
@@ -362,16 +380,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			"", /*asof*/
-			"[1 123 'cat']\n[2 223 'dog']\n",
-		},
-		{
-			"show-data-as-of-time-after-first-insertion-should-work-in-a-single-full-backup",
-			"testDB.public.fooTable",
-			[]string{
-				backupPath,
-			},
-			ts.AsOfSystemTime(),
-			"[1 123 'cat']\n",
+			"1,123,'cat',true\n2,223,'dog',null\n",
 		},
 		{
 			"show-data-as-of-time-after-second-insertion-should-work-in-a-single-full-backup",
@@ -380,28 +389,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath,
 			},
 			ts1.AsOfSystemTime(),
-			"[1 123 'cat']\n[2 223 'dog']\n",
-		},
-		{
-			"show-data-of-public-schema-as-of-time-after-first-insertion-should-work-in-a-chain-of-incremental-backups",
-			"testDB.public.fooTable",
-			[]string{
-				backupPath,
-				backupPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
-				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
-			},
-			ts.AsOfSystemTime(),
-			"[1 123 'cat']\n",
-		}, {
-			"show-data-of-foo-schema-as-of-time-after-first-insertion-should-work-in-a-chain-of-incremental-backups",
-			"testDB.fooschema.fooTable",
-			[]string{
-				backupPath,
-				backupPath + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
-				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
-			},
-			ts.AsOfSystemTime(),
-			"[1 123 'foo cat']\n",
+			"1,123,'cat'\n2,223,'dog'\n",
 		},
 		{
 			"show-data-of-public-schema-as-of-time-after-second-insertion-should-work-in-a-chain-of-incremental-backups",
@@ -412,7 +400,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts1.AsOfSystemTime(),
-			"[1 123 'cat']\n[2 223 'dog']\n",
+			"1,123,'cat'\n2,223,'dog'\n",
 		}, {
 			"show-data-of-foo-schema-as-of-time-after-second-insertion-should-work-in-a-chain-of-incremental-backups",
 			"testDB.fooschema.fooTable",
@@ -422,10 +410,10 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts1.AsOfSystemTime(),
-			"[1 123 'foo cat']\n",
+			"1,123,'foo cat'\n",
 		},
 		{
-			"show-data-of-public-schema-as-of-time-after-third-insertion-should-work-in-a-chain-of-incremental-backups",
+			"show-data-of-public-schema-as-of-time-after-third-insertion-and-schema-changes-should-work-in-a-chain-of-incremental-backups",
 			"testDB.public.fooTable",
 			[]string{
 				backupPath,
@@ -433,7 +421,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts2.AsOfSystemTime(),
-			"[1 123 'cat']\n[2 223 'dog']\n[3 323 'mickey mouse']\n",
+			"1,123,'cat',null\n2,223,'dog',null\n3,323,'mickey mouse',null\n",
 		}, {
 			"show-data-as-of-foo-schema-of-time-after-third-insertion-should-work-in-a-chain-of-incremental-backups",
 			"testDB.fooschema.fooTable",
@@ -443,9 +431,9 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts2.AsOfSystemTime(),
-			"[1 123 'foo cat']\n[3 323 'foo mickey mouse']\n",
+			"1,123,'foo cat'\n3,323,'foo mickey mouse'\n",
 		}, {
-			"show-data-as-of-public-schema-of-time-after-delete-key-should-work-in-a-chain-of-incremental-backups",
+			"show-data-as-of-public-schema-of-time-after-delete-key-and-update-value-should-work-in-a-chain-of-incremental-backups",
 			"testDB.public.fooTable",
 			[]string{
 				backupPath,
@@ -453,7 +441,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts3.AsOfSystemTime(),
-			"[1 123 'cat']\n[2 223 'dog']\n",
+			"1,123,'cat',true\n2,223,'dog',null\n",
 		},
 	}
 
