@@ -848,7 +848,22 @@ func (r *Replica) GetGCThreshold() hlc.Timestamp {
 // Version returns the replica version.
 func (r *Replica) Version() roachpb.Version {
 	if r.mu.state.Version == nil {
-		// TODO(irfansharif,tbg): This is a stop-gap for #58523.
+		// We introduced replica versions in v21.1 to service long-running
+		// migrations. For replicas that were instantiated pre-21.1, it's
+		// possible that the replica version is unset (but not for too long!).
+		//
+		// In the 21.1 cycle we introduced below-raft migrations that install a
+		// replica version on all replicas currently part of a raft group. What
+		// the migrations don't (directly) do is ensure that the versions are
+		// also installed on replicas slated to be GC-ed soon. For that purpose
+		// the migrations infrastructure makes use of PurgeOutdatedReplicas.
+		//
+		// All that is to say that in 21.1, it's possible we're dealing with
+		// unset replica versions.
+		//
+		// TODO(irfansharif): Remove this in 21.2; we'll have migrated into 21.1
+		// and purged all outdated replicas by then, and thus guaranteed to
+		// always have replica versions.
 		return roachpb.Version{}
 	}
 

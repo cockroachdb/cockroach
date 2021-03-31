@@ -136,16 +136,21 @@ func (r *Replica) updateTimestampCache(
 				addToTSCache(key, nil, ts, recovered.ID)
 			}
 		case *roachpb.PushTxnRequest:
-			// A successful PushTxn request bumps the timestamp cache for
-			// the pushee's transaction key. The pushee will consult the
-			// timestamp cache when creating its record. If the push left
-			// the transaction in a PENDING state (PUSH_TIMESTAMP) then we
-			// update the timestamp cache. This will cause the creator
-			// of the transaction record to forward its provisional commit
-			// timestamp to honor the result of this push. If the push left
-			// the transaction in an ABORTED state (PUSH_ABORT) then we
-			// update the a special record in the timestamp cache. This will prevent
-			// the creation of the transaction record entirely.
+			// A successful PushTxn request bumps the timestamp cache for the
+			// pushee's transaction key. The pushee will consult the timestamp
+			// cache when creating its record - see CanCreateTxnRecord.
+			//
+			// If the push left the transaction in a PENDING state
+			// (PUSH_TIMESTAMP) then we add a "push" marker to the timestamp
+			// cache with the push time. This will cause the creator of the
+			// transaction record to forward its provisional commit timestamp to
+			// honor the result of this push, preventing it from committing at
+			// any prior time.
+			//
+			// If the push left the transaction in an ABORTED state (PUSH_ABORT)
+			// then we add a "tombstone" marker to the timestamp cache wth the
+			// pushee's minimum timestamp. This will prevent the creation of the
+			// transaction record entirely.
 			pushee := br.Responses[i].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
 
 			var tombstone bool
@@ -165,12 +170,25 @@ func (r *Replica) updateTimestampCache(
 			}
 
 			var key roachpb.Key
+			var pushTS hlc.Timestamp
 			if tombstone {
+				// NOTE: we only push to the pushee's MinTimestamp and not to
+				// its WriteTimestamp here because we don't want to add an entry
+				// to the timestamp cache at a higher time than the request's
+				// timestamp. The request's PushTo field is validated to be less
+				// than or equal to its timestamp during evaluation. However, a
+				// PUSH_ABORT may not contain a PushTo timestamp or may contain
+				// a PushTo timestamp that lags the pushee's WriteTimestamp. So
+				// if we were to bump the timestamp cache to the WriteTimestamp,
+				// we could risk adding an entry at a time in advance of the
+				// local clock.
 				key = transactionTombstoneMarker(start, pushee.ID)
+				pushTS = pushee.MinTimestamp
 			} else {
 				key = transactionPushMarker(start, pushee.ID)
+				pushTS = pushee.WriteTimestamp
 			}
-			addToTSCache(key, nil, pushee.WriteTimestamp, t.PusherTxn.ID)
+			addToTSCache(key, nil, pushTS, t.PusherTxn.ID)
 		case *roachpb.ConditionalPutRequest:
 			// ConditionalPut only updates on ConditionFailedErrors. On other
 			// errors, no information is returned. On successful writes, the
