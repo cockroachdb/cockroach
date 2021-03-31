@@ -126,6 +126,7 @@ func (s *streamIngestionResumer) revertToCutoverTimestamp(
 	}
 
 	spans := []roachpb.Span{sd.Span}
+	clusterSettings := p.ExecCfg().Settings
 	for len(spans) != 0 {
 		var b kv.Batch
 		for _, span := range spans {
@@ -134,7 +135,8 @@ func (s *streamIngestionResumer) revertToCutoverTimestamp(
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
-				TargetTime: sp.StreamIngest.CutoverTime,
+				TargetTime:                          sp.StreamIngest.CutoverTime,
+				EnableTimeBoundIteratorOptimization: sql.UseTBIForRevertRange.Get(&clusterSettings.SV),
 			})
 		}
 		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize
