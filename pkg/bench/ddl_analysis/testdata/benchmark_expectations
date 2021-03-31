@@ -52,10 +52,14 @@ exp,benchmark
 42,Grant/grant_all_on_3_tables
 21,GrantRole/grant_1_role
 24,GrantRole/grant_2_roles
-4,ORMQueries/activerecord_type_introspection_query
+2,ORMQueries/activerecord_type_introspection_query
 2,ORMQueries/django_table_introspection_1_table
 2,ORMQueries/django_table_introspection_4_tables
 2,ORMQueries/django_table_introspection_8_tables
+2,ORMQueries/pg_attribute
+2,ORMQueries/pg_class
+2,ORMQueries/pg_namespace
+2,ORMQueries/pg_type
 24,Revoke/revoke_all_on_1_table
 33,Revoke/revoke_all_on_2_tables
 42,Revoke/revoke_all_on_3_tables
