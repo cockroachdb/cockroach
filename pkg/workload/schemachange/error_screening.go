@@ -800,3 +800,14 @@ SELECT
 		val,
 	)
 }
+
+func tableHasOngoingSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+		SELECT EXISTS (SELECT table_id FROM crdb_internal.schema_changes
+		WHERE table_id = $1::REGCLASS)
+		`,
+		tableName.String(),
+	)
+}

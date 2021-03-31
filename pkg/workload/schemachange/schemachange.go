@@ -350,6 +350,15 @@ func (w *schemaChangeWorker) runInTxn(tx *pgx.Tx) error {
 			break
 		}
 
+		// Some ops can only be done executed if they are standalone (e.g.
+		// anything using ALTER PRIMARY KEY). Early exit if so.
+		if len(w.opGen.opsInTxn) > 0 {
+			switch w.opGen.opsInTxn[len(w.opGen.opsInTxn)-1] {
+			case alterTableLocality:
+				break
+			}
+		}
+
 		op, err := w.opGen.randOp(tx)
 
 		if pgErr := (pgx.PgError{}); errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
