@@ -753,6 +753,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		c.encryptAtRandom = false
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 	} else {
+		t.l.PrintfCtx(ctx, "skipping full initialization; will only restart nodes")
 		c.Stop(ctx)
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 	}
@@ -783,15 +784,14 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
 		}
 
+		t.Status("setting up dataset")
 		m := newMonitor(ctx, c, roachNodes)
-		if !skipInit {
-			m.Go(func(ctx context.Context) error {
-				t.Status("setting up dataset")
-				return loadTPCCBench(ctx, t, c, b, roachNodes, c.Node(loadNodes[0]))
-			})
-		}
+		m.Go(func(ctx context.Context) error {
+			return loadTPCCBench(ctx, t, c, b, roachNodes, c.Node(loadNodes[0]))
+		})
 		m.Wait()
 	}
+	t.Status()
 
 	// Search between 1 and b.LoadWarehouses for the largest number of
 	// warehouses that can be operated on while sustaining a throughput
