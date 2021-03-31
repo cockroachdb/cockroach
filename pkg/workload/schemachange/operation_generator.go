@@ -421,10 +421,44 @@ func (og *operationGenerator) alterTableLocality(tx *pgx.Tx) (string, error) {
 		func() string {
 			return "GLOBAL"
 		},
-		// TODO(#62191): do REGIONAL BY ROW and REGIONAL BY ROW AS <column>
+		func() string {
+			return "REGIONAL BY ROW"
+		},
 	}
 	idx := og.params.rng.Intn(len(localityOptions))
-	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, localityOptions[idx]()), nil
+	toLocality := localityOptions[idx]()
+	var fromLocality string
+	if err := tx.QueryRow(
+		`SELECT locality FROM [SHOW TABLES] WHERE schema_name = $1::string
+		AND table_name = $2::string`,
+		tableName.Schema(),
+		tableName.Table(),
+	).Scan(&fromLocality); err != nil {
+		return "", err
+	}
+
+	// This statement is not compatible with in progress schema changes when
+	// there is some job migrating the table to or from REGIONAL BY ROW.
+	// As such, if we detect any schema changes on the table, do something invalid
+	// instead.
+	hasSchemaChange, err := og.tableHasSchemaChangePendingOrInTxn(tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if hasSchemaChange {
+		og.expectedCommitErrors.add(pgcode.InvalidTableDefinition)
+		toLocality = `REGIONAL BY TABLE IN non_existent_region`
+	}
+	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, toLocality), nil
+}
+
+func (og *operationGenerator) tableHasSchemaChangePendingOrInTxn(
+	tx *pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	if len(og.opsInTxn) > 0 {
+		return true, nil
+	}
+	return tableHasOngoingSchemaChanges(tx, tableName)
 }
 
 func getClusterRegionNames(tx *pgx.Tx) (descpb.RegionNames, error) {

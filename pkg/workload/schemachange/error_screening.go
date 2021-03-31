@@ -800,3 +800,21 @@ SELECT
 		val,
 	)
 }
+
+func tableHasOngoingSchemaChanges(tx *pgx.Tx, tableName *tree.TableName) (bool, error) {
+	return scanBool(
+		tx,
+		`
+		SELECT json_array_length(
+        crdb_internal.pb_to_json(
+            'cockroach.sql.sqlbase.Descriptor',
+            descriptor
+        )->'table'->'mutations'
+       )
+       = 0
+		FROM system.descriptor
+	  WHERE id = $1::REGCLASS
+		`,
+		tableName.String(),
+	)
+}
