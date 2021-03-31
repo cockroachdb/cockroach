@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/errors"
 )
 
@@ -60,13 +61,8 @@ func IsRetryableError(err error) bool {
 		// unfortunate string comparison.
 		return true
 	}
-	if strings.Contains(errStr, `rpc error`) {
-		// When a crdb node dies, any DistSQL flows with processors scheduled on
-		// it get an error with "rpc error" in the message from the call to
-		// `(*DistSQLPlanner).Run`.
-		return true
-	}
-	return false
+
+	return utilccl.IsDistSQLRetryableError(err)
 }
 
 // MaybeStripRetryableErrorMarker performs some minimal attempt to clean the

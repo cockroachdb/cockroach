@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -207,6 +208,101 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 
 		logger.Printf("%s\n", strings.Join(s, ", "))
 	}
+}
+func registerRestoreNodeShutdown(r *testRegistry) {
+	makeRestoreStarter := func(ctx context.Context, t *test, c *cluster, gatewayNode int) jobStarter {
+		return func(c *cluster) (string, error) {
+			t.l.Printf("connecting to gateway")
+			gatewayDB := c.Conn(ctx, gatewayNode)
+			defer gatewayDB.Close()
+
+			t.l.Printf("creating bank database")
+			if _, err := gatewayDB.Exec("CREATE DATABASE bank"); err != nil {
+				return "", err
+			}
+
+			errCh := make(chan error, 1)
+			go func() {
+				defer close(errCh)
+
+				// 10 GiB restore.
+				restoreQuery := `RESTORE bank.bank FROM
+					'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=10000000,seed=1/bank'`
+
+				t.l.Printf("starting to run the restore job")
+				if _, err := gatewayDB.Exec(restoreQuery); err != nil {
+					errCh <- err
+				}
+				t.l.Printf("done running restore job")
+			}()
+
+			// Wait for the job.
+			retryOpts := retry.Options{
+				MaxRetries:     50,
+				InitialBackoff: 1 * time.Second,
+				MaxBackoff:     5 * time.Second,
+			}
+			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+				var jobCount int
+				if err := gatewayDB.QueryRowContext(ctx, "SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE'").Scan(&jobCount); err != nil {
+					return "", err
+				}
+
+				select {
+				case err := <-errCh:
+					// We got an error when starting the job.
+					return "", err
+				default:
+				}
+
+				if jobCount == 0 {
+					t.l.Printf("waiting for restore job")
+				} else if jobCount == 1 {
+					t.l.Printf("found restore job")
+					break
+				} else {
+					t.l.Printf("found multiple restore jobs -- erroring")
+					return "", errors.New("unexpectedly found multiple restore jobs")
+				}
+			}
+
+			var jobID string
+			if err := gatewayDB.QueryRowContext(ctx, "SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'").Scan(&jobID); err != nil {
+				return "", errors.Wrap(err, "querying the job ID")
+			}
+			return jobID, nil
+		}
+	}
+
+	r.Add(testSpec{
+		Name:       "restore/nodeShutdown/worker",
+		Owner:      OwnerBulkIO,
+		Cluster:    makeClusterSpec(4),
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			gatewayNode := 2
+			nodeToShutdown := 3
+			c.Put(ctx, cockroach, "./cockroach")
+			c.Start(ctx, t)
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
+		},
+	})
+
+	r.Add(testSpec{
+		Name:       "restore/nodeShutdown/coordinator",
+		Owner:      OwnerBulkIO,
+		Cluster:    makeClusterSpec(4),
+		MinVersion: "v21.1.0",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			gatewayNode := 2
+			nodeToShutdown := 2
+			c.Put(ctx, cockroach, "./cockroach")
+			c.Start(ctx, t)
+
+			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
+		},
+	})
 }
 
 func registerRestore(r *testRegistry) {

@@ -51,6 +51,7 @@ go_library(
         "inverted_index.go",
         "java_helpers.go",
         "jepsen.go",
+        "jobs.go",
         "kv.go",
         "kvbench.go",
         "ledger.go",
