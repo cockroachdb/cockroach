@@ -9,7 +9,9 @@
 package cliccl
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"net/url"
 	"os"
@@ -51,6 +53,9 @@ import (
 
 var externalIODir string
 var readTime string
+var destination string
+var format string
+var nullas string
 
 func init() {
 
@@ -119,6 +124,27 @@ func init() {
 		cliflags.ReadTime.Shorthand,
 		"", /*value*/
 		cliflags.ReadTime.Usage())
+
+	loadShowDataCmd.Flags().StringVarP(
+		&destination,
+		cliflags.ExportDestination.Name,
+		cliflags.ExportDestination.Shorthand,
+		"", /*value*/
+		cliflags.ExportDestination.Usage())
+
+	loadShowDataCmd.Flags().StringVarP(
+		&format,
+		cliflags.ExportTableFormat.Name,
+		cliflags.ExportTableFormat.Shorthand,
+		"csv", /*value*/
+		cliflags.ExportTableFormat.Usage())
+
+	loadShowDataCmd.Flags().StringVarP(
+		&nullas,
+		cliflags.ExportCSVNullas.Name,
+		cliflags.ExportCSVNullas.Shorthand,
+		"null", /*value*/
+		cliflags.ExportCSVNullas.Usage())
 
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadShowCmds)
@@ -422,8 +448,8 @@ func runLoadShowData(cmd *cobra.Command, args []string) error {
 		return errors.Wrapf(err, "fetching entry")
 	}
 
-	if err = showDatum(ctx, entry, endTime, codec); err != nil {
-		return errors.Wrapf(err, "showing key-value pairs")
+	if err = showData(ctx, entry, endTime, codec); err != nil {
+		return errors.Wrapf(err, "show data")
 	}
 	return nil
 }
@@ -448,7 +474,7 @@ func evalAsOfTimestamp(readTime string) (hlc.Timestamp, error) {
 	return hlc.Timestamp{}, err
 }
 
-func showDatum(
+func showData(
 	ctx context.Context, entry backupccl.BackupTableEntry, endTime hlc.Timestamp, codec keys.SQLCodec,
 ) (err error) {
 
@@ -471,6 +497,7 @@ func showDatum(
 	if err != nil {
 		return errors.Wrapf(err, "make row fetcher")
 	}
+	defer rf.Close(ctx)
 
 	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key}, storage.MVCCKey{Key: entry.Span.EndKey}
 	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, endTime)
@@ -478,6 +505,19 @@ func showDatum(
 	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {
 		return errors.Wrapf(err, "row fetcher starts scan")
 	}
+
+	var writer *csv.Writer
+	if format != "csv" {
+		return errors.Newf("only exporting to csv format is supported")
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	if destination == "" {
+		writer = csv.NewWriter(os.Stdout)
+	} else {
+		writer = csv.NewWriter(buf)
+	}
+
 	for {
 		datums, _, _, err := rf.NextRowDecoded(ctx)
 		if err != nil {
@@ -486,7 +526,32 @@ func showDatum(
 		if datums == nil {
 			break
 		}
-		fmt.Println(datums)
+		row := make([]string, datums.Len())
+		for i, datum := range datums {
+			if datum == tree.DNull {
+				row[i] = nullas
+			} else {
+				row[i] = datum.String()
+			}
+		}
+		if err := writer.Write(row); err != nil {
+			return err
+		}
+		writer.Flush()
+	}
+
+	if destination != "" {
+		dir, file := filepath.Split(destination)
+		store, err := cloudimpl.ExternalStorageFromURI(ctx, dir, base.ExternalIODirConfig{},
+			cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+		if err != nil {
+			return errors.Wrapf(err, "unable to open store to write files: %s", destination)
+		}
+		if err = store.WriteFile(ctx, file, bytes.NewReader(buf.Bytes())); err != nil {
+			_ = store.Close()
+			return err
+		}
+		return store.Close()
 	}
 	return err
 }

@@ -267,18 +267,18 @@ func TestLoadShowData(t *testing.T) {
 			"show-data-with-qualified-table-name-of-user-defined-schema",
 			"testDB.testschema.fooTable",
 			[]string{backupTestSchemaPath},
-			"[2 223 'dog']\n",
+			"2,223,'dog'\n",
 		},
 		{
 			"show-data-with-qualified-table-name-of-public-schema",
 			"testDB.public.fooTable",
 			[]string{backupPublicSchemaPath},
-			"[1 123 'cat']\n",
+			"1,123,'cat'\n",
 		}, {
 			"show-data-of-incremental-backup",
 			"testDB.testschema.fooTable",
 			[]string{backupTestSchemaPath, backupTestSchemaPath + ts1.GoTime().Format(backupccl.DateBasedIncFolderName)},
-			"[2 223 'dog']\n[3 333 'mickey mouse']\n",
+			"2,223,'dog'\n3,333,'mickey mouse'\n",
 		},
 	}
 
@@ -362,7 +362,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			"", /*asof*/
-			"[1 123 'cat']\n[2 223 'dog']\n",
+			"1,123,'cat'\n2,223,'dog'\n",
 		},
 		{
 			"show-data-as-of-time-after-first-insertion-should-work-in-a-single-full-backup",
@@ -371,7 +371,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath,
 			},
 			ts.AsOfSystemTime(),
-			"[1 123 'cat']\n",
+			"1,123,'cat'\n",
 		},
 		{
 			"show-data-as-of-time-after-second-insertion-should-work-in-a-single-full-backup",
@@ -380,7 +380,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath,
 			},
 			ts1.AsOfSystemTime(),
-			"[1 123 'cat']\n[2 223 'dog']\n",
+			"1,123,'cat'\n2,223,'dog'\n",
 		},
 		{
 			"show-data-of-public-schema-as-of-time-after-first-insertion-should-work-in-a-chain-of-incremental-backups",
@@ -391,7 +391,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts.AsOfSystemTime(),
-			"[1 123 'cat']\n",
+			"1,123,'cat'\n",
 		}, {
 			"show-data-of-foo-schema-as-of-time-after-first-insertion-should-work-in-a-chain-of-incremental-backups",
 			"testDB.fooschema.fooTable",
@@ -401,7 +401,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts.AsOfSystemTime(),
-			"[1 123 'foo cat']\n",
+			"1,123,'foo cat'\n",
 		},
 		{
 			"show-data-of-public-schema-as-of-time-after-second-insertion-should-work-in-a-chain-of-incremental-backups",
@@ -412,7 +412,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts1.AsOfSystemTime(),
-			"[1 123 'cat']\n[2 223 'dog']\n",
+			"1,123,'cat'\n2,223,'dog'\n",
 		}, {
 			"show-data-of-foo-schema-as-of-time-after-second-insertion-should-work-in-a-chain-of-incremental-backups",
 			"testDB.fooschema.fooTable",
@@ -422,7 +422,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts1.AsOfSystemTime(),
-			"[1 123 'foo cat']\n",
+			"1,123,'foo cat'\n",
 		},
 		{
 			"show-data-of-public-schema-as-of-time-after-third-insertion-should-work-in-a-chain-of-incremental-backups",
@@ -433,7 +433,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts2.AsOfSystemTime(),
-			"[1 123 'cat']\n[2 223 'dog']\n[3 323 'mickey mouse']\n",
+			"1,123,'cat'\n2,223,'dog'\n3,323,'mickey mouse'\n",
 		}, {
 			"show-data-as-of-foo-schema-of-time-after-third-insertion-should-work-in-a-chain-of-incremental-backups",
 			"testDB.fooschema.fooTable",
@@ -443,7 +443,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts2.AsOfSystemTime(),
-			"[1 123 'foo cat']\n[3 323 'foo mickey mouse']\n",
+			"1,123,'foo cat'\n3,323,'foo mickey mouse'\n",
 		}, {
 			"show-data-as-of-public-schema-of-time-after-delete-key-should-work-in-a-chain-of-incremental-backups",
 			"testDB.public.fooTable",
@@ -453,7 +453,7 @@ func TestLoadShowDataAOST(t *testing.T) {
 				backupPath + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
 			},
 			ts3.AsOfSystemTime(),
-			"[1 123 'cat']\n[2 223 'dog']\n",
+			"1,123,'cat'\n2,223,'dog'\n",
 		},
 	}
 
