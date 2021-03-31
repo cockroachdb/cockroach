@@ -118,7 +118,7 @@ func (p *postgreStream) Next() (interface{}, error) {
 				}
 				continue
 			}
-			return nil, err
+			return nil, wrapErrorWithUnsupportedHint(err)
 		}
 		switch len(stmts) {
 		case 0:
@@ -625,7 +625,7 @@ func readPostgresStmt(
 						}
 						continue
 					}
-					return errors.Errorf("unsupported statement: %s", stmt)
+					return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 				}
 				create.Defs = append(create.Defs, cmd.ColumnDef)
 			case *tree.AlterTableSetNotNull:
@@ -653,14 +653,14 @@ func readPostgresStmt(
 					}
 					continue
 				}
-				return errors.Errorf("unsupported statement: %s", stmt)
+				return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 			}
 		}
 	case *tree.AlterTableOwner:
 		if ignoreUnsupportedStmts {
 			return unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
 		}
-		return errors.Errorf("unsupported statement: %s", stmt)
+		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported statement: %s", stmt))
 	case *tree.CreateSequence:
 		schemaQualifiedTableName, err := getSchemaAndTableName(&stmt.Name)
 		if err != nil {
@@ -673,7 +673,7 @@ func readPostgresStmt(
 		if ignoreUnsupportedStmts {
 			return unsupportedStmtLogger.log(stmt.String(), false /* isParseError */)
 		}
-		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
+		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
 	// Some SELECT statements mutate schema. Search for those here.
 	case *tree.Select:
 		switch sel := stmt.Select.(type) {
@@ -706,7 +706,7 @@ func readPostgresStmt(
 							}
 							continue
 						}
-						return err
+						return wrapErrorWithUnsupportedHint(err)
 					}
 					// Attempt to convert all func exprs to datums.
 					datums := make(tree.Datums, len(expr.Exprs))
@@ -751,7 +751,7 @@ func readPostgresStmt(
 						}
 						continue
 					}
-					return err
+					return wrapErrorWithUnsupportedHint(err)
 				}
 			}
 		default:
@@ -763,7 +763,7 @@ func readPostgresStmt(
 				}
 				return nil
 			}
-			return err
+			return wrapErrorWithUnsupportedHint(err)
 		}
 	case *tree.DropTable:
 		names := stmt.Names
@@ -808,7 +808,7 @@ func readPostgresStmt(
 		if ignoreUnsupportedStmts {
 			return unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
 		}
-		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
+		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
 			return stmt
@@ -817,7 +817,7 @@ func readPostgresStmt(
 		if ignoreUnsupportedStmts {
 			return unsupportedStmtLogger.log(fmt.Sprintf("%s", stmt), false /* isParseError */)
 		}
-		return errors.Errorf("unsupported %T statement: %s", stmt, stmt)
+		return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported %T statement: %s", stmt, stmt))
 	}
 	return nil
 }
@@ -940,6 +940,12 @@ func (m *pgDumpReader) readFiles(
 	return m.unsupportedStmtLogger.flush()
 }
 
+func wrapErrorWithUnsupportedHint(err error) error {
+	return errors.WithHintf(err,
+		"To ignore unsupported statements and log them for review post IMPORT, see the options listed"+
+			" in the docs: %s", "https://www.cockroachlabs.com/docs/stable/import.html#import-options")
+}
+
 func (m *pgDumpReader) readFile(
 	ctx context.Context, input *fileReader, inputIdx int32, resumePos int64, rejected chan string,
 ) error {
@@ -1000,7 +1006,7 @@ func (m *pgDumpReader) readFile(
 					}
 					continue
 				}
-				return errors.Errorf("unsupported: %s", i.Rows.Select)
+				return wrapErrorWithUnsupportedHint(errors.Errorf("unsupported: %s", i.Rows.Select))
 			}
 			inserts++
 			startingCount := count
@@ -1154,7 +1160,7 @@ func (m *pgDumpReader) readFile(
 					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			}
 			if len(sc.Exprs) != 1 {
 				err := errors.Errorf("unsupported %d select args: %v", len(sc.Exprs), sc.Exprs)
@@ -1165,7 +1171,7 @@ func (m *pgDumpReader) readFile(
 					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			}
 			fn, ok := sc.Exprs[0].Expr.(*tree.FuncExpr)
 			if !ok {
@@ -1177,7 +1183,7 @@ func (m *pgDumpReader) readFile(
 					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			}
 
 			switch funcName := strings.ToLower(fn.Func.String()); funcName {
@@ -1190,7 +1196,7 @@ func (m *pgDumpReader) readFile(
 					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			case "setval", "pg_catalog.setval":
 				if args := len(fn.Exprs); args < 2 || args > 3 {
 					err := errors.Errorf("unsupported %d fn args in select: %v", len(fn.Exprs), fn.Exprs)
@@ -1225,7 +1231,7 @@ func (m *pgDumpReader) readFile(
 						}
 						continue
 					}
-					return err
+					return wrapErrorWithUnsupportedHint(err)
 				}
 				val, err := seqval.AsInt64()
 				if err != nil {
@@ -1280,7 +1286,7 @@ func (m *pgDumpReader) readFile(
 					}
 					continue
 				}
-				return err
+				return wrapErrorWithUnsupportedHint(err)
 			}
 		case *tree.CreateExtension, *tree.CommentOnDatabase, *tree.CommentOnTable,
 			*tree.CommentOnIndex, *tree.CommentOnColumn, *tree.AlterSequence:
@@ -1299,7 +1305,7 @@ func (m *pgDumpReader) readFile(
 				}
 				continue
 			}
-			return err
+			return wrapErrorWithUnsupportedHint(err)
 		}
 	}
 	for _, conv := range m.tables {
