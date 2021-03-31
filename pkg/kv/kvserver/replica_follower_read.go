@@ -197,8 +197,16 @@ func (r *Replica) maxClosedRLocked(
 	// Look at the legacy closed timestamp propagation mechanism.
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), appliedLAI)
-	maxClosed.Forward(lease.Start.ToTimestamp())
 	maxClosed.Forward(initialMaxClosed)
+
+	// If the range has not upgraded to the new closed timestamp system,
+	// continue using the lease start time as an input to the range's closed
+	// timestamp. Otherwise, ignore it. We expect to delete this code soon, but
+	// we keep it around for now to avoid a regression in follower read
+	// availability in mixed v20.2/v21.1 clusters.
+	if replicaStateClosed.IsEmpty() {
+		maxClosed.Forward(lease.Start.ToTimestamp())
+	}
 
 	// Look at the "new" closed timestamp propagation mechanism.
 	maxClosed.Forward(replicaStateClosed)
@@ -217,8 +225,6 @@ func (r *Replica) maxClosedRLocked(
 	var update replicaUpdate
 	// In some tests the lease can be empty, or the ClosedTimestampReceiver might
 	// not be set.
-	// TODO(andrei): Remove the ClosedTimestampReceiver == nil protection once the
-	// multiTestContext goes away.
 	if !replicationBehind && !lease.Empty() && r.store.cfg.ClosedTimestampReceiver != nil {
 		otherSideTransportClosed, otherSideTransportLAI :=
 			r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(ctx, r.RangeID, lease.Replica.NodeID)
@@ -246,13 +252,31 @@ func (r *Replica) maxClosedRLocked(
 // timestamps is synchronized with lease transfers and subsumption requests.
 // Callers who need that property should be prepared to get an empty result
 // back, meaning that the closed timestamp cannot be known.
-func (r *Replica) ClosedTimestampV2() hlc.Timestamp {
+//
+// TODO(andrei): Remove this in favor of maxClosed() once the old closed
+// timestamp mechanism is deleted. At that point, the two should be equivalent.
+func (r *Replica) ClosedTimestampV2(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.closedTimestampV2RLocked()
-}
 
-func (r *Replica) closedTimestampV2RLocked() hlc.Timestamp {
-	// TODO(andrei,nvanbenschoten): include sideTransportClosedTimestamp.
-	return r.mu.state.RaftClosedTimestamp
+	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
+
+	closed := r.mu.state.RaftClosedTimestamp
+	sideTransportClosedMaybe, minLAI := r.getSideTransportClosedTimestampRLocked()
+	replicationBehind := appliedLAI < minLAI
+	if !replicationBehind {
+		closed.Forward(sideTransportClosedMaybe)
+	}
+
+	// Tests might not be configured with a receiver.
+	if receiver := r.store.cfg.ClosedTimestampReceiver; receiver != nil {
+		otherSideTransportClosed, otherSideTransportLAI :=
+			r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
+		replicationBehind = appliedLAI < otherSideTransportLAI
+		if !replicationBehind {
+			closed.Forward(otherSideTransportClosed)
+		}
+	}
+
+	return closed
 }

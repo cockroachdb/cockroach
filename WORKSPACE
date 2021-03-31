@@ -98,7 +98,7 @@ load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_depe
 
 go_rules_dependencies()
 
-go_register_toolchains(go_version = "1.15.6")
+go_register_toolchains(go_version = "1.15.10")
 
 # Configure nodeJS.
 load("@build_bazel_rules_nodejs//:index.bzl", "yarn_install")
@@ -163,3 +163,8 @@ git_repository(
 load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
 
 rules_foreign_cc_dependencies()
+
+# Load custom toolchains.
+load("//build:toolchains/REPOSITORIES.bzl", "toolchain_dependencies")
+
+toolchain_dependencies()

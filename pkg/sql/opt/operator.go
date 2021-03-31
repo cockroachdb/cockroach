@@ -136,6 +136,7 @@ var ComparisonOpReverseMap = map[Operator]tree.ComparisonOperator{
 	IsOp:             tree.IsNotDistinctFrom,
 	IsNotOp:          tree.IsDistinctFrom,
 	ContainsOp:       tree.Contains,
+	ContainedByOp:    tree.ContainedBy,
 	JsonExistsOp:     tree.JSONExists,
 	JsonSomeExistsOp: tree.JSONSomeExists,
 	JsonAllExistsOp:  tree.JSONAllExists,

@@ -3825,6 +3825,23 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.create_join_token": makeBuiltin(
+		tree.FunctionProperties{Category: categorySystemInfo},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				token, err := ctx.JoinTokenCreator.CreateJoinToken(ctx.Context)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(token), nil
+			},
+			Info:       "Creates a join token for use when adding a new node to a secure cluster.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.destroy_tenant": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     categoryMultiTenancy,
@@ -4322,6 +4339,25 @@ may increase either contention or retry errors, or both.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+
+	"crdb_internal.get_vmodule": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(ctx *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				if err := checkPrivilegedUser(ctx); err != nil {
+					return nil, err
+				}
+				return tree.NewDString(log.GetVModule()), nil
+			},
+			Info:       "Returns the vmodule configuration on the gateway node processing this request.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	// Returns the number of distinct inverted index entries that would be
 	// generated for a value.
 	"crdb_internal.num_geo_inverted_index_entries": makeBuiltin(

@@ -612,20 +612,27 @@ func (h *crdbInstallHelper) generateKeyCmd(nodeIdx int, extraArgs []string) stri
 	}
 
 	nodes := h.c.ServerNodes()
-	var storeDir string
+	var storeDirs []string
 	if idx := argExists(extraArgs, "--store"); idx == -1 {
-		storeDir = h.c.Impl.NodeDir(h.c, nodes[nodeIdx], 1 /* storeIndex */)
+		for i := 1; i <= StartOpts.StoreCount; i++ {
+			storeDir := h.c.Impl.NodeDir(h.c, nodes[nodeIdx], i)
+			storeDirs = append(storeDirs, storeDir)
+		}
 	} else {
-		storeDir = strings.TrimPrefix(extraArgs[idx], "--store=")
+		storeDir := strings.TrimPrefix(extraArgs[idx], "--store=")
+		storeDirs = append(storeDirs, storeDir)
 	}
 
 	// Command to create the store key.
-	keyCmd := fmt.Sprintf(`
-		mkdir -p %[1]s;
-		if [ ! -e %[1]s/aes-128.key ]; then
-			openssl rand -out %[1]s/aes-128.key 48;
-		fi;`, storeDir)
-	return keyCmd
+	var keyCmd strings.Builder
+	for _, storeDir := range storeDirs {
+		fmt.Fprintf(&keyCmd, `
+			mkdir -p %[1]s;
+			if [ ! -e %[1]s/aes-128.key ]; then
+				openssl rand -out %[1]s/aes-128.key 48;
+			fi;`, storeDir)
+	}
+	return keyCmd.String()
 }
 
 func (h *crdbInstallHelper) useStartSingleNode(vers *version.Version) bool {

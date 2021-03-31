@@ -29,10 +29,11 @@ import (
 type relocateNode struct {
 	optColumnsSlot
 
-	relocateLease bool
-	tableDesc     catalog.TableDescriptor
-	index         *descpb.IndexDescriptor
-	rows          planNode
+	relocateLease     bool
+	relocateNonVoters bool
+	tableDesc         catalog.TableDescriptor
+	index             *descpb.IndexDescriptor
+	rows              planNode
 
 	run relocateRun
 }
@@ -51,9 +52,6 @@ func (n *relocateNode) startExec(runParams) error {
 	n.run.storeMap = make(map[roachpb.StoreID]roachpb.NodeID)
 	return nil
 }
-
-// TODO(aayush): Extend EXPERIMENTAL_RELOCATE syntax to support relocating
-// non-voting replicas.
 
 func (n *relocateNode) Next(params runParams) (bool, error) {
 	// Each Next call relocates one range (corresponding to one row from n.rows).
@@ -82,7 +80,8 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			)
 		}
 		relocation := data[0].(*tree.DArray)
-		if len(relocation.Array) == 0 {
+		if !n.relocateNonVoters && len(relocation.Array) == 0 {
+			// We cannot remove all voters.
 			return false, errors.Errorf("empty relocation array for EXPERIMENTAL_RELOCATE")
 		}
 
@@ -129,13 +128,21 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 	}
 	n.run.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 
+	existingVoters := rangeDesc.Replicas().Voters().ReplicationTargets()
+	existingNonVoters := rangeDesc.Replicas().NonVoters().ReplicationTargets()
 	if n.relocateLease {
 		if err := params.p.ExecCfg().DB.AdminTransferLease(params.ctx, rowKey, leaseStoreID); err != nil {
 			return false, err
 		}
+	} else if n.relocateNonVoters {
+		if err := params.p.ExecCfg().DB.AdminRelocateRange(
+			params.ctx, rowKey, existingVoters, relocationTargets,
+		); err != nil {
+			return false, err
+		}
 	} else {
 		if err := params.p.ExecCfg().DB.AdminRelocateRange(
-			params.ctx, rowKey, relocationTargets, nil, /* nonVoterTargets */
+			params.ctx, rowKey, relocationTargets, existingNonVoters,
 		); err != nil {
 			return false, err
 		}

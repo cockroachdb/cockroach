@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
@@ -48,7 +49,7 @@ func (s *statusServer) Statements(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			return s.StatementsLocal()
+			return statementsLocal(s.gossip.NodeID, s.admin.server.sqlServer)
 		}
 		status, err := s.dialNode(ctx, requestedNodeID)
 		if err != nil {
@@ -87,10 +88,12 @@ func (s *statusServer) Statements(
 	return response, nil
 }
 
-func (s *statusServer) StatementsLocal() (*serverpb.StatementsResponse, error) {
-	stmtStats := s.admin.server.sqlServer.pgServer.SQLServer.GetUnscrubbedStmtStats()
-	txnStats := s.admin.server.sqlServer.pgServer.SQLServer.GetUnscrubbedTxnStats()
-	lastReset := s.admin.server.sqlServer.pgServer.SQLServer.GetStmtStatsLastReset()
+func statementsLocal(
+	nodeID *base.NodeIDContainer, sqlServer *SQLServer,
+) (*serverpb.StatementsResponse, error) {
+	stmtStats := sqlServer.pgServer.SQLServer.GetUnscrubbedStmtStats()
+	txnStats := sqlServer.pgServer.SQLServer.GetUnscrubbedTxnStats()
+	lastReset := sqlServer.pgServer.SQLServer.GetStmtStatsLastReset()
 
 	resp := &serverpb.StatementsResponse{
 		Statements:            make([]serverpb.StatementsResponse_CollectedStatementStatistics, len(stmtStats)),
@@ -102,7 +105,7 @@ func (s *statusServer) StatementsLocal() (*serverpb.StatementsResponse, error) {
 	for i, txn := range txnStats {
 		resp.Transactions[i] = serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics{
 			StatsData: txn,
-			NodeID:    s.gossip.NodeID.Get(),
+			NodeID:    nodeID.Get(),
 		}
 	}
 
@@ -110,7 +113,7 @@ func (s *statusServer) StatementsLocal() (*serverpb.StatementsResponse, error) {
 		resp.Statements[i] = serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
 				KeyData: stmt.Key,
-				NodeID:  s.gossip.NodeID.Get(),
+				NodeID:  nodeID.Get(),
 			},
 			ID:    stmt.ID,
 			Stats: stmt.Stats,

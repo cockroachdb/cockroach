@@ -847,6 +847,27 @@ func (tc *TestCluster) TransferRangeLeaseOrFatal(
 	}
 }
 
+// RemoveLeaseHolderOrFatal is a convenience version of TransferRangeLease and RemoveVoter
+func (tc *TestCluster) RemoveLeaseHolderOrFatal(
+	t testing.TB,
+	rangeDesc roachpb.RangeDescriptor,
+	src roachpb.ReplicationTarget,
+	dest roachpb.ReplicationTarget,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		if err := tc.TransferRangeLease(rangeDesc, dest); err != nil {
+			return err
+		}
+		if _, err := tc.RemoveVoters(rangeDesc.StartKey.AsRawKey(), src); err != nil {
+			if strings.Contains(err.Error(), "to remove self (leaseholder)") {
+				return err
+			}
+			t.Fatal(err)
+		}
+		return nil
+	})
+}
+
 // MoveRangeLeaseNonCooperatively is part of the TestClusterInterface.
 func (tc *TestCluster) MoveRangeLeaseNonCooperatively(
 	rangeDesc roachpb.RangeDescriptor, dest roachpb.ReplicationTarget, manual *hlc.HybridManualClock,

@@ -8,16 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package server
+package security
 
 import (
-	"io/ioutil"
 	"math/rand"
-	"path"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -31,20 +27,20 @@ func TestJoinToken(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	j := &joinToken{
-		tokenID:      uuid.MakeV4(),
-		sharedSecret: randutil.RandBytes(rng, joinTokenSecretLen),
+	j := &JoinToken{
+		TokenID:      uuid.MakeV4(),
+		SharedSecret: randutil.RandBytes(rng, joinTokenSecretLen),
 		fingerprint:  nil,
 	}
 	testCACert := []byte("foobar")
 	j.sign(testCACert)
-	require.True(t, j.verifySignature(testCACert))
-	require.False(t, j.verifySignature([]byte("test")))
+	require.True(t, j.VerifySignature(testCACert))
+	require.False(t, j.VerifySignature([]byte("test")))
 	require.NotNil(t, j.fingerprint)
 
 	marshaled, err := j.MarshalText()
 	require.NoError(t, err)
-	j2 := &joinToken{}
+	j2 := &JoinToken{}
 	require.NoError(t, j2.UnmarshalText(marshaled))
 
 	require.Equal(t, j, j2)
@@ -54,14 +50,11 @@ func TestGenerateJoinToken(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tempDir, cleanup := testutils.TempDir(t)
-	defer cleanup()
-	caCertFile := path.Join(tempDir, security.CACertFilename())
-	caCert := []byte("foobar")
-	require.NoError(t, ioutil.WriteFile(caCertFile, caCert, 0600))
+	cm, err := NewCertificateManager(EmbeddedCertsDir, CommandTLSSettings{})
+	require.NoError(t, err)
 
-	token, err := generateJoinToken(tempDir)
+	token, err := GenerateJoinToken(cm)
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
-	require.True(t, token.verifySignature(caCert))
+	require.True(t, token.VerifySignature(cm.CACert().FileContents))
 }

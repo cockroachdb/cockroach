@@ -673,6 +673,11 @@ func (t *TestTenant) DiagnosticsReporter() interface{} {
 	return t.diagnosticsReporter
 }
 
+// StatusServer is part of the TestTenantInterface interface.
+func (t *TestTenant) StatusServer() interface{} {
+	return t.execCfg.SQLStatusServer
+}
+
 // SetupIdleMonitor will monitor the active connections and if there are none,
 // will activate a `defaultCountdownDuration` countdown timer and terminate
 // the application. The monitoring will start after a warmup period

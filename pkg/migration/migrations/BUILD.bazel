@@ -4,6 +4,7 @@ go_library(
     name = "migrations",
     srcs = [
         "foreign_key_representation_upgrade.go",
+        "join_tokens.go",
         "migrations.go",
         "migrations_table.go",
         "namespace_migration.go",
