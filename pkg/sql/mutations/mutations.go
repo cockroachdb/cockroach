@@ -633,6 +633,7 @@ func postgresMutator(rng *rand.Rand, q string) string {
 		"INT4":    "INT8",
 		"STORING": "INCLUDE",
 		" AS (":   " GENERATED ALWAYS AS (",
+		",)":      ")",
 	} {
 		q = strings.Replace(q, from, to, -1)
 	}
