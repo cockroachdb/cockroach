@@ -2808,12 +2808,11 @@ func (s *Store) PurgeOutdatedReplicas(ctx context.Context, version roachpb.Versi
 	qp := quotapool.NewIntPool("purge-outdated-replicas", 50)
 	g := ctxgroup.WithContext(ctx)
 	s.VisitReplicas(func(repl *Replica) (wantMore bool) {
-		if (repl.Version() == roachpb.Version{}) {
-			// TODO(irfansharif,tbg): This is a stop gap for #58523.
-			return true
-		}
 		if !repl.Version().Less(version) {
-			// Nothing to do here.
+			// Nothing to do here. The less-than check also considers replicas
+			// with unset replica versions, which are only possible if they're
+			// left-over, GC-able replicas from before the first below-raft
+			// migration. We'll want to purge those.
 			return true
 		}
 
