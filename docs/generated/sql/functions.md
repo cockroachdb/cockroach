@@ -873,6 +873,16 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><a name="crdb_internal.filter_multiregion_fields_from_zone_config_sql"></a><code>crdb_internal.filter_multiregion_fields_from_zone_config_sql(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Takes in a CONFIGURE ZONE SQL statement and returns a modified
+SQL statement omitting multi-region related zone configuration fields.
+If the CONFIGURE ZONE statement can be inferred by the database’s or
+table’s zone configuration this will return NULL.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.validate_multi_region_zone_configs"></a><code>crdb_internal.validate_multi_region_zone_configs() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validates all multi-region zone configurations are correctly setup
+for the current database, including all tables, indexes and partitions underneath.
+Returns an error if validation fails. This builtin uses un-leased versions of the
+each descriptor, requiring extra round trips.</p>
+</span></td></tr>
 <tr><td><a name="default_to_database_primary_region"></a><code>default_to_database_primary_region(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given region if the region has been added to the current database.
 Otherwise, this will return the primary region of the current database.
 This will error if the current database is not a multi-region database.</p>
@@ -2371,11 +2381,6 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tr><td><a name="convert_from"></a><code>convert_from(str: <a href="bytes.html">bytes</a>, enc: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Decode the bytes in <code>str</code> into a string using encoding <code>enc</code>. Supports encodings ‘UTF8’ and ‘LATIN1’.</p>
 </span></td></tr>
 <tr><td><a name="convert_to"></a><code>convert_to(str: <a href="string.html">string</a>, enc: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encode the string <code>str</code> as a byte array using encoding <code>enc</code>. Supports encodings ‘UTF8’ and ‘LATIN1’.</p>
-</span></td></tr>
-<tr><td><a name="crdb_internal.filter_multiregion_fields_from_zone_config_sql"></a><code>crdb_internal.filter_multiregion_fields_from_zone_config_sql(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Takes in a CONFIGURE ZONE SQL statement and returns a modified
-SQL statement omitting multi-region related zone configuration fields.
-If the CONFIGURE ZONE statement can be inferred by the database’s or
-table’s zone configuration this will return NULL.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.show_create_all_tables"></a><code>crdb_internal.show_create_all_tables(database_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns rows of CREATE table statements followed by
 ALTER table statements that add table constraints. The rows are ordered
