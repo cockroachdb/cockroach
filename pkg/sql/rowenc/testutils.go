@@ -1379,6 +1379,7 @@ func getTableInfoFromDDLStatements(stmts []tree.Statement) map[tree.Name]tableIn
 					// can only reference tables that already exist.
 					if refTableInfo, ok := tables[ast.Table.ObjectName]; ok {
 						refTableInfo.refColsLists = append(refTableInfo.refColsLists, ast.ToCols)
+						tables[ast.Table.ObjectName] = refTableInfo
 					}
 				}
 			}
@@ -1393,6 +1394,7 @@ func getTableInfoFromDDLStatements(stmts []tree.Statement) map[tree.Name]tableIn
 						// statements come after CREATE statements.
 						if info, ok := tables[constraintDef.Table.ObjectName]; ok {
 							info.refColsLists = append(info.refColsLists, constraintDef.ToCols)
+							tables[constraintDef.Table.ObjectName] = info
 						}
 					}
 				}
