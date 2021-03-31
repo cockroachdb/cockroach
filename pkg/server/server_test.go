@@ -40,9 +40,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -60,6 +62,8 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // TestSelfBootstrap verifies operation when no bootstrap hosts have
@@ -1162,4 +1166,65 @@ func TestDecommissionNodeStatus(t *testing.T) {
 	entry, err := srv.DB().Get(ctx, keys.NodeStatusKey(decomNodeID))
 	require.NoError(t, err)
 	require.Nil(t, entry.Value, "found stale node status entry for node %d", decomNodeID)
+}
+
+func TestSQLDecommissioned(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+		ServerArgs: base.TestServerArgs{
+			Insecure: true, // to set up a simple SQL client
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Decommission server 1 and wait for it to lose cluster access.
+	srv := tc.Server(0)
+	decomSrv := tc.Server(1)
+	for _, status := range []livenesspb.MembershipStatus{
+		livenesspb.MembershipStatus_DECOMMISSIONING, livenesspb.MembershipStatus_DECOMMISSIONED,
+	} {
+		require.NoError(t, srv.Decommission(ctx, status, []roachpb.NodeID{decomSrv.NodeID()}))
+	}
+
+	require.Eventually(t, func() bool {
+		_, err := decomSrv.DB().Scan(ctx, keys.MinKey, keys.MaxKey, 0)
+		s, ok := status.FromError(errors.UnwrapAll(err))
+		return ok && s.Code() == codes.PermissionDenied
+	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for server to lose cluster access")
+
+	// Tests SQL access. We're mostly concerned with these operations returning
+	// fast rather than hanging indefinitely due to internal retries. We both
+	// try the internal executor, to check that the internal structured error is
+	// propagated correctly, and also from a client to make sure the error is
+	// propagated all the way.
+	require.Eventually(t, func() bool {
+		sqlExec := decomSrv.InternalExecutor().(*sql.InternalExecutor)
+
+		datums, err := sqlExec.QueryBuffered(ctx, "", nil, "SELECT 1")
+		require.NoError(t, err)
+		require.Equal(t, []tree.Datums{{tree.NewDInt(1)}}, datums)
+
+		_, err = sqlExec.QueryBuffered(ctx, "", nil, "SELECT * FROM crdb_internal.tables")
+		if err == nil {
+			return false
+		}
+		s, ok := status.FromError(errors.UnwrapAll(err))
+		require.True(t, ok, "expected gRPC status error, got %T: %s", err, err)
+		require.Equal(t, codes.PermissionDenied, s.Code())
+
+		sqlClient, err := serverutils.OpenDBConnE(decomSrv.ServingSQLAddr(), "", true, tc.Stopper())
+		require.NoError(t, err)
+
+		var result int
+		err = sqlClient.QueryRow("SELECT 1").Scan(&result)
+		require.NoError(t, err)
+		require.Equal(t, 1, result)
+
+		_, err = sqlClient.Query("SELECT * FROM crdb_internal.tables")
+		return err != nil
+	}, 10*time.Second, 100*time.Millisecond, "timed out waiting for queries to error")
 }
