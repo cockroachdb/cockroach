@@ -90,7 +90,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		fn("deserialization time", humanizeutil.Duration(s.NetRx.DeserializationTime.Value()))
 	}
 	if s.NetRx.TuplesReceived.HasValue() {
-		fn("network tuples received", humanizeutil.Count(s.NetRx.TuplesReceived.Value()))
+		fn("network rows received", humanizeutil.Count(s.NetRx.TuplesReceived.Value()))
 	}
 	if s.NetRx.BytesReceived.HasValue() {
 		fn("network bytes received", humanize.IBytes(s.NetRx.BytesReceived.Value()))
@@ -101,7 +101,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 
 	// Network Tx stats.
 	if s.NetTx.TuplesSent.HasValue() {
-		fn("network tuples sent", humanizeutil.Count(s.NetTx.TuplesSent.Value()))
+		fn("network rows sent", humanizeutil.Count(s.NetTx.TuplesSent.Value()))
 	}
 	if s.NetTx.BytesSent.HasValue() {
 		fn("network bytes sent", humanize.IBytes(s.NetTx.BytesSent.Value()))
@@ -114,7 +114,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	switch len(s.Inputs) {
 	case 1:
 		if s.Inputs[0].NumTuples.HasValue() {
-			fn("input tuples", humanizeutil.Count(s.Inputs[0].NumTuples.Value()))
+			fn("input rows", humanizeutil.Count(s.Inputs[0].NumTuples.Value()))
 		}
 		if s.Inputs[0].WaitTime.HasValue() {
 			fn("input stall time", humanizeutil.Duration(s.Inputs[0].WaitTime.Value()))
@@ -122,13 +122,13 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 
 	case 2:
 		if s.Inputs[0].NumTuples.HasValue() {
-			fn("left tuples", humanizeutil.Count(s.Inputs[0].NumTuples.Value()))
+			fn("left rows", humanizeutil.Count(s.Inputs[0].NumTuples.Value()))
 		}
 		if s.Inputs[0].WaitTime.HasValue() {
 			fn("left stall time", humanizeutil.Duration(s.Inputs[0].WaitTime.Value()))
 		}
 		if s.Inputs[1].NumTuples.HasValue() {
-			fn("right tuples", humanizeutil.Count(s.Inputs[1].NumTuples.Value()))
+			fn("right rows", humanizeutil.Count(s.Inputs[1].NumTuples.Value()))
 		}
 		if s.Inputs[1].WaitTime.HasValue() {
 			fn("right stall time", humanizeutil.Duration(s.Inputs[1].WaitTime.Value()))
@@ -143,7 +143,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		fn("KV contention time", humanizeutil.Duration(s.KV.ContentionTime.Value()))
 	}
 	if s.KV.TuplesRead.HasValue() {
-		fn("KV tuples read", humanizeutil.Count(s.KV.TuplesRead.Value()))
+		fn("KV rows read", humanizeutil.Count(s.KV.TuplesRead.Value()))
 	}
 	if s.KV.BytesRead.HasValue() {
 		fn("KV bytes read", humanize.IBytes(s.KV.BytesRead.Value()))
@@ -165,7 +165,7 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 		fn("batches output", humanizeutil.Count(s.Output.NumBatches.Value()))
 	}
 	if s.Output.NumTuples.HasValue() {
-		fn("tuples output", humanizeutil.Count(s.Output.NumTuples.Value()))
+		fn("rows output", humanizeutil.Count(s.Output.NumTuples.Value()))
 	}
 }
 
