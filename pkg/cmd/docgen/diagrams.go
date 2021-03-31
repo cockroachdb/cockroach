@@ -444,6 +444,7 @@ var specs = []stmtSpec{
 		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
 		replace: map[string]string{
+			"targets":                        "( | targets )",
 			"'INTO'":                         "'INTO' ( | subdirectory | 'LATEST') 'IN'",
 			"sconst_or_placeholder":          "subdirectory",
 			"string_or_placeholder_opt_list": "destination",
@@ -1037,7 +1038,7 @@ var specs = []stmtSpec{
 			"string_or_placeholder":                  "subdirectory",
 			"list_of_string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
 		},
-		unlink: []string{"timestamp", "full_backup_location", "incremental_backup_location"},
+		unlink: []string{"subdirectory", "timestamp", "destination", "partitioned_backup_location"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'REPLICATION' 'STREAM' 'FROM'"),
 		},
