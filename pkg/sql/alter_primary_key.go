@@ -235,6 +235,11 @@ func (p *planner) AlterPrimaryKey(
 	// to consider the indexed columns to be newPrimaryIndexDesc.ColumnIDs.
 	newPrimaryIndexDesc.StoreColumnNames, newPrimaryIndexDesc.StoreColumnIDs = nil, nil
 	for _, col := range tableDesc.Columns {
+		// We do not store virtual columns.
+		if col.Virtual {
+			continue
+		}
+
 		containsCol := false
 		for _, colID := range newPrimaryIndexDesc.ColumnIDs {
 			if colID == col.ID {
