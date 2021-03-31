@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -292,6 +293,9 @@ func (s storage) release(ctx context.Context, stopper *stop.Stopper, lease *stor
 		)
 		if err != nil {
 			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
+			if grpcutil.IsAuthError(err) {
+				return
+			}
 			firstAttempt = false
 			continue
 		}

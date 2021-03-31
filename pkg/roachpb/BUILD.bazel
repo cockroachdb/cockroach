@@ -50,6 +50,7 @@ go_library(
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_cockroachdb_errors//extgrpc",
         "@com_github_cockroachdb_redact//:redact",
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
@@ -98,6 +99,7 @@ go_library(
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
+        "@com_github_cockroachdb_errors//extgrpc",
         "@com_github_cockroachdb_redact//:redact",
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
@@ -150,6 +152,8 @@ go_test(
         "@io_etcd_go_etcd_raft_v3//quorum",
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@io_etcd_go_etcd_raft_v3//tracker",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
     ],
 )
 
