@@ -176,7 +176,6 @@ go_test(
         "//pkg/util/span",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
-        "//pkg/util/timeutil/pgdate",
         "//pkg/util/uuid",
         "//pkg/workload",
         "//pkg/workload/bank",
