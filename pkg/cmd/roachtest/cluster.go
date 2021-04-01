@@ -832,6 +832,21 @@ func (n nodeListOption) String() string {
 	return buf.String()
 }
 
+// workerAction informs a cluster operation that the callee is a "worker" rather
+// than the test's main goroutine.
+type workerAction struct{}
+
+var _ option = workerAction{}
+
+func (o workerAction) option() {}
+
+// withWorkerAction creates the workerAction option, informing a cluster
+// operation that the callee is a "worker" rather than the test's main
+// goroutine.
+func withWorkerAction() option {
+	return workerAction{}
+}
+
 // clusterSpec represents a test's description of what its cluster needs to
 // look like. It becomes part of a clusterConfig when the cluster is created.
 type clusterSpec struct {
@@ -1093,11 +1108,7 @@ type cluster struct {
 	name string
 	tag  string
 	spec clusterSpec
-	// status is used to communicate the test's status. The callback is a noop
-	// until the cluster is passed to a test, at which point it's hooked up to
-	// test.Status().
-	status func(...interface{})
-	t      testI
+	t    testI
 	// r is the registry tracking this cluster. Destroying the cluster will
 	// unregister it.
 	r *clusterRegistry
@@ -1118,6 +1129,20 @@ type cluster struct {
 
 	// destroyState contains state related to the cluster's destruction.
 	destroyState destroyState
+}
+
+// status is used to communicate the test's status. It's a no-op until the
+// cluster is passed to a test, at which point it's hooked up to test.Status().
+func (c *cluster) status(args ...interface{}) {
+	if impl, ok := c.t.(*test); ok {
+		impl.Status(args...)
+	}
+}
+
+func (c *cluster) workerStatus(args ...interface{}) {
+	if impl, ok := c.t.(*test); ok {
+		impl.WorkerStatus(args...)
+	}
 }
 
 func (c *cluster) String() string {
@@ -1244,7 +1269,6 @@ func (f *clusterFactory) newCluster(
 		c := &cluster{
 			name:       name,
 			expiration: timeutil.Now().Add(24 * time.Hour),
-			status:     func(...interface{}) {},
 			r:          f.r,
 		}
 		if err := f.r.registerCluster(c); err != nil {
@@ -1261,7 +1285,6 @@ func (f *clusterFactory) newCluster(
 	c := &cluster{
 		name:           name,
 		spec:           cfg.spec,
-		status:         func(...interface{}) {},
 		expiration:     exp,
 		encryptDefault: encrypt.asBool(),
 		r:              f.r,
@@ -1343,7 +1366,6 @@ func attachToExistingCluster(
 	c := &cluster{
 		name:           name,
 		spec:           spec,
-		status:         func(...interface{}) {},
 		l:              l,
 		expiration:     exp,
 		encryptDefault: encrypt.asBool(),
@@ -1390,9 +1412,6 @@ func attachToExistingCluster(
 func (c *cluster) setTest(t testI) {
 	c.t = t
 	c.l = t.logger()
-	if impl, ok := t.(*test); ok {
-		c.status = impl.Status
-	}
 }
 
 // StopCockroachGracefullyOnNode stops a running cockroach instance on the requested
@@ -2143,18 +2162,40 @@ func (c *cluster) Restart(ctx context.Context, t *test, node nodeListOption) {
 	cancel()
 }
 
-func decorateStatus(operation string, opts ...option) string {
+func (c *cluster) setStatusForClusterOpt(operation string, opts ...option) {
 	var nodes nodeListOption
+	worker := false
 	for _, o := range opts {
 		if s, ok := o.(nodeSelector); ok {
 			nodes = s.merge(nodes)
+		}
+		if _, ok := o.(workerAction); ok {
+			worker = true
 		}
 	}
 	nodesString := " cluster"
 	if len(nodes) != 0 {
 		nodesString = " nodes " + nodes.String()
 	}
-	return operation + nodesString
+	msg := operation + nodesString
+	if worker {
+		c.workerStatus(msg)
+	} else {
+		c.status(msg)
+	}
+}
+func (c *cluster) clearStatusForClusterOpt(opts ...option) {
+	worker := false
+	for _, o := range opts {
+		if _, ok := o.(workerAction); ok {
+			worker = true
+		}
+	}
+	if worker {
+		c.workerStatus()
+	} else {
+		c.status()
+	}
 }
 
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
@@ -2168,8 +2209,8 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	c.status(decorateStatus("starting", opts...))
-	defer c.status()
+	c.setStatusForClusterOpt("starting", opts...)
+	defer c.clearStatusForClusterOpt(opts...)
 	args := []string{
 		roachprod,
 		"start",
@@ -2218,8 +2259,8 @@ func (c *cluster) StopE(ctx context.Context, opts ...option) error {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
-	c.status(decorateStatus("stopping", opts...))
-	defer c.status()
+	c.setStatusForClusterOpt("stopping", opts...)
+	defer c.clearStatusForClusterOpt(opts...)
 	return execCmd(ctx, c.l, args...)
 }
 
@@ -2245,8 +2286,8 @@ func (c *cluster) WipeE(ctx context.Context, l *logger, opts ...option) error {
 		// For tests.
 		return nil
 	}
-	c.status(decorateStatus("wiping", opts...))
-	defer c.status()
+	c.setStatusForClusterOpt("wiping", opts...)
+	defer c.clearStatusForClusterOpt(opts...)
 	return execCmd(ctx, l, roachprod, "wipe", c.makeNodes(opts...))
 }
 
