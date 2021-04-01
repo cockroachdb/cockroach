@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -194,6 +195,20 @@ func (p *planner) truncateTable(
 		return err
 	}
 
+	if err := checkTableForDisallowedMutationsWithTruncate(tableDesc); err != nil {
+		return err
+	}
+
+	// Resolve all outstanding mutations. Make all new schema elements
+	// public because the table is empty and doesn't need to be backfilled.
+	for _, m := range tableDesc.Mutations {
+		if err := tableDesc.MakeMutationComplete(m); err != nil {
+			return err
+		}
+	}
+	tableDesc.Mutations = nil
+	tableDesc.GCMutations = nil
+
 	// Collect all of the old indexes and reset all of the index IDs.
 	oldIndexes := make([]descpb.IndexDescriptor, len(tableDesc.ActiveIndexes()))
 	for _, idx := range tableDesc.ActiveIndexes() {
@@ -217,16 +232,6 @@ func (p *planner) truncateTable(
 	for _, idx := range tableDesc.ActiveIndexes() {
 		indexIDMapping[oldIndexes[idx.Ordinal()].ID] = idx.GetID()
 	}
-
-	// Resolve all outstanding mutations. Make all new schema elements
-	// public because the table is empty and doesn't need to be backfilled.
-	for _, m := range tableDesc.Mutations {
-		if err := tableDesc.MakeMutationComplete(m); err != nil {
-			return err
-		}
-	}
-	tableDesc.Mutations = nil
-	tableDesc.GCMutations = nil
 
 	// Create schema change GC jobs for all of the indexes.
 	dropTime := timeutil.Now().UnixNano()
@@ -303,7 +308,87 @@ func (p *planner) truncateTable(
 		return err
 	}
 
+	// Mark any mutation jobs as successful and then clear the record of
+	// their existence. Old code did not do this and relied on jobs finishing
+	// and removing themselves. That turns out to be hazardous because those
+	// jobs may now fail and then fail to revert.
+	if err := p.markTableMutationJobsSuccessful(ctx, tableDesc); err != nil {
+		return err
+	}
+	tableDesc.MutationJobs = nil
+
 	return p.writeSchemaChange(ctx, tableDesc, descpb.InvalidMutationID, jobDesc)
+}
+
+// checkTableForDisallowedMutationsWithTruncate iterates the set of mutations
+// in the descriptor and determines whether any should prevent the truncate
+// from completing. Interactions between truncate and ongoing schema change
+// jobs are complex. On some level, the truncate can allow the work of these
+// mutations to be short-circuited. However, accounting for the various cross-
+// descriptor side-effects (like removing back-references or cleaning up dropped
+// indexes) feels hard to get exactly right in the existing model. Thus, it
+// is safer to more generally just disallow TRUNCATE when there are things
+// going on and then advise the user to allow jobs to continue or to cancel
+// them.
+//
+// This also aligns with a future world where we will be diminishing the
+// allowable concurrency. However, in today's schema change world, some
+// cancellations require O(rows) work. Some of these operations we can safely
+// just complete. This function iterates the set of mutations and decides
+// whether any exist that are not safe to just complete.
+func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error {
+
+	// The mutations which are scary to complete are mutations which involve
+	// back-references. That would be anything related to foreign keys and
+	// dropping of a column using a user-defined type or sequence. We can permit
+	// the addition or removal of columns so long as they do not involve
+	// user-defined types.
+
+	for i, m := range desc.AllMutations() {
+		if idx := m.AsIndex(); idx != nil {
+			// Do not allow dropping indexes.
+			if !m.Adding() {
+				return unimplemented.Newf(
+					"TRUNCATE concurrent with ongoing schema change",
+					"cannot perform TRUNCATE on %q which has indexes being dropped", desc.GetName())
+			}
+		} else if col := m.AsColumn(); col != nil {
+			if col.Dropped() && col.GetType().UserDefined() {
+				return unimplemented.Newf(
+					"TRUNCATE concurrent with ongoing schema change",
+					"cannot perform TRUNCATE on %q which has a column (%q) being "+
+						"dropped which depends on another object", desc.GetName(), col.GetName())
+			}
+		} else if c := m.AsConstraint(); c != nil {
+			switch ct := c.ConstraintToUpdateDesc().ConstraintType; ct {
+			case descpb.ConstraintToUpdate_CHECK,
+				descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX,
+				descpb.ConstraintToUpdate_NOT_NULL,
+				descpb.ConstraintToUpdate_FOREIGN_KEY:
+				return unimplemented.Newf(
+					"TRUNCATE concurrent with ongoing schema change",
+					"cannot perform TRUNCATE on %q which has an ongoing %s "+
+						"constraint change", desc.GetName(), ct)
+			default:
+				return errors.AssertionFailedf("cannot perform TRUNCATE due to "+
+					"unknown constraint type %v on mutation %d in %v", ct, i, desc)
+			}
+		} else if s := m.AsPrimaryKeySwap(); s != nil {
+			return unimplemented.Newf(
+				"TRUNCATE concurrent with ongoing schema change",
+				"cannot perform TRUNCATE on %q which has an ongoing primary key "+
+					"change", desc.GetName())
+		} else if m.AsComputedColumnSwap() != nil {
+			return unimplemented.Newf(
+				"TRUNCATE concurrent with ongoing schema change",
+				"cannot perform TRUNCATE on %q which has an ongoing column type "+
+					"change", desc.GetName())
+		} else {
+			return errors.AssertionFailedf("cannot perform TRUNCATE due to "+
+				"concurrent unknown mutation of type %T for mutation %d in %v", m, i, desc)
+		}
+	}
+	return nil
 }
 
 // ClearTableDataInChunks truncates the data of a table in chunks. It deletes a

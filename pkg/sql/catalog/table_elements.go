@@ -74,6 +74,10 @@ type Mutation interface {
 	// if the mutation is a materialized view refresh, nil otherwise.
 	AsMaterializedViewRefresh() MaterializedViewRefresh
 
+	// NOTE: When adding new types of mutations to this interface, be sure to
+	// audit the code which unpacks and introspects mutations to be sure to add
+	// cases for the new type.
+
 	// MutationOrdinal returns the ordinal of the mutation in the underlying table
 	// descriptor's Mutations slice.
 	MutationOrdinal() int
