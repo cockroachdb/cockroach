@@ -23,7 +23,7 @@ import { Bytes, DATE_FORMAT, Percentage } from "src/util/format";
 import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
 import { SummaryBar, SummaryLabel, SummaryValue } from "src/views/shared/components/summaryBar";
-import { Button } from "@cockroachlabs/admin-ui-components";
+import { Button } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import "./nodeOverview.styl";
 import { LiveBytesTooltip, KeyBytesTooltip, ValueBytesTooltip, IntentBytesTooltip, SystemBytesTooltip, NodeUsedCapacityTooltip, NodeAvailableCapacityTooltip, NodeMaximumCapacityTooltip } from "./tooltips";

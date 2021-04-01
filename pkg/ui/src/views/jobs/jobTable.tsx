@@ -20,7 +20,7 @@ import { isEmpty, isEqual, map } from "lodash";
 import {JobDescriptionCell} from "src/views/jobs/jobDescriptionCell";
 import Job = cockroach.server.serverpb.JobsResponse.IJob;
 import JobsResponse = cockroach.server.serverpb.JobsResponse;
-import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/admin-ui-components";
+import { Pagination, ResultsPerPageLabel } from "@cockroachlabs/cluster-ui";
 import { jobTable } from "src/util/docs";
 import { trackDocsLink } from "src/util/analytics";
 

@@ -26,7 +26,7 @@ import { SortedTable } from "src/views/shared/components/sortedtable";
 const { TabPane } = Tabs;
 import { getMatchParamByName } from "src/util/query";
 import { databaseDetails } from "../databaseSummary";
-import { Button } from "@cockroachlabs/admin-ui-components";
+import { Button } from "@cockroachlabs/cluster-ui";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import SqlBox from "src/views/shared/components/sql/box";
 
