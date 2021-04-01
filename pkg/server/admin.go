@@ -241,6 +241,15 @@ func (s *adminServer) Databases(
 		return nil, err
 	}
 
+	return s.databasesHelper(ctx, req, sessionUser, 0, 0)
+}
+
+func (s *adminServer) databasesHelper(
+	ctx context.Context,
+	req *serverpb.DatabasesRequest,
+	sessionUser security.SQLUsername,
+	limit, offset int,
+) (_ *serverpb.DatabasesResponse, retErr error) {
 	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-show-dbs", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: sessionUser},
@@ -292,8 +301,15 @@ func (s *adminServer) DatabaseDetails(
 		return nil, err
 	}
 
-	var resp serverpb.DatabaseDetailsResponse
+	return s.databaseDetailsHelper(ctx, req, userName)
+}
 
+func (s *adminServer) getDatabaseGrants(
+	ctx context.Context,
+	req *serverpb.DatabaseDetailsRequest,
+	userName security.SQLUsername,
+	limit, offset int,
+) (resp []serverpb.DatabaseDetailsResponse_Grant, retErr error) {
 	escDBName := tree.NameStringP(&req.Database)
 	// Placeholders don't work with SHOW statements, so we need to manually
 	// escape the database name.
@@ -301,11 +317,21 @@ func (s *adminServer) DatabaseDetails(
 	// TODO(cdo): Use placeholders when they're supported by SHOW.
 
 	// Marshal grants.
+	query := makeSQLQuery()
+	// We use Sprintf instead of the more canonical query argument approach, as
+	// that doesn't support arguments inside a SHOW subquery yet.
+	query.Append(fmt.Sprintf("SELECT * FROM [SHOW GRANTS ON DATABASE %s]", escDBName))
+	if limit > 0 {
+		query.Append(" LIMIT $", limit)
+		if offset > 0 {
+			query.Append(" OFFSET $", offset)
+		}
+	}
 	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-show-grants", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName},
 		// We only want to show the grants on the database.
-		fmt.Sprintf("SELECT * FROM [SHOW GRANTS ON DATABASE %s]", escDBName),
+		query.String(), query.QueryArguments()...,
 	)
 	if err = s.maybeHandleNotFoundError(err); err != nil {
 		return nil, err
@@ -343,20 +369,37 @@ func (s *adminServer) DatabaseDetails(
 					return nil, err
 				}
 				grant.Privileges = strings.Split(privileges, ",")
-				resp.Grants = append(resp.Grants, grant)
+				resp = append(resp, grant)
 			}
 			if err = s.maybeHandleNotFoundError(err); err != nil {
 				return nil, err
 			}
 		}
 	}
+	return resp, retErr
+}
 
+func (s *adminServer) getDatabaseTables(
+	ctx context.Context,
+	req *serverpb.DatabaseDetailsRequest,
+	userName security.SQLUsername,
+	limit, offset int,
+) (resp []string, retErr error) {
+	query := makeSQLQuery()
+	query.Append(`SELECT table_schema, table_name FROM information_schema.tables
+WHERE table_catalog = $ AND table_type != 'SYSTEM VIEW'`, req.Database)
+	query.Append(" ORDER BY table_name")
+	if limit > 0 {
+		query.Append(" LIMIT $", limit)
+		if offset > 0 {
+			query.Append(" OFFSET $", offset)
+		}
+	}
 	// Marshal table names.
-	it, err = s.server.sqlServer.internalExecutor.QueryIteratorEx(
+	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-show-tables", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName, Database: req.Database},
-		`SELECT table_schema, table_name FROM information_schema.tables
-WHERE table_catalog = $1 AND table_type != 'SYSTEM VIEW';`, req.Database)
+		query.String(), query.QueryArguments()...)
 	if err = s.maybeHandleNotFoundError(err); err != nil {
 		return nil, err
 	}
@@ -386,7 +429,7 @@ WHERE table_catalog = $1 AND table_type != 'SYSTEM VIEW';`, req.Database)
 				if err := scanner.Scan(row, "table_name", &tableName); err != nil {
 					return nil, err
 				}
-				resp.TableNames = append(resp.TableNames, fmt.Sprintf("%s.%s",
+				resp = append(resp, fmt.Sprintf("%s.%s",
 					tree.NameStringP(&schemaName), tree.NameStringP(&tableName)))
 			}
 			if err = s.maybeHandleNotFoundError(err); err != nil {
@@ -394,33 +437,63 @@ WHERE table_catalog = $1 AND table_type != 'SYSTEM VIEW';`, req.Database)
 			}
 		}
 	}
+	return resp, retErr
+}
 
+func (s *adminServer) getMiscDatabaseDetails(
+	ctx context.Context,
+	req *serverpb.DatabaseDetailsRequest,
+	userName security.SQLUsername,
+	resp *serverpb.DatabaseDetailsResponse,
+) (*serverpb.DatabaseDetailsResponse, error) {
+	if resp == nil {
+		resp = &serverpb.DatabaseDetailsResponse{}
+	}
 	// Query the descriptor ID and zone configuration for this database.
-	{
-		databaseID, err := s.queryDatabaseID(ctx, userName, req.Database)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		resp.DescriptorID = int64(databaseID)
+	databaseID, err := s.queryDatabaseID(ctx, userName, req.Database)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	resp.DescriptorID = int64(databaseID)
 
-		id, zone, zoneExists, err := s.queryZonePath(ctx, userName, []descpb.ID{databaseID})
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-
-		if !zoneExists {
-			zone = s.server.cfg.DefaultZoneConfig
-		}
-		resp.ZoneConfig = zone
-
-		switch id {
-		case databaseID:
-			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
-		default:
-			resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
-		}
+	id, zone, zoneExists, err := s.queryZonePath(ctx, userName, []descpb.ID{databaseID})
+	if err != nil {
+		return nil, s.serverError(err)
 	}
 
+	if !zoneExists {
+		zone = s.server.cfg.DefaultZoneConfig
+	}
+	resp.ZoneConfig = zone
+
+	switch id {
+	case databaseID:
+		resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_DATABASE
+	default:
+		resp.ZoneConfigLevel = serverpb.ZoneConfigurationLevel_CLUSTER
+	}
+	return resp, nil
+}
+
+func (s *adminServer) databaseDetailsHelper(
+	ctx context.Context, req *serverpb.DatabaseDetailsRequest, userName security.SQLUsername,
+) (_ *serverpb.DatabaseDetailsResponse, retErr error) {
+	var resp serverpb.DatabaseDetailsResponse
+	var err error
+
+	resp.Grants, err = s.getDatabaseGrants(ctx, req, userName, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+	resp.TableNames, err = s.getDatabaseTables(ctx, req, userName, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = s.getMiscDatabaseDetails(ctx, req, userName, &resp)
+	if err != nil {
+		return nil, err
+	}
 	return &resp, nil
 }
 
@@ -463,6 +536,12 @@ func (s *adminServer) TableDetails(
 		return nil, err
 	}
 
+	return s.tableDetailsHelper(ctx, req, userName)
+}
+
+func (s *adminServer) tableDetailsHelper(
+	ctx context.Context, req *serverpb.TableDetailsRequest, userName security.SQLUsername,
+) (_ *serverpb.TableDetailsResponse, retErr error) {
 	escQualTable, err := getFullyQualifiedTableName(req.Database, req.Table)
 	if err != nil {
 		return nil, err
@@ -1054,6 +1133,16 @@ func (s *adminServer) Events(
 		limit = defaultAPIEventLimit
 	}
 
+	return s.eventsHelper(ctx, req, userName, int(limit), 0, redactEvents)
+}
+
+func (s *adminServer) eventsHelper(
+	ctx context.Context,
+	req *serverpb.EventsRequest,
+	userName security.SQLUsername,
+	limit, offset int,
+	redactEvents bool,
+) (_ *serverpb.EventsResponse, retErr error) {
 	// Execute the query.
 	q := makeSQLQuery()
 	q.Append(`SELECT timestamp, "eventType", "targetID", "reportingID", info, "uniqueID" `)
@@ -1068,6 +1157,9 @@ func (s *adminServer) Events(
 	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
 		q.Append("LIMIT $", limit)
+		if offset > 0 {
+			q.Append(" OFFSET $", offset)
+		}
 	}
 	if len(q.Errors()) > 0 {
 		return nil, combineAllErrors(q.Errors())
