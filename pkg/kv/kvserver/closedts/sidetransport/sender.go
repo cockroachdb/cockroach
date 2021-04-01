@@ -121,7 +121,6 @@ type Replica interface {
 	// Accessors.
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
-	Desc() *roachpb.RangeDescriptor
 
 	// BumpSideTransportClosed advances the range's closed timestamp if it can.
 	// If the closed timestamp is advanced, the function synchronizes with
@@ -135,11 +134,16 @@ type Replica interface {
 	//
 	// If the closed timestamp was advanced, the function returns a LAI to be
 	// attached to the newly closed timestamp.
+	//
+	// The desired closed timestamp is passed as a map from range policy to
+	// timestamp; this function looks up the entry for this range.
+	//
+	// The RangeDescriptor is returned in both the true and false cases.
 	BumpSideTransportClosed(
 		ctx context.Context,
 		now hlc.ClockTimestamp,
 		targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
-	) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy)
+	) (bool, ctpb.LAI, roachpb.RangeClosedTimestampPolicy, *roachpb.RangeDescriptor)
 }
 
 // NewSender creates a Sender. Run must be called on it afterwards to get it to
@@ -332,17 +336,19 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 		lhRangeID := lh.GetRangeID()
 		lastMsg, tracked := s.trackedMu.tracked[lhRangeID]
 
-		// Make sure that we're communicating with all of the range's followers.
-		// Note that we're including this range's followers before deciding below if
-		// this message will include this range. This is because we don't want
-		// dynamic conditions about the activity of this range to dictate the
-		// opening and closing of connections to the other nodes.
-		for _, repl := range lh.Desc().Replicas().VoterFullAndNonVoterDescriptors() {
-			nodesWithFollowers.Add(int(repl.NodeID))
+		// Check whether the desired timestamp can be closed on this range.
+		canClose, lai, policy, desc := lh.BumpSideTransportClosed(ctx, now, s.trackedMu.lastClosed)
+
+		// Ensure that we're communicating with all of the range's followers. Note
+		// that we're including this range's followers before deciding below if the
+		// current message will include this range; we don't want dynamic conditions
+		// about the activity of this range to dictate the opening and closing of
+		// connections to the other nodes.
+		repls := desc.Replicas().Descriptors()
+		for i := range repls {
+			nodesWithFollowers.Add(int(repls[i].NodeID))
 		}
 
-		// Check whether the desired timestamp can be closed on this range.
-		canClose, lai, policy := lh.BumpSideTransportClosed(ctx, now, s.trackedMu.lastClosed)
 		if !canClose {
 			// We can't close the desired timestamp. If this range was tracked, we
 			// need to un-track it.
