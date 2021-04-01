@@ -125,8 +125,7 @@ func TestRunnerRun(t *testing.T) {
 				cpuQuota:                  1000,
 				keepClustersOnTestFailure: false,
 			}
-			err := runner.Run(ctx, tests, 1, /* count */
-				defaultParallelism, copt, "" /* artifactsDir */, lopt)
+			err := runner.Run(ctx, tests, 1 /* count */, defaultParallelism, copt, lopt)
 
 			if !testutils.IsError(err, c.expErr) {
 				t.Fatalf("expected err: %q, but found %v. Filters: %s", c.expErr, err, c.filters)
@@ -181,8 +180,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 			<-ctx.Done()
 		},
 	}
-	err := runner.Run(ctx, []testSpec{test}, 1, /* count */
-		defaultParallelism, copt, "" /* artifactsDir */, lopt)
+	err := runner.Run(ctx, []testSpec{test}, 1 /* count */, defaultParallelism, copt, lopt)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
 	}
@@ -318,8 +316,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			}
 			cr := newClusterRegistry()
 			runner := newTestRunner(cr, r.buildVersion)
-			err = runner.Run(ctx, tests, 1, /* count */
-				defaultParallelism, copt, "" /* artifactsDir */, lopt)
+			err = runner.Run(ctx, tests, 1 /* count */, defaultParallelism, copt, lopt)
 			if !testutils.IsError(err, c.expErr) {
 				t.Fatalf("expected err: %q, got: %v", c.expErr, err)
 			}

@@ -54,21 +54,25 @@ const (
 )
 
 var (
-	local            bool
-	cockroach        string
-	libraryFilePaths []string
-	cloud                         = gce
-	encrypt          encryptValue = "false"
-	instanceType     string
-	localSSD         bool
-	workload         string
-	roachprod        string
-	createArgs       []string
-	buildTag         string
-	clusterName      string
-	clusterWipe      bool
-	zonesF           string
-	teamCity         bool
+	local                   bool
+	cockroach               string
+	libraryFilePaths        []string
+	cloud                                = gce
+	encrypt                 encryptValue = "false"
+	instanceType            string
+	localSSD                bool
+	workload                string
+	roachprod               string
+	createArgs              []string
+	buildTag                string
+	clusterName             string
+	existingClustersPrefix  string
+	existingClustersCount   int
+	wipeClustersBeforeReuse bool
+	clusterWipe             bool
+	zonesF                  string
+	teamCity                bool
+	testFlags               string
 )
 
 type encryptValue string
@@ -231,32 +235,75 @@ func initBinariesAndLibraries() {
 	}
 }
 
+// ClusterReleasePolicy controls what the clusterRegistry will do when it's
+// being asked to release a cluster.
+type ClusterReleasePolicy bool
+
+const (
+	// DestroyOnRelease means that clusters that are no longer needed for running
+	// tests will be destroyed.
+	DestroyOnRelease ClusterReleasePolicy = false
+	// KeepClusterForReuse means clusters are not destroyed; the user asked for
+	// clusters to be kept around.
+	KeepClusterForReuse = true
+)
+
+// registeredCluster is a cluster with a little bit of extra info tracked by the
+// clusterRegistry.
+type registeredCluster struct {
+	*cluster
+	state clusterState
+	// savedMsg is set is state == saved. It contains some information about why
+	// the cluster was saved.
+	savedMsg string
+}
+
+// clusterState enumerates the states of clusters inside the clusterRegistry.
+type clusterState int
+
+const (
+	// inUse means that a test is currently using the cluster.
+	inUse clusterState = iota
+	// saved means the cluster is being preserved for debugging (see --debug).
+	saved
+	// available means the cluster is available to be used by tests. Clusters
+	// usually are either passed from one test to another directly, without going
+	// through the clusterRegistry, in which case they don't go through the
+	// available state. This state is used when clusters came from outside the
+	// test runner through --existing-clusters-name.
+	available
+)
+
+// clusterRegistry manages clusters. It can create clusters for running tests,
+// and then destroy them.
 type clusterRegistry struct {
-	mu struct {
+	// releasePolicy dictates if the registry destroys clusters or not.
+	releasePolicy ClusterReleasePolicy
+	mu            struct {
 		syncutil.Mutex
-		clusters map[string]*cluster
+		// clusters tracks all the clusters managed by this registry. Map from
+		// cluster.name->cluster.
+		clusters map[string]registeredCluster
+		// tagCount maps from cluster tag to count of current clusters with that
+		// tag. Used to prioritize tests depending on how many compatible clusters
+		// already exist.
 		tagCount map[string]int
-		// savedClusters keeps track of clusters that have been saved for further
-		// debugging. Each cluster comes with a message about the test failure
-		// causing it to be saved for debugging.
-		savedClusters map[*cluster]string
 	}
 }
 
 func newClusterRegistry() *clusterRegistry {
 	cr := &clusterRegistry{}
-	cr.mu.clusters = make(map[string]*cluster)
-	cr.mu.savedClusters = make(map[*cluster]string)
+	cr.mu.clusters = make(map[string]registeredCluster)
 	return cr
 }
 
 func (r *clusterRegistry) registerCluster(c *cluster) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.mu.clusters[c.name] != nil {
+	if _, ok := r.mu.clusters[c.name]; ok {
 		return fmt.Errorf("cluster named %q already exists in registry", c.name)
 	}
-	r.mu.clusters[c.name] = c
+	r.mu.clusters[c.name] = registeredCluster{cluster: c, state: available}
 	return nil
 }
 
@@ -278,6 +325,7 @@ func (r *clusterRegistry) unregisterCluster(c *cluster) bool {
 	return true
 }
 
+// countForTag returns how many current clusters have a given tag.
 func (r *clusterRegistry) countForTag(tag string) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -290,8 +338,15 @@ func (r *clusterRegistry) countForTag(tag string) int {
 // generally a test failure error).
 func (r *clusterRegistry) markClusterAsSaved(c *cluster, msg string) {
 	r.mu.Lock()
-	r.mu.savedClusters[c] = msg
+	rc := r.mu.clusters[c.name]
+	rc.state = saved
+	rc.savedMsg = msg
+	r.mu.clusters[c.name] = rc
 	r.mu.Unlock()
+}
+
+func (r *clusterRegistry) SetClusterReleasePolicy(policy ClusterReleasePolicy) {
+	r.releasePolicy = policy
 }
 
 type clusterWithMsg struct {
@@ -304,14 +359,15 @@ type clusterWithMsg struct {
 func (r *clusterRegistry) savedClusters() []clusterWithMsg {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	res := make([]clusterWithMsg, len(r.mu.savedClusters))
-	i := 0
-	for c, msg := range r.mu.savedClusters {
-		res[i] = clusterWithMsg{
-			cluster:  c,
-			savedMsg: msg,
+	res := make([]clusterWithMsg, 0)
+	for _, c := range r.mu.clusters {
+		if c.state != saved {
+			continue
 		}
-		i++
+		res = append(res, clusterWithMsg{
+			cluster:  c.cluster,
+			savedMsg: c.savedMsg,
+		})
 	}
 	sort.Slice(res, func(i, j int) bool {
 		return strings.Compare(res[i].name, res[j].name) < 0
@@ -323,7 +379,13 @@ func (r *clusterRegistry) savedClusters() []clusterWithMsg {
 // blocks until they're destroyed. It responds to context cancelation by
 // interrupting the waiting; the cluster destruction itself does not inherit the
 // cancelation.
+//
+// This is a no-op if r.releasePolicy == KeepClusterForReuse.
 func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger) {
+	if r.releasePolicy == KeepClusterForReuse {
+		return
+	}
+
 	// Fire off a goroutine to destroy all of the clusters.
 	done := make(chan struct{})
 	go func() {
@@ -333,10 +395,10 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger) {
 		savedClusters := make(map[*cluster]struct{})
 		r.mu.Lock()
 		for _, c := range r.mu.clusters {
-			clusters = append(clusters, c)
-		}
-		for c := range r.mu.savedClusters {
-			savedClusters[c] = struct{}{}
+			clusters = append(clusters, c.cluster)
+			if c.state == saved {
+				savedClusters[c.cluster] = struct{}{}
+			}
 		}
 		r.mu.Unlock()
 
@@ -360,6 +422,68 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context, l *logger) {
 	case <-done:
 	case <-ctx.Done():
 	}
+}
+
+// ReleaseCluster either destroys the cluster, or puts it back in the registry
+// as available for another test to pick up.
+func (r *clusterRegistry) ReleaseCluster(ctx context.Context, c *cluster, l *logger) {
+	if r.releasePolicy == DestroyOnRelease {
+		c.Destroy(ctx, closeLogger, l)
+	} else {
+		r.mu.Lock()
+		rc := r.mu.clusters[c.name]
+		rc.state = available
+		r.mu.clusters[c.name] = rc
+		r.mu.Unlock()
+	}
+}
+
+// AllocateCluster retrieves a cluster with the given spec from the registry.
+// The returned cluster is marked as inUse. If no suitable cluster is available
+// (for example because of all the loaded clusters have been saved for
+// debugging), returns nil.
+func (r *clusterRegistry) AllocateCluster(ctx context.Context, spec clusterSpec) *cluster {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, c := range r.mu.clusters {
+		if c.state != available {
+			continue
+		}
+		if !clustersCompatible(c.spec, spec) {
+			continue
+		}
+		c.state = inUse
+		r.mu.clusters[c.name] = c
+		return c.cluster
+	}
+	return nil
+}
+
+// loadExistingClusters populates the registry with count existing clusters. The
+// clusters will be "saved", so that they're not automatically destroyed after
+// test runs.
+func (r *clusterRegistry) loadExistingClusters(
+	ctx context.Context, namePrefix string, count int, l *logger,
+) error {
+	// The clusters will not be automatically destroyed. Note that they might be
+	// wiped, though, if --debug was not specified.
+	r.releasePolicy = KeepClusterForReuse
+	opt := attachOpt{
+		// Skip spec validation because we don't know a spec.
+		// attachToExistingCluster will synthesize a spec.
+		skipValidation: true,
+		skipStop:       true,
+		skipWipe:       true,
+	}
+	l.PrintfCtx(ctx, "attaching to %d existing clusters: %s[1-%d]", count, namePrefix, count)
+	for i := 1; i <= count; i++ {
+		_, err := attachToExistingCluster(ctx, fmt.Sprintf("%s%d", namePrefix, i), l, clusterSpec{}, opt, r)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // execCmd is like execCmdEx, but doesn't return the command's output.
@@ -1332,6 +1456,10 @@ type attachOpt struct {
 // attachToExistingCluster creates a cluster object based on machines that have
 // already been already allocated by roachprod.
 //
+// If opt.skipValidation is not set, the cluster is validated against spec. If
+// opt.skipValidation is set, spec is ignored; in this case a partial cluster
+// spec will be synthesized based on the detected cluster topology.
+//
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func attachToExistingCluster(
 	ctx context.Context, name string, l *logger, spec clusterSpec, opt attachOpt, r *clusterRegistry,
@@ -1362,6 +1490,8 @@ func attachToExistingCluster(
 		if err := c.validate(ctx, spec, l); err != nil {
 			return nil, err
 		}
+	} else {
+		c.synthesizeSpec(ctx, l)
 	}
 
 	if !opt.skipStop {
@@ -1475,6 +1605,59 @@ func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger) er
 				return fmt.Errorf("node %d has %d CPUs, test requires %d", i, vmCPUs, cpus)
 			}
 		}
+	}
+	return nil
+}
+
+// synthesizeSpec fills in as much as it can of the cluster's spec based on the
+// reality.
+func (c *cluster) synthesizeSpec(ctx context.Context, l *logger) error {
+	c.status("synthesizing spec")
+	sargs := []string{roachprod, "list", c.name, "--json", "--quiet"}
+	out, err := execCmdWithBuffer(ctx, l, sargs...)
+	if err != nil {
+		return err
+	}
+
+	// jsonOutput matches the structure of the output from `roachprod list`
+	// when in json mode.
+	type jsonOutput struct {
+		Clusters map[string]struct {
+			VMs []struct {
+				MachineType string `json:"machine_type"`
+			} `json:"vms"`
+		} `json:"clusters"`
+	}
+	var details jsonOutput
+	if err := json.Unmarshal(out, &details); err != nil {
+		return err
+	}
+
+	cDetails, ok := details.Clusters[c.name]
+	if !ok {
+		return fmt.Errorf("cluster %q not found", c.name)
+	}
+	if len(cDetails.VMs) < c.spec.NodeCount {
+		return fmt.Errorf("cluster has %d nodes, test requires at least %d", len(cDetails.VMs), c.spec.NodeCount)
+	}
+
+	var uniqueVMCPUs int
+	for i, vm := range cDetails.VMs {
+		vmCPUs := MachineTypeToCPUs(vm.MachineType)
+		if i == 0 {
+			uniqueVMCPUs = vmCPUs
+		} else {
+			// If not all machines are the same, we reset uniqueVMCPUs.
+			if vmCPUs != uniqueVMCPUs {
+				uniqueVMCPUs = 0
+			}
+		}
+	}
+
+	c.spec = clusterSpec{
+		NodeCount:   len(cDetails.VMs),
+		CPUs:        uniqueVMCPUs,
+		ReusePolicy: reusePolicyAny{},
 	}
 	return nil
 }

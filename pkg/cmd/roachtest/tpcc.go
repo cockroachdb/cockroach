@@ -740,16 +740,23 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	loadGroups := makeLoadGroups(c, numZones, b.Nodes, numLoadGroups)
 	roachNodes := loadGroups.roachNodes()
 	loadNodes := loadGroups.loadNodes()
-	c.Put(ctx, cockroach, "./cockroach", roachNodes)
-	// Fixture import needs ./cockroach workload on loadNodes[0],
-	// and if we use haproxy (see below) we need it on the others
-	// as well.
-	c.Put(ctx, cockroach, "./cockroach", loadNodes)
-	c.Put(ctx, workload, "./workload", loadNodes)
-	// Don't encrypt in tpccbench tests.
-	c.encryptDefault = false
-	c.encryptAtRandom = false
-	c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
+	skipInit := strings.Contains(testFlags, "skip-cluster-create")
+	if !skipInit {
+		c.Put(ctx, cockroach, "./cockroach", roachNodes)
+		// Fixture import needs ./cockroach workload on loadNodes[0],
+		// and if we use haproxy (see below) we need it on the others
+		// as well.
+		c.Put(ctx, cockroach, "./cockroach", loadNodes)
+		c.Put(ctx, workload, "./workload", loadNodes)
+		// Don't encrypt in tpccbench tests.
+		c.encryptDefault = false
+		c.encryptAtRandom = false
+		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
+	} else {
+		t.l.PrintfCtx(ctx, "skipping full initialization; will only restart nodes")
+		c.Stop(ctx)
+		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
+	}
 
 	useHAProxy := b.Chaos
 	const restartWait = 15 * time.Second
@@ -777,13 +784,14 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
 		}
 
+		t.Status("setting up dataset")
 		m := newMonitor(ctx, c, roachNodes)
 		m.Go(func(ctx context.Context) error {
-			t.Status("setting up dataset")
 			return loadTPCCBench(ctx, t, c, b, roachNodes, c.Node(loadNodes[0]))
 		})
 		m.Wait()
 	}
+	t.Status()
 
 	// Search between 1 and b.LoadWarehouses for the largest number of
 	// warehouses that can be operated on while sustaining a throughput
