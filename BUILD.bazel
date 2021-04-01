@@ -113,7 +113,7 @@ load("@bazel_gazelle//:def.bzl", "gazelle")
 # gazelle:exclude pkg/sql/roleoption/option_string.go
 # gazelle:exclude pkg/sql/schemachange/columnconversionkind_string.go
 # gazelle:exclude pkg/sql/sem/tree/createtypevariety_string.go
-# gazelle:exclude pkg/sql/sem/tree/statementtype_string.go
+# gazelle:exclude pkg/sql/sem/tree/statementreturntype_string.go
 # gazelle:exclude pkg/sql/txnevent_string.go
 # gazelle:exclude pkg/sql/txntype_string.go
 # gazelle:exclude pkg/util/timeutil/pgdate/field_string.go

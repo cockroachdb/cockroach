@@ -133,7 +133,7 @@ func (dsp *DistSQLPlanner) Exec(
 	recv := MakeDistSQLReceiver(
 		ctx,
 		rw,
-		stmt.AST.StatementType(),
+		stmt.AST.StatementReturnType(),
 		execCfg.RangeDescriptorCache,
 		p.txn,
 		execCfg.Clock,

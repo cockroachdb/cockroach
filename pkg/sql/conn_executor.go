@@ -2007,7 +2007,7 @@ func (ex *connExecutor) execCopyIn(
 // stmtHasNoData returns true if describing a result of the input statement
 // type should return NoData.
 func stmtHasNoData(stmt tree.Statement) bool {
-	return stmt == nil || stmt.StatementType() != tree.Rows
+	return stmt == nil || stmt.StatementReturnType() != tree.Rows
 }
 
 // generateID generates a unique ID based on the SQL instance ID and its current
@@ -2420,7 +2420,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 // initStatementResult initializes res according to a query.
 //
 // cols represents the columns of the result rows. Should be nil if
-// stmt.AST.StatementType() != tree.Rows.
+// stmt.AST.StatementReturnType() != tree.Rows.
 //
 // If an error is returned, it is to be considered a query execution error.
 func (ex *connExecutor) initStatementResult(
@@ -2431,7 +2431,7 @@ func (ex *connExecutor) initStatementResult(
 			return err
 		}
 	}
-	if ast.StatementType() == tree.Rows {
+	if ast.StatementReturnType() == tree.Rows {
 		// Note that this call is necessary even if cols is nil.
 		res.SetColumns(ctx, cols)
 	}
@@ -2682,7 +2682,7 @@ type StatementCounters struct {
 	ReleaseRestartSavepointCount    telemetry.CounterWithMetric
 	RollbackToRestartSavepointCount telemetry.CounterWithMetric
 
-	// DdlCount counts all statements whose StatementType is DDL.
+	// DdlCount counts all statements whose StatementReturnType is DDL.
 	DdlCount telemetry.CounterWithMetric
 
 	// MiscCount counts all statements not covered by a more specific stat above.
