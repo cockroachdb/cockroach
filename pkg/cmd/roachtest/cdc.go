@@ -55,6 +55,7 @@ type cdcTestArgs struct {
 	kafkaChaos         bool
 	crdbChaos          bool
 	cloudStorageSink   bool
+	sinkURI            string
 
 	targetInitialScanLatency time.Duration
 	targetSteadyLatency      time.Duration
@@ -80,7 +81,9 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	}
 
 	var sinkURI string
-	if args.cloudStorageSink {
+	if args.sinkURI != "" {
+		sinkURI = args.sinkURI
+	} else if args.cloudStorageSink {
 		ts := timeutil.Now().Format(`20060102150405`)
 		// cockroach-tmp is a multi-region bucket with a TTL to clean up old
 		// data.
@@ -592,6 +595,22 @@ func registerCDC(r *testRegistry) {
 				workloadDuration:         "120m",
 				targetInitialScanLatency: 3 * time.Minute,
 				targetSteadyLatency:      10 * time.Minute,
+			})
+		},
+	})
+	r.Add(testSpec{
+		Name:    "cdc/tpcc-1000/sink=null",
+		Owner:   OwnerCDC,
+		Cluster: makeClusterSpec(4, cpu(16)),
+		Tags:    []string{"manual"},
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       1000,
+				workloadDuration:         "120m",
+				targetInitialScanLatency: 3 * time.Minute,
+				targetSteadyLatency:      10 * time.Minute,
+				sinkURI:                  "null://",
 			})
 		},
 	})
