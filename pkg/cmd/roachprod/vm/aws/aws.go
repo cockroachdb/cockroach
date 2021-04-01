@@ -474,6 +474,11 @@ func (p *Provider) Delete(vms vm.List) error {
 	return g.Wait()
 }
 
+// Reset is part of vm.Provider. It is a no-op.
+func (p *Provider) Reset(vms vm.List) error {
+	return nil // unimplemented
+}
+
 // Extend is part of the vm.Provider interface.
 // This will update the Lifetime tag on the instances.
 func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {

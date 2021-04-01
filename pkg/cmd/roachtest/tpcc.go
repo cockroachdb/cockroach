@@ -802,8 +802,48 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	if res, err := s.Search(func(warehouses int) (bool, error) {
 		iteration++
 		t.l.Printf("initializing cluster for %d warehouses (search attempt: %d)", warehouses, iteration)
+
+		// NB: for goroutines in this monitor, handle errors via `t.Fatal` to
+		// *abort* the line search and whole tpccbench run. Return the errors
+		// to indicate that the specific warehouse count failed, but that the
+		// line search ought to continue.
 		m := newMonitor(ctx, c, roachNodes)
-		c.Stop(ctx, roachNodes)
+
+		// We overload the clusters in tpccbench, which can lead to transient infra
+		// failures. These are a) really annoying to debug and b) hide the actual
+		// passing warehouse count, making the line search sensitive to the choice
+		// of starting warehouses. Do a best-effort at waiting for the cloud VM(s)
+		// to recover without failing the line search.
+		if err := c.Reset(ctx); err != nil {
+			t.Fatal(err)
+		}
+		var ok bool
+		for i := 0; i < 10; i++ {
+			if err := ctx.Err(); err != nil {
+				t.Fatal(err)
+			}
+			shortCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			if err := c.StopE(shortCtx, roachNodes); err != nil {
+				cancel()
+				t.l.Printf("unable to stop cluster; retrying to allow vm to recover: %s", err)
+				// We usually spend a long time blocking in StopE anyway, but just in case
+				// of a fast-failure mode, we still want to spend a little bit of time over
+				// the course of 10 retries to maximize the chances of things going back to
+				// working.
+				select {
+				case <-time.After(30 * time.Second):
+				case <-ctx.Done():
+				}
+				continue
+			}
+			cancel()
+			ok = true
+			break
+		}
+		if !ok {
+			t.Fatalf("VM is hosed; giving up")
+		}
+
 		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 		time.Sleep(restartWait)
 
@@ -857,7 +897,8 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 						b.partitions(), groupIdx)
 					activeWarehouses = warehouses / numLoadGroups
 				default:
-					panic("unexpected")
+					// Abort the whole test.
+					t.Fatalf("unimplemented LoadConfig %v", b.LoadConfig)
 				}
 				if b.Chaos {
 					// For chaos tests, we don't want to use the default method because it
@@ -873,33 +914,67 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				err := c.RunE(ctx, group.loadNodes, cmd)
 				loadDone <- timeutil.Now()
 				if err != nil {
+					// NB: this will let the line search continue at a lower warehouse
+					// count.
 					return errors.Wrapf(err, "error running tpcc load generator")
 				}
 				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
 				if err := c.Get(
 					ctx, t.l, histogramsPath, roachtestHistogramsPath, group.loadNodes,
 				); err != nil {
-					t.Fatal(err)
+					// NB: this will let the line search continue. The reason we do this
+					// is because it's conceivable that we made it here, but a VM just
+					// froze up on us. The next search iteration will handle this state.
+					return err
 				}
 				snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
 				if err != nil {
-					return errors.Wrapf(err, "failed to decode histogram snapshots")
+					// If we got this far, and can't decode data, it's not a case of
+					// overload but something that deserves failing the whole test.
+					t.Fatal(err)
 				}
 				result := tpcc.NewResultWithSnapshots(activeWarehouses, 0, snapshots)
 				resultChan <- result
 				return nil
 			})
 		}
-		if err = m.WaitE(); err != nil {
-			return false, err
-		}
+		failErr := m.WaitE()
 		close(resultChan)
-		var results []*tpcc.Result
-		for partial := range resultChan {
-			results = append(results, partial)
+
+		var res *tpcc.Result
+		if failErr != nil {
+			if t.Failed() {
+				// Someone called `t.Fatal` in a monitored goroutine,
+				// meaning that something went sideways in a way that
+				// indicates a general problem (i.e. not just that the
+				// current warehouse count overloaded the cluster.
+				// Abort the whole test.
+				return false, err
+			}
+			// A goroutine returned an error, but this means only
+			// that the given warehouse count did not run to completion,
+			// presumably because it overloaded the cluster. We thus
+			// "achieved" zero TpmC, but will continue the search.
+			//
+			// Note that it's also possible that we get here due to an
+			// actual bug in CRDB (for example a node crashing due to
+			// getting into an invalid state); we cannot distinguish
+			// those here and so tpccbench isn't a good test to rely
+			// on to catch crash-causing bugs.
+			res = &tpcc.Result{
+				ActiveWarehouses: warehouses,
+			}
+		} else {
+			// We managed to run TPCC, which means that we may or may
+			// not have "passed" TPCC.
+			var results []*tpcc.Result
+			for partial := range resultChan {
+				results = append(results, partial)
+			}
+			res = tpcc.MergeResults(results...)
+			failErr = res.FailureError()
 		}
-		res := tpcc.MergeResults(results...)
-		failErr := res.FailureError()
+
 		// Print the result.
 		if failErr == nil {
 			ttycolor.Stdout(ttycolor.Green)
