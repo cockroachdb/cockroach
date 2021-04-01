@@ -2010,7 +2010,10 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 }
 
 func (og *operationGenerator) validate(tx *pgx.Tx) (string, error) {
-	validateStmt := "SELECT 'validating all objects'"
+	// Finish validation off by validating multi region zone configs are as expected.
+	// Configs can be invalid if a user decides to override a multi-region field, but
+	// this is not performed by the schemachange workload.
+	validateStmt := "SELECT 'validating all objects', crdb_internal.validate_multi_region_zone_configs()"
 	rows, err := tx.Query(`SELECT * FROM "".crdb_internal.invalid_objects ORDER BY id`)
 	if err != nil {
 		return validateStmt, err
