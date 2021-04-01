@@ -4832,10 +4832,10 @@ CREATE TABLE t60527 (
 )
 ----
 
-# TODO(mgartner): Functions with NullableArgs=false and a NULL argument can be
-# normalized to NULL. This would simplify this query plan to an empty Values
-# expression.
-opt
+# FoldFunctionWithNullArg is disabled to prevent the expression from being
+# normalized to an empty Values expression and avoiding
+# GenerateInvertedIndexScans altogether.
+opt disable=FoldFunctionWithNullArg
 SELECT * FROM t60527 WHERE (ST_Covers(NULL::GEOGRAPHY, g) AND ST_DWithin(NULL::GEOGRAPHY, g, 1))
 ----
 select
@@ -4856,10 +4856,10 @@ CREATE TABLE t62686 (
 )
 ----
 
-# TODO(mgartner): Functions with NullableArgs=false and a NULL argument can be
-# normalized to NULL. This would simplify this query plan to an empty Values
-# expression.
-opt
+# FoldFunctionWithNullArg is disabled to prevent the expression from being
+# normalized to an empty Values expression and avoiding
+# GenerateInvertedIndexScans altogether.
+opt disable=FoldFunctionWithNullArg
 SELECT * FROM t62686 WHERE ST_DFullyWithin(c, ST_GeomFromText('POINT(1 1)'), NULL::FLOAT8)
 ----
 select
