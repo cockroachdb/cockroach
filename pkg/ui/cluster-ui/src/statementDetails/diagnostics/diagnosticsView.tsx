@@ -32,6 +32,11 @@ export interface DiagnosticsViewDispatchProps {
   activate: (statementFingerprint: string) => void;
   dismissAlertMessage: () => void;
   onDownloadDiagnosticBundleClick?: (statementFingerprint: string) => void;
+  onSortingChange?: (
+    name: string,
+    columnTitle: string,
+    ascending: boolean,
+  ) => void;
 }
 
 export interface DiagnosticsViewOwnProps {
@@ -180,6 +185,12 @@ export class DiagnosticsView extends React.Component<
     this.props.dismissAlertMessage();
   }
 
+  onSortingChange = (columnName: string, ascending: boolean) => {
+    if (this.props.onSortingChange) {
+      this.props.onSortingChange("Diagnostics", columnName, ascending);
+    }
+  };
+
   render() {
     const { hasData, diagnosticsReports, showDiagnosticsViewLink } = this.props;
 
@@ -214,7 +225,11 @@ export class DiagnosticsView extends React.Component<
             </Button>
           )}
         </div>
-        <Table dataSource={dataSource} columns={this.columns} />
+        <Table
+          dataSource={dataSource}
+          columns={this.columns}
+          onSortingChange={this.onSortingChange}
+        />
         {showDiagnosticsViewLink && (
           <div className={cx("crl-statements-diagnostics-view__footer")}>
             <Link

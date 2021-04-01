@@ -13,6 +13,7 @@ export interface TableProps<T> {
   tableLayout?: "fixed" | "auto";
   pageSize?: number;
   className?: string;
+  onSortingChange?: (columnName: string, ascending: boolean) => void;
 }
 
 const cx = classnames.bind(styles);
@@ -29,6 +30,7 @@ export function Table<T>(props: TableProps<T>) {
     tableLayout = "auto",
     pageSize,
     className,
+    onSortingChange,
   } = props;
   return (
     <ConfigProvider renderEmpty={customizeRenderEmpty(noDataMessage)}>
@@ -41,6 +43,14 @@ export function Table<T>(props: TableProps<T>) {
         expandRowByClick
         tableLayout={tableLayout}
         pagination={{ hideOnSinglePage: true, pageSize }}
+        onChange={(pagination, filters, sorter) => {
+          if (onSortingChange && sorter.column) {
+            onSortingChange(
+              sorter.column?.title as string,
+              sorter.order === "ascend",
+            );
+          }
+        }}
       />
     </ConfigProvider>
   );

@@ -1,5 +1,6 @@
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Dispatch } from "redux";
 
 import { AppState } from "src/store";
 import { actions as statementActions } from "src/store/statements";
@@ -9,7 +10,6 @@ import { actions as localStorageActions } from "src/store/localStorage";
 import {
   StatementsPage,
   StatementsPageDispatchProps,
-  StatementsPageOuterProps,
   StatementsPageProps,
   StatementsPageStateProps,
 } from "./statementsPage";
@@ -22,9 +22,12 @@ import {
 } from "./statementsPage.selectors";
 import { AggregateStatistics } from "../statementsTable";
 
-type OwnProps = StatementsPageOuterProps & RouteComponentProps;
 export const ConnectedStatementsPage = withRouter(
-  connect<StatementsPageStateProps, StatementsPageDispatchProps, OwnProps>(
+  connect<
+    StatementsPageStateProps,
+    StatementsPageDispatchProps,
+    RouteComponentProps
+  >(
     (state: AppState, props: StatementsPageProps) => ({
       statements: selectStatements(state, props),
       statementsError: selectStatementsLastError(state),
@@ -32,40 +35,69 @@ export const ConnectedStatementsPage = withRouter(
       totalFingerprints: selectTotalFingerprints(state),
       lastReset: selectLastReset(state),
     }),
-    {
-      refreshStatements: statementActions.refresh,
-      refreshStatementDiagnosticsRequests: statementDiagnosticsActions.refresh,
+    (dispatch: Dispatch) => ({
+      refreshStatements: () => dispatch(statementActions.refresh()),
+      refreshStatementDiagnosticsRequests: () =>
+        dispatch(statementDiagnosticsActions.refresh()),
       dismissAlertMessage: () =>
-        localStorageActions.update({
-          key: "adminUi/showDiagnosticsModal",
-          value: false,
-        }),
-      onActivateStatementDiagnostics: statementDiagnosticsActions.createReport,
-      onDiagnosticsModalOpen: (statementFingerprint: string) =>
-        analyticsActions.activateDiagnostics({
-          page: "statements",
-          value: statementFingerprint,
-        }),
-      onSearchComplete: (results: AggregateStatistics[]) =>
-        analyticsActions.search({
-          page: "statements",
-          value: results?.length || 0,
-        }),
-      onPageChanged: (pageNum: number) =>
-        analyticsActions.pagination({ page: "statements", value: pageNum }),
-      onSortingChange: (
-        tableName: string,
-        columnName: string,
-        ascending: boolean,
-      ) =>
-        analyticsActions.sorting({
-          page: "statements",
-          value: {
+        dispatch(
+          localStorageActions.update({
+            key: "adminUi/showDiagnosticsModal",
+            value: false,
+          }),
+        ),
+      onActivateStatementDiagnostics: (statementFingerprint: string) => {
+        dispatch(
+          statementDiagnosticsActions.createReport(statementFingerprint),
+        );
+        dispatch(
+          analyticsActions.track({
+            name: "Statement Diagnostics Clicked",
+            page: "Statements",
+            action: "Activated",
+          }),
+        );
+      },
+      onDiagnosticsReportDownload: () =>
+        dispatch(
+          analyticsActions.track({
+            name: "Statement Diagnostics Clicked",
+            page: "Statements",
+            action: "Downloaded",
+          }),
+        ),
+      onSearchComplete: (_results: AggregateStatistics[]) =>
+        dispatch(
+          analyticsActions.track({
+            name: "Keyword Searched",
+            page: "Statements",
+          }),
+        ),
+      onFilterChange: value =>
+        dispatch(
+          analyticsActions.track({
+            name: "Filter Clicked",
+            page: "Statements",
+            filterName: "app",
+            value,
+          }),
+        ),
+      onSortingChange: (tableName: string, columnName: string) =>
+        dispatch(
+          analyticsActions.track({
+            name: "Column Sorted",
+            page: "Statements",
             tableName,
             columnName,
-            ascending,
-          },
-        }),
-    },
+          }),
+        ),
+      onStatementClick: () =>
+        dispatch(
+          analyticsActions.track({
+            name: "Statement Clicked",
+            page: "Statements",
+          }),
+        ),
+    }),
   )(StatementsPage),
 );
