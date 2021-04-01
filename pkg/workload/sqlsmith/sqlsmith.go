@@ -72,7 +72,11 @@ func (g *sqlSmith) Flags() workload.Flags { return g.flags }
 func (g *sqlSmith) Hooks() workload.Hooks {
 	return workload.Hooks{
 		PreCreate: func(db *gosql.DB) error {
-			if _, err := db.Exec(`SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true`); err != nil {
+			if _, err := db.Exec(`
+SET CLUSTER SETTING sql.defaults.interleaved_tables.enabled = true;
+SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
+SET enable_drop_enum_value = true;
+`); err != nil {
 				return err
 			}
 			return nil

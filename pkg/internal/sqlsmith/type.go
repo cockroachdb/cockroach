@@ -79,7 +79,7 @@ func (s *Smither) makeDesiredTypes() []*types.T {
 }
 
 type typeInfo struct {
-	udts        map[types.UserDefinedTypeName]*types.T
+	udts        map[tree.TypeName]*types.T
 	seedTypes   []*types.T
 	scalarTypes []*types.T
 }
@@ -88,10 +88,7 @@ type typeInfo struct {
 func (s *Smither) ResolveType(
 	_ context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	key := types.UserDefinedTypeName{
-		Name:   name.Object(),
-		Schema: name.Schema(),
-	}
+	key := tree.MakeSchemaQualifiedTypeName(name.Schema(), name.Object())
 	res, ok := s.types.udts[key]
 	if !ok {
 		return nil, errors.Newf("type name %s not found by smither", name.Object())

@@ -281,3 +281,12 @@ func HandleErrorFromDiskQueue(err error) {
 		colexecerror.InternalError(err)
 	}
 }
+
+// EnsureSelectionVectorLength returns an int slice that is guaranteed to have
+// the specified length. old is reused if possible but is *not* zeroed out.
+func EnsureSelectionVectorLength(old []int, length int) []int {
+	if cap(old) >= length {
+		return old[:length]
+	}
+	return make([]int, length)
+}

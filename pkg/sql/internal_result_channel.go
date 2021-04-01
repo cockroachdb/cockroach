@@ -144,6 +144,11 @@ type syncIEResultChannel struct {
 	// goroutine exits its run() loop whereas waitCh is closed when closing the
 	// iterator.
 	dataCh chan ieIteratorResult
+
+	// waitCh is never closed. In all places where the caller may interact with it
+	// the doneCh is also used. This policy is in place to make it safe to unblock
+	// both the reader and the writer without any hazards of a blocked reader
+	// attempting to send on a closed channel.
 	waitCh chan struct{}
 
 	// doneCh is used to indicate that the ReadWriter has been closed.
@@ -195,7 +200,6 @@ func (i *syncIEResultChannel) unblockWriter(ctx context.Context) (done bool, err
 
 func (i *syncIEResultChannel) finish() {
 	close(i.dataCh)
-	close(i.waitCh)
 }
 
 func (i *syncIEResultChannel) nextResult(

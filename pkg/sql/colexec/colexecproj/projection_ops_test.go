@@ -344,6 +344,7 @@ func benchmarkProjOp(
 
 func BenchmarkProjOp(b *testing.B) {
 	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

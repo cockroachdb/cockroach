@@ -741,11 +741,10 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	roachNodes := loadGroups.roachNodes()
 	loadNodes := loadGroups.loadNodes()
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
-	// Fixture import needs ./cockroach workload on loadNodes[0],
+	// Fixture import needs './cockroach workload' on loadNodes[0],
 	// and if we use haproxy (see below) we need it on the others
 	// as well.
 	c.Put(ctx, cockroach, "./cockroach", loadNodes)
-	c.Put(ctx, workload, "./workload", loadNodes)
 	// Don't encrypt in tpccbench tests.
 	c.encryptDefault = false
 	c.encryptAtRandom = false

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type aggTestSpec struct {
@@ -395,6 +396,7 @@ func TestAggregator(t *testing.T) {
 }
 
 func BenchmarkAggregation(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 1
 	const numRows = 1000
 
@@ -451,6 +453,7 @@ func BenchmarkAggregation(b *testing.B) {
 }
 
 func BenchmarkCountRows(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	spec := &execinfrapb.AggregatorSpec{
 		Aggregations: []execinfrapb.AggregatorSpec_Aggregation{
 			{
@@ -487,6 +490,7 @@ func BenchmarkCountRows(b *testing.B) {
 }
 
 func BenchmarkGrouping(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	const numCols = 1
 	const numRows = 1000
 
@@ -520,6 +524,7 @@ func BenchmarkGrouping(b *testing.B) {
 }
 
 func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
+	defer log.Scope(b).Close(b)
 	const numCols = 3
 	const groupSize = 10
 	var groupedCols = [2]int{0, 1}

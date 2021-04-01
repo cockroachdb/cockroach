@@ -198,6 +198,7 @@ func TestOrderedSyncRandomInput(t *testing.T) {
 }
 
 func BenchmarkOrderedSynchronizer(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	numInputs := int64(3)

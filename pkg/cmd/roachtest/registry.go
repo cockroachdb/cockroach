@@ -27,6 +27,7 @@ func registerTests(r *testRegistry) {
 	registerClearRange(r)
 	registerClockJumpTests(r)
 	registerClockMonotonicTests(r)
+	registerConnectionLatencyTest(r)
 	registerCopy(r)
 	registerDecommission(r)
 	registerDiskFull(r)

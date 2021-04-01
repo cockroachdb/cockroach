@@ -342,6 +342,7 @@ func runDistinctBenchmarks(
 }
 
 func BenchmarkDistinct(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	distinctConstructors := []func(*colmem.Allocator, colexecop.Operator, []uint32, int, []*types.T) (colexecop.Operator, error){
