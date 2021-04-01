@@ -710,23 +710,23 @@ func randEncDatumRow(typ *types.T) rowenc.EncDatumRow {
 	}
 }
 
-// BenchmarkEncodeInt-16                    2006964               666.0 ns/op            73 B/op          5 allocs/op
-// BenchmarkEncodeBool-16                   1955925               589.0 ns/op            33 B/op          3 allocs/op
-// BenchmarkEncodeFloat-16                  2165485               674.5 ns/op            72 B/op          5 allocs/op
-// BenchmarkEncodeBox2D-16                   618493              1807 ns/op             771 B/op         19 allocs/op
-// BenchmarkEncodeGeography-16              2114208               689.1 ns/op           153 B/op          4 allocs/op
-// BenchmarkEncodeGeometry-16               2180958               723.0 ns/op           136 B/op          5 allocs/op
-// BenchmarkEncodeBytes-16                  2197863               700.5 ns/op            64 B/op          5 allocs/op
-// BenchmarkEncodeString-16                 1710142               685.9 ns/op            81 B/op          5 allocs/op
-// BenchmarkEncodeDate-16                   2448033               554.0 ns/op            32 B/op          3 allocs/op
-// BenchmarkEncodeTime-16                   1737711               644.7 ns/op            49 B/op          5 allocs/op
-// BenchmarkEncodeTimeTZ-16                  829166              1446 ns/op             402 B/op         14 allocs/op
-// BenchmarkEncodeTimestamp-16              1599121               744.3 ns/op            97 B/op          6 allocs/op
-// BenchmarkEncodeTimestampTZ-16            1610475               751.5 ns/op            97 B/op          6 allocs/op
-// BenchmarkEncodeDecimal-16                 728798              1593 ns/op             522 B/op         24 allocs/op
-// BenchmarkEncodeUUID-16                   1519089               784.1 ns/op           177 B/op          6 allocs/op
-// BenchmarkEncodeINet-16                   1420908               830.0 ns/op           153 B/op          8 allocs/op
-// BenchmarkEncodeJSON-16                   1000000              3090 ns/op            1490 B/op         45 allocs/op
+// BenchmarkEncodeInt-16                     895807              1128 ns/op            1082 B/op         11 allocs/op
+// BenchmarkEncodeBool-16                   1000000              1065 ns/op            1042 B/op          9 allocs/op
+// BenchmarkEncodeFloat-16                  1000000              1137 ns/op            1082 B/op         11 allocs/op
+// BenchmarkEncodeBox2D-16                   524196              2241 ns/op            1588 B/op         24 allocs/op
+// BenchmarkEncodeGeography-16               785518              1371 ns/op            2082 B/op         11 allocs/op
+// BenchmarkEncodeGeometry-16               1000000              1333 ns/op            1954 B/op         11 allocs/op
+// BenchmarkEncodeBytes-16                  1073588              1185 ns/op            1113 B/op         12 allocs/op
+// BenchmarkEncodeString-16                 1000000              1078 ns/op            1042 B/op          9 allocs/op
+// BenchmarkEncodeDate-16                    986196              1106 ns/op            1050 B/op          9 allocs/op
+// BenchmarkEncodeTime-16                   1101405              1133 ns/op            1089 B/op         12 allocs/op
+// BenchmarkEncodeTimeTZ-16                  616290              1864 ns/op            1411 B/op         20 allocs/op
+// BenchmarkEncodeTimestamp-16               970492              1176 ns/op            1106 B/op         12 allocs/op
+// BenchmarkEncodeTimestampTZ-16             919526              1178 ns/op            1106 B/op         12 allocs/op
+// BenchmarkEncodeDecimal-16                 572534              2488 ns/op            1731 B/op         40 allocs/op
+// BenchmarkEncodeUUID-16                    794467              1417 ns/op            1186 B/op         12 allocs/op
+// BenchmarkEncodeINet-16                    776548              1324 ns/op            1162 B/op         14 allocs/op
+// BenchmarkEncodeJSON-16                    545298              3529 ns/op            2371 B/op         49 allocs/op
 func BenchmarkEncodeInt(b *testing.B) {
 	benchmarkEncodeType(b, types.Int, randEncDatumRow(types.Int))
 }
