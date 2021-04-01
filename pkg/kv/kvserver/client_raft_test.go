@@ -2517,9 +2517,10 @@ outer:
 						t.Fatal(err)
 					}
 					if lease, _ := repl.GetLease(); lease.Replica.Equal(repDesc) {
-						tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(replicaIdx))
+						tc.RemoveLeaseHolderOrFatal(t, *repl.Desc(), tc.Target(leaderIdx), tc.Target(replicaIdx))
+					} else {
+						tc.RemoveVotersOrFatal(t, key, tc.Target(leaderIdx))
 					}
-					tc.RemoveVotersOrFatal(t, key, tc.Target(leaderIdx))
 					// We want to stop all nodes from talking to the replicaIdx, so need
 					// to trip the breaker on all servers but it.
 					for i := range tc.Servers {
@@ -2535,14 +2536,15 @@ outer:
 							cb.Reset()
 						}
 					}
-					// Make sure the old replica was actually removed, before we try to re-adding it.
+					// Make the add retryable to avoid a race raft snapshots. The raft leader
+					// and lease holder may end up on different nodes due to the constant
+					// shuffling and when a new node is added it gets two snapshots.
+					// The add operation fails which fails the test.
 					testutils.SucceedsSoon(t, func() error {
-						if oldRepl := tc.GetFirstStoreFromServer(t, leaderIdx).LookupReplica(roachpb.RKey(key)); oldRepl != nil {
-							return errors.Errorf("Expected replica %s to be removed", oldRepl)
-						}
-						return nil
+						_, err := tc.AddVoters(key, tc.Target(leaderIdx))
+						return err
 					})
-					tc.AddVotersOrFatal(t, key, tc.Target(leaderIdx))
+					// Make sure the new replica was actually added.
 					require.NoError(t, tc.WaitForVoters(key, tc.Target(leaderIdx)))
 					continue outer
 				}
