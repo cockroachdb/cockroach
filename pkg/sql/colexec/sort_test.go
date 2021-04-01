@@ -280,6 +280,7 @@ func TestAllSpooler(t *testing.T) {
 }
 
 func BenchmarkSort(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 	k := uint64(128)
@@ -332,6 +333,7 @@ func BenchmarkSort(b *testing.B) {
 }
 
 func BenchmarkAllSpooler(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
