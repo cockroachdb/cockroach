@@ -541,6 +541,34 @@ func (c *CustomFuncs) FoldColumnAccess(input opt.ScalarExpr, idx memo.TupleOrdin
 	return nil
 }
 
+// CanFoldFunctionWithNullArg returns true if the given function can be folded
+// to Null when any of its arguments are Null. A function can be folded to Null
+// in this case if all of the following are true:
+//
+//   1. It does not allow Null arguments (NullableArgs=false).
+//   2. It is a normal function, not an aggregate, window, or generator.
+//
+// See FoldFunctionWithNullArg for more details.
+func (c *CustomFuncs) CanFoldFunctionWithNullArg(private *memo.FunctionPrivate) bool {
+	return !private.Properties.NullableArgs &&
+		private.Properties.Class == tree.NormalClass
+}
+
+// HasNullArg returns true if one of args is Null.
+func (c *CustomFuncs) HasNullArg(args memo.ScalarListExpr) bool {
+	for i := range args {
+		if args[i].Op() == opt.NullOp {
+			return true
+		}
+	}
+	return false
+}
+
+// FunctionReturnType returns the return type of the given function.
+func (c *CustomFuncs) FunctionReturnType(private *memo.FunctionPrivate) *types.T {
+	return private.Typ
+}
+
 // FoldFunction evaluates a function expression with constant inputs. It
 // returns a constant expression as long as the function is contained in the
 // FoldFunctionAllowlist, and the evaluation causes no error.
