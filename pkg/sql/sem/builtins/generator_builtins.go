@@ -1756,12 +1756,12 @@ func (s *showCreateAllTablesGenerator) Next(ctx context.Context) (bool, error) {
 			return false, nil
 		}
 
-		statementType := alterAddFKStatements
+		statementReturnType := alterAddFKStatements
 		if s.phase == alterValidateFks {
-			statementType = alterValidateFKStatements
+			statementReturnType = alterValidateFKStatements
 		}
 		alterStmt, err := getAlterStatements(
-			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName, statementType,
+			ctx, s.ie, s.txn, s.ids[s.idx], s.timestamp, s.dbName, statementReturnType,
 		)
 		if err != nil {
 			return false, err

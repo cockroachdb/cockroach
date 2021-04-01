@@ -148,7 +148,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		recv := MakeDistSQLReceiver(
 			ctx,
 			rw,
-			stmt.AST.StatementType(),
+			stmt.AST.StatementReturnType(),
 			execCfg.RangeDescriptorCache,
 			txn,
 			execCfg.Clock,
@@ -210,7 +210,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	recv := MakeDistSQLReceiver(
 		ctx,
 		rw,
-		tree.Rows, /* StatementType */
+		tree.Rows, /* StatementReturnType */
 		nil,       /* rangeCache */
 		txn,
 		nil, /* clockUpdater */
