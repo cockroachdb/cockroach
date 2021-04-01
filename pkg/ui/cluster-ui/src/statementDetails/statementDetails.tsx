@@ -116,7 +116,13 @@ export interface StatementDetailsDispatchProps {
   createStatementDiagnosticsReport: (statementFingerprint: string) => void;
   dismissStatementDiagnosticsAlertMessage?: () => void;
   onTabChanged?: (tabName: string) => void;
-  onDiagnosticBundleDownload?: (statementFingerprint: string) => void;
+  onDiagnosticBundleDownload?: (statementFingerprint?: string) => void;
+  onSortingChange?: (
+    name: string,
+    columnTitle: string,
+    ascending: boolean,
+  ) => void;
+  onBackToStatementsClick?: () => void;
 }
 
 export interface StatementDetailsStateProps {
@@ -286,6 +292,9 @@ export class StatementDetails extends React.Component<
     this.setState({
       sortSetting: ss,
     });
+    if (this.props.onSortingChange) {
+      this.props.onSortingChange("Stats By Node", ss.columnTitle, ss.ascending);
+    }
   };
 
   componentDidMount() {
@@ -316,6 +325,13 @@ export class StatementDetails extends React.Component<
     this.props.onTabChanged && this.props.onTabChanged(tabId);
   };
 
+  backToStatementsClick = () => {
+    this.props.history.push("/statements");
+    if (this.props.onBackToStatementsClick) {
+      this.props.onBackToStatementsClick();
+    }
+  };
+
   render() {
     const app = getMatchParamByName(this.props.match, appAttr);
     return (
@@ -323,7 +339,7 @@ export class StatementDetails extends React.Component<
         <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
         <div className={cx("section", "page--header")}>
           <Button
-            onClick={() => this.props.history.push("/statements")}
+            onClick={this.backToStatementsClick}
             type="unstyled-link"
             size="small"
             icon={<ArrowLeft fontSize={"10px"} />}
@@ -721,6 +737,7 @@ export class StatementDetails extends React.Component<
             showDiagnosticsViewLink={
               this.props.uiConfig.showStatementDiagnosticsLink
             }
+            onSortingChange={this.props.onSortingChange}
           />
         </TabPane>
         <TabPane tab="Logical Plan" key="logical-plan">

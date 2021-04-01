@@ -1,5 +1,6 @@
 import { withRouter } from "react-router-dom";
 import { connect } from "react-redux";
+import { Dispatch } from "redux";
 import {
   StatementDetails,
   StatementDetailsDispatchProps,
@@ -40,28 +41,64 @@ const mapStateToProps = (
   };
 };
 
-const mapDispatchToProps: StatementDetailsDispatchProps = {
-  refreshStatements: statementActions.refresh,
-  refreshStatementDiagnosticsRequests: statementDiagnosticsActions.refresh,
-  refreshNodes: nodesActions.refresh,
-  refreshNodesLiveness: nodeLivenessActions.refresh,
+const mapDispatchToProps = (
+  dispatch: Dispatch,
+): StatementDetailsDispatchProps => ({
+  refreshStatements: () => dispatch(statementActions.refresh()),
+  refreshStatementDiagnosticsRequests: () =>
+    dispatch(statementDiagnosticsActions.refresh()),
+  refreshNodes: () => dispatch(nodesActions.refresh()),
+  refreshNodesLiveness: () => dispatch(nodeLivenessActions.refresh()),
   dismissStatementDiagnosticsAlertMessage: () =>
-    localStorageActions.update({
-      key: "adminUi/showDiagnosticsModal",
-      value: false,
-    }),
-  createStatementDiagnosticsReport: statementDiagnosticsActions.createReport,
+    dispatch(
+      localStorageActions.update({
+        key: "adminUi/showDiagnosticsModal",
+        value: false,
+      }),
+    ),
+  createStatementDiagnosticsReport: (statementFingerprint: string) => {
+    dispatch(statementDiagnosticsActions.createReport(statementFingerprint));
+    dispatch(
+      analyticsActions.track({
+        name: "Statement Diagnostics Clicked",
+        page: "Statement Details",
+        action: "Activated",
+      }),
+    );
+  },
   onTabChanged: tabName =>
-    analyticsActions.subNavigationSelection({
-      page: "statementDetails",
-      value: tabName,
-    }),
-  onDiagnosticBundleDownload: statementFingerprint =>
-    analyticsActions.downloadStatementDiagnostics({
-      page: "statementDetails",
-      value: statementFingerprint,
-    }),
-};
+    dispatch(
+      analyticsActions.track({
+        name: "Tab Changed",
+        page: "Statement Details",
+        tabName,
+      }),
+    ),
+  onDiagnosticBundleDownload: () =>
+    dispatch(
+      analyticsActions.track({
+        name: "Statement Diagnostics Clicked",
+        page: "Statement Details",
+        action: "Downloaded",
+      }),
+    ),
+  onSortingChange: (tableName, columnName) =>
+    dispatch(
+      analyticsActions.track({
+        name: "Column Sorted",
+        page: "Statement Details",
+        columnName,
+        tableName,
+      }),
+    ),
+  onBackToStatementsClick: () =>
+    dispatch(
+      analyticsActions.track({
+        name: "Back Clicked",
+        page: "Statement Details",
+      }),
+    ),
+});
 
 export const ConnectedStatementDetailsPage = withRouter(
   connect(mapStateToProps, mapDispatchToProps)(StatementDetails),

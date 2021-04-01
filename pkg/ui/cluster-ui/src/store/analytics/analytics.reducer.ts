@@ -1,39 +1,66 @@
 import { createAction } from "@reduxjs/toolkit";
+import { DOMAIN_NAME } from "../utils";
 
-type Page =
-  | "statements"
-  | "statementDetails"
-  | "transactions"
-  | "transactionDetails";
+type Page = "Statements" | "Statement Details";
 
-type PagePayload<T> = {
+type SearchEvent = {
+  name: "Keyword Searched";
   page: Page;
-  value: T;
 };
 
-type SortingPayload = {
+type SortingEvent = {
+  name: "Column Sorted";
+  page: Page;
   tableName: string;
   columnName: string;
-  ascending?: boolean;
 };
 
-const PREFIX = "adminUI/analytics";
+type StatementDiagnosticEvent = {
+  name: "Statement Diagnostics Clicked";
+  page: Page;
+  action: "Activated" | "Downloaded";
+};
+
+type TabChangedEvent = {
+  name: "Tab Changed";
+  tabName: string;
+  page: Page;
+};
+
+type BackButtonClick = {
+  name: "Back Clicked";
+  page: Page;
+};
+
+type StatementClicked = {
+  name: "Statement Clicked";
+  page: Page;
+};
+
+type FilterEvent = {
+  name: "Filter Clicked";
+  page: Page;
+  filterName: string;
+  value: string;
+};
+
+type AnalyticsEvent =
+  | SortingEvent
+  | StatementDiagnosticEvent
+  | SearchEvent
+  | TabChangedEvent
+  | BackButtonClick
+  | FilterEvent
+  | StatementClicked;
+
+const PREFIX = `${DOMAIN_NAME}/analytics`;
 
 /**
  * actions accept payload with "page" field which specifies the page where
  * action occurs and a value expected expected by specific action.
  */
 export const actions = {
-  search: createAction<PagePayload<number>>(`${PREFIX}/search`),
-  pagination: createAction<PagePayload<number>>(`${PREFIX}/pagination`),
-  sorting: createAction<PagePayload<SortingPayload>>(`${PREFIX}/sorting`),
-  activateDiagnostics: createAction<PagePayload<string>>(
-    `${PREFIX}/activateStatementDiagnostics`,
-  ),
-  downloadStatementDiagnostics: createAction<PagePayload<string>>(
-    `${PREFIX}/downloadStatementDiagnostics`,
-  ),
-  subNavigationSelection: createAction<PagePayload<string>>(
-    `${PREFIX}/subNavigationSelection`,
-  ),
+  track: createAction(`${PREFIX}/track`, (event: AnalyticsEvent) => ({
+    payload: event,
+  })),
 };
