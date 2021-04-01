@@ -91,7 +91,7 @@ message StatementStatistics {
   // are sampled.
   optional ExecStats exec_stats = 21 [(gogoproto.nullable) = false];
 
-  // SqlType is the type of the sql, between DDL, DML and DCL
+  // SqlType is the type of the sql (DDL, DML, DCL or TCL)
   optional string sql_type = 22 [(gogoproto.nullable) = false];
 
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!

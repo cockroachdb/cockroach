@@ -33,6 +33,7 @@ import "fmt"
 // StatementReturnType is the enumerated type for Statement return styles on
 // the wire.
 type StatementReturnType int
+type StatementType int
 
 //go:generate stringer -type=StatementReturnType
 const (
@@ -65,20 +66,27 @@ const (
 	Unknown
 )
 
+//go:generate stringer -type=StatementType
+const (
+	// DDL (Data Definition Language) deals with database schemas and descriptions.
+	typeDDL StatementType = iota
+	// DML (Data Manipulation Language) deals with data manipulation and it is used to
+	// store, modify, retrieve, delete and update data in a database.
+	typeDML
+	// DCL (Data Control Language) deals with commands such as GRANT and mostly
+	// concerned with rights, permissions and other controls of the database system.
+	typeDCL
+	// TCL (Transaction Control Language) deals with a transaction within a database.
+	typeTCL
+)
+
 // Statement represents a statement.
 type Statement interface {
 	fmt.Stringer
 	NodeFormatter
 
 	StatementReturnType() StatementReturnType
-	// StatementType returns the SQL Type as DDL, DML or DCL
-	// DDL (Data Definition Language) deals with database schemas and descriptions.
-	// DML (Data Manipulation Language) deals with data manipulation and it is used to
-	// store, modify, retrieve, delete and update data in a database.
-	// DCL (Data Control Language) deals with commands such as GRANT and mostly
-	// concerned with rights, permissions and other controls of the database system.
-	// TCL (Transaction Control Language) deals with a transaction within a database.
-	StatementType() string
+	StatementType() StatementType
 	// StatementTag is a short string identifying the type of statement
 	// (usually a single verb). This is different than the Stringer output,
 	// which is the actual statement (including args).
@@ -165,7 +173,7 @@ var _ CCLOnlyStatement = &ReplicationStream{}
 func (*AlterDatabaseOwner) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterDatabaseOwner) StatementType() string { return "DDL" }
+func (*AlterDatabaseOwner) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDatabaseOwner) StatementTag() string { return "ALTER DATABASE OWNER" }
@@ -176,7 +184,7 @@ func (*AlterDatabaseOwner) hiddenFromShowQueries() {}
 func (*AlterDatabaseAddRegion) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterDatabaseAddRegion) StatementType() string { return "DDL" }
+func (*AlterDatabaseAddRegion) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDatabaseAddRegion) StatementTag() string { return "ALTER DATABASE ADD REGION" }
@@ -187,7 +195,7 @@ func (*AlterDatabaseAddRegion) hiddenFromShowQueries() {}
 func (*AlterDatabaseDropRegion) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterDatabaseDropRegion) StatementType() string { return "DDL" }
+func (*AlterDatabaseDropRegion) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDatabaseDropRegion) StatementTag() string { return "ALTER DATABASE DROP REGION" }
@@ -198,7 +206,7 @@ func (*AlterDatabaseDropRegion) hiddenFromShowQueries() {}
 func (*AlterDatabasePrimaryRegion) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterDatabasePrimaryRegion) StatementType() string { return "DDL" }
+func (*AlterDatabasePrimaryRegion) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDatabasePrimaryRegion) StatementTag() string { return "ALTER DATABASE PRIMARY REGION" }
@@ -209,7 +217,7 @@ func (*AlterDatabasePrimaryRegion) hiddenFromShowQueries() {}
 func (*AlterDatabaseSurvivalGoal) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterDatabaseSurvivalGoal) StatementType() string { return "DDL" }
+func (*AlterDatabaseSurvivalGoal) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterDatabaseSurvivalGoal) StatementTag() string { return "ALTER DATABASE SURVIVE" }
@@ -220,7 +228,7 @@ func (*AlterDatabaseSurvivalGoal) hiddenFromShowQueries() {}
 func (*AlterIndex) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterIndex) StatementType() string { return "DDL" }
+func (*AlterIndex) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterIndex) StatementTag() string { return "ALTER INDEX" }
@@ -231,7 +239,7 @@ func (*AlterIndex) hiddenFromShowQueries() {}
 func (*AlterTable) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterTable) StatementType() string { return "DDL" }
+func (*AlterTable) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterTable) StatementTag() string { return "ALTER TABLE" }
@@ -242,7 +250,7 @@ func (*AlterTable) hiddenFromShowQueries() {}
 func (*AlterTableLocality) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterTableLocality) StatementType() string { return "DDL" }
+func (*AlterTableLocality) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterTableLocality) StatementTag() string { return "ALTER TABLE SET LOCALITY" }
@@ -253,7 +261,7 @@ func (*AlterTableLocality) hiddenFromShowQueries() {}
 func (*AlterTableOwner) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterTableOwner) StatementType() string { return "DDL" }
+func (*AlterTableOwner) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterTableOwner) StatementTag() string { return "ALTER TABLE OWNER" }
@@ -264,7 +272,7 @@ func (*AlterTableOwner) hiddenFromShowQueries() {}
 func (*AlterTableSetSchema) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterTableSetSchema) StatementType() string { return "DDL" }
+func (*AlterTableSetSchema) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterTableSetSchema) StatementTag() string { return "ALTER TABLE SET SCHEMA" }
@@ -275,7 +283,7 @@ func (*AlterTableSetSchema) hiddenFromShowQueries() {}
 func (*AlterSchema) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterSchema) StatementType() string { return "DDL" }
+func (*AlterSchema) StatementType() StatementType { return typeDDL }
 
 // StatementTag implements the Statement interface.
 func (*AlterSchema) StatementTag() string { return "ALTER SCHEMA" }
@@ -286,7 +294,7 @@ func (*AlterSchema) hiddenFromShowQueries() {}
 func (*AlterType) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterType) StatementType() string { return "DDL" }
+func (*AlterType) StatementType() StatementType { return typeDDL }
 
 // StatementTag implements the Statement interface.
 func (*AlterType) StatementTag() string { return "ALTER TYPE" }
@@ -297,7 +305,7 @@ func (*AlterType) hiddenFromShowQueries() {}
 func (*AlterSequence) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*AlterSequence) StatementType() string { return "DDL" }
+func (*AlterSequence) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
@@ -306,7 +314,7 @@ func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
 func (*AlterRole) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*AlterRole) StatementType() string { return "DDL" }
+func (*AlterRole) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterRole) StatementTag() string { return "ALTER ROLE" }
@@ -319,7 +327,7 @@ func (*AlterRole) hiddenFromShowQueries() {}
 func (*Analyze) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*Analyze) StatementType() string { return "DDL" }
+func (*Analyze) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Analyze) StatementTag() string { return "ANALYZE" }
@@ -328,7 +336,7 @@ func (*Analyze) StatementTag() string { return "ANALYZE" }
 func (*Backup) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Backup) StatementType() string { return "DML" }
+func (*Backup) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Backup) StatementTag() string { return "BACKUP" }
@@ -341,7 +349,7 @@ func (*Backup) hiddenFromShowQueries() {}
 func (*ScheduledBackup) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ScheduledBackup) StatementType() string { return "DML" }
+func (*ScheduledBackup) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ScheduledBackup) StatementTag() string { return "SCHEDULED BACKUP" }
@@ -354,7 +362,7 @@ func (*ScheduledBackup) hiddenFromShowQueries() {}
 func (*BeginTransaction) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*BeginTransaction) StatementType() string { return "TCL" }
+func (*BeginTransaction) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*BeginTransaction) StatementTag() string { return "BEGIN" }
@@ -363,7 +371,7 @@ func (*BeginTransaction) StatementTag() string { return "BEGIN" }
 func (*ControlJobs) StatementReturnType() StatementReturnType { return RowsAffected }
 
 // StatementType implements the Statement interface.
-func (*ControlJobs) StatementType() string { return "DML" }
+func (*ControlJobs) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *ControlJobs) StatementTag() string {
@@ -374,7 +382,7 @@ func (n *ControlJobs) StatementTag() string {
 func (*ControlSchedules) StatementReturnType() StatementReturnType { return RowsAffected }
 
 // StatementType implements the Statement interface.
-func (*ControlSchedules) StatementType() string { return "DML" }
+func (*ControlSchedules) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *ControlSchedules) StatementTag() string {
@@ -385,7 +393,7 @@ func (n *ControlSchedules) StatementTag() string {
 func (*ControlJobsForSchedules) StatementReturnType() StatementReturnType { return RowsAffected }
 
 // StatementType implements the Statement interface.
-func (*ControlJobsForSchedules) StatementType() string { return "DML" }
+func (*ControlJobsForSchedules) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *ControlJobsForSchedules) StatementTag() string {
@@ -396,7 +404,7 @@ func (n *ControlJobsForSchedules) StatementTag() string {
 func (*CancelQueries) StatementReturnType() StatementReturnType { return RowsAffected }
 
 // StatementType implements the Statement interface.
-func (*CancelQueries) StatementType() string { return "DML" }
+func (*CancelQueries) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CancelQueries) StatementTag() string { return "CANCEL QUERIES" }
@@ -405,7 +413,7 @@ func (*CancelQueries) StatementTag() string { return "CANCEL QUERIES" }
 func (*CancelSessions) StatementReturnType() StatementReturnType { return RowsAffected }
 
 // StatementType implements the Statement interface.
-func (*CancelSessions) StatementType() string { return "DML" }
+func (*CancelSessions) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CancelSessions) StatementTag() string { return "CANCEL SESSIONS" }
@@ -414,7 +422,7 @@ func (*CancelSessions) StatementTag() string { return "CANCEL SESSIONS" }
 func (*CannedOptPlan) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*CannedOptPlan) StatementType() string { return "DML" }
+func (*CannedOptPlan) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CannedOptPlan) StatementTag() string { return "PREPARE AS OPT PLAN" }
@@ -423,7 +431,7 @@ func (*CannedOptPlan) StatementTag() string { return "PREPARE AS OPT PLAN" }
 func (*CommentOnColumn) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CommentOnColumn) StatementType() string { return "DDL" }
+func (*CommentOnColumn) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CommentOnColumn) StatementTag() string { return "COMMENT ON COLUMN" }
@@ -432,7 +440,7 @@ func (*CommentOnColumn) StatementTag() string { return "COMMENT ON COLUMN" }
 func (*CommentOnDatabase) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CommentOnDatabase) StatementType() string { return "DDL" }
+func (*CommentOnDatabase) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CommentOnDatabase) StatementTag() string { return "COMMENT ON DATABASE" }
@@ -441,7 +449,7 @@ func (*CommentOnDatabase) StatementTag() string { return "COMMENT ON DATABASE" }
 func (*CommentOnIndex) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CommentOnIndex) StatementType() string { return "DDL" }
+func (*CommentOnIndex) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CommentOnIndex) StatementTag() string { return "COMMENT ON INDEX" }
@@ -450,7 +458,7 @@ func (*CommentOnIndex) StatementTag() string { return "COMMENT ON INDEX" }
 func (*CommentOnTable) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CommentOnTable) StatementType() string { return "DDL" }
+func (*CommentOnTable) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CommentOnTable) StatementTag() string { return "COMMENT ON TABLE" }
@@ -459,7 +467,7 @@ func (*CommentOnTable) StatementTag() string { return "COMMENT ON TABLE" }
 func (*CommitTransaction) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*CommitTransaction) StatementType() string { return "TCL" }
+func (*CommitTransaction) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CommitTransaction) StatementTag() string { return "COMMIT" }
@@ -468,7 +476,7 @@ func (*CommitTransaction) StatementTag() string { return "COMMIT" }
 func (*CopyFrom) StatementReturnType() StatementReturnType { return CopyIn }
 
 // StatementType implements the Statement interface.
-func (*CopyFrom) StatementType() string { return "DML" }
+func (*CopyFrom) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CopyFrom) StatementTag() string { return "COPY" }
@@ -477,7 +485,7 @@ func (*CopyFrom) StatementTag() string { return "COPY" }
 func (*CreateChangefeed) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*CreateChangefeed) StatementType() string { return "DDL" }
+func (*CreateChangefeed) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *CreateChangefeed) StatementTag() string {
@@ -493,7 +501,7 @@ func (*CreateChangefeed) cclOnlyStatement() {}
 func (*CreateDatabase) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CreateDatabase) StatementType() string { return "DDL" }
+func (*CreateDatabase) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateDatabase) StatementTag() string { return "CREATE DATABASE" }
@@ -502,7 +510,7 @@ func (*CreateDatabase) StatementTag() string { return "CREATE DATABASE" }
 func (*CreateExtension) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*CreateExtension) StatementType() string { return "DDL" }
+func (*CreateExtension) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateExtension) StatementTag() string { return "CREATE EXTENSION" }
@@ -511,7 +519,7 @@ func (*CreateExtension) StatementTag() string { return "CREATE EXTENSION" }
 func (*CreateIndex) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CreateIndex) StatementType() string { return "DDL" }
+func (*CreateIndex) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateIndex) StatementTag() string { return "CREATE INDEX" }
@@ -520,7 +528,7 @@ func (*CreateIndex) StatementTag() string { return "CREATE INDEX" }
 func (n *CreateSchema) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CreateSchema) StatementType() string { return "DDL" }
+func (*CreateSchema) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *CreateSchema) StatementTag() string {
@@ -534,7 +542,7 @@ func (*CreateSchema) modifiesSchema() bool { return true }
 func (n *CreateTable) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CreateTable) StatementType() string { return "DDL" }
+func (*CreateTable) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *CreateTable) StatementTag() string {
@@ -551,7 +559,7 @@ func (*CreateTable) modifiesSchema() bool { return true }
 func (*CreateType) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CreateType) StatementType() string { return "DDL" }
+func (*CreateType) StatementType() StatementType { return typeDDL }
 
 // StatementTag implements the Statement interface.
 func (*CreateType) StatementTag() string { return "CREATE TYPE" }
@@ -562,7 +570,7 @@ func (*CreateType) modifiesSchema() bool { return true }
 func (*CreateRole) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*CreateRole) StatementType() string { return "DDL" }
+func (*CreateRole) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateRole) StatementTag() string { return "CREATE ROLE" }
@@ -573,7 +581,7 @@ func (*CreateRole) hiddenFromShowQueries() {}
 func (*CreateView) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CreateView) StatementType() string { return "DDL" }
+func (*CreateView) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateView) StatementTag() string { return "CREATE VIEW" }
@@ -582,7 +590,7 @@ func (*CreateView) StatementTag() string { return "CREATE VIEW" }
 func (*CreateSequence) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CreateSequence) StatementType() string { return "DDL" }
+func (*CreateSequence) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateSequence) StatementTag() string { return "CREATE SEQUENCE" }
@@ -591,7 +599,7 @@ func (*CreateSequence) StatementTag() string { return "CREATE SEQUENCE" }
 func (*CreateStats) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*CreateStats) StatementType() string { return "DDL" }
+func (*CreateStats) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateStats) StatementTag() string { return "CREATE STATISTICS" }
@@ -600,7 +608,7 @@ func (*CreateStats) StatementTag() string { return "CREATE STATISTICS" }
 func (*Deallocate) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*Deallocate) StatementType() string { return "TCL" }
+func (*Deallocate) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *Deallocate) StatementTag() string {
@@ -615,7 +623,7 @@ func (n *Deallocate) StatementTag() string {
 func (*Discard) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*Discard) StatementType() string { return "TCL" }
+func (*Discard) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Discard) StatementTag() string { return "DISCARD" }
@@ -624,7 +632,7 @@ func (*Discard) StatementTag() string { return "DISCARD" }
 func (n *Delete) StatementReturnType() StatementReturnType { return n.Returning.statementReturnType() }
 
 // StatementType implements the Statement interface.
-func (*Delete) StatementType() string { return "DML" }
+func (*Delete) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Delete) StatementTag() string { return "DELETE" }
@@ -633,7 +641,7 @@ func (*Delete) StatementTag() string { return "DELETE" }
 func (*DropDatabase) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*DropDatabase) StatementType() string { return "DDL" }
+func (*DropDatabase) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropDatabase) StatementTag() string { return "DROP DATABASE" }
@@ -642,7 +650,7 @@ func (*DropDatabase) StatementTag() string { return "DROP DATABASE" }
 func (*DropIndex) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*DropIndex) StatementType() string { return "DDL" }
+func (*DropIndex) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropIndex) StatementTag() string { return "DROP INDEX" }
@@ -651,7 +659,7 @@ func (*DropIndex) StatementTag() string { return "DROP INDEX" }
 func (*DropTable) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*DropTable) StatementType() string { return "DDL" }
+func (*DropTable) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropTable) StatementTag() string { return "DROP TABLE" }
@@ -660,7 +668,7 @@ func (*DropTable) StatementTag() string { return "DROP TABLE" }
 func (*DropView) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*DropView) StatementType() string { return "DDL" }
+func (*DropView) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropView) StatementTag() string { return "DROP VIEW" }
@@ -669,7 +677,7 @@ func (*DropView) StatementTag() string { return "DROP VIEW" }
 func (*DropSequence) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*DropSequence) StatementType() string { return "DDL" }
+func (*DropSequence) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropSequence) StatementTag() string { return "DROP SEQUENCE" }
@@ -678,7 +686,7 @@ func (*DropSequence) StatementTag() string { return "DROP SEQUENCE" }
 func (*DropRole) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*DropRole) StatementType() string { return "DDL" }
+func (*DropRole) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropRole) StatementTag() string { return "DROP ROLE" }
@@ -691,7 +699,7 @@ func (*DropRole) hiddenFromShowQueries() {}
 func (*DropType) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*DropType) StatementType() string { return "DDL" }
+func (*DropType) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropType) StatementTag() string { return "DROP TYPE" }
@@ -700,7 +708,7 @@ func (*DropType) StatementTag() string { return "DROP TYPE" }
 func (*DropSchema) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*DropSchema) StatementType() string { return "DDL" }
+func (*DropSchema) StatementType() StatementType { return typeDDL }
 
 // StatementTag implements the Statement interface.
 func (*DropSchema) StatementTag() string { return "DROP SCHEMA" }
@@ -709,7 +717,7 @@ func (*DropSchema) StatementTag() string { return "DROP SCHEMA" }
 func (*Execute) StatementReturnType() StatementReturnType { return Unknown }
 
 // StatementType implements the Statement interface.
-func (*Execute) StatementType() string { return "TCL" }
+func (*Execute) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Execute) StatementTag() string { return "EXECUTE" }
@@ -718,7 +726,7 @@ func (*Execute) StatementTag() string { return "EXECUTE" }
 func (*Explain) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Explain) StatementType() string { return "DML" }
+func (*Explain) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Explain) StatementTag() string { return "EXPLAIN" }
@@ -727,7 +735,7 @@ func (*Explain) StatementTag() string { return "EXPLAIN" }
 func (*ExplainAnalyze) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ExplainAnalyze) StatementType() string { return "DML" }
+func (*ExplainAnalyze) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ExplainAnalyze) StatementTag() string { return "EXPLAIN ANALYZE" }
@@ -736,7 +744,7 @@ func (*ExplainAnalyze) StatementTag() string { return "EXPLAIN ANALYZE" }
 func (*Export) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Export) StatementType() string { return "DML" }
+func (*Export) StatementType() StatementType { return typeDML }
 
 func (*Export) cclOnlyStatement() {}
 
@@ -747,7 +755,7 @@ func (*Export) StatementTag() string { return "EXPORT" }
 func (*Grant) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*Grant) StatementType() string { return "DCL" }
+func (*Grant) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Grant) StatementTag() string { return "GRANT" }
@@ -756,7 +764,7 @@ func (*Grant) StatementTag() string { return "GRANT" }
 func (*GrantRole) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*GrantRole) StatementType() string { return "DCL" }
+func (*GrantRole) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*GrantRole) StatementTag() string { return "GRANT" }
@@ -765,7 +773,7 @@ func (*GrantRole) StatementTag() string { return "GRANT" }
 func (n *Insert) StatementReturnType() StatementReturnType { return n.Returning.statementReturnType() }
 
 // StatementType implements the Statement interface.
-func (*Insert) StatementType() string { return "DML" }
+func (*Insert) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Insert) StatementTag() string { return "INSERT" }
@@ -774,7 +782,7 @@ func (*Insert) StatementTag() string { return "INSERT" }
 func (*Import) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Import) StatementType() string { return "DML" }
+func (*Import) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Import) StatementTag() string { return "IMPORT" }
@@ -785,7 +793,7 @@ func (*Import) cclOnlyStatement() {}
 func (*ParenSelect) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ParenSelect) StatementType() string { return "DML" }
+func (*ParenSelect) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ParenSelect) StatementTag() string { return "SELECT" }
@@ -794,7 +802,7 @@ func (*ParenSelect) StatementTag() string { return "SELECT" }
 func (*Prepare) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*Prepare) StatementType() string { return "TCL" }
+func (*Prepare) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Prepare) StatementTag() string { return "PREPARE" }
@@ -803,7 +811,7 @@ func (*Prepare) StatementTag() string { return "PREPARE" }
 func (*ReassignOwnedBy) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*ReassignOwnedBy) StatementType() string { return "DDL" }
+func (*ReassignOwnedBy) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ReassignOwnedBy) StatementTag() string { return "REASSIGN OWNED BY" }
@@ -812,7 +820,7 @@ func (*ReassignOwnedBy) StatementTag() string { return "REASSIGN OWNED BY" }
 func (*DropOwnedBy) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*DropOwnedBy) StatementType() string { return "DDL" }
+func (*DropOwnedBy) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*DropOwnedBy) StatementTag() string { return "DROP OWNED BY" }
@@ -821,7 +829,7 @@ func (*DropOwnedBy) StatementTag() string { return "DROP OWNED BY" }
 func (*RefreshMaterializedView) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*RefreshMaterializedView) StatementType() string { return "DDL" }
+func (*RefreshMaterializedView) StatementType() StatementType { return typeDDL }
 
 // StatementTag implements the Statement interface.
 func (*RefreshMaterializedView) StatementTag() string { return "REFRESH MATERIALIZED VIEW" }
@@ -830,7 +838,7 @@ func (*RefreshMaterializedView) StatementTag() string { return "REFRESH MATERIAL
 func (*ReleaseSavepoint) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*ReleaseSavepoint) StatementType() string { return "TCL" }
+func (*ReleaseSavepoint) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ReleaseSavepoint) StatementTag() string { return "RELEASE" }
@@ -839,7 +847,7 @@ func (*ReleaseSavepoint) StatementTag() string { return "RELEASE" }
 func (*RenameColumn) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*RenameColumn) StatementType() string { return "DDL" }
+func (*RenameColumn) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*RenameColumn) StatementTag() string { return "RENAME COLUMN" }
@@ -848,7 +856,7 @@ func (*RenameColumn) StatementTag() string { return "RENAME COLUMN" }
 func (*RenameDatabase) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*RenameDatabase) StatementType() string { return "DDL" }
+func (*RenameDatabase) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*RenameDatabase) StatementTag() string { return "RENAME DATABASE" }
@@ -857,7 +865,7 @@ func (*RenameDatabase) StatementTag() string { return "RENAME DATABASE" }
 func (*ReparentDatabase) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*ReparentDatabase) StatementType() string { return "DDL" }
+func (*ReparentDatabase) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ReparentDatabase) StatementTag() string { return "CONVERT TO SCHEMA" }
@@ -866,7 +874,7 @@ func (*ReparentDatabase) StatementTag() string { return "CONVERT TO SCHEMA" }
 func (*RenameIndex) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*RenameIndex) StatementType() string { return "DDL" }
+func (*RenameIndex) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*RenameIndex) StatementTag() string { return "RENAME INDEX" }
@@ -875,7 +883,7 @@ func (*RenameIndex) StatementTag() string { return "RENAME INDEX" }
 func (*RenameTable) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*RenameTable) StatementType() string { return "DDL" }
+func (*RenameTable) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *RenameTable) StatementTag() string {
@@ -891,7 +899,7 @@ func (n *RenameTable) StatementTag() string {
 func (*Relocate) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Relocate) StatementType() string { return "DML" }
+func (*Relocate) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *Relocate) StatementTag() string {
@@ -905,7 +913,7 @@ func (n *Relocate) StatementTag() string {
 func (*ReplicationStream) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ReplicationStream) StatementType() string { return "DML" }
+func (*ReplicationStream) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ReplicationStream) StatementTag() string { return "CREATE REPLICATION STREAM" }
@@ -918,7 +926,7 @@ func (*ReplicationStream) hiddenFromShowQueries() {}
 func (*Restore) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Restore) StatementType() string { return "DML" }
+func (*Restore) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Restore) StatementTag() string { return "RESTORE" }
@@ -931,7 +939,7 @@ func (*Restore) hiddenFromShowQueries() {}
 func (*Revoke) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*Revoke) StatementType() string { return "DCL" }
+func (*Revoke) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Revoke) StatementTag() string { return "REVOKE" }
@@ -940,7 +948,7 @@ func (*Revoke) StatementTag() string { return "REVOKE" }
 func (*RevokeRole) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
-func (*RevokeRole) StatementType() string { return "DCL" }
+func (*RevokeRole) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*RevokeRole) StatementTag() string { return "REVOKE" }
@@ -949,7 +957,7 @@ func (*RevokeRole) StatementTag() string { return "REVOKE" }
 func (*RollbackToSavepoint) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*RollbackToSavepoint) StatementType() string { return "TCL" }
+func (*RollbackToSavepoint) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*RollbackToSavepoint) StatementTag() string { return "ROLLBACK" }
@@ -958,16 +966,16 @@ func (*RollbackToSavepoint) StatementTag() string { return "ROLLBACK" }
 func (*RollbackTransaction) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*RollbackTransaction) StatementType() string { return "TCL" }
+func (*RollbackTransaction) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*RollbackTransaction) StatementTag() string { return "ROLLBACK" }
 
 // StatementReturnType implements the Statement interface.
-func (*Savepoint) StatementReturnType() StatementReturnType { return Ack }
+func (*Savepoint) StatementReturnType () StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*Savepoint) StatementType() string { return "TCL" }
+func (*Savepoint) StatementType() StatementType { return typeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Savepoint) StatementTag() string { return "SAVEPOINT" }
@@ -976,7 +984,7 @@ func (*Savepoint) StatementTag() string { return "SAVEPOINT" }
 func (*Scatter) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Scatter) StatementType() string { return "DML" }
+func (*Scatter) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Scatter) StatementTag() string { return "SCATTER" }
@@ -985,7 +993,7 @@ func (*Scatter) StatementTag() string { return "SCATTER" }
 func (*Scrub) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Scrub) StatementType() string { return "DML" }
+func (*Scrub) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (n *Scrub) StatementTag() string { return "SCRUB" }
@@ -994,7 +1002,7 @@ func (n *Scrub) StatementTag() string { return "SCRUB" }
 func (*Select) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Select) StatementType() string { return "DML" }
+func (*Select) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Select) StatementTag() string { return "SELECT" }
@@ -1003,7 +1011,7 @@ func (*Select) StatementTag() string { return "SELECT" }
 func (*SelectClause) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*SelectClause) StatementType() string { return "DML" }
+func (*SelectClause) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SelectClause) StatementTag() string { return "SELECT" }
@@ -1012,7 +1020,7 @@ func (*SelectClause) StatementTag() string { return "SELECT" }
 func (*SetVar) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetVar) StatementType() string { return "DCL" }
+func (*SetVar) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetVar) StatementTag() string { return "SET" }
@@ -1021,7 +1029,7 @@ func (*SetVar) StatementTag() string { return "SET" }
 func (*SetClusterSetting) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetClusterSetting) StatementType() string { return "DCL" }
+func (*SetClusterSetting) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetClusterSetting) StatementTag() string { return "SET CLUSTER SETTING" }
@@ -1030,7 +1038,7 @@ func (*SetClusterSetting) StatementTag() string { return "SET CLUSTER SETTING" }
 func (*SetTransaction) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetTransaction) StatementType() string { return "DCL" }
+func (*SetTransaction) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetTransaction) StatementTag() string { return "SET TRANSACTION" }
@@ -1039,7 +1047,7 @@ func (*SetTransaction) StatementTag() string { return "SET TRANSACTION" }
 func (*SetTracing) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetTracing) StatementType() string { return "DCL" }
+func (*SetTracing) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetTracing) StatementTag() string { return "SET TRACING" }
@@ -1051,7 +1059,7 @@ func (*SetTracing) observerStatement() {}
 func (*SetZoneConfig) StatementReturnType() StatementReturnType { return RowsAffected }
 
 // StatementType implements the Statement interface.
-func (*SetZoneConfig) StatementType() string { return "DCL" }
+func (*SetZoneConfig) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetZoneConfig) StatementTag() string { return "CONFIGURE ZONE" }
@@ -1060,7 +1068,7 @@ func (*SetZoneConfig) StatementTag() string { return "CONFIGURE ZONE" }
 func (*SetSessionAuthorizationDefault) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetSessionAuthorizationDefault) StatementType() string { return "DCL" }
+func (*SetSessionAuthorizationDefault) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetSessionAuthorizationDefault) StatementTag() string { return "SET" }
@@ -1069,7 +1077,7 @@ func (*SetSessionAuthorizationDefault) StatementTag() string { return "SET" }
 func (*SetSessionCharacteristics) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*SetSessionCharacteristics) StatementType() string { return "DCL" }
+func (*SetSessionCharacteristics) StatementType() StatementType { return typeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*SetSessionCharacteristics) StatementTag() string { return "SET" }
@@ -1078,7 +1086,7 @@ func (*SetSessionCharacteristics) StatementTag() string { return "SET" }
 func (*ShowVar) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowVar) StatementType() string { return "DML" }
+func (*ShowVar) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowVar) StatementTag() string { return "SHOW" }
@@ -1087,7 +1095,7 @@ func (*ShowVar) StatementTag() string { return "SHOW" }
 func (*ShowClusterSetting) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowClusterSetting) StatementType() string { return "DML" }
+func (*ShowClusterSetting) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowClusterSetting) StatementTag() string { return "SHOW" }
@@ -1096,7 +1104,7 @@ func (*ShowClusterSetting) StatementTag() string { return "SHOW" }
 func (*ShowClusterSettingList) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowClusterSettingList) StatementType() string { return "DML" }
+func (*ShowClusterSettingList) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowClusterSettingList) StatementTag() string { return "SHOW" }
@@ -1105,7 +1113,7 @@ func (*ShowClusterSettingList) StatementTag() string { return "SHOW" }
 func (*ShowColumns) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowColumns) StatementType() string { return "DML" }
+func (*ShowColumns) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowColumns) StatementTag() string { return "SHOW COLUMNS" }
@@ -1114,7 +1122,7 @@ func (*ShowColumns) StatementTag() string { return "SHOW COLUMNS" }
 func (*ShowCreate) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowCreate) StatementType() string { return "DML" }
+func (*ShowCreate) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowCreate) StatementTag() string { return "SHOW CREATE" }
@@ -1123,7 +1131,7 @@ func (*ShowCreate) StatementTag() string { return "SHOW CREATE" }
 func (*ShowCreateAllTables) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowCreateAllTables) StatementType() string { return "DML" }
+func (*ShowCreateAllTables) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowCreateAllTables) StatementTag() string { return "SHOW CREATE ALL TABLES" }
@@ -1132,7 +1140,7 @@ func (*ShowCreateAllTables) StatementTag() string { return "SHOW CREATE ALL TABL
 func (*ShowBackup) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowBackup) StatementType() string { return "DML" }
+func (*ShowBackup) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowBackup) StatementTag() string { return "SHOW BACKUP" }
@@ -1143,7 +1151,7 @@ func (*ShowBackup) cclOnlyStatement() {}
 func (*ShowDatabases) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowDatabases) StatementType() string { return "DML" }
+func (*ShowDatabases) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowDatabases) StatementTag() string { return "SHOW DATABASES" }
@@ -1152,7 +1160,7 @@ func (*ShowDatabases) StatementTag() string { return "SHOW DATABASES" }
 func (*ShowEnums) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowEnums) StatementType() string { return "DML" }
+func (*ShowEnums) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowEnums) StatementTag() string { return "SHOW ENUMS" }
@@ -1161,7 +1169,7 @@ func (*ShowEnums) StatementTag() string { return "SHOW ENUMS" }
 func (*ShowTypes) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowTypes) StatementType() string { return "DML" }
+func (*ShowTypes) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowTypes) StatementTag() string { return "SHOW TYPES" }
@@ -1170,7 +1178,7 @@ func (*ShowTypes) StatementTag() string { return "SHOW TYPES" }
 func (*ShowTraceForSession) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowTraceForSession) StatementType() string { return "DML" }
+func (*ShowTraceForSession) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowTraceForSession) StatementTag() string { return "SHOW TRACE FOR SESSION" }
@@ -1179,7 +1187,7 @@ func (*ShowTraceForSession) StatementTag() string { return "SHOW TRACE FOR SESSI
 func (*ShowGrants) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowGrants) StatementType() string { return "DML" }
+func (*ShowGrants) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowGrants) StatementTag() string { return "SHOW GRANTS" }
@@ -1188,7 +1196,7 @@ func (*ShowGrants) StatementTag() string { return "SHOW GRANTS" }
 func (*ShowDatabaseIndexes) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowDatabaseIndexes) StatementType() string { return "DML" }
+func (*ShowDatabaseIndexes) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowDatabaseIndexes) StatementTag() string { return "SHOW INDEXES FROM DATABASE" }
@@ -1197,7 +1205,7 @@ func (*ShowDatabaseIndexes) StatementTag() string { return "SHOW INDEXES FROM DA
 func (*ShowIndexes) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowIndexes) StatementType() string { return "DML" }
+func (*ShowIndexes) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowIndexes) StatementTag() string { return "SHOW INDEXES FROM TABLE" }
@@ -1206,7 +1214,7 @@ func (*ShowIndexes) StatementTag() string { return "SHOW INDEXES FROM TABLE" }
 func (*ShowPartitions) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowPartitions) StatementType() string { return "DML" }
+func (*ShowPartitions) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of the statement.
 func (*ShowPartitions) StatementTag() string { return "SHOW PARTITIONS" }
@@ -1215,7 +1223,7 @@ func (*ShowPartitions) StatementTag() string { return "SHOW PARTITIONS" }
 func (*ShowQueries) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowQueries) StatementType() string { return "DML" }
+func (*ShowQueries) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowQueries) StatementTag() string { return "SHOW STATEMENTS" }
@@ -1224,7 +1232,7 @@ func (*ShowQueries) StatementTag() string { return "SHOW STATEMENTS" }
 func (*ShowJobs) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowJobs) StatementType() string { return "DML" }
+func (*ShowJobs) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowJobs) StatementTag() string { return "SHOW JOBS" }
@@ -1233,7 +1241,7 @@ func (*ShowJobs) StatementTag() string { return "SHOW JOBS" }
 func (*ShowRoleGrants) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowRoleGrants) StatementType() string { return "DML" }
+func (*ShowRoleGrants) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowRoleGrants) StatementTag() string { return "SHOW GRANTS ON ROLE" }
@@ -1242,7 +1250,7 @@ func (*ShowRoleGrants) StatementTag() string { return "SHOW GRANTS ON ROLE" }
 func (*ShowSessions) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowSessions) StatementType() string { return "DML" }
+func (*ShowSessions) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSessions) StatementTag() string { return "SHOW SESSIONS" }
@@ -1251,7 +1259,7 @@ func (*ShowSessions) StatementTag() string { return "SHOW SESSIONS" }
 func (*ShowTableStats) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowTableStats) StatementType() string { return "DML" }
+func (*ShowTableStats) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowTableStats) StatementTag() string { return "SHOW STATISTICS" }
@@ -1260,7 +1268,7 @@ func (*ShowTableStats) StatementTag() string { return "SHOW STATISTICS" }
 func (*ShowHistogram) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowHistogram) StatementType() string { return "DML" }
+func (*ShowHistogram) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowHistogram) StatementTag() string { return "SHOW HISTOGRAM" }
@@ -1269,7 +1277,7 @@ func (*ShowHistogram) StatementTag() string { return "SHOW HISTOGRAM" }
 func (*ShowSchedules) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowSchedules) StatementType() string { return "DML" }
+func (*ShowSchedules) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSchedules) StatementTag() string { return "SHOW SCHEDULES" }
@@ -1278,7 +1286,7 @@ func (*ShowSchedules) StatementTag() string { return "SHOW SCHEDULES" }
 func (*ShowSyntax) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowSyntax) StatementType() string { return "DML" }
+func (*ShowSyntax) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSyntax) StatementTag() string { return "SHOW SYNTAX" }
@@ -1289,7 +1297,7 @@ func (*ShowSyntax) observerStatement() {}
 func (*ShowTransactionStatus) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowTransactionStatus) StatementType() string { return "DML" }
+func (*ShowTransactionStatus) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowTransactionStatus) StatementTag() string { return "SHOW TRANSACTION STATUS" }
@@ -1300,7 +1308,7 @@ func (*ShowTransactionStatus) observerStatement() {}
 func (*ShowSavepointStatus) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowSavepointStatus) StatementType() string { return "DML" }
+func (*ShowSavepointStatus) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSavepointStatus) StatementTag() string { return "SHOW SAVEPOINT STATUS" }
@@ -1311,7 +1319,7 @@ func (*ShowSavepointStatus) observerStatement() {}
 func (*ShowLastQueryStatistics) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowLastQueryStatistics) StatementType() string { return "DML" }
+func (*ShowLastQueryStatistics) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowLastQueryStatistics) StatementTag() string { return "SHOW LAST QUERY STATISTICS" }
@@ -1322,7 +1330,7 @@ func (*ShowLastQueryStatistics) observerStatement() {}
 func (*ShowUsers) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowUsers) StatementType() string { return "DML" }
+func (*ShowUsers) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowUsers) StatementTag() string { return "SHOW USERS" }
@@ -1331,7 +1339,7 @@ func (*ShowUsers) StatementTag() string { return "SHOW USERS" }
 func (*ShowRoles) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowRoles) StatementType() string { return "DML" }
+func (*ShowRoles) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowRoles) StatementTag() string { return "SHOW ROLES" }
@@ -1340,7 +1348,7 @@ func (*ShowRoles) StatementTag() string { return "SHOW ROLES" }
 func (*ShowZoneConfig) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowZoneConfig) StatementType() string { return "DML" }
+func (*ShowZoneConfig) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowZoneConfig) StatementTag() string { return "SHOW ZONE CONFIGURATION" }
@@ -1349,7 +1357,7 @@ func (*ShowZoneConfig) StatementTag() string { return "SHOW ZONE CONFIGURATION" 
 func (*ShowRanges) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowRanges) StatementType() string { return "DML" }
+func (*ShowRanges) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowRanges) StatementTag() string { return "SHOW RANGES" }
@@ -1358,7 +1366,7 @@ func (*ShowRanges) StatementTag() string { return "SHOW RANGES" }
 func (*ShowRangeForRow) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowRangeForRow) StatementType() string { return "DML" }
+func (*ShowRangeForRow) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowRangeForRow) StatementTag() string { return "SHOW RANGE FOR ROW" }
@@ -1367,7 +1375,7 @@ func (*ShowRangeForRow) StatementTag() string { return "SHOW RANGE FOR ROW" }
 func (*ShowSurvivalGoal) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowSurvivalGoal) StatementType() string { return "DML" }
+func (*ShowSurvivalGoal) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSurvivalGoal) StatementTag() string { return "SHOW SURVIVAL GOAL" }
@@ -1376,7 +1384,7 @@ func (*ShowSurvivalGoal) StatementTag() string { return "SHOW SURVIVAL GOAL" }
 func (*ShowRegions) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowRegions) StatementType() string { return "DML" }
+func (*ShowRegions) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowRegions) StatementTag() string { return "SHOW REGIONS" }
@@ -1385,7 +1393,7 @@ func (*ShowRegions) StatementTag() string { return "SHOW REGIONS" }
 func (*ShowFingerprints) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowFingerprints) StatementType() string { return "DML" }
+func (*ShowFingerprints) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowFingerprints) StatementTag() string { return "SHOW EXPERIMENTAL_FINGERPRINTS" }
@@ -1394,7 +1402,7 @@ func (*ShowFingerprints) StatementTag() string { return "SHOW EXPERIMENTAL_FINGE
 func (*ShowConstraints) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowConstraints) StatementType() string { return "DML" }
+func (*ShowConstraints) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowConstraints) StatementTag() string { return "SHOW CONSTRAINTS" }
@@ -1403,7 +1411,7 @@ func (*ShowConstraints) StatementTag() string { return "SHOW CONSTRAINTS" }
 func (*ShowTables) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowTables) StatementType() string { return "DML" }
+func (*ShowTables) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowTables) StatementTag() string { return "SHOW TABLES" }
@@ -1412,7 +1420,7 @@ func (*ShowTables) StatementTag() string { return "SHOW TABLES" }
 func (*ShowTransactions) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowTransactions) StatementType() string { return "DML" }
+func (*ShowTransactions) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowTransactions) StatementTag() string { return "SHOW TRANSACTIONS" }
@@ -1421,7 +1429,7 @@ func (*ShowTransactions) StatementTag() string { return "SHOW TRANSACTIONS" }
 func (*ShowSchemas) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowSchemas) StatementType() string { return "DML" }
+func (*ShowSchemas) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSchemas) StatementTag() string { return "SHOW SCHEMAS" }
@@ -1430,7 +1438,7 @@ func (*ShowSchemas) StatementTag() string { return "SHOW SCHEMAS" }
 func (*ShowSequences) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ShowSequences) StatementType() string { return "DML" }
+func (*ShowSequences) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSequences) StatementTag() string { return "SHOW SCHEMAS" }
@@ -1439,7 +1447,7 @@ func (*ShowSequences) StatementTag() string { return "SHOW SCHEMAS" }
 func (*Split) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Split) StatementType() string { return "DML" }
+func (*Split) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Split) StatementTag() string { return "SPLIT" }
@@ -1448,7 +1456,7 @@ func (*Split) StatementTag() string { return "SPLIT" }
 func (*StreamIngestion) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*StreamIngestion) StatementType() string { return "DML" }
+func (*StreamIngestion) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*StreamIngestion) StatementTag() string { return "RESTORE FROM REPLICATION STREAM" }
@@ -1459,7 +1467,7 @@ func (*StreamIngestion) cclOnlyStatement() {}
 func (*Unsplit) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*Unsplit) StatementType() string { return "DML" }
+func (*Unsplit) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Unsplit) StatementTag() string { return "UNSPLIT" }
@@ -1468,7 +1476,7 @@ func (*Unsplit) StatementTag() string { return "UNSPLIT" }
 func (*Truncate) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*Truncate) StatementType() string { return "DDL" }
+func (*Truncate) StatementType() StatementType { return typeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Truncate) StatementTag() string { return "TRUNCATE" }
@@ -1480,7 +1488,7 @@ func (*Truncate) modifiesSchema() bool { return true }
 func (n *Update) StatementReturnType() StatementReturnType { return n.Returning.statementReturnType() }
 
 // StatementType implements the Statement interface.
-func (*Update) StatementType() string { return "DML" }
+func (*Update) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Update) StatementTag() string { return "UPDATE" }
@@ -1489,7 +1497,7 @@ func (*Update) StatementTag() string { return "UPDATE" }
 func (*UnionClause) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*UnionClause) StatementType() string { return "DML" }
+func (*UnionClause) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*UnionClause) StatementTag() string { return "UNION" }
@@ -1498,7 +1506,7 @@ func (*UnionClause) StatementTag() string { return "UNION" }
 func (*ValuesClause) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
-func (*ValuesClause) StatementType() string { return "DML" }
+func (*ValuesClause) StatementType() StatementType { return typeDML }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ValuesClause) StatementTag() string { return "VALUES" }
@@ -1647,3 +1655,8 @@ func (n *Truncate) String() string                       { return AsString(n) }
 func (n *UnionClause) String() string                    { return AsString(n) }
 func (n *Update) String() string                         { return AsString(n) }
 func (n *ValuesClause) String() string                   { return AsString(n) }
+
+func (n StatementType) String() string {
+	return [...]string{"DDL", "DML", "DCL", "TCL"}[n]
+}
+

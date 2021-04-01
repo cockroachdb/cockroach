@@ -395,7 +395,7 @@ type DistSQLReceiver struct {
 	// resultWriter is the interface which we send results to.
 	resultWriter rowResultWriter
 
-	stmtType tree.StatementType
+	stmtType tree.StatementReturnType
 
 	// outputTypes are the types of the result columns produced by the plan.
 	outputTypes []*types.T
@@ -540,7 +540,7 @@ type clockUpdater interface {
 func MakeDistSQLReceiver(
 	ctx context.Context,
 	resultWriter rowResultWriter,
-	stmtType tree.StatementType,
+	stmtType tree.StatementReturnType,
 	rangeCache *rangecache.RangeCache,
 	txn *kv.Txn,
 	clockUpdater clockUpdater,
