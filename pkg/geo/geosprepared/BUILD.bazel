@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "geosprepared",
+    srcs = ["geosprepared.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/geo/geosprepared",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/geo/geopb",
+        "//pkg/geo/geos",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

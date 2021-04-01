@@ -46,6 +46,7 @@ go_library(
         "//pkg/geo/geopb",
         "//pkg/geo/geos",
         "//pkg/geo/geosegmentize",
+        "//pkg/geo/geosprepared",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util",
