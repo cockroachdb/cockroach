@@ -242,6 +242,13 @@ func (s *adminServer) Databases(
 		return nil, err
 	}
 
+	return s.databasesHelper(ctx, req, sessionUser, 0, 0)
+}
+
+func (s *adminServer) databasesHelper(
+	ctx context.Context, req *serverpb.DatabasesRequest,
+	sessionUser security.SQLUsername, limit, offset int,
+) (_ *serverpb.DatabasesResponse, retErr error) {
 	it, err := s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-show-dbs", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: sessionUser},
@@ -293,6 +300,13 @@ func (s *adminServer) DatabaseDetails(
 		return nil, err
 	}
 
+	return s.databaseDetailsHelper(ctx, req, userName, 0, 0)
+}
+
+func (s *adminServer) databaseDetailsHelper(
+	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
+	userName security.SQLUsername, limit, offset int,
+) (_ *serverpb.DatabaseDetailsResponse, retErr error) {
 	var resp serverpb.DatabaseDetailsResponse
 
 	escDBName := tree.NameStringP(&req.Database)
@@ -352,12 +366,21 @@ func (s *adminServer) DatabaseDetails(
 		}
 	}
 
+	query := makeSQLQuery()
+	query.Append(`SELECT table_schema, table_name FROM information_schema.tables
+WHERE table_catalog = $ AND table_type != 'SYSTEM VIEW'`, req.Database)
+	query.Append(" ORDER BY table_name")
+	if limit > 0 {
+		query.Append(" LIMIT $", limit)
+		if offset > 0 {
+			query.Append(" OFFSET $", offset)
+		}
+	}
 	// Marshal table names.
 	it, err = s.server.sqlServer.internalExecutor.QueryIteratorEx(
 		ctx, "admin-show-tables", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: userName, Database: req.Database},
-		`SELECT table_schema, table_name FROM information_schema.tables
-WHERE table_catalog = $1 AND table_type != 'SYSTEM VIEW';`, req.Database)
+		query.String(), query.QueryArguments()...)
 	if err = s.maybeHandleNotFoundError(err); err != nil {
 		return nil, err
 	}
@@ -464,6 +487,13 @@ func (s *adminServer) TableDetails(
 		return nil, err
 	}
 
+	return s.tableDetailsHelper(ctx, req, userName)
+}
+
+func (s *adminServer) tableDetailsHelper(
+	ctx context.Context, req *serverpb.TableDetailsRequest,
+	userName security.SQLUsername,
+) (_ *serverpb.TableDetailsResponse, retErr error) {
 	escQualTable, err := getFullyQualifiedTableName(req.Database, req.Table)
 	if err != nil {
 		return nil, err
@@ -1055,6 +1085,13 @@ func (s *adminServer) Events(
 		limit = defaultAPIEventLimit
 	}
 
+	return s.eventsHelper(ctx, req, userName, int(limit), 0, redactEvents)
+}
+
+func (s *adminServer) eventsHelper(
+	ctx context.Context, req *serverpb.EventsRequest,
+	userName security.SQLUsername, limit, offset int, redactEvents bool,
+) (_ *serverpb.EventsResponse, retErr error) {
 	// Execute the query.
 	q := makeSQLQuery()
 	q.Append(`SELECT timestamp, "eventType", "targetID", "reportingID", info, "uniqueID" `)
@@ -1069,6 +1106,9 @@ func (s *adminServer) Events(
 	q.Append("ORDER BY timestamp DESC ")
 	if limit > 0 {
 		q.Append("LIMIT $", limit)
+		if offset > 0 {
+			q.Append(" OFFSET $", offset)
+		}
 	}
 	if len(q.Errors()) > 0 {
 		return nil, combineAllErrors(q.Errors())
