@@ -121,7 +121,8 @@ type test struct {
 	// l is the logger that the test will use for its output.
 	l *logger
 
-	runner   string
+	runner string
+	// runnerID is the test's main goroutine ID.
 	runnerID int64
 	start    time.Time
 	end      time.Time
@@ -148,8 +149,11 @@ type test struct {
 			line int
 		}
 		failureMsg string
-		status     map[int64]testStatus
-		output     []byte
+		// status is a map from goroutine id to status set by that goroutine. A
+		// special goroutine is indicated by runnerID; that one provides the test's
+		// "main status".
+		status map[int64]testStatus
+		output []byte
 	}
 }
 
