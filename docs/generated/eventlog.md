@@ -137,6 +137,65 @@ after being offline.
 | `StartedAt` | The time when this node was last started. | no |
 | `LastUp` | The approximate last time the node was up before the last restart. | no |
 
+## Job events
+
+Events in this category pertain to long-running jobs that are orchestrated by
+a node's job registry. These system processes can create and/or modify stored
+objects during the course of their execution.
+
+A job might choose to emit multiple events during its execution when
+transitioning from one "state" to another.
+Egs: IMPORT/RESTORE will emit events on job creation and successful
+completion. If the job fails, events will be emitted on job creation,
+failure, and successful revert.
+
+Events in this category are logged to channel OPS.
+
+
+### `import`
+
+An event of type `import` is recorded when an import job is created and successful completion.
+If the job fails, events will be emitted on job creation, failure, and
+successful revert.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `JobID` | The ID of the job that triggered the event. | no |
+| `JobType` | The type of the job that triggered the event. | no |
+| `Description` | A description of the job that triggered the event. Some jobs populate the description with an approximate representation of the SQL statement run to create the job. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorIDs` | The object descriptors affected by the job. Set to zero for operations that don't affect descriptors. | yes |
+| `Status` | The status of the job that triggered the event. This allows the job to indicate which phase execution it is in when the event is triggered. | no |
+
+### `restore`
+
+An event of type `restore` is recorded when a restore job is created and successful completion.
+If the job fails, events will be emitted on job creation, failure, and
+successful revert.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `JobID` | The ID of the job that triggered the event. | no |
+| `JobType` | The type of the job that triggered the event. | no |
+| `Description` | A description of the job that triggered the event. Some jobs populate the description with an approximate representation of the SQL statement run to create the job. | yes |
+| `User` | The user account that triggered the event. | yes |
+| `DescriptorIDs` | The object descriptors affected by the job. Set to zero for operations that don't affect descriptors. | yes |
+| `Status` | The status of the job that triggered the event. This allows the job to indicate which phase execution it is in when the event is triggered. | no |
+
 ## Miscellaneous SQL events
 
 Events in this category report miscellaneous SQL events.
