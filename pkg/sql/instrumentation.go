@@ -38,7 +38,7 @@ import (
 var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 	"sql.txn_stats.sample_rate",
 	"the probability that a given transaction will collect execution statistics (displayed in the DB Console)",
-	0.1,
+	0.01,
 	func(f float64) error {
 		if f < 0 || f > 1 {
 			return errors.New("value must be between 0 and 1 inclusive")
