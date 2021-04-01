@@ -330,12 +330,17 @@ export const StatementTableTitle = {
 };
 
 export const StatementTableCell = {
-  statements: (search?: string, selectedApp?: string) => (stmt: any) => (
+  statements: (
+    search?: string,
+    selectedApp?: string,
+    onStatementClick?: (statement: string) => void,
+  ) => (stmt: any) => (
     <StatementLink
       statement={stmt.label}
       implicitTxn={stmt.implicitTxn}
       search={search}
       app={selectedApp}
+      onClick={onStatementClick}
     />
   ),
   diagnostics: (
@@ -417,6 +422,7 @@ interface StatementLinkProps {
   implicitTxn: boolean;
   search: string;
   anonStatement?: string;
+  onClick?: (statement: string) => void;
 }
 
 // StatementLinkTarget returns the link to the relevant statement page, given
@@ -438,8 +444,15 @@ export const StatementLinkTarget = (props: StatementLinkProps) => {
 
 export const StatementLink = (props: StatementLinkProps) => {
   const summary = summarize(props.statement);
+  const { onClick, statement } = props;
+  const onStatementClick = React.useCallback(() => {
+    if (onClick) {
+      onClick(statement);
+    }
+  }, [onClick, statement]);
+
   return (
-    <Link to={StatementLinkTarget(props)}>
+    <Link to={StatementLinkTarget(props)} onClick={onStatementClick}>
       <div>
         <Tooltip
           placement="bottom"

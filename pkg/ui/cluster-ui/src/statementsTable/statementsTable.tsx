@@ -176,13 +176,18 @@ export function makeStatementsColumns(
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
   onDiagnosticsDownload?: (report: IStatementDiagnosticsReport) => void,
+  onStatementClick?: (statement: string) => void,
 ): ColumnDescriptor<AggregateStatistics>[] {
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
     {
       name: "statements",
       title: StatementTableTitle.statements,
       className: cx("cl-table__col-query-text"),
-      cell: StatementTableCell.statements(search, selectedApp),
+      cell: StatementTableCell.statements(
+        search,
+        selectedApp,
+        onStatementClick,
+      ),
       sort: stmt => stmt.label,
     },
   ];
