@@ -89,8 +89,26 @@ else
 fi
 
 sudo apt-get install -qy chrony
-echo -e "\nserver 169.254.169.123 prefer iburst" | sudo tee -a /etc/chrony/chrony.conf
-echo -e "\nmakestep 0.1 3" | sudo tee -a /etc/chrony/chrony.conf
+
+# Override the chrony config. In particular,
+# log aggressively when clock is adjusted (0.01s)
+# and exclusively use a single time server.
+sudo cat <<EOF > /etc/chrony/chrony.conf
+keyfile /etc/chrony/chrony.keys
+commandkey 1
+driftfile /var/lib/chrony/chrony.drift
+log tracking measurements statistics
+logdir /var/log/chrony
+maxupdateskew 100.0
+dumponexit
+dumpdir /var/lib/chrony
+logchange 0.01
+hwclockfile /etc/adjtime
+rtcsync
+server 169.254.169.123 prefer iburst
+makestep 0.1 3
+EOF
+
 sudo /etc/init.d/chrony restart
 sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
 
