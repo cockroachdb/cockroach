@@ -521,10 +521,20 @@ func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
 	return m.ReturnCols[ord]
 }
 
-// MapToInputCols maps the given set of table columns to a corresponding set of
-// input columns using the MapToInputID function.
-func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
+// MapToInputCols maps the given set of columns to a corresponding set of
+// input columns using the PassthroughCols list and MapToInputID function.
+func (m *MutationPrivate) MapToInputCols(cols opt.ColSet) opt.ColSet {
 	var inCols opt.ColSet
+
+	// First see if any of the columns come from the passthrough columns.
+	for _, c := range m.PassthroughCols {
+		if cols.Contains(c) {
+			inCols.Add(c)
+		}
+	}
+
+	// The remaining columns must come from the table.
+	tabCols := cols.Difference(inCols)
 	tabCols.ForEach(func(t opt.ColumnID) {
 		id := m.MapToInputID(t)
 		if id == 0 {
@@ -532,6 +542,7 @@ func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 		}
 		inCols.Add(id)
 	})
+
 	return inCols
 }
 
