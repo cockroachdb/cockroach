@@ -15,107 +15,115 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
-// Limit defines a rate in units per second.
-type Limit float64
+// Config contains the configuration of the rate limiter.
+//
+// We limit the rate in terms of "KV Compute Units". The configuration contains
+// the rate and burst limits for KVCUs, as well as factors that define a "cost
+// mode" for calculating the number of KVCUs for a read or write request.
+//
+// Specifically, the cost model is a linear function combining a fixed
+// pre-request cost and a size-dependent (per-byte) cost.
+//
+// For a read:
+//   KVCUs = ReadRequestUnits + <size of read> * ReadUnitsPerByte
+// For a write:
+//   KVCUs = WriteRequestUnits + <size of write) * WriteUnitsPerByte
+//
+type Config struct {
+	// Rate defines the "sustained" rate limit in KV Compute Units per second.
+	Rate float64
+	// Burst defines the "burst" limit in KV Compute Units. Unused units
+	// accumulate up to this limit.
+	Burst float64
 
-// LimitConfig configures the rate limit and burst limit for a given resource.
-type LimitConfig struct {
-	Rate  Limit
-	Burst int64
+	// ReadRequestUnits is the baseline cost of a read, in KV Compute Units.
+	ReadRequestUnits float64
+	// ReadRequestUnits is the size-dependent cost of a read, in KV Compute Units
+	// per byte.
+	ReadUnitsPerByte float64
+	// WriteRequestUnits is the baseline cost of a write, in KV Compute Units.
+	WriteRequestUnits float64
+	// WriteRequestUnits is the size-dependent cost of a write, in KV Compute
+	// Units per byte.
+	WriteUnitsPerByte float64
 }
 
-// LimitConfigs configures the rate limits.
-// It is exported for convenience and testing.
-// The values are derived from cluster settings.
-type LimitConfigs struct {
-	ReadRequests  LimitConfig
-	WriteRequests LimitConfig
-	ReadBytes     LimitConfig
-	WriteBytes    LimitConfig
-}
-
-// LimitConfigsFromSettings constructs LimitConfigs from the values stored in
-// the settings.
-func LimitConfigsFromSettings(settings *cluster.Settings) LimitConfigs {
-	return LimitConfigs{
-		ReadRequests: LimitConfig{
-			Rate:  Limit(readRequestRateLimit.Get(&settings.SV)),
-			Burst: readRequestBurstLimit.Get(&settings.SV),
-		},
-		WriteRequests: LimitConfig{
-			Rate:  Limit(writeRequestRateLimit.Get(&settings.SV)),
-			Burst: writeRequestBurstLimit.Get(&settings.SV),
-		},
-		ReadBytes: LimitConfig{
-			Rate:  Limit(readRateLimit.Get(&settings.SV)),
-			Burst: readBurstLimit.Get(&settings.SV),
-		},
-		WriteBytes: LimitConfig{
-			Rate:  Limit(writeRateLimit.Get(&settings.SV)),
-			Burst: writeBurstLimit.Get(&settings.SV),
-		},
-	}
-}
-
+// Settings for the rate limiter. These determine the values for a Config,
+// though not directly (the settings have user-friendlier units).
+//
+// The settings are designed so that there is one important "knob" to turn:
+// kv.tenant_rate_limiter.rate_limit.
+//
+// The rest of the settings are meant to be changed rarely. Note that the burst
+// limit setting is defined as a multiplier of the rate (i.e. in seconds), so
+// it doesn't need to be adjusted in concert with the rate.
+//
+// The settings that determine the KV Request Units (the "cost model") are set
+// based on experiments, where 1000 KV Request Units correspond to one CPU
+// second.
 var (
-	readRequestRateLimit = settings.RegisterFloatSetting(
-		"kv.tenant_rate_limiter.read_requests.rate_limit",
-		"per-tenant read request rate limit in requests per second",
-		128,
+	kvcuRateLimit = settings.RegisterFloatSetting(
+		"kv.tenant_rate_limiter.rate_limit",
+		"per-tenant rate limit in KV Compute Units per second",
+		200,
 		settings.PositiveFloat,
 	)
 
-	readRequestBurstLimit = settings.RegisterIntSetting(
-		"kv.tenant_rate_limiter.read_requests.burst_limit",
-		"per-tenant read request burst limit in requests",
-		512,
-		settings.PositiveInt,
-	)
-
-	writeRequestRateLimit = settings.RegisterFloatSetting(
-		"kv.tenant_rate_limiter.write_requests.rate_limit",
-		"per-tenant write request rate limit in requests per second",
-		128,
+	kvcuBurstLimitSeconds = settings.RegisterFloatSetting(
+		"kv.tenant_rate_limiter.burst_limit_seconds",
+		"per-tenant burst limit as a multiplier of the rate",
+		10,
 		settings.PositiveFloat,
 	)
 
-	writeRequestBurstLimit = settings.RegisterIntSetting(
-		"kv.tenant_rate_limiter.write_requests.burst_limit",
-		"per-tenant write request burst limit in requests",
-		512,
-		settings.PositiveInt,
+	readRequestCost = settings.RegisterFloatSetting(
+		"kv.tenant_rate_limiter.read_request_cost",
+		"base cost of a read request in KV Compute Units",
+		0.7,
+		settings.PositiveFloat,
 	)
 
-	readRateLimit = settings.RegisterByteSizeSetting(
-		"kv.tenant_rate_limiter.read_bytes.rate_limit",
-		"per-tenant read rate limit in bytes per second",
-		1<<20 /* 1 MiB */)
+	readCostPerMB = settings.RegisterFloatSetting(
+		"kv.tenant_rate_limiter.read_cost_per_megabyte",
+		"cost of a read in KV Compute Units per MB",
+		10.0,
+		settings.PositiveFloat,
+	)
 
-	readBurstLimit = settings.RegisterByteSizeSetting(
-		"kv.tenant_rate_limiter.read_bytes.burst_limit",
-		"per-tenant read burst limit in bytes",
-		16<<20 /* 16 MiB */)
+	writeRequestCost = settings.RegisterFloatSetting(
+		"kv.tenant_rate_limiter.write_request_cost",
+		"base cost of a write request in KV Compute Units",
+		1.0,
+		settings.PositiveFloat,
+	)
 
-	writeRateLimit = settings.RegisterByteSizeSetting(
-		"kv.tenant_rate_limiter.write_bytes.rate_limit",
-		"per-tenant write rate limit in bytes per second",
-		512<<10 /* 512 KiB */)
+	writeCostPerMB = settings.RegisterFloatSetting(
+		"kv.tenant_rate_limiter.write_cost_per_megabyte",
+		"cost of a write in KV Compute Units per MB",
+		400.0,
+		settings.PositiveFloat,
+	)
 
-	writeBurstLimit = settings.RegisterByteSizeSetting(
-		"kv.tenant_rate_limiter.write_bytes.burst_limit",
-		"per-tenant write burst limit in bytes",
-		8<<20 /* 8 MiB */)
-
-	// settingsSetOnChangeFuncs are the functions used to register the factory to
-	// be notified of changes to any of the settings which configure it.
-	settingsSetOnChangeFuncs = [...]func(*settings.Values, func()){
-		readRequestRateLimit.SetOnChange,
-		readRequestBurstLimit.SetOnChange,
-		writeRequestRateLimit.SetOnChange,
-		writeRequestBurstLimit.SetOnChange,
-		readRateLimit.SetOnChange,
-		readBurstLimit.SetOnChange,
-		writeRateLimit.SetOnChange,
-		writeBurstLimit.SetOnChange,
+	// List of config settings, used to set up "on change" notifiers.
+	configSettings = [...]settings.WritableSetting{
+		kvcuRateLimit,
+		kvcuBurstLimitSeconds,
+		readRequestCost,
+		readCostPerMB,
+		writeRequestCost,
+		writeCostPerMB,
 	}
 )
+
+// ConfigFromSettings constructs a Config using the cluster setting values.
+func ConfigFromSettings(st *cluster.Settings) Config {
+	const perMBToPerByte = float64(1) / (1024 * 1024)
+	var c Config
+	c.Rate = kvcuRateLimit.Get(&st.SV)
+	c.Burst = c.Rate * kvcuBurstLimitSeconds.Get(&st.SV)
+	c.ReadRequestUnits = readRequestCost.Get(&st.SV)
+	c.ReadUnitsPerByte = readCostPerMB.Get(&st.SV) * perMBToPerByte
+	c.WriteRequestUnits = writeRequestCost.Get(&st.SV)
+	c.WriteUnitsPerByte = writeCostPerMB.Get(&st.SV) * perMBToPerByte
+	return c
+}

@@ -36,6 +36,7 @@ go_test(
     embed = [":tenantrate"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/leaktest",
