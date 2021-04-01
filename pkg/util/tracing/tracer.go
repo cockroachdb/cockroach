@@ -325,11 +325,7 @@ func (t *Tracer) startSpanGeneric(
 		// for the new span to avoid compat issues between the
 		// two underlying tracers.
 		if ok2 && (!ok1 || typ1 == typ2) {
-			var shadowCtx opentracing.SpanContext
-			if opts.Parent != nil && opts.Parent.i.ot.shadowSpan != nil {
-				shadowCtx = opts.Parent.i.ot.shadowSpan.Context()
-			}
-			ot = makeShadowSpan(shadowTr, shadowCtx, opts.RefType, opName, startTime)
+			ot = makeShadowSpan(shadowTr, opts.shadowContext(), opts.RefType, opName, startTime)
 			// If LogTags are given, pass them as tags to the shadow span.
 			// Regular tags are populated later, via the top-level Span.
 			if opts.LogTags != nil {

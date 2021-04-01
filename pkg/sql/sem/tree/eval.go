@@ -3017,6 +3017,11 @@ type EvalDatabase interface {
 	// session database.
 	CurrentDatabaseRegionConfig(ctx context.Context) (DatabaseRegionConfig, error)
 
+	// ValidateAllMultiRegionZoneConfigsInCurrentDatabase validates whether the current
+	// database's multi-region zone configs are correctly setup. This includes
+	// all tables within the database.
+	ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error
+
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.
 	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.
@@ -3236,6 +3241,16 @@ type TenantOperator interface {
 	GCTenant(ctx context.Context, tenantID uint64) error
 }
 
+// JoinTokenCreator is capable of creating and persisting join tokens, allowing
+// SQL builtin functions to create join tokens. The methods will return errors
+// when run on multi-tenant clusters or with this functionality unavailable.
+type JoinTokenCreator interface {
+	// CreateJoinToken creates a new ephemeral join token and persists it
+	// across the cluster. This join token can then be used to have new nodes
+	// join the cluster and exchange certificates securely.
+	CreateJoinToken(ctx context.Context) (string, error)
+}
+
 // EvalContextTestingKnobs contains test knobs.
 type EvalContextTestingKnobs struct {
 	// AssertFuncExprReturnTypes indicates whether FuncExpr evaluations
@@ -3363,6 +3378,8 @@ type EvalContext struct {
 	Sequence SequenceOperators
 
 	Tenant TenantOperator
+
+	JoinTokenCreator JoinTokenCreator
 
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn

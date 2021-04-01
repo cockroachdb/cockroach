@@ -27,14 +27,29 @@ type Setup func(*rand.Rand) string
 
 // Setups is a collection of useful initial table states.
 var Setups = map[string]Setup{
-	"empty": stringSetup(""),
+	"empty": wrapCommonSetup(stringSetup("")),
 	// seed is a SQL statement that creates a table with most data types
 	// and some sample rows.
-	"seed": stringSetup(seedTable),
+	"seed": wrapCommonSetup(stringSetup(seedTable)),
 	// seed-vec is like seed except only types supported by vectorized
 	// execution are used.
-	"seed-vec":    stringSetup(vecSeedTable),
-	"rand-tables": randTables,
+	"seed-vec":    wrapCommonSetup(stringSetup(vecSeedTable)),
+	"rand-tables": wrapCommonSetup(randTables),
+}
+
+// wrapCommonSetup wraps setup steps common to all SQLSmith setups around the
+// specific setup passed in.
+func wrapCommonSetup(setupFn Setup) Setup {
+	return func(r *rand.Rand) string {
+		s := setupFn(r)
+		var sb strings.Builder
+		sb.WriteString(`
+SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true;
+SET enable_drop_enum_value = true;
+`)
+		sb.WriteString(s)
+		return sb.String()
+	}
 }
 
 var setupNames = func() []string {

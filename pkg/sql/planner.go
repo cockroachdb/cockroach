@@ -362,6 +362,7 @@ func newInternalPlanner(
 	p.extendedEvalCtx.ClientNoticeSender = p
 	p.extendedEvalCtx.Sequence = p
 	p.extendedEvalCtx.Tenant = p
+	p.extendedEvalCtx.JoinTokenCreator = p
 	p.extendedEvalCtx.ClusterID = execCfg.ClusterID()
 	p.extendedEvalCtx.ClusterName = execCfg.RPCContext.ClusterName()
 	p.extendedEvalCtx.NodeID = execCfg.NodeID
@@ -414,6 +415,11 @@ func internalExtendedEvalCtx(
 ) extendedEvalContext {
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
+	var sqlStatsResetter tree.SQLStatsResetter
+	if execCfg.InternalExecutor != nil {
+		sqlStatsResetter = execCfg.InternalExecutor.s
+	}
+
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:              txn,
@@ -428,6 +434,7 @@ func internalExtendedEvalCtx(
 			StmtTimestamp:    stmtTimestamp,
 			TxnTimestamp:     txnTimestamp,
 			InternalExecutor: execCfg.InternalExecutor,
+			SQLStatsResetter: sqlStatsResetter,
 		},
 		SessionMutator:    dataMutator,
 		VirtualSchemas:    execCfg.VirtualSchemas,

@@ -34,9 +34,9 @@ func Covers(a geo.Geometry, b geo.Geometry) (bool, error) {
 		// A point cannot cover a polygon.
 		return false, nil
 	case PolygonAndPoint:
-		// Computing whether a polygon covers a point is the same
-		// as computing whether a point is covered by the polygon.
-		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonCoveredBy)
+		// Computing whether a polygon covers a point is equivalent
+		// to computing whether the point is covered by the polygon.
+		return PointKindCoveredByPolygonKind(pointKind, polygonKind)
 	}
 
 	return geos.Covers(a.EWKB(), b.EWKB())
@@ -58,7 +58,7 @@ func CoveredBy(a geo.Geometry, b geo.Geometry) (bool, error) {
 		// A polygon cannot be covered by a point.
 		return false, nil
 	case PointAndPolygon:
-		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonCoveredBy)
+		return PointKindCoveredByPolygonKind(pointKind, polygonKind)
 	}
 
 	return geos.CoveredBy(a.EWKB(), b.EWKB())
@@ -72,6 +72,19 @@ func Contains(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if !a.CartesianBoundingBox().Covers(b.CartesianBoundingBox()) {
 		return false, nil
 	}
+
+	// Optimization for point in polygon calculations.
+	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
+	switch pointPolygonPair {
+	case PointAndPolygon:
+		// A point cannot contain a polygon.
+		return false, nil
+	case PolygonAndPoint:
+		// Computing whether a polygon contains a point is equivalent
+		// to computing whether the point is contained within the polygon.
+		return PointKindWithinPolygonKind(pointKind, polygonKind)
+	}
+
 	return geos.Contains(a.EWKB(), b.EWKB())
 }
 
@@ -135,7 +148,7 @@ func Intersects(a geo.Geometry, b geo.Geometry) (bool, error) {
 	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
 	switch pointPolygonPair {
 	case PointAndPolygon, PolygonAndPoint:
-		return PointKindRelatesToPolygonKind(pointKind, polygonKind, PointPolygonIntersects)
+		return PointKindIntersectsPolygonKind(pointKind, polygonKind)
 	}
 
 	return geos.Intersects(a.EWKB(), b.EWKB())
@@ -314,5 +327,16 @@ func Within(a geo.Geometry, b geo.Geometry) (bool, error) {
 	if !b.CartesianBoundingBox().Covers(a.CartesianBoundingBox()) {
 		return false, nil
 	}
+
+	// Optimization for point in polygon calculations.
+	pointPolygonPair, pointKind, polygonKind := PointKindAndPolygonKind(a, b)
+	switch pointPolygonPair {
+	case PolygonAndPoint:
+		// A polygon cannot be contained within a point.
+		return false, nil
+	case PointAndPolygon:
+		return PointKindWithinPolygonKind(pointKind, polygonKind)
+	}
+
 	return geos.Within(a.EWKB(), b.EWKB())
 }

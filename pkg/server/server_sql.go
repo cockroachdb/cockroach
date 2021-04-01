@@ -522,13 +522,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
+			ctx,
 			cfg.TableStatCacheSize,
-			cfg.gossip,
 			cfg.db,
 			cfg.circularInternalExecutor,
 			codec,
 			leaseMgr,
 			cfg.Settings,
+			cfg.rangeFeedFactory,
 		),
 
 		QueryCache:                 querycache.New(cfg.QueryCacheSize),
@@ -598,6 +599,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.HistogramWindowInterval(),
 		execCfg,
 	)
+
+	distSQLServer.ServerConfig.SQLStatsResetter = pgServer.SQLServer
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the rowexec.Server and sql.Server and set
@@ -756,7 +759,7 @@ func (s *SQLServer) preStart(
 		mmKnobs = *migrationManagerTestingKnobs.(*sqlmigrations.MigrationManagerTestingKnobs)
 	}
 
-	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB, s.execCfg.Gossip)
+	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
 	// Only start the sqlliveness subsystem if we're already at the cluster

@@ -207,6 +207,7 @@ func newIntColumns(nCols int, length int) []coldata.Vec {
 }
 
 func BenchmarkExternalHashJoiner(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

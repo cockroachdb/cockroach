@@ -13,8 +13,10 @@ package telemetry
 import (
 	"fmt"
 	"math"
+	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -247,9 +249,13 @@ func RecordError(err error) {
 		default:
 			prefix = "othererror." + code.String() + "."
 		}
-
 		for _, tk := range tkeys {
-			Count(prefix + tk)
+			prefixedTelemetryKey := prefix + tk
+			if strings.HasPrefix(tk, catconstants.ValidationTelemetryKeyPrefix) {
+				// Descriptor validation errors already have their own prefixing scheme.
+				prefixedTelemetryKey = tk
+			}
+			Count(prefixedTelemetryKey)
 		}
 	}
 }

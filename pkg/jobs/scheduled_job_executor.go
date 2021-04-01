@@ -55,28 +55,33 @@ type ScheduledJobExecutor interface {
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.
 type ScheduledJobExecutorFactory = func() (ScheduledJobExecutor, error)
 
-var registeredExecutorFactories = make(map[string]ScheduledJobExecutorFactory)
+var executorRegistry struct {
+	syncutil.Mutex
+	factories map[string]ScheduledJobExecutorFactory
+	executors map[string]ScheduledJobExecutor
+}
 
 // RegisterScheduledJobExecutorFactory registers callback for creating ScheduledJobExecutor
 // with the specified name.
 func RegisterScheduledJobExecutorFactory(name string, factory ScheduledJobExecutorFactory) {
-	if _, ok := registeredExecutorFactories[name]; ok {
+	executorRegistry.Lock()
+	defer executorRegistry.Unlock()
+	if executorRegistry.factories == nil {
+		executorRegistry.factories = make(map[string]ScheduledJobExecutorFactory)
+	}
+
+	if _, ok := executorRegistry.factories[name]; ok {
 		panic("executor " + name + " already registered")
 	}
-	registeredExecutorFactories[name] = factory
+	executorRegistry.factories[name] = factory
 }
 
 // newScheduledJobExecutor creates new instance of ScheduledJobExecutor.
-func newScheduledJobExecutor(name string) (ScheduledJobExecutor, error) {
-	if factory, ok := registeredExecutorFactories[name]; ok {
+func newScheduledJobExecutorLocked(name string) (ScheduledJobExecutor, error) {
+	if factory, ok := executorRegistry.factories[name]; ok {
 		return factory()
 	}
 	return nil, errors.Newf("executor %q is not registered", name)
-}
-
-var executorRegistry struct {
-	syncutil.Mutex
-	executors map[string]ScheduledJobExecutor
 }
 
 // GetScheduledJobExecutor returns a singleton instance of
@@ -90,7 +95,7 @@ func GetScheduledJobExecutor(name string) (ScheduledJobExecutor, bool, error) {
 	if ex, ok := executorRegistry.executors[name]; ok {
 		return ex, false, nil
 	}
-	ex, err := newScheduledJobExecutor(name)
+	ex, err := newScheduledJobExecutorLocked(name)
 	if err != nil {
 		return nil, false, err
 	}

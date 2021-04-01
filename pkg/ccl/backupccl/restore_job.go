@@ -13,9 +13,11 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -47,7 +49,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -498,6 +502,56 @@ func rewriteBackupSpanKey(
 		newKey = codec.TablePrefix(id)
 	}
 	return newKey, nil
+}
+
+func restoreWithRetry(
+	restoreCtx context.Context,
+	execCtx sql.JobExecContext,
+	backupManifests []BackupManifest,
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	endTime hlc.Timestamp,
+	dataToRestore restorationData,
+	job *jobs.Job,
+	encryption *jobspb.BackupEncryptionOptions,
+) (RowCount, error) {
+	// We retry on pretty generic failures -- any rpc error. If a worker node were
+	// to restart, it would produce this kind of error, but there may be other
+	// errors that are also rpc errors. Don't retry to aggressively.
+	retryOpts := retry.Options{
+		MaxBackoff: 1 * time.Second,
+		MaxRetries: 5,
+	}
+
+	// We want to retry a restore if there are transient failures (i.e. worker nodes
+	// dying), so if we receive a retryable error, re-plan and retry the backup.
+	var res RowCount
+	var err error
+	for r := retry.StartWithCtx(restoreCtx, retryOpts); r.Next(); {
+		res, err = restore(
+			restoreCtx,
+			execCtx,
+			backupManifests,
+			backupLocalityInfo,
+			endTime,
+			dataToRestore,
+			job,
+			encryption,
+		)
+		if err == nil {
+			break
+		}
+
+		if !utilccl.IsDistSQLRetryableError(err) {
+			return RowCount{}, err
+		}
+
+		log.Warningf(restoreCtx, `encountered retryable error: %+v`, err)
+	}
+
+	if err != nil {
+		return RowCount{}, errors.Wrap(err, "exhausted retries")
+	}
+	return res, nil
 }
 
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable
@@ -1292,6 +1346,9 @@ func createImportingDescriptors(
 				// Update the job once all descs have been prepared for ingestion.
 				err := r.job.SetDetails(ctx, txn, details)
 
+				// Emit to the event log now that the job has finished preparing descs.
+				emitRestoreJobEvent(ctx, p, jobs.StatusRunning, r.job)
+
 				return err
 			})
 		if err != nil {
@@ -1454,6 +1511,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 				return err
 			}
 		}
+		emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
 		return nil
 	}
 
@@ -1463,7 +1521,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 
 	var resTotal RowCount
 	if !preData.isEmpty() {
-		res, err := restore(
+		res, err := restoreWithRetry(
 			ctx,
 			p,
 			backupManifests,
@@ -1497,7 +1555,7 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	{
 		// Restore the main data bundle. We notably only restore the system tables
 		// later.
-		res, err := restore(
+		res, err := restoreWithRetry(
 			ctx,
 			p,
 			backupManifests,
@@ -1559,6 +1617,9 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 	r.notifyStatsRefresherOfNewTables()
 
 	r.restoreStats = resTotal
+
+	// Emit an event now that the restore job has completed.
+	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
 
 	// Collect telemetry.
 	{
@@ -1797,11 +1858,28 @@ func (r *restoreResumer) publishDescriptors(
 	return nil
 }
 
+func emitRestoreJobEvent(
+	ctx context.Context, p sql.JobExecContext, status jobs.Status, job *jobs.Job,
+) {
+	// Emit to the event log now that we have completed the prepare step.
+	var restoreEvent eventpb.Restore
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return sql.LogEventForJobs(ctx, p.ExecCfg(), txn, &restoreEvent, int64(job.ID()),
+			job.Payload(), p.User(), status)
+	}); err != nil {
+		log.Warningf(ctx, "failed to log event: %v", err)
+	}
+}
+
 // OnFailOrCancel is part of the jobs.Resumer interface. Removes KV data that
 // has been committed from a restore that has failed or been canceled. It does
 // this by adding the table descriptors in DROP state, which causes the schema
 // change stuff to delete the keys in the background.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+	// Emit to the event log that the job has started reverting.
+	emitRestoreJobEvent(ctx, p, jobs.StatusReverting, r.job)
+
 	telemetry.Count("restore.total.failed")
 	telemetry.CountBucketed("restore.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
@@ -1809,7 +1887,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
-	return descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
+	err := descs.Txn(ctx, execCfg.Settings, execCfg.LeaseManager, execCfg.InternalExecutor,
 		execCfg.DB, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			for _, tenant := range details.Tenants {
 				tenant.State = descpb.TenantInfo_DROP
@@ -1821,6 +1899,13 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}
 			}
 			return r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol)
 		})
+	if err != nil {
+		return err
+	}
+
+	// Emit to the event log that the job has completed reverting.
+	emitRestoreJobEvent(ctx, p, jobs.StatusFailed, r.job)
+	return nil
 }
 
 // dropDescriptors implements the OnFailOrCancel logic.

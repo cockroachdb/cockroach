@@ -311,10 +311,20 @@ select crdb_internal.set_vmodule('doesntexist=2,butitsok=4')
 ----
 0
 
+query T
+select crdb_internal.get_vmodule()
+----
+doesntexist=2,butitsok=4
+
 query I
 select crdb_internal.set_vmodule('')
 ----
 0
+
+query T
+select crdb_internal.get_vmodule()
+----
+·
 
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
@@ -375,6 +385,9 @@ select crdb_internal.force_log_fatal('foo')
 
 query error insufficient privilege
 select crdb_internal.set_vmodule('')
+
+query error insufficient privilege
+select crdb_internal.get_vmodule()
 
 query error pq: only users with the admin role are allowed to access the node runtime information
 select * from crdb_internal.node_runtime_info

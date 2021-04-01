@@ -221,6 +221,10 @@ type StoreTestingKnobs struct {
 	// BeforeRelocateOne intercepts the return values of s.relocateOne before
 	// they're being put into effect.
 	BeforeRelocateOne func(_ []roachpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget, _ error)
+	// DontIgnoreFailureToTransferLease makes `AdminRelocateRange` return an error
+	// to its client if it failed to transfer the lease to the first voting
+	// replica in the set of relocation targets.
+	DontIgnoreFailureToTransferLease bool
 	// MaxApplicationBatchSize enforces a maximum size on application batches.
 	// This can be useful for testing conditions which require commands to be
 	// applied in separate batches.
@@ -256,6 +260,10 @@ type StoreTestingKnobs struct {
 	// If set, use the given truncated state type when bootstrapping ranges.
 	// This is used for testing the truncated state migration.
 	TruncatedStateTypeOverride *stateloader.TruncatedStateType
+	// If set, use the given version as the initial replica version when
+	// bootstrapping ranges. This is used for testing the migration
+	// infrastructure.
+	InitialReplicaVersionOverride *roachpb.Version
 	// GossipWhenCapacityDeltaExceedsFraction specifies the fraction from the last
 	// gossiped store capacity values which need be exceeded before the store will
 	// gossip immediately without waiting for the periodic gossip interval.

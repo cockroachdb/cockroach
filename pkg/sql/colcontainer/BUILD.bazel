@@ -49,6 +49,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "@com_github_marusama_semaphore//:semaphore",

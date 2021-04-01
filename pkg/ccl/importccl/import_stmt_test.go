@@ -1983,9 +1983,20 @@ func TestImportCSVStmt(t *testing.T) {
 
 			jobPrefix := fmt.Sprintf(`IMPORT TABLE %s.public.t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))`, intodb)
 
+			var intodbID descpb.ID
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s'`,
+				intodb)).Scan(&intodbID)
+			var publicSchemaID descpb.ID
+			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT id FROM system.namespace WHERE name = '%s'`,
+				tree.PublicSchema)).Scan(&publicSchemaID)
+			var tableID int64
+			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE "parentID" = $1 AND "parentSchemaID" = $2`,
+				intodbID, publicSchemaID).Scan(&tableID)
+
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUserName(),
-				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
+				Username:      security.RootUserName(),
+				Description:   fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
+				DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -2600,6 +2611,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 // -> Rollback of a failed IMPORT INTO
 func TestImportIntoCSV(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 62853, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t)
@@ -2841,6 +2853,9 @@ func TestImportIntoCSV(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
 			defer sqlDB.Exec(t, `DROP TABLE t`)
 
+			var tableID int64
+			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
+
 			var unused string
 			var restored struct {
 				rows, idx, bytes int
@@ -2868,8 +2883,9 @@ func TestImportIntoCSV(t *testing.T) {
 
 			jobPrefix := `IMPORT INTO defaultdb.public.t(a, b)`
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUserName(),
-				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
+				Username:      security.RootUserName(),
+				Description:   fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.ReplaceAll(strings.Join(tc.files, ", "), "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")),
+				DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -5753,6 +5769,9 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 				COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 				CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
 
+				ALTER AGGREGATE myavg(integer) RENAME TO my_average;
+				ALTER DOMAIN zipcode SET NOT NULL;
+
 				-- Valid statement.
 				CREATE TABLE foo (id INT);
 
@@ -5865,11 +5884,13 @@ grant privileges on sequence: could not be parsed
 grant privileges on sequence: could not be parsed
 comment on extension: could not be parsed
 create extension if not exists with: could not be parsed
+alter aggregate: could not be parsed
+alter domain: could not be parsed
 create function: could not be parsed
-alter function: could not be parsed
-alter default privileges: could not be parsed
 `,
-			`alter table alter column add: could not be parsed
+			`alter function: could not be parsed
+alter default privileges: could not be parsed
+alter table alter column add: could not be parsed
 copy from unsupported format: could not be parsed
 grant privileges on schema with: could not be parsed
 COMMENT ON TABLE t IS 'This should be skipped': unsupported by IMPORT
@@ -6670,6 +6691,95 @@ DROP VIEW IF EXISTS v`,
 	})
 }
 
+// There are two goals of this testcase:
+//
+// 1) Ensure that we can properly export from REGIONAL BY ROW tables (that the
+//    hidden row stays hidden, unless explicitly requested).
+// 2) That we can import the exported data both into a non-RBR table, as well
+//    as a table which we can later convert to RBR, while preserving the
+//    crdb_region column data.
+func TestMultiRegionExportImportRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	validateNumRows := func(sqlDB *gosql.DB, tableName string, expected int) {
+		res := sqlDB.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s`, tableName))
+		require.NoError(t, res.Err())
+
+		var numRows int
+		err := res.Scan(&numRows)
+		require.NoError(t, err)
+
+		if numRows != expected {
+			t.Errorf("expected %d rows after import, found %d", expected, numRows)
+		}
+	}
+
+	baseDir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+
+	_, sqlDB, clusterCleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, base.TestingKnobs{}, &baseDir)
+	defer clusterCleanup()
+
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	require.NoError(t, err)
+
+	// Create the database.
+	_, err = sqlDB.Exec(`CREATE DATABASE multi_region PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE multi_region;`)
+	require.NoError(t, err)
+
+	// Create the tables
+	_, err = sqlDB.Exec(`CREATE TABLE original_rbr (i int) LOCALITY REGIONAL BY ROW;
+CREATE TABLE destination (i int);
+CREATE TABLE destination_fake_rbr (crdb_region public.crdb_internal_region NOT NULL, i int);`)
+	require.NoError(t, err)
+
+	// Insert some data to the original table.
+	_, err = sqlDB.Exec(`INSERT INTO original_rbr values (1),(2),(3),(4),(5)`)
+	require.NoError(t, err)
+
+	// Export the data.
+	_, err = sqlDB.Exec(`EXPORT INTO CSV 'nodelocal://0/original_rbr_full'
+ FROM SELECT crdb_region, i from original_rbr;`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`EXPORT INTO CSV 'nodelocal://0/original_rbr_default' 
+FROM TABLE original_rbr;`)
+	require.NoError(t, err)
+
+	// Import the data back into the destination table.
+	_, err = sqlDB.Exec(`IMPORT into destination (i) CSV DATA
+ ('nodelocal://0/original_rbr_default/export*.csv')`)
+	require.NoError(t, err)
+	validateNumRows(sqlDB, `destination`, 5)
+
+	// Import the full export to the fake RBR table.
+	_, err = sqlDB.Exec(`IMPORT into destination_fake_rbr (crdb_region, i) CSV DATA
+ ('nodelocal://0/original_rbr_full/export*.csv')`)
+	require.NoError(t, err)
+	validateNumRows(sqlDB, `destination_fake_rbr`, 5)
+
+	// Convert fake table to full RBR table. This test is only required until we
+	// support IMPORT directly to RBR tables. The thinking behind this test is
+	// that this _could_ be one way that customers work-around the limitation of
+	// not supporting IMPORT to RBR tables in 21.1. Note that right now we can't
+	// make this column hidden (#62892).
+	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr ALTER COLUMN
+ crdb_region SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region;`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET LOCALITY 
+ REGIONAL BY ROW AS crdb_region;`)
+	require.NoError(t, err)
+
+	// Insert some more rows and ensure that the default values get generated.
+	_, err = sqlDB.Exec(`INSERT INTO destination_fake_rbr (i) values (6),(7),(3),(9),(10)`)
+	require.NoError(t, err)
+	validateNumRows(sqlDB, `destination_fake_rbr`, 10)
+}
+
 // TestImportClientDisconnect ensures that an import job can complete even if
 // the client connection which started it closes. This test uses a helper
 // subprocess to force a closed client connection without needing to rely
@@ -6996,4 +7106,72 @@ func TestDetachedImport(t *testing.T) {
 	waitForJobResult(t, tc, jobID, jobs.StatusSucceeded)
 	sqlDB.QueryRow(t, importIntoQueryDetached, simpleOcf).Scan(&jobID)
 	waitForJobResult(t, tc, jobID, jobs.StatusFailed)
+}
+
+func TestImportJobEventLogging(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.ScopeWithoutShowLogs(t).Close(t)
+
+	defer jobs.TestingSetProgressThresholds()()
+	defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
+
+	const (
+		nodes = 3
+	)
+	ctx := context.Background()
+	baseDir := filepath.Join("testdata", "avro")
+	args := base.TestServerArgs{ExternalIODir: baseDir}
+	params := base.TestClusterArgs{ServerArgs: args}
+	tc := testcluster.StartTestCluster(t, nodes, params)
+	defer tc.Stopper().Stop(ctx)
+
+	var forceFailure bool
+	for i := range tc.Servers {
+		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*importResumer)
+				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+					if forceFailure {
+						return errors.New("testing injected failure")
+					}
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
+	connDB := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(connDB)
+
+	simpleOcf := fmt.Sprintf("nodelocal://0/%s", "simple.ocf")
+
+	// First, let's test the happy path. Start a job, allow it to succeed and check
+	// the event log for the entries.
+	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
+	beforeImport := timeutil.Now()
+	importQuery := `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`
+
+	var jobID int64
+	var unused interface{}
+	sqlDB.QueryRow(t, importQuery, simpleOcf).Scan(&jobID, &unused, &unused, &unused, &unused,
+		&unused)
+
+	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
+	backupccl.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT")
+
+	sqlDB.Exec(t, `DROP TABLE simple`)
+
+	// Now let's test the events that are emitted when a job fails.
+	forceFailure = true
+	beforeSecondImport := timeutil.Now()
+	secondImport := `IMPORT TABLE simple (i INT8 PRIMARY KEY, s text, b bytea) AVRO DATA ($1)`
+	sqlDB.ExpectErrSucceedsSoon(t, "testing injected failure", secondImport, simpleOcf)
+
+	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE status = 'failed'")
+	row.Scan(&jobID)
+
+	expectedStatus = []string{string(jobs.StatusFailed), string(jobs.StatusReverting),
+		string(jobs.StatusRunning)}
+	backupccl.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
 }

@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -58,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1852,6 +1854,19 @@ type preparedSchemaMetadata struct {
 	queuedSchemaJobs      []jobspb.JobID
 }
 
+func emitImportJobEvent(
+	ctx context.Context, p sql.JobExecContext, status jobs.Status, job *jobs.Job,
+) {
+	// Emit to the event log now that we have completed the prepare step.
+	var importEvent eventpb.Import
+	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return sql.LogEventForJobs(ctx, p.ExecCfg(), txn, &importEvent, int64(job.ID()),
+			job.Payload(), p.User(), status)
+	}); err != nil {
+		log.Warningf(ctx, "failed to log event: %v", err)
+	}
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
@@ -1906,7 +1921,36 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 					// Update the job details now that the schemas and table descs have
 					// been "prepared".
-					return r.job.SetDetails(ctx, txn, preparedDetails)
+					err = r.job.SetDetails(ctx, txn, preparedDetails)
+					if err != nil {
+						return err
+					}
+
+					// Update the job record with the schema and table IDs we will be
+					// ingesting into.
+					err = r.job.SetDescriptorIDs(ctx, txn, func(ctx context.Context,
+						descIDs []descpb.ID) ([]descpb.ID, error) {
+						var descriptorIDs []descpb.ID
+						if descIDs == nil {
+							for _, schema := range preparedDetails.Schemas {
+								descriptorIDs = append(descriptorIDs, schema.Desc.GetID())
+							}
+							for _, table := range preparedDetails.Tables {
+								descriptorIDs = append(descriptorIDs, table.Desc.GetID())
+							}
+							return descriptorIDs, nil
+						}
+						log.Warningf(ctx, "unexpected descriptor IDs %+v set in import job %d", descIDs,
+							r.job.ID())
+						return nil, nil
+					})
+					if err != nil {
+						// We don't want to fail the import if we fail to update the
+						// descriptor IDs as this is only for observability.
+						log.Warningf(ctx, "failed to update import job %d with target descriptor IDs",
+							r.job.ID())
+					}
+					return nil
 				})
 			if err != nil {
 				return err
@@ -1925,6 +1969,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 			// Re-initialize details after prepare step.
 			details = r.job.Details().(jobspb.ImportDetails)
+			emitImportJobEvent(ctx, p, jobs.StatusRunning, r.job)
 		}
 
 		// Create a mapping from schemaID to schemaName.
@@ -1998,11 +2043,12 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	res, err := sql.DistIngest(ctx, p, r.job, tables, files, format, details.Walltime,
+	res, err := ingestWithRetry(ctx, p, r.job, tables, files, format, details.Walltime,
 		r.testingKnobs.alwaysFlushJobProgress)
 	if err != nil {
 		return err
 	}
+
 	pkIDs := make(map[uint64]struct{}, len(details.Tables))
 	for _, t := range details.Tables {
 		pkIDs[roachpb.BulkOpSummaryID(uint64(t.Desc.ID), uint64(t.Desc.PrimaryIndex.ID))] = struct{}{}
@@ -2039,6 +2085,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
+	emitImportJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+
 	addToFileFormatTelemetry(details.Format.Format.String(), "succeeded")
 	telemetry.CountBucketed("import.rows", r.res.Rows)
 	const mb = 1 << 20
@@ -2058,6 +2106,48 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	return nil
+}
+
+func ingestWithRetry(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	job *jobs.Job,
+	tables map[string]*execinfrapb.ReadImportDataSpec_ImportTable,
+	from []string,
+	format roachpb.IOFileFormat,
+	walltime int64,
+	alwaysFlushProgress bool,
+) (roachpb.BulkOpSummary, error) {
+
+	// We retry on pretty generic failures -- any rpc error. If a worker node were
+	// to restart, it would produce this kind of error, but there may be other
+	// errors that are also rpc errors. Don't retry to aggressively.
+	retryOpts := retry.Options{
+		MaxBackoff: 1 * time.Second,
+		MaxRetries: 5,
+	}
+
+	// We want to retry a restore if there are transient failures (i.e. worker nodes
+	// dying), so if we receive a retryable error, re-plan and retry the backup.
+	var res roachpb.BulkOpSummary
+	var err error
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		res, err = sql.DistIngest(ctx, execCtx, job, tables, from, format, walltime, alwaysFlushProgress)
+		if err == nil {
+			break
+		}
+
+		if !utilccl.IsDistSQLRetryableError(err) {
+			return roachpb.BulkOpSummary{}, err
+		}
+
+		log.Warningf(ctx, `encountered retryable error: %+v`, err)
+	}
+
+	if err != nil {
+		return roachpb.BulkOpSummary{}, errors.Wrap(err, "exhausted retries")
+	}
+	return res, nil
 }
 
 func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.ExecutorConfig) error {
@@ -2167,9 +2257,16 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
+	}
+
+	// Wait for the table to be public before completing.
+	for _, tbl := range details.Tables {
+		_, err := lm.WaitForOneVersion(ctx, tbl.Desc.ID, retry.Options{})
+		if err != nil {
+			return errors.Wrap(err, "publishing tables waiting for one version")
+		}
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
@@ -2188,6 +2285,10 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
+
+	// Emit to the event log that the job has started reverting.
+	emitImportJobEvent(ctx, p, jobs.StatusReverting, r.job)
+
 	details := r.job.Details().(jobspb.ImportDetails)
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
@@ -2215,6 +2316,15 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 	}); err != nil {
 		return err
 	}
+	// Wait for the tables to become public before completing.
+	if details.PrepareComplete {
+		for _, tableDesc := range details.Tables {
+			_, err := cfg.LeaseManager.WaitForOneVersion(ctx, tableDesc.Desc.ID, retry.Options{})
+			if err != nil {
+				return errors.Wrap(err, "rolling back tables waiting for them to be public")
+			}
+		}
+	}
 
 	// Run any jobs which might have been queued when dropping the schemas.
 	// This would be a job to drop all the schemas, and a job to update the parent
@@ -2225,6 +2335,9 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 			return errors.Wrap(err, "failed to run jobs that drop the imported schemas")
 		}
 	}
+
+	// Emit to the event log that the job has completed reverting.
+	emitImportJobEvent(ctx, p, jobs.StatusFailed, r.job)
 
 	return nil
 }

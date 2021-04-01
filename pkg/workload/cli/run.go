@@ -71,6 +71,13 @@ var histogramsMaxLatency = runFlags.Duration(
 	"histograms-max-latency", 100*time.Second,
 	"Expected maximum latency of running a query")
 
+var securityFlags = pflag.NewFlagSet(`security`, pflag.ContinueOnError)
+var secure = securityFlags.Bool("secure", false,
+	"Run in secure mode (sslmode=require). "+
+		"Running in secure mode expects the relevant certs to have been created for the user in the certs/ directory."+
+		"For example when using root, certs/client.root.crt certs/client.root.key should exist.")
+var user = securityFlags.String("user", "root", "Specify a user to run the workload as")
+
 func init() {
 
 	_ = sharedFlags.MarkHidden("pprofport")
@@ -96,6 +103,7 @@ func init() {
 			genInitCmd.Flags().AddFlagSet(initFlags)
 			genInitCmd.Flags().AddFlagSet(sharedFlags)
 			genInitCmd.Flags().AddFlagSet(genFlags)
+			genInitCmd.Flags().AddFlagSet(securityFlags)
 			genInitCmd.Run = CmdHelper(gen, runInit)
 			if userFacing && !meta.PublicFacing {
 				genInitCmd.Hidden = true
@@ -131,6 +139,7 @@ func init() {
 			genRunCmd.Flags().AddFlagSet(runFlags)
 			genRunCmd.Flags().AddFlagSet(sharedFlags)
 			genRunCmd.Flags().AddFlagSet(genFlags)
+			genRunCmd.Flags().AddFlagSet(securityFlags)
 			initFlags.VisitAll(func(initFlag *pflag.Flag) {
 				// Every init flag is a valid run flag that implies the --init option.
 				f := *initFlag
@@ -153,8 +162,6 @@ func init() {
 func CmdHelper(
 	gen workload.Generator, fn func(gen workload.Generator, urls []string, dbName string) error,
 ) func(*cobra.Command, []string) {
-	const crdbDefaultURL = `postgres://root@localhost:26257?sslmode=disable`
-
 	return HandleErrs(func(cmd *cobra.Command, args []string) error {
 		// Apply the logging configuration if none was set already.
 		if active, _ := log.IsActive(); !active {
@@ -182,7 +189,15 @@ func CmdHelper(
 			dbOverride = dbFlag.Value.String()
 		}
 		urls := args
+
 		if len(urls) == 0 {
+			crdbDefaultURL := fmt.Sprintf(`postgres://%s@localhost:26257?sslmode=disable`, *user)
+			if *secure {
+				crdbDefaultURL = fmt.Sprintf(
+					// This URL expects the certs to have been created by the user.
+					`postgres://%s@localhost:26257?sslcert=certs/client.%s.crt&sslkey=certs/client.%s.key&sslrootcert=certs/ca.crt&sslmode=require`,
+					*user, *user, *user)
+			}
 			urls = []string{crdbDefaultURL}
 		}
 		dbName, err := workload.SanitizeUrls(gen, dbOverride, urls)

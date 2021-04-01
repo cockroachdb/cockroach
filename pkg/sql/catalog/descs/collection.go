@@ -282,7 +282,7 @@ func (tc *Collection) getLeasedDescriptorByName(
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
-		if catalog.HasInactiveDescriptorError(err) ||
+		if (catalog.HasInactiveDescriptorError(err) && errors.Is(err, catalog.ErrDescriptorDropped)) ||
 			errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, true, nil
 		}
@@ -1528,7 +1528,13 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 		return nil
 	}
 	bdg := catalogkv.NewOneLevelUncachedDescGetter(txn, tc.codec())
-	return catalog.Validate(ctx, bdg, catalog.ValidationLevelAllPreTxnCommit, descs...).CombinedError()
+	return catalog.Validate(
+		ctx,
+		bdg,
+		catalog.ValidationWriteTelemetry,
+		catalog.ValidationLevelAllPreTxnCommit,
+		descs...,
+	).CombinedError()
 }
 
 // User defined type accessors.

@@ -42,7 +42,7 @@ func TestComponentStatsMakeDeterminstic(t *testing.T) {
 network latency: 0µs
 network wait time: 0µs
 deserialization time: 0µs
-network tuples received: 10
+network rows received: 10
 network bytes received: 80 B`,
 		},
 		{ // 2
@@ -53,7 +53,7 @@ network bytes received: 80 B`,
 				},
 			},
 			expected: `
-network tuples sent: 10
+network rows sent: 10
 network bytes sent: 80 B`,
 		},
 		{ // 3
@@ -66,7 +66,7 @@ network bytes sent: 80 B`,
 			},
 			expected: `
 KV time: 0µs
-KV tuples read: 10
+KV rows read: 10
 KV bytes read: 80 B`,
 		},
 		{ // 4
@@ -91,7 +91,7 @@ max scratch disk allocated: 0 B`,
 			},
 			expected: `
 batches output: 0
-tuples output: 100`,
+rows output: 100`,
 		},
 		{ // 6
 			stats: ComponentStats{
@@ -101,7 +101,7 @@ tuples output: 100`,
 				}},
 			},
 			expected: `
-input tuples: 100
+input rows: 100
 input stall time: 0µs`,
 		},
 	}
@@ -174,20 +174,20 @@ func TestComponentStatsUnion(t *testing.T) {
 network latency: 1s
 network wait time: 1s
 deserialization time: 1s
-network tuples received: 10
+network rows received: 10
 network bytes received: 12 KiB
-network tuples sent: 10
+network rows sent: 10
 network bytes sent: 12 KiB
-input tuples: 100
+input rows: 100
 input stall time: 1s
 KV time: 1s
-KV tuples read: 10
+KV rows read: 10
 KV bytes read: 12 KiB
 execution time: 1s
 max memory allocated: 1.0 KiB
 max scratch disk allocated: 1.0 KiB
 batches output: 10
-tuples output: 100`,
+rows output: 100`,
 		},
 		{ // 2
 			a: ComponentStats{},
@@ -226,20 +226,20 @@ tuples output: 100`,
 network latency: 1s
 network wait time: 1s
 deserialization time: 1s
-network tuples received: 10
+network rows received: 10
 network bytes received: 12 KiB
-network tuples sent: 10
+network rows sent: 10
 network bytes sent: 12 KiB
-input tuples: 100
+input rows: 100
 input stall time: 1s
 KV time: 1s
-KV tuples read: 10
+KV rows read: 10
 KV bytes read: 12 KiB
 execution time: 1s
 max memory allocated: 1.0 KiB
 max scratch disk allocated: 1.0 KiB
 batches output: 10
-tuples output: 100`,
+rows output: 100`,
 		},
 		{ // 3
 			a: ComponentStats{
@@ -294,20 +294,20 @@ tuples output: 100`,
 network latency: 1s
 network wait time: 1s
 deserialization time: 1s
-network tuples received: 10
+network rows received: 10
 network bytes received: 12 KiB
-network tuples sent: 10
+network rows sent: 10
 network bytes sent: 12 KiB
-input tuples: 100
+input rows: 100
 input stall time: 1s
 KV time: 1s
-KV tuples read: 10
+KV rows read: 10
 KV bytes read: 12 KiB
 execution time: 1s
 max memory allocated: 1.0 KiB
 max scratch disk allocated: 1.0 KiB
 batches output: 10
-tuples output: 100`,
+rows output: 100`,
 		},
 	}
 

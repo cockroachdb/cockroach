@@ -997,6 +997,80 @@ func (m *CommonEventDetails) AppendJSONFields(printComma bool, b redact.Redactab
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *CommonJobEventDetails) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	if m.JobID != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"JobID\":"...)
+		b = strconv.AppendInt(b, int64(m.JobID), 10)
+	}
+
+	if m.JobType != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"JobType\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), m.JobType))
+		b = append(b, '"')
+	}
+
+	if m.Description != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Description\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.Description)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.User != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"User\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.User)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if len(m.DescriptorIDs) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"DescriptorIDs\":["...)
+		for i, v := range m.DescriptorIDs {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = strconv.AppendUint(b, uint64(v), 10)
+		}
+		b = append(b, ']')
+	}
+
+	if m.Status != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Status\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), m.Status))
+		b = append(b, '"')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *CommonNodeDecommissionDetails) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	if m.RequestingNodeID != 0 {
@@ -1994,6 +2068,16 @@ func (m *FinishSchemaChangeRollback) AppendJSONFields(printComma bool, b redact.
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *Import) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonJobEventDetails.AppendJSONFields(printComma, b)
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *NodeDecommissioned) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
@@ -2199,6 +2283,16 @@ func (m *RenameType) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 		b = append(b, redact.EndMarker()...)
 		b = append(b, '"')
 	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
+func (m *Restore) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonJobEventDetails.AppendJSONFields(printComma, b)
 
 	return printComma, b
 }

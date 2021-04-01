@@ -2179,9 +2179,9 @@ project
  │         │    │    └── columns: b.bar:5 b.baz:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8
  │         │    └── filters (true)
  │         └── projections
- │              └── a.bar:1 @> b.baz:6 [as=column9:9]
+ │              └── b.baz:6 <@ a.bar:1 [as=column9:9]
  └── projections
-      └── column9:9 AND (b.baz:6 @> b.baz:6) [as=r:10]
+      └── column9:9 AND (b.baz:6 <@ b.baz:6) [as=r:10]
 
 exec-ddl
 CREATE TABLE times (t time PRIMARY KEY)

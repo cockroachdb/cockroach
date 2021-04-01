@@ -83,7 +83,7 @@ func TestLicense(t *testing.T) {
 			}
 		}
 		if err := check(
-			lic, tc.checkTime, tc.checkCluster, tc.checkOrg, "",
+			lic, tc.checkTime, tc.checkCluster, tc.checkOrg, "", true,
 		); !testutils.IsError(err, tc.err) {
 			t.Fatalf("%d: lic for %s to %s, checked by %s at %s.\n got %q", i,
 				tc.grantedTo, tc.expiration, tc.checkCluster, tc.checkTime, err)
@@ -108,7 +108,7 @@ func TestExpiredLicenseLanguage(t *testing.T) {
 		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: 1,
 	}
-	err := check(lic, timeutil.Now(), uuid.MakeV4(), "", "RESTORE")
+	err := check(lic, timeutil.Now(), uuid.MakeV4(), "", "RESTORE", true)
 	expected := "Use of RESTORE requires an enterprise license. Your evaluation license expired on " +
 		"January 1, 1970. If you're interested in getting a new license, please contact " +
 		"subscriptions@cockroachlabs.com and we can help you out."

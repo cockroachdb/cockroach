@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -104,20 +105,22 @@ func TestDiskQueue(t *testing.T) {
 					require.NoError(t, err)
 					require.Equal(t, 1, len(directories))
 
-					// Run verification.
+					// Run verification. We reuse the same batch to dequeue into
+					// since that is the common pattern.
+					dest := coldata.NewMemBatch(typs, testColumnFactory)
 					for {
-						b := op.Next(ctx)
-						require.NoError(t, q.Enqueue(ctx, b))
-						if b.Length() == 0 {
+						src := op.Next(ctx)
+						require.NoError(t, q.Enqueue(ctx, src))
+						if src.Length() == 0 {
 							break
 						}
 						if rng.Float64() < dequeuedProbabilityBeforeAllEnqueuesAreDone {
-							if ok, err := q.Dequeue(ctx, b); !ok {
+							if ok, err := q.Dequeue(ctx, dest); !ok {
 								t.Fatal("queue incorrectly considered empty")
 							} else if err != nil {
 								t.Fatal(err)
 							}
-							coldata.AssertEquivalentBatches(t, batches[0], b)
+							coldata.AssertEquivalentBatches(t, batches[0], dest)
 							batches = batches[1:]
 						}
 					}
@@ -127,25 +130,24 @@ func TestDiskQueue(t *testing.T) {
 					}
 					for i := 0; i < numReadIterations; i++ {
 						batchIdx := 0
-						b := coldata.NewMemBatch(typs, testColumnFactory)
 						for batchIdx < len(batches) {
-							if ok, err := q.Dequeue(ctx, b); !ok {
+							if ok, err := q.Dequeue(ctx, dest); !ok {
 								t.Fatal("queue incorrectly considered empty")
 							} else if err != nil {
 								t.Fatal(err)
 							}
-							coldata.AssertEquivalentBatches(t, batches[batchIdx], b)
+							coldata.AssertEquivalentBatches(t, batches[batchIdx], dest)
 							batchIdx++
 						}
 
 						if testReuseCache {
 							// Trying to Enqueue after a Dequeue should return an error in these
 							// CacheModes.
-							require.Error(t, q.Enqueue(ctx, b))
+							require.Error(t, q.Enqueue(ctx, dest))
 						}
 
-						if ok, err := q.Dequeue(ctx, b); ok {
-							if b.Length() != 0 {
+						if ok, err := q.Dequeue(ctx, dest); ok {
+							if dest.Length() != 0 {
 								t.Fatal("queue should be empty")
 							}
 						} else if err != nil {
@@ -208,6 +210,7 @@ var (
 // BenchmarkDiskQueue benchmarks a queue with parameters provided through flags.
 func BenchmarkDiskQueue(b *testing.B) {
 	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
 
 	bufSize, err := humanizeutil.ParseBytes(*bufferSizeBytes)
 	if err != nil {

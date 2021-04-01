@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -333,6 +334,9 @@ func (nl *NodeLiveness) SetDraining(
 		if err := nl.setDrainingInternal(ctx, oldLivenessRec, drain, reporter); err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
+			}
+			if grpcutil.IsAuthError(err) {
+				return err
 			}
 			continue
 		}
@@ -697,6 +701,9 @@ func (nl *NodeLiveness) Start(ctx context.Context, opts NodeLivenessStartOptions
 							liveness, err := nl.getLivenessFromKV(ctx, nodeID)
 							if err != nil {
 								log.Infof(ctx, "unable to get liveness record from KV: %s", err)
+								if grpcutil.IsAuthError(err) {
+									return err
+								}
 								continue
 							}
 							oldLiveness = liveness

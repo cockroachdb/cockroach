@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -5593,6 +5594,7 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 // heartbeat within its transaction liveness threshold can be pushed/aborted.
 func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderBazelWithIssue(t, 62860, "flaky test")
 	defer log.Scope(t).Close(t)
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
 	stopper := stop.NewStopper()
@@ -11367,8 +11369,8 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
-				record := txn.AsRecord()
-				record.WriteTimestamp.Forward(pushTs)
+				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
+				record.WriteTimestamp = record.WriteTimestamp.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
 			},

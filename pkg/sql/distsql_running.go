@@ -459,7 +459,7 @@ type rowResultWriter interface {
 	// AddRow writes a result row.
 	// Note that the caller owns the row slice and might reuse it.
 	AddRow(ctx context.Context, row tree.Datums) error
-	IncrementRowsAffected(n int)
+	IncrementRowsAffected(ctx context.Context, n int)
 	SetError(error)
 	Err() error
 }
@@ -510,7 +510,7 @@ func (w *errOnlyResultWriter) Err() error {
 func (w *errOnlyResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	panic("AddRow not supported by errOnlyResultWriter")
 }
-func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
+func (w *errOnlyResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
 }
 
@@ -692,7 +692,7 @@ func (r *DistSQLReceiver) Push(
 		// We only need the row count. planNodeToRowSource is set up to handle
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
-		r.resultWriter.IncrementRowsAffected(int(tree.MustBeDInt(row[0].Datum)))
+		r.resultWriter.IncrementRowsAffected(r.ctx, int(tree.MustBeDInt(row[0].Datum)))
 		return r.status
 	}
 

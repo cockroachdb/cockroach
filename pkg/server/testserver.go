@@ -336,6 +336,14 @@ func (ts *TestServer) Gossip() *gossip.Gossip {
 	return nil
 }
 
+// RangeFeedFactory is part of serverutils.TestServerInterface.
+func (ts *TestServer) RangeFeedFactory() interface{} {
+	if ts != nil {
+		return ts.sqlServer.execCfg.RangeFeedFactory
+	}
+	return (*rangefeed.Factory)(nil)
+}
+
 // Clock returns the clock used by the TestServer.
 func (ts *TestServer) Clock() *hlc.Clock {
 	if ts != nil {
@@ -663,6 +671,11 @@ func (t *TestTenant) PGServer() interface{} {
 // DiagnosticsReporter is part of the TestTenantInterface interface.
 func (t *TestTenant) DiagnosticsReporter() interface{} {
 	return t.diagnosticsReporter
+}
+
+// StatusServer is part of the TestTenantInterface interface.
+func (t *TestTenant) StatusServer() interface{} {
+	return t.execCfg.SQLStatusServer
 }
 
 // SetupIdleMonitor will monitor the active connections and if there are none,

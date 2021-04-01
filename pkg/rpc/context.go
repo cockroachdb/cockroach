@@ -43,11 +43,9 @@ import (
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 func init() {
@@ -836,7 +834,7 @@ func (ald *artificialLatencyDialer) dial(ctx context.Context, addr string) (net.
 	if err != nil {
 		return conn, err
 	}
-	return delayingConn{
+	return &delayingConn{
 		Conn:    conn,
 		latency: time.Duration(ald.latencyMS) * time.Millisecond,
 		readBuf: new(bytes.Buffer),
@@ -857,7 +855,7 @@ func (d delayingListener) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return delayingConn{
+	return &delayingConn{
 		Conn: c,
 		// Put a default latency as the server's conn. This value will get populated
 		// as packets are exchanged across the delayingConnections.
@@ -866,6 +864,16 @@ func (d delayingListener) Accept() (net.Conn, error) {
 	}, nil
 }
 
+// delayingConn is a wrapped net.Conn that introduces a fixed delay into all
+// writes to the connection. The implementation works by specifying a timestamp
+// at which the other end of the connection is allowed to read the data, and
+// sending that timestamp across the network in a header packet. On the read
+// side, a sleep until the timestamp is introduced after the data is read before
+// the data is returned to the consumer.
+//
+// Note that the fixed latency here is a one-way latency, so if you want to
+// simulate a round-trip latency of x milliseconds, you should use a delayingConn
+// on both ends with x/2 milliseconds of latency.
 type delayingConn struct {
 	net.Conn
 	latency     time.Duration
@@ -892,7 +900,7 @@ func (d delayingConn) Write(b []byte) (n int, err error) {
 	return n, err
 }
 
-func (d delayingConn) Read(b []byte) (n int, err error) {
+func (d *delayingConn) Read(b []byte) (n int, err error) {
 	if d.readBuf.Len() == 0 {
 		var hdr delayingHeader
 		if err := binary.Read(d.Conn, binary.BigEndian, &hdr); err != nil {
@@ -901,11 +909,9 @@ func (d delayingConn) Read(b []byte) (n int, err error) {
 		// If we somehow don't get our expected magic, throw an error.
 		if hdr.Magic != magic {
 			panic(errors.New("didn't get expected magic bytes header"))
-			// TODO (rohany): I can't get this to work. I suspect that the problem
-			//  is with that maybe the improperly parsed struct is not written back
-			//  into the same binary format that it was read as. I tried this with sending
-			//  the magic integer over first and saw the same thing.
 		} else {
+			// Once we receive our first packet, we set our delay to the expected
+			// delay that was sent on the write side.
 			d.latency = time.Duration(hdr.DelayMS) * time.Millisecond
 			defer func() {
 				time.Sleep(timeutil.Until(timeutil.Unix(0, hdr.ReadTime)))
@@ -1051,7 +1057,7 @@ func (ctx *Context) grpcDialNodeInternal(
 			if err := ctx.Stopper.RunAsyncTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					err := ctx.runHeartbeat(conn, target, redialChan)
-					if err != nil && !grpcutil.IsClosedConnection(err) {
+					if err != nil && !grpcutil.IsClosedConnection(err) && !grpcutil.IsAuthError(err) {
 						log.Health.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 					}
 					ctx.removeConn(conn, thisConnKeys...)
@@ -1167,7 +1173,7 @@ func (ctx *Context) runHeartbeat(
 				err = ping(goCtx)
 			}
 
-			if s, ok := grpcstatus.FromError(errors.UnwrapAll(err)); ok && s.Code() == codes.PermissionDenied {
+			if grpcutil.IsAuthError(err) {
 				returnErr = true
 			}
 

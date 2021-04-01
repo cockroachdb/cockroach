@@ -66,7 +66,7 @@ func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
 		p.inputTypes, p.output, 1 /* minCapacity */, maxBatchMemSize,
 	)
 	batch := p.Input.Next(ctx)
-	if batch.Selection() == nil {
+	if batch.Selection() == nil || batch.Length() == 0 {
 		return batch
 	}
 	p.output, _ = p.allocator.ResetMaybeReallocate(

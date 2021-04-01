@@ -1,0 +1,49 @@
+estimate_iops
+readpercentage: 100
+readsize: 4096
+----
+Read-only workload (4.0 KiB reads): 128 sustained IOPS, 512 burst.
+
+estimate_iops
+readpercentage: 100
+readsize: 65536
+----
+Read-only workload (64 KiB reads): 16 sustained IOPS, 256 burst.
+
+estimate_iops
+readpercentage: 100
+readsize: 1048576
+----
+Read-only workload (1.0 MiB reads): 1.0 sustained IOPS, 16 burst.
+
+estimate_iops
+readpercentage: 0
+writesize: 4096
+----
+Write-only workload (4.0 KiB writes): 128 sustained IOPS, 512 burst.
+
+estimate_iops
+readpercentage: 0
+writesize: 65536
+----
+Write-only workload (64 KiB writes): 8.0 sustained IOPS, 128 burst.
+
+estimate_iops
+readpercentage: 0
+writesize: 1048576
+----
+Write-only workload (1.0 MiB writes): 0.5 sustained IOPS, 8.0 burst.
+
+estimate_iops
+readpercentage: 50
+readsize: 4096
+writesize: 4096
+----
+Mixed workload (50% reads; 4.0 KiB reads; 4.0 KiB writes): 256 sustained IOPS, 1024 burst.
+
+estimate_iops
+readpercentage: 90
+readsize: 4096
+writesize: 4096
+----
+Mixed workload (90% reads; 4.0 KiB reads; 4.0 KiB writes): 142 sustained IOPS, 569 burst.
