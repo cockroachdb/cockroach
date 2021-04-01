@@ -1,11 +1,8 @@
 # Common helpers for teamcity-*.sh scripts.
 
-remove_files_on_exit() {
-  rm -f .google-credentials.json
-  rm -f .cockroach-teamcity-key
-  rm -rf ~/.docker
-}
-trap remove_files_on_exit EXIT
+# root is the absolute path to the root directory of the repository.
+root=$(cd "$(dirname "$0")/../.." && pwd)
+source "$root/build/teamcity-common-support.sh"
 
 tc_start_block() {
   echo "##teamcity[blockOpened name='$1']"
@@ -13,15 +10,6 @@ tc_start_block() {
 
 tc_end_block() {
   echo "##teamcity[blockClosed name='$1']"
-}
-
-log_into_gcloud() {
-  if [[ "${google_credentials}" ]]; then
-    echo "${google_credentials}" > .google-credentials.json
-    gcloud auth activate-service-account --key-file=.google-credentials.json
-  else
-    echo 'warning: `google_credentials` not set' >&2
-  fi
 }
 
 docker_login_with_google() {
