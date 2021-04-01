@@ -1497,7 +1497,6 @@ FROM
 full-join (cross)
  ├── columns: a:1(int) b:2(int) c:3(int) a:5(int) b:6(int) c:7(int)
  ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
- ├── immutable
  ├── stats: [rows=100]
  ├── key: (1,2)
  ├── fd: (1,2)-->(3,5-7)
@@ -1513,20 +1512,7 @@ full-join (cross)
  │    ├── key: ()
  │    └── fd: ()-->(5-7)
  └── filters
-      └── is [type=bool, immutable, subquery]
-           ├── function: not_like_escape [type=bool]
-           │    ├── '' [type=string]
-           │    ├── CAST(NULL AS STRING) [type=string]
-           │    └── cast: STRING [type=string]
-           │         └── subquery [type=unknown]
-           │              └── values
-           │                   ├── columns: "?column?":9(unknown)
-           │                   ├── cardinality: [1 - 1]
-           │                   ├── stats: [rows=1]
-           │                   ├── key: ()
-           │                   ├── fd: ()-->(9)
-           │                   └── (NULL,) [type=tuple{unknown}]
-           └── false [type=bool]
+      └── false [type=bool, constraints=(contradiction; tight)]
 
 expr
 (SemiJoin

@@ -4832,20 +4832,14 @@ CREATE TABLE t60527 (
 )
 ----
 
-# TODO(mgartner): Functions with NullableArgs=false and a NULL argument can be
-# normalized to NULL. This would simplify this query plan to an empty Values
-# expression.
 opt
 SELECT * FROM t60527 WHERE (ST_Covers(NULL::GEOGRAPHY, g) AND ST_DWithin(NULL::GEOGRAPHY, g, 1))
 ----
-select
+values
  ├── columns: g:1!null
- ├── immutable
- ├── scan t60527
- │    └── columns: g:1
- └── filters
-      ├── st_covers(CAST(NULL AS GEOGRAPHY), g:1) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
-      └── st_dwithin(CAST(NULL AS GEOGRAPHY), g:1, 1.0) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
 
 # Regression test for #62686. Do not panic when a geospatial function has a NULL
 # additional argument.
@@ -4856,19 +4850,14 @@ CREATE TABLE t62686 (
 )
 ----
 
-# TODO(mgartner): Functions with NullableArgs=false and a NULL argument can be
-# normalized to NULL. This would simplify this query plan to an empty Values
-# expression.
 opt
 SELECT * FROM t62686 WHERE ST_DFullyWithin(c, ST_GeomFromText('POINT(1 1)'), NULL::FLOAT8)
 ----
-select
+values
  ├── columns: c:1!null
- ├── immutable
- ├── scan t62686
- │    └── columns: c:1
- └── filters
-      └── st_dfullywithin(c:1, '0101000000000000000000F03F000000000000F03F', CAST(NULL AS FLOAT8)) [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
 
 # --------------------------------------------------
 # GenerateZigzagJoins
