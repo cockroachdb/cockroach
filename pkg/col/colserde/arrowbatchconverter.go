@@ -302,7 +302,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(typ.Family()) {
 		case types.BoolFamily:
 			boolArr := array.NewBooleanData(d)
-			handleNulls(boolArr, vec, batchLength)
+			vec.Nulls().SetNullBitmap(boolArr.NullBitmapBytes(), batchLength)
 			vecArr := vec.Bool()
 			for i := 0; i < boolArr.Len(); i++ {
 				vecArr[i] = boolArr.Value(i)
@@ -310,7 +310,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 
 		case types.BytesFamily:
 			bytesArr := array.NewBinaryData(d)
-			handleNulls(bytesArr, vec, batchLength)
+			vec.Nulls().SetNullBitmap(bytesArr.NullBitmapBytes(), batchLength)
 			bytes := bytesArr.ValueBytes()
 			if bytes == nil {
 				// All bytes values are empty, so the representation is solely with the
@@ -324,7 +324,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			// TODO(yuzefovich): this serialization is quite inefficient - improve
 			// it.
 			bytesArr := array.NewBinaryData(d)
-			handleNulls(bytesArr, vec, batchLength)
+			vec.Nulls().SetNullBitmap(bytesArr.NullBitmapBytes(), batchLength)
 			// We need to be paying attention to nulls values so that we don't
 			// try to unmarshal invalid values.
 			var nulls *coldata.Nulls
@@ -352,7 +352,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			// TODO(yuzefovich): this serialization is quite inefficient - improve
 			// it.
 			bytesArr := array.NewBinaryData(d)
-			handleNulls(bytesArr, vec, batchLength)
+			vec.Nulls().SetNullBitmap(bytesArr.NullBitmapBytes(), batchLength)
 			// We need to be paying attention to nulls values so that we don't
 			// try to unmarshal invalid values.
 			var nulls *coldata.Nulls
@@ -380,7 +380,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 			// TODO(asubiotto): this serialization is quite inefficient compared to
 			//  the direct casts below. Improve it.
 			bytesArr := array.NewBinaryData(d)
-			handleNulls(bytesArr, vec, batchLength)
+			vec.Nulls().SetNullBitmap(bytesArr.NullBitmapBytes(), batchLength)
 			// We need to be paying attention to nulls values so that we don't
 			// try to unmarshal invalid values.
 			var nulls *coldata.Nulls
@@ -413,7 +413,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 
 		case typeconv.DatumVecCanonicalTypeFamily:
 			bytesArr := array.NewBinaryData(d)
-			handleNulls(bytesArr, vec, batchLength)
+			vec.Nulls().SetNullBitmap(bytesArr.NullBitmapBytes(), batchLength)
 			// We need to be paying attention to nulls values so that we don't
 			// try to unmarshal invalid values.
 			var nulls *coldata.Nulls
@@ -444,22 +444,22 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 				switch typ.Width() {
 				case 16:
 					intArr := array.NewInt16Data(d)
-					handleNulls(intArr, vec, batchLength)
+					vec.Nulls().SetNullBitmap(intArr.NullBitmapBytes(), batchLength)
 					col = coldata.Int16s(intArr.Int16Values())
 				case 32:
 					intArr := array.NewInt32Data(d)
-					handleNulls(intArr, vec, batchLength)
+					vec.Nulls().SetNullBitmap(intArr.NullBitmapBytes(), batchLength)
 					col = coldata.Int32s(intArr.Int32Values())
 				case 0, 64:
 					intArr := array.NewInt64Data(d)
-					handleNulls(intArr, vec, batchLength)
+					vec.Nulls().SetNullBitmap(intArr.NullBitmapBytes(), batchLength)
 					col = coldata.Int64s(intArr.Int64Values())
 				default:
 					panic(fmt.Sprintf("unexpected int width: %d", typ.Width()))
 				}
 			case types.FloatFamily:
 				floatArr := array.NewFloat64Data(d)
-				handleNulls(floatArr, vec, batchLength)
+				vec.Nulls().SetNullBitmap(floatArr.NullBitmapBytes(), batchLength)
 				col = coldata.Float64s(floatArr.Float64Values())
 			default:
 				panic(
@@ -472,29 +472,4 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 	b.SetSelection(false)
 	b.SetLength(batchLength)
 	return nil
-}
-
-// handleNulls sets the correct nulls bitmap on vec according to arr.
-func handleNulls(arr array.Interface, vec coldata.Vec, batchLength int) {
-	arrowBitmap := arr.NullBitmapBytes()
-	if len(arrowBitmap) != 0 {
-		vec.Nulls().SetNullBitmap(arrowBitmap, batchLength)
-	} else {
-		// For types with the canonical type family of Bool, Bytes, Int, or
-		// Float, when there are no nulls, we have a null bitmap with zero
-		// length.
-		if vec.Nulls().MaxNumElements() < batchLength {
-			// The current null bitmap doesn't have enough space, so we need to
-			// allocate a new one.
-			//
-			// Note that this has likely occurred because on the previous batch
-			// there were some nulls and we replaced the null bitmap with the
-			// arrowBitmap which happened to be of insufficient capacity for the
-			// current batch.
-			nulls := coldata.NewNulls(batchLength)
-			vec.SetNulls(&nulls)
-		} else {
-			vec.Nulls().UnsetNulls()
-		}
-	}
 }

@@ -276,7 +276,7 @@ func (r *commandResult) SetPortalOutput(
 }
 
 // IncrementRowsAffected is part of the CommandResult interface.
-func (r *commandResult) IncrementRowsAffected(n int) {
+func (r *commandResult) IncrementRowsAffected(ctx context.Context, n int) {
 	r.assertNotReleased()
 	r.rowsAffected += n
 }
