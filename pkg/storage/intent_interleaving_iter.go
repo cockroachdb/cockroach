@@ -123,7 +123,10 @@ type intentInterleavingIter struct {
 	valid bool
 	err   error
 
-	intentKeyBuf []byte
+	// Buffers to reuse memory when constructing lock table keys for bounds and
+	// seeks.
+	intentKeyBuf      []byte
+	intentLimitKeyBuf []byte
 }
 
 var _ MVCCIterator = &intentInterleavingIter{}
@@ -190,10 +193,12 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	// bound for prefix iteration, though since they don't need to, most callers
 	// don't.
 
+	iiIter := intentInterleavingIterPool.Get().(*intentInterleavingIter)
 	intentOpts := opts
-	var intentKeyBuf []byte
+	intentKeyBuf := iiIter.intentKeyBuf
+	intentLimitKeyBuf := iiIter.intentLimitKeyBuf
 	if opts.LowerBound != nil {
-		intentOpts.LowerBound, intentKeyBuf = keys.LockTableSingleKey(opts.LowerBound, nil)
+		intentOpts.LowerBound, intentKeyBuf = keys.LockTableSingleKey(opts.LowerBound, intentKeyBuf)
 	} else if !opts.Prefix {
 		// Make sure we don't step outside the lock table key space. Note that
 		// this is the case where the lower bound was not set and
@@ -201,14 +206,16 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 		intentOpts.LowerBound = keys.LockTableSingleKeyStart
 	}
 	if opts.UpperBound != nil {
-		intentOpts.UpperBound, _ = keys.LockTableSingleKey(opts.UpperBound, nil)
+		intentOpts.UpperBound, intentLimitKeyBuf =
+			keys.LockTableSingleKey(opts.UpperBound, intentLimitKeyBuf)
 	} else if !opts.Prefix {
 		// Make sure we don't step outside the lock table key space. Note that
 		// this is the case where the upper bound was not set and
 		// constrainedToGlobal.
 		intentOpts.UpperBound = keys.LockTableSingleKeyEnd
 	}
-	// Note that we can reuse intentKeyBuf after NewEngineIterator returns.
+	// Note that we can reuse intentKeyBuf, intentLimitKeyBuf after
+	// NewEngineIterator returns.
 	intentIter := reader.NewEngineIterator(intentOpts)
 
 	// The creation of these iterators can race with concurrent mutations, which
@@ -221,13 +228,15 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	} else {
 		iter = newMVCCIteratorByCloningEngineIter(intentIter, opts)
 	}
-	iiIter := intentInterleavingIterPool.Get().(*intentInterleavingIter)
+
 	*iiIter = intentInterleavingIter{
-		prefix:       opts.Prefix,
-		constraint:   constraint,
-		iter:         iter,
-		intentIter:   intentIter,
-		intentKeyBuf: intentKeyBuf,
+		prefix:                               opts.Prefix,
+		constraint:                           constraint,
+		iter:                                 iter,
+		intentIter:                           intentIter,
+		intentKeyAsNoTimestampMVCCKeyBacking: iiIter.intentKeyAsNoTimestampMVCCKeyBacking,
+		intentKeyBuf:                         intentKeyBuf,
+		intentLimitKeyBuf:                    intentLimitKeyBuf,
 	}
 	return iiIter
 }
@@ -610,7 +619,11 @@ func (i *intentInterleavingIter) Value() []byte {
 func (i *intentInterleavingIter) Close() {
 	i.iter.Close()
 	i.intentIter.Close()
-	*i = intentInterleavingIter{}
+	*i = intentInterleavingIter{
+		intentKeyAsNoTimestampMVCCKeyBacking: i.intentKeyAsNoTimestampMVCCKeyBacking,
+		intentKeyBuf:                         i.intentKeyBuf,
+		intentLimitKeyBuf:                    i.intentLimitKeyBuf,
+	}
 	intentInterleavingIterPool.Put(i)
 }
 

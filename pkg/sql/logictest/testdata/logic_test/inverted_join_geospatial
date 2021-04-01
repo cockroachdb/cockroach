@@ -477,3 +477,15 @@ FULL OUTER JOIN
 ON inv_join.k1 = cross_join.k1 AND inv_join.k2 = cross_join.k2
 WHERE inv_join.k1 IS NULL OR cross_join.k1 IS NULL
 ----
+
+# Regression test for #62686. An inverted join with a geospatial function and a
+# NULL distance argument should not error.
+statement ok
+CREATE TABLE t62686 (
+  c GEOMETRY,
+  INVERTED INDEX (c ASC)
+);
+INSERT INTO t62686 VALUES (ST_GeomFromText('POINT(1 1)'));
+
+statement ok
+SELECT * FROM t62686 t1 JOIN t62686 t2 ON ST_DFullyWithin(t1.c, t2.c, NULL::FLOAT8)
