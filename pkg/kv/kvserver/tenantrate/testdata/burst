@@ -2,10 +2,10 @@
 # into debt.
 
 init
-readrequests:  { rate: 1, burst: 2 }
-writerequests: { rate: 1, burst: 2 }
-readbytes:     { rate: 1024, burst: 2048 }
-writebytes:    { rate: 10, burst: 20 }
+rate:  1
+burst: 2
+read:  { base: 1, perbyte: 0.1 }
+write: { base: 1, perbyte: 0.1 }
 ----
 00:00:00.000
 
@@ -16,11 +16,11 @@ get_tenants
 ----
 [2#1]
 
-# Launch a request for tenant 2 that consumes more write bytes than the burst
+# Launch a write request for tenant 2 that needs 3 units, more than the burst
 # limit. This will not block but will put the limiter into debt.
 
 launch
-- { id: g1, tenant: 2, iswrite: true, writebytes: 30 }
+- { id: g1, tenant: 2, iswrite: true, writebytes: 20 }
 ----
 [g1@2]
 
@@ -29,14 +29,13 @@ await
 ----
 []
 
-# Launch another request which will block until there is sufficient write
-# quota available. This will be 2s because we're in debt 10 and the rate is
-# 10/s.
+# Launch another request which will block until there is 1 unit available.
+# This will be 2s because we're in debt 1 and the rate is 1/s.
 
 launch
-- { id: g1, tenant: 2, iswrite: true, writebytes: 10 }
+- { id: g2, tenant: 2, iswrite: true, writebytes: 0 }
 ----
-[g1@2]
+[g2@2]
 
 # Observe that the request indeed sees two seconds of waiting.
 
@@ -59,18 +58,18 @@ advance
 # Ensure that the request is indeed unblocked.
 
 await
-- g1
+- g2
 ----
 []
 
 # Test that when consuming more than burst that we wait for the token bucket to
-# be full. At time 4s the token bucket will be full. When requesting 30, which
-# is above the burst of 20, we'll need to wait for the bucket to be full.
+# be full. At time 4s the token bucket will be full. When requesting 4, which
+# is above the burst of 2, we'll need to wait for the bucket to be full.
 
 launch
-- { id: g1,  tenant: 2, iswrite: true, writebytes: 30 }
+- { id: g3,  tenant: 2, iswrite: true, writebytes: 30 }
 ----
-[g1@2]
+[g3@2]
 
 # Verify that the timer exists to avoid races setting the timer and advancing
 # time.
@@ -85,6 +84,6 @@ advance
 00:00:04.000
 
 await
-- g1
+- g3
 ----
 []
