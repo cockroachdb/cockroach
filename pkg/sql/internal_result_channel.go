@@ -195,7 +195,6 @@ func (i *syncIEResultChannel) unblockWriter(ctx context.Context) (done bool, err
 
 func (i *syncIEResultChannel) finish() {
 	close(i.dataCh)
-	close(i.waitCh)
 }
 
 func (i *syncIEResultChannel) nextResult(
