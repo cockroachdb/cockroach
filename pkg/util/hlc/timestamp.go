@@ -175,7 +175,7 @@ func (t Timestamp) AsOfSystemTime() string {
 	return fmt.Sprintf("%d.%010d%s", t.WallTime, t.Logical, syn)
 }
 
-// IsEmpty retruns true if t is an empty Timestamp.
+// IsEmpty returns true if t is an empty Timestamp.
 func (t Timestamp) IsEmpty() bool {
 	return t == Timestamp{}
 }
