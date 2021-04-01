@@ -610,20 +610,6 @@ func registerCDC(r *testRegistry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:    "cdc/poller/rangefeed=false",
-		Owner:   OwnerCDC,
-		Cluster: makeClusterSpec(4, cpu(16)),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       1000,
-				workloadDuration:         "30m",
-				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      2 * time.Minute,
-			})
-		},
-	})
-	r.Add(testSpec{
 		Name:    "cdc/sink-chaos",
 		Owner:   `cdc`,
 		Cluster: makeClusterSpec(4, cpu(16)),
