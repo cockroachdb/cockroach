@@ -323,6 +323,14 @@ func RandomGeometry(rng *rand.Rand, srid geopb.SRID) geo.Geometry {
 	return RandomGeometryWithLayout(rng, srid, geom.NoLayout)
 }
 
+// RandomGeometryWithShapeType generates a random Geometry
+// with the given SRID and ShapeType.
+func RandomGeometryWithShapeType(
+	rng *rand.Rand, srid geopb.SRID, shapeType geopb.ShapeType,
+) geo.Geometry {
+	return RandomGeometryWithLayout(rng, srid, geo.ShapeTypeToLayout(shapeType))
+}
+
 // RandomGeometryWithLayout generates a random Geometry of a given layout with
 // the given SRID.
 func RandomGeometryWithLayout(rng *rand.Rand, srid geopb.SRID, layout geom.Layout) geo.Geometry {
@@ -342,6 +350,14 @@ func RandomGeometryWithLayout(rng *rand.Rand, srid geopb.SRID, layout geom.Layou
 // RandomGeography generates a random Geometry with the given SRID.
 func RandomGeography(rng *rand.Rand, srid geopb.SRID) geo.Geography {
 	return RandomGeographyWithLayout(rng, srid, geom.NoLayout)
+}
+
+// RandomGeographyWithShapeType generates a random Geography
+// with the given SRID and ShapeType.
+func RandomGeographyWithShapeType(
+	rng *rand.Rand, srid geopb.SRID, shapeType geopb.ShapeType,
+) geo.Geography {
+	return RandomGeographyWithLayout(rng, srid, geo.ShapeTypeToLayout(shapeType))
 }
 
 // RandomGeographyWithLayout generates a random Geometry of a given layout with

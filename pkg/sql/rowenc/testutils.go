@@ -121,13 +121,13 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		if srid == 0 {
 			srid = geopb.DefaultGeographySRID
 		}
-		return tree.NewDGeography(geogen.RandomGeography(rng, srid))
+		return tree.NewDGeography(geogen.RandomGeographyWithShapeType(rng, srid, gm.ShapeType))
 	case types.GeometryFamily:
 		gm, err := typ.GeoMetadata()
 		if err != nil {
 			panic(err)
 		}
-		return tree.NewDGeometry(geogen.RandomGeometry(rng, gm.SRID))
+		return tree.NewDGeometry(geogen.RandomGeometryWithShapeType(rng, gm.SRID, gm.ShapeType))
 	case types.DecimalFamily:
 		d := &tree.DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too

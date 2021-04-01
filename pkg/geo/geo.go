@@ -92,6 +92,8 @@ func SpatialObjectFitsColumnMetadata(
 // Note this is not a definition on ShapeType to prevent geopb from importing twpayne/go-geom.
 func ShapeTypeToLayout(s geopb.ShapeType) geom.Layout {
 	switch {
+	case s == geopb.ShapeType_Unset:
+		return geom.NoLayout
 	case (s&geopb.MShapeTypeFlag > 0) && (s&geopb.ZShapeTypeFlag > 0):
 		return geom.XYZM
 	case s&geopb.ZShapeTypeFlag > 0:
