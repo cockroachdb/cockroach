@@ -119,18 +119,17 @@ func retrieveUserAndPassword(
 			ctx, "get-hashed-pwd", nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			getHashedPassword, normalizedUsername)
-		if err != nil {
+		if values == nil || err != nil {
+			// Either the query returned no rows or it encountered an error.
+			if err == nil {
+				err = errors.New("hashedPassword not found for user")
+			}
 			return errors.Wrapf(err, "error looking up user %s", normalizedUsername)
 		}
-		if values != nil {
-			exists = true
-			if v := values[0]; v != tree.DNull {
-				hashedPassword = []byte(*(v.(*tree.DBytes)))
-			}
-		}
 
-		if !exists {
-			return nil
+		exists = true
+		if v := values[0]; v != tree.DNull {
+			hashedPassword = []byte(*(v.(*tree.DBytes)))
 		}
 
 		// Use fully qualified table name to avoid looking up "".system.role_options.

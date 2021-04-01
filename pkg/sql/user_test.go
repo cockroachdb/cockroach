@@ -130,7 +130,7 @@ GRANT ALL ON DATABASE defaultdb TO foo`); err != nil {
 		}
 	}()
 
-	// Configure the login timeout to just 1s.
+	// Configure the login timeout to just 200ms.
 	if _, err := db.Exec(`SET CLUSTER SETTING server.user_login.timeout = '200ms'`); err != nil {
 		t.Fatal(err)
 	}
