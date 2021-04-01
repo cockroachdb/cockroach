@@ -51,6 +51,11 @@ func (p *provider) Delete(vms vm.List) error {
 	return errors.Newf("%s", p.unimplemented)
 }
 
+// Reset implements vm.Provider and is a no-op.
+func (p *provider) Reset(vms vm.List) error {
+	return nil
+}
+
 // Extend implements vm.Provider and returns Unimplemented.
 func (p *provider) Extend(vms vm.List, lifetime time.Duration) error {
 	return errors.Newf("%s", p.unimplemented)

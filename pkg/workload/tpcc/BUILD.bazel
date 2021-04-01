@@ -48,11 +48,13 @@ go_test(
     size = "small",
     srcs = [
         "partition_test.go",
+        "result_test.go",
         "stats_test.go",
     ],
     embed = [":tpcc"],
     deps = [
         "//pkg/testutils",
         "//pkg/workload",
+        "@com_github_stretchr_testify//require",
     ],
 )
