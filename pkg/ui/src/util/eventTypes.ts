@@ -99,6 +99,10 @@ export const CREATE_ROLE = "create_role";
 export const DROP_ROLE = "drop_role";
 // Recorded when a role is altered.
 export const ALTER_ROLE = "alter_role";
+// Recorded when an import job is in different stages of execution.
+export const IMPORT = "import";
+// Recorded when a restore job is in different stages of execution.
+export const RESTORE = "restore";
 
 // Node Event Types
 export const nodeEvents = [
@@ -128,17 +132,20 @@ export const settingsEvents = [
   SET_ZONE_CONFIG,
   REMOVE_ZONE_CONFIG,
 ];
+export const jobEvents = [IMPORT, RESTORE];
 export const allEvents = [
   ...nodeEvents,
   ...databaseEvents,
   ...tableEvents,
   ...settingsEvents,
+  ...jobEvents,
 ];
 
 const nodeEventSet = _.invert(nodeEvents);
 const databaseEventSet = _.invert(databaseEvents);
 const tableEventSet = _.invert(tableEvents);
 const settingsEventSet = _.invert(settingsEvents);
+const jobsEventSet = _.invert(jobEvents);
 
 export function isNodeEvent(e: Event): boolean {
   return !_.isUndefined(nodeEventSet[e.event_type]);
@@ -154,4 +161,8 @@ export function isTableEvent(e: Event): boolean {
 
 export function isSettingsEvent(e: Event): boolean {
   return !_.isUndefined(settingsEventSet[e.event_type]);
+}
+
+export function isJobsEvent(e: Event): boolean {
+  return !_.isUndefined(jobsEventSet[e.event_type]);
 }
