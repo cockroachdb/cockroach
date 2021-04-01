@@ -207,7 +207,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"WindowFrame":       {fullName: "memo.WindowFrame", passByVal: true},
 		"FKCascades":        {fullName: "memo.FKCascades", passByVal: true},
 		"ExplainOptions":    {fullName: "tree.ExplainOptions", passByVal: true},
-		"StatementType":     {fullName: "tree.StatementType", passByVal: true},
+		"StatementReturnType":     {fullName: "tree.StatementReturnType", passByVal: true},
 		"ShowTraceType":     {fullName: "tree.ShowTraceType", passByVal: true},
 		"bool":              {fullName: "bool", passByVal: true},
 		"int":               {fullName: "int", passByVal: true},
