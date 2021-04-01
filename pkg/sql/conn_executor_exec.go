@@ -200,7 +200,7 @@ func (ex *connExecutor) execPortal(
 		// that it returns 0 rows).
 		// Note that here we deviate from Postgres which returns an error
 		// when attempting to execute an exhausted portal which has a
-		// StatementType() different from "Rows".
+		// StatementReturnType() different from "Rows".
 		if portal.exhausted {
 			return nil, nil, nil
 		}
@@ -853,7 +853,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	var cols colinfo.ResultColumns
-	if stmt.AST.StatementType() == tree.Rows {
+	if stmt.AST.StatementReturnType() == tree.Rows {
 		cols = planner.curPlan.main.planColumns()
 	}
 	if err := ex.initStatementResult(ctx, res, stmt.AST, cols); err != nil {
@@ -910,7 +910,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
-		ctx, planner, stmt.AST.StatementType(), res, distributePlan.WillDistribute(), progAtomic,
+		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
 	)
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.phaseTimes[plannerEndExecStmt] = timeutil.Now()
@@ -980,7 +980,7 @@ type topLevelQueryStats struct {
 func (ex *connExecutor) execWithDistSQLEngine(
 	ctx context.Context,
 	planner *planner,
-	stmtType tree.StatementType,
+	stmtType tree.StatementReturnType,
 	res RestrictedCommandResult,
 	distribute bool,
 	progressAtomic *uint64,

@@ -622,7 +622,7 @@ type PlanningCtx struct {
 	// else (like sub- and postqueries, or EXPLAIN ANALYZE) should set this to
 	// true to avoid double closes of the planNode tree.
 	ignoreClose bool
-	stmtType    tree.StatementType
+	stmtType    tree.StatementReturnType
 	// planDepth is set to the current depth of the planNode tree. It's used to
 	// keep track of whether it's valid to run a root node in a special fast path
 	// mode.
