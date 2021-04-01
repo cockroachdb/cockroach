@@ -3,6 +3,14 @@
 # root is the absolute path to the root directory of the repository.
 root=$(cd "$(dirname "$0")/.." && pwd)
 
+source "$root/build/teamcity-common-support.sh"
+
+remove_files_on_exit() {
+  rm -f ~/.ssh/id_rsa{,.pub}
+  common_support_remove_files_on_exit
+}
+trap remove_files_on_exit EXIT
+
 # maybe_ccache turns on ccache to speed up compilation, but only for PR builds.
 # This speeds up the CI cycle for developers while preventing ccache from
 # corrupting a release build.
@@ -282,4 +290,10 @@ tc_prepare() {
   run mkdir -p artifacts
   maybe_ccache
   tc_end_block "Prepare environment"
+}
+
+generate_ssh_key() {
+  if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
+    ssh-keygen -q -N "" -f ~/.ssh/id_rsa
+  fi
 }
