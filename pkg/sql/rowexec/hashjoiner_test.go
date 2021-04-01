@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1448,6 +1449,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 // variable size. There is a 1:1 relationship between the rows of each table.
 // TODO(asubiotto): More complex benchmarks.
 func BenchmarkHashJoiner(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
