@@ -227,6 +227,9 @@ func SetValueAt(v Vec, elem interface{}, rowIdx int) {
 // GetValueAt is an inefficient helper to get the value in a Vec when the type
 // is unknown.
 func GetValueAt(v Vec, rowIdx int) interface{} {
+	if v.Nulls().NullAt(rowIdx) {
+		return nil
+	}
 	t := v.Type()
 	switch v.CanonicalTypeFamily() {
 	// {{range .}}
