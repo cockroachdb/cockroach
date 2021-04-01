@@ -1176,7 +1176,9 @@ func (fi *flushInfo) registerCmd(pos sql.CmdPos) {
 	fi.cmdStarts.addLast(pos, fi.buf.Len())
 }
 
-func cookTag(tagStr string, buf []byte, stmtType tree.StatementType, rowsAffected int) []byte {
+func cookTag(
+	tagStr string, buf []byte, stmtType tree.StatementReturnType, rowsAffected int,
+) []byte {
 	if tagStr == "INSERT" {
 		// From the postgres docs (49.5. Message Formats):
 		// `INSERT oid rows`... oid is the object ID of the inserted row if

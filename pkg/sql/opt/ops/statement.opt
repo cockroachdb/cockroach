@@ -77,8 +77,8 @@ define ExplainPrivate {
     # Props stores the required physical properties for the enclosed expression.
     Props PhysProps
 
-    # StmtType stores the type of the statement we are explaining.
-    StmtType StatementType
+    # StmtType stores the type of the statement return we are explaining.
+    StmtType StatementReturnType
 }
 
 # ShowTraceForSession returns the current session traces.
