@@ -13,6 +13,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
@@ -143,7 +144,6 @@ func newAndProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -188,7 +188,8 @@ func (o *andProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
@@ -581,7 +582,6 @@ func newAndRightNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -626,7 +626,8 @@ func (o *andRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
@@ -986,7 +987,6 @@ func newAndLeftNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -1031,7 +1031,8 @@ func (o *andLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
@@ -1372,7 +1373,6 @@ func newOrProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -1417,7 +1417,8 @@ func (o *orProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
@@ -1811,7 +1812,6 @@ func newOrRightNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -1856,7 +1856,8 @@ func (o *orRightNullProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
@@ -2217,7 +2218,6 @@ func newOrLeftNullProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -2262,7 +2262,8 @@ func (o *orLeftNullProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		o.origSel = colexecutils.EnsureSelectionVectorLength(o.origSel, origLen)
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
