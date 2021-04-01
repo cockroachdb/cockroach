@@ -56,6 +56,8 @@ func checkNumIn(inputs []colexecop.Operator, numIn int) error {
 
 // wrapRowSources, given input Operators, integrates toWrap into a columnar
 // execution flow and returns toWrap's output as an Operator.
+// - materializerSafeToRelease indicates whether the materializers created in
+// order to row-sourcify the inputs are safe to be released on the flow cleanup.
 func wrapRowSources(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -64,9 +66,11 @@ func wrapRowSources(
 	acc *mon.BoundAccount,
 	processorID int32,
 	newToWrap func([]execinfra.RowSource) (execinfra.RowSource, error),
+	materializerSafeToRelease bool,
 	factory coldata.ColumnFactory,
-) (*colexec.Columnarizer, error) {
+) (*colexec.Columnarizer, []execinfra.Releasable, error) {
 	var toWrapInputs []execinfra.RowSource
+	var releasables []execinfra.Releasable
 	for i, input := range inputs {
 		// Optimization: if the input is a Columnarizer, its input is
 		// necessarily a execinfra.RowSource, so remove the unnecessary
@@ -78,14 +82,6 @@ func wrapRowSources(
 			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
-			// Note that this materializer is *not* added to the set of
-			// releasables because in some cases it could be released before
-			// being closed. Namely, this would occur if we have a subquery
-			// with LocalPlanNode core and a materializer is added in order to
-			// wrap that core - what will happen is that all releasables are put
-			// back into their pools upon the subquery's flow cleanup, yet the
-			// subquery planNode tree isn't closed yet since its closure is down
-			// when the main planNode tree is being closed.
 			toWrapInput, err := colexec.NewMaterializer(
 				flowCtx,
 				processorID,
@@ -98,25 +94,31 @@ func wrapRowSources(
 				nil, /* cancelFlow */
 			)
 			if err != nil {
-				return nil, err
+				return nil, releasables, err
 			}
 			toWrapInputs = append(toWrapInputs, toWrapInput)
+			if materializerSafeToRelease {
+				releasables = append(releasables, toWrapInput)
+			}
 		}
 	}
 
 	toWrap, err := newToWrap(toWrapInputs)
 	if err != nil {
-		return nil, err
+		return nil, releasables, err
 	}
 
+	var c *colexec.Columnarizer
 	if _, mustBeStreaming := toWrap.(execinfra.StreamingProcessor); mustBeStreaming {
-		return colexec.NewStreamingColumnarizer(
+		c, err = colexec.NewStreamingColumnarizer(
+			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
+		)
+	} else {
+		c, err = colexec.NewBufferingColumnarizer(
 			ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
 		)
 	}
-	return colexec.NewBufferingColumnarizer(
-		ctx, colmem.NewAllocator(ctx, acc, factory), flowCtx, processorID, toWrap,
-	)
+	return c, releasables, err
 }
 
 type opResult struct {
@@ -556,7 +558,15 @@ func (r opResult) createAndWrapRowSource(
 	if err := canWrap(flowCtx.EvalCtx.SessionData.VectorizeMode, spec); err != nil {
 		return causeToWrap
 	}
-	c, err := wrapRowSources(
+	// Note that the materializers aren't safe to release in all cases since in
+	// some cases they could be released before being closed. Namely, this would
+	// occur if we have a subquery with LocalPlanNode core and a materializer is
+	// added in order to wrap that core - what will happen is that all
+	// releasables are put back into their pools upon the subquery's flow
+	// cleanup, yet the subquery planNode tree isn't closed yet since its
+	// closure is done when the main planNode tree is being closed.
+	materializerSafeToRelease := spec.Core.LocalPlanNode == nil
+	c, releasables, err := wrapRowSources(
 		ctx,
 		flowCtx,
 		inputs,
@@ -587,6 +597,7 @@ func (r opResult) createAndWrapRowSource(
 			r.ColumnTypes = rs.OutputTypes()
 			return rs, nil
 		},
+		materializerSafeToRelease,
 		factory,
 	)
 	if err != nil {
@@ -598,6 +609,7 @@ func (r opResult) createAndWrapRowSource(
 	}
 	r.MetadataSources = append(r.MetadataSources, r.Op.(execinfrapb.MetadataSource))
 	r.ToClose = append(r.ToClose, c)
+	r.Releasables = append(r.Releasables, releasables...)
 	return nil
 }
 
