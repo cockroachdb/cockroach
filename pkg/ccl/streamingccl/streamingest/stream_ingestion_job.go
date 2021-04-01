@@ -134,7 +134,8 @@ func (s *streamIngestionResumer) revertToCutoverTimestamp(
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
-				TargetTime: sp.StreamIngest.CutoverTime,
+				TargetTime:                          sp.StreamIngest.CutoverTime,
+				EnableTimeBoundIteratorOptimization: true,
 			})
 		}
 		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize

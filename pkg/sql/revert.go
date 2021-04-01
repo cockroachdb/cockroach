@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -27,6 +28,14 @@ import (
 // reply size to worry about.
 // TODO(dt): tune this via experimentation.
 const RevertTableDefaultBatchSize = 500000
+
+// useTBIForRevertRange is a cluster setting that controls if the time-bound
+// iterator optimization is used when processing a revert range request.
+var useTBIForRevertRange = settings.RegisterBoolSetting(
+	"kv.bulk_io_write.revert_range_time_bound_iterator.enabled",
+	"use the time-bound iterator optimization when processing a revert range request",
+	true,
+)
 
 // RevertTables reverts the passed table to the target time, which much be above
 // the GC threshold for every range (unless the flag ignoreGCThreshold is passed
@@ -91,8 +100,9 @@ func RevertTables(
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
-				TargetTime:        targetTime,
-				IgnoreGcThreshold: ignoreGCThreshold,
+				TargetTime:                          targetTime,
+				IgnoreGcThreshold:                   ignoreGCThreshold,
+				EnableTimeBoundIteratorOptimization: useTBIForRevertRange.Get(&execCfg.Settings.SV),
 			})
 		}
 		b.Header.MaxSpanRequestKeys = batchSize
