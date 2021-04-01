@@ -450,7 +450,7 @@ var specs = []stmtSpec{
 			"sconst_or_placeholder":          "subdirectory",
 			"a_expr":                         "timestamp",
 		},
-		unlink:  []string{"targets", "subdirectory", "destination", "timestamp"},
+		unlink:  []string{"targets", "subdirectory", "destination", "timestamp", "partitioned_backup_location"},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
