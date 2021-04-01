@@ -1,7 +1,7 @@
 backup_stmt ::=
-	'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' backup_options ( ( ',' backup_options ) )*
-	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' backup_options ( ( ',' backup_options ) )* ')'
-	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
-	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination  'WITH' backup_options ( ( ',' backup_options ) )*
-	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination  'WITH' 'OPTIONS' '(' backup_options ( ( ',' backup_options ) )* ')'
-	| 'BACKUP' ( | targets ) 'INTO' ( | subdirectory | 'LATEST') 'IN' destination  
+	'BACKUP' ( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN') ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' backup_options ( ( ',' backup_options ) )*
+	| 'BACKUP' ( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN') ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 'WITH' 'OPTIONS' '(' backup_options ( ( ',' backup_options ) )* ')'
+	| 'BACKUP' ( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN') ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' ) 'AS' 'OF' 'SYSTEM' 'TIME' timestamp 
+	| 'BACKUP' ( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN') ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  'WITH' backup_options ( ( ',' backup_options ) )*
+	| 'BACKUP' ( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN') ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  'WITH' 'OPTIONS' '(' backup_options ( ( ',' backup_options ) )* ')'
+	| 'BACKUP' ( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* ) 'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN') ( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )  
