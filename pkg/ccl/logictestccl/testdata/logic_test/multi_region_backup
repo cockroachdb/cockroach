@@ -1,7 +1,5 @@
 # LogicTest: multiregion-9node-3region-3azs
 
-skip flaky # see #60773
-
 query TTTT
 SHOW REGIONS
 ----
