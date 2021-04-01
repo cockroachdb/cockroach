@@ -37,30 +37,50 @@ const ProviderName = "aws"
 // init will inject the AWS provider into vm.Providers, but only
 // if the aws tool is available on the local path.
 func init() {
-	const unimplemented = "please install the AWS CLI utilities version 1 " +
+	// aws-cli version 1 automatically base64 encodes the string passed as --public-key-material.
+	// Version 2 supports file:// and fileb:// prefixes for text and binary files.
+	// The latter prefix will base64-encode the file contents. See
+	// https://docs.aws.amazon.//com/cli/latest/userguide/cliv2-migration.html#cliv2-migration-binaryparam
+	const unsupportedAwsCliVersionPrefix = "aws-cli/1."
+	const unimplemented = "please install the AWS CLI utilities version 2+ " +
 		"(https://docs.aws.amazon.com/cli/latest/userguide/installing.html)"
 	const noCredentials = "missing AWS credentials, expected ~/.aws/credentials file or AWS_ACCESS_KEY_ID env var"
 
 	var p vm.Provider = &Provider{}
-	if _, err := exec.LookPath("aws"); err == nil {
-		// NB: This is a bit hacky, but using something like `aws iam get-user` is
-		// slow and not something we want to do at startup.
-		haveCredentials := func() bool {
-			const credFile = "${HOME}/.aws/credentials"
-			if _, err := os.Stat(os.ExpandEnv(credFile)); err == nil {
-				return true
-			}
-			if os.Getenv("AWS_ACCESS_KEY_ID") != "" {
-				return true
-			}
+
+	haveRequiredVersion := func() bool {
+		cmd := exec.Command("aws", "--version")
+		output, err := cmd.Output()
+		if err != nil {
 			return false
 		}
-
-		if !haveCredentials() {
-			p = flagstub.New(p, noCredentials)
+		if strings.HasPrefix(string(output), unsupportedAwsCliVersionPrefix) {
+			return false
 		}
-	} else {
+		return true
+	}
+	if !haveRequiredVersion() {
 		p = flagstub.New(p, unimplemented)
+		vm.Providers[ProviderName] = p
+		return
+	}
+
+	// NB: This is a bit hacky, but using something like `aws iam get-user` is
+	// slow and not something we want to do at startup.
+	haveCredentials := func() bool {
+		const credFile = "${HOME}/.aws/credentials"
+		if _, err := os.Stat(os.ExpandEnv(credFile)); err == nil {
+			return true
+		}
+		if os.Getenv("AWS_ACCESS_KEY_ID") != "" {
+			return true
+		}
+		return false
+	}
+	if !haveCredentials() {
+		p = flagstub.New(p, noCredentials)
+		vm.Providers[ProviderName] = p
+		return
 	}
 
 	vm.Providers[ProviderName] = p
