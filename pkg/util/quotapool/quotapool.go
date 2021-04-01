@@ -232,6 +232,13 @@ func (qp *QuotaPool) Acquire(ctx context.Context, r Request) (err error) {
 		return err
 	}
 
+	if qp.config.onWaitStart != nil {
+		qp.config.onWaitStart(ctx, qp.name, r)
+	}
+	if qp.config.onWaitFinish != nil {
+		defer qp.config.onWaitFinish(ctx, qp.name, r)
+	}
+
 	// Set up the infrastructure to report slow requests.
 	var slowTimer timeutil.TimerI
 	var slowTimerC <-chan time.Time
