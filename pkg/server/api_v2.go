@@ -135,6 +135,13 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 		{"ranges/hot/", a.listHotRanges, true, adminRole, noOption},
 		{"ranges/{range_id:[0-9]+}/", a.listRange, true, adminRole, noOption},
 		{"health/", a.health, false, regularRole, noOption},
+		{"users/", a.listUsers, true, regularRole, noOption},
+		{"events/", a.listEvents, true, adminRole, noOption},
+		{"databases/", a.listDatabases, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/", a.databaseDetails, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption},
+		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)

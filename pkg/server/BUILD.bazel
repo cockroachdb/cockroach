@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "admin.go",
         "api_v2.go",
+        "api_v2_admin.go",
         "api_v2_auth.go",
         "api_v2_error.go",
         "api_v2_ranges.go",
@@ -239,6 +240,7 @@ go_test(
     srcs = [
         "admin_cluster_test.go",
         "admin_test.go",
+        "api_v2_admin_test.go",
         "api_v2_ranges_test.go",
         "api_v2_test.go",
         "authentication_test.go",
