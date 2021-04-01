@@ -102,6 +102,7 @@ func TestLikeOperators(t *testing.T) {
 }
 
 func BenchmarkLikeOps(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 

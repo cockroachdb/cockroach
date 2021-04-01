@@ -1032,6 +1032,7 @@ func TestHashJoiner(t *testing.T) {
 }
 
 func BenchmarkHashJoiner(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	nCols := 4
 	sourceTypes := make([]*types.T, nCols)

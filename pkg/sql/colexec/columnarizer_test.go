@@ -130,6 +130,7 @@ func TestColumnarizerDrainsAndClosesInput(t *testing.T) {
 }
 
 func BenchmarkColumnarize(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	types := []*types.T{types.Int, types.Int}
 	nRows := 10000
 	nCols := 2

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -209,6 +210,7 @@ var (
 // BenchmarkDiskQueue benchmarks a queue with parameters provided through flags.
 func BenchmarkDiskQueue(b *testing.B) {
 	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
 
 	bufSize, err := humanizeutil.ParseBytes(*bufferSizeBytes)
 	if err != nil {
