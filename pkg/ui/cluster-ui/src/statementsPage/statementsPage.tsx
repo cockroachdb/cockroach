@@ -49,7 +49,7 @@ export interface StatementsPageDispatchProps {
   refreshStatementDiagnosticsRequests: () => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (statement: string) => void;
-  onDiagnosticsModalOpen: (statement: string) => void;
+  onDiagnosticsModalOpen?: (statement: string) => void;
   onSearchComplete?: (results: AggregateStatistics[]) => void;
   onPageChanged?: (newPage: number) => void;
   onSortingChange?: (
@@ -57,6 +57,9 @@ export interface StatementsPageDispatchProps {
     columnTitle: string,
     ascending: boolean,
   ) => void;
+  onDiagnosticsReportDownload?: (report: IStatementDiagnosticsReport) => void;
+  onFilterChange?: (value: string) => void;
+  onStatementClick?: (statement: string) => void;
 }
 
 export interface StatementsPageStateProps {
@@ -65,10 +68,6 @@ export interface StatementsPageStateProps {
   apps: string[];
   totalFingerprints: number;
   lastReset: string;
-}
-
-export interface StatementsPageOuterProps {
-  onDiagnosticsReportDownload?: (report: IStatementDiagnosticsReport) => void;
 }
 
 export interface StatementsPageState {
@@ -81,7 +80,6 @@ export interface StatementsPageState {
 
 export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
-  StatementsPageOuterProps &
   RouteComponentProps<unknown>;
 
 export class StatementsPage extends React.Component<
@@ -155,19 +153,20 @@ export class StatementsPage extends React.Component<
       sortKey: ss.sortKey,
       ascending: Boolean(ss.ascending).toString(),
     });
-    this.props.onSortingChange(
-      "statements-table",
-      ss.columnTitle,
-      ss.ascending,
-    );
+    if (this.props.onSortingChange) {
+      this.props.onSortingChange("Statements", ss.columnTitle, ss.ascending);
+    }
   };
 
   selectApp = (value: string) => {
     if (value == "All") value = "";
-    const { history } = this.props;
+    const { history, onFilterChange } = this.props;
     history.location.pathname = `/statements/${encodeURIComponent(value)}`;
     history.replace(history.location);
     this.resetPagination();
+    if (onFilterChange) {
+      onFilterChange(value);
+    }
   };
 
   resetPagination = () => {
@@ -286,6 +285,7 @@ export class StatementsPage extends React.Component<
       match,
       lastReset,
       onDiagnosticsReportDownload,
+      onStatementClick,
     } = this.props;
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
@@ -336,6 +336,7 @@ export class StatementsPage extends React.Component<
               search,
               this.activateDiagnosticsRef,
               onDiagnosticsReportDownload,
+              onStatementClick,
             )}
             sortSetting={this.state.sortSetting}
             onChangeSortSetting={this.changeSortSetting}
