@@ -1119,6 +1119,7 @@ func runBenchmarkWideTable(b *testing.B, db *sqlutils.SQLRunner, count int, bigC
 // BenchmarkVecSkipScan benchmarks the vectorized engine's performance
 // when skipping unneeded key values in the decoding process.
 func BenchmarkVecSkipScan(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	benchmarkCockroach(b, func(b *testing.B, db *sqlutils.SQLRunner) {
 		create := `
 CREATE TABLE bench.scan(
@@ -1183,6 +1184,7 @@ func BenchmarkWideTableIgnoreColumns(b *testing.B) {
 // benchmark (and get memory allocation statistics for) the planning process.
 func BenchmarkPlanning(b *testing.B) {
 	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
 		db.Exec(b, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
 

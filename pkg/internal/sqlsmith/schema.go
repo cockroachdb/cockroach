@@ -141,6 +141,40 @@ func (s *Smither) getRandIndex() (*tree.TableIndexName, *tree.CreateIndex, colRe
 	return s.getRandTableIndex(name, name)
 }
 
+func (s *Smither) getRandUserDefinedTypeLabel() (*tree.EnumValue, *tree.TypeName, bool) {
+	typName, ok := s.getRandUserDefinedType()
+	if !ok {
+		return nil, nil, false
+	}
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	udt := s.types.udts[*typName]
+	logicalRepresentations := udt.TypeMeta.EnumData.LogicalRepresentations
+	// There are no values in this enum.
+	if len(logicalRepresentations) == 0 {
+		return nil, nil, false
+	}
+	enumVal := tree.EnumValue(logicalRepresentations[s.rnd.Intn(len(logicalRepresentations))])
+	return &enumVal, typName, true
+}
+
+func (s *Smither) getRandUserDefinedType() (*tree.TypeName, bool) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	if s.types == nil || len(s.types.udts) == 0 {
+		return nil, false
+	}
+	idx := s.rnd.Intn(len(s.types.udts))
+	count := 0
+	for typName := range s.types.udts {
+		if count == idx {
+			return &typName, true
+		}
+		count++
+	}
+	return nil, false
+}
+
 func (s *Smither) extractTypes() (*typeInfo, error) {
 	rows, err := s.db.Query(`
 SELECT
@@ -154,7 +188,7 @@ FROM
 	defer rows.Close()
 
 	evalCtx := tree.EvalContext{}
-	udtMapping := make(map[types.UserDefinedTypeName]*types.T)
+	udtMapping := make(map[tree.TypeName]*types.T)
 
 	for rows.Next() {
 		// For each row, collect columns.
@@ -193,7 +227,8 @@ FROM
 					IsMemberReadOnly:        make([]bool, len(members)),
 				},
 			}
-			udtMapping[*typ.TypeMeta.Name] = typ
+			key := tree.MakeSchemaQualifiedTypeName(scName, name)
+			udtMapping[key] = typ
 		default:
 			return nil, errors.New("unsupported SQLSmith type kind")
 		}

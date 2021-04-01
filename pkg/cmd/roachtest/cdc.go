@@ -33,6 +33,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -141,6 +142,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		args.targetInitialScanLatency,
 		args.targetSteadyLatency,
 		changefeedLogger,
+		t.Status,
 		args.crdbChaos,
 	)
 	defer verifier.maybeLogLatencyHist()
@@ -1358,9 +1360,11 @@ type latencyVerifier struct {
 	targetInitialScanLatency time.Duration
 	tolerateErrors           bool
 	logger                   *logger
+	setTestStatus            func(...interface{})
 
 	initialScanLatency   time.Duration
 	maxSeenSteadyLatency time.Duration
+	maxSeenSteadyEveryN  log.EveryN
 	latencyBecameSteady  bool
 
 	latencyHist *hdrhistogram.Histogram
@@ -1370,6 +1374,7 @@ func makeLatencyVerifier(
 	targetInitialScanLatency time.Duration,
 	targetSteadyLatency time.Duration,
 	l *logger,
+	setTestStatus func(...interface{}),
 	tolerateErrors bool,
 ) *latencyVerifier {
 	const sigFigs, minLatency, maxLatency = 1, 100 * time.Microsecond, 100 * time.Second
@@ -1378,8 +1383,10 @@ func makeLatencyVerifier(
 		targetInitialScanLatency: targetInitialScanLatency,
 		targetSteadyLatency:      targetSteadyLatency,
 		logger:                   l,
+		setTestStatus:            setTestStatus,
 		latencyHist:              hist,
 		tolerateErrors:           tolerateErrors,
+		maxSeenSteadyEveryN:      log.Every(10 * time.Second),
 	}
 }
 
@@ -1403,8 +1410,11 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		// tracking the max latency once we seen a latency
 		// that's less than the max allowed. Verify at the end
 		// of the test that this happens at some point.
-		lv.logger.Printf("end-to-end latency %s not yet below target steady latency %s\n",
-			latency, lv.targetSteadyLatency)
+		if lv.maxSeenSteadyEveryN.ShouldLog() {
+			lv.setTestStatus(fmt.Sprintf(
+				"watching changefeed: end-to-end latency %s not yet below target steady latency %s",
+				latency.Truncate(time.Millisecond), lv.targetSteadyLatency.Truncate(time.Millisecond)))
+		}
 		return
 	}
 	if err := lv.latencyHist.RecordValue(latency.Nanoseconds()); err != nil {
@@ -1413,8 +1423,11 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 	if latency > lv.maxSeenSteadyLatency {
 		lv.maxSeenSteadyLatency = latency
 	}
-	lv.logger.Printf("end-to-end steady latency %s; max steady latency so far %s\n",
-		latency, lv.maxSeenSteadyLatency)
+	if lv.maxSeenSteadyEveryN.ShouldLog() {
+		lv.setTestStatus(fmt.Sprintf(
+			"watching changefeed: end-to-end steady latency %s; max steady latency so far %s",
+			latency.Truncate(time.Millisecond), lv.maxSeenSteadyLatency.Truncate(time.Millisecond)))
+	}
 }
 
 func (lv *latencyVerifier) pollLatency(

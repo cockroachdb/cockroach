@@ -887,6 +887,7 @@ func benchmarkAggregateFunction(
 	distinctProb float64,
 	numInputRows int,
 ) {
+	defer log.Scope(b).Close(b)
 	if groupSize > numInputRows {
 		// In this case all tuples will be part of the same group, and we have
 		// likely already benchmarked such scenario with this value of
