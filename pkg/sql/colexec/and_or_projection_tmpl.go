@@ -118,7 +118,6 @@ func new_OP_TITLEProjOp(
 		leftIdx:          leftIdx,
 		rightIdx:         rightIdx,
 		outputIdx:        outputIdx,
-		origSel:          make([]int, coldata.BatchSize()),
 	}
 }
 
@@ -163,7 +162,12 @@ func (o *_OP_LOWERProjOp) Next(ctx context.Context) coldata.Batch {
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
-		copy(o.origSel[:origLen], sel[:origLen])
+		if cap(o.origSel) < origLen {
+			o.origSel = make([]int, origLen)
+		} else {
+			o.origSel = o.origSel[:origLen]
+		}
+		copy(o.origSel, sel)
 		usesSel = true
 	}
 
