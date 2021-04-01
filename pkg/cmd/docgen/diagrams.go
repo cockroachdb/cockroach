@@ -444,10 +444,10 @@ var specs = []stmtSpec{
 		inline: []string{"opt_backup_targets", "opt_with_backup_options", "opt_as_of_clause", "as_of_clause", "backup_options_list"},
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP' targets 'INTO'")},
 		replace: map[string]string{
-			"targets":                        "( | targets )",
-			"'INTO'":                         "'INTO' ( | subdirectory | 'LATEST') 'IN'",
+			"targets":                        "( | 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder_opt_list": "( destination | '(' partitioned_backup_location ( ',' partitioned_backup_location )* ')' )",
+			"'INTO'":                         "'INTO' ( | subdirectory 'IN' | 'LATEST' 'IN')",
 			"sconst_or_placeholder":          "subdirectory",
-			"string_or_placeholder_opt_list": "destination",
 			"a_expr":                         "timestamp",
 		},
 		unlink:  []string{"targets", "subdirectory", "destination", "timestamp"},
