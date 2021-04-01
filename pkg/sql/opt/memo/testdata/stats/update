@@ -123,3 +123,91 @@ update xyz
       │         └── false [type=bool]
       └── projections
            └── 'foo' [as=x_new:9, type=string]
+
+# Regression test for #62692. Ensure we don't error when calculating stats for
+# mutation passthrough columns
+
+exec-ddl
+CREATE TABLE parent (p INT PRIMARY KEY)
+----
+
+exec-ddl
+CREATE TABLE child (x INT, c INT REFERENCES parent (p))
+----
+
+build
+WITH q AS (UPDATE child SET c = p FROM parent WHERE p = 1 RETURNING p) SELECT * FROM q WHERE p = 1
+----
+with &2 (q)
+ ├── columns: p:14(int!null)
+ ├── volatile, mutations
+ ├── stats: [rows=1000, distinct(14)=1, null(14)=0]
+ ├── fd: ()-->(14)
+ ├── project
+ │    ├── columns: parent.p:9(int)
+ │    ├── volatile, mutations
+ │    ├── stats: [rows=1000, distinct(9)=1, null(9)=0]
+ │    ├── fd: ()-->(9)
+ │    └── update child
+ │         ├── columns: x:1(int) c:2(int!null) rowid:3(int!null) parent.p:9(int) parent.crdb_internal_mvcc_timestamp:10(decimal)
+ │         ├── fetch columns: x:5(int) c:6(int) rowid:7(int)
+ │         ├── update-mapping:
+ │         │    └── parent.p:9 => c:2
+ │         ├── input binding: &1
+ │         ├── volatile, mutations
+ │         ├── stats: [rows=1000, distinct(9)=1, null(9)=0]
+ │         ├── key: (3)
+ │         ├── fd: ()-->(2,9,10), (2)==(9), (9)==(2), (3)-->(1)
+ │         ├── select
+ │         │    ├── columns: x:5(int) c:6(int) rowid:7(int!null) child.crdb_internal_mvcc_timestamp:8(decimal) parent.p:9(int!null) parent.crdb_internal_mvcc_timestamp:10(decimal)
+ │         │    ├── stats: [rows=1000, distinct(9)=1, null(9)=0]
+ │         │    ├── key: (7)
+ │         │    ├── fd: ()-->(9,10), (7)-->(5,6,8)
+ │         │    ├── inner-join (cross)
+ │         │    │    ├── columns: x:5(int) c:6(int) rowid:7(int!null) child.crdb_internal_mvcc_timestamp:8(decimal) parent.p:9(int!null) parent.crdb_internal_mvcc_timestamp:10(decimal)
+ │         │    │    ├── stats: [rows=1000000, distinct(7)=1000, null(7)=0, distinct(9)=1000, null(9)=0]
+ │         │    │    ├── key: (7,9)
+ │         │    │    ├── fd: (7)-->(5,6,8), (9)-->(10)
+ │         │    │    ├── scan child
+ │         │    │    │    ├── columns: x:5(int) c:6(int) rowid:7(int!null) child.crdb_internal_mvcc_timestamp:8(decimal)
+ │         │    │    │    ├── stats: [rows=1000, distinct(7)=1000, null(7)=0]
+ │         │    │    │    ├── key: (7)
+ │         │    │    │    └── fd: (7)-->(5,6,8)
+ │         │    │    ├── scan parent
+ │         │    │    │    ├── columns: parent.p:9(int!null) parent.crdb_internal_mvcc_timestamp:10(decimal)
+ │         │    │    │    ├── stats: [rows=1000, distinct(9)=1000, null(9)=0]
+ │         │    │    │    ├── key: (9)
+ │         │    │    │    └── fd: (9)-->(10)
+ │         │    │    └── filters (true)
+ │         │    └── filters
+ │         │         └── parent.p:9 = 1 [type=bool, outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
+ │         └── f-k-checks
+ │              └── f-k-checks-item: child(c) -> parent(p)
+ │                   └── anti-join (hash)
+ │                        ├── columns: p:11(int!null)
+ │                        ├── stats: [rows=1e-10]
+ │                        ├── fd: ()-->(11)
+ │                        ├── with-scan &1
+ │                        │    ├── columns: p:11(int!null)
+ │                        │    ├── mapping:
+ │                        │    │    └──  parent.p:9(int) => p:11(int)
+ │                        │    ├── stats: [rows=1000, distinct(11)=1, null(11)=0]
+ │                        │    └── fd: ()-->(11)
+ │                        ├── scan parent
+ │                        │    ├── columns: parent.p:12(int!null)
+ │                        │    ├── stats: [rows=1000, distinct(12)=1000, null(12)=0]
+ │                        │    └── key: (12)
+ │                        └── filters
+ │                             └── p:11 = parent.p:12 [type=bool, outer=(11,12), constraints=(/11: (/NULL - ]; /12: (/NULL - ]), fd=(11)==(12), (12)==(11)]
+ └── select
+      ├── columns: p:14(int!null)
+      ├── stats: [rows=1000, distinct(14)=1, null(14)=0]
+      ├── fd: ()-->(14)
+      ├── with-scan &2 (q)
+      │    ├── columns: p:14(int)
+      │    ├── mapping:
+      │    │    └──  parent.p:9(int) => p:14(int)
+      │    ├── stats: [rows=1000, distinct(14)=1, null(14)=0]
+      │    └── fd: ()-->(14)
+      └── filters
+           └── p:14 = 1 [type=bool, outer=(14), constraints=(/14: [/1 - /1]; tight), fd=()-->(14)]
