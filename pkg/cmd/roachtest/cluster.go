@@ -2126,6 +2126,20 @@ func roachprodArgs(opts []option) []string {
 	return args
 }
 
+func decorateStatus(operation string, opts ...option) string {
+	var nodes nodeListOption
+	for _, o := range opts {
+		if s, ok := o.(nodeSelector); ok {
+			nodes = s.merge(nodes)
+		}
+	}
+	nodesString := " cluster"
+	if len(nodes) != 0 {
+		nodesString = " nodes " + nodes.String()
+	}
+	return operation + nodesString
+}
+
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
 // can either be a specific node, empty (to indicate all nodes), or a pair of
 // nodes indicating a range.
@@ -2137,7 +2151,7 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	c.status("starting cluster")
+	c.status(decorateStatus("starting", opts...))
 	defer c.status()
 	args := []string{
 		roachprod,
@@ -2187,7 +2201,7 @@ func (c *cluster) StopE(ctx context.Context, opts ...option) error {
 	}
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
-	c.status("stopping cluster")
+	c.status(decorateStatus("stopping", opts...))
 	defer c.status()
 	return execCmd(ctx, c.l, args...)
 }
@@ -2231,7 +2245,7 @@ func (c *cluster) WipeE(ctx context.Context, l *logger, opts ...option) error {
 		// For tests.
 		return nil
 	}
-	c.status("wiping cluster")
+	c.status(decorateStatus("wiping", opts...))
 	defer c.status()
 	return execCmd(ctx, l, roachprod, "wipe", c.makeNodes(opts...))
 }
