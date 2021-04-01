@@ -6691,6 +6691,95 @@ DROP VIEW IF EXISTS v`,
 	})
 }
 
+// There are two goals of this testcase:
+//
+// 1) Ensure that we can properly export from REGIONAL BY ROW tables (that the
+//    hidden row stays hidden, unless explicitly requested).
+// 2) That we can import the exported data both into a non-RBR table, as well
+//    as a table which we can later convert to RBR, while preserving the
+//    crdb_region column data.
+func TestMultiRegionExportImportRoundTrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	validateNumRows := func(sqlDB *gosql.DB, tableName string, expected int) {
+		res := sqlDB.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s`, tableName))
+		require.NoError(t, res.Err())
+
+		var numRows int
+		err := res.Scan(&numRows)
+		require.NoError(t, err)
+
+		if numRows != expected {
+			t.Errorf("expected %d rows after import, found %d", expected, numRows)
+		}
+	}
+
+	baseDir, dirCleanup := testutils.TempDir(t)
+	defer dirCleanup()
+
+	_, sqlDB, clusterCleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /* numServers */, base.TestingKnobs{}, &baseDir)
+	defer clusterCleanup()
+
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
+	require.NoError(t, err)
+
+	// Create the database.
+	_, err = sqlDB.Exec(`CREATE DATABASE multi_region PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE multi_region;`)
+	require.NoError(t, err)
+
+	// Create the tables
+	_, err = sqlDB.Exec(`CREATE TABLE original_rbr (i int) LOCALITY REGIONAL BY ROW;
+CREATE TABLE destination (i int);
+CREATE TABLE destination_fake_rbr (crdb_region public.crdb_internal_region NOT NULL, i int);`)
+	require.NoError(t, err)
+
+	// Insert some data to the original table.
+	_, err = sqlDB.Exec(`INSERT INTO original_rbr values (1),(2),(3),(4),(5)`)
+	require.NoError(t, err)
+
+	// Export the data.
+	_, err = sqlDB.Exec(`EXPORT INTO CSV 'nodelocal://0/original_rbr_full'
+ FROM SELECT crdb_region, i from original_rbr;`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`EXPORT INTO CSV 'nodelocal://0/original_rbr_default' 
+FROM TABLE original_rbr;`)
+	require.NoError(t, err)
+
+	// Import the data back into the destination table.
+	_, err = sqlDB.Exec(`IMPORT into destination (i) CSV DATA
+ ('nodelocal://0/original_rbr_default/export*.csv')`)
+	require.NoError(t, err)
+	validateNumRows(sqlDB, `destination`, 5)
+
+	// Import the full export to the fake RBR table.
+	_, err = sqlDB.Exec(`IMPORT into destination_fake_rbr (crdb_region, i) CSV DATA
+ ('nodelocal://0/original_rbr_full/export*.csv')`)
+	require.NoError(t, err)
+	validateNumRows(sqlDB, `destination_fake_rbr`, 5)
+
+	// Convert fake table to full RBR table. This test is only required until we
+	// support IMPORT directly to RBR tables. The thinking behind this test is
+	// that this _could_ be one way that customers work-around the limitation of
+	// not supporting IMPORT to RBR tables in 21.1. Note that right now we can't
+	// make this column hidden (#62892).
+	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr ALTER COLUMN
+ crdb_region SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region;`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET LOCALITY 
+ REGIONAL BY ROW AS crdb_region;`)
+	require.NoError(t, err)
+
+	// Insert some more rows and ensure that the default values get generated.
+	_, err = sqlDB.Exec(`INSERT INTO destination_fake_rbr (i) values (6),(7),(3),(9),(10)`)
+	require.NoError(t, err)
+	validateNumRows(sqlDB, `destination_fake_rbr`, 10)
+}
+
 // TestImportClientDisconnect ensures that an import job can complete even if
 // the client connection which started it closes. This test uses a helper
 // subprocess to force a closed client connection without needing to rely
