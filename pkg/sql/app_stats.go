@@ -235,6 +235,7 @@ func (a *appStats) recordStatement(
 	} else if int64(automaticRetryCount) > s.mu.data.MaxRetries {
 		s.mu.data.MaxRetries = int64(automaticRetryCount)
 	}
+	s.mu.data.SQLType = stmt.AST.StatementType().String()
 	s.mu.data.NumRows.Record(s.mu.data.Count, float64(numRows))
 	s.mu.data.ParseLat.Record(s.mu.data.Count, parseLat)
 	s.mu.data.PlanLat.Record(s.mu.data.Count, planLat)

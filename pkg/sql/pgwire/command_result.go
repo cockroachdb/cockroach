@@ -69,7 +69,7 @@ type commandResult struct {
 	// CommandComplete message.
 	cmdCompleteTag string
 
-	stmtType     tree.StatementType
+	stmtType     tree.StatementReturnType
 	descOpt      sql.RowDescOpt
 	rowsAffected int
 
@@ -290,7 +290,7 @@ func (r *commandResult) RowsAffected() int {
 // ResetStmtType is part of the CommandResult interface.
 func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.assertNotReleased()
-	r.stmtType = stmt.StatementType()
+	r.stmtType = stmt.StatementReturnType()
 	r.cmdCompleteTag = stmt.StatementTag()
 }
 
@@ -341,7 +341,7 @@ func (c *conn) newCommandResult(
 		pos:            pos,
 		typ:            commandComplete,
 		cmdCompleteTag: stmt.StatementTag(),
-		stmtType:       stmt.StatementType(),
+		stmtType:       stmt.StatementReturnType(),
 		descOpt:        descOpt,
 		formatCodes:    formatCodes,
 	}
