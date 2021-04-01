@@ -211,5 +211,6 @@ export function combineStatementStats(
 
 export const getSearchParams = (searchParams: string) => {
   const sp = new URLSearchParams(searchParams);
-  return (key: string, defaultValue?: string) => sp.get(key) || defaultValue;
+  return (key: string, defaultValue?: string | boolean) =>
+    sp.get(key) || defaultValue;
 };

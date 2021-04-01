@@ -10,7 +10,7 @@ import {
   SortSetting,
 } from "../sortedtable";
 import { Pagination } from "../pagination";
-import { TransactionsPageStatistic } from "../transactionsPage/transactionsPageStatistic";
+import { TableStatistics } from "../tableStatistics";
 import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
 import { Button } from "../button";
 import { collectStatementsText } from "src/transactionsPage/utils";
@@ -209,7 +209,7 @@ export class TransactionDetails extends React.Component<
                       </SummaryCard>
                     </Col>
                   </Row>
-                  <TransactionsPageStatistic
+                  <TableStatistics
                     pagination={pagination}
                     totalCount={statements.length}
                     lastReset={lastReset}

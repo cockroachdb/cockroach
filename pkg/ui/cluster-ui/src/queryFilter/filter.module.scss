@@ -1,4 +1,4 @@
-@import "../../core/index.module";
+@import "../core/index.module";
 
 $dropdown-hover-color: darken($colors--background, 2.5%);
 
@@ -54,7 +54,7 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
         margin-top: 25px;
       }
 
-      &__query {
+      &__margin-top {
         margin-top: 27px;
       }
     }
@@ -89,14 +89,15 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
         margin-top: 30px;
       }
 
+      &__input {
+        float: left;
+        margin-top: 4px;
+      }
+
       &__label {
-        height: 35px;
-        font-family: $font-family--base;
-        font-style: normal;
-        font-weight: normal;
-        font-size: $font-size--medium;
-        line-height: $line-height--medium-small;
-        letter-spacing: 0.1px;
+        float: left;
+        margin-left: 5px;
+        width: calc(100% - 20px);
       }
     }
 
