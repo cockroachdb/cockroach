@@ -19,6 +19,19 @@ GIT_COMMIT=$(git rev-parse HEAD)
 GIT_TAG=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
 GIT_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
 
+# Cross-compilation occurs when you set TARGET_TRIPLE to something other than
+# HOST_TRIPLE. You'll need to ensure the cross-compiling toolchain is on your
+# path and override the rest of the variables that immediately follow as
+# necessary. For an example, see build/builder/cmd/mkrelease, which sets these
+# variables appropriately for the toolchains baked into the builder image.
+
+# TODO(alanmas): So far HOST_TRIPLE is "hardcoded" but
+# we need to ensure it gets set correctly as we continue to port things to Bazel.
+
+HOST_TRIPLE="x86_64-pc-linux-gnu"
+
+TARGET_TRIPLE=${HOST_TRIPLE}
+
 # Prefix with STABLE_ so that these values are saved to stable-status.txt
 # instead of volatile-status.txt.
 # Stamped rules will be retriggered by changes to stable-status.txt, but not by
@@ -28,4 +41,5 @@ STABLE_BUILD_GIT_COMMIT ${GIT_COMMIT-}
 STABLE_BUILD_GIT_TAG ${GIT_TAG-}
 STABLE_BUILD_GIT_UTCTIME ${GIT_UTCTIME-}
 STABLE_BUILD_GIT_BUILD_TYPE ${GIT_BUILD_TYPE-}
+STABLE_BUILD_TARGET_TRIPLE ${TARGET_TRIPLE-}
 EOF
