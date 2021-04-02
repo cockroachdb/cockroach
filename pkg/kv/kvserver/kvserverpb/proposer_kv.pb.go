@@ -285,9 +285,9 @@ type ReplicatedEvalResult struct {
 	Merge           *Merge           `protobuf:"bytes,4,opt,name=merge,proto3" json:"merge,omitempty"`
 	ComputeChecksum *ComputeChecksum `protobuf:"bytes,21,opt,name=compute_checksum,json=computeChecksum,proto3" json:"compute_checksum,omitempty"`
 	IsLeaseRequest  bool             `protobuf:"varint,6,opt,name=is_lease_request,json=isLeaseRequest,proto3" json:"is_lease_request,omitempty"`
-	// Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
-	// to verify the validity of the command (for lease coverage and GC
-	// threshold).
+	// The BatchRequest.Timestamp of the request that produced this command. Used
+	// to verify the validity of the command against the GC threshold and to
+	// update the followers' clocks.
 	Timestamp hlc.Timestamp `protobuf:"bytes,8,opt,name=timestamp,proto3" json:"timestamp"`
 	// The stats delta corresponding to the data in this WriteBatch. On
 	// a split, contains only the contributions to the left-hand side.
