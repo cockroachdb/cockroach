@@ -152,6 +152,7 @@ func (ib *IndexBackfillPlanner) plan(
 			ib.execCfg.Clock,
 			evalCtx.Tracing,
 			ib.execCfg.ContentionRegistry,
+			ib.execCfg.TestingKnobs.DistSQLReceiverPushCallback,
 		)
 		defer recv.Release()
 		evalCtxCopy := evalCtx

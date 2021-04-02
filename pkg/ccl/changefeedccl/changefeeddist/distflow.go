@@ -113,6 +113,7 @@ func StartDistChangefeed(
 		nil, /* clockUpdater */
 		evalCtx.Tracing,
 		execCtx.ExecCfg().ContentionRegistry,
+		execCtx.ExecCfg().TestingKnobs.DistSQLReceiverPushCallback,
 	)
 	defer recv.Release()
 

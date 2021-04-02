@@ -139,6 +139,7 @@ func (dsp *DistSQLPlanner) Exec(
 		execCfg.Clock,
 		p.ExtendedEvalContext().Tracing,
 		execCfg.ContentionRegistry,
+		execCfg.TestingKnobs.DistSQLReceiverPushCallback,
 	)
 	defer recv.Release()
 

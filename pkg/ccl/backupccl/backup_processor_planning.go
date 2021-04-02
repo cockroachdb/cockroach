@@ -179,6 +179,7 @@ func distBackup(
 		nil,   /* clockUpdater */
 		evalCtx.Tracing,
 		evalCtx.ExecCfg.ContentionRegistry,
+		evalCtx.ExecCfg.TestingKnobs.DistSQLReceiverPushCallback,
 	)
 	defer recv.Release()
 
