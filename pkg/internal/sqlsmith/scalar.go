@@ -297,6 +297,16 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return nil, false
 		}
 	}
+	if s.postgres {
+		if transform, needTransform := postgresBinOpTransformations[binOpTriple{
+			op.LeftType.Family(),
+			op.Operator,
+			op.RightType.Family(),
+		}]; needTransform {
+			op.LeftType = transform.leftType
+			op.RightType = transform.rightType
+		}
+	}
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
 	return castType(
@@ -314,6 +324,11 @@ type binOpTriple struct {
 	right types.Family
 }
 
+type binOpOperands struct {
+	leftType  *types.T
+	rightType *types.T
+}
+
 var ignorePostgresBinOps = map[binOpTriple]bool{
 	// Integer division in cockroach returns a different type.
 	{types.IntFamily, tree.Div, types.IntFamily}: true,
@@ -321,6 +336,26 @@ var ignorePostgresBinOps = map[binOpTriple]bool{
 	{types.FloatFamily, tree.Mult, types.DateFamily}: true,
 	{types.DateFamily, tree.Mult, types.FloatFamily}: true,
 	{types.DateFamily, tree.Div, types.FloatFamily}:  true,
+
+	// Postgres does not have separate floor division operator.
+	{types.IntFamily, tree.FloorDiv, types.IntFamily}:         true,
+	{types.FloatFamily, tree.FloorDiv, types.FloatFamily}:     true,
+	{types.DecimalFamily, tree.FloorDiv, types.DecimalFamily}: true,
+	{types.DecimalFamily, tree.FloorDiv, types.IntFamily}:     true,
+	{types.IntFamily, tree.FloorDiv, types.DecimalFamily}:     true,
+
+	{types.FloatFamily, tree.Mod, types.FloatFamily}: true,
+}
+
+// For certain operations, Postgres is picky about the operand types.
+var postgresBinOpTransformations = map[binOpTriple]binOpOperands{
+	{types.IntFamily, tree.Plus, types.DateFamily}:          {types.Int4, types.Date},
+	{types.DateFamily, tree.Plus, types.IntFamily}:          {types.Date, types.Int4},
+	{types.IntFamily, tree.Minus, types.DateFamily}:         {types.Int4, types.Date},
+	{types.DateFamily, tree.Minus, types.IntFamily}:         {types.Date, types.Int4},
+	{types.JsonFamily, tree.JSONFetchVal, types.IntFamily}:  {types.Jsonb, types.Int4},
+	{types.JsonFamily, tree.JSONFetchText, types.IntFamily}: {types.Jsonb, types.Int4},
+	{types.JsonFamily, tree.Minus, types.IntFamily}:         {types.Jsonb, types.Int4},
 }
 
 func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -352,16 +387,19 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
+		// Postgres is picky about having Int4 arguments instead of Int8.
+		if s.postgres && argTyp.Family() == types.IntFamily {
+			argTyp = types.Int4
+		}
 		var arg tree.TypedExpr
 		// If we're a GROUP BY or window function, try to choose a col ref for the arguments.
 		if class == tree.AggregateClass || class == tree.WindowClass {
 			var ok bool
 			arg, ok = makeColRef(s, argTyp, refs)
 			if !ok {
-				// If we can't find a col ref for our
-				// aggregate function, try again with
-				// a non-aggregate.
-				return makeFunc(s, emptyCtx, typ, refs)
+				// If we can't find a col ref for our aggregate function, just use a
+				// constant.
+				arg = makeConstExpr(s, typ, refs)
 			}
 		}
 		if arg == nil {
