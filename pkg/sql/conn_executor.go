@@ -1080,9 +1080,9 @@ type connExecutor struct {
 
 		schemaChangerState SchemaChangerState
 
-		// shouldCollectExecutionStats specifies whether the statements in this
-		// transaction should collect execution stats.
-		shouldCollectExecutionStats bool
+		// shouldCollectTxnExecutionStats specifies whether the statements in
+		// this transaction should collect execution stats.
+		shouldCollectTxnExecutionStats bool
 		// accumulatedStats are the accumulated stats of all statements.
 		accumulatedStats execstats.QueryLevelStats
 		// rowsRead and bytesRead are separate from QueryLevelStats because they are
