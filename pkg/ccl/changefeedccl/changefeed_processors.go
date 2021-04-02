@@ -404,7 +404,7 @@ func (ca *changeAggregator) ConsumerDone() {
 // ConsumerClosed is part of the RowSource interface.
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	ca.InternalClose()
+	ca.close()
 }
 
 const (
@@ -920,7 +920,7 @@ func (cf *changeFrontier) ConsumerDone() {
 // ConsumerClosed is part of the RowSource interface.
 func (cf *changeFrontier) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	cf.InternalClose()
+	cf.close()
 }
 
 // isSinkless returns true if this changeFrontier is sinkless and thus does not
