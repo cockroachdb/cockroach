@@ -590,8 +590,17 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 // SetError provides a convenient way for a client to pass in an error, thus
 // pretending that a query execution error happened. The error is passed along
 // to the resultWriter.
+//
+// The status of DistSQLReceiver is updated accordingly.
 func (r *DistSQLReceiver) SetError(err error) {
 	r.resultWriter.SetError(err)
+	// If we encountered an error, we will transition to draining unless we were
+	// canceled.
+	if r.ctx.Err() != nil {
+		r.status = execinfra.ConsumerClosed
+	} else {
+		r.status = execinfra.DrainRequested
+	}
 }
 
 // Push is part of the RowReceiver interface.
@@ -606,11 +615,11 @@ func (r *DistSQLReceiver) Push(
 			if r.txn != nil {
 				if r.txn.ID() == meta.LeafTxnFinalState.Txn.ID {
 					if err := r.txn.UpdateRootWithLeafFinalState(r.ctx, meta.LeafTxnFinalState); err != nil {
-						r.resultWriter.SetError(err)
+						r.SetError(err)
 					}
 				}
 			} else {
-				r.resultWriter.SetError(
+				r.SetError(
 					errors.Errorf("received a leaf final state (%s); but have no root", meta.LeafTxnFinalState))
 			}
 		}
@@ -635,7 +644,7 @@ func (r *DistSQLReceiver) Push(
 						}
 					}
 				}
-				r.resultWriter.SetError(meta.Err)
+				r.SetError(meta.Err)
 			}
 		}
 		if len(meta.Ranges) > 0 {
@@ -678,11 +687,7 @@ func (r *DistSQLReceiver) Push(
 		return r.status
 	}
 	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
-		r.resultWriter.SetError(r.ctx.Err())
-	}
-	if r.resultWriter.Err() != nil {
-		// TODO(andrei): We should drain here if we weren't canceled.
-		return execinfra.ConsumerClosed
+		r.SetError(r.ctx.Err())
 	}
 	if r.status != execinfra.NeedMoreRows {
 		return r.status
@@ -706,7 +711,7 @@ func (r *DistSQLReceiver) Push(
 	// planNodeToRowSource is not set up to handle decoding the row.
 	if r.noColsRequired {
 		r.row = []tree.Datum{}
-		r.status = execinfra.ConsumerClosed
+		r.status = execinfra.DrainRequested
 	} else {
 		if r.row == nil {
 			r.row = make(tree.Datums, len(row))
@@ -714,26 +719,27 @@ func (r *DistSQLReceiver) Push(
 		for i, encDatum := range row {
 			err := encDatum.EnsureDecoded(r.outputTypes[i], &r.alloc)
 			if err != nil {
-				r.resultWriter.SetError(err)
-				r.status = execinfra.ConsumerClosed
+				r.SetError(err)
 				return r.status
 			}
 			r.row[i] = encDatum.Datum
 		}
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
-	// Note that AddRow accounts for the memory used by the Datums.
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
-		// ErrLimitedResultClosed is not a real error, it is a
-		// signal to stop distsql and return success to the client.
-		if !errors.Is(commErr, ErrLimitedResultClosed) {
+		if errors.Is(commErr, ErrLimitedResultClosed) {
+			// ErrLimitedResultClosed is not a real error, it is a signal to
+			// stop distsql and return success to the client (that's why we
+			// don't set the error on the resultWriter).
+			r.status = execinfra.DrainRequested
+		} else {
 			// Set the error on the resultWriter too, for the convenience of some of the
 			// clients. If clients don't care to differentiate between communication
 			// errors and query execution errors, they can simply inspect
 			// resultWriter.Err(). Also, this function itself doesn't care about the
 			// distinction and just uses resultWriter.Err() to see if we're still
 			// accepting results.
-			r.resultWriter.SetError(commErr)
+			r.SetError(commErr)
 
 			// We don't need to shut down the connection
 			// if there's a portal-related error. This is
@@ -746,10 +752,6 @@ func (r *DistSQLReceiver) Push(
 				r.commErr = commErr
 			}
 		}
-		// TODO(andrei): We should drain here. Metadata from this query would be
-		// useful, particularly as it was likely a large query (since AddRow()
-		// above failed, presumably with an out-of-memory error).
-		r.status = execinfra.ConsumerClosed
 	}
 	return r.status
 }

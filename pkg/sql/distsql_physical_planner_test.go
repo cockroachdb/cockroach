@@ -267,7 +267,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	rangeCache := rangecache.NewRangeCache(st, nil /* db */, size, stopper)
 	r := MakeDistSQLReceiver(
 		ctx,
-		nil, /* resultWriter */
+		&errOnlyResultWriter{}, /* resultWriter */
 		tree.Rows,
 		rangeCache,
 		nil, /* txn */
