@@ -87,7 +87,7 @@ func (c *asyncIEResultChannel) firstResult(
 		return ieIteratorResult{}, true, ctx.Err()
 	case res, ok := <-c.dataCh:
 		if !ok {
-			return ieIteratorResult{}, true, nil
+			return ieIteratorResult{}, true, ctx.Err()
 		}
 		return res, false, nil
 	}
@@ -178,7 +178,7 @@ func (i *syncIEResultChannel) firstResult(
 	case <-ctx.Done():
 		return ieIteratorResult{}, true, ctx.Err()
 	case <-i.doneCh:
-		return ieIteratorResult{}, true, nil
+		return ieIteratorResult{}, true, ctx.Err()
 	case res, ok := <-i.dataCh:
 		if !ok {
 			return ieIteratorResult{}, true, nil
@@ -226,6 +226,10 @@ func (i *syncIEResultChannel) addResult(ctx context.Context, result ieIteratorRe
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-i.doneCh:
+		// Prefer the context error if there is one.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		return errSyncIEResultReaderCanceled
 	case i.dataCh <- result:
 	}
@@ -233,6 +237,10 @@ func (i *syncIEResultChannel) addResult(ctx context.Context, result ieIteratorRe
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-i.doneCh:
+		// Prefer the context error if there is one.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		return errSyncIEResultReaderCanceled
 	case <-i.waitCh:
 		return nil
