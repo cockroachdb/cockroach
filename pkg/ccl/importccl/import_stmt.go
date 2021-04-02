@@ -2462,6 +2462,7 @@ func (r *importResumer) dropTables(
 	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
+	dropTime := int64(1)
 
 	// If the prepare step of the import job was not completed then the
 	// descriptors do not need to be rolled back as the txn updating them never
@@ -2516,13 +2517,16 @@ func (r *importResumer) dropTables(
 	}
 
 	for i := range empty {
+		// Set a DropTime on the table descriptor to differentiate it from an
+		// older-format (v1.1) descriptor. This enables ClearTableData to use a
+		// RangeClear for faster data removal, rather than removing by chunks.
+		empty[i].TableDesc().DropTime = dropTime
 		if err := gcjob.ClearTableData(ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, empty[i]); err != nil {
 			return errors.Wrapf(err, "clearing data for table %d", empty[i].GetID())
 		}
 	}
 
 	b := txn.NewBatch()
-	dropTime := int64(1)
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
 		newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
