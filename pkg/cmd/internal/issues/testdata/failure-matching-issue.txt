@@ -1,5 +1,3 @@
-getLatestTag: result v3.3.0
-listMilestones owner=cockroachdb repo=cockroach: result [github.Milestone{Number:2, Title:"3.3"} github.Milestone{Number:1, Title:"3.2"}]
 listCommits owner=cockroachdb repo=cockroach github.CommitsListOptions{SHA:"", Path:"", Author:"bran", Since:time.Time{wall:, ext:}, Until:time.Time{wall:, ext:}, ListOptions:github.ListOptions{Page:0, PerPage:1}}
 searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestReplicateQueueRebalance failed" label:branch-release-0.1: [github.Issue{Number:30, Title:"boom", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.1"}]}]
 searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:"C-test-failure" sort:created-desc "storage: TestReplicateQueueRebalance failed" -label:branch-release-0.1: []
