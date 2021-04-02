@@ -68,11 +68,11 @@ exp,benchmark
 1,SystemDatabaseQueries/select_system.users_with_empty_database_name
 1,SystemDatabaseQueries/select_system.users_with_schema_name
 2,SystemDatabaseQueries/select_system.users_without_schema_name
-24,Truncate/truncate_1_column_0_rows
-24,Truncate/truncate_1_column_1_row
-24,Truncate/truncate_1_column_2_rows
-24,Truncate/truncate_2_column_0_rows
-24,Truncate/truncate_2_column_1_rows
-24,Truncate/truncate_2_column_2_rows
+27,Truncate/truncate_1_column_0_rows
+26,Truncate/truncate_1_column_1_row
+26,Truncate/truncate_1_column_2_rows
+27,Truncate/truncate_2_column_0_rows
+26,Truncate/truncate_2_column_1_rows
+26,Truncate/truncate_2_column_2_rows
 1,VirtualTableQueries/select_crdb_internal.invalid_objects_with_1_fk
 1,VirtualTableQueries/select_crdb_internal.tables_with_1_fk
