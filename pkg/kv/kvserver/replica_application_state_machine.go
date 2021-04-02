@@ -328,7 +328,7 @@ func checkForcedErr(
 	// evaluates at a timestamp above the GC threshold? Does it actually matter if
 	// the GC threshold has advanced since then?
 	wts := raftCmd.ReplicatedEvalResult.WriteTimestamp
-	if wts.LessEq(*replicaState.GCThreshold) {
+	if !wts.IsEmpty() && wts.LessEq(*replicaState.GCThreshold) {
 		return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
 			Timestamp: wts,
 			Threshold: *replicaState.GCThreshold,
