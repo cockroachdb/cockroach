@@ -235,8 +235,9 @@ func getSpanExprForGeographyIndex(
 
 // Helper for DWithin and DFullyWithin.
 func getDistanceParam(params []tree.Datum) float64 {
-	// Parameters are type checked earlier. Keep this consistent with the definition
-	// in geo_builtins.go.
+	// Parameters are type checked earlier when the expression is built by
+	// optbuilder. extractInfoFromExpr ensures that the parameters are non-NULL
+	// constants. Keep this consistent with the definition in geo_builtins.go.
 	if len(params) != 1 {
 		panic(errors.AssertionFailedf("unexpected param length %d", len(params)))
 	}
@@ -447,9 +448,10 @@ func joinGeoIndexFromExpr(
 		return nil
 	}
 
-	// Any additional params must be constant.
+	// Any additional params must be non-NULL constants.
 	for i := 2; i < args.ChildCount(); i++ {
-		if !memo.CanExtractConstDatum(args.Child(i)) {
+		arg := args.Child(i)
+		if arg.Op() == opt.NullOp || !memo.CanExtractConstDatum(arg) {
 			return nil
 		}
 	}
@@ -603,6 +605,11 @@ func constrainGeoIndexFromExpr(
 	}
 	d := memo.ExtractConstDatum(arg1)
 
+	// The first argument must be non-NULL.
+	if arg1.Op() == opt.NullOp {
+		return invertedexpr.NonInvertedColExpression{}
+	}
+
 	// The second argument should be a variable corresponding to the index
 	// column.
 	variable, ok := arg2.(*memo.VariableExpr)
@@ -614,10 +621,11 @@ func constrainGeoIndexFromExpr(
 		return invertedexpr.NonInvertedColExpression{}
 	}
 
-	// Any additional params must be constant.
+	// Any additional params must be non-NULL constants.
 	var additionalParams []tree.Datum
 	for i := 2; i < args.ChildCount(); i++ {
-		if !memo.CanExtractConstDatum(args.Child(i)) {
+		arg := args.Child(i)
+		if arg.Op() == opt.NullOp || !memo.CanExtractConstDatum(arg) {
 			return invertedexpr.NonInvertedColExpression{}
 		}
 		additionalParams = append(additionalParams, memo.ExtractConstDatum(args.Child(i)))
