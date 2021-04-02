@@ -1348,8 +1348,8 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 	)
 }
 
-// checkTSAboveGCThresholdRLocked returns an error if a request (identified
-// by its MVCC timestamp) can be run on the replica.
+// checkTSAboveGCThresholdRLocked returns an error if a request (identified by
+// its read timestamp) wants to read below the range's GC threshold.
 func (r *Replica) checkTSAboveGCThresholdRLocked(
 	ts hlc.Timestamp, st kvserverpb.LeaseStatus, isAdmin bool,
 ) error {
