@@ -225,8 +225,6 @@ func (r *Replica) maxClosedRLocked(
 	var update replicaUpdate
 	// In some tests the lease can be empty, or the ClosedTimestampReceiver might
 	// not be set.
-	// TODO(andrei): Remove the ClosedTimestampReceiver == nil protection once the
-	// multiTestContext goes away.
 	if !replicationBehind && !lease.Empty() && r.store.cfg.ClosedTimestampReceiver != nil {
 		otherSideTransportClosed, otherSideTransportLAI :=
 			r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(ctx, r.RangeID, lease.Replica.NodeID)
@@ -254,13 +252,31 @@ func (r *Replica) maxClosedRLocked(
 // timestamps is synchronized with lease transfers and subsumption requests.
 // Callers who need that property should be prepared to get an empty result
 // back, meaning that the closed timestamp cannot be known.
-func (r *Replica) ClosedTimestampV2() hlc.Timestamp {
+//
+// TODO(andrei): Remove this in favor of maxClosed() once the old closed
+// timestamp mechanism is deleted. At that point, the two should be equivalent.
+func (r *Replica) ClosedTimestampV2(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.closedTimestampV2RLocked()
-}
 
-func (r *Replica) closedTimestampV2RLocked() hlc.Timestamp {
-	// TODO(andrei,nvanbenschoten): include sideTransportClosedTimestamp.
-	return r.mu.state.RaftClosedTimestamp
+	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
+
+	closed := r.mu.state.RaftClosedTimestamp
+	sideTransportClosedMaybe, minLAI := r.getSideTransportClosedTimestampRLocked()
+	replicationBehind := appliedLAI < minLAI
+	if !replicationBehind {
+		closed.Forward(sideTransportClosedMaybe)
+	}
+
+	// Tests might not be configured with a receiver.
+	if receiver := r.store.cfg.ClosedTimestampReceiver; receiver != nil {
+		otherSideTransportClosed, otherSideTransportLAI :=
+			r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
+		replicationBehind = appliedLAI < otherSideTransportLAI
+		if !replicationBehind {
+			closed.Forward(otherSideTransportClosed)
+		}
+	}
+
+	return closed
 }
