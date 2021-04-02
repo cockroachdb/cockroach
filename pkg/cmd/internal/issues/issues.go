@@ -459,21 +459,26 @@ func (p *poster) parameters() []string {
 // test failure.
 type PostRequest struct {
 	// The name of the package the test failure relates to.
-	PackageName,
+	PackageName string
 	// The name of the failing test.
-	TestName,
+	TestName string
 	// The test output.
-	Message,
+	Message string
 	// A path to the test artifacts relative to the artifacts root. If nonempty,
 	// allows the poster formatter to construct a direct URL to this directory.
-	Artifacts,
-	// The email of the author, used to determine which team/person to assign
-	// the issue to.
+	Artifacts string
+	// The email of the author. It will be translated into a Github handle and
+	// mentioned in the comment. This increases the chances of the "right person"
+	// seeing the failure early.
 	//
-	// TODO(irfansharif): We should re-think this, and our general approach to
-	// issue assignment, and move away from assigning individual authors.
-	// #51653.
-	AuthorEmail,
+	// TODO(tbg): remove this. It is already unused in roachtest, and in the unit
+	// tests we can replace it via the `codeowners` package, which allows us to
+	// mention a team via the `Mention` field below (and we should ultimately
+	// spruce things up so that we can assign a ProjectColumnID as well).
+	AuthorEmail string
+	// Mention is a slice of Github handles (@foo, @cockroachdb/some-team, etc)
+	// that should be mentioned in the message.
+	Mention []string
 	// The instructions to reproduce the failure.
 	ReproductionCommand string
 	// Additional labels that will be added to the issue. They will be created

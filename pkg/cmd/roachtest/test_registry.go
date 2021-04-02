@@ -42,8 +42,10 @@ const (
 // OwnerMetadata contains information about a roachtest owning team, such as
 // team slack room, and github project.
 type OwnerMetadata struct {
-	SlackRoom    string
-	ContactEmail string
+	SlackRoom string
+	// Mention is a slice of Github handles to notify (via mentioning) in posted
+	// issues.
+	Mention []string
 	// TriageColumnID is the column id of the project column the team uses to
 	// triage issues. Unfortunately, there appears to be no way to retrieve this
 	// programmatically from the API.
@@ -63,29 +65,30 @@ type OwnerMetadata struct {
 // roachtestOwners maps an owner in code (as specified on a roachtest spec) to
 // metadata used for github issue posting/slack rooms, etc.
 var roachtestOwners = map[Owner]OwnerMetadata{
-	OwnerSQLExperience: {SlackRoom: `sql-experience`, ContactEmail: `rafi@cockroachlabs.com`,
+	OwnerSQLExperience: {SlackRoom: `sql-experience`, Mention: []string{`@cockroachdb/sql-experience`},
 		TriageColumnID: 7259065,
 	},
-	OwnerBulkIO: {SlackRoom: `bulk-io`, ContactEmail: `david@cockroachlabs.com`,
+	OwnerBulkIO: {SlackRoom: `bulk-io`, Mention: []string{`@cockroachdb/bulk-io`},
 		TriageColumnID: 3097123,
 	},
-	OwnerCDC: {SlackRoom: `cdc`, ContactEmail: `ajwerner@cockroachlabs.com`,
+	OwnerCDC: {SlackRoom: `cdc`, Mention: []string{`@cockroachdb/cdc`},
 		TriageColumnID: 3570120,
 	},
-	OwnerKV: {SlackRoom: `kv`, ContactEmail: `andrei@cockroachlabs.com`,
+	OwnerKV: {SlackRoom: `kv`, Mention: []string{`@cockroachdb/kv`},
 		TriageColumnID: 3550674,
 	},
-	OwnerPartitioning: {SlackRoom: `partitioning`, ContactEmail: `andrei@cockroachlabs.com`,
-		// Partitioning issues get sent to the KV triage column for now.
+	// This is an alias for the KV team.
+	OwnerPartitioning: {SlackRoom: `kv`, Mention: []string{`@cockroachdb/kv`},
 		TriageColumnID: 3550674,
 	},
-	OwnerSQLExec: {SlackRoom: `sql-execution-team`, ContactEmail: `alfonso@cockroachlabs.com`,
+	// TODO(jordanlewis): that team doesn't exist any more, fix things up.
+	OwnerSQLExec: {SlackRoom: `sql-execution-team`, Mention: []string{`@cockroachdb/sql-queries`},
 		TriageColumnID: 6837155,
 	},
-	OwnerSQLSchema: {SlackRoom: `sql-schema`, ContactEmail: `lucy@cockroachlabs.com`,
+	OwnerSQLSchema: {SlackRoom: `sql-schema`, Mention: []string{`@cockroachdb/sql-schema`},
 		TriageColumnID: 8946818,
 	},
-	OwnerStorage: {SlackRoom: `storage`, ContactEmail: `peter@cockroachlabs.com`,
+	OwnerStorage: {SlackRoom: `storage`, Mention: []string{`@cockroachdb/storage`},
 		TriageColumnID: 6668367,
 	},
 	// Only for use in roachtest package unittests.
