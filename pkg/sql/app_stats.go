@@ -481,18 +481,15 @@ func (a *appStats) recordTransaction(
 	}
 }
 
-// shouldSaveLogicalPlanDescription returns whether we should save this as a
-// sample logical plan for its corresponding fingerprint. We use
-// `logicalPlanCollectionPeriod` to assess how frequently to sample logical
-// plans.
-func (a *appStats) shouldSaveLogicalPlanDescription(anonymizedStmt string, implicitTxn bool) bool {
+// shouldSaveLogicalPlanDescription returns whether we should save the sample
+// logical plan for a fingerprint (represented implicitly by the corresponding
+// stmtStats object). stats is nil if it is the first time we see the
+// fingerprint. We use `logicalPlanCollectionPeriod` to assess how frequently to
+// sample logical plans.
+func (a *appStats) shouldSaveLogicalPlanDescription(stats *stmtStats) bool {
 	if !sampleLogicalPlans.Get(&a.st.SV) {
 		return false
 	}
-	// We don't know yet if we will hit an error, so we assume we don't. The worst
-	// that can happen is that for statements that always error out, we will
-	// always save the tree plan.
-	stats, _ := a.getStatsForStmt(anonymizedStmt, implicitTxn, nil /* error */, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true
