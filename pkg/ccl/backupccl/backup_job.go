@@ -50,14 +50,8 @@ import (
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
 
-func (r *RowCount) add(other RowCount) {
-	r.DataSize += other.DataSize
-	r.Rows += other.Rows
-	r.IndexEntries += other.IndexEntries
-}
-
-func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) RowCount {
-	res := RowCount{DataSize: raw.DataSize}
+func countRows(raw roachpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
+	res := roachpb.RowCount{DataSize: raw.DataSize}
 	for id, count := range raw.EntryCounts {
 		if _, ok := pkIDs[id]; ok {
 			res.Rows += count
@@ -162,7 +156,7 @@ func backup(
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
-) (RowCount, error) {
+) (roachpb.RowCount, error) {
 	// TODO(dan): Figure out how permissions should work. #6713 is tracking this
 	// for grpc.
 
@@ -199,7 +193,7 @@ func backup(
 	// filter out incompatible nodes.
 	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, evalCtx, execCtx.ExecCfg())
 	if err != nil {
-		return RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
+		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
 	}
 
 	backupSpecs, err := distBackupPlanSpecs(
@@ -217,7 +211,7 @@ func backup(
 		backupManifest.EndTime,
 	)
 	if err != nil {
-		return RowCount{}, err
+		return roachpb.RowCount{}, err
 	}
 
 	numTotalSpans := 0
@@ -251,7 +245,7 @@ func backup(
 			}
 			for _, file := range progDetails.Files {
 				backupManifest.Files = append(backupManifest.Files, file)
-				backupManifest.EntryCounts.add(file.EntryCounts)
+				backupManifest.EntryCounts.Add(file.EntryCounts)
 			}
 
 			// Signal that an ExportRequest finished to update job progress.
@@ -278,11 +272,11 @@ func backup(
 		progCh,
 		backupSpecs,
 	); err != nil {
-		return RowCount{}, err
+		return roachpb.RowCount{}, err
 	}
 
 	if err := g.Wait(); err != nil {
-		return RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
+		return roachpb.RowCount{}, errors.Wrapf(err, "exporting %d ranges", errors.Safe(numTotalSpans))
 	}
 
 	backupID := uuid.MakeV4()
@@ -318,13 +312,13 @@ func backup(
 				defer store.Close()
 				return writeBackupPartitionDescriptor(ctx, store, filename, encryption, &desc)
 			}(); err != nil {
-				return RowCount{}, err
+				return roachpb.RowCount{}, err
 			}
 		}
 	}
 
 	if err := writeBackupManifest(ctx, settings, defaultStore, backupManifestName, encryption, backupManifest); err != nil {
-		return RowCount{}, err
+		return roachpb.RowCount{}, err
 	}
 	var tableStatistics []*stats.TableStatisticProto
 	for i := range backupManifest.Descriptors {
@@ -352,7 +346,7 @@ func backup(
 	}
 
 	if err := writeTableStatistics(ctx, defaultStore, backupStatisticsFileName, encryption, &statsTable); err != nil {
-		return RowCount{}, err
+		return roachpb.RowCount{}, err
 	}
 
 	return backupManifest.EntryCounts, nil
@@ -379,7 +373,7 @@ func (b *backupResumer) releaseProtectedTimestamp(
 
 type backupResumer struct {
 	job         *jobs.Job
-	backupStats RowCount
+	backupStats roachpb.RowCount
 
 	testingKnobs struct {
 		ignoreProtectedTimestamps bool
@@ -451,7 +445,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 	// We want to retry a backup if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
-	var res RowCount
+	var res roachpb.RowCount
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		res, err = backup(
 			ctx,

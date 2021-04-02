@@ -284,7 +284,7 @@ func backupShowerDefault(
 						}
 					}
 				}
-				descSizes := make(map[descpb.ID]RowCount)
+				descSizes := make(map[descpb.ID]roachpb.RowCount)
 				for _, file := range manifest.Files {
 					// TODO(dan): This assumes each file in the backup only contains
 					// data from a single table, which is usually but not always
@@ -296,7 +296,7 @@ func backupShowerDefault(
 						continue
 					}
 					s := descSizes[descpb.ID(tableID)]
-					s.add(file.EntryCounts)
+					s.Add(file.EntryCounts)
 					descSizes[descpb.ID(tableID)] = s
 				}
 				start := tree.DNull

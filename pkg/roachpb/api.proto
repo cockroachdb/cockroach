@@ -1433,6 +1433,14 @@ message BulkOpSummary {
   map<uint64, int64> entry_counts = 5;
 }
 
+// RowCount tracks the size and row/index entry counts.
+message RowCount {
+  int64 data_size = 1;
+  int64 rows = 2;
+  int64 index_entries = 3;
+  reserved 4; // was BulkOpSummary's system_records.
+}
+
 // ExportResponse is the response to an Export() operation.
 message ExportResponse {
   // File describes a keyrange that has been dumped to a file at the given

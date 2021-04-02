@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/ccl/bulkccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -7752,7 +7754,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 		&unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
-	CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, "restore",
+	bulkccl.CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, "restore",
 		"RESTORE")
 
 	sqlDB.Exec(t, `DROP DATABASE r1`)
@@ -7767,6 +7769,6 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	expectedStatus = []string{string(jobs.StatusFailed), string(jobs.StatusReverting),
 		string(jobs.StatusRunning)}
-	CheckEmittedEvents(t, expectedStatus, beforeSecondRestore.UnixNano(), jobID,
+	bulkccl.CheckEmittedEvents(t, expectedStatus, beforeSecondRestore.UnixNano(), jobID,
 		"restore", "RESTORE")
 }

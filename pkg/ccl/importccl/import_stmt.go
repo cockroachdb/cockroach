@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/bulkccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1125,10 +1125,10 @@ func protectTimestampForImport(
 type importResumer struct {
 	job      *jobs.Job
 	settings *cluster.Settings
-	res      backupccl.RowCount
+	res      roachpb.RowCount
 
 	testingKnobs struct {
-		afterImport               func(summary backupccl.RowCount) error
+		afterImport               func(summary roachpb.RowCount) error
 		alwaysFlushJobProgress    bool
 		ignoreProtectedTimestamps bool
 	}
@@ -1142,7 +1142,7 @@ func prepareNewTableDescsForIngestion(
 	p sql.JobExecContext,
 	importTables []jobspb.ImportDetails_Table,
 	parentID descpb.ID,
-	schemaRewrites backupccl.DescRewriteMap,
+	schemaRewrites bulkccl.DescRewriteMap,
 ) ([]*descpb.TableDescriptor, error) {
 	newMutableTableDescriptors := make([]*tabledesc.Mutable, len(importTables))
 	for i := range importTables {
@@ -1159,7 +1159,7 @@ func prepareNewTableDescsForIngestion(
 	// schema ID.
 	tableRewrites := schemaRewrites
 	if tableRewrites == nil {
-		tableRewrites = make(backupccl.DescRewriteMap)
+		tableRewrites = make(bulkccl.DescRewriteMap)
 	}
 	seqVals := make(map[descpb.ID]int64, len(importTables))
 	for _, tableDesc := range importTables {
@@ -1173,7 +1173,7 @@ func prepareNewTableDescsForIngestion(
 		}
 		seqVals[id] = tableDesc.SeqVal
 	}
-	if err := backupccl.RewriteTableDescs(
+	if err := bulkccl.RewriteTableDescs(
 		newMutableTableDescriptors, tableRewrites, "",
 	); err != nil {
 		return nil, err
@@ -1221,7 +1221,7 @@ func prepareNewTableDescsForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := backupccl.WriteDescriptors(ctx, p.ExecCfg().Codec, txn, p.User(), descsCol,
+	if err := bulkccl.WriteDescriptors(ctx, p.ExecCfg().Codec, txn, p.User(), descsCol,
 		nil /* databases */, nil, /* schemas */
 		tableDescs, nil, tree.RequestedDescriptors,
 		p.ExecCfg().Settings, seqValKVs); err != nil {
@@ -1413,7 +1413,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 		dbDesc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 	}
 
-	schemaMetadata.schemaRewrites = make(backupccl.DescRewriteMap)
+	schemaMetadata.schemaRewrites = make(bulkccl.DescRewriteMap)
 	mutableSchemaDescs := make([]*schemadesc.Mutable, 0)
 	for _, desc := range details.Schemas {
 		schemaMetadata.oldSchemaIDToName[desc.Desc.GetID()] = desc.Desc.GetName()
@@ -1848,7 +1848,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 
 type preparedSchemaMetadata struct {
 	schemaPreparedDetails jobspb.ImportDetails
-	schemaRewrites        backupccl.DescRewriteMap
+	schemaRewrites        bulkccl.DescRewriteMap
 	newSchemaIDToName     map[descpb.ID]string
 	oldSchemaIDToName     map[descpb.ID]string
 	queuedSchemaJobs      []jobspb.JobID
