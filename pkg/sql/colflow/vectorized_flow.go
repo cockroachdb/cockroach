@@ -828,7 +828,9 @@ func (s *vectorizedFlowCreator) setupInput(
 				return nil, nil, nil, nil, err
 			}
 
-			latency, err := s.nodeDialer.Latency(inputStream.TargetNodeID)
+			// Retrieve the latency from the origin node (the one that has the
+			// outbox).
+			latency, err := s.nodeDialer.Latency(inputStream.OriginNodeID)
 			if err != nil {
 				// If an error occurred, latency's nil value of 0 is used. If latency is
 				// 0, it is not included in the displayed stats for EXPLAIN ANALYZE
