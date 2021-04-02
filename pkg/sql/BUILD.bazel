@@ -487,6 +487,7 @@ go_test(
         "upsert_test.go",
         "user_test.go",
         "values_test.go",
+        "virtual_schema_test.go",
         "virtual_table_test.go",
         "zone_config_test.go",
         "zone_test.go",
