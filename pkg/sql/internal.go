@@ -604,7 +604,7 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 func (ie *InternalExecutor) execInternal(
 	ctx context.Context,
 	opName string,
-	rw ieResultChannel,
+	rw *ieResultChannel,
 	txn *kv.Txn,
 	sessionDataOverride sessiondata.InternalExecutorOverride,
 	stmt string,
