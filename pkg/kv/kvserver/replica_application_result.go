@@ -67,7 +67,7 @@ func isTrivial(r *kvserverpb.ReplicatedEvalResult) bool {
 	// it is trivial.
 	allowlist := *r
 	allowlist.Delta = enginepb.MVCCStatsDelta{}
-	allowlist.Timestamp = hlc.Timestamp{}
+	allowlist.WriteTimestamp = hlc.Timestamp{}
 	allowlist.DeprecatedDelta = nil
 	allowlist.PrevLeaseProposal = nil
 	allowlist.State = nil
@@ -85,7 +85,7 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// they don't trigger an assertion at the end of the application process
 	// (which checks that all fields were handled).
 	r.IsLeaseRequest = false
-	r.Timestamp = hlc.Timestamp{}
+	r.WriteTimestamp = hlc.Timestamp{}
 	r.PrevLeaseProposal = nil
 	// The state fields cleared here were already applied to the in-memory view of
 	// replica state for this batch.

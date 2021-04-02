@@ -3342,7 +3342,7 @@ func TestProposalOverhead(t *testing.T) {
 		}
 		// Sometime the logical portion of the timestamp can be non-zero which makes
 		// the overhead non-deterministic.
-		args.Cmd.ReplicatedEvalResult.Timestamp.Logical = 0
+		args.Cmd.ReplicatedEvalResult.WriteTimestamp.Logical = 0
 		atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
 		// We don't want to print the WriteBatch because it's explicitly
 		// excluded from the size computation. Nil'ing it out does not

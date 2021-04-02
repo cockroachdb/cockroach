@@ -318,16 +318,19 @@ func checkForcedErr(
 		)
 	}
 
-	// Verify that the batch timestamp is after the GC threshold. This is
+	// Verify that command is not trying to write below the GC threshold. This is
 	// necessary because not all commands declare read access on the GC
 	// threshold key, even though they implicitly depend on it. This means
 	// that access to this state will not be serialized by latching,
 	// so we must perform this check upstream and downstream of raft.
-	// See #14833.
-	ts := raftCmd.ReplicatedEvalResult.Timestamp
-	if ts.LessEq(*replicaState.GCThreshold) {
+	// TODO(andrei,nvanbenschoten,bdarnell): Is this check below-Raft actually
+	// necessary, given that we've check at evaluation time that the request
+	// evaluates at a timestamp above the GC threshold? Does it actually matter if
+	// the GC threshold has advanced since then?
+	wts := raftCmd.ReplicatedEvalResult.WriteTimestamp
+	if wts.LessEq(*replicaState.GCThreshold) {
 		return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
-			Timestamp: ts,
+			Timestamp: wts,
 			Threshold: *replicaState.GCThreshold,
 		})
 	}
@@ -484,7 +487,7 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	}
 
 	// Update the batch's max timestamp.
-	if clockTS, ok := cmd.replicatedResult().Timestamp.TryToClockTimestamp(); ok {
+	if clockTS, ok := cmd.replicatedResult().WriteTimestamp.TryToClockTimestamp(); ok {
 		b.maxTS.Forward(clockTS)
 	}
 
