@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1268,24 +1267,27 @@ func backupPlanHook(
 			return nil
 		}
 
+		// We create the job record in the planner's transaction to ensure that
+		// the job record creation happens transactionally.
+		plannerTxn := p.ExtendedEvalContext().Txn
+
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr); err != nil {
-				return err
-			}
-			if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
-				return err
-			}
+		if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
+			return err
+		}
+		if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
+			return err
+		}
+		if err := protectTimestampForBackup(ctx, p, plannerTxn, jobID, spans, startTime, endTime, backupDetails); err != nil {
+			return err
+		}
 
-			return protectTimestampForBackup(ctx, p, txn, jobID, spans, startTime, endTime,
-				backupDetails)
-		}); err != nil {
-			if sj != nil {
-				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
-				}
-			}
+		// We commit the transaction here so that the job can be started. This
+		// is safe because we're in an implicit transaction. If we were in an
+		// explicit transaction the job would have to be run with the detached
+		// option and would have been handled above.
+		if err := plannerTxn.Commit(ctx); err != nil {
 			return err
 		}
 
