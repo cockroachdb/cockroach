@@ -1329,6 +1329,13 @@ func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	}
 }
 
+// Add combines the values from other, for use on an accumulator RowCount.
+func (r *RowCount) Add(other RowCount) {
+	r.DataSize += other.DataSize
+	r.Rows += other.Rows
+	r.IndexEntries += other.IndexEntries
+}
+
 // MustSetValue is like SetValue, except it resets the enum and panics if the
 // provided value is not a valid variant type.
 func (e *RangeFeedEvent) MustSetValue(value interface{}) {

@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/bulkccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
@@ -1728,7 +1728,7 @@ func TestImportCSVStmt(t *testing.T) {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
 						return errors.New("testing injected failure")
 					}
@@ -2637,7 +2637,7 @@ func TestImportIntoCSV(t *testing.T) {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if importBodyFinished != nil {
 						importBodyFinished <- struct{}{}
 					}
@@ -4289,7 +4289,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 					resumer := raw.(*importResumer)
 					resumer.testingKnobs.ignoreProtectedTimestamps = true
 					resumer.testingKnobs.alwaysFlushJobProgress = true
-					resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+					resumer.testingKnobs.afterImport = func(summary roachpb.RowCount) error {
 						return nil
 					}
 					if jobID == -1 {
@@ -6193,7 +6193,7 @@ table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
 				map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 					jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 						r := raw.(*importResumer)
-						r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+						r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 							return errors.New("testing injected failure")
 						}
 						return r
@@ -7130,7 +7130,7 @@ func TestImportJobEventLogging(t *testing.T) {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
 						return errors.New("testing injected failure")
 					}
@@ -7158,7 +7158,7 @@ func TestImportJobEventLogging(t *testing.T) {
 		&unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
-	backupccl.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT")
+	bulkccl.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT")
 
 	sqlDB.Exec(t, `DROP TABLE simple`)
 
@@ -7173,5 +7173,5 @@ func TestImportJobEventLogging(t *testing.T) {
 
 	expectedStatus = []string{string(jobs.StatusFailed), string(jobs.StatusReverting),
 		string(jobs.StatusRunning)}
-	backupccl.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
+	bulkccl.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
 }

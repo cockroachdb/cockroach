@@ -6,10 +6,11 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl
+package bulkccl
 
 import (
 	"encoding/json"
+	"errors"
 	"math"
 	"regexp"
 	"strings"
@@ -18,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
