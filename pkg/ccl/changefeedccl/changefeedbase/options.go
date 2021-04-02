@@ -76,6 +76,9 @@ const (
 	OptFormatJSON FormatType = `json`
 	OptFormatAvro FormatType = `experimental_avro`
 
+	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
+	OptKafkaSinkConfig = `kafka_sink_config`
+
 	SinkParamCACert           = `ca_cert`
 	SinkParamClientCert       = `client_cert`
 	SinkParamClientKey        = `client_key`
