@@ -4725,7 +4725,7 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 			blockPreApplication, blockPostApplication := make(chan struct{}), make(chan struct{})
 			applyFilterFn := func(ch chan struct{}) kvserverbase.ReplicaApplyFilter {
 				return func(filterArgs kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
-					if atomic.LoadInt32(&filterActive) == 1 && filterArgs.Timestamp == magicTS {
+					if atomic.LoadInt32(&filterActive) == 1 && filterArgs.WriteTimestamp == magicTS {
 						<-ch
 					}
 					return 0, nil
