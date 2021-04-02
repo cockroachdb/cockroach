@@ -37,12 +37,15 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -72,15 +75,15 @@ var (
 
 // strings used on constants creations and text manipulation.
 const (
-	pgCatalogPrefix          = "PgCatalog"
-	pgCatalogIDConstant      = "PgCatalogID"
-	tableIDSuffix            = "TableID"
-	tableDefsDeclaration     = `tableDefs: map[descpb.ID]virtualSchemaDef{`
-	tableDefsTerminal        = `},`
-	allTableNamesDeclaration = `allTableNames: buildStringSet(`
-	allTableNamesTerminal    = `),`
-	virtualTablePosition     = `// typOid is the only OID generation approach that does not use oidHasher, because`
-	virtualTableTemplate     = `var %s = virtualSchemaTable{
+	pgCatalogPrefix            = "PgCatalog"
+	pgCatalogIDConstant        = "PgCatalogID"
+	tableIDSuffix              = "TableID"
+	tableDefsDeclaration       = `tableDefs: map[descpb.ID]virtualSchemaDef{`
+	tableDefsTerminal          = `},`
+	undefinedTablesDeclaration = `undefinedTables: buildStringSet(`
+	undefinedTablesTerminal    = `),`
+	virtualTablePosition       = `// typOid is the only OID generation approach that does not use oidHasher, because`
+	virtualTableTemplate       = `var %s = virtualSchemaTable{
 	comment: "%s was created for compatibility and is currently unimplemented",
 	schema:  vtable.%s,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -288,10 +291,13 @@ func fixVtable(t *testing.T, notImplemented PGMetadataTables) {
 	})
 }
 
-// fixPgCatalogGo will update pgCatalog.allTableNames, pgCatalog.tableDefs and
+// fixPgCatalogGo will update pgCatalog.undefinedTables, pgCatalog.tableDefs and
 // will add needed virtualSchemas.
-func fixPgCatalogGo(notImplemented PGMetadataTables) {
-	allTableNamesText := getAllTableNamesText(notImplemented)
+func fixPgCatalogGo(t *testing.T, notImplemented PGMetadataTables) {
+	undefinedTablesText, err := getUndefinedTablesText(notImplemented, pgCatalog)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tableDefinitionText := getTableDefinitionsText(pgCatalogGo, notImplemented)
 
 	rewriteFile(pgCatalogGo, func(input *os.File, output outputFile) {
@@ -309,8 +315,8 @@ func fixPgCatalogGo(notImplemented PGMetadataTables) {
 			switch trimText {
 			case tableDefsDeclaration:
 				printBeforeTerminalString(reader, output, tableDefsTerminal, tableDefinitionText)
-			case allTableNamesDeclaration:
-				printBeforeTerminalString(reader, output, allTableNamesTerminal, allTableNamesText)
+			case undefinedTablesDeclaration:
+				printBeforeTerminalString(reader, output, undefinedTablesTerminal, undefinedTablesText)
 			}
 		}
 	})
@@ -410,7 +416,7 @@ func updateFile(inputFileName, outputFileName string, f func(input *os.File, out
 	}
 	defer dClose(input)
 
-	output, err := os.OpenFile(outputFileName, os.O_CREATE|os.O_WRONLY, 0644)
+	output, err := os.OpenFile(outputFileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		panic(fmt.Errorf("error opening file %s: %v", outputFileName, err))
 	}
@@ -506,25 +512,57 @@ func printVirtualSchemas(newTableNameList PGMetadataTables) string {
 	return sb.String()
 }
 
-// getAllTableNamesText retrieves pgCatalog.allTableNames, then it merges the
-// new table names and formats the replacement text.
-func getAllTableNamesText(notImplemented PGMetadataTables) string {
-	newTableNameSet := make(map[string]struct{})
-	for tableName := range pgCatalog.allTableNames {
-		newTableNameSet[tableName] = none
+// getTableNameFromCreateTable uses pkg/sql/parser to analyze CREATE TABLE
+// statement to retrieve table name.
+func getTableNameFromCreateTable(createTableText string) (string, error) {
+	stmt, err := parser.ParseOne(createTableText)
+	if err != nil {
+		return "", err
 	}
-	for tableName := range notImplemented {
-		newTableNameSet[tableName] = none
-	}
-	newTableList := make([]string, 0, len(newTableNameSet))
-	for tableName := range newTableNameSet {
-		newTableList = append(newTableList, tableName)
-	}
-	sort.Strings(newTableList)
-	return formatAllTableNamesText(newTableList)
+
+	create := stmt.AST.(*tree.CreateTable)
+	return create.Table.Table(), nil
 }
 
-func formatAllTableNamesText(newTableNameList []string) string {
+// getUndefinedTablesText retrieves pgCatalog.undefinedTables, then it merges the
+// new table names and formats the replacement text.
+func getUndefinedTablesText(newTables PGMetadataTables, vs virtualSchema) (string, error) {
+	newTableList, err := getUndefinedTablesList(newTables, vs)
+	if err != nil {
+		return "", err
+	}
+	return formatUndefinedTablesText(newTableList), nil
+}
+
+// getUndefinedTablesList checks undefinedTables in the virtualSchema and makes
+// sure they are not defined in tableDefs or are newTables to implement.
+func getUndefinedTablesList(newTables PGMetadataTables, vs virtualSchema) ([]string, error) {
+	var undefinedTablesList []string
+	removeTables := make(map[string]struct{})
+	for _, table := range vs.tableDefs {
+		tableName, err := getTableNameFromCreateTable(table.getSchema())
+		if err != nil {
+			return nil, err
+		}
+
+		removeTables[tableName] = struct{}{}
+	}
+
+	for tableName := range newTables {
+		removeTables[tableName] = struct{}{}
+	}
+
+	for tableName := range vs.undefinedTables {
+		if _, ok := removeTables[tableName]; !ok {
+			undefinedTablesList = append(undefinedTablesList, tableName)
+		}
+	}
+
+	sort.Strings(undefinedTablesList)
+	return undefinedTablesList, nil
+}
+
+func formatUndefinedTablesText(newTableNameList []string) string {
 	var sb strings.Builder
 	for _, tableName := range newTableNameList {
 		sb.WriteString("\t\t\"")
@@ -675,9 +713,46 @@ func TestPGCatalog(t *testing.T) {
 	rewriteDiffs(t, diffs, filepath.Join(testdata, fmt.Sprintf(expectedDiffs, *catalogName)))
 
 	if *addMissingTables {
+		validateUndefinedTablesField(t)
 		unimplemented := diffs.getUnimplementedTables(pgTables)
 		fixConstants(t, unimplemented)
 		fixVtable(t, unimplemented)
-		fixPgCatalogGo(unimplemented)
+		fixPgCatalogGo(t, unimplemented)
 	}
+}
+
+// TestPGMetadataCanFixCode checks for parts of the code this file is checking with
+// add-missing-tables flag to verify that a potential refactoring does not
+// break the code.
+func TestPGMetadataCanFixCode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// TODO: Add more checks, for now adding the test that is relevant for
+	// rewrite undefinedTables.
+	validateUndefinedTablesField(t)
+}
+
+// validateUndefinedTablesField checks the definition of virtualSchema objects
+// (pg_catalog and information_schema) have a undefinedTables field which can
+// be rewritten by this code.
+func validateUndefinedTablesField(t *testing.T) {
+	propertyIndex := strings.IndexRune(undefinedTablesDeclaration, ':')
+	property := undefinedTablesDeclaration[:propertyIndex]
+	// Using pgCatalog but information_schema is a virtualSchema as well
+	assertProperty(t, property, pgCatalog)
+}
+
+// assertProperty checks the property (or field) exists in the given interface.
+func assertProperty(t *testing.T, property string, i interface{}) {
+	t.Run(fmt.Sprintf("assertProperty/%s", property), func(t *testing.T) {
+		value := reflect.ValueOf(i)
+		if value.Type().Kind() != reflect.Ptr {
+			value = reflect.New(reflect.TypeOf(i))
+		}
+
+		field := value.Elem().FieldByName(property)
+		if !field.IsValid() {
+			t.Fatalf("field %s is not a field of type %T", property, i)
+		}
+	})
 }
