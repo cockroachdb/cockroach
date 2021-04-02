@@ -965,33 +965,25 @@ func importPlanHook(
 			return nil
 		}
 
-		// We're about to have side-effects not tied to this tranaction
-		// (creating the job record below). This is okay as long as the
-		// transaction eventually commits. To ensure that the transaction
-		// commits, we commit it here. This is allowed since we know we're in an
-		// implicit transaction.
-		// We know we're in an implicit transaction because we would have
-		// already returned if it were a detached job, and we check at the start
-		// of the plan hooks that the transaction is implicit if the detached
-		// option was not specified.
-		if err := p.ExtendedEvalContext().Txn.Commit(ctx); err != nil {
-			return err
-		}
+		// We create the job record in the planner's transaction to ensure that
+		// the job record creation happens transactionally.
+		plannerTxn := p.ExtendedEvalContext().Txn
 
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr); err != nil {
-				return err
-			}
+		if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
+			return err
+		}
 
-			return protectTimestampForImport(ctx, p, txn, jobID, spansToProtect, walltime, importDetails)
-		}); err != nil {
-			if sj != nil {
-				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
-					log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
-				}
-			}
+		if err := protectTimestampForImport(ctx, p, plannerTxn, jobID, spansToProtect, walltime, importDetails); err != nil {
+			return err
+		}
+
+		// We commit the transaction here so that the job can be started. This
+		// is safe because we're in an implicit transaction. If we were in an
+		// explicit transaction the job would have to be run with the detached
+		// option and would have been handled above.
+		if err := plannerTxn.Commit(ctx); err != nil {
 			return err
 		}
 
