@@ -493,6 +493,7 @@ func scrubRunDistSQL(
 		p.ExecCfg().Clock,
 		p.extendedEvalCtx.Tracing,
 		p.ExecCfg().ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

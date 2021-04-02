@@ -23,16 +23,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -149,6 +154,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			execCfg.Clock,
 			p.ExtendedEvalContext().Tracing,
 			execCfg.ContentionRegistry,
+			nil, /* testingPushCallback */
 		)
 
 		// We need to re-plan every time, since close() below makes
@@ -210,6 +216,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		nil, /* clockUpdater */
 		&SessionTracing{},
 		nil, /* contentionRegistry */
+		nil, /* testingPushCallback */
 	)
 
 	retryErr := roachpb.NewErrorWithTxn(
@@ -328,4 +335,116 @@ SET TRACING=off;
 		}
 		require.Equal(t, contention, strings.Contains(contentionRegistry.String(), contentionEventSubstring))
 	})
+}
+
+// TestDistSQLReceiverDrainsOnError is a simple unit test that asserts that the
+// DistSQLReceiver transitions to execinfra.DrainRequested status if an error is
+// pushed into it.
+func TestDistSQLReceiverDrainsOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	recv := MakeDistSQLReceiver(
+		context.Background(),
+		&errOnlyResultWriter{},
+		tree.Rows,
+		nil, /* rangeCache */
+		nil, /* txn */
+		nil, /* clockUpdater */
+		&SessionTracing{},
+		nil, /* contentionRegistry */
+		nil, /* testingPushCallback */
+	)
+	status := recv.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.New("some error")})
+	require.Equal(t, execinfra.DrainRequested, status)
+}
+
+// TestDistSQLReceiverDrainsMeta verifies that the DistSQLReceiver drains the
+// execution flow in order to retrieve the required metadata. In particular, it
+// sets up a 3 node cluster which is then accessed via PGWire protocol in order
+// to take advantage of the LIMIT feature of portals (pausing the execution once
+// the desired number of rows have been returned to the client). The crux of the
+// test is, once the portal is closed and the execution flow is shutdown, making
+// sure that the receiver collects LeafTxnFinalState metadata from each of the
+// nodes which is required for correctness.
+func TestDistSQLReceiverDrainsMeta(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var accumulatedMeta []execinfrapb.ProducerMetadata
+	// Set up a 3 node cluster and inject a callback to accumulate all metadata
+	// for the test query.
+	const numNodes = 3
+	const testQuery = "SELECT * FROM foo"
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			UseDatabase: "test",
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &ExecutorTestingKnobs{
+					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+						if query != testQuery {
+							return nil
+						}
+						return func(row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
+							if meta != nil {
+								accumulatedMeta = append(accumulatedMeta, *meta)
+							}
+						}
+					},
+				},
+			},
+			Insecure: true,
+		}})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a table with 30 rows, split them into 3 ranges with each node
+	// having one.
+	db := tc.ServerConn(0 /* idx */)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		30,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
+	sqlDB.Exec(t, "ALTER TABLE test.foo SPLIT AT VALUES (10), (20)")
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf("ALTER TABLE test.foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 0), (ARRAY[%d], 10), (ARRAY[%d], 20)",
+			tc.Server(0).GetFirstStoreID(),
+			tc.Server(1).GetFirstStoreID(),
+			tc.Server(2).GetFirstStoreID(),
+		),
+	)
+
+	// Connect to the cluster via the PGWire client.
+	p, err := pgtest.NewPGTest(ctx, tc.Server(0).ServingSQLAddr(), security.RootUser)
+	require.NoError(t, err)
+
+	// Execute the test query asking for at most 25 rows.
+	require.NoError(t, p.SendOneLine(`Query {"String": "USE test"}`))
+	require.NoError(t, p.SendOneLine(fmt.Sprintf(`Parse {"Query": "%s"}`, testQuery)))
+	require.NoError(t, p.SendOneLine(`Bind`))
+	require.NoError(t, p.SendOneLine(`Execute {"MaxRows": 25}`))
+	require.NoError(t, p.SendOneLine(`Sync`))
+
+	// Retrieve all of the results. We need to receive until two 'ReadyForQuery'
+	// messages are returned (the first one for "USE test" query and the second
+	// one is for the limited portal execution).
+	until := pgtest.ParseMessages("ReadyForQuery\nReadyForQuery")
+	msgs, err := p.Until(false /* keepErrMsg */, until...)
+	require.NoError(t, err)
+	received := pgtest.MsgsToJSONWithIgnore(msgs, &datadriven.TestData{})
+
+	// Confirm that we did retrieve 25 rows as well as 3 metadata objects.
+	require.Equal(t, 25, strings.Count(received, `"Type":"DataRow"`))
+	numLeafTxnFinalMeta := 0
+	for _, meta := range accumulatedMeta {
+		if meta.LeafTxnFinalState != nil {
+			numLeafTxnFinalMeta++
+		}
+	}
+	require.Equal(t, numNodes, numLeafTxnFinalMeta)
 }
