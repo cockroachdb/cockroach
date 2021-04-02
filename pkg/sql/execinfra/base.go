@@ -153,6 +153,10 @@ type RowSource interface {
 	// before Next indicates that there are no more rows, ConsumerDone() and/or
 	// ConsumerClosed() must be called; it is a no-op to call these methods after
 	// all the rows were consumed (i.e. after Next() returned an empty row).
+	//
+	// Processors that embed ProcessorBase can delegate the implementation to
+	// the latter if they only need to perform trivial cleanup (calling
+	// ProcessorBase.InternalClose).
 	ConsumerClosed()
 }
 
