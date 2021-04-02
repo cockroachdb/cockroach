@@ -748,6 +748,10 @@ func (r *Replica) evaluateProposal(
 	// Evaluate the commands. If this returns without an error, the batch should
 	// be committed. Note that we don't hold any locks at this point. This is
 	// important since evaluating a proposal is expensive.
+	//
+	// Note that, during evaluation, ba's read and write timestamps might get
+	// bumped (see evaluateWriteBatchWithServersideRefreshes).
+	//
 	// TODO(tschottdorf): absorb all returned values in `res` below this point
 	// in the call stack as well.
 	batch, ms, br, res, pErr := r.evaluateWriteBatch(ctx, idKey, ba, lul, latchSpans)
@@ -804,7 +808,7 @@ func (r *Replica) evaluateProposal(
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
 		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
-		res.Replicated.Timestamp = ba.Timestamp
+		res.Replicated.WriteTimestamp = ba.WriteTimestamp()
 		res.Replicated.Delta = ms.ToStatsDelta()
 
 		// This is the result of a migration. See the field for more details.
