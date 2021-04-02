@@ -17,6 +17,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -298,4 +299,23 @@ func TestSQLSink(t *testing.T) {
 			{`foo`, `2`, ``, ``, `0.000000001,0`},
 		},
 	)
+}
+
+func TestSaramaConfigOptionParsing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	opts := make(map[string]string)
+	cfg, err := getSaramaConfig(opts)
+	require.NoError(t, err)
+	require.Equal(t, defaultSaramaConfig, cfg)
+
+	expected := &saramaConfig{}
+	expected.Flush.MaxMessages = 1000
+	expected.Flush.Frequency = jsonDuration(time.Second)
+
+	opts[changefeedbase.OptKafkaSinkConfig] = `{"Flush": {"MaxMessages": 1000, "Frequency": "1s"}}`
+	cfg, err = getSaramaConfig(opts)
+	require.NoError(t, err)
+	require.Equal(t, expected, cfg)
 }
