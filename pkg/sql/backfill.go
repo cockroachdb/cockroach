@@ -1092,6 +1092,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		sc.clock,
 		evalCtx.Tracing,
 		sc.execCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 
@@ -1311,6 +1312,7 @@ func (sc *SchemaChanger) distBackfill(
 				sc.clock,
 				evalCtx.Tracing,
 				sc.execCfg.ContentionRegistry,
+				nil, /* testingPushCallback */
 			)
 			defer recv.Release()
 
