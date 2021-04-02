@@ -570,6 +570,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/jobutils",
+        "//pkg/testutils/pgtest",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
