@@ -55,10 +55,10 @@ const virtualSchemaNotImplementedMessage = "virtual schema table not implemented
 // and tables in that their descriptors are not distributed, but instead live statically
 // in code. This means that they are accessed separately from standard descriptors.
 type virtualSchema struct {
-	name           string
-	allTableNames  map[string]struct{}
-	tableDefs      map[descpb.ID]virtualSchemaDef
-	tableValidator func(*descpb.TableDescriptor) error // optional
+	name                    string
+	unimplementedTableNames map[string]struct{}
+	tableDefs               map[descpb.ID]virtualSchemaDef
+	tableValidator          func(*descpb.TableDescriptor) error // optional
 	// Some virtual tables can be used if there is no current database set; others can't.
 	validWithNoDatabaseContext bool
 	// Some virtual schemas (like pg_catalog) contain types that we can resolve.
@@ -329,11 +329,11 @@ var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)
 type virtualSchemaEntry struct {
 	// TODO(ajwerner): Use a descpb.SchemaDescriptor here as part of the
 	// user-defined schema work.
-	desc            *dbdesc.Immutable
-	defs            map[string]*virtualDefEntry
-	orderedDefNames []string
-	allTableNames   map[string]struct{}
-	containsTypes   bool
+	desc                    *dbdesc.Immutable
+	defs                    map[string]*virtualDefEntry
+	orderedDefNames         []string
+	unimplementedTableNames map[string]struct{}
+	containsTypes           bool
 }
 
 func (v *virtualSchemaEntry) Desc() catalog.Descriptor {
@@ -363,7 +363,7 @@ func (v *virtualSchemaEntry) GetObjectByName(
 			}
 			return def, nil
 		}
-		if _, ok := v.allTableNames[name]; ok {
+		if _, ok := v.unimplementedTableNames[name]; ok {
 			return nil, newUnimplementedVirtualTableError(v.desc.GetName(), name)
 		}
 		return nil, nil
@@ -704,11 +704,11 @@ func NewVirtualSchemaHolder(
 		sort.Strings(orderedDefNames)
 
 		vs.entries[dbName] = &virtualSchemaEntry{
-			desc:            dbDesc,
-			defs:            defs,
-			orderedDefNames: orderedDefNames,
-			allTableNames:   schema.allTableNames,
-			containsTypes:   schema.containsTypes,
+			desc:                    dbDesc,
+			defs:                    defs,
+			orderedDefNames:         orderedDefNames,
+			unimplementedTableNames: schema.unimplementedTableNames,
+			containsTypes:           schema.containsTypes,
 		}
 		vs.orderedNames[order] = dbName
 		order++
@@ -772,7 +772,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (*virtua
 			sqltelemetry.IncrementGetVirtualTableEntry(tn.Schema(), tableName)
 			return t, nil
 		}
-		if _, ok := db.allTableNames[tableName]; ok {
+		if _, ok := db.unimplementedTableNames[tableName]; ok {
 			return nil, unimplemented.NewWithIssueDetailf(
 				8675,
 				fmt.Sprintf("%s.%s", tn.Schema(), tableName),

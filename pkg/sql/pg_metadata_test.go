@@ -43,6 +43,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -72,15 +74,15 @@ var (
 
 // strings used on constants creations and text manipulation.
 const (
-	pgCatalogPrefix          = "PgCatalog"
-	pgCatalogIDConstant      = "PgCatalogID"
-	tableIDSuffix            = "TableID"
-	tableDefsDeclaration     = `tableDefs: map[descpb.ID]virtualSchemaDef{`
-	tableDefsTerminal        = `},`
-	allTableNamesDeclaration = `allTableNames: buildStringSet(`
-	allTableNamesTerminal    = `),`
-	virtualTablePosition     = `// typOid is the only OID generation approach that does not use oidHasher, because`
-	virtualTableTemplate     = `var %s = virtualSchemaTable{
+	pgCatalogPrefix                    = "PgCatalog"
+	pgCatalogIDConstant                = "PgCatalogID"
+	tableIDSuffix                      = "TableID"
+	tableDefsDeclaration               = `tableDefs: map[descpb.ID]virtualSchemaDef{`
+	tableDefsTerminal                  = `},`
+	unimplementedTableNamesDeclaration = `unimplementedTableNames: buildStringSet(`
+	unimplementedTableNamesTerminal    = `),`
+	virtualTablePosition               = `// typOid is the only OID generation approach that does not use oidHasher, because`
+	virtualTableTemplate               = `var %s = virtualSchemaTable{
 	comment: "%s was created for compatibility and is currently unimplemented",
 	schema:  vtable.%s,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
@@ -288,10 +290,13 @@ func fixVtable(t *testing.T, notImplemented PGMetadataTables) {
 	})
 }
 
-// fixPgCatalogGo will update pgCatalog.allTableNames, pgCatalog.tableDefs and
+// fixPgCatalogGo will update pgCatalog.unimplementedTableNames, pgCatalog.tableDefs and
 // will add needed virtualSchemas.
-func fixPgCatalogGo(notImplemented PGMetadataTables) {
-	allTableNamesText := getAllTableNamesText(notImplemented)
+func fixPgCatalogGo(t *testing.T, notImplemented PGMetadataTables) {
+	unimplementedTableNamesText, err := getUnimplementedTableNamesText(notImplemented, pgCatalog)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tableDefinitionText := getTableDefinitionsText(pgCatalogGo, notImplemented)
 
 	rewriteFile(pgCatalogGo, func(input *os.File, output outputFile) {
@@ -309,8 +314,8 @@ func fixPgCatalogGo(notImplemented PGMetadataTables) {
 			switch trimText {
 			case tableDefsDeclaration:
 				printBeforeTerminalString(reader, output, tableDefsTerminal, tableDefinitionText)
-			case allTableNamesDeclaration:
-				printBeforeTerminalString(reader, output, allTableNamesTerminal, allTableNamesText)
+			case unimplementedTableNamesDeclaration:
+				printBeforeTerminalString(reader, output, unimplementedTableNamesTerminal, unimplementedTableNamesText)
 			}
 		}
 	})
@@ -410,7 +415,7 @@ func updateFile(inputFileName, outputFileName string, f func(input *os.File, out
 	}
 	defer dClose(input)
 
-	output, err := os.OpenFile(outputFileName, os.O_CREATE|os.O_WRONLY, 0644)
+	output, err := os.OpenFile(outputFileName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		panic(fmt.Errorf("error opening file %s: %v", outputFileName, err))
 	}
@@ -506,25 +511,59 @@ func printVirtualSchemas(newTableNameList PGMetadataTables) string {
 	return sb.String()
 }
 
-// getAllTableNamesText retrieves pgCatalog.allTableNames, then it merges the
-// new table names and formats the replacement text.
-func getAllTableNamesText(notImplemented PGMetadataTables) string {
-	newTableNameSet := make(map[string]struct{})
-	for tableName := range pgCatalog.allTableNames {
-		newTableNameSet[tableName] = none
+// getTableNameFromCreateTable uses pkg/sql/parser to analize CREATE TABLE
+// statement to retrieve table name
+func getTableNameFromCreateTable(createTableText string) (string, error) {
+	stmt, err := parser.ParseOne(createTableText)
+	if err != nil {
+		return "", err
 	}
-	for tableName := range notImplemented {
-		newTableNameSet[tableName] = none
-	}
-	newTableList := make([]string, 0, len(newTableNameSet))
-	for tableName := range newTableNameSet {
-		newTableList = append(newTableList, tableName)
-	}
-	sort.Strings(newTableList)
-	return formatAllTableNamesText(newTableList)
+
+	create := stmt.AST.(*tree.CreateTable)
+	return create.Table.Table(), nil
 }
 
-func formatAllTableNamesText(newTableNameList []string) string {
+// getUnimplementedTableNamesText retrieves pgCatalog.unimplementedTableNames, then it merges the
+// new table names and formats the replacement text.
+func getUnimplementedTableNamesText(
+	notImplemented PGMetadataTables, vs virtualSchema,
+) (string, error) {
+	newTableList, err := getUnimplementedTableNamesList(notImplemented, vs)
+	if err != nil {
+		return "", err
+	}
+	return formatUnimplementedTableNamesText(newTableList), nil
+}
+
+func getUnimplementedTableNamesList(
+	newTables PGMetadataTables, vs virtualSchema,
+) ([]string, error) {
+	var unimplementedTableList []string
+	removeTables := make(map[string]struct{})
+	for _, table := range vs.tableDefs {
+		tableName, err := getTableNameFromCreateTable(table.getSchema())
+		if err != nil {
+			return nil, err
+		}
+
+		removeTables[tableName] = struct{}{}
+	}
+
+	for tableName := range newTables {
+		removeTables[tableName] = struct{}{}
+	}
+
+	for tableName := range vs.unimplementedTableNames {
+		if _, ok := removeTables[tableName]; !ok {
+			unimplementedTableList = append(unimplementedTableList, tableName)
+		}
+	}
+
+	sort.Strings(unimplementedTableList)
+	return unimplementedTableList, nil
+}
+
+func formatUnimplementedTableNamesText(newTableNameList []string) string {
 	var sb strings.Builder
 	for _, tableName := range newTableNameList {
 		sb.WriteString("\t\t\"")
@@ -678,6 +717,6 @@ func TestPGCatalog(t *testing.T) {
 		unimplemented := diffs.getUnimplementedTables(pgTables)
 		fixConstants(t, unimplemented)
 		fixVtable(t, unimplemented)
-		fixPgCatalogGo(unimplemented)
+		fixPgCatalogGo(t, unimplemented)
 	}
 }
