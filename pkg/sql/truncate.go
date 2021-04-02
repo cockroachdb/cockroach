@@ -11,13 +11,17 @@
 package sql
 
 import (
+	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -169,6 +173,13 @@ func (t *truncateNode) Next(runParams) (bool, error) { return false, nil }
 func (t *truncateNode) Values() tree.Datums          { return tree.Datums{} }
 func (t *truncateNode) Close(context.Context)        {}
 
+var enableSplitsAfterTruncate = settings.RegisterIntSetting(
+	"sql.truncate.preserved_split_count",
+	"set to non-zero to cause TRUNCATE to preserve range splits from the "+
+		"table's indexes. This can improve performance when truncating a table"+
+		"with significant write traffic.",
+	0)
+
 // truncateTable truncates the data of a table in a single transaction. It does
 // so by dropping all existing indexes on the table and creating new ones without
 // backfilling any data into the new indexes. The old indexes are cleaned up
@@ -280,19 +291,102 @@ func (p *planner) truncateTable(
 	}
 
 	// Move any zone configs on indexes over to the new set of indexes.
-	oldIndexIDs := make([]descpb.IndexID, len(oldIndexes)-1)
+	oldIndexIDs := make([]descpb.IndexID, len(oldIndexes))
 	for i := range oldIndexIDs {
-		oldIndexIDs[i] = oldIndexes[i+1].ID
+		oldIndexIDs[i] = oldIndexes[i].ID
 	}
-	newIndexIDs := make([]descpb.IndexID, len(tableDesc.PublicNonPrimaryIndexes()))
+	newIndexIDs := make([]descpb.IndexID, len(tableDesc.ActiveIndexes()))
+	newIndexes := tableDesc.ActiveIndexes()
 	for i := range newIndexIDs {
-		newIndexIDs[i] = tableDesc.PublicNonPrimaryIndexes()[i].GetID()
+		newIndexIDs[i] = newIndexes[i].GetID()
 	}
+
+	if nSplits := int(enableSplitsAfterTruncate.Get(p.execCfg.SV())); nSplits > 0 {
+		// Re-split the new set of indexes along the same split points as the old
+		// indexes.
+		b := p.txn.NewBatch()
+		for i := range oldIndexIDs {
+			indexPrefix := p.execCfg.Codec.IndexPrefix(uint32(id), uint32(oldIndexIDs[i]))
+			newIndexPrefix := p.execCfg.Codec.IndexPrefix(uint32(id), uint32(newIndexIDs[i]))
+			// Fetch all of the range descriptors for this index.
+			ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
+				Key:    indexPrefix,
+				EndKey: indexPrefix.PrefixEnd(),
+			})
+			if err != nil {
+				return err
+			}
+			nRanges := len(ranges)
+
+			if nRanges < nSplits {
+				nSplits = nRanges
+			}
+
+			step := nRanges / nSplits
+			rem := nRanges % nSplits
+
+			var desc roachpb.RangeDescriptor
+			for j := 0; j < nSplits; j++ {
+				a := rem
+				if j < rem {
+					a = j
+				}
+				// Try, not very hard, to evenly space out the ranges that we select
+				// from the ranges that are returned.
+				//
+				// Does anyone know a better way of evenly spacing out n items from a
+				// list of m items, especially when n is greater than m / 2?
+				r := ranges[step*j+a]
+				if err := r.ValueProto(&desc); err != nil {
+					return err
+				}
+				// For every range's start key, translate the start key into the keyspace
+				// of the replacement index. We'll split the replacement index along this
+				// same boundary later.
+				startKey := desc.StartKey
+
+				if !bytes.HasPrefix(startKey, indexPrefix) {
+					// We probably didn't get around to splitting our table yet, so just
+					// skip this particular range.
+					continue
+				}
+
+				// The new start key is created by splicing the suffix of the old start
+				// key, without its table id / index id prefix, onto the new table id /
+				// index id prefix that we'll be using for the new post-truncate ranges.
+				newStartKey := append(newIndexPrefix, startKey[len(indexPrefix):]...)
+
+				b.AddRawRequest(&roachpb.AdminSplitRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key: newStartKey,
+					},
+					SplitKey:       newStartKey,
+					ExpirationTime: p.execCfg.Clock.Now().Add(time.Minute.Nanoseconds(), 0),
+				})
+
+			}
+		}
+
+		b.AddRawRequest(&roachpb.AdminScatterRequest{
+			// Scatter all of the data between the start key of the first new index, and
+			// the PrefixEnd of the last new index.
+			RequestHeader: roachpb.RequestHeader{
+				Key:    p.execCfg.Codec.IndexPrefix(uint32(id), uint32(newIndexIDs[0])),
+				EndKey: p.execCfg.Codec.IndexPrefix(uint32(id), uint32(newIndexIDs[len(newIndexIDs)-1])).PrefixEnd(),
+			},
+			RandomizeLeases: true,
+		})
+
+		if err := p.txn.Run(ctx, b); err != nil {
+			return err
+		}
+	}
+
 	swapInfo := &descpb.PrimaryKeySwap{
 		OldPrimaryIndexId: oldIndexes[0].ID,
-		OldIndexes:        oldIndexIDs,
+		OldIndexes:        oldIndexIDs[1:],
 		NewPrimaryIndexId: tableDesc.GetPrimaryIndexID(),
-		NewIndexes:        newIndexIDs,
+		NewIndexes:        newIndexIDs[1:],
 	}
 	if err := maybeUpdateZoneConfigsForPKChange(ctx, p.txn, p.ExecCfg(), tableDesc, swapInfo); err != nil {
 		return err
