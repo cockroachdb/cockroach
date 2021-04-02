@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -388,7 +389,11 @@ func (p *planner) dropTableImpl(
 }
 
 // unsplitRangesForTable unsplit any manually split ranges within the table span.
-func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledesc.Mutable) error {
+func (p *planner) unsplitRangesForTable(
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	indexIDMapping map[descpb.IndexID]descpb.IndexID,
+) error {
 	// Gate this on being the system tenant because secondary tenants aren't
 	// allowed to scan the meta ranges directly.
 	if p.ExecCfg().Codec.ForSystemTenant() {
@@ -397,6 +402,7 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 		if err != nil {
 			return err
 		}
+		var mappedSplitPoints []roachpb.Key
 		for _, r := range ranges {
 			var desc roachpb.RangeDescriptor
 			if err := r.ValueProto(&desc); err != nil {
@@ -410,6 +416,34 @@ func (p *planner) unsplitRangesForTable(ctx context.Context, tableDesc *tabledes
 					!strings.Contains(err.Error(), "is not the start of a range") {
 					return err
 				}
+			}
+
+			rest, tableID, indexID, err := p.ExecCfg().Codec.DecodeIndexPrefix(desc.StartKey.AsRawKey())
+			if err != nil {
+				continue
+			}
+			if tableID != uint32(tableDesc.GetID()) {
+				return errors.Errorf("expected table %d, got table ID %d", tableDesc, tableID)
+			}
+			mappedID, ok := indexIDMapping[descpb.IndexID(indexID)]
+			if !ok {
+				continue
+			}
+			indexPrefix := p.ExecCfg().Codec.IndexPrefix(tableID, uint32(mappedID))
+			mappedSplitPoints = append(mappedSplitPoints, append(indexPrefix, rest...))
+		}
+		// Downsample, remap to new table, split.
+		// TODO(nvanbenschoten): base this on num nodes or something.
+		newRanges := 64
+		if newRanges > len(mappedSplitPoints) {
+			newRanges = len(mappedSplitPoints)
+		}
+		every := float64(len(mappedSplitPoints)) / float64(newRanges)
+		expTime := p.ExecCfg().Clock.Now().Add(time.Hour.Nanoseconds(), 0)
+		for i := 0; i < newRanges; i++ {
+			splitPoint := mappedSplitPoints[int(float64(i)*every)]
+			if err := p.ExecCfg().DB.SplitAndScatter(ctx, splitPoint, expTime); err != nil {
+				return err
 			}
 		}
 	}
@@ -441,7 +475,7 @@ func (p *planner) initiateDropTable(
 
 	// Unsplit all manually split ranges in the table so they can be
 	// automatically merged by the merge queue.
-	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
+	if err := p.unsplitRangesForTable(ctx, tableDesc, nil); err != nil {
 		return err
 	}
 

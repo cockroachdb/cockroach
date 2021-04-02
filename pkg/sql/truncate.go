@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -169,6 +170,12 @@ func (t *truncateNode) Next(runParams) (bool, error) { return false, nil }
 func (t *truncateNode) Values() tree.Datums          { return tree.Datums{} }
 func (t *truncateNode) Close(context.Context)        {}
 
+var replaceSplits = settings.RegisterBoolSetting(
+	"sql.truncate.replace_splits",
+	"whether a truncate operation should replace existing split points with new ones",
+	true,
+)
+
 // truncateTable truncates the data of a table in a single transaction. It does
 // so by dropping all existing indexes on the table and creating new ones without
 // backfilling any data into the new indexes. The old indexes are cleaned up
@@ -259,9 +266,14 @@ func (p *planner) truncateTable(
 		return err
 	}
 
+	var replaceSplitsMapping map[descpb.IndexID]descpb.IndexID
+	if replaceSplits.Get(&p.ExecCfg().Settings.SV) {
+		replaceSplitsMapping = indexIDMapping
+	}
+
 	// Unsplit all manually split ranges in the table so they can be
 	// automatically merged by the merge queue.
-	if err := p.unsplitRangesForTable(ctx, tableDesc); err != nil {
+	if err := p.unsplitRangesForTable(ctx, tableDesc, replaceSplitsMapping); err != nil {
 		return err
 	}
 
