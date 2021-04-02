@@ -1284,7 +1284,20 @@ func (s *Server) PreStart(ctx context.Context) error {
 			close(knobs.SignalAfterGettingRPCAddress)
 		}
 		if knobs.PauseAfterGettingRPCAddress != nil {
-			<-knobs.PauseAfterGettingRPCAddress
+			select {
+			case <-knobs.PauseAfterGettingRPCAddress:
+				// Normal case. Just continue below.
+
+			case <-ctx.Done():
+				// Test timeout or some other condition in the caller, by which
+				// we are instructed to stop.
+				return ctx.Err()
+
+			case <-s.stopper.ShouldQuiesce():
+				// The server is instructed to stop before it even finished
+				// starting up.
+				return nil
+			}
 		}
 	}
 

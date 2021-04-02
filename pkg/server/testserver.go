@@ -460,8 +460,7 @@ func (ts *TestServer) NodeDialer() *nodedialer.Dialer {
 // TestServer.ServingRPCAddr() after Start() for client connections.
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
-func (ts *TestServer) Start() error {
-	ctx := context.Background()
+func (ts *TestServer) Start(ctx context.Context) error {
 	return ts.Server.Start(ctx)
 }
 
