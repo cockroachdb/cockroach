@@ -1010,10 +1010,10 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
 	cost := memo.Cost(set.Relational().Stats.RowCount) * cpuCostFactor
 
-	// A set operation must process every row from both tables once.
-	// UnionAll can avoid any extra computation, but all other set operations
-	// must perform a hash table lookup or update for each input row.
-	if set.Op() != opt.UnionAllOp {
+	// A set operation must process every row from both tables once. UnionAll and
+	// LocalityOptimizedSearch can avoid any extra computation, but all other set
+	// operations must perform a hash table lookup or update for each input row.
+	if set.Op() != opt.UnionAllOp && set.Op() != opt.LocalityOptimizedSearchOp {
 		leftRowCount := set.Child(0).(memo.RelExpr).Relational().Stats.RowCount
 		rightRowCount := set.Child(1).(memo.RelExpr).Relational().Stats.RowCount
 		cost += memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
