@@ -240,6 +240,7 @@ func runPlanInsidePlan(
 			params.extendedEvalCtx.ExecCfg.Clock.Update(ts)
 		},
 		params.p.extendedEvalCtx.Tracing,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

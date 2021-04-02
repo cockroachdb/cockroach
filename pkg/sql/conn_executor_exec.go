@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -947,6 +948,10 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	distribute bool,
 	progressAtomic *uint64,
 ) (topLevelQueryStats, error) {
+	var testingPushCallback func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
+	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
+		testingPushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
+	}
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache,
@@ -955,6 +960,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			ex.server.cfg.Clock.Update(ts)
 		},
 		&ex.sessionTracing,
+		testingPushCallback,
 	)
 	recv.progressAtomic = progressAtomic
 	defer recv.Release()

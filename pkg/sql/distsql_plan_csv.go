@@ -294,6 +294,7 @@ func DistIngest(
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

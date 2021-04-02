@@ -1014,6 +1014,7 @@ func (sc *SchemaChanger) distBackfill(
 					sc.clock.Update(ts)
 				},
 				evalCtx.Tracing,
+				nil, /* testingPushCallback */
 			)
 			defer recv.Release()
 

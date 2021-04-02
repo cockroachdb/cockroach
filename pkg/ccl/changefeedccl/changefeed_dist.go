@@ -178,6 +178,7 @@ func distChangefeedFlow(
 		noTxn,
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 
