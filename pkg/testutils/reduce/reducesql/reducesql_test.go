@@ -47,7 +47,7 @@ func isInterestingSQL(contains string) reduce.InterestingFn {
 		}
 		serv := ts.(*server.TestServer)
 		defer serv.Stopper().Stop(ctx)
-		if err := serv.Start(); err != nil {
+		if err := serv.Start(context.Background()); err != nil {
 			panic(err)
 		}
 
