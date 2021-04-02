@@ -566,7 +566,13 @@ func (s *Smither) makeSelectClause(
 			// either reference a group by column or a non-group by
 			// column in an aggregate function. It's also possible
 			// the where and order by exprs are not correct.
-			groupByRefs := fromRefs.extend()
+			var groupByRefs colRefs
+			for _, r := range fromRefs {
+				if s.postgres && r.typ.Family() == types.Box2DFamily {
+					continue
+				}
+				groupByRefs = append(groupByRefs, r)
+			}
 			s.rnd.Shuffle(len(groupByRefs), func(i, j int) {
 				groupByRefs[i], groupByRefs[j] = groupByRefs[j], groupByRefs[i]
 			})
@@ -676,8 +682,14 @@ func makeSelect(s *Smither) (tree.Statement, bool) {
 	if s.outputSort {
 		order := make(tree.OrderBy, len(refs))
 		for i, r := range refs {
+			var expr tree.Expr = r.item
+			// PostGIS cannot order box2d types, so we cast to string so the
+			// order is deterministic.
+			if s.postgres && r.typ.Family() == types.Box2DFamily {
+				expr = &tree.CastExpr{Expr: r.item, Type: types.String}
+			}
 			order[i] = &tree.Order{
-				Expr:       r.item,
+				Expr:       expr,
 				NullsOrder: tree.NullsFirst,
 			}
 		}
@@ -1110,6 +1122,10 @@ func (s *Smither) makeOrderBy(refs colRefs) tree.OrderBy {
 		ref := refs[s.rnd.Intn(len(refs))]
 		// We don't support order by jsonb columns.
 		if ref.typ.Family() == types.JsonFamily {
+			continue
+		}
+		// PostGIS cannot order box2d types.
+		if s.postgres && ref.typ.Family() == types.Box2DFamily {
 			continue
 		}
 		ob = append(ob, &tree.Order{

@@ -633,6 +633,7 @@ func postgresMutator(rng *rand.Rand, q string) string {
 		"INT4":    "INT8",
 		"STORING": "INCLUDE",
 		" AS (":   " GENERATED ALWAYS AS (",
+		",)":      ")",
 	} {
 		q = strings.Replace(q, from, to, -1)
 	}
@@ -719,40 +720,80 @@ func postgresCreateTableMutator(
 		mutated = append(mutated, stmt)
 		switch stmt := stmt.(type) {
 		case *tree.CreateTable:
+			if stmt.Interleave != nil {
+				stmt.Interleave = nil
+				changed = true
+			}
+			// Get all the column types first.
+			colTypes := make(map[string]*types.T)
+			for _, def := range stmt.Defs {
+				switch def := def.(type) {
+				case *tree.ColumnTableDef:
+					colTypes[string(def.Name)] = tree.MustBeStaticallyKnownType(def.Type)
+				}
+			}
+
 			var newdefs tree.TableDefs
 			for _, def := range stmt.Defs {
 				switch def := def.(type) {
 				case *tree.IndexTableDef:
 					// Postgres doesn't support indexes in CREATE TABLE, so split them out
 					// to their own statement.
+					var newCols tree.IndexElemList
+					for _, col := range def.Columns {
+						// Postgres doesn't support box2d as a btree index key.
+						colTypeFamily := colTypes[string(col.Column)].Family()
+						if colTypeFamily == types.Box2DFamily {
+							changed = true
+						} else {
+							newCols = append(newCols, col)
+						}
+					}
+					if len(newCols) == 0 {
+						// Break without adding this index at all.
+						break
+					}
+					def.Columns = newCols
 					// TODO(rafi): Postgres supports inverted indexes with a different
 					// syntax than Cockroach. Maybe we could add it later.
-					// The syntax is `CREATE INDEX name ON table USING gin(column`.
+					// The syntax is `CREATE INDEX name ON table USING gin(column)`.
 					if !def.Inverted {
 						mutated = append(mutated, &tree.CreateIndex{
 							Name:     def.Name,
 							Table:    stmt.Table,
 							Inverted: def.Inverted,
-							Columns:  def.Columns,
+							Columns:  newCols,
 							Storing:  def.Storing,
 						})
 						changed = true
 					}
 				case *tree.UniqueConstraintTableDef:
+					var newCols tree.IndexElemList
+					for _, col := range def.Columns {
+						// Postgres doesn't support box2d as a btree index key.
+						colTypeFamily := colTypes[string(col.Column)].Family()
+						if colTypeFamily == types.Box2DFamily {
+							changed = true
+						} else {
+							newCols = append(newCols, col)
+						}
+					}
+					if len(newCols) == 0 {
+						// Break without adding this index at all.
+						break
+					}
+					def.Columns = newCols
 					if def.PrimaryKey {
-						// Postgres doesn't support descending PKs.
 						for i, col := range def.Columns {
+							// Postgres doesn't support descending PKs.
 							if col.Direction != tree.DefaultDirection {
 								def.Columns[i].Direction = tree.DefaultDirection
 								changed = true
 							}
 						}
 						if def.Name != "" {
-							// Unset Name here because
-							// constraint names cannot
-							// be shared among tables,
-							// so multiple PK constraints
-							// named "primary" is an error.
+							// Unset Name here because constraint names cannot be shared among
+							// tables, so multiple PK constraints named "primary" is an error.
 							def.Name = ""
 							changed = true
 						}
@@ -764,27 +805,39 @@ func postgresCreateTableMutator(
 						Table:    stmt.Table,
 						Unique:   true,
 						Inverted: def.Inverted,
-						Columns:  def.Columns,
+						Columns:  newCols,
 						Storing:  def.Storing,
 					})
 					changed = true
 				case *tree.ColumnTableDef:
-					colType := tree.MustBeStaticallyKnownType(def.Type)
-					switch colType.Family() {
-					case types.GeometryFamily, types.GeographyFamily, types.Box2DFamily:
-						// PostgreSQL does not have any spatial types. Turn them into
-						// String types.
-						def.Type = types.String
-						mutated = append(mutated, &tree.AlterTable{
-							Table: stmt.Table.ToUnresolvedObjectName(),
-							Cmds: tree.AlterTableCmds{
-								&tree.AlterTableAlterColumnType{
-									Column: def.Name,
-									ToType: types.String,
-								},
-							},
-						})
-						changed = true
+					if def.IsComputed() {
+						// Postgres has different cast volatility for timestamps and OID
+						// types. The substitution here is specific to the output of
+						// testutils.randComputedColumnTableDef.
+						if funcExpr, ok := def.Computed.Expr.(*tree.FuncExpr); ok {
+							if len(funcExpr.Exprs) == 1 {
+								if castExpr, ok := funcExpr.Exprs[0].(*tree.CastExpr); ok {
+									referencedType := colTypes[castExpr.Expr.(*tree.UnresolvedName).String()]
+									isContextDependentType := referencedType.Family() == types.TimestampFamily ||
+										referencedType.Family() == types.OidFamily
+									if isContextDependentType &&
+										tree.MustBeStaticallyKnownType(castExpr.Type) == types.String {
+										def.Computed.Expr = &tree.CaseExpr{
+											Whens: []*tree.When{
+												{
+													Cond: &tree.IsNullExpr{
+														Expr: castExpr.Expr,
+													},
+													Val: rowenc.RandDatum(rng, types.String, true /* nullOK */),
+												},
+											},
+											Else: rowenc.RandDatum(rng, types.String, true /* nullOK */),
+										}
+										changed = true
+									}
+								}
+							}
+						}
 					}
 					newdefs = append(newdefs, def)
 				default:
