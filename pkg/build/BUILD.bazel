@@ -18,6 +18,7 @@ go_library(
         "github.com/cockroachdb/cockroach/pkg/build.tag": "{STABLE_BUILD_GIT_TAG}",
         "github.com/cockroachdb/cockroach/pkg/build.utcTime": "{STABLE_BUILD_GIT_UTCTIME}",
         "github.com/cockroachdb/cockroach/pkg/build.typ": "{STABLE_BUILD_GIT_BUILD_TYPE}",
+        "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple": "{STABLE_BUILD_TARGET_TRIPLE}",
     },
     deps = [
         "//pkg/util/envutil",
