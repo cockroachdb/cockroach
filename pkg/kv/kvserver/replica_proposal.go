@@ -808,7 +808,18 @@ func (r *Replica) evaluateProposal(
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
 		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
-		res.Replicated.WriteTimestamp = ba.WriteTimestamp()
+		// Set the timestamp fields. If this range has not "migrated" to 21.1 (as
+		// indicated by RaftClosedTimestamp), then we'll maintain compatibility with
+		// 20.2 and indiscriminately set WriteTimestamp = ba.WriteTimestamp. If we
+		// know we're only proposing to 21.1+ nodes, then we only set WriteTimestamp
+		// when writing intents. Otherwise, we set ClockSignal.
+		if r.State().RaftClosedTimestamp.IsEmpty() {
+			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
+		} else if ba.IsIntentWrite() {
+			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
+		} else {
+			res.Replicated.ClockSignal = r.store.Clock().Now()
+		}
 		res.Replicated.Delta = ms.ToStatsDelta()
 
 		// This is the result of a migration. See the field for more details.

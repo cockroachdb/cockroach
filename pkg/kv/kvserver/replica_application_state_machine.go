@@ -459,12 +459,17 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		// EndTxn) can operate below the closed timestamp. In turn, this means that
 		// we can only assert on the leaseholder, as only that replica has
 		// cmd.proposal.Request filled in.
-		if cmd.IsLocal() && cmd.proposal.Request.IsIntentWrite() {
-			wts := cmd.proposal.Request.WriteTimestamp()
-			if wts.LessEq(b.state.RaftClosedTimestamp) {
-				return nil, makeNonDeterministicFailure("writing at %s below closed ts: %s (%s)",
-					wts, b.state.RaftClosedTimestamp.String(), cmd.proposal.Request.String())
+
+		wts := cmd.raftCmd.ReplicatedEvalResult.WriteTimestamp
+		if !wts.IsEmpty() && wts.LessEq(b.state.RaftClosedTimestamp) {
+			var req string
+			if cmd.proposal != nil {
+				req = cmd.proposal.Request.String()
+			} else {
+				req = "request unknown; not leaseholder"
 			}
+			return nil, errors.AssertionFailedf("writing at %s below closed ts: %s (%s)",
+				wts, b.state.RaftClosedTimestamp.String(), req)
 		}
 		log.Event(ctx, "applying command")
 	}
@@ -490,6 +495,8 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 	if clockTS, ok := cmd.replicatedResult().WriteTimestamp.TryToClockTimestamp(); ok {
 		b.maxTS.Forward(clockTS)
 	}
+	clockTS := cmd.replicatedResult().ClockSignal.UnsafeToClockTimestamp()
+	b.maxTS.Forward(clockTS)
 
 	// Normalize the command, accounting for past migrations.
 	b.migrateReplicatedResult(ctx, cmd)

@@ -86,6 +86,7 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// (which checks that all fields were handled).
 	r.IsLeaseRequest = false
 	r.WriteTimestamp = hlc.Timestamp{}
+	r.ClockSignal = hlc.Timestamp{}
 	r.PrevLeaseProposal = nil
 	// The state fields cleared here were already applied to the in-memory view of
 	// replica state for this batch.

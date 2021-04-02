@@ -125,10 +125,17 @@ message ReplicatedEvalResult {
   Merge merge = 4;
   ComputeChecksum compute_checksum = 21;
   bool is_lease_request = 6;
-  // The timestamp at which this command is writing. Used to verify the validity
-  // of the command against the GC threshold and to update the followers'
-  // clocks.
+  // The timestamp at which this command is writing. This is only set by
+  // isIntentWrite requests (for example, it is not set by a lone EndTxn request
+  // which doesn't write new values and thus can operate below the closed
+  // timestamp). The field is used to verify the validity of the command against
+  // the GC threshold and to update the followers' clocks.
   util.hlc.Timestamp write_timestamp = 8 [(gogoproto.nullable) = false];
+  // clock_signal can be set by the proposer in order to propagate a clock
+  // reading to the followers. This field is generally only populated when
+  // write_timestamp is not populated; when write_timestamp is populated, that's
+  // considered a good enough clock signal.
+  util.hlc.Timestamp clock_signal = 23 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
   storage.enginepb.MVCCStats deprecated_delta = 10; // See #18828
