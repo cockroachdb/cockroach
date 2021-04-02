@@ -238,8 +238,6 @@ goroutine 13:
 
 					ctx := context.Background()
 					req := PostRequest{
-						TitleTemplate:       UnitTestFailureTitle,
-						BodyTemplate:        UnitTestFailureBody,
 						PackageName:         c.packageName,
 						TestName:            c.testName,
 						Message:             c.message,
@@ -248,8 +246,8 @@ goroutine 13:
 						ReproductionCommand: c.reproCmd,
 						ExtraLabels:         []string{"release-blocker"},
 					}
-					require.NoError(t, p.post(ctx, req, nil, nil))
-					path := filepath.Join("testdata", c.name+"-"+foundIssue+".txt")
+					require.NoError(t, p.post(ctx, UnitTestFormatter, req))
+					path := filepath.Join("testdata", "post", c.name+"-"+foundIssue+".txt")
 					b, err := ioutil.ReadFile(path)
 					failed := !assert.NoError(t, err)
 					if !failed {
@@ -301,16 +299,14 @@ func TestPostEndToEnd(t *testing.T) {
 	defer unset()
 
 	req := PostRequest{
-		TitleTemplate: "test issue 2",
-		BodyTemplate:  "test body",
-		PackageName:   "github.com/cockroachdb/cockroach/pkg/foo/bar",
-		TestName:      "TestFooBarBaz",
-		Message:       "I'm a message",
-		AuthorEmail:   "tobias.schottdorf@gmail.com",
-		ExtraLabels:   []string{"release-blocker"},
+		PackageName: "github.com/cockroachdb/cockroach/pkg/foo/bar",
+		TestName:    "TestFooBarBaz",
+		Message:     "I'm a message",
+		AuthorEmail: "tobias.schottdorf@gmail.com",
+		ExtraLabels: []string{"release-blocker"},
 	}
 
-	require.NoError(t, Post(context.Background(), req))
+	require.NoError(t, Post(context.Background(), UnitTestFormatter, req))
 }
 
 func TestGetAssignee(t *testing.T) {

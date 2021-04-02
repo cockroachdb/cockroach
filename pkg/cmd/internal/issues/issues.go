@@ -11,16 +11,13 @@
 package issues
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/url"
 	"os"
 	"os/exec"
 	"strings"
-	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -46,56 +43,6 @@ func enforceMaxLength(s string) string {
 	}
 	return s
 }
-
-// UnitTestFailureTitle is a title template suitable for posting issues about
-// vanilla Go test failures.
-const UnitTestFailureTitle = `{{ shortpkg .PackageName }}: {{.TestName}} failed`
-
-// UnitTestFailureBody is a body template suitable for posting issues about vanilla Go
-// test failures.
-const UnitTestFailureBody = `[({{shortpkg .PackageName}}).{{.TestName}} failed]({{.URL}}) on [{{.Branch}}@{{.Commit}}]({{commiturl .Commit}}):
-
-{{ if (.CondensedMessage.FatalOrPanic 50).Error }}{{with $fop := .CondensedMessage.FatalOrPanic 50 -}}
-Fatal error:
-{{threeticks}}
-{{ .Error }}{{threeticks}}
-
-Stack:
-{{threeticks}}
-{{ $fop.FirstStack }}
-{{threeticks}}
-
-<details><summary>Log preceding fatal error</summary><p>
-
-{{threeticks}}
-{{ $fop.LastLines }}
-{{threeticks}}
-
-</p></details>{{end}}{{ else -}}
-{{threeticks}}
-{{ .CondensedMessage.Digest 50 }}
-{{ threeticks }}{{end}}
-
-<details><summary>More</summary><p>
-{{if .Parameters -}}
-Parameters:
-{{range .Parameters }}
-- {{ . }}{{end}}{{end}}
-
-{{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
-{{else -}}
-{{threeticks}}
-{{.ReproductionCommand}}
-{{threeticks}}
-
-{{end -}}
-
-{{ if .RelatedIssues }}Related:{{end}}{{range .RelatedIssues}}
-- #{{ .Number}} {{ .Title }} {{ range .Labels }} [{{ .Name }}]({{ .URL }}){{- end}}
-{{end}}
-[See this test on roachdash](https://roachdash.crdb.dev/?filter={{urlquery "status:open t:.*" .TestName ".*" }}&sort=title&restgroup=false&display=lastcommented+project)
-<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub></p></details>
-`
 
 var (
 	// Set of labels attached to created issues.
@@ -306,20 +253,37 @@ func (o *Options) CanPost() bool {
 	return o.Token != ""
 }
 
-// TemplateData holds the data available in (PostRequest).(Body|Title)Template,
-// respectively. On top of the below, there are also a few functions, for which
-// UnitTestFailureBody can serve as a reference.
+// TemplateData is the input on which an IssueFormatter operates. It has
+// everything known about the test failure in a predigested form.
 type TemplateData struct {
 	PostRequest
-	Parameters       []string
+	// This is foo/bar instead of github.com/cockroachdb/cockroach/pkg/foo/bar.
+	PackageNameShort string
+	// GOFLAGS=-foo TAGS=-race etc.
+	Parameters []string
+	// The message, garnished with helpers that allow extracting the useful
+	// bots.
 	CondensedMessage CondensedMessage
-	Commit           string
-	Branch           string
-	ArtifactsURL     string
-	URL              string
-	Assignee         interface{} // lazy
-	RelatedIssues    []github.Issue
-	InternalLog      string
+	// The commit SHA.
+	Commit string
+	// Link to the commit on Github.
+	CommitURL string
+	// The branch.
+	Branch string
+	// An URL that goes straight to the artifacts for this test.
+	// Set only if PostRequest.Artifacts was provided.
+	ArtifactsURL string
+	// URL is the link to the failing build.
+	URL string
+	// Assignee is the Github handle, resolved from PostRequest.AuthorEmail.
+	Assignee string
+	// Issues that match this one, except they're on other branches.
+	RelatedIssues []github.Issue
+	// InternalLog contains information about non-critical issues encountered
+	// while forming the issue. For example, a failure to retrieve an assignee
+	// would post an unassigned issue and InternalLog would provide a hint as
+	// to why the assignment failed.
+	InternalLog string
 }
 
 func (p *poster) templateData(
@@ -339,42 +303,12 @@ func (p *poster) templateData(
 		URL:              p.teamcityBuildLogURL().String(),
 		Assignee:         assignee,
 		RelatedIssues:    relatedIssues,
+		PackageNameShort: strings.TrimPrefix(req.PackageName, CockroachPkgPrefix),
+		CommitURL:        fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA),
 	}
 }
 
-func (p *poster) execTemplate(ctx context.Context, tpl string, data TemplateData) (string, error) {
-	tlp, err := template.New("").Funcs(template.FuncMap{
-		"threeticks": func() string { return "```" },
-		"commiturl": func(sha string) string {
-			return fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA)
-		},
-		"shortpkg": func(fullpkg string) string {
-			return strings.TrimPrefix(fullpkg, CockroachPkgPrefix)
-		},
-	}).Parse(tpl)
-	if err != nil {
-		return "", err
-	}
-
-	var buf strings.Builder
-	if err := tlp.Execute(&buf, data); err != nil {
-		return "", err
-	}
-	return enforceMaxLength(buf.String()), nil
-}
-
-type postBuilder struct {
-	strings.Builder // the body
-	p               *poster
-	PostRequest
-}
-
-func (p *poster) post(
-	origCtx context.Context,
-	req PostRequest,
-	titleFn func(io.Writer, TemplateData) error,
-	bodyFn func(io.Writer, TemplateData) error,
-) error {
+func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req PostRequest) error {
 	ctx := &postCtx{Context: origCtx}
 
 	assignee := p.getAssignee(ctx, req.AuthorEmail)
@@ -386,39 +320,9 @@ func (p *poster) post(
 		nil, // relatedIssues
 	)
 
-	if titleFn == nil {
-		titleFn = func(w io.Writer, data TemplateData) error {
-			title, err := p.execTemplate(ctx, req.TitleTemplate, data)
-			if err != nil {
-				return err
-			}
-			_, err = fmt.Fprint(w, title)
-			return err
-		}
-	}
-	if bodyFn == nil {
-		bodyFn = func(w io.Writer, data TemplateData) error {
-			body, err := p.execTemplate(ctx, req.BodyTemplate, data)
-			if err != nil {
-				return err
-			}
-			_, err = fmt.Fprint(w, body)
-			return err
-		}
-	}
-
 	// We just want the title this time around, as we're going to use
 	// it to figure out if an issue already exists.
-	title, err := func() (string, error) {
-		var buf bytes.Buffer
-		if err := titleFn(&buf, data); err != nil {
-			return "", err
-		}
-		return buf.String(), nil
-	}()
-	if err != nil {
-		return err
-	}
+	title := formatter.Title(data)
 
 	// We carry out two searches below, one attempting to find an issue that we
 	// adopt (i.e. add a comment to) and one finding "related issues", i.e. those
@@ -466,19 +370,21 @@ func (p *poster) post(
 
 	data.RelatedIssues = rRelated.Issues
 	data.InternalLog = ctx.Builder.String()
-	var body strings.Builder
-	if err := bodyFn(&body, data); err != nil {
+	r := &Renderer{}
+	if err := formatter.Body(r, data); err != nil {
 		// Failure is not an option.
 		_ = err
-		fmt.Fprintln(&body, "\nFailed to render body: "+err.Error())
+		fmt.Fprintln(&r.buf, "\nFailed to render body: "+err.Error())
 	}
+
+	body := enforceMaxLength(r.buf.String())
 
 	createLabels := append(issueLabels, releaseLabel)
 	createLabels = append(createLabels, req.ExtraLabels...)
 	if foundIssue == nil {
 		issueRequest := github.IssueRequest{
 			Title:     &title,
-			Body:      github.String(body.String()),
+			Body:      github.String(body),
 			Labels:    &createLabels,
 			Assignee:  &assignee,
 			Milestone: p.getProbableMilestone(ctx),
@@ -503,7 +409,7 @@ func (p *poster) post(
 			}
 		}
 	} else {
-		comment := github.IssueComment{Body: github.String(body.String())}
+		comment := github.IssueComment{Body: github.String(body)}
 		if _, _, err := p.createComment(
 			ctx, p.Org, p.Repo, *foundIssue, &comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",
@@ -552,18 +458,14 @@ func (p *poster) parameters() []string {
 // A PostRequest contains the information needed to create an issue about a
 // test failure.
 type PostRequest struct {
-	// The title of the issue. See UnitTestFailureTitleTemplate for an example.
-	TitleTemplate,
-	// The body of the issue. See UnitTestFailureBodyTemplate for an example.
-	BodyTemplate,
 	// The name of the package the test failure relates to.
 	PackageName,
 	// The name of the failing test.
 	TestName,
-	// The test output, ideally shrunk to contain only relevant details.
+	// The test output.
 	Message,
-	// A link to the test artifacts. If empty, defaults to a link constructed
-	// from the TeamCity env vars (if available).
+	// A path to the test artifacts relative to the artifacts root. If nonempty,
+	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts,
 	// The email of the author, used to determine which team/person to assign
 	// the issue to.
@@ -588,7 +490,7 @@ type PostRequest struct {
 // existing open issue. GITHUB_API_TOKEN must be set to a valid Github token
 // that has permissions to search and create issues and comments or an error
 // will be returned.
-func Post(ctx context.Context, req PostRequest) error {
+func Post(ctx context.Context, formatter IssueFormatter, req PostRequest) error {
 	opts := DefaultOptionsFromEnv()
 	if !opts.CanPost() {
 		return errors.Newf("GITHUB_API_TOKEN env variable is not set; cannot post issue")
@@ -597,5 +499,5 @@ func Post(ctx context.Context, req PostRequest) error {
 	client := github.NewClient(oauth2.NewClient(ctx, oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: opts.Token},
 	)))
-	return newPoster(client, opts).post(ctx, req, nil, nil)
+	return newPoster(client, opts).post(ctx, formatter, req)
 }
