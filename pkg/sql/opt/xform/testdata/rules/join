@@ -7842,3 +7842,510 @@ right-join (hash)
  │    └── columns: m:1 n:2
  └── filters
       └── p:5 = m:1 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# --------------------------------------------------
+# GenerateLocalityOptimizedAntiJoin
+# --------------------------------------------------
+
+# These tables mimic REGIONAL BY ROW tables.
+exec-ddl
+CREATE TABLE abc_part (
+    r STRING NOT NULL CHECK (r IN ('east', 'west', 'central')),
+    a INT NOT NULL,
+    b INT,
+    c INT,
+    PRIMARY KEY (r, a),
+    UNIQUE WITHOUT INDEX (a),
+    UNIQUE WITHOUT INDEX (b),
+    UNIQUE INDEX b_idx (r, b) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    ),
+    INDEX c_idx (r, c) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    )
+) PARTITION BY LIST (r) (
+  PARTITION east VALUES IN (('east')),
+  PARTITION west VALUES IN (('west')),
+  PARTITION central VALUES IN (('central'))
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@b_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+CREATE TABLE def_part (
+    r STRING NOT NULL CHECK (r IN ('east', 'west', 'central')),
+    d INT NOT NULL,
+    e INT REFERENCES abc_part (a),
+    f INT REFERENCES abc_part (b),
+    PRIMARY KEY (r, d),
+    UNIQUE WITHOUT INDEX (d),
+    UNIQUE WITHOUT INDEX (e),
+    UNIQUE INDEX e_idx (r, e) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    ),
+    INDEX f_idx (r, f) PARTITION BY LIST (r) (
+      PARTITION east VALUES IN (('east')),
+      PARTITION west VALUES IN (('west')),
+      PARTITION central VALUES IN (('central'))
+    )
+) PARTITION BY LIST (r) (
+  PARTITION east VALUES IN (('east')),
+  PARTITION west VALUES IN (('west')),
+  PARTITION central VALUES IN (('central'))
+)
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX def_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX def_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX def_part@primary CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX def_part@e_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX def_part@e_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX def_part@e_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+exec-ddl
+ALTER PARTITION "east" OF INDEX def_part@f_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=east: 2}',
+  lease_preferences = '[[+region=east]]'
+----
+
+exec-ddl
+ALTER PARTITION "west" OF INDEX def_part@f_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=west: 2}',
+  lease_preferences = '[[+region=west]]';
+----
+
+exec-ddl
+ALTER PARTITION "central" OF INDEX def_part@f_idx CONFIGURE ZONE USING
+  num_voters = 5,
+  voter_constraints = '{+region=central: 2}',
+  lease_preferences = '[[+region=central]]';
+----
+
+# Locality optimized anti join.
+opt locality=(region=east) expect=GenerateLocalityOptimizedAntiJoin
+SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE e = a) AND d = 1
+----
+anti-join (lookup abc_part)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── e:3 = a:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │         └── abc_part.r:6 IN ('central', 'west') [outer=(6), constraints=(/6: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── anti-join (lookup abc_part)
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── e:3 = a:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │    │         └── abc_part.r:6 = 'east' [outer=(6), constraints=(/6: [/'east' - /'east']; tight), fd=()-->(6)]
+ │    ├── lookup columns are key
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    │    ├── left columns: def_part.r:11 d:12 e:13 f:14
+ │    │    ├── right columns: def_part.r:16 d:17 e:18 f:19
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null d:12!null e:13 f:14
+ │    │    │    ├── constraint: /11/12: [/'east'/1 - /'east'/1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null d:17!null e:18 f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'central'/1 - /'central'/1]
+ │    │         │    └── [/'west'/1 - /'west'/1]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── filters (true)
+ └── filters (true)
+
+# Locality optimized anti join in different region.
+opt locality=(region=west) expect=GenerateLocalityOptimizedAntiJoin
+SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE e = a) AND d = 1
+----
+anti-join (lookup abc_part)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── e:3 = a:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │         └── abc_part.r:6 IN ('central', 'east') [outer=(6), constraints=(/6: [/'central' - /'central'] [/'east' - /'east']; tight)]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── anti-join (lookup abc_part)
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── e:3 = a:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │    │         └── abc_part.r:6 = 'west' [outer=(6), constraints=(/6: [/'west' - /'west']; tight), fd=()-->(6)]
+ │    ├── lookup columns are key
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    │    ├── left columns: def_part.r:11 d:12 e:13 f:14
+ │    │    ├── right columns: def_part.r:16 d:17 e:18 f:19
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null d:12!null e:13 f:14
+ │    │    │    ├── constraint: /11/12: [/'west'/1 - /'west'/1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null d:17!null e:18 f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'central'/1 - /'central'/1]
+ │    │         │    └── [/'east'/1 - /'east'/1]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── filters (true)
+ └── filters (true)
+
+# Different join condition.
+opt locality=(region=east) expect=GenerateLocalityOptimizedAntiJoin
+SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE f = b) AND d = 10
+----
+anti-join (lookup abc_part@b_idx)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── f:4 = b:8 [outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ]), fd=(4)==(8), (8)==(4)]
+ │         └── abc_part.r:6 IN ('central', 'west') [outer=(6), constraints=(/6: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── anti-join (lookup abc_part@b_idx)
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── f:4 = b:8 [outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ]), fd=(4)==(8), (8)==(4)]
+ │    │         └── abc_part.r:6 = 'east' [outer=(6), constraints=(/6: [/'east' - /'east']; tight), fd=()-->(6)]
+ │    ├── lookup columns are key
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    │    ├── left columns: def_part.r:11 d:12 e:13 f:14
+ │    │    ├── right columns: def_part.r:16 d:17 e:18 f:19
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null d:12!null e:13 f:14
+ │    │    │    ├── constraint: /11/12: [/'east'/10 - /'east'/10]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null d:17!null e:18 f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'central'/10 - /'central'/10]
+ │    │         │    └── [/'west'/10 - /'west'/10]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── filters (true)
+ └── filters (true)
+
+# With an extra ON filter.
+opt locality=(region=east) expect=GenerateLocalityOptimizedAntiJoin
+SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE e = a AND f > b) AND d = 1
+----
+anti-join (lookup abc_part)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── e:3 = a:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │         └── abc_part.r:6 IN ('central', 'west') [outer=(6), constraints=(/6: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── anti-join (lookup abc_part)
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── e:3 = a:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │    │         └── abc_part.r:6 = 'east' [outer=(6), constraints=(/6: [/'east' - /'east']; tight), fd=()-->(6)]
+ │    ├── lookup columns are key
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    │    ├── left columns: def_part.r:11 d:12 e:13 f:14
+ │    │    ├── right columns: def_part.r:16 d:17 e:18 f:19
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null d:12!null e:13 f:14
+ │    │    │    ├── constraint: /11/12: [/'east'/1 - /'east'/1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null d:17!null e:18 f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'central'/1 - /'central'/1]
+ │    │         │    └── [/'west'/1 - /'west'/1]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── filters
+ │         └── f:4 > b:8 [outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
+ └── filters
+      └── f:4 > b:8 [outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ])]
+
+# Optimization applies even though the scan may produce more than one row.
+opt locality=(region=east) expect=GenerateLocalityOptimizedAntiJoin
+SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE e = a) AND f = 10
+----
+anti-join (lookup abc_part)
+ ├── columns: r:1!null d:2!null e:3 f:4!null
+ ├── lookup expression
+ │    └── filters
+ │         ├── e:3 = a:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │         └── abc_part.r:6 IN ('central', 'west') [outer=(6), constraints=(/6: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ ├── lookup columns are key
+ ├── key: (2)
+ ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+ ├── anti-join (lookup abc_part)
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── e:3 = a:7 [outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(7), (7)==(3)]
+ │    │         └── abc_part.r:6 = 'east' [outer=(6), constraints=(/6: [/'east' - /'east']; tight), fd=()-->(6)]
+ │    ├── lookup columns are key
+ │    ├── key: (2)
+ │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+ │    ├── index-join def_part
+ │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4!null
+ │    │    ├── key: (2)
+ │    │    ├── fd: ()-->(4), (2)-->(1,3), (3)~~>(1,2)
+ │    │    └── scan def_part@f_idx
+ │    │         ├── columns: def_part.r:1!null d:2!null f:4!null
+ │    │         ├── constraint: /1/4/2
+ │    │         │    ├── [/'central'/10 - /'central'/10]
+ │    │         │    ├── [/'east'/10 - /'east'/10]
+ │    │         │    └── [/'west'/10 - /'west'/10]
+ │    │         ├── key: (2)
+ │    │         └── fd: ()-->(4), (2)-->(1)
+ │    └── filters (true)
+ └── filters (true)
+
+# Optimization applies even though the lookup join may have more than one
+# matching row.
+opt locality=(region=east) expect=GenerateLocalityOptimizedAntiJoin
+SELECT * FROM def_part WHERE NOT EXISTS (SELECT * FROM abc_part WHERE f = c) AND d = 10
+----
+anti-join (lookup abc_part@c_idx)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── lookup expression
+ │    └── filters
+ │         ├── f:4 = c:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
+ │         └── abc_part.r:6 IN ('central', 'west') [outer=(6), constraints=(/6: [/'central' - /'central'] [/'west' - /'west']; tight)]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── anti-join (lookup abc_part@c_idx)
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── f:4 = c:9 [outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
+ │    │         └── abc_part.r:6 = 'east' [outer=(6), constraints=(/6: [/'east' - /'east']; tight), fd=()-->(6)]
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    │    ├── left columns: def_part.r:11 d:12 e:13 f:14
+ │    │    ├── right columns: def_part.r:16 d:17 e:18 f:19
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null d:12!null e:13 f:14
+ │    │    │    ├── constraint: /11/12: [/'east'/10 - /'east'/10]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null d:17!null e:18 f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'central'/10 - /'central'/10]
+ │    │         │    └── [/'west'/10 - /'west'/10]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── filters (true)
+ └── filters (true)
+
+# Optimization does not apply for semi join.
+opt locality=(region=central) expect-not=GenerateLocalityOptimizedAntiJoin
+SELECT * FROM def_part WHERE EXISTS (SELECT * FROM abc_part WHERE e = a) AND d = 1
+----
+semi-join (lookup abc_part)
+ ├── columns: r:1!null d:2!null e:3 f:4
+ ├── key columns: [21 3] = [6 7]
+ ├── lookup columns are key
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── inner-join (cross)
+ │    ├── columns: def_part.r:1!null d:2!null e:3 f:4 "lookup_join_const_col_@6":21!null
+ │    ├── cardinality: [0 - 3]
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(one-or-more)
+ │    ├── fd: ()-->(1-4)
+ │    ├── values
+ │    │    ├── columns: "lookup_join_const_col_@6":21!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── ('central',)
+ │    │    ├── ('east',)
+ │    │    └── ('west',)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: def_part.r:1!null d:2!null e:3 f:4
+ │    │    ├── left columns: def_part.r:11 d:12 e:13 f:14
+ │    │    ├── right columns: def_part.r:16 d:17 e:18 f:19
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan def_part
+ │    │    │    ├── columns: def_part.r:11!null d:12!null e:13 f:14
+ │    │    │    ├── constraint: /11/12: [/'central'/1 - /'central'/1]
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan def_part
+ │    │         ├── columns: def_part.r:16!null d:17!null e:18 f:19
+ │    │         ├── constraint: /16/17
+ │    │         │    ├── [/'east'/1 - /'east'/1]
+ │    │         │    └── [/'west'/1 - /'west'/1]
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── filters (true)
+ └── filters (true)

@@ -628,7 +628,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	cost := baseCost + memo.Cost(rowCount)*(seqIOCostFactor+perRowCost)
 
 	// If this scan is locality optimized, divide the cost in two in order to make
-	// the total cost of the two scans in the locality optimized plan less then
+	// the total cost of the two scans in the locality optimized plan less than
 	// the cost of the single scan in the non-locality optimized plan.
 	// TODO(rytaft): This is hacky. We should really be making this determination
 	// based on the latency between regions.
@@ -773,6 +773,7 @@ func (c *coster) computeIndexJoinCost(
 		join.Table,
 		cat.PrimaryIndex,
 		memo.JoinFlags(0),
+		false, /* localityOptimized */
 	)
 }
 
@@ -791,6 +792,7 @@ func (c *coster) computeLookupJoinCost(
 		join.Table,
 		join.Index,
 		join.Flags,
+		join.LocalityOptimized,
 	)
 }
 
@@ -803,6 +805,7 @@ func (c *coster) computeIndexLookupJoinCost(
 	table opt.TableID,
 	index cat.IndexOrdinal,
 	flags memo.JoinFlags,
+	localityOptimized bool,
 ) memo.Cost {
 	input := join.Child(0).(memo.RelExpr)
 	lookupCount := input.Relational().Stats.RowCount
@@ -871,6 +874,15 @@ func (c *coster) computeIndexLookupJoinCost(
 	if flags.Has(memo.PreferLookupJoinIntoRight) {
 		// If we prefer a lookup join, make the cost much smaller.
 		cost *= preferLookupJoinFactor
+	}
+
+	// If this lookup join is locality optimized, divide the cost by two in order to make
+	// the total cost of the two lookup joins in the locality optimized plan less than
+	// the cost of the single lookup join in the non-locality optimized plan.
+	// TODO(rytaft): This is hacky. We should really be making this determination
+	// based on the latency between regions.
+	if localityOptimized {
+		cost /= 2
 	}
 	return cost
 }
