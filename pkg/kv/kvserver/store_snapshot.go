@@ -125,6 +125,7 @@ type kvBatchSnapshotStrategy struct {
 	sstChunkSize int64
 	// Only used on the receiver side.
 	scratch *SSTSnapshotStorageScratch
+	batch   storage.Batch
 }
 
 // multiSSTWriter is a wrapper around RocksDBSstFileWriter and
@@ -240,11 +241,22 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// At the moment we'll write at most five SSTs.
 	// TODO(jeffreyxiao): Re-evaluate as the default range size grows.
 	keyRanges := rditer.MakeReplicatedKeyRanges(header.State.Desc)
-	msstw, err := newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
-	if err != nil {
-		return noSnap, err
+
+	var msstw multiSSTWriter
+	if kvSS.scratch != nil {
+		var err error
+		msstw, err = newMultiSSTWriter(ctx, kvSS.scratch, keyRanges, kvSS.sstChunkSize)
+		if err != nil {
+			return noSnap, err
+		}
+		defer msstw.Close()
+	} else {
+		for _, keyRange := range keyRanges {
+			if err := kvSS.batch.ClearRawRange(keyRange.Start.Key, keyRange.End.Key); err != nil {
+				return noSnap, sendSnapshotError(stream, err)
+			}
+		}
 	}
-	defer msstw.Close()
 	var logEntries [][]byte
 
 	for {
@@ -258,20 +270,26 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		}
 
 		if req.KVBatch != nil {
-			batchReader, err := storage.NewRocksDBBatchReader(req.KVBatch)
-			if err != nil {
-				return noSnap, errors.Wrap(err, "failed to decode batch")
-			}
-			// All operations in the batch are guaranteed to be puts.
-			for batchReader.Next() {
-				if batchReader.BatchType() != storage.BatchTypeValue {
-					return noSnap, errors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
-				}
-				key, err := batchReader.EngineKey()
+			if kvSS.scratch != nil {
+				batchReader, err := storage.NewRocksDBBatchReader(req.KVBatch)
 				if err != nil {
-					return noSnap, errors.Wrap(err, "failed to decode mvcc key")
+					return noSnap, errors.Wrap(err, "failed to decode batch")
 				}
-				if err := msstw.Put(ctx, key, batchReader.Value()); err != nil {
+				// All operations in the batch are guaranteed to be puts.
+				for batchReader.Next() {
+					if batchReader.BatchType() != storage.BatchTypeValue {
+						return noSnap, errors.AssertionFailedf("expected type %d, found type %d", storage.BatchTypeValue, batchReader.BatchType())
+					}
+					key, err := batchReader.EngineKey()
+					if err != nil {
+						return noSnap, errors.Wrap(err, "failed to decode mvcc key")
+					}
+					if err := msstw.Put(ctx, key, batchReader.Value()); err != nil {
+						return noSnap, err
+					}
+				}
+			} else {
+				if err := kvSS.batch.ApplyBatchRepr(req.KVBatch, false /* sync */); err != nil {
 					return noSnap, err
 				}
 			}
@@ -280,15 +298,16 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			logEntries = append(logEntries, req.LogEntries...)
 		}
 		if req.Final {
-			// We finished receiving all batches and log entries. It's possible that
-			// we did not receive any key-value pairs for some of the key ranges, but
-			// we must still construct SSTs with range deletion tombstones to remove
-			// the data.
-			if err := msstw.Finish(ctx); err != nil {
-				return noSnap, err
+			if kvSS.scratch != nil {
+				// We finished receiving all batches and log entries. It's possible that
+				// we did not receive any key-value pairs for some of the key ranges, but
+				// we must still construct SSTs with range deletion tombstones to remove
+				// the data.
+				if err := msstw.Finish(ctx); err != nil {
+					return noSnap, err
+				}
+				msstw.Close()
 			}
-
-			msstw.Close()
 
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
 			if err != nil {
@@ -300,6 +319,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				UsesUnreplicatedTruncatedState: header.UnreplicatedTruncatedState,
 				SnapUUID:                       snapUUID,
 				SSTStorageScratch:              kvSS.scratch,
+				Batch:                          kvSS.batch,
 				LogEntries:                     logEntries,
 				State:                          &header.State,
 				snapType:                       header.Type,
@@ -315,7 +335,11 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					inSnap.String(), len(logEntries), expLen)
 			}
 
-			kvSS.status = fmt.Sprintf("log entries: %d, ssts: %d", len(logEntries), len(kvSS.scratch.SSTs()))
+			ssts := 0
+			if kvSS.scratch != nil {
+				ssts = len(kvSS.scratch.SSTs())
+			}
+			kvSS.status = fmt.Sprintf("log entries: %d, ssts: %d", len(logEntries), ssts)
 			return inSnap, nil
 		}
 	}
@@ -514,6 +538,9 @@ func (kvSS *kvBatchSnapshotStrategy) Close(ctx context.Context) {
 		if err := kvSS.scratch.Clear(); err != nil {
 			log.Warningf(ctx, "error closing kvBatchSnapshotStrategy: %v", err)
 		}
+	}
+	if kvSS.batch != nil {
+		kvSS.batch.Close()
 	}
 }
 
@@ -794,14 +821,24 @@ func (s *Store) receiveSnapshot(
 	var ss snapshotStrategy
 	switch header.Strategy {
 	case SnapshotRequest_KV_BATCH:
-		snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
-		if err != nil {
-			err = errors.Wrap(err, "invalid snapshot")
-			return sendSnapshotError(stream, err)
+		useSSTs := header.State.Stats.Total() > 4<<20 /* 4 MB */
+
+		var scratch *SSTSnapshotStorageScratch
+		var batch storage.Batch
+		if useSSTs {
+			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
+			if err != nil {
+				err = errors.Wrap(err, "invalid snapshot")
+				return sendSnapshotError(stream, err)
+			}
+			scratch = s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID)
+		} else {
+			batch = s.engine.NewUnindexedBatch(true /* writeOnly */)
 		}
 
 		ss = &kvBatchSnapshotStrategy{
-			scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
+			scratch:      scratch,
+			batch:        batch,
 			sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
 		}
 		defer ss.Close(ctx)
