@@ -138,12 +138,6 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 	return nil, bp.DrainHelper()
 }
 
-// ConsumerClosed is part of the RowSource interface.
-func (bp *backupDataProcessor) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	bp.InternalClose()
-}
-
 type spanAndTime struct {
 	// spanIdx is a unique identifier of this object.
 	spanIdx    int
