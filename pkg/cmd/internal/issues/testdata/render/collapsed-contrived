@@ -1,0 +1,14 @@
+render
+----
+----
+<details><summary>&lt;some&gt; ``` weird stuff &amp; &lt;/a&gt; going on here</summary>
+<p>
+
+```
+Does this
+`````` work?<p><-- should have a paragraph tag
+```
+</p>
+</details>
+----
+----
