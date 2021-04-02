@@ -715,7 +715,7 @@ locality-optimized-search
  ├── right columns: t.public.abc_part.r:11(string) t.public.abc_part.a:12(int) t.public.abc_part.b:13(int) t.public.abc_part.c:14(string)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.910000001, distinct(3)=0.910000001, null(3)=0, distinct(4)=0.910000001, null(4)=0, distinct(3,4)=0.910000001, null(3,4)=0]
- ├── cost: 5.101218
+ ├── cost: 5.083216
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1,2)
