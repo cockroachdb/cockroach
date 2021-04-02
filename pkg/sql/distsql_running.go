@@ -744,21 +744,23 @@ func (r *DistSQLReceiver) Push(
 			// don't set the error on the resultWriter).
 			r.status = execinfra.DrainRequested
 		} else {
-			// Set the error on the resultWriter too, for the convenience of some of the
-			// clients. If clients don't care to differentiate between communication
-			// errors and query execution errors, they can simply inspect
-			// resultWriter.Err(). Also, this function itself doesn't care about the
-			// distinction and just uses resultWriter.Err() to see if we're still
-			// accepting results.
+			// Set the error on the resultWriter to notify the consumer about
+			// it. Most clients don't care to differentiate between
+			// communication errors and query execution errors, so they can
+			// simply inspect resultWriter.Err().
 			r.SetError(commErr)
 
-			// We don't need to shut down the connection
-			// if there's a portal-related error. This is
-			// definitely a layering violation, but is part
-			// of some accepted technical debt (see comments on
-			// sql/pgwire.limitedCommandResult.moreResultsNeeded).
-			// Instead of changing the signature of AddRow, we have
-			// a sentinel error that is handled specially here.
+			// The only client that needs to know that a communication error and
+			// not a query execution error has occurred is
+			// connExecutor.execWithDistSQLEngine which will inspect r.commErr
+			// on its own and will shut down the connection.
+			//
+			// We don't need to shut down the connection if there's a
+			// portal-related error. This is definitely a layering violation,
+			// but is part of some accepted technical debt (see comments on
+			// sql/pgwire.limitedCommandResult.moreResultsNeeded). Instead of
+			// changing the signature of AddRow, we have a sentinel error that
+			// is handled specially here.
 			if !errors.Is(commErr, ErrLimitedResultNotSupported) {
 				r.commErr = commErr
 			}
@@ -889,9 +891,6 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryRecv.resultWriter = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
 	dsp.Run(subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)()
-	if subqueryRecv.commErr != nil {
-		return subqueryRecv.commErr
-	}
 	if err := subqueryRowReceiver.Err(); err != nil {
 		return err
 	}
@@ -1166,8 +1165,5 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	// but it may not be the case when we support cascades through the optimizer.
 	postqueryRecv.resultWriter = &errOnlyResultWriter{}
 	dsp.Run(postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)()
-	if postqueryRecv.commErr != nil {
-		return postqueryRecv.commErr
-	}
 	return postqueryRecv.resultWriter.Err()
 }
