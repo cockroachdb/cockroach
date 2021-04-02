@@ -12,13 +12,16 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -350,5 +353,71 @@ func TestTruncateWithConcurrentMutations(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) { run(t, tc) })
+	}
+}
+
+func TestTruncatePreservesSplitPoints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+
+	testCases := []struct {
+		nodes int
+	}{
+		{
+			nodes: 1,
+		},
+		{
+			nodes: 3,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(fmt.Sprintf("nodes=%d", testCase.nodes), func(t *testing.T) {
+			tc := testcluster.StartTestCluster(t, testCase.nodes, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
+							DisableMergeQueue: true,
+						},
+					},
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
+
+			var err error
+			_, err = tc.Conns[0].ExecContext(ctx, `
+CREATE TABLE a(a INT PRIMARY KEY, b INT, INDEX(b));
+INSERT INTO a SELECT g,g FROM generate_series(1,10000) g(g);
+ALTER TABLE a SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000), (7000), (8000), (9000);
+ALTER INDEX a_b_idx SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000), (7000), (8000), (9000);
+`)
+			assert.NoError(t, err)
+
+			row := tc.Conns[0].QueryRowContext(ctx, `
+SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE table_id = 'a'::regclass`)
+			assert.NoError(t, row.Err())
+			var nRanges int
+			assert.NoError(t, row.Scan(&nRanges))
+
+			const origNRanges = 19
+			assert.Equal(t, origNRanges, nRanges)
+
+			_, err = tc.Conns[0].ExecContext(ctx, `TRUNCATE a`)
+			assert.NoError(t, err)
+
+			row = tc.Conns[0].QueryRowContext(ctx, `
+SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE table_id = 'a'::regclass`)
+			assert.NoError(t, row.Err())
+			assert.NoError(t, row.Scan(&nRanges))
+
+			// We subtract 1 from the original n ranges because the first range can't
+			// be migrated to the new keyspace, as its prefix doesn't include an
+			// index ID.
+			assert.Equal(t, origNRanges+testCase.nodes*int(sql.PreservedSplitCountMultiple.Get(&tc.Servers[0].Cfg.
+				Settings.SV)),
+				nRanges)
+		})
 	}
 }
