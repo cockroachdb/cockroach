@@ -636,6 +636,7 @@ func (e *distSQLSpecExecFactory) ConstructLookupJoin(
 	isSecondJoinInPairedJoiner bool,
 	reqOrdering exec.OutputOrdering,
 	locking *tree.LockingItem,
+	localityOptimized bool,
 ) (exec.Node, error) {
 	// TODO (rohany): Implement production of system columns by the underlying scan here.
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: lookup join")

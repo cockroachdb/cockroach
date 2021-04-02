@@ -437,6 +437,10 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 			return cannotDistribute, cannotDistributeRowLevelLockingErr
 		}
 
+		if n.localityOptimized {
+			// This is a locality optimized lookup join.
+			return cannotDistribute, nil
+		}
 		if err := checkExpr(n.lookupExpr); err != nil {
 			return cannotDistribute, err
 		}

@@ -727,6 +727,281 @@ vectorized: true
       table: regional_by_row_table@primary
       spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 
+# Tests using locality optimized search for lookup anti joins (including foreign
+# key checks).
+statement ok
+CREATE TABLE parent (
+  p_id INT PRIMARY KEY,
+  FAMILY (p_id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE child (
+  c_id INT PRIMARY KEY,
+  c_p_id INT REFERENCES parent (p_id),
+  INDEX (c_p_id),
+  FAMILY (c_id, c_p_id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO parent (crdb_region, p_id)
+VALUES ('ap-southeast-2', 10), ('ca-central-1', 20), ('us-east-1', 30)
+
+statement ok
+INSERT INTO child (crdb_region, c_id, c_p_id)
+VALUES ('ap-southeast-2', 10, 10), ('ca-central-1', 20, 20), ('us-east-1', 30, 30)
+
+statement ok
+SET locality_optimized_partitioned_index_scan = false
+
+# Query with locality optimized search disabled.
+query T
+EXPLAIN SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+----
+distribution: full
+vectorized: true
+·
+• lookup join (anti)
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1'))
+│
+└── • scan
+      missing stats
+      table: child@primary
+      spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10] [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
+
+# All regions are scanned without the optimization.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/75/1/"@"/10{-/#}, /Table/75/1/"\x80"/10{-/#}, /Table/75/1/"\xc0"/10{-/#}
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/74/1/"@"/10{-/#}, /Table/74/1/"\x80"/10{-/#}, /Table/74/1/"\xc0"/10{-/#}
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+
+statement ok
+SET locality_optimized_partitioned_index_scan = true
+
+# Same query with locality optimized search enabled.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+----
+distribution: local
+vectorized: true
+·
+• lookup join (anti)
+│ table: parent@primary
+│ equality cols are key
+│ lookup condition: (p_id = c_p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+│
+└── • lookup join (anti)
+    │ table: parent@primary
+    │ equality cols are key
+    │ lookup condition: (p_id = c_p_id) AND (crdb_region = 'ap-southeast-2')
+    │
+    └── • union all
+        │ limit: 1
+        │
+        ├── • scan
+        │     missing stats
+        │     table: child@primary
+        │     spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10]
+        │
+        └── • scan
+              missing stats
+              table: child@primary
+              spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k1Fr2zAQx9_3KY7bQ5KhEtlxoQgKLqvLXDynSwwrLKZ41tF6SyRPliEl5LuP2GGNwxLSjr35Tve3fv_T3QqrX3MUGNzfRVdhDP3rcJpMv0QDmAZR8DGBD3AzGX-G_KmYS_j6KZgE0I_HCQT3m0Lod8vKzJCy27ryoZBwCfnD5mMwgKv4Gvp5m3T4ABkqLSnOFlSh-IYOpgxLo3OqKm02qVVTEMolCs6wUGVtN-mUYa4NoVihLeycUGCSfZ_ThDJJZsiRoSSbFfPmtw25X5pikZlnZDgtM1UJGM5wNlte8BkOHX7WiYbvIVMSHND2iQwyHNdWgO8w38V0zVDX9oWkstkjoXDW7G20zqm0_h9Sf0t5Gpl7kOwFqFbaSDIkOzDp-i_ssT7T5dDtUkfForDgHGTgr-nOrS7Utjmj7jXJc0kCouAmgas4CeF2HMbIsB26naZFWv-sS_ihCwVaCej7I7gE392OoO_BJSx7Hu8JIXyHc37uDU5r5uiNRrz_ZWSzssvexa4VBste3vF2ojnvNeYmVJVaVbQ3MYfeP2VI8pHasat0bXK6MzpvrmnDcaNrEpIq2566bRCq5qhZsl2x8y9i96h41BHzffHoqNg7LvaOis_3xOn63e8AAAD__2Pcwcc=
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
+
+# If the row is found in the local region, the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/75/1/"@"/10{-/#}
+fetched: /child/primary/'ap-southeast-2'/10/c_p_id -> /10
+Scan /Table/74/1/"@"/10{-/#}
+fetched: /parent/primary/'ap-southeast-2'/10 -> NULL
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched in
+# parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/75/1/"@"/20{-/#}
+Scan /Table/75/1/"\x80"/20{-/#}, /Table/75/1/"\xc0"/20{-/#}
+fetched: /child/primary/'ca-central-1'/20/c_p_id -> /20
+Scan /Table/74/1/"@"/20{-/#}
+Scan /Table/74/1/"\x80"/20{-/#}, /Table/74/1/"\xc0"/20{-/#}
+fetched: /parent/primary/'ca-central-1'/20 -> NULL
+
+query T
+EXPLAIN INSERT INTO child VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: child(c_id, c_p_id, crdb_region)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 4 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • lookup join (semi)
+│           │ table: child@primary
+│           │ equality: (lookup_join_const_col_@12, column1) = (crdb_region,c_id)
+│           │ equality cols are key
+│           │ pred: column8 != crdb_region
+│           │
+│           └── • cross join
+│               │ estimated row count: 3
+│               │
+│               ├── • values
+│               │     size: 1 column, 3 rows
+│               │
+│               └── • scan buffer
+│                     label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@primary
+            │ equality cols are key
+            │ lookup condition: (column2 = p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │
+            └── • lookup join (anti)
+                │ table: parent@primary
+                │ equality cols are key
+                │ lookup condition: (column2 = p_id) AND (crdb_region = 'ap-southeast-2')
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+query T
+EXPLAIN UPSERT INTO child VALUES (1, 1)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • upsert
+│   │ into: child(c_id, c_p_id, crdb_region)
+│   │ arbiter constraints: primary
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • cross join (left outer)
+│               │
+│               ├── • values
+│               │     size: 3 columns, 1 row
+│               │
+│               └── • union all
+│                   │ limit: 1
+│                   │
+│                   ├── • scan
+│                   │     missing stats
+│                   │     table: child@primary
+│                   │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: child@primary
+│                         spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@primary
+            │ equality cols are key
+            │ lookup condition: (column2 = p_id) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
+            │
+            └── • lookup join (anti)
+                │ table: parent@primary
+                │ equality cols are key
+                │ lookup condition: (column2 = p_id) AND (crdb_region = 'ap-southeast-2')
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+# We don't yet support locality optimized search for semi join.
+query T
+EXPLAIN DELETE FROM parent WHERE p_id = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • delete
+│   │ from: parent
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • union all
+│           │ limit: 1
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: parent@primary
+│           │     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│           │
+│           └── • scan
+│                 missing stats
+│                 table: parent@primary
+│                 spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (semi)
+            │ table: child@child_c_p_id_idx
+            │ equality: (lookup_join_const_col_@12, p_id) = (crdb_region,c_p_id)
+            │
+            └── • cross join
+                │
+                ├── • values
+                │     size: 1 column, 3 rows
+                │
+                └── • scan buffer
+                      label: buffer 1
 
 # Tests creating a index and a unique constraint on a REGIONAL BY ROW table.
 statement ok

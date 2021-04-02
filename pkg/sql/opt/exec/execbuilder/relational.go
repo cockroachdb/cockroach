@@ -1549,6 +1549,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		join.IsSecondJoinInPairedJoiner,
 		res.reqOrdering(join),
 		locking,
+		join.LocalityOptimized,
 	)
 	if err != nil {
 		return execPlan{}, err
