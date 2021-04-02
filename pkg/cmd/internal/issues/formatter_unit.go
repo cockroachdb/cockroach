@@ -92,6 +92,14 @@ var UnitTestFormatter = IssueFormatter{
 			})
 		}
 
+		if len(data.Mention) > 0 {
+			r.Escaped("/cc")
+			for _, handle := range data.Mention {
+				r.Escaped(" ")
+				r.Escaped(handle)
+			}
+		}
+
 		if data.InternalLog != "" {
 			r.Collapsed("Internal log", func() {
 				r.CodeBlock("", data.InternalLog)

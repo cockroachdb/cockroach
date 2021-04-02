@@ -636,10 +636,7 @@ func (r *testRunner) runTest(
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", t.Name(), durationStr, output)
 			// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
 			if issues.DefaultOptionsFromEnv().CanPost() && t.spec.Run != nil && t.spec.Cluster.NodeCount > 0 {
-				projectColumnID := 0
-				if info, ok := roachtestOwners[t.spec.Owner]; ok {
-					projectColumnID = info.TriageColumnID
-				}
+				owner := roachtestOwners[t.spec.Owner]
 
 				branch := "<unknown branch>"
 				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
@@ -658,12 +655,14 @@ func (r *testRunner) runTest(
 				}
 
 				req := issues.PostRequest{
+					AuthorEmail:     "", // intentionally unset - we add to the board and cc the team
+					Mention:         owner.Mention,
+					ProjectColumnID: owner.TriageColumnID,
 					PackageName:     "roachtest",
 					TestName:        t.Name(),
 					Message:         msg,
 					Artifacts:       artifacts,
 					ExtraLabels:     labels,
-					ProjectColumnID: projectColumnID,
 					ReproductionCommand: fmt.Sprintf(`#!/usr/bin/env bash
 #!/bin/bash
 set -euxo pipefail
