@@ -273,8 +273,11 @@ type cFetcher struct {
 		// seekPrefix is the prefix to seek to in stateSeekPrefix.
 		seekPrefix roachpb.Key
 
-		// limitHint is a hint as to the number of rows that the caller expects to
-		// be returned from this fetch.
+		// limitHint is a hint as to the number of rows that the caller expects
+		// to be returned from this fetch. It will be decremented whenever a
+		// batch is returned by the length of the batch so that it tracks the
+		// hint for the rows remaining to be returned. It might become negative
+		// indicating that the hint is no longer applicable.
 		limitHint int
 
 		// remainingValueColsByIdx is the set of value columns that are yet to be
@@ -316,17 +319,28 @@ type cFetcher struct {
 
 func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 	var reallocated bool
-	var estimatedRowCount int
-	// We need to transform our rf.estimatedRowCount, which is a uint64, into
-	// an int. We have to be careful: if we just cast it directly, a giant
-	// estimate will wrap around and become negative.
-	if rf.estimatedRowCount > uint64(coldata.BatchSize()) {
-		estimatedRowCount = coldata.BatchSize()
+	var minCapacity int
+	if rf.estimatedRowCount == 0 && rf.machine.limitHint > 0 {
+		// If we don't have an estimate but we have a limit hint, use the hint
+		// to size the batch. Note that if it exceeds coldata.BatchSize,
+		// ResetMaybeReallocate will chop it down.
+		minCapacity = rf.machine.limitHint
 	} else {
-		estimatedRowCount = int(rf.estimatedRowCount)
+		// Otherwise, use the estimate. Note that if the estimate is not
+		// present, it'll be 0 and ResetMaybeReallocate will allocate the
+		// initial batch of capacity 1 which is the esired behavior.
+		//
+		// We need to transform our rf.estimatedRowCount, which is a uint64,
+		// into an int. We have to be careful: if we just cast it directly, a
+		// giant estimate will wrap around and become negative.
+		if rf.estimatedRowCount > uint64(coldata.BatchSize()) {
+			minCapacity = coldata.BatchSize()
+		} else {
+			minCapacity = int(rf.estimatedRowCount)
+		}
 	}
 	rf.machine.batch, reallocated = rf.allocator.ResetMaybeReallocate(
-		rf.typs, rf.machine.batch, estimatedRowCount, rf.memoryLimit,
+		rf.typs, rf.machine.batch, minCapacity, rf.memoryLimit,
 	)
 	if reallocated {
 		rf.machine.colvecs = rf.machine.batch.ColVecs()
@@ -437,7 +451,6 @@ func (rf *cFetcher) Init(
 	}
 	sort.Ints(table.neededColsList)
 
-	rf.resetBatch(table.timestampOutputIdx, table.oidOutputIdx)
 	table.knownPrefixLength = len(rowenc.MakeIndexKeyPrefix(codec, table.desc, table.index.ID))
 
 	var indexColumnIDs []descpb.ColumnID
@@ -665,7 +678,8 @@ func (rf *cFetcher) StartScan(
 	rf.fetcher = f
 	rf.machine.lastRowPrefix = nil
 	rf.machine.limitHint = int(limitHint)
-	rf.machine.state[0] = stateInitFetch
+	rf.machine.state[0] = stateResetBatch
+	rf.machine.state[1] = stateInitFetch
 	return nil
 }
 
@@ -1056,14 +1070,21 @@ func (rf *cFetcher) nextBatch(ctx context.Context) (coldata.Batch, error) {
 			rf.shiftState()
 
 			var emitBatch bool
-			if rf.machine.rowIdx >= rf.machine.batch.Capacity() {
-				// We have no more room in our batch, so output it immediately.
+			if rf.machine.rowIdx >= rf.machine.batch.Capacity() ||
+				(rf.machine.limitHint > 0 && rf.machine.rowIdx >= rf.machine.limitHint) {
+				// We either
+				//   1. have no more room in our batch, so output it immediately
+				// or
+				//   2. we made it to our limit hint, so output our batch early
+				//      to make sure that we don't bother filling in extra data
+				//      if we don't need to.
 				emitBatch = true
-			} else if rf.machine.limitHint > 0 && rf.machine.rowIdx >= rf.machine.limitHint {
-				// If we made it to our limit hint, output our batch early to make sure
-				// that we don't bother filling in extra data if we don't need to.
-				emitBatch = true
-				rf.machine.limitHint = 0
+				// Update the limit hint to track the expected remaining rows to
+				// be fetched.
+				//
+				// Note that limitHint might become negative at which point we
+				// will start ignoring it.
+				rf.machine.limitHint -= rf.machine.rowIdx
 			}
 
 			if emitBatch {
