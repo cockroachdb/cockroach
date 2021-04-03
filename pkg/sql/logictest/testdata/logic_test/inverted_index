@@ -767,7 +767,13 @@ INSERT INTO f VALUES
   (25, '{"a": {"b": "c", "d": "e"}}'),
   (26, '{"a": {"b": "c"}, "d": "e"}'),
   (27, '[1, 2, {"b": "c"}]'),
-  (28, '[{"a": {"b": "c"}}, "d", "e"]')
+  (28, '[{"a": {"b": "c"}}, "d", "e"]'),
+  (29, '{"a": null}'),
+  (30, '{"a": [1, 2, null]}'),
+  (31, 'null'),
+  (32, '{}'),
+  (33, '[]'),
+  (34, '{"a": {"b": []}}')
 
 query T
 SELECT j FROM f@i WHERE j->'a' = '1' ORDER BY k
@@ -879,6 +885,204 @@ query T
 SELECT j FROM f@i WHERE j->'a' = '"b"' AND j->'c' = '[{"d": 1}, {"e": 2}]' ORDER BY k
 ----
 {"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+# Expressions with fetch val and containment operators use the inverted index.
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '"b"' ORDER BY k
+----
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> 'null' ORDER BY k
+----
+{"a": null}
+{"a": [1, 2, null]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ 'null' ORDER BY k
+----
+{"a": null}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '[]' ORDER BY k
+----
+{"a": []}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '{}' ORDER BY k
+----
+{"a": {}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '[]' ORDER BY k
+----
+{"a": [1, 2]}
+{"a": []}
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": [1, 2, null]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '{}' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": {"b": {"c": 1}}}
+{"a": {"b": {"c": 1, "d": 2}}}
+{"a": {"b": {"d": 2}}}
+{"a": {"b": {"c": [1, 2]}}}
+{"a": {"b": {"c": [1, 2, 3]}}}
+{"a": {}}
+{"a": {"b": "c"}}
+{"a": {"b": ["c", "d", "e"]}}
+{"a": {"b": "c", "d": "e"}}
+{"a": {"b": "c"}, "d": "e"}
+{"a": {"b": []}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '{"b": [1, 2]}' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
+{"a": {}}
+{"a": {"b": []}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '{"b": {"c": [1, 2]}}' ORDER BY k
+----
+{"a": {"b": {"c": [1, 2]}}}
+{"a": {}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '{"b": ["c"]}' ORDER BY k
+----
+{"a": {"b": ["c", "d", "e"]}}
+
+query T
+SELECT j FROM f@i WHERE j->'c' @> '[{"d": 1}]' ORDER BY k
+----
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+# Expressions with chained fetch val and containment operators use the inverted
+# index.
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' <@ '1' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' @> '1' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' @> '[1, 2]' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' <@ '[1, 2]' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": {"b": []}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' @> '"c"' ORDER BY k
+----
+{"a": {"b": "c"}}
+{"a": {"b": ["c", "d", "e"]}}
+{"a": {"b": "c", "d": "e"}}
+{"a": {"b": "c"}, "d": "e"}
+
+# Expressions with fetch val on the right side should use the inverted index.
+query T
+SELECT j FROM f@i WHERE '"b"' <@ j->'a' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE '[1, 2]' <@ j->'a'->'b' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE '{"b": {"c": [1, 2]}}' <@ j->'a' ORDER BY k
+----
+{"a": {"b": {"c": [1, 2]}}}
+{"a": {"b": {"c": [1, 2, 3]}}}
+
+# Conjunctions of fetch val and containment expressions use the inverted index.
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' AND '["c"]' <@ j->'a' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+
+#TODO(angelazxu): Uncomment these tests once #63180 is fixed.
+# query T
+# SELECT j FROM f@i WHERE j->'a' <@ '{"b": [1, 2]}' AND j->'a'->'b' @> '[1]' ORDER BY k
+# ----
+
+# query T
+# SELECT j FROM f@i WHERE j->'a' @> '"b"' AND j->'a' <@ '["b", "c", "d", "e"]' ORDER BY k
+# ----
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '{"d": 2}' AND '[1, 2]' @> j->'a'->'b' ORDER BY k
+----
+{"a": {"b": 1, "d": 2}}
+
+# Disjunctions of fetch val and containment expressions use the inverted index.
+query T
+SELECT j FROM f@i WHERE j->'a' @> '[1, 2]' OR j->'a'->'b' @> '[1, 2]' ORDER BY k
+----
+{"a": [1, 2]}
+{"a": {"b": [1, 2]}}
+{"a": [1, 2, null]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' OR j->'a'->'b' <@ '[1, 2]' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+{"a": {"b": []}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' <@ '{"c": [1, 2], "d": 2}' OR j->'a'->'b' <@ '["c", "d", "e", 1, 2, 3]' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": {"b": {"d": 2}}}
+{"a": {"b": {"c": [1, 2]}}}
+{"a": {"b": "c"}}
+{"a": {"b": ["c", "d", "e"]}}
+{"a": {"b": "c", "d": "e"}}
+{"a": {"b": "c"}, "d": "e"}
+{"a": {"b": []}}
 
 subtest arrays
 

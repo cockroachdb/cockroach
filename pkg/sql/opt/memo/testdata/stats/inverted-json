@@ -984,3 +984,373 @@ select
  │              └── fd: (1)-->(4)
  └── filters
       └── (j:2->'a') = '{}' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contains operators uses the inverted index.
+opt
+SELECT * FROM t WHERE j->'a' @> '1'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /4
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+      │         └── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+      ├── stats: [rows=2e-07]
+      ├── key: (1)
+      └── scan t@j_idx
+           ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+           ├── inverted constraint: /4/1
+           │    └── spans
+           │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+           │         └── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+           ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+           │   histogram(4)=
+           ├── key: (1)
+           └── fd: (1)-->(4)
+
+# A query with fetch val and contained by operators uses the inverted index,
+# and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' <@ '1'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x019", "7\x00\x019"]
+ │         │         └── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x019", "7\x00\x019"]
+ │              │         └── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+ │              ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(4)=1, null(4)=0]
+ │              │   histogram(4)=  0      100
+ │              │                <--- '\x37000139'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── (j:2->'a') <@ '1' [type=bool, outer=(2), immutable]
+
+# A query with chained fetch val and contains operators uses the inverted index.
+opt
+SELECT * FROM t WHERE j->'a'->'b' @> '"c"'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /4
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+      ├── stats: [rows=2e-07]
+      ├── key: (1)
+      └── scan t@j_idx
+           ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+           ├── inverted constraint: /4/1
+           │    └── spans
+           │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+           │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+           ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+           │   histogram(4)=
+           ├── key: (1)
+           └── fd: (1)-->(4)
+
+# A query with chained fetch val and contained by operators uses the inverted
+# index, and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a'->'b' <@ '"c"'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x019", "7\x00\x019"]
+ │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
+ │         │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x019", "7\x00\x019"]
+ │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
+ │              │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │              ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(4)=1, null(4)=0]
+ │              │   histogram(4)=  0      100
+ │              │                <--- '\x37000139'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── ((j:2->'a')->'b') <@ '"c"' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contains operators uses the inverted index when an
+# object is on the right side.
+opt
+SELECT * FROM t WHERE j->'a' @> '{"b": "c"}'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=222.222222]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── scan t@j_idx
+      ├── columns: k:1(int!null)
+      ├── inverted constraint: /4/1
+      │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      ├── stats: [rows=2e-07, distinct(4)=2e-07, null(4)=0]
+      │   histogram(4)=
+      └── key: (1)
+
+# A query with fetch val and contained by operators uses the inverted index
+# when an object is on the right side, and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' <@ '{"b": "c"}'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x019", "7\x00\x019"]
+ │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
+ │         │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x019", "7\x00\x019"]
+ │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
+ │              │         └── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+ │              ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(4)=1, null(4)=0]
+ │              │   histogram(4)=  0      100
+ │              │                <--- '\x37000139'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── (j:2->'a') <@ '{"b": "c"}' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contains operators uses the inverted index when an
+# array is on the right side, and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' @> '[1, 2]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=24.691358]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=2e-07]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: true
+ │         │    ├── union spans: empty
+ │         │    └── INTERSECTION
+ │         │         ├── span expression
+ │         │         │    ├── tight: true, unique: true
+ │         │         │    └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+ │         │         └── span expression
+ │         │              ├── tight: true, unique: true
+ │         │              └── union spans: ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │         ├── stats: [rows=2e-07]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+ │              │         └── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │              ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+ │              │   histogram(4)=
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── (j:2->'a') @> '[1, 2]' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contained by operators uses the inverted index
+# when an array is on the right side, and the expression is not tight.
+opt
+SELECT * FROM t WHERE j->'a' <@ '[1, 2]'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x019", "7\x00\x019"]
+ │         │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+ │         │         ├── ["7a\x00\x01*\x04\x00", "7a\x00\x01*\x04\x00"]
+ │         │         ├── ["7a\x00\x018", "7a\x00\x018"]
+ │         │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+ │         │         └── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x019", "7\x00\x019"]
+ │              │         ├── ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
+ │              │         ├── ["7a\x00\x01*\x04\x00", "7a\x00\x01*\x04\x00"]
+ │              │         ├── ["7a\x00\x018", "7a\x00\x018"]
+ │              │         ├── ["7a\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02\x00\x03\x00\x01*\x02\x00"]
+ │              │         └── ["7a\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │              ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(4)=1, null(4)=0]
+ │              │   histogram(4)=  0      100
+ │              │                <--- '\x37000139'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── (j:2->'a') <@ '[1, 2]' [type=bool, outer=(2), immutable]
+
+# A query with fetch val and contained by operators uses the inverted index
+# when the fetch val is on the right side.
+opt
+SELECT * FROM t WHERE  '"c"' <@ j->'a'->'b'
+----
+index-join t
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inverted-filter
+      ├── columns: k:1(int!null)
+      ├── inverted expression: /4
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+      │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+      ├── stats: [rows=2e-07]
+      ├── key: (1)
+      └── scan t@j_idx
+           ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+           ├── inverted constraint: /4/1
+           │    └── spans
+           │         ├── ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
+           │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x02\x00\x03\x00\x01\x12c\x00\x01"]
+           ├── stats: [rows=2e-07, distinct(1)=2e-07, null(1)=0, distinct(4)=2e-07, null(4)=0]
+           │   histogram(4)=
+           ├── key: (1)
+           └── fd: (1)-->(4)
+
+# A query with fetch val and contains operators uses the inverted index when
+# the fetch val is on the right side.
+opt
+SELECT * FROM t WHERE  '[1, 2]' @> j->'a'->'b'
+----
+select
+ ├── columns: k:1(int!null) j:2(jsonb)
+ ├── immutable
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── index-join t
+ │    ├── columns: k:1(int!null) j:2(jsonb)
+ │    ├── stats: [rows=100]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── inverted-filter
+ │         ├── columns: k:1(int!null)
+ │         ├── inverted expression: /4
+ │         │    ├── tight: false, unique: false
+ │         │    └── union spans
+ │         │         ├── ["7\x00\x019", "7\x00\x019"]
+ │         │         ├── ["7a\x00\x019", "7a\x00\x019"]
+ │         │         ├── ["7a\x00\x02b\x00\x01*\x02\x00", "7a\x00\x02b\x00\x01*\x02\x00"]
+ │         │         ├── ["7a\x00\x02b\x00\x01*\x04\x00", "7a\x00\x02b\x00\x01*\x04\x00"]
+ │         │         ├── ["7a\x00\x02b\x00\x018", "7a\x00\x02b\x00\x018"]
+ │         │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00"]
+ │         │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │         ├── stats: [rows=100]
+ │         ├── key: (1)
+ │         └── scan t@j_idx
+ │              ├── columns: k:1(int!null) j_inverted_key:4(jsonb!null)
+ │              ├── inverted constraint: /4/1
+ │              │    └── spans
+ │              │         ├── ["7\x00\x019", "7\x00\x019"]
+ │              │         ├── ["7a\x00\x019", "7a\x00\x019"]
+ │              │         ├── ["7a\x00\x02b\x00\x01*\x02\x00", "7a\x00\x02b\x00\x01*\x02\x00"]
+ │              │         ├── ["7a\x00\x02b\x00\x01*\x04\x00", "7a\x00\x02b\x00\x01*\x04\x00"]
+ │              │         ├── ["7a\x00\x02b\x00\x018", "7a\x00\x02b\x00\x018"]
+ │              │         ├── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x02\x00"]
+ │              │         └── ["7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00", "7a\x00\x02b\x00\x02\x00\x03\x00\x01*\x04\x00"]
+ │              ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(4)=1, null(4)=0]
+ │              │   histogram(4)=  0      100
+ │              │                <--- '\x37000139'
+ │              ├── key: (1)
+ │              └── fd: (1)-->(4)
+ └── filters
+      └── '[1, 2]' @> ((j:2->'a')->'b') [type=bool, outer=(2), immutable]

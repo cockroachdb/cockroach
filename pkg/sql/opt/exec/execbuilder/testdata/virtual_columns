@@ -1417,7 +1417,10 @@ vectorized: true
   table: inv@iv_j_idx
   spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
 
-# Verify that we use iv_jv_idx.
+statement ok
+DROP INDEX inv@iv_j_idx
+
+# Verify that we use iv_jv_idx
 query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND jv @> '{"a": "b"}'
 ----
