@@ -383,7 +383,17 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 		indexColumn, constantVal = right, left
 		containedBy = !containedBy
 	} else {
-		// If neither condition is met, we cannot create an InvertedExpression.
+		if fetch, ok := left.(*memo.FetchValExpr); ok {
+			// When the expression has a JSON fetch operator on the left, it is
+			// handled in extractJSONFetchValContainsCondition.
+			return j.extractJSONFetchValContainsCondition(evalCtx, fetch, right, containedBy)
+		} else if fetch, ok := right.(*memo.FetchValExpr); ok {
+			// When the expression has a JSON fetch operator on the right, it is
+			// handled in extractJSONFetchValContainsCondition as an equivalent
+			// expression with right and left swapped.
+			return j.extractJSONFetchValContainsCondition(evalCtx, fetch, left, !containedBy)
+		}
+		// If none of the conditions are met, we cannot create an InvertedExpression.
 		return inverted.NonInvertedColExpression{}
 	}
 	d := memo.ExtractConstDatum(constantVal)
@@ -403,7 +413,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 
 // extractJSONFetchValEqCondition extracts an InvertedExpression representing an
 // inverted filter over the planner's inverted index, based on equality between
-// a chain of fetch val expressions and a right scalar expression. If an
+// a chain of fetch val expressions and a scalar expression. If an
 // InvertedExpression cannot be generated from the expression, an
 // inverted.NonInvertedColExpression is returned.
 //
@@ -415,7 +425,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONOrArrayContainsCondition(
 func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 	evalCtx *tree.EvalContext, left *memo.FetchValExpr, right opt.ScalarExpr,
 ) inverted.Expression {
-	// The right side of the equals expression should be a constant JSON value.
+	// The right side of the expression should be a constant JSON value.
 	if !memo.CanExtractConstDatum(right) {
 		return inverted.NonInvertedColExpression{}
 	}
@@ -424,77 +434,18 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 		return inverted.NonInvertedColExpression{}
 	}
 
-	// Recursively traverse fetch val expressions and collect keys with which to
-	// build the InvertedExpression. If it is not possible to build an inverted
-	// expression from the tree of fetch val expressions, collectKeys returns
-	// early and foundKeys remains false. If successful, foundKeys is set to
-	// true and JSON fetch value indexes are collected in keys. The keys are
-	// ordered by the outer-most fetch val index first. The outer-most fetch val
-	// index is the right-most in the -> chain, for example (j->'a'->'b') is
-	// equivalent to ((j->'a')->'b') and 'b' is the outer-most fetch val index.
-	//
-	// Later on, we iterate forward through these keys to build a JSON object
-	// from the inside-out with the inner-most value being the JSON scalar
-	// extracted above from the right ScalarExpr function argument. In the
-	// resulting JSON object, the outer-most JSON fetch value indexes are the
-	// inner most JSON object keys.
-	//
-	// As an example, when left is (j->'a'->'b') and right is ('1'), the keys
-	// {"b", "a"} are collected and the JSON object {"a": {"b": 1}} is built.
-	foundKeys := false
+	// Collect a slice of keys from the fetch val expression.
 	var keys []string
-	var collectKeys func(fetch *memo.FetchValExpr)
-	collectKeys = func(fetch *memo.FetchValExpr) {
-		// The right side of the fetch val expression, the Index field, must be
-		// a constant string. If not, then we cannot build an inverted
-		// expression.
-		if !memo.CanExtractConstDatum(fetch.Index) {
-			return
-		}
-		key, ok := memo.ExtractConstDatum(fetch.Index).(*tree.DString)
-		if !ok {
-			return
-		}
-
-		// Append the key to the list of keys.
-		keys = append(keys, string(*key))
-
-		// If the left side of the fetch val expression, the Json field, is a
-		// variable or expression corresponding to the index column, then we
-		// have found a valid list of keys to build an inverted expression.
-		if isIndexColumn(j.tabID, j.index, fetch.Json, j.computedColumns) {
-			foundKeys = true
-			return
-		}
-
-		// If the left side of the fetch val expression is another fetch val
-		// expression, recursively collect its keys.
-		if innerFetch, ok := fetch.Json.(*memo.FetchValExpr); ok {
-			collectKeys(innerFetch)
-		}
-
-		// Otherwise, we cannot build an inverted expression.
-	}
-	collectKeys(left)
-	if !foundKeys {
+	keys = j.collectKeys(keys, left)
+	if len(keys) == 0 {
 		return inverted.NonInvertedColExpression{}
 	}
 
-	// Build a new JSON object of the form:
-	//   {<keyN>: ... {<key1>: {key0: <val>}}}
-	// Note that key0 is the outer-most fetch val index, so the expression
-	// j->'a'->'b' = 1 results in {"a": {"b": 1}}.
-	var obj json.JSON
-	for i := 0; i < len(keys); i++ {
-		b := json.NewObjectBuilder(1)
-		if i == 0 {
-			b.Add(keys[i], val.JSON)
-		} else {
-			b.Add(keys[i], obj)
-		}
-		obj = b.Build()
-	}
+	// Build a new JSON object with the collected keys and val.
+	obj := buildObject(keys, val.JSON)
 
+	// For Equals expressions, we will generate the inverted expression for the
+	// single object built from the keys and val.
 	invertedExpr := getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, tree.NewDJSON(obj))
 
 	// When the right side is an array or object, the InvertedExpression
@@ -504,6 +455,206 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 	if typ == json.ArrayJSONType || typ == json.ObjectJSONType {
 		invertedExpr.SetNotTight()
 	}
-
 	return invertedExpr
+}
+
+// extractJSONFetchValContainsCondition extracts an InvertedExpression
+// representing an inverted filter over the planner's inverted index, based on
+// containment between a chain of fetch val expressions and a scalar
+// expression. If an InvertedExpression cannot be generated from the
+// expression, an inverted.NonInvertedColExpression is returned.
+//
+// In order to generate an InvertedExpression, left must be a fetch val
+// expression in the form [col]->[index0]->[index1]->...->[indexN] where col is
+// a variable or expression referencing the inverted column in the inverted
+// index and each index is a constant string. The right expression must be a
+// constant JSON value. For expressions with a left constant value and a right
+// fetch val expression, the arguments will be swapped when passed in.
+//
+// The type of operator is indicated by the containedBy parameter, which is
+// true for <@ and false for @>.
+func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
+	evalCtx *tree.EvalContext, left *memo.FetchValExpr, right opt.ScalarExpr, containedBy bool,
+) inverted.Expression {
+	// The right side of the expression should be a constant JSON value.
+	if !memo.CanExtractConstDatum(right) {
+		return inverted.NonInvertedColExpression{}
+	}
+	val, ok := memo.ExtractConstDatum(right).(*tree.DJSON)
+	if !ok {
+		return inverted.NonInvertedColExpression{}
+	}
+
+	// Collect a slice of keys from the fetch val expression.
+	var keys []string
+	keys = j.collectKeys(keys, left)
+	if len(keys) == 0 {
+		return inverted.NonInvertedColExpression{}
+	}
+
+	// Build a new JSON object with the collected keys and val.
+	obj := buildObject(keys, val.JSON)
+
+	var invertedExpr inverted.Expression
+
+	// For Contains and ContainedBy expressions, we may need to build additional
+	// objects to cover all possibilities.
+	objs, err := buildFetchContainmentObjects(keys, val.JSON, containedBy)
+	if err != nil {
+		return inverted.NonInvertedColExpression{}
+	}
+	objs = append(objs, obj)
+	// We get an inverted expression for each object constructed, and union
+	// these expressions.
+	for i := range objs {
+		var expr inverted.Expression
+		if containedBy {
+			expr = getInvertedExprForJSONOrArrayIndexForContainedBy(evalCtx, tree.NewDJSON(objs[i]))
+		} else {
+			expr = getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, tree.NewDJSON(objs[i]))
+		}
+		if invertedExpr == nil {
+			invertedExpr = expr
+		} else {
+			invertedExpr = inverted.Or(invertedExpr, expr)
+		}
+	}
+	return invertedExpr
+}
+
+// collectKeys is called on fetch val expressions to the find corresponding
+// keys used to build a JSON object. It recursively traverses the fetch val
+// expressions and collects keys with which to build the InvertedExpression.
+// If it is not possible to build an inverted expression from the tree of fetch
+// val expressions, collectKeys returns nil for keys. If successful, the JSON
+// fetch value indexes are collected in keys. The keys are ordered by the
+// outer-most fetch val index first. The outer-most fetch val index is the
+// right-most in the -> chain, for example (j->'a'->'b') is equivalent to
+// ((j->'a')->'b') and 'b' is the outer-most fetch val index.
+//
+// Callers of this function should iterate forward through these keys to build
+// a JSON object from the inside-out with the inner-most value being the JSON
+// scalar extracted above from the right ScalarExpr function argument. In the
+// resulting JSON object, the outer-most JSON fetch value indexes are the
+// inner most JSON object keys.
+//
+// As an example, when left is (j->'a'->'b') and right is ('1'), the keys
+// {"b", "a"} are collected and the JSON object {"a": {"b": 1}} is built.
+func (j *jsonOrArrayFilterPlanner) collectKeys(
+	currKeys []string, fetch *memo.FetchValExpr,
+) (keys []string) {
+	// The right side of the fetch val expression, the Index field, must be
+	// a constant string. If not, then we cannot build an inverted
+	// expression.
+	if !memo.CanExtractConstDatum(fetch.Index) {
+		return nil
+	}
+	key, ok := memo.ExtractConstDatum(fetch.Index).(*tree.DString)
+	if !ok {
+		return nil
+	}
+
+	// Append the key to the list of keys.
+	keys = append(currKeys, string(*key))
+
+	// If the left side of the fetch val expression, the Json field, is a
+	// variable or expression corresponding to the index column, then we
+	// have found a valid list of keys to build an inverted expression.
+	if isIndexColumn(j.tabID, j.index, fetch.Json, j.computedColumns) {
+		return keys
+	}
+
+	// If the left side of the fetch val expression is another fetch val
+	// expression, recursively collect its keys.
+	if innerFetch, ok := fetch.Json.(*memo.FetchValExpr); ok {
+		return j.collectKeys(keys, innerFetch)
+	}
+	// Otherwise, we cannot build an inverted expression.
+	return nil
+}
+
+// buildFetchContainmentObjects constructs new JSON objects with given keys and val.
+// The keys and val are extracted from a fetch val containment expression, and
+// the objects constructed depend on the value type and whether the expression
+// uses <@ or @>. For example, the expression j->'a'->'b' @> "c" would have
+// {"a", "b"} as keys, "c" as val, and construct {"a": "b": ["c"]}.
+// An array of the constructed JSONs is returned.
+func buildFetchContainmentObjects(
+	keys []string, val json.JSON, containedBy bool,
+) ([]json.JSON, error) {
+	var objs []json.JSON
+	typ := val.Type()
+	switch typ {
+	case json.ArrayJSONType:
+		// For arrays in ContainedBy expressions, we must create a scalar value
+		// object, because getInvertedExprForJSONOrArrayIndexForContainedBy will
+		// not include the scalar value spans.
+
+		// Array value examples:
+		//   j->'a' @> '[1]', no new object required, we already have '{"a": [1]}'
+		//   j->'a' <@ '[1]', build '{"a": 1}', we already have '{"a": [1]}'
+		//   j->'a' <@ '[1, [2], 3]', build '{"a": 1}', '{"a": 3}', we already have '{"a": [1, [2], 3]}'
+		if containedBy {
+			for i := 0; i < val.Len(); i++ {
+				v, err := val.FetchValIdx(i)
+				if err != nil {
+					return nil, err
+				}
+				t := v.Type()
+				if t == json.ArrayJSONType || t == json.ObjectJSONType {
+					// The scalar value is only needed for non-nested arrays and objects.
+					continue
+				}
+				newObj := buildObject(keys, v)
+				objs = append(objs, newObj)
+			}
+		}
+
+	case json.ObjectJSONType:
+		// For objects in ContainedBy expressions, we do not need to generate the
+		// empty object value for each level of nesting, because the spans will be
+		// added for us in getInvertedExprForJSONOrArrayIndexForContainedBy.
+		// For objects in Contains expressions, no additional spans are required
+		// outside of the given object's spans.
+
+		// Object value examples:
+		//   j->'a' @> '{"b": 2}', we already have '{"a": {"b": 2}}'
+		//   j->'a' <@ '{"b": 2}', we already have '{"a": {"b": 2}}'
+		return nil, nil
+
+	default:
+		// For scalars in Contains expressions, we construct an array value
+		// containing the scalar.
+
+		// Scalar value examples:
+		//   j->'a' @> '1', build '{"a": [1]}', we already have '{"a": 1}'
+		//   j->'a' <@ '1', we already have '{"a": 1}'
+		if !containedBy {
+			arr := json.NewArrayBuilder(1)
+			arr.Add(val)
+			v := arr.Build()
+			newObj := buildObject(keys, v)
+			objs = append(objs, newObj)
+		}
+	}
+	return objs, nil
+}
+
+// buildObject constructs a new JSON object of the form:
+//   {<keyN>: ... {<key1>: {key0: <val>}}}
+// Where the keys and val are extracted from a fetch val expression by the
+// caller. Note that key0 is the outer-most fetch val index, so the expression
+// j->'a'->'b' = 1 results in {"a": {"b": 1}}.
+func buildObject(keys []string, val json.JSON) json.JSON {
+	var obj json.JSON
+	for i := 0; i < len(keys); i++ {
+		b := json.NewObjectBuilder(1)
+		if i == 0 {
+			b.Add(keys[i], val)
+		} else {
+			b.Add(keys[i], obj)
+		}
+		obj = b.Build()
+	}
+	return obj
 }
