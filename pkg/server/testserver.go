@@ -987,6 +987,12 @@ func (ts *TestServer) DrainClients(ctx context.Context) error {
 	return ts.drainClients(ctx, nil /* reporter */)
 }
 
+// Readiness returns nil when the server's health probe reports
+// readiness, a readiness error otherwise.
+func (ts *TestServer) Readiness(ctx context.Context) error {
+	return ts.admin.checkReadinessForHealthCheck(ctx)
+}
+
 // WriteSummaries implements TestServerInterface.
 func (ts *TestServer) WriteSummaries() error {
 	return ts.node.writeNodeStatus(context.TODO(), time.Hour, false)

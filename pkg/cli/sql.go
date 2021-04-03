@@ -569,7 +569,7 @@ func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateE
 		return nextState
 	}
 
-	if err := demoCtx.transientCluster.AddNode(cmd[1]); err != nil {
+	if err := demoCtx.transientCluster.AddNode(context.Background(), cmd[1]); err != nil {
 		return c.internalServerError(errState, err)
 	}
 	addedNodeID := len(demoCtx.transientCluster.servers)
