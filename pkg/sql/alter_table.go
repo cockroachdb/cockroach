@@ -1099,6 +1099,13 @@ func applyColumnMutation(
 			}
 		}
 
+	case *tree.AlterTableSetVisible:
+		col, err := tableDesc.FindActiveOrNewColumnByName(col.ColName())
+		if err != nil {
+			return err
+		}
+		col.ColumnDesc().Hidden = !t.Visible
+
 	case *tree.AlterTableSetNotNull:
 		if !col.Nullable {
 			return nil

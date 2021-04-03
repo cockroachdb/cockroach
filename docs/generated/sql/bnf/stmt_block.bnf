@@ -2537,6 +2537,7 @@ alter_table_cmd ::=
 	| 'ADD' 'COLUMN' column_def
 	| 'ADD' 'COLUMN' 'IF' 'NOT' 'EXISTS' column_def
 	| 'ALTER' opt_column column_name alter_column_default
+	| 'ALTER' opt_column column_name alter_column_visible
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
@@ -2812,6 +2813,10 @@ opt_column ::=
 alter_column_default ::=
 	'SET' 'DEFAULT' a_expr
 	| 'DROP' 'DEFAULT'
+
+alter_column_visible ::=
+	'SET' 'VISIBLE'
+	| 'SET' 'NOT' 'VISIBLE'
 
 opt_set_data ::=
 	'SET' 'DATA'
