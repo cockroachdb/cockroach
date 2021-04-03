@@ -1029,7 +1029,8 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 	cost := memo.Cost(cpuCostFactor)
 
 	// Add the CPU cost of emitting the rows.
-	cost += memo.Cost(grouping.Relational().Stats.RowCount) * cpuCostFactor
+	outputRowCount := grouping.Relational().Stats.RowCount
+	cost += memo.Cost(outputRowCount) * cpuCostFactor
 
 	// GroupBy must process each input row once. Cost per row depends on the
 	// number of grouping columns and the number of aggregates.
@@ -1040,18 +1041,40 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *physical.R
 	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
 
 	if groupingColCount > 0 {
-		// Add a cost that reflects the use of a hash table - unless we are doing a
-		// streaming aggregation where all the grouping columns are ordered; we
-		// interpolate linearly if only part of the grouping columns are ordered.
-		//
-		// The cost is chosen so that it's always less than the cost to sort the
-		// input.
-		hashCost := memo.Cost(inputRowCount) * cpuCostFactor
 		n := len(ordering.StreamingGroupingColOrdering(private, &required.Ordering))
-		// n = 0:                factor = 1
-		// n = groupingColCount: factor = 0
-		hashCost *= 1 - memo.Cost(n)/memo.Cost(groupingColCount)
-		cost += hashCost
+		if n < groupingColCount {
+			// Unless we are doing a streaming aggregation where all the
+			// grouping columns are ordered, add a cost that reflects the use of
+			// a hash table. The vectorized execution engine doesn't take
+			// advantage of the partially ordered columns, so we'll treat such
+			// case as having no useful ordering.
+			// TODO(rytaft): how do limits play with aggregation? If we have a
+			// hard limit, then sort + streaming aggregation might be preferable
+			// because we can short-circuit the execution once the limit is
+			// satisfied, unlike in the case of the hash aggregation which has
+			// to fully consume the input before it can emit any output.
+			var singleRowHashTableCost memo.Cost
+			if avgGroupSize := inputRowCount / outputRowCount; avgGroupSize >= 10 {
+				// When the aggregation significantly reduces the cardinality,
+				// we make the cost such that it's always less than the cost to
+				// sort the input.
+				singleRowHashTableCost = cpuCostFactor
+			} else {
+				// The cost of a single row lookup against the hash table
+				// consists of two parts:
+				// 1. the cost of computing the hash which is proportional to
+				// the number of grouping columns
+				// 2. the cost of a lookup in the hash table which is
+				// proportional to the number of elements in the hash table
+				// (which eventually will contain total output count).
+				// TODO(rytaft): this doesn't account for the fact that we might
+				// spill to disk.
+				hashingCost := memo.Cost(groupingColCount) * 0.25
+				lookupCost := memo.Cost(outputRowCount) / 100000
+				singleRowHashTableCost = (hashingCost + lookupCost) * cpuCostFactor
+			}
+			cost += memo.Cost(inputRowCount) * singleRowHashTableCost
+		}
 	}
 
 	return cost
