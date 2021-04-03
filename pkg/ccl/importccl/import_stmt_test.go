@@ -1003,6 +1003,29 @@ END;
 			},
 		},
 		{
+			name: "ALTER COLUMN x SET VISIBLE",
+			typ:  "PGDUMP",
+			data: `
+				CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, c INT8 NOT VISIBLE);
+				ALTER TABLE t ALTER COLUMN c SET VISIBLE;
+				ALTER TABLE t ALTER COLUMN b SET NOT VISIBLE;
+			`,
+			query: map[string][][]string{
+				`SHOW CREATE TABLE t`: {
+					{
+						"t",
+						`CREATE TABLE public.t (
+	a INT8 NOT NULL,
+	b INT8 NOT VISIBLE NULL,
+	c INT8 NULL,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	FAMILY "primary" (a, b, c)
+)`,
+					},
+				},
+			},
+		},
+		{
 			name: "ALTER COLUMN x SET DEFAULT",
 			typ:  "PGDUMP",
 			data: `
