@@ -7260,12 +7260,7 @@ func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 		telemetry.Inc(sqltelemetry.FollowerReadDisabledCCLCounter)
 		ctx.ClientNoticeSender.BufferClientNotice(
 			ctx.Context,
-			pgnotice.Newf(
-				tree.FollowerReadTimestampFunctionName+
-					" does not returns a value that is less likely to read from the closest replica "+
-					"in a non-CCL distribution, using %s from statement time instead",
-				defaultFollowerReadDuration,
-			),
+			pgnotice.Newf("follower reads disabled because you are running a non-CCL distribution"),
 		)
 		return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
 	}
@@ -7274,12 +7269,7 @@ func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 		if code := pgerror.GetPGCode(err); code == pgcode.CCLValidLicenseRequired {
 			telemetry.Inc(sqltelemetry.FollowerReadDisabledNoEnterpriseLicense)
 			ctx.ClientNoticeSender.BufferClientNotice(
-				ctx.Context,
-				pgnotice.Newf(
-					"%s: using %s from current statement time instead",
-					defaultFollowerReadDuration,
-					err.Error(),
-				),
+				ctx.Context, pgnotice.Newf("follower reads disabled: %s", err.Error()),
 			)
 			return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
 		}
