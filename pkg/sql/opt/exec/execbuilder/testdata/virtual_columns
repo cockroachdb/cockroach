@@ -1417,7 +1417,10 @@ vectorized: true
   table: inv@iv_j_idx
   spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
 
-# Verify that we use iv_jv_idx.
+# TODO(angelazxu): We previously chose iv_jv_idx here but now use iv_j_idx.
+# This was a result of implementing index-acceleration for expressions of the
+# form j->'a' @> '1' (#63048). There may be some costing estimates that aren't
+# accurate and need to be investigated here.
 query T
 EXPLAIN (VERBOSE) SELECT k FROM inv WHERE iv IN (10, 20, 30) AND jv @> '{"a": "b"}'
 ----
@@ -1427,5 +1430,5 @@ vectorized: true
 • scan
   columns: (k)
   estimated row count: 3 (missing stats)
-  table: inv@iv_jv_idx
-  spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+  table: inv@iv_j_idx
+  spans: /10/"a"/"a"/"b"-/10/"a"/"a"/"b"/PrefixEnd /20/"a"/"a"/"b"-/20/"a"/"a"/"b"/PrefixEnd /30/"a"/"a"/"b"-/30/"a"/"a"/"b"/PrefixEnd

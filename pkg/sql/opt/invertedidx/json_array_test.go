@@ -548,6 +548,160 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			unique:           true,
 			remainingFilters: "j @> '[[1, 2]]'",
 		},
+		{
+			// Contains is supported with a fetch val operator on the left.
+			filters:          `j->'a' @> '1'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            true,
+			unique:           false,
+			remainingFilters: "",
+		},
+		{
+			// Contains is supported with chained fetch val operators on the left.
+			filters:          `j->'a'->'b' @> '1'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            true,
+			unique:           false,
+			remainingFilters: "",
+		},
+		{
+			// Contains with a fetch val is supported for JSON arrays.
+			filters:          `j->'a'->'b' @> '[1, 2]'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->'a'->'b' @> '[1, 2]'",
+		},
+		{
+			filters:          `j->'a'->'b' @> '[[1, 2]]'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->'a'->'b' @> '[[1, 2]]'",
+		},
+		{
+			// Contains with a fetch val is supported for JSON objects.
+			filters:          `j->'a'->'b' @> '{"c": 1}'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            true,
+			unique:           true,
+			remainingFilters: "",
+		},
+		{
+			filters:          `j->'a'->'b' @> '{"c": {"d": "e"}}'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            true,
+			unique:           true,
+			remainingFilters: "",
+		},
+		{
+			filters:          `j->'a'->'b' @> '[{"c": 1, "d": "2"}]'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->'a'->'b' @> '[{\"c\": 1, \"d\": \"2\"}]'",
+		},
+		{
+			filters:          `j->'a'->'b' @> '{"c": [1, 2], "d": "2"}'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->'a'->'b' @> '{\"c\": [1, 2], \"d\": \"2\"}'",
+		},
+		{
+			// ContainedBy is supported with a fetch val operator on the left.
+			filters:          `j->'a' <@ '1'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j->'a' <@ '1'",
+		},
+		{
+			// ContainedBy is supported with chained fetch val operators on the left.
+			filters:          `j->'a'->'b' <@ '1'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j->'a'->'b' <@ '1'",
+		},
+		{
+			// ContainedBy with a fetch val is supported for JSON arrays.
+			filters:          `j->'a'->'b' <@ '[1, 2]'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j->'a'->'b' <@ '[1, 2]'",
+		},
+		{
+			filters:          `j->'a'->'b' <@ '[[1, 2]]'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j->'a'->'b' <@ '[[1, 2]]'",
+		},
+		{
+			// ContainedBy with a fetch val is supported for JSON objects.
+			filters:          `j->'a'->'b' <@ '{"c": 1}'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j->'a'->'b' <@ '{\"c\": 1}'",
+		},
+		{
+			filters:          `j->'a'->'b' <@ '{"c": {"d": "e"}}'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j->'a'->'b' <@ '{\"c\": {\"d\": \"e\"}}'",
+		},
+		{
+			filters:          `j->'a'->'b' <@ '[{"c": 1, "d": "2"}]'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j->'a'->'b' <@ '[{\"c\": 1, \"d\": \"2\"}]'",
+		},
+		{
+			filters:          `j->'a'->'b' <@ '{"c": [1, 2], "d": "2"}'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j->'a'->'b' <@ '{\"c\": [1, 2], \"d\": \"2\"}'",
+		},
+		{
+			// Contains is supported with a fetch val operator on the right.
+			filters:          `'1' @> j->'a'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "'1' @> j->'a'",
+		},
+		{
+			// ContainedBy is supported with a fetch val operator on the right.
+			filters:          `'1' <@ j->'a'`,
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            true,
+			unique:           false,
+			remainingFilters: "",
+		},
 	}
 
 	for _, tc := range testCases {
