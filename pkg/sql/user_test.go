@@ -45,6 +45,8 @@ func TestGetUserHashedPasswordTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 62948 /* githubIssueID */)
+
 	// We want to use a low timeout below to prevent
 	// this test from taking forever, however
 	// race builds are so slow as to trigger this timeout spuriously.
