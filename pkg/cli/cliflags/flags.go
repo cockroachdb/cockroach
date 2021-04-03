@@ -1215,8 +1215,9 @@ The location where all libraries for spatial operations is located.`,
 	Global = FlagInfo{
 		Name: "global",
 		Description: `
-Simulate a global cluster. This adds artificial latencies to nodes in different
-regions. This flag only works with the default node localities. This setting is experimental.`,
+Simulate a global cluster. Start a 9 node cluster with 3 nodes in
+us-west1, us-east1 and europe-west1. Real world latencies are simulated
+between different nodes.`,
 	}
 
 	WriteSize = FlagInfo{
