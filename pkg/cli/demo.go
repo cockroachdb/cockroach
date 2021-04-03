@@ -200,7 +200,7 @@ func checkDemoConfiguration(
 	}
 
 	// If artificial latencies were requested, then the user cannot supply their own localities.
-	if demoCtx.simulateLatency && demoCtx.localities != nil {
+	if demoCtx.global && demoCtx.localities != nil {
 		return nil, errors.New("--global cannot be used with --demo-locality")
 	}
 

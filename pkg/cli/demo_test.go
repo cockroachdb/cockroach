@@ -120,7 +120,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 	}
 }
 
-func TestTransientClusterSimulateLatencies(t *testing.T) {
+func TestTransientClusterGlobal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -134,7 +134,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	defer TestingReset()
 
 	// Set up an empty 9-node cluster with simulated latencies.
-	demoCtx.simulateLatency = true
+	demoCtx.global = true
 	demoCtx.noExampleDatabase = true
 	demoCtx.nodes = 9
 
