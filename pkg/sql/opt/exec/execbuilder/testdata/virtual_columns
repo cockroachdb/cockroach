@@ -1427,5 +1427,5 @@ vectorized: true
 • scan
   columns: (k)
   estimated row count: 3 (missing stats)
-  table: inv@iv_jv_idx
-  spans: /10/"a"/"b"-/10/"a"/"b"/PrefixEnd /20/"a"/"b"-/20/"a"/"b"/PrefixEnd /30/"a"/"b"-/30/"a"/"b"/PrefixEnd
+  table: inv@iv_j_idx
+  spans: /10/"a"/"a"/"b"-/10/"a"/"a"/"b"/PrefixEnd /20/"a"/"a"/"b"-/20/"a"/"a"/"b"/PrefixEnd /30/"a"/"a"/"b"-/30/"a"/"a"/"b"/PrefixEnd

@@ -767,7 +767,9 @@ INSERT INTO f VALUES
   (25, '{"a": {"b": "c", "d": "e"}}'),
   (26, '{"a": {"b": "c"}, "d": "e"}'),
   (27, '[1, 2, {"b": "c"}]'),
-  (28, '[{"a": {"b": "c"}}, "d", "e"]')
+  (28, '[{"a": {"b": "c"}}, "d", "e"]'),
+  (29, '{"a": null}'),
+  (30, '{"a": [1, 2, null]}')
 
 query T
 SELECT j FROM f@i WHERE j->'a' = '1' ORDER BY k
@@ -879,6 +881,104 @@ query T
 SELECT j FROM f@i WHERE j->'a' = '"b"' AND j->'c' = '[{"d": 1}, {"e": 2}]' ORDER BY k
 ----
 {"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' @> '1' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' @> '[1, 2]' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '"b"' ORDER BY k
+----
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' <@ '1' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+
+query T
+SELECT j FROM f@i WHERE j->'a'->'b' <@ '[1, 2]' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' AND j->'a' @> '["c"]' ORDER BY k
+----
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '[1, 2]' OR j->'a'->'b' @> '[1, 2]' ORDER BY k
+----
+{"a": [1, 2]}
+{"a": {"b": [1, 2]}}
+{"a": [1, 2, null]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '{"b": [1, 2]}' AND j->'a'->'b' <@ '[1, 2]' ORDER BY k
+----
+{"a": {"b": [1, 2]}}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ '["b"]' OR j->'a'->'b' <@ '[1, 2]' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": []}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' AND j->'a' <@ '["b", "c", "d", "e"]' ORDER BY k
+----
+{"a": []}
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> '"b"' OR j->'a'->'b' <@ '[1, 2]' ORDER BY k
+----
+{"a": {"b": 1}}
+{"a": {"b": 1, "d": 2}}
+{"a": {"b": [1, 2]}}
+{"a": ["b", "c", "d", "e"]}
+{"a": ["b", "e", "c", "d"]}
+{"a": "b", "x": ["c", "d", "e"]}
+{"a": "b", "c": [{"d": 1}, {"e": 2}]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' @> 'null' ORDER BY k
+----
+{"a": null}
+{"a": [1, 2, null]}
+
+query T
+SELECT j FROM f@i WHERE j->'a' <@ 'null' ORDER BY k
+----
+{"a": null}
 
 subtest arrays
 
