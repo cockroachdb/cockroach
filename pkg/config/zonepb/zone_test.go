@@ -313,6 +313,14 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 			shouldFail: true,
 		},
 		{
+			name: "num_voters without num_replicas",
+			cfg: ZoneConfig{
+				NumVoters: proto.Int32(3),
+			},
+			expected:   "when num_voters is set, num_replicas must be set as well",
+			shouldFail: true,
+		},
+		{
 			name: "per-voter constraints without num_voters",
 			cfg: ZoneConfig{
 				NumReplicas: proto.Int32(3),
@@ -344,6 +352,7 @@ func TestZoneConfigValidateTandemFields(t *testing.T) {
 			name: "lease preferences without voter_constraints when voters are explicitly configured",
 			cfg: ZoneConfig{
 				NumVoters:                 proto.Int32(3),
+				NumReplicas:               proto.Int32(3),
 				InheritedConstraints:      false,
 				InheritedVoterConstraints: true,
 				InheritedLeasePreferences: false,

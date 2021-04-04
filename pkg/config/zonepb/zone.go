@@ -278,6 +278,11 @@ func (z *ZoneConfig) IsComplete() bool {
 func (z *ZoneConfig) ValidateTandemFields() error {
 	var numConstrainedRepls int32
 	numVotersExplicit := z.NumVoters != nil && *z.NumVoters > 0
+
+	if z.NumVoters != nil && z.NumReplicas == nil {
+		return fmt.Errorf("when num_voters is set, num_replicas must be set as well")
+	}
+
 	for _, constraint := range z.Constraints {
 		numConstrainedRepls += constraint.NumReplicas
 	}
