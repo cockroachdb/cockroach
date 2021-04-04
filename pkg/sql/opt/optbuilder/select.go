@@ -175,7 +175,7 @@ func (b *Builder) buildDataSource(
 			expr:         innerScope.expr,
 			id:           id,
 		}
-		b.addCTEToWithFrame(cte)
+		b.addCTE(cte)
 
 		inCols := make(opt.ColList, len(cte.cols))
 		outCols := make(opt.ColList, len(cte.cols))

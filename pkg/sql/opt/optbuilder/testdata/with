@@ -1280,52 +1280,52 @@ WITH RECURSIVE cte(a) AS (
     (SELECT a*10 FROM cte WHERE a < 100)
 ) SELECT * FROM cte;
 ----
-with &3 (cte)
+with &2 (v)
  ├── columns: a:8
- ├── recursive-c-t-e
- │    ├── columns: a:5
- │    ├── working table binding: &1
- │    ├── initial columns: "?column?":4
- │    ├── recursive columns: "?column?":7
- │    ├── fake-rel
- │    │    └── columns: "?column?":4
- │    ├── with &2 (v)
- │    │    ├── columns: "?column?":4!null
- │    │    ├── values
- │    │    │    ├── columns: column1:1!null
- │    │    │    ├── (1,)
- │    │    │    └── (2,)
- │    │    └── project
- │    │         ├── columns: "?column?":4!null
- │    │         ├── inner-join (cross)
- │    │         │    ├── columns: x:2!null x:3!null
- │    │         │    ├── with-scan &2 (v)
- │    │         │    │    ├── columns: x:2!null
- │    │         │    │    └── mapping:
- │    │         │    │         └──  column1:1 => x:2
- │    │         │    ├── with-scan &2 (v)
- │    │         │    │    ├── columns: x:3!null
- │    │         │    │    └── mapping:
- │    │         │    │         └──  column1:1 => x:3
- │    │         │    └── filters (true)
- │    │         └── projections
- │    │              └── x:2 + x:3 [as="?column?":4]
- │    └── project
- │         ├── columns: "?column?":7!null
- │         ├── select
- │         │    ├── columns: a:6!null
- │         │    ├── with-scan &1 (cte)
- │         │    │    ├── columns: a:6
- │         │    │    └── mapping:
- │         │    │         └──  a:5 => a:6
- │         │    └── filters
- │         │         └── a:6 < 100
- │         └── projections
- │              └── a:6 * 10 [as="?column?":7]
- └── with-scan &3 (cte)
+ ├── values
+ │    ├── columns: column1:1!null
+ │    ├── (1,)
+ │    └── (2,)
+ └── with &3 (cte)
       ├── columns: a:8
-      └── mapping:
-           └──  a:5 => a:8
+      ├── recursive-c-t-e
+      │    ├── columns: a:5
+      │    ├── working table binding: &1
+      │    ├── initial columns: "?column?":4
+      │    ├── recursive columns: "?column?":7
+      │    ├── fake-rel
+      │    │    └── columns: "?column?":4
+      │    ├── project
+      │    │    ├── columns: "?column?":4!null
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: x:2!null x:3!null
+      │    │    │    ├── with-scan &2 (v)
+      │    │    │    │    ├── columns: x:2!null
+      │    │    │    │    └── mapping:
+      │    │    │    │         └──  column1:1 => x:2
+      │    │    │    ├── with-scan &2 (v)
+      │    │    │    │    ├── columns: x:3!null
+      │    │    │    │    └── mapping:
+      │    │    │    │         └──  column1:1 => x:3
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── x:2 + x:3 [as="?column?":4]
+      │    └── project
+      │         ├── columns: "?column?":7!null
+      │         ├── select
+      │         │    ├── columns: a:6!null
+      │         │    ├── with-scan &1 (cte)
+      │         │    │    ├── columns: a:6
+      │         │    │    └── mapping:
+      │         │    │         └──  a:5 => a:6
+      │         │    └── filters
+      │         │         └── a:6 < 100
+      │         └── projections
+      │              └── a:6 * 10 [as="?column?":7]
+      └── with-scan &3 (cte)
+           ├── columns: a:8
+           └── mapping:
+                └──  a:5 => a:8
 
 # Verify the addition of casts to the "initial" query.
 build

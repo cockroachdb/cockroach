@@ -12,6 +12,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -22,39 +23,38 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// pushWithFrame pushes a new frame onto the CTE stack.
-//
-// The CTE stack is used to "hoist" CTEs to an appropriate boundary before
-// constructing the With operators. For run-of-the-mill queries, there are no
-// boundaries and all CTEs are hoisted at the top level. However, certain
-// statements (e.g. EXPLAIN, CREATE VIEW, CREATE TABLE AS) must introduce a
-// boundary.
-func (b *Builder) pushWithFrame() {
-	b.cteStack = append(b.cteStack, []cteSource{})
+// cteSource represents a CTE in the given query.
+type cteSource struct {
+	id           opt.WithID
+	name         tree.AliasClause
+	cols         physical.Presentation
+	originalExpr tree.Statement
+	expr         memo.RelExpr
+	mtr          tree.MaterializeClause
+	// If set, this function is called when a CTE is referenced. It can throw an
+	// error.
+	onRef func()
 }
 
-// addCTEToWithFrame adds a CTE to the current frame.
-func (b *Builder) addCTEToWithFrame(cte cteSource) {
-	level := len(b.cteStack) - 1
-	b.cteStack[level] = append(b.cteStack[level], cte)
+// cteBoundary is used to build statements which impose a CTE boundary, like
+// EXPLAIN or CREATE VIEW. The With operators for any CTEs defined inside the
+// statement are all built before returning.
+func (b *Builder) cteBoundary(buildFn func() *scope) *scope {
+	// Save the CTEs above the boundary.
+	prevCTEs := b.ctes
+	b.ctes = nil
+	scope := buildFn()
+	scope.expr = b.buildWiths(scope.expr, b.ctes)
+	b.ctes = prevCTEs
+	return scope
 }
 
-// popWithFrame pops a frame from the CTE stack and wraps the given scope's
-// expression with With operators for the expressions in this frame.
-func (b *Builder) popWithFrame(s *scope) {
-	level := len(b.cteStack) - 1
-	ctes := b.cteStack[level]
-	b.cteStack = b.cteStack[:level]
-
-	s.expr = b.buildWiths(s.expr, ctes)
+func (b *Builder) addCTE(cte cteSource) {
+	b.ctes = append(b.ctes, cte)
 }
 
 // buildWiths adds With expressions on top of an expression.
 func (b *Builder) buildWiths(expr memo.RelExpr, ctes []cteSource) memo.RelExpr {
-	if len(ctes) == 0 {
-		return expr
-	}
-
 	// Since later CTEs can refer to earlier ones, we want to add these in
 	// reverse order.
 	for i := len(ctes) - 1; i >= 0; i-- {
@@ -133,7 +133,7 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 		}
 		cte := &addedCTEs[i]
 		outScope.ctes[cte.name.Alias.String()] = cte
-		b.addCTEToWithFrame(*cte)
+		b.addCTE(*cte)
 
 		if cteExpr.Relational().CanMutate && !inScope.atRoot {
 			panic(
@@ -232,9 +232,7 @@ func (b *Builder) buildCTE(
 	}
 	// If the initial statement contains CTEs, we don't want the Withs hoisted
 	// above the recursive CTE.
-	b.pushWithFrame()
 	initialScope := b.buildStmt(initial, nil /* desiredTypes */, cteScope)
-	b.popWithFrame(initialScope)
 
 	initialScope.removeHiddenCols()
 	b.dropOrderingAndExtraCols(initialScope)
@@ -286,9 +284,12 @@ func (b *Builder) buildCTE(
 
 	// If the recursive statement contains CTEs, we don't want the Withs hoisted
 	// above the recursive CTE.
-	b.pushWithFrame()
-	recursiveScope := b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
-	b.popWithFrame(recursiveScope)
+	// TODO(radu): introducing a boundary here is a hack, and won't work well if
+	// the CTE contains [..] operators or SQLClass functions.
+
+	recursiveScope := b.cteBoundary(func() *scope {
+		return b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
+	})
 
 	if numRefs == 0 {
 		// Build this as a non-recursive CTE.
