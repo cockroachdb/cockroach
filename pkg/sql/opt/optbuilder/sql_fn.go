@@ -91,7 +91,7 @@ func (b *Builder) buildSQLFn(
 		expr:         innerScope.expr,
 		id:           id,
 	}
-	b.addCTEToWithFrame(cte)
+	b.addCTE(cte)
 
 	// Build and return the original function.
 	return b.buildScalar(info.FuncExpr, inScope, outScope, outCol, colRefs)
