@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/tests",
+        "//pkg/testutils",
         "//pkg/testutils/diagutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
