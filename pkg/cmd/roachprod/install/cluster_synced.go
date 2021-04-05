@@ -1244,7 +1244,8 @@ func (c *SyncedCluster) Logs(
 				"-o ControlMaster=auto "+
 				"-o ControlPath=~/.ssh/%r@%h:%p "+
 				"-o UserKnownHostsFile=/dev/null "+
-				"-o ControlPersist=2m")
+				"-o ControlPersist=2m "+
+				strings.Join(sshAuthArgs(), " "))
 			// Use rsync-path flag to sudo into user if different from sshUser.
 			if user != "" && user != sshUser {
 				rsyncArgs = append(rsyncArgs, "--rsync-path",
