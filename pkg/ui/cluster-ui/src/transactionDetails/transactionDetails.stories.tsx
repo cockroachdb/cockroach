@@ -27,6 +27,7 @@ storiesOf("Transactions Details", module)
       statements={data.statements as any}
       lastReset={Date().toString()}
       handleDetails={() => {}}
+      resetSQLStats={() => {}}
     />
   ))
   .add("with loading indicator", () => (
@@ -34,6 +35,7 @@ storiesOf("Transactions Details", module)
       statements={undefined}
       lastReset={Date().toString()}
       handleDetails={() => {}}
+      resetSQLStats={() => {}}
     />
   ))
   .add("with error alert", () => (
@@ -42,5 +44,6 @@ storiesOf("Transactions Details", module)
       error={error}
       lastReset={Date().toString()}
       handleDetails={() => {}}
+      resetSQLStats={() => {}}
     />
   ));

@@ -57,6 +57,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 export interface StatementsPageDispatchProps {
   refreshStatements: () => void;
   refreshStatementDiagnosticsRequests: () => void;
+  resetSQLStats: () => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (statement: string) => void;
   onDiagnosticsModalOpen?: (statement: string) => void;
@@ -296,6 +297,7 @@ export class StatementsPage extends React.Component<
       lastReset,
       onDiagnosticsReportDownload,
       onStatementClick,
+      resetSQLStats,
     } = this.props;
     const appAttrValue = getMatchParamByName(match, appAttr);
     const selectedApp = appAttrValue || "";
@@ -335,6 +337,7 @@ export class StatementsPage extends React.Component<
             arrayItemName="statements"
             activeFilters={activeFilters}
             onClearFilters={this.onClearFilters}
+            resetSQLStats={resetSQLStats}
           />
           <StatementsSortedTable
             className="statements-table"
