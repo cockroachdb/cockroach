@@ -123,6 +123,7 @@ go_test(
         "create_scheduled_backup_test.go",
         "full_cluster_backup_restore_test.go",
         "helpers_test.go",
+        "import_spans_test.go",
         "main_test.go",
         "partitioned_backup_test.go",
         "restore_mid_schema_change_test.go",
