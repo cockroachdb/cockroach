@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -263,7 +264,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	buf := kvfeed.MakeChanBuffer()
+	buf := kvevent.MakeChanBuffer()
 	schemaFeed := newSchemaFeed(ctx, ca.flowCtx.Cfg, ca.spec, ca.metrics)
 	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, ca.kvFeedMemMon, ca.spec,
 		spans, buf, ca.metrics, schemaFeed)
@@ -326,7 +327,7 @@ func makeKVFeedCfg(
 	mm *mon.BytesMonitor,
 	spec execinfrapb.ChangeAggregatorSpec,
 	spans []roachpb.Span,
-	buf kvfeed.EventBuffer,
+	buf kvevent.Buffer,
 	metrics *Metrics,
 	sf schemafeed.SchemaFeed,
 ) kvfeed.Config {
@@ -489,11 +490,11 @@ func (ca *changeAggregator) tick() error {
 
 	forceFlush := false
 	switch event.Type() {
-	case kvfeed.KVEvent:
+	case kvevent.TypeKV:
 		if err := ca.eventConsumer.ConsumeEvent(ca.Ctx, event); err != nil {
 			return err
 		}
-	case kvfeed.ResolvedEvent:
+	case kvevent.TypeResolved:
 		resolved := event.Resolved()
 		if _, err := ca.frontier.ForwardResolvedSpan(*resolved); err != nil {
 			return err
@@ -571,23 +572,23 @@ func (ca *changeAggregator) ConsumerClosed() {
 
 type kvEventProducer interface {
 	// GetEvent returns the next kv event.
-	GetEvent(ctx context.Context) (kvfeed.Event, error)
+	GetEvent(ctx context.Context) (kvevent.Event, error)
 }
 
 type bufEventProducer struct {
-	kvfeed.EventBufferReader
+	kvevent.Reader
 }
 
 var _ kvEventProducer = &bufEventProducer{}
 
 // GetEvent implements kvEventProducer interface
-func (p *bufEventProducer) GetEvent(ctx context.Context) (kvfeed.Event, error) {
+func (p *bufEventProducer) GetEvent(ctx context.Context) (kvevent.Event, error) {
 	return p.Get(ctx)
 }
 
 type kvEventConsumer interface {
 	// ConsumeEvent responsible for consuming kv event.
-	ConsumeEvent(ctx context.Context, event kvfeed.Event) error
+	ConsumeEvent(ctx context.Context, event kvevent.Event) error
 }
 
 type kvEventToRowConsumer struct {
@@ -635,12 +636,12 @@ type tableDescriptorTopic struct {
 var _ TopicDescriptor = &tableDescriptorTopic{}
 
 // ConsumeEvent implements kvEventConsumer interface
-func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Event) error {
-	if event.Type() != kvfeed.KVEvent {
-		return errors.AssertionFailedf("expected kv event, got %v", event.Type())
+func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
+	if ev.Type() != kvevent.TypeKV {
+		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
 	}
 
-	r, err := c.eventToRow(ctx, event)
+	r, err := c.eventToRow(ctx, ev)
 	if err != nil {
 		return err
 	}
@@ -686,7 +687,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Ev
 }
 
 func (c *kvEventToRowConsumer) eventToRow(
-	ctx context.Context, event kvfeed.Event,
+	ctx context.Context, event kvevent.Event,
 ) (encodeRow, error) {
 	var r encodeRow
 	schemaTimestamp := event.KV().Value.Timestamp
@@ -827,12 +828,12 @@ func (n noTopic) GetVersion() descpb.DescriptorVersion {
 }
 
 // ConsumeEvent implements kvEventConsumer interface.
-func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Event) error {
-	if event.Type() != kvfeed.KVEvent {
-		return errors.AssertionFailedf("expected kv event, got %v", event.Type())
+func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
+	if ev.Type() != kvevent.TypeKV {
+		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
 	}
-	keyBytes := []byte(event.KV().Key)
-	val := event.KV().Value
+	keyBytes := []byte(ev.KV().Key)
+	val := ev.KV().Value
 	valBytes, err := protoutil.Marshal(&val)
 	if err != nil {
 		return err
