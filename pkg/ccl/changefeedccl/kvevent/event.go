@@ -127,3 +127,26 @@ func (b *Event) Timestamp() hlc.Timestamp {
 		return hlc.Timestamp{} // unreachable
 	}
 }
+
+func makeResolvedEvent(
+	span roachpb.Span, ts hlc.Timestamp, boundaryType jobspb.ResolvedSpan_BoundaryType,
+) Event {
+	return Event{
+		resolved: &jobspb.ResolvedSpan{
+			Span:                      span,
+			Timestamp:                 ts,
+			DeprecatedBoundaryReached: boundaryType != jobspb.ResolvedSpan_NONE,
+			BoundaryType:              boundaryType,
+		},
+	}
+}
+
+func makeKVEvent(
+	kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
+) Event {
+	return Event{
+		kv:                kv,
+		prevVal:           prevVal,
+		backfillTimestamp: backfillTimestamp,
+	}
+}
