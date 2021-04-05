@@ -11,6 +11,7 @@ package kvfeed
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -21,7 +22,7 @@ import (
 // physicalFeedFactory constructs a physical feed which writes into sink and
 // runs until the group's context expires.
 type physicalFeedFactory interface {
-	Run(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error
+	Run(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error
 }
 
 type physicalConfig struct {
@@ -39,14 +40,12 @@ type rangefeedFactory func(
 ) error
 
 type rangefeed struct {
-	memBuf EventBufferWriter
+	memBuf kvevent.Writer
 	cfg    physicalConfig
 	eventC chan *roachpb.RangeFeedEvent
 }
 
-func (p rangefeedFactory) Run(
-	ctx context.Context, sink EventBufferWriter, cfg physicalConfig,
-) error {
+func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
 	// To avoid blocking raft, RangeFeed puts all entries in a server side
 	// buffer. But to keep things simple, it's a small fixed-sized buffer. This
 	// means we need to ingest everything we get back as quickly as possible, so
