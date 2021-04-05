@@ -411,8 +411,7 @@ type saramaConfig struct {
 	}
 }
 
-// Configure configures provided kafka configuration struct based
-// on this config.
+// Apply configures provided kafka configuration struct based on this config.
 func (c *saramaConfig) Apply(kafka *sarama.Config) {
 	kafka.Producer.Flush.Bytes = c.Flush.Bytes
 	kafka.Producer.Flush.Messages = c.Flush.Messages
@@ -540,7 +539,8 @@ func makeKafkaSink(
 
 	saramaCfg, err := getSaramaConfig(opts)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to parse sarama config; check changefeed.experimental_kafka_config setting")
+		return nil, errors.Wrapf(err,
+			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
 	}
 	saramaCfg.Apply(config)
 

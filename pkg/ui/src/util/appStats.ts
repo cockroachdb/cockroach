@@ -85,6 +85,7 @@ export function addStatementStats(
     legacy_last_err: "",
     legacy_last_err_redacted: "",
     exec_stats: addExecStats(a.exec_stats, b.exec_stats),
+    sql_type: a.sql_type,
   };
 }
 
