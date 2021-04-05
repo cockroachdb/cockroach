@@ -50,9 +50,11 @@ type Outbox struct {
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
 
+	inputInitialized bool
+
 	// draining is an atomic that represents whether the Outbox is draining.
 	draining        uint32
-	metadataSources []execinfrapb.MetadataSource
+	metadataSources execinfrapb.MetadataSources
 	// closers is a slice of Closers that need to be Closed on termination.
 	closers colexecop.Closers
 
@@ -248,6 +250,7 @@ func (o *Outbox) sendBatches(
 	}
 	errToSend = colexecerror.CatchVectorizedRuntimeError(func() {
 		o.Input.Init()
+		o.inputInitialized = true
 		for {
 			if atomic.LoadUint32(&o.draining) == 1 {
 				terminatedGracefully = true
@@ -307,8 +310,12 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 			},
 		})
 	}
-	for _, src := range o.metadataSources {
-		for _, meta := range src.DrainMeta(ctx) {
+	if o.inputInitialized {
+		// If we encountered a panic when initializing the input, the metadata
+		// sources might be uninitialized, so we drain them only otherwise.
+		// Although the DrainMeta call contains a panic-catcher, we would rather
+		// not emit errors (which are likely to occur) in this case.
+		for _, meta := range o.metadataSources.DrainMeta(ctx) {
 			msg.Data.Metadata = append(msg.Data.Metadata, execinfrapb.LocalMetaToRemoteProducerMeta(ctx, meta))
 		}
 	}

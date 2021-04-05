@@ -562,12 +562,14 @@ func (r *HashRouter) Run(ctx context.Context) {
 	if span != nil {
 		defer span.Finish()
 	}
+	var inputInitialized bool
 	// Since HashRouter runs in a separate goroutine, we want to be safe and
 	// make sure that we catch errors in all code paths, so we wrap the whole
 	// method with a catcher. Note that we also have "internal" catchers as
 	// well for more fine-grained control of error propagation.
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
 		r.Input.Init()
+		inputInitialized = true
 		var done bool
 		processNextBatch := func() {
 			done = r.processNextBatch(ctx)
@@ -633,7 +635,13 @@ func (r *HashRouter) Run(ctx context.Context) {
 			r.bufferedMeta = append(r.bufferedMeta, *meta)
 		}
 	}
-	r.bufferedMeta = append(r.bufferedMeta, r.metadataSources.DrainMeta(ctx)...)
+	if inputInitialized {
+		// If we encountered a panic when initializing the input, the metadata
+		// sources might be uninitialized, so we drain them only otherwise.
+		// Although the DrainMeta call contains a panic-catcher, we would rather
+		// not emit errors (which are likely to occur) in this case.
+		r.bufferedMeta = append(r.bufferedMeta, r.metadataSources.DrainMeta(ctx)...)
+	}
 	// Non-blocking send of metadata so that one of the outputs can return it
 	// in DrainMeta.
 	r.waitForMetadata <- r.bufferedMeta
