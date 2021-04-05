@@ -1055,9 +1055,8 @@ func backupPlanHook(
 			_, coveredTime, err := makeImportSpans(
 				spans,
 				prevBackups,
-				nil, /*backupLocalityInfo*/
-				keys.MinKey,
-				p.User(),
+				nil,         /*backupLocalityMaps*/
+				keys.MinKey, /* lowWatermark */
 				func(span covering.Range, start, end hlc.Timestamp) error {
 					if start.IsEmpty() {
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
@@ -1110,7 +1109,6 @@ func backupPlanHook(
 			append(prevBackups, backupManifest),
 			nil, /*backupLocalityInfo*/
 			keys.MinKey,
-			p.User(),
 			errOnMissingRange,
 		); err != nil {
 			return err
