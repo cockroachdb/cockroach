@@ -249,6 +249,13 @@ func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMeta
 	if c.removedFromFlow {
 		return nil
 	}
+	if c.initStatus == colexecop.OperatorNotInitialized {
+		// The columnarizer wasn't initialized, so the wrapped processors might
+		// not have been started leaving them in an unsafe to drain state, so
+		// we skip the draining. Mostly likely this happened because a panic was
+		// encountered in Init.
+		return c.accumulatedMeta
+	}
 	c.MoveToDraining(nil /* err */)
 	for {
 		meta := c.DrainHelper()
