@@ -19,6 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -103,73 +106,91 @@ func TestRestoreMidSchemaChange(t *testing.T) {
 	}
 }
 
-func verifyMidSchemaChange(
-	t *testing.T, scName string, sqlDB *sqlutils.SQLRunner, isClusterRestore bool,
-) {
-	var expectedData [][]string
-	tableName := fmt.Sprintf("defaultdb.%s", scName)
-	// numJobsInCluster is the number of completed jobs that will be restored
-	// during a cluster restore.
-	var numJobsInCluster int
-	expNumSchemaChangeJobs := 1
-	// This enumerates the tests cases and specifies how each case should be
-	// handled.
+// expectedSCJobCount returns the expected number of schema change jobs
+// we expect to fin.d
+func expectedSCJobCount(scName string, isClusterRestore bool) int {
+	// The number of schema change under test. These will be the ones that are
+	// synthesized in database restore.
+	var expNumSCJobs int
+	var numBackgroundSCJobs int
+
+	// Some test cases may have more than 1 background schema change job.
 	switch scName {
-	case "midaddcol":
-		numJobsInCluster = 1 // the CREATE TABLE job
-		expectedData = [][]string{{"1", "1.3"}, {"2", "1.3"}, {"3", "1.3"}}
-	case "midaddconst":
-		numJobsInCluster = 1 // the CREATE TABLE job
-		expectedData = [][]string{{"1"}, {"2"}, {"3"}}
-		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM [SHOW CONSTRAINTS FROM defaultdb.midaddconst] WHERE constraint_name = 'my_const'", [][]string{{"1"}})
-	case "midaddindex":
-		numJobsInCluster = 1 // the CREATE TABLE job
-		expectedData = [][]string{{"1"}, {"2"}, {"3"}}
-		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM [SHOW INDEXES FROM defaultdb.midaddindex] WHERE column_name = 'a'", [][]string{{"1"}})
-	case "middropcol":
-		numJobsInCluster = 1 // the CREATE TABLE job
-		expectedData = [][]string{{"1"}, {"1"}, {"1"}, {"2"}, {"2"}, {"2"}, {"3"}, {"3"}, {"3"}}
 	case "midmany":
-		numJobsInCluster = 1 // the CREATE TABLE job
-		expNumSchemaChangeJobs = 3
-		expectedData = [][]string{{"1", "1.3"}, {"2", "1.3"}, {"3", "1.3"}}
-		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM [SHOW CONSTRAINTS FROM defaultdb.midmany] WHERE constraint_name = 'my_const'", [][]string{{"1"}})
-		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM [SHOW INDEXES FROM defaultdb.midmany] WHERE column_name = 'a'", [][]string{{"1"}})
-	case "midmultitxn":
-		numJobsInCluster = 1 // the CREATE TABLE job
-		expectedData = [][]string{{"1", "1.3"}, {"2", "1.3"}, {"3", "1.3"}}
-		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM [SHOW CONSTRAINTS FROM defaultdb.midmultitxn] WHERE constraint_name = 'my_const'", [][]string{{"1"}})
-		sqlDB.CheckQueryResults(t, "SELECT count(*) FROM [SHOW INDEXES FROM defaultdb.midmultitxn] WHERE column_name = 'a'", [][]string{{"1"}})
+		numBackgroundSCJobs = 1 // the create table
+		// This test runs 3 schema changes on a single table.
+		expNumSCJobs = 3
 	case "midmultitable":
-		numJobsInCluster = 2 // the 2 CREATE TABLE jobs
-		expNumSchemaChangeJobs = 2
-		expectedData = [][]string{{"1", "1.3"}, {"2", "1.3"}, {"3", "1.3"}}
-		sqlDB.CheckQueryResults(t, fmt.Sprintf("SELECT * FROM %s1", tableName), expectedData)
-		expectedData = [][]string{{"1"}, {"2"}, {"3"}}
-		sqlDB.CheckQueryResults(t, fmt.Sprintf("SELECT * FROM %s2", tableName), expectedData)
-		tableName += "1"
+		numBackgroundSCJobs = 2 // this test creates 2 tables
+		expNumSCJobs = 2        // this test perform a schema change for each table
 	case "midprimarykeyswap":
-		numJobsInCluster = 2 // the CREATE TABLE job and the ALTER COLUMN
-		// The primary key swap will also create a cleanup job.
-		expNumSchemaChangeJobs = 2
-		expectedData = [][]string{{"1"}, {"2"}, {"3"}}
+		// Create table + alter column is done in the prep stage of this test.
+		numBackgroundSCJobs = 2
+		// PK change + PK cleanup
+		expNumSCJobs = 2
 	case "midprimarykeyswapcleanup":
-		// The CREATE TABLE job, the ALTER COLUMN, and the original ALTER PRIMARY
+		// This test performs an ALTER COLUMN, and the original ALTER PRIMARY
 		// KEY that is being cleaned up.
-		numJobsInCluster = 3
-		// This backup only contains the cleanup job mentioned above.
-		expectedData = [][]string{{"1"}, {"2"}, {"3"}}
+		numBackgroundSCJobs = 3
+		expNumSCJobs = 1
+	default:
+		// Most test cases only have 1 schema change under test.
+		expNumSCJobs = 1
+		// Most test cases have just a CREATE TABLE job that created the table
+		// under test.
+		numBackgroundSCJobs = 1
 	}
-	if scName != "midmultitable" {
-		sqlDB.CheckQueryResults(t, fmt.Sprintf("SELECT * FROM %s", tableName), expectedData)
-	}
+
+	// Since we're doing a cluster restore, we need to account for all of
+	// the schema change jobs that existed in the backup.
 	if isClusterRestore {
+		expNumSCJobs += numBackgroundSCJobs
+
 		// If we're performing a cluster restore, we also need to include the drop
 		// crdb_temp_system job.
-		expNumSchemaChangeJobs++
-		// And the create table jobs included from the backups.
-		expNumSchemaChangeJobs += numJobsInCluster
+		expNumSCJobs++
 	}
+
+	return expNumSCJobs
+}
+
+func validateTable(
+	t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, dbName string, tableName string,
+) {
+	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
+	// There should be no mutations on these table descriptors at this point.
+	require.Equal(t, 0, len(desc.TableDesc().Mutations))
+
+	var rowCount int
+	sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s.%s`, dbName, tableName)).Scan(&rowCount)
+	// The number of entries in all indexes should be the same.
+	for _, index := range desc.AllIndexes() {
+		var indexCount int
+		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) FROM %s.%s@[%d]`, dbName, tableName, index.GetID())).Scan(&indexCount)
+		require.Equal(t, rowCount, indexCount, `index should have the same number of rows as PK`)
+	}
+}
+
+func getTablesInTest(scName string) (tableNames []string) {
+	// Most of the backups name their table the test name.
+	tableNames = []string{scName}
+
+	// Some create multiple tables thouhg.
+	switch scName {
+	case "midmultitable":
+		tableNames = []string{"midmultitable1", "midmultitable2"}
+	}
+
+	return
+}
+
+func verifyMidSchemaChange(
+	t *testing.T, scName string, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, isClusterRestore bool,
+) {
+	tables := getTablesInTest(scName)
+
+	// Check that we are left with the expected number of schema change jobs.
+	expNumSchemaChangeJobs := expectedSCJobCount(scName, isClusterRestore)
 	schemaChangeJobs := sqlDB.QueryStr(t, "SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE'")
 	require.Equal(t, expNumSchemaChangeJobs, len(schemaChangeJobs),
 		"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, schemaChangeJobs)
@@ -189,9 +210,14 @@ func verifyMidSchemaChange(
 		require.Equal(t, expNumSchemaChangeJobs, len(schemaChangeJobs),
 			"Expected %d schema change jobs but found %v", expNumSchemaChangeJobs, schemaChangeJobs)
 	}
-	// Ensure that a schema change can complete on the restored table.
-	schemaChangeQuery := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT post_restore_const CHECK (a > 0)", tableName)
-	sqlDB.Exec(t, schemaChangeQuery)
+
+	for _, tableName := range tables {
+		validateTable(t, kvDB, sqlDB, "defaultdb", tableName)
+		// Ensure that a schema change can complete on the restored table.
+		schemaChangeQuery := fmt.Sprintf("ALTER TABLE defaultdb.%s ADD CONSTRAINT post_restore_const CHECK (a > 0)", tableName)
+		sqlDB.Exec(t, schemaChangeQuery)
+	}
+
 }
 
 func restoreMidSchemaChange(
@@ -211,6 +237,7 @@ func restoreMidSchemaChange(
 			dirCleanupFn()
 		}()
 		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		kvDB := tc.Server(0).DB()
 
 		symlink := filepath.Join(dir, "foo")
 		err := os.Symlink(backupDir, symlink)
@@ -223,7 +250,9 @@ func restoreMidSchemaChange(
 		}
 		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", LocalFoo))
 		sqlDB.Exec(t, restoreQuery, LocalFoo)
-		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND status <> 'succeeded'", [][]string{})
-		verifyMidSchemaChange(t, schemaChangeName, sqlDB, isClusterRestore)
+		// Wait for all jobs to terminate. Some may fail since we don't restore
+		// adding spans.
+		sqlDB.CheckQueryResultsRetry(t, "SELECT * FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE' AND NOT (status = 'succeeded' OR status = 'failed')", [][]string{})
+		verifyMidSchemaChange(t, schemaChangeName, kvDB, sqlDB, isClusterRestore)
 	}
 }
