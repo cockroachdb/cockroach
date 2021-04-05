@@ -274,7 +274,7 @@ func (m *Materializer) Start(ctx context.Context) {
 		m.MoveToDraining(err)
 	} else {
 		// Note that we intentionally only start the drain helper if
-		// initialization was successful - no starting the helper will tell it
+		// initialization was successful - not starting the helper will tell it
 		// to not drain the metadata sources (which have not been properly
 		// initialized).
 		m.drainHelper.Start(ctx)

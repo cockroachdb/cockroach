@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -336,11 +337,18 @@ type MetadataSource interface {
 type MetadataSources []MetadataSource
 
 // DrainMeta calls DrainMeta on all MetadataSources and returns a single slice
-// with all the accumulated metadata.
+// with all the accumulated metadata. Note that this method wraps the draining
+// with the panic-catcher so that the callers don't have to.
 func (s MetadataSources) DrainMeta(ctx context.Context) []ProducerMetadata {
 	var result []ProducerMetadata
-	for _, src := range s {
-		result = append(result, src.DrainMeta(ctx)...)
+	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+		for _, src := range s {
+			result = append(result, src.DrainMeta(ctx)...)
+		}
+	}); err != nil {
+		meta := GetProducerMeta()
+		meta.Err = err
+		result = append(result, *meta)
 	}
 	return result
 }
