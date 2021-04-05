@@ -727,7 +727,7 @@ func init() {
 		// ./cockroach demo movr --nodes=3.
 		f := demoCmd.PersistentFlags()
 
-		intFlag(f, &demoCtx.nodes, cliflags.DemoNodes)
+		intFlag(f, &demoCtx.numNodes, cliflags.DemoNodes)
 		boolFlag(f, &demoCtx.runWorkload, cliflags.RunDemoWorkload)
 		varFlag(f, &demoCtx.localities, cliflags.DemoNodeLocality)
 		boolFlag(f, &demoCtx.geoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
@@ -754,8 +754,8 @@ func init() {
 		// sharing a variable between both.
 		stringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
 
-		intFlag(f, &demoCtx.sqlPort, cliflags.DemoSQLPort)
-		intFlag(f, &demoCtx.httpPort, cliflags.DemoHTTPPort)
+		intFlag(f, &demoCtx.sqlFirstPort, cliflags.DemoSQLPort)
+		intFlag(f, &demoCtx.httpFirstPort, cliflags.DemoHTTPPort)
 	}
 
 	// statement-diag command.
