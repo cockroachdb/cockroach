@@ -13,7 +13,6 @@ package testutils
 import (
 	"context"
 	"runtime/debug"
-	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,7 +28,7 @@ const DefaultSucceedsSoonDuration = 45 * time.Second
 // function runs without error within a preset maximum duration. The
 // function is invoked immediately at first and then successively with
 // an exponential backoff starting at 1ns and ending at around 1s.
-func SucceedsSoon(t testing.TB, fn func() error) {
+func SucceedsSoon(t TB, fn func() error) {
 	t.Helper()
 	if err := SucceedsSoonError(fn); err != nil {
 		t.Fatalf("condition failed to evaluate within %s: %s\n%s",
