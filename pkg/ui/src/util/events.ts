@@ -140,6 +140,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Import Job: User ${info.User} has a job ${info.JobID} running with status ${info.Status}`;
     case eventTypes.RESTORE:
       return `Restore Job: User ${info.User} has a job ${info.JobID} running with status ${info.Status}`;
+    case eventTypes.ALTER_DATABASE_ADD_REGION:
+      return `Add Region: User ${info.User} added region ${info.RegionName} to database ${info.DatabaseName}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(
         info,
@@ -188,6 +190,7 @@ export interface EventInfo {
   NewDatabaseParent?: string;
   JobID?: string;
   Status?: string;
+  RegionName?: string;
 }
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {
