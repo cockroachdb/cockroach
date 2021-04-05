@@ -16,13 +16,12 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
 )
 
-// SQLRunner wraps a testing.TB and *gosql.DB connection and provides
+// SQLRunner wraps a testutils.TB and *gosql.DB connection and provides
 // convenience functions to run SQL statements and fail the test on any errors.
 type SQLRunner struct {
 	DB DBHandle
@@ -53,7 +52,7 @@ func MakeRoundRobinSQLRunner(dbs ...DBHandle) *SQLRunner {
 }
 
 // Exec is a wrapper around gosql.Exec that kills the test on error.
-func (sr *SQLRunner) Exec(t testing.TB, query string, args ...interface{}) gosql.Result {
+func (sr *SQLRunner) Exec(t testutils.TB, query string, args ...interface{}) gosql.Result {
 	t.Helper()
 	r, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if err != nil {
@@ -64,7 +63,7 @@ func (sr *SQLRunner) Exec(t testing.TB, query string, args ...interface{}) gosql
 
 // ExecSucceedsSoon is a wrapper around gosql.Exec that wraps
 // the exec in a succeeds soon.
-func (sr *SQLRunner) ExecSucceedsSoon(t testing.TB, query string, args ...interface{}) {
+func (sr *SQLRunner) ExecSucceedsSoon(t testutils.TB, query string, args ...interface{}) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
 		_, err := sr.DB.ExecContext(context.Background(), query, args...)
@@ -75,7 +74,7 @@ func (sr *SQLRunner) ExecSucceedsSoon(t testing.TB, query string, args ...interf
 // ExecRowsAffected executes the statement and verifies that RowsAffected()
 // matches the expected value. It kills the test on errors.
 func (sr *SQLRunner) ExecRowsAffected(
-	t testing.TB, expRowsAffected int, query string, args ...interface{},
+	t testutils.TB, expRowsAffected int, query string, args ...interface{},
 ) {
 	t.Helper()
 	r := sr.Exec(t, query, args...)
@@ -90,7 +89,7 @@ func (sr *SQLRunner) ExecRowsAffected(
 
 // ExpectErr runs the given statement and verifies that it returns an error
 // matching the given regex.
-func (sr *SQLRunner) ExpectErr(t testing.TB, errRE string, query string, args ...interface{}) {
+func (sr *SQLRunner) ExpectErr(t testutils.TB, errRE string, query string, args ...interface{}) {
 	t.Helper()
 	_, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if !testutils.IsError(err, errRE) {
@@ -100,7 +99,7 @@ func (sr *SQLRunner) ExpectErr(t testing.TB, errRE string, query string, args ..
 
 // ExpectErrSucceedsSoon wraps ExpectErr with a SucceedsSoon.
 func (sr *SQLRunner) ExpectErrSucceedsSoon(
-	t testing.TB, errRE string, query string, args ...interface{},
+	t testutils.TB, errRE string, query string, args ...interface{},
 ) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
@@ -113,7 +112,7 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 }
 
 // Query is a wrapper around gosql.Query that kills the test on error.
-func (sr *SQLRunner) Query(t testing.TB, query string, args ...interface{}) *gosql.Rows {
+func (sr *SQLRunner) Query(t testutils.TB, query string, args ...interface{}) *gosql.Rows {
 	t.Helper()
 	r, err := sr.DB.QueryContext(context.Background(), query, args...)
 	if err != nil {
@@ -124,7 +123,7 @@ func (sr *SQLRunner) Query(t testing.TB, query string, args ...interface{}) *gos
 
 // Row is a wrapper around gosql.Row that kills the test on error.
 type Row struct {
-	testing.TB
+	testutils.TB
 	row *gosql.Row
 }
 
@@ -137,14 +136,14 @@ func (r *Row) Scan(dest ...interface{}) {
 }
 
 // QueryRow is a wrapper around gosql.QueryRow that kills the test on error.
-func (sr *SQLRunner) QueryRow(t testing.TB, query string, args ...interface{}) *Row {
+func (sr *SQLRunner) QueryRow(t testutils.TB, query string, args ...interface{}) *Row {
 	t.Helper()
 	return &Row{t, sr.DB.QueryRowContext(context.Background(), query, args...)}
 }
 
 // QueryStr runs a Query and converts the result using RowsToStrMatrix. Kills
 // the test on errors.
-func (sr *SQLRunner) QueryStr(t testing.TB, query string, args ...interface{}) [][]string {
+func (sr *SQLRunner) QueryStr(t testutils.TB, query string, args ...interface{}) [][]string {
 	t.Helper()
 	rows := sr.Query(t, query, args...)
 	r, err := RowsToStrMatrix(rows)
@@ -205,7 +204,7 @@ func MatrixToStr(rows [][]string) string {
 
 // CheckQueryResults checks that the rows returned by a query match the expected
 // response.
-func (sr *SQLRunner) CheckQueryResults(t testing.TB, query string, expected [][]string) {
+func (sr *SQLRunner) CheckQueryResults(t testutils.TB, query string, expected [][]string) {
 	t.Helper()
 	res := sr.QueryStr(t, query)
 	if !reflect.DeepEqual(res, expected) {
@@ -218,7 +217,7 @@ func (sr *SQLRunner) CheckQueryResults(t testing.TB, query string, expected [][]
 // CheckQueryResultsRetry checks that the rows returned by a query match the
 // expected response. If the results don't match right away, it will retry
 // using testutils.SucceedsSoon.
-func (sr *SQLRunner) CheckQueryResultsRetry(t testing.TB, query string, expected [][]string) {
+func (sr *SQLRunner) CheckQueryResultsRetry(t testutils.TB, query string, expected [][]string) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
 		res := sr.QueryStr(t, query)
