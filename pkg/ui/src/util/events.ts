@@ -59,6 +59,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Type Created: User ${info.User} created type ${info.TypeName}`;
     case eventTypes.ALTER_TYPE:
       return `Type Altered: User ${info.User} altered type ${info.TypeName}`;
+    case eventTypes.DROP_TYPE:
+      return `Type Dropped: User ${info.User} dropped type ${info.TypeName}`;
     case eventTypes.CREATE_SEQUENCE:
       return `Sequence Created: User ${info.User} created sequence ${info.SequenceName}`;
     case eventTypes.ALTER_SEQUENCE:
