@@ -125,6 +125,18 @@ interrupt
 eexpect ":/# "
 end_test
 
+start_test "Check that an invalid URL in the env var produces a reasonable error"
+send "export COCKROACH_URL=invalid_url;\r"
+eexpect ":/# "
+send "$argv sql\r"
+eexpect "ERROR"
+eexpect "setting --url from COCKROACH_URL"
+eexpect "invalid argument"
+eexpect "URL scheme must be"
+eexpect ":/# "
+end_test
+
+
 stop_server $argv
 
 send "exit 0\r"
