@@ -94,6 +94,10 @@ type regionPair struct {
 	regionB string
 }
 
+// regionToRegionToLatency maps region pairs to a latency in milliseconds.
+// Note: there are multiple places in the code where the integer
+// here is converted to a time.Duration. If/when the unit is changed,
+// be careful to update all of them.
 var regionToRegionToLatency map[string]map[string]int
 
 func insertPair(pair regionPair, latency int) {
@@ -106,6 +110,10 @@ func insertPair(pair regionPair, latency int) {
 }
 
 // Round-trip latencies collected from http://cloudping.co on 2019-09-11.
+// The unit is milliseconds.
+// Note: there are multiple places in the code where the integer
+// here is converted to a time.Duration. If/when the unit is changed,
+// be careful to update all of them.
 var regionRoundTripLatencies = map[regionPair]int{
 	{regionA: "us-east1", regionB: "us-west1"}:     66,
 	{regionA: "us-east1", regionB: "europe-west1"}: 64,
