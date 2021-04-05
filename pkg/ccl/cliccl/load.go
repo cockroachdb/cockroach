@@ -10,6 +10,7 @@ package cliccl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -139,10 +141,14 @@ func runLoadShowSummary(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	showMeta(desc)
-	showSpans(desc)
-	showFiles(desc)
-	showDescriptors(desc)
+
+	var meta = backupMetaDisplayMsg(desc)
+	jsonBytes, err := json.MarshalIndent(meta, "" /*prefix*/, "\t" /*indent*/)
+	if err != nil {
+		return errors.Wrapf(err, "marshall backup manifest")
+	}
+	s := string(jsonBytes)
+	fmt.Println(s)
 	return nil
 }
 
@@ -237,69 +243,83 @@ func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func showMeta(desc backupccl.BackupManifest) {
-	start := timeutil.Unix(0, desc.StartTime.WallTime).Format(time.RFC3339Nano)
-	end := timeutil.Unix(0, desc.EndTime.WallTime).Format(time.RFC3339Nano)
-	fmt.Printf("StartTime: %s (%s)\n", start, desc.StartTime)
-	fmt.Printf("EndTime: %s (%s)\n", end, desc.EndTime)
-	fmt.Printf("DataSize: %d (%s)\n", desc.EntryCounts.DataSize, humanizeutil.IBytes(desc.EntryCounts.DataSize))
-	fmt.Printf("Rows: %d\n", desc.EntryCounts.Rows)
-	fmt.Printf("IndexEntries: %d\n", desc.EntryCounts.IndexEntries)
-	fmt.Printf("FormatVersion: %d\n", desc.FormatVersion)
-	fmt.Printf("ClusterID: %s\n", desc.ClusterID)
-	fmt.Printf("NodeID: %s\n", desc.NodeID)
-	fmt.Printf("BuildInfo: %s\n", desc.BuildInfo.Short())
+type backupMetaDisplayMsg backupccl.BackupManifest
+type backupFileDisplayMsg backupccl.BackupManifest_File
+
+func (f backupFileDisplayMsg) MarshalJSON() ([]byte, error) {
+	fileDisplayMsg := struct {
+		Path         string
+		Span         string
+		DataSize     string
+		IndexEntries int64
+		Rows         int64
+	}{
+		Path:         f.Path,
+		Span:         fmt.Sprint(f.Span),
+		DataSize:     humanizeutil.IBytes(f.EntryCounts.DataSize),
+		IndexEntries: f.EntryCounts.IndexEntries,
+		Rows:         f.EntryCounts.Rows,
+	}
+	return json.Marshal(fileDisplayMsg)
 }
 
-func showSpans(desc backupccl.BackupManifest) {
-	fmt.Printf("Spans:\n")
-	if len(desc.Spans) == 0 {
-		fmt.Printf("	(No spans included in the specified backup path.)\n")
-	}
-	for _, s := range desc.Spans {
-		fmt.Printf("	%s\n", s)
-	}
-}
+func (b backupMetaDisplayMsg) MarshalJSON() ([]byte, error) {
 
-func showFiles(desc backupccl.BackupManifest) {
-	fmt.Printf("Files:\n")
-	if len(desc.Files) == 0 {
-		fmt.Printf("	(No sst files included in the specified backup path.)\n")
+	fileMsg := make([]backupFileDisplayMsg, len(b.Files))
+	for i, file := range b.Files {
+		fileMsg[i] = backupFileDisplayMsg(file)
 	}
-	for _, f := range desc.Files {
-		fmt.Printf("	%s:\n", f.Path)
-		fmt.Printf("		Span: %s\n", f.Span)
-		fmt.Printf("		DataSize: %d (%s)\n", f.EntryCounts.DataSize, humanizeutil.IBytes(f.EntryCounts.DataSize))
-		fmt.Printf("		Rows: %d\n", f.EntryCounts.Rows)
-		fmt.Printf("		IndexEntries: %d\n", f.EntryCounts.IndexEntries)
-	}
-}
 
-func showDescriptors(desc backupccl.BackupManifest) {
-	// Note that these descriptors could be from any past version of the cluster,
-	// in case more fields need to be added to the output.
-	dbIDs := make([]descpb.ID, 0, len(desc.Descriptors))
+	displayMsg := struct {
+		StartTime           string
+		EndTime             string
+		DataSize            string
+		Rows                int64
+		IndexEntries        int64
+		FormatVersion       uint32
+		ClusterID           uuid.UUID
+		NodeID              roachpb.NodeID
+		BuildInfo           string
+		Files               []backupFileDisplayMsg
+		Spans               string
+		DataBaseDescriptors map[descpb.ID]string
+		TableDescriptors    map[descpb.ID]string
+		TypeDescriptors     map[descpb.ID]string
+		SchemaDescriptors   map[descpb.ID]string
+	}{
+		StartTime:           timeutil.Unix(0, b.StartTime.WallTime).Format(time.RFC3339),
+		EndTime:             timeutil.Unix(0, b.EndTime.WallTime).Format(time.RFC3339),
+		DataSize:            humanizeutil.IBytes(b.EntryCounts.DataSize),
+		Rows:                b.EntryCounts.Rows,
+		IndexEntries:        b.EntryCounts.IndexEntries,
+		FormatVersion:       b.FormatVersion,
+		ClusterID:           b.ClusterID,
+		NodeID:              b.NodeID,
+		BuildInfo:           b.BuildInfo.Short(),
+		Files:               fileMsg,
+		Spans:               fmt.Sprint(b.Spans),
+		DataBaseDescriptors: make(map[descpb.ID]string),
+		TableDescriptors:    make(map[descpb.ID]string),
+		TypeDescriptors:     make(map[descpb.ID]string),
+		SchemaDescriptors:   make(map[descpb.ID]string),
+	}
+
 	dbIDToName := make(map[descpb.ID]string)
-	schemaIDs := make([]descpb.ID, 0, len(desc.Descriptors))
-	schemaIDs = append(schemaIDs, keys.PublicSchemaID)
 	schemaIDToFullyQualifiedName := make(map[descpb.ID]string)
 	schemaIDToFullyQualifiedName[keys.PublicSchemaID] = sessiondata.PublicSchemaName
-	typeIDs := make([]descpb.ID, 0, len(desc.Descriptors))
 	typeIDToFullyQualifiedName := make(map[descpb.ID]string)
-	tableIDs := make([]descpb.ID, 0, len(desc.Descriptors))
 	tableIDToFullyQualifiedName := make(map[descpb.ID]string)
-	for i := range desc.Descriptors {
-		d := &desc.Descriptors[i]
+
+	for i := range b.Descriptors {
+		d := &b.Descriptors[i]
 		id := descpb.GetDescriptorID(d)
 		tableDesc, databaseDesc, typeDesc, schemaDesc := descpb.FromDescriptor(d)
 		if databaseDesc != nil {
 			dbIDToName[id] = descpb.GetDescriptorName(d)
-			dbIDs = append(dbIDs, id)
 		} else if schemaDesc != nil {
 			dbName := dbIDToName[schemaDesc.GetParentID()]
 			schemaName := descpb.GetDescriptorName(d)
 			schemaIDToFullyQualifiedName[id] = dbName + "." + schemaName
-			schemaIDs = append(schemaIDs, id)
 		} else if typeDesc != nil {
 			parentSchema := schemaIDToFullyQualifiedName[typeDesc.GetParentSchemaID()]
 			if parentSchema == sessiondata.PublicSchemaName {
@@ -307,7 +327,6 @@ func showDescriptors(desc backupccl.BackupManifest) {
 			}
 			typeName := descpb.GetDescriptorName(d)
 			typeIDToFullyQualifiedName[id] = parentSchema + "." + typeName
-			typeIDs = append(typeIDs, id)
 		} else if tableDesc != nil {
 			tbDesc := tabledesc.NewBuilder(tableDesc).BuildImmutable()
 			parentSchema := schemaIDToFullyQualifiedName[tbDesc.GetParentSchemaID()]
@@ -316,37 +335,13 @@ func showDescriptors(desc backupccl.BackupManifest) {
 			}
 			tableName := descpb.GetDescriptorName(d)
 			tableIDToFullyQualifiedName[id] = parentSchema + "." + tableName
-			tableIDs = append(tableIDs, id)
 		}
 	}
 
-	fmt.Printf("Databases:\n")
-	for _, id := range dbIDs {
-		fmt.Printf("	%d: %s\n",
-			id, dbIDToName[id])
-	}
+	displayMsg.DataBaseDescriptors = dbIDToName
+	displayMsg.TableDescriptors = tableIDToFullyQualifiedName
+	displayMsg.SchemaDescriptors = schemaIDToFullyQualifiedName
+	displayMsg.TypeDescriptors = typeIDToFullyQualifiedName
 
-	fmt.Printf("Schemas:\n")
-	for _, id := range schemaIDs {
-		fmt.Printf("	%d: %s\n",
-			id, schemaIDToFullyQualifiedName[id])
-	}
-
-	fmt.Printf("Types:\n")
-	if len(typeIDs) == 0 {
-		fmt.Printf("	(No user-defined types included in the specified backup path.)\n")
-	}
-	for _, id := range typeIDs {
-		fmt.Printf("	%d: %s\n",
-			id, typeIDToFullyQualifiedName[id])
-	}
-
-	fmt.Printf("Tables:\n")
-	if len(tableIDs) == 0 {
-		fmt.Printf("	(No tables included in the specified backup path.)\n")
-	}
-	for _, id := range tableIDs {
-		fmt.Printf("	%d: %s\n",
-			id, tableIDToFullyQualifiedName[id])
-	}
+	return json.Marshal(displayMsg)
 }
