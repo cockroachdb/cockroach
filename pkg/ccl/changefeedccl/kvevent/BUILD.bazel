@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kvevent",
+    srcs = [
+        "chan_buffer.go",
+        "event.go",
+        "mem_buffer.go",
+        "metrics.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/rowcontainer",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util/envutil",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/mon",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)

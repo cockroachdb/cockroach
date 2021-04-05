@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -33,7 +34,7 @@ import (
 type kvScanner interface {
 	// Scan will scan all of the KVs in the spans specified by the physical config
 	// at the specified timestamp and write them to the buffer.
-	Scan(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error
+	Scan(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error
 }
 
 type scanRequestScanner struct {
@@ -45,7 +46,7 @@ type scanRequestScanner struct {
 var _ kvScanner = (*scanRequestScanner)(nil)
 
 func (p *scanRequestScanner) Scan(
-	ctx context.Context, sink EventBufferWriter, cfg physicalConfig,
+	ctx context.Context, sink kvevent.Writer, cfg physicalConfig,
 ) error {
 	if log.V(2) {
 		log.Infof(ctx, "performing scan on %v at %v withDiff %v",
@@ -103,7 +104,7 @@ func (p *scanRequestScanner) Scan(
 }
 
 func (p *scanRequestScanner) exportSpan(
-	ctx context.Context, span roachpb.Span, ts hlc.Timestamp, withDiff bool, sink EventBufferWriter,
+	ctx context.Context, span roachpb.Span, ts hlc.Timestamp, withDiff bool, sink kvevent.Writer,
 ) error {
 	txn := p.db.NewTxn(ctx, "changefeed backfill")
 	if log.V(2) {
@@ -198,7 +199,7 @@ func getSpansToProcess(
 // the KVFeed's buffer.
 func slurpScanResponse(
 	ctx context.Context,
-	sink EventBufferWriter,
+	sink kvevent.Writer,
 	res *roachpb.ScanResponse,
 	ts hlc.Timestamp,
 	withDiff bool,
