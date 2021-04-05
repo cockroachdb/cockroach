@@ -43,7 +43,7 @@ type NewColOperatorArgs struct {
 	// NewColOperator call creates a colexec.Materializer, then it will take
 	// over the responsibility of draining the sources; otherwise, they will be
 	// returned in NewColOperatorResult.
-	MetadataSources []execinfrapb.MetadataSources
+	MetadataSources []colexecop.MetadataSources
 	DiskQueueCfg    colcontainer.DiskQueueCfg
 	FDSemaphore     semaphore.Semaphore
 	ExprHelper      *ExprHelper
@@ -97,7 +97,7 @@ type NewColOperatorResult struct {
 	// created during NewColOperator call, but it also might include all of the
 	// sources from NewColOperatorArgs.MetadataSources if no metadata draining
 	// component was created.
-	MetadataSources execinfrapb.MetadataSources
+	MetadataSources colexecop.MetadataSources
 	// ToClose is a slice of components that need to be Closed.
 	ToClose     []colexecop.Closer
 	OpMonitors  []*mon.BytesMonitor

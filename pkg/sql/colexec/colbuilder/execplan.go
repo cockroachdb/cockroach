@@ -81,7 +81,7 @@ func wrapRowSources(
 			c.MarkAsRemovedFromFlow()
 			toWrapInputs = append(toWrapInputs, c.Input())
 		} else {
-			var metadataSources execinfrapb.MetadataSources
+			var metadataSources colexecop.MetadataSources
 			if len(args.MetadataSources) > i {
 				// In some testing paths, MetadataSources might be left unset,
 				// so we check whether the slice has ith element. In the
@@ -616,7 +616,7 @@ func (r opResult) createAndWrapRowSource(
 	if args.TestingKnobs.PlanInvariantsCheckers {
 		r.Op = colexec.NewInvariantsChecker(r.Op)
 	}
-	r.MetadataSources = append(r.MetadataSources, r.Op.(execinfrapb.MetadataSource))
+	r.MetadataSources = append(r.MetadataSources, r.Op.(colexecop.MetadataSource))
 	r.ToClose = append(r.ToClose, c)
 	r.Releasables = append(r.Releasables, releasables...)
 	return nil
@@ -765,7 +765,7 @@ func NewColOperator(
 				result.Op = colexec.NewInvariantsChecker(result.Op)
 			}
 			result.KVReader = scanOp
-			result.MetadataSources = append(result.MetadataSources, result.Op.(execinfrapb.MetadataSource))
+			result.MetadataSources = append(result.MetadataSources, result.Op.(colexecop.MetadataSource))
 			result.Releasables = append(result.Releasables, scanOp)
 
 			// We want to check for cancellation once per input batch, and

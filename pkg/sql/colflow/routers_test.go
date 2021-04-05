@@ -1085,8 +1085,8 @@ func TestHashRouterRandom(t *testing.T) {
 					unblockEventsChan,
 					outputs,
 					nil, /* getStats */
-					[]execinfrapb.MetadataSource{
-						execinfrapb.CallbackMetadataSource{
+					[]colexecop.MetadataSource{
+						colexectestutils.CallbackMetadataSource{
 							DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
 								return []execinfrapb.ProducerMetadata{{Err: errors.New(hashRouterMetadataMsg)}}
 							},

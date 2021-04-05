@@ -36,7 +36,7 @@ import (
 )
 
 type callbackRemoteComponentCreator struct {
-	newOutboxFn func(*colmem.Allocator, colexecop.Operator, []*types.T, []execinfrapb.MetadataSource) (*colrpc.Outbox, error)
+	newOutboxFn func(*colmem.Allocator, colexecop.Operator, []*types.T, []colexecop.MetadataSource) (*colrpc.Outbox, error)
 	newInboxFn  func(allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID) (*colrpc.Inbox, error)
 }
 
@@ -45,7 +45,7 @@ func (c callbackRemoteComponentCreator) newOutbox(
 	input colexecop.Operator,
 	typs []*types.T,
 	_ func() []*execinfrapb.ComponentStats,
-	metadataSources []execinfrapb.MetadataSource,
+	metadataSources []colexecop.MetadataSource,
 	_ []colexecop.Closer,
 ) (*colrpc.Outbox, error) {
 	return c.newOutboxFn(allocator, input, typs, metadataSources)
@@ -194,7 +194,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 			allocator *colmem.Allocator,
 			op colexecop.Operator,
 			typs []*types.T,
-			sources []execinfrapb.MetadataSource,
+			sources []colexecop.MetadataSource,
 		) (*colrpc.Outbox, error) {
 			require.False(t, outboxCreated)
 			outboxCreated = true

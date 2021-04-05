@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow/colrpc"
@@ -178,8 +179,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctxRemote)
 				}
-				createMetadataSourceForID := func(id int) execinfrapb.MetadataSource {
-					return execinfrapb.CallbackMetadataSource{
+				createMetadataSourceForID := func(id int) colexecop.MetadataSource {
+					return colexectestutils.CallbackMetadataSource{
 						DrainMetaCb: func(ctx context.Context) []execinfrapb.ProducerMetadata {
 							return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("%d", id)}}
 						},
@@ -189,7 +190,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				// outboxes that drain these outputs. The outboxes will drain the router
 				// outputs which should in turn drain the HashRouter that will return
 				// this metadata.
-				toDrain := make([]execinfrapb.MetadataSource, numHashRouterOutputs)
+				toDrain := make([]colexecop.MetadataSource, numHashRouterOutputs)
 				for i := range toDrain {
 					toDrain[i] = createMetadataSourceForID(i)
 				}
@@ -221,12 +222,12 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						synchronizerInputs,
 						colexec.SynchronizerInput{
 							Op:              colexecop.Operator(inbox),
-							MetadataSources: []execinfrapb.MetadataSource{inbox},
+							MetadataSources: []colexecop.MetadataSource{inbox},
 						},
 					)
 				}
 				synchronizer := colexec.NewParallelUnorderedSynchronizer(synchronizerInputs, &wg)
-				materializerMetadataSource := execinfrapb.MetadataSource(synchronizer)
+				materializerMetadataSource := colexecop.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 				// idToClosed keeps track of whether Close was called for a given id.
@@ -242,7 +243,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxInput colexecop.Operator,
 					inbox *colrpc.Inbox,
 					id int,
-					outboxMetadataSources []execinfrapb.MetadataSource,
+					outboxMetadataSources []colexecop.MetadataSource,
 				) {
 					idToClosed.Lock()
 					idToClosed.mapping[id] = false
@@ -298,7 +299,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer outboxMemAccount.Close(ctxRemote)
 					if i < numHashRouterOutputs {
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, hashRouterOutputs[i], inboxes[i], streamID, []execinfrapb.MetadataSource{hashRouterOutputs[i]})
+						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, hashRouterOutputs[i], inboxes[i], streamID, []colexecop.MetadataSource{hashRouterOutputs[i]})
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
@@ -312,7 +313,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							colexecop.NewRepeatableBatchSource(remoteAllocator, batch, typs),
 							inboxes[i],
 							streamID,
-							[]execinfrapb.MetadataSource{createMetadataSourceForID(streamID)},
+							[]colexecop.MetadataSource{createMetadataSourceForID(streamID)},
 						)
 					}
 					streamID++
@@ -341,7 +342,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						synchronizer,
 						inbox,
 						streamID,
-						[]execinfrapb.MetadataSource{materializerMetadataSource, createMetadataSourceForID(streamID)},
+						[]colexecop.MetadataSource{materializerMetadataSource, createMetadataSourceForID(streamID)},
 					)
 					streamID++
 					// There is now only a single Inbox on the "local" node which is the
@@ -361,7 +362,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					typs,
 					nil, /* output */
 					nil, /* getStats */
-					[]execinfrapb.MetadataSource{materializerMetadataSource},
+					[]colexecop.MetadataSource{materializerMetadataSource},
 					[]colexecop.Closer{callbackCloser{closeCb: func() error {
 						materializerCalledClose = true
 						return nil
