@@ -34,24 +34,7 @@ func LimitHint(specLimitHint int64, post *execinfrapb.PostProcessSpec) (limitHin
 	if post.Limit != 0 && post.Limit <= readerOverflowProtection {
 		limitHint = int64(post.Limit)
 	} else if specLimitHint != 0 && specLimitHint <= readerOverflowProtection {
-		// If it turns out that limiHint rows are sufficient for our consumer, we
-		// want to avoid asking for another batch. Currently, the only way for us to
-		// "stop" is if we block on sending rows and the consumer sets
-		// ConsumerDone() on the RowChannel while we block. So we want to block
-		// *after* sending all the rows in the limit hint; to do this, we request
-		// rowChannelBufSize + 1 more rows:
-		//  - rowChannelBufSize rows guarantee that we will fill the row channel
-		//    even after limitHint rows are consumed
-		//  - the extra row gives us chance to call Push again after we unblock,
-		//    which will notice that ConsumerDone() was called.
-		//
-		// This flimsy mechanism is only useful in the (optimistic) case that the
-		// processor that only needs this many rows is our direct, local consumer.
-		// If we have a chain of processors and RowChannels, or remote streams, this
-		// reasoning goes out the door.
-		//
-		// TODO(radu, andrei): work on a real mechanism for limits.
-		limitHint = specLimitHint + RowChannelBufSize + 1
+		limitHint = specLimitHint
 	}
 
 	return limitHint
