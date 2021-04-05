@@ -237,6 +237,41 @@ func TestMakeImportSpans(t *testing.T) {
 			expectedSpans:      []roachpb.Span{makeTableSpan(52), makeTableSpan(53)},
 			expectedMaxEndTime: ts[3],
 		},
+		{
+			name:            "reintroduced-spans",
+			tablesToRestore: []roachpb.Span{makeTableSpan(52), makeTableSpan(53)},
+			backups: []BackupManifest{
+				makeBackupManifest(
+					ts[0], ts[1],
+					[]roachpb.Span{makeTableSpan(52)},
+					noIntroducedSpans,
+				),
+				makeBackupManifest(
+					ts[1], ts[2],
+					[]roachpb.Span{makeTableSpan(52), makeTableSpan(53)},
+					// Table 53 was created between the full backup and this
+					// inc, so it appears as introduced spans.
+					[]roachpb.Span{makeTableSpan(53)}, // introduced spans
+				),
+				makeBackupManifest(
+					ts[2], ts[3],
+					// We should be able to backup table 53 incremenatally after
+					// it has been introduced.
+					[]roachpb.Span{makeTableSpan(52), makeTableSpan(53)},
+					noIntroducedSpans,
+				),
+				makeBackupManifest(
+					ts[3], ts[4],
+					[]roachpb.Span{makeTableSpan(52), makeTableSpan(53)},
+					// In some cases, spans that were normally included in
+					// incremental backups may be re-introduced.
+					[]roachpb.Span{makeTableSpan(53)},
+				),
+			},
+
+			expectedSpans:      []roachpb.Span{makeTableSpan(52), makeTableSpan(53)},
+			expectedMaxEndTime: ts[4],
+		},
 	}
 
 	for _, tc := range tcs {
