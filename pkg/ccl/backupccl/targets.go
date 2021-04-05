@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -472,15 +473,17 @@ func MakeBackupTableEntry(
 		ind := -1
 		for i, b := range backupManifests {
 			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
-				if endTime != b.EndTime {
-					return BackupTableEntry{}, errors.Newf("should specify the exact backup time, next backup timestamp is %s", b.EndTime.AsOfSystemTime())
+				if endTime != b.EndTime && b.MVCCFilter != MVCCFilter_All {
+					return BackupTableEntry{}, errors.Newf(
+						"reading data for requested time requires that BACKUP was created with %q"+
+							" or should specify the time to be an exact backup time, nearest backup time is %s", backupOptRevisionHistory, timeutil.Unix(0, b.EndTime.WallTime).UTC())
 				}
 				ind = i
 				break
 			}
 		}
 		if ind == -1 {
-			return BackupTableEntry{}, errors.Newf("supplied backups do not cover requested time %s", endTime.AsOfSystemTime())
+			return BackupTableEntry{}, errors.Newf("supplied backups do not cover requested time %s", timeutil.Unix(0, endTime.WallTime).UTC())
 		}
 		backupManifests = backupManifests[:ind+1]
 	}
