@@ -360,10 +360,9 @@ func spansForAllTableIndexes(
 	})
 
 	// Attempt to merge any contiguous spans generated from the tables and revs.
-	mergedSpans, distinct := roachpb.MergeSpans(spans)
-	if !distinct {
-		return nil, errors.NewAssertionErrorWithWrappedErrf(errors.New("expected all resolved spans for the BACKUP to be distinct"), "IndexSpan")
-	}
+	// No need to check if the spans are distinct, since some of the merged
+	// indexes may overlap between different revisions of the same descriptor.
+	mergedSpans, _ := roachpb.MergeSpans(spans)
 
 	knobs := execCfg.BackupRestoreTestingKnobs
 	if knobs != nil && knobs.CaptureResolvedTableDescSpans != nil {
