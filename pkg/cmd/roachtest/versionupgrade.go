@@ -237,29 +237,33 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t *test, i int) *gosql.DB
 	return db
 }
 
+func uploadVersion(
+	ctx context.Context, t *test, c *cluster, nodes nodeListOption, newVersion string,
+) (binaryName string) {
+	binaryName = "./cockroach"
+	if newVersion == "" {
+		c.Put(ctx, cockroach, binaryName, nodes)
+	} else {
+		newVersion = "v" + newVersion
+		dir := newVersion
+		binaryName = filepath.Join(dir, "cockroach")
+		// Check if the cockroach binary already exists.
+		if err := c.RunE(ctx, nodes, "test", "-e", binaryName); err != nil {
+			if err := c.RunE(ctx, nodes, "mkdir", "-p", dir); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.Stage(ctx, c.l, "release", newVersion, dir, nodes); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return binaryName
+}
+
 func (u *versionUpgradeTest) uploadVersion(
 	ctx context.Context, t *test, nodes nodeListOption, newVersion string,
 ) option {
-	if newVersion == "" {
-		binary := cockroach
-		target := "./cockroach"
-		u.c.Put(ctx, binary, target, nodes)
-		return startArgs("--binary=" + target)
-	}
-
-	newVersion = "v" + newVersion
-	dir := newVersion
-	target := filepath.Join(dir, "cockroach")
-	// Check if the cockroach binary already exists.
-	if err := u.c.RunE(ctx, nodes, "test", "-e", target); err != nil {
-		if err := u.c.RunE(ctx, nodes, "mkdir", "-p", dir); err != nil {
-			t.Fatal(err)
-		}
-		if err := u.c.Stage(ctx, u.c.l, "release", newVersion, dir, nodes); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return startArgs("--binary=" + target)
+	return startArgs("--binary=" + uploadVersion(ctx, t, u.c, nodes, newVersion))
 }
 
 // binaryVersion returns the binary running on the (one-indexed) node.
