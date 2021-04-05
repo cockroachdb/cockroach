@@ -462,7 +462,7 @@ func (tc *TestCluster) AddServer(serverArgs base.TestServerArgs) (*server.TestSe
 // actually starting the server.
 func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) error {
 	server := tc.Servers[idx]
-	if err := server.Start(); err != nil {
+	if err := server.Start(context.Background()); err != nil {
 		return err
 	}
 
@@ -1327,17 +1327,22 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	}
 	s := srv.(*server.TestServer)
 
+	ctx := context.Background()
 	if err := func() error {
-		tc.mu.Lock()
-		defer tc.mu.Unlock()
-		tc.Servers[idx] = s
-		tc.mu.serverStoppers[idx] = s.Stopper()
+		func() {
+			// Only lock the assignment of the server and the stopper and the call to the inspect function.
+			// This ensures that the stopper's Stop() method can abort an async Start() call.
+			tc.mu.Lock()
+			defer tc.mu.Unlock()
+			tc.Servers[idx] = s
+			tc.mu.serverStoppers[idx] = s.Stopper()
 
-		if inspect != nil {
-			inspect(s)
-		}
+			if inspect != nil {
+				inspect(s)
+			}
+		}()
 
-		if err := srv.Start(); err != nil {
+		if err := srv.Start(ctx); err != nil {
 			return err
 		}
 
@@ -1357,7 +1362,7 @@ func (tc *TestCluster) RestartServerWithInspect(idx int, inspect func(s *server.
 	// different port, and a cycle of gossip is necessary to make all other nodes
 	// aware.
 	return contextutil.RunWithTimeout(
-		context.Background(), "check-conn", 15*time.Second,
+		ctx, "check-conn", 15*time.Second,
 		func(ctx context.Context) error {
 			r := retry.StartWithCtx(ctx, retry.Options{
 				InitialBackoff: 1 * time.Millisecond,

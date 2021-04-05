@@ -334,7 +334,8 @@ func TestJoinVersionGate(t *testing.T) {
 	}
 	defer serv.Stop()
 
-	if err := serv.Start(); !errors.Is(errors.Cause(err), server.ErrIncompatibleBinaryVersion) {
+	ctx := context.Background()
+	if err := serv.Start(ctx); !errors.Is(errors.Cause(err), server.ErrIncompatibleBinaryVersion) {
 		t.Fatalf("expected error %s, got %v", server.ErrIncompatibleBinaryVersion.Error(), err.Error())
 	}
 }
