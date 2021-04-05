@@ -220,8 +220,7 @@ func makeImportSpans(
 rangeLoop:
 	for _, importRange := range importRanges {
 		needed := false
-		// ts keeps track of the latest time that we've backed up for this span.
-		var ts hlc.Timestamp
+		var latestCoveredTime hlc.Timestamp
 		var files []roachpb.ImportRequest_File
 		payloads := importRange.Payload.([]interface{})
 		for _, p := range payloads {
@@ -233,26 +232,19 @@ rangeLoop:
 				needed = true
 			case backupSpan:
 				// The latest time we've backed up this span may be ahead of the start
-				// time of this entry. This is because some spans can be re-introduced.
-				// Spans are re-introduced when they were taken OFFLINE (and therefore
-				// processed non-transactional writes) and brought back online (PUBLIC).
-				// They need to be re-introduced so that BACKUP re-captures the
-				// non-transactional writes which may have a write timestamp at any
-				// timestamp as far back as when the descriptor was originally taken
-				// OFFLINE.
-				// In practice, it's expected that ts == ie.start here. When that is not
-				// the case ts should be greater than ie.start and ie.start should be 0.
-				// This is safe because the iterators used to read the data from this
-				// backup can support reading from files with duplicate data. For more
-				// information see #62564.
-				if ts.Less(ie.start) {
+				// time of this entry. This is because some spans can be
+				// "re-introduced", meaning that they were previously backed up but
+				// still appear in introducedSpans. Spans are re-introduced when they
+				// were taken OFFLINE (and therefore processed non-transactional writes)
+				// and brought back online (PUBLIC). For more information see #62564.
+				if latestCoveredTime.Less(ie.start) {
 					return nil, hlc.Timestamp{}, errors.Errorf(
 						"no backup covers time [%s,%s) for range [%s,%s) or backups listed out of order (mismatched start time)",
-						ts, ie.start,
+						latestCoveredTime, ie.start,
 						roachpb.Key(importRange.Start), roachpb.Key(importRange.End))
 				}
-				if !ie.end.Less(ts) {
-					ts = ie.end
+				if !ie.end.Less(latestCoveredTime) {
+					latestCoveredTime = ie.end
 				}
 			case backupFile:
 				if len(ie.file.Path) > 0 {
@@ -265,8 +257,8 @@ rangeLoop:
 			}
 		}
 		if needed {
-			if ts != maxEndTime {
-				if err := onMissing(importRange, ts, maxEndTime); err != nil {
+			if latestCoveredTime != maxEndTime {
+				if err := onMissing(importRange, latestCoveredTime, maxEndTime); err != nil {
 					return nil, hlc.Timestamp{}, err
 				}
 			}

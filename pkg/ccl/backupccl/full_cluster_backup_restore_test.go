@@ -17,12 +17,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func backupRestoreTestSetupEmptyWithParams(
@@ -528,4 +533,102 @@ func TestClusterRevisionHistory(t *testing.T) {
 		})
 	}
 
+}
+
+// TestReintroduceOfflineSpans is a regression test for #62564, which tracks a
+// bug where AddSSTable requests to OFFLINE tables may be missed by cluster
+// incremental backups since they can write at a timestamp older than the last
+// backup.
+func TestReintroduceOfflineSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "likely slow under race")
+
+	// Block restores on the source cluster.
+	blockDBRestore := make(chan struct{})
+	dbRestoreStarted := make(chan struct{})
+	// The data is split such that there will be 10 span entries to process.
+	restoreBlockEntiresThreshold := 4
+	entriesCount := 0
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		Store: &kvserver.StoreTestingKnobs{
+			TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+				for _, ru := range br.Responses {
+					switch ru.GetInner().(type) {
+					case *roachpb.ImportResponse:
+						if entriesCount == 0 {
+							close(dbRestoreStarted)
+						}
+						if entriesCount == restoreBlockEntiresThreshold {
+							<-blockDBRestore
+						}
+
+						entriesCount++
+					}
+				}
+				return nil
+			},
+		},
+	}
+	params.ServerArgs.Knobs = knobs
+
+	const numAccounts = 1000
+	ctx, _, srcDB, tempDir, cleanupSrc := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, initNone, params)
+	_, _, destDB, cleanupDst := backupRestoreTestSetupEmpty(t, singleNode, tempDir, initNone, base.TestClusterArgs{})
+	defer cleanupSrc()
+	defer cleanupDst()
+
+	dbBackupLoc := "nodelocal://0/my_db_backup"
+	clusterBackupLoc := "nodelocal://0/my_cluster_backup"
+
+	// Take a backup that we'll use to create an OFFLINE descriptor.
+	srcDB.Exec(t, `CREATE INDEX new_idx ON data.bank (balance)`)
+	srcDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, dbBackupLoc)
+
+	srcDB.Exec(t, `CREATE DATABASE restoredb;`)
+
+	// Take a base full backup.
+	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
+
+	var g errgroup.Group
+	g.Go(func() error {
+		_, err := srcDB.DB.ExecContext(ctx, `RESTORE data.bank FROM $1 WITH into_db='restoredb'`, dbBackupLoc)
+		return err
+	})
+
+	// Take an incremental backup after the database restore starts.
+	<-dbRestoreStarted
+	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
+
+	// All the restore to finish. This will issue AddSSTable requests at a
+	// timestamp that is before the last incremental we just took.
+	close(blockDBRestore)
+
+	// Wait for the database restore to finish, and take another incremental
+	// backup that will miss the AddSSTable writes.
+	require.NoError(t, g.Wait())
+
+	var tsBefore string
+	srcDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
+
+	// Drop an index on the restored table to ensure that the dropped index was
+	// also re-included.
+	srcDB.Exec(t, `DROP INDEX new_idx`)
+
+	srcDB.Exec(t, `BACKUP TO $1 WITH revision_history`, clusterBackupLoc)
+
+	// Restore the incremental backup chain that has missing writes.
+	destDB.Exec(t, `RESTORE FROM $1 AS OF SYSTEM TIME `+tsBefore, clusterBackupLoc)
+
+	// Assert that the restored database has the same number
+	// of rows in both the source and destination cluster.
+	checkQuery := `SELECT count(*) FROM restoredb.bank AS OF SYSTEM TIME ` + tsBefore
+	expectedCount := srcDB.QueryStr(t, checkQuery)
+	destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank`, expectedCount)
+
+	checkQuery = `SELECT count(*) FROM restoredb.bank@new_idx AS OF SYSTEM TIME ` + tsBefore
+	expectedCount = srcDB.QueryStr(t, checkQuery)
+	destDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@new_idx`, expectedCount)
 }
