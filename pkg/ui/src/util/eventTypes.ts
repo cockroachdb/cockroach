@@ -54,6 +54,8 @@ export const CREATE_VIEW = "create_view";
 export const DROP_VIEW = "drop_view";
 // Recorded when a type is created.
 export const CREATE_TYPE = "create_type";
+// Recorded when a type is altered.
+export const ALTER_TYPE = "alter_type";
 // Recorded when a sequence is created.
 export const CREATE_SEQUENCE = "create_sequence";
 // Recorded when a sequence is altered.
