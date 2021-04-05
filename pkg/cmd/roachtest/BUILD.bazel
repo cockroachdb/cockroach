@@ -10,7 +10,6 @@ go_library(
         "alterpk.go",
         "autoupgrade.go",
         "backup.go",
-        "bank.go",
         "build_info.go",
         "canary.go",
         "cancel.go",
