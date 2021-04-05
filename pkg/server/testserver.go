@@ -460,8 +460,7 @@ func (ts *TestServer) NodeDialer() *nodedialer.Dialer {
 // TestServer.ServingRPCAddr() after Start() for client connections.
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
-func (ts *TestServer) Start() error {
-	ctx := context.Background()
+func (ts *TestServer) Start(ctx context.Context) error {
 	return ts.Server.Start(ctx)
 }
 
@@ -842,6 +841,12 @@ func (ts *TestServer) SQLAddr() string {
 // DrainClients exports the drainClients() method for use by tests.
 func (ts *TestServer) DrainClients(ctx context.Context) error {
 	return ts.drainClients(ctx, nil /* reporter */)
+}
+
+// Readiness returns nil when the server's health probe reports
+// readiness, a readiness error otherwise.
+func (ts *TestServer) Readiness(ctx context.Context) error {
+	return ts.admin.checkReadinessForHealthCheck(ctx)
 }
 
 // WriteSummaries implements TestServerInterface.
