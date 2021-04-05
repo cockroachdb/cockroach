@@ -73,7 +73,7 @@ func TestTenantUpgrade(t *testing.T) {
 		}
 		// Prevent a logging assertion that the server ID is initialized multiple times.
 		log.TestingClearServerIdentifiers()
-		tenant, err := tc.Server(0).StartTenant(tenantArgs)
+		tenant, err := tc.Server(0).StartTenant(ctx, tenantArgs)
 		require.NoError(t, err)
 		pgURL, cleanupPGUrl := sqlutils.PGUrl(t, tenant.SQLAddr(), "Tenant", url.User(security.RootUser))
 		tenantDB, err = gosql.Open("postgres", pgURL.String())

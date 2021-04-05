@@ -443,6 +443,7 @@ func (s *Stopper) Stop(ctx context.Context) {
 	stopCalled := s.mu.stopping
 	s.mu.stopping = true
 	s.mu.Unlock()
+	log.Infof(ctx, "stop %s", debug.Stack())
 
 	if stopCalled {
 		// Wait for the concurrent Stop() to complete.
