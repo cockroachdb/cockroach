@@ -84,7 +84,7 @@ func clearTrivialReplicatedEvalResultFields(r *kvserverpb.ReplicatedEvalResult) 
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the application process
 	// (which checks that all fields were handled).
-	r.IsLeaseRequest = false
+	r.Flags = 0
 	r.WriteTimestamp = hlc.Timestamp{}
 	r.PrevLeaseProposal = nil
 	// The state fields cleared here were already applied to the in-memory view of

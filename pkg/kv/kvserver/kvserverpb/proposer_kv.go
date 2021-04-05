@@ -44,3 +44,14 @@ func MaxClosedTimestampFooterSize() int {
 func (r ReplicatedEvalResult) IsZero() bool {
 	return r == ReplicatedEvalResult{}
 }
+
+// IsLeaseRequest returns whether the command corresponds to a lease request.
+func (r ReplicatedEvalResult) IsLeaseRequest() bool {
+	return (r.Flags & int64(EvalResultFlags_LeaseRequest)) != 0
+}
+
+// SetLeaseRequest set the respective flag on the command, indicating that this
+// command corresponds to a lease request.
+func (r *ReplicatedEvalResult) SetLeaseRequest() {
+	r.Flags |= int64(EvalResultFlags_LeaseRequest)
+}

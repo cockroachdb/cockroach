@@ -38,8 +38,8 @@ func TestEvalResultIsZero(t *testing.T) {
 				f.GossipFirstRange = true
 				defer func() { f.GossipFirstRange = false }()
 			case *kvserverpb.ReplicatedEvalResult:
-				f.IsLeaseRequest = true
-				defer func() { f.IsLeaseRequest = false }()
+				f.SetLeaseRequest()
+				defer func() { f.Flags = 0 }()
 			case **kvserverpb.WriteBatch:
 				*f = new(kvserverpb.WriteBatch)
 				defer func() { *f = nil }()
