@@ -154,8 +154,9 @@ func zoneConfigForMultiRegionDatabase(
 		LeasePreferences: []zonepb.LeasePreference{
 			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(regionConfig.PrimaryRegion())}},
 		},
-		VoterConstraints: voterConstraints,
-		Constraints:      constraints,
+		ExplicitlySetVoterConstraints: true,
+		VoterConstraints:              voterConstraints,
+		Constraints:                   constraints,
 	}, nil
 }
 
@@ -177,7 +178,7 @@ func zoneConfigForMultiRegionPartition(
 	}
 	zc.NumVoters = &numVoters
 
-	zc.InheritedVoterConstraints = false
+	zc.ExplicitlySetVoterConstraints = true
 	zc.VoterConstraints = voterConstraints
 
 	zc.InheritedLeasePreferences = false
@@ -378,7 +379,7 @@ func zoneConfigForMultiRegionTable(
 		}
 		ret.NumVoters = &numVoters
 
-		ret.InheritedVoterConstraints = false
+		ret.ExplicitlySetVoterConstraints = true
 		ret.VoterConstraints = voterConstraints
 
 		ret.InheritedLeasePreferences = false
