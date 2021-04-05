@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -204,7 +205,7 @@ func createBenchmarkChangefeed(
 
 	settings := s.ClusterSettings()
 	metrics := MakeMetrics(base.DefaultHistogramWindowInterval()).(*Metrics)
-	buf := kvfeed.MakeChanBuffer()
+	buf := kvevent.MakeChanBuffer()
 	leaseMgr := s.LeaseManager().(*lease.Manager)
 	mm := mon.NewUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,
@@ -240,7 +241,7 @@ func createBenchmarkChangefeed(
 		if err != nil {
 			return nil, err
 		}
-		if event.Type() == kvfeed.KVEvent {
+		if event.Type() == kvevent.TypeKV {
 			if err := eventConsumer.ConsumeEvent(ctx, event); err != nil {
 				return nil, err
 			}

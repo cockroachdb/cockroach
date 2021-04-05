@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -43,9 +44,9 @@ type Config struct {
 	Gossip             gossip.OptionalGossip
 	Spans              []roachpb.Span
 	Targets            jobspb.ChangefeedTargets
-	Sink               EventBufferWriter
+	Sink               kvevent.Writer
 	LeaseMgr           *lease.Manager
-	Metrics            *Metrics
+	Metrics            *kvevent.Metrics
 	MM                 *mon.BytesMonitor
 	WithDiff           bool
 	SchemaChangeEvents changefeedbase.SchemaChangeEventClass
@@ -92,8 +93,8 @@ func Run(ctx context.Context, cfg Config) error {
 		distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 		pff = rangefeedFactory(distSender.RangeFeed)
 	}
-	bf := func() EventBuffer {
-		return makeMemBuffer(cfg.MM.MakeBoundAccount(), cfg.Metrics)
+	bf := func() kvevent.Buffer {
+		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), cfg.Metrics)
 	}
 	f := newKVFeed(
 		cfg.Sink, cfg.Spans,
@@ -155,21 +156,21 @@ type kvFeed struct {
 	withDiff            bool
 	withInitialBackfill bool
 	initialHighWater    hlc.Timestamp
-	sink                EventBufferWriter
+	sink                kvevent.Writer
 	codec               keys.SQLCodec
 
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass
 	schemaChangePolicy changefeedbase.SchemaChangePolicy
 
 	// These dependencies are made available for test injection.
-	bufferFactory func() EventBuffer
+	bufferFactory func() kvevent.Buffer
 	tableFeed     schemaFeed
 	scanner       kvScanner
 	physicalFeed  physicalFeedFactory
 }
 
 func newKVFeed(
-	sink EventBufferWriter,
+	sink kvevent.Writer,
 	spans []roachpb.Span,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
@@ -179,7 +180,7 @@ func newKVFeed(
 	tf schemaFeed,
 	sc kvScanner,
 	pff physicalFeedFactory,
-	bf func() EventBuffer,
+	bf func() kvevent.Buffer,
 ) *kvFeed {
 	return &kvFeed{
 		sink:                sink,
@@ -371,8 +372,8 @@ func (e *errBoundaryReached) Error() string {
 // *errBoundaryReached. A nil error will never be returned.
 func copyFromSourceToSinkUntilTableEvent(
 	ctx context.Context,
-	sink EventBufferWriter,
-	source EventBufferReader,
+	sink kvevent.Writer,
+	source kvevent.Reader,
 	cfg physicalConfig,
 	tables schemaFeed,
 ) error {
@@ -397,7 +398,7 @@ func copyFromSourceToSinkUntilTableEvent(
 			}
 			return nil
 		}
-		applyScanBoundary = func(e Event) (skipEvent, reachedBoundary bool) {
+		applyScanBoundary = func(e kvevent.Event) (skipEvent, reachedBoundary bool) {
 			if scanBoundary == nil {
 				return false, false
 			}
@@ -405,9 +406,9 @@ func copyFromSourceToSinkUntilTableEvent(
 				return false, false
 			}
 			switch e.Type() {
-			case KVEvent:
+			case kvevent.TypeKV:
 				return true, false
-			case ResolvedEvent:
+			case kvevent.TypeResolved:
 				boundaryResolvedTimestamp := scanBoundary.Timestamp().Prev()
 				resolved := e.Resolved()
 				if resolved.Timestamp.LessEq(boundaryResolvedTimestamp) {
@@ -420,11 +421,11 @@ func copyFromSourceToSinkUntilTableEvent(
 				return false, false
 			}
 		}
-		addEntry = func(e Event) error {
+		addEntry = func(e kvevent.Event) error {
 			switch e.Type() {
-			case KVEvent:
+			case kvevent.TypeKV:
 				return sink.AddKV(ctx, e.KV(), e.PrevValue(), e.BackfillTimestamp())
-			case ResolvedEvent:
+			case kvevent.TypeResolved:
 				// TODO(ajwerner): technically this doesn't need to happen for most
 				// events - we just need to make sure we forward for events which are
 				// at scanBoundary.Prev(). We may not yet know about that scanBoundary.
