@@ -87,11 +87,13 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			demoCtxTemp := demoCtx
-			demoCtx.sqlPoolMemorySize = tc.sqlPoolMemorySize
-			demoCtx.cacheSize = tc.cacheSize
+			cfg := demoCtx.transientClusterConfig
+			cfg.sqlPoolMemorySize = tc.sqlPoolMemorySize
+			cfg.cacheSize = tc.cacheSize
+			cfg.sqlFirstPort = 1234
+			cfg.httpFirstPort = 4567
 
-			actual := testServerArgsForTransientCluster(unixSocketDetails{}, tc.nodeID, tc.joinAddr, "", 1234, 4567, stickyEnginesRegistry)
+			actual := testServerArgsForTransientCluster(cfg, unixSocketDetails{}, tc.nodeID, tc.joinAddr, "", stickyEnginesRegistry)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 
@@ -107,9 +109,6 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			actual.StoreSpecs = nil
 
 			assert.Equal(t, tc.expected, actual)
-
-			// Restore demoCtx state after each test.
-			demoCtx = demoCtxTemp
 		})
 	}
 }
