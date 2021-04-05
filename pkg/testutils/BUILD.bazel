@@ -14,6 +14,7 @@ go_library(
         "soon.go",
         "sort.go",
         "subtest.go",
+        "tb.go",
         "trace.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils",
