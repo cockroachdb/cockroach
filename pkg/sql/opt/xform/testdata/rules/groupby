@@ -498,7 +498,7 @@ memo (optimized, ~5KB, required=[presentation: min:6])
  ├── G2: (scan abc,cols=(1))
  │    ├── [ordering: +1] [limit hint: 1.00]
  │    │    ├── best: (scan abc,cols=(1))
- │    │    └── cost: 6.11
+ │    │    └── cost: 5.06
  │    └── []
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1064.51
@@ -560,7 +560,7 @@ memo (optimized, ~5KB, required=[presentation: max:6])
  ├── G2: (scan abc,cols=(1))
  │    ├── [ordering: -1] [limit hint: 1.00]
  │    │    ├── best: (scan abc,rev,cols=(1))
- │    │    └── cost: 6.13
+ │    │    └── cost: 5.06
  │    └── []
  │         ├── best: (scan abc,cols=(1))
  │         └── cost: 1064.51
