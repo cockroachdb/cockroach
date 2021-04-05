@@ -62,7 +62,7 @@ type Operator interface {
 // DrainMeta may not be called concurrently.
 type DrainableOperator interface {
 	Operator
-	execinfrapb.MetadataSource
+	MetadataSource
 }
 
 // KVReader is an operator that performs KV reads.
@@ -309,4 +309,37 @@ func (n *noopOperator) Reset(ctx context.Context) {
 	if r, ok := n.Input.(Resetter); ok {
 		r.Reset(ctx)
 	}
+}
+
+// MetadataSource is an interface implemented by processors and columnar
+// operators that can produce metadata.
+type MetadataSource interface {
+	// DrainMeta returns all the metadata produced by the processor or operator.
+	// It will be called exactly once, usually, when the processor or operator
+	// has finished doing its computations. This is a signal that the output
+	// requires no more rows to be returned.
+	// Implementers can choose what to do on subsequent calls (if such occur).
+	// TODO(yuzefovich): modify the contract to require returning nil on all
+	// calls after the first one.
+	DrainMeta(context.Context) []execinfrapb.ProducerMetadata
+}
+
+// MetadataSources is a slice of MetadataSource.
+type MetadataSources []MetadataSource
+
+// DrainMeta calls DrainMeta on all MetadataSources and returns a single slice
+// with all the accumulated metadata. Note that this method wraps the draining
+// with the panic-catcher so that the callers don't have to.
+func (s MetadataSources) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	var result []execinfrapb.ProducerMetadata
+	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+		for _, src := range s {
+			result = append(result, src.DrainMeta(ctx)...)
+		}
+	}); err != nil {
+		meta := execinfrapb.GetProducerMeta()
+		meta.Err = err
+		result = append(result, *meta)
+	}
+	return result
 }

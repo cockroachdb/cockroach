@@ -29,18 +29,17 @@ type InvariantsChecker struct {
 	colexecop.NonExplainable
 
 	initStatus     colexecop.OperatorInitStatus
-	metadataSource execinfrapb.MetadataSource
+	metadataSource colexecop.MetadataSource
 }
 
-var _ colexecop.Operator = &InvariantsChecker{}
-var _ execinfrapb.MetadataSource
+var _ colexecop.DrainableOperator = &InvariantsChecker{}
 
 // NewInvariantsChecker creates a new InvariantsChecker.
 func NewInvariantsChecker(input colexecop.Operator) *InvariantsChecker {
 	c := &InvariantsChecker{
 		OneInputNode: colexecop.OneInputNode{Input: input},
 	}
-	if ms, ok := input.(execinfrapb.MetadataSource); ok {
+	if ms, ok := input.(colexecop.MetadataSource); ok {
 		c.metadataSource = ms
 	}
 	return c
@@ -99,7 +98,7 @@ func (i *InvariantsChecker) Next(ctx context.Context) coldata.Batch {
 	return b
 }
 
-// DrainMeta implements the execinfrapb.MetadataSource interface.
+// DrainMeta implements the colexecop.MetadataSource interface.
 func (i *InvariantsChecker) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	if shortCircuit := i.assertInitWasCalled(); shortCircuit {
 		return nil

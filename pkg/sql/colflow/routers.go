@@ -413,9 +413,9 @@ type HashRouter struct {
 	// execinfrapb.ProducerMetadata object. This will be done right before
 	// draining metadataSources.
 	getStats func() []*execinfrapb.ComponentStats
-	// metadataSources is a slice of execinfrapb.MetadataSources that need to be
+	// metadataSources is a slice of colexecop.MetadataSources that need to be
 	// drained when the HashRouter terminates.
-	metadataSources execinfrapb.MetadataSources
+	metadataSources colexecop.MetadataSources
 	// closers is a slice of Closers that need to be closed when the hash router
 	// terminates.
 	closers colexecop.Closers
@@ -466,7 +466,7 @@ func NewHashRouter(
 	fdSemaphore semaphore.Semaphore,
 	diskAccounts []*mon.BoundAccount,
 	getStats func() []*execinfrapb.ComponentStats,
-	toDrain []execinfrapb.MetadataSource,
+	toDrain []colexecop.MetadataSource,
 	toClose []colexecop.Closer,
 ) (*HashRouter, []colexecop.DrainableOperator) {
 	if diskQueueCfg.CacheMode != colcontainer.DiskQueueCacheModeDefault {
@@ -507,7 +507,7 @@ func newHashRouterWithOutputs(
 	unblockEventsChan <-chan struct{},
 	outputs []routerOutput,
 	getStats func() []*execinfrapb.ComponentStats,
-	toDrain []execinfrapb.MetadataSource,
+	toDrain []colexecop.MetadataSource,
 	toClose []colexecop.Closer,
 ) *HashRouter {
 	r := &HashRouter{

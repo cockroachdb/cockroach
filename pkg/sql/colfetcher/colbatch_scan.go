@@ -119,7 +119,7 @@ func (s *ColBatchScan) Next(ctx context.Context) coldata.Batch {
 	return bat
 }
 
-// DrainMeta is part of the MetadataSource interface.
+// DrainMeta is part of the colexecop.MetadataSource interface.
 func (s *ColBatchScan) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	s.mu.Lock()
 	initialized := s.mu.init

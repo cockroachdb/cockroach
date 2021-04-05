@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1476,4 +1477,15 @@ func GenerateBatchSize() int {
 		return sizesToChooseFrom[rng.Intn(len(sizesToChooseFrom))]
 	}
 	return coldata.BatchSize()
+}
+
+// CallbackMetadataSource is a utility struct that implements the
+// colexecop.MetadataSource interface by calling a provided callback.
+type CallbackMetadataSource struct {
+	DrainMetaCb func(context.Context) []execinfrapb.ProducerMetadata
+}
+
+// DrainMeta is part of the colexecop.MetadataSource interface.
+func (s CallbackMetadataSource) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
+	return s.DrainMetaCb(ctx)
 }

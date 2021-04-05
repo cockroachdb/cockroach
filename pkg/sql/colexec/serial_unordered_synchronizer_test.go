@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -44,8 +45,8 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 		inputIdx := i
 		inputs[i] = SynchronizerInput{
 			Op: source,
-			MetadataSources: []execinfrapb.MetadataSource{
-				execinfrapb.CallbackMetadataSource{
+			MetadataSources: []colexecop.MetadataSource{
+				colexectestutils.CallbackMetadataSource{
 					DrainMetaCb: func(_ context.Context) []execinfrapb.ProducerMetadata {
 						return []execinfrapb.ProducerMetadata{{Err: errors.Errorf("input %d test-induced metadata", inputIdx)}}
 					},
