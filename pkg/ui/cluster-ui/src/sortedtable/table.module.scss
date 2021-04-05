@@ -24,6 +24,7 @@ $stats-table-tr--bg: $colors--neutral-0;
     &--body {
       letter-spacing: 0.33px;
       background-color: $colors--neutral-0;
+      height: $line-height--xxx-large;
       &:hover {
         background-color: $colors--background;
       }
@@ -32,17 +33,14 @@ $stats-table-tr--bg: $colors--neutral-0;
     &--header {
       text-align: left;
       white-space: nowrap;
-      @include text--heading-6;
-      color: $colors--neutral-6;
-      background-color: $colors--neutral-1;
-      font-weight: 600;
-      font-family: $font-family--semi-bold;
-      letter-spacing: 1.5px;
+      @include text--body-strong;
+      color: $colors--neutral-7;
+      background-color: $colors--neutral-0;
 
       tr, th {
         padding: $spacing-base $spacing-base $spacing-base $spacing-small;
         height: $line-height--large;
-        background-color: $colors--neutral-1;
+        background-color: $colors--neutral-0;
       }
     }
 

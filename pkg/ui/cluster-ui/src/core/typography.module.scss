@@ -8,6 +8,7 @@
   }
 }
 
+@include font-face("Source Sans Pro");
 @include font-face("SourceSansPro-Bold");
 @include font-face("SourceSansPro-Regular");
 @include font-face("SourceSansPro-SemiBold");
@@ -32,6 +33,7 @@ $font-size--tall: 16px;
 $font-size--medium: 14px;
 $font-size--small: 12px;
 
+$line-height--xxx-large: 70px;
 $line-height--xx-large: 64px;
 $line-height--x-large: 48px;
 $line-height--larger: 40px;

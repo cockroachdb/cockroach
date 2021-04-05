@@ -91,7 +91,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
   const columns = [
     {
       name: "transactions",
-      title: <>transactions</>,
+      title: <>Transactions</>,
       cell: (item: Transaction) =>
         textCell({
           transactionText: collectStatementsText(
@@ -169,7 +169,7 @@ export const TransactionsTable: React.FC<TransactionsTable> = props => {
     },
     {
       name: "statements",
-      title: <>statements</>,
+      title: <>Statements</>,
       cell: (item: Transaction) => item.stats_data.statement_ids.length,
       sort: (item: Transaction) => item.stats_data.statement_ids.length,
     },
