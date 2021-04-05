@@ -537,6 +537,18 @@ func (expr *IndirectionExpr) TypeCheck(
 	if typ.Family() != types.ArrayFamily {
 		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "cannot subscript type %s because it is not an array", typ)
 	}
+
+	// If the subExpr is a CastExpr, we need to wrap it in a ParenExpr
+	// (which was removed during type checking of ParenExpr), otherwise
+	// the indirection will get interpreted as part of the type.
+	// Ex. ('{a}'::_typ)[1] vs. '{a}'::_typ[1]
+	_, ok := subExpr.(*CastExpr)
+	if ok {
+		subExpr = &ParenExpr{
+			Expr: subExpr,
+		}
+	}
+
 	expr.Expr = subExpr
 	expr.typ = typ.ArrayContents()
 
