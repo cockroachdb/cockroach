@@ -25,12 +25,14 @@ go_test(
     name = "keys_test",
     size = "small",
     srcs = [
+        "foo_test.go",
         "keys_test.go",
         "printer_test.go",
     ],
     embed = [":keys"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
