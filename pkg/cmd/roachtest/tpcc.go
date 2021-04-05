@@ -303,7 +303,7 @@ func registerTPCC(r *testRegistry) {
 				// Upload and restart cluster into the new
 				// binary (stays at old cluster version).
 				binaryUpgradeStep(crdbNodes, mainBinary),
-				uploadVersion(workloadNode, mainBinary), // for tpccBackgroundStepper's workload
+				uploadVersionStep(workloadNode, mainBinary), // for tpccBackgroundStepper's workload
 				// Now start running TPCC in the background.
 				tpccBackgroundStepper.launch,
 				// While tpcc is running in the background, bump the cluster
