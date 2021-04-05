@@ -119,10 +119,6 @@ go_test(
             "//pkg/util/log/eventpb",
             "@org_golang_x_sys//unix",
         ],
-        "@io_bazel_rules_go//go/platform:nacl": [
-            "//pkg/util/log/eventpb",
-            "@org_golang_x_sys//unix",
-        ],
         "@io_bazel_rules_go//go/platform:netbsd": [
             "//pkg/util/log/eventpb",
             "@org_golang_x_sys//unix",

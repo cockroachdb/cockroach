@@ -36,9 +36,6 @@ go_library(
         "@io_bazel_rules_go//go/platform:linux": [
             "-ldl",
         ],
-        "@io_bazel_rules_go//go/platform:nacl": [
-            "-ldl",
-        ],
         "@io_bazel_rules_go//go/platform:netbsd": [
             "-ldl",
         ],
