@@ -93,9 +93,6 @@ go_library(
         "@io_bazel_rules_go//go/platform:linux": [
             "@com_github_shirou_gopsutil//disk",
         ],
-        "@io_bazel_rules_go//go/platform:nacl": [
-            "@com_github_shirou_gopsutil//disk",
-        ],
         "@io_bazel_rules_go//go/platform:netbsd": [
             "@com_github_shirou_gopsutil//disk",
         ],
