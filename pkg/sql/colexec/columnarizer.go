@@ -239,9 +239,8 @@ func (c *Columnarizer) Run(context.Context) {
 }
 
 var (
-	_ colexecop.Operator         = &Columnarizer{}
-	_ execinfrapb.MetadataSource = &Columnarizer{}
-	_ colexecop.Closer           = &Columnarizer{}
+	_ colexecop.DrainableOperator = &Columnarizer{}
+	_ colexecop.Closer            = &Columnarizer{}
 )
 
 // DrainMeta is part of the MetadataSource interface.

@@ -1411,7 +1411,7 @@ func BenchmarkJoinReader(b *testing.B) {
 								if !spilled && jr.(*joinReader).Spilled() {
 									spilled = true
 								}
-								meta := output.DrainMeta(ctx)
+								meta := output.bufferedMeta
 								if len(meta) != 1 || meta[0].Metrics == nil {
 									// Expect a single metadata payload with Metrics set.
 									b.Fatalf("unexpected metadata: %v", meta)

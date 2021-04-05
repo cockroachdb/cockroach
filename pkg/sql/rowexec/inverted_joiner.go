@@ -163,7 +163,6 @@ type invertedJoiner struct {
 
 var _ execinfra.Processor = &invertedJoiner{}
 var _ execinfra.RowSource = &invertedJoiner{}
-var _ execinfrapb.MetadataSource = &invertedJoiner{}
 var _ execinfra.OpNode = &invertedJoiner{}
 
 const invertedJoinerProcName = "inverted joiner"
@@ -797,11 +796,6 @@ func (ij *invertedJoiner) generateMeta(ctx context.Context) []execinfrapb.Produc
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (ij *invertedJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return ij.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

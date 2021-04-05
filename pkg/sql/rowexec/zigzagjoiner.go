@@ -260,7 +260,6 @@ var zigzagJoinerBatchSize = int64(util.ConstantWithMetamorphicTestValue(
 
 var _ execinfra.Processor = &zigzagJoiner{}
 var _ execinfra.RowSource = &zigzagJoiner{}
-var _ execinfrapb.MetadataSource = &zigzagJoiner{}
 var _ execinfra.OpNode = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
@@ -1035,11 +1034,6 @@ func (z *zigzagJoiner) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (z *zigzagJoiner) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return z.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

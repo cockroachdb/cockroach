@@ -54,7 +54,7 @@ type Outbox struct {
 
 	// draining is an atomic that represents whether the Outbox is draining.
 	draining        uint32
-	metadataSources execinfrapb.MetadataSources
+	metadataSources colexecop.MetadataSources
 	// closers is a slice of Closers that need to be Closed on termination.
 	closers colexecop.Closers
 
@@ -83,7 +83,7 @@ func NewOutbox(
 	input colexecop.Operator,
 	typs []*types.T,
 	getStats func() []*execinfrapb.ComponentStats,
-	metadataSources []execinfrapb.MetadataSource,
+	metadataSources []colexecop.MetadataSource,
 	toClose []colexecop.Closer,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
