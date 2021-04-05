@@ -37,7 +37,7 @@ import (
 
 // interestingGoroutines returns all goroutines we care about for the purpose
 // of leak checking. It excludes testing or runtime ones.
-func interestingGoroutines() map[int64]string {
+func interestingGoroutines() (map[int64]string, []byte) {
 	buf := make([]byte, 2<<20)
 	buf = buf[:runtime.Stack(buf, true)]
 	gs := make(map[int64]string)
@@ -75,7 +75,7 @@ func interestingGoroutines() map[int64]string {
 		}
 		gs[goid.ExtractGID([]byte(g))] = g
 	}
-	return gs
+	return gs, buf
 }
 
 // Set once a test leaks goroutines so that further tests don't attempt to
@@ -96,7 +96,7 @@ var PrintLeakedStoppers = func(t testing.TB) {}
 func AfterTest(t testing.TB) func() {
 	// Try a best effort GC to help the race tests move along.
 	runtime.GC()
-	orig := interestingGoroutines()
+	orig, _ := interestingGoroutines()
 	return func() {
 		t.Helper()
 		// If there was a panic, "leaked" goroutines are expected.
@@ -147,7 +147,8 @@ func AfterTest(t testing.TB) func() {
 // returns an error if they differ.
 func diffGoroutines(base map[int64]string) error {
 	var leaked []string
-	for id, stack := range interestingGoroutines() {
+	gs, buf := interestingGoroutines()
+	for id, stack := range gs {
 		if _, ok := base[id]; !ok {
 			leaked = append(leaked, stack)
 		}
@@ -161,5 +162,9 @@ func diffGoroutines(base map[int64]string) error {
 	for _, g := range leaked {
 		b.WriteString(fmt.Sprintf("Leaked goroutine: %v\n\n", g))
 	}
+
+	b.WriteString("All goroutines:\n")
+	b.Write(buf)
+
 	return errors.Newf("%s", b.String())
 }
