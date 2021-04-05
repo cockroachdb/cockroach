@@ -55,6 +55,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `View Created: User ${info.User} created view ${info.ViewName}`;
     case eventTypes.DROP_VIEW:
       return `View Dropped: User ${info.User} dropped view ${info.ViewName}`;
+    case eventTypes.CREATE_TYPE:
+      return `Type Created: User ${info.User} created type ${info.TypeName}`;
     case eventTypes.CREATE_SEQUENCE:
       return `Sequence Created: User ${info.User} created sequence ${info.SequenceName}`;
     case eventTypes.ALTER_SEQUENCE:
