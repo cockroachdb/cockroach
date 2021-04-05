@@ -26,7 +26,6 @@ $viz-sides = 62px
 
   &__content
     padding 0 10px 15px
-    height 200px
     &.visualization--loading
       display flex
       justify-content center
@@ -89,3 +88,25 @@ $viz-sides = 62px
 
 .linked-guideline__line
   stroke $link-color
+
+.uplot
+  display flex
+
+.uplot > .u-legend
+  display none
+  position absolute
+  left 0
+  top 0
+  font-size 10px
+  background-color white
+  text-align left
+  margin-top 20px
+  z-index 100
+  pointer-events: none;
+  width: fit-content;
+  border-radius: 5px
+  padding: 10px;
+  border 1px solid rgba(0,0,0,0.1)
+
+.u-legend .u-series
+  display block
