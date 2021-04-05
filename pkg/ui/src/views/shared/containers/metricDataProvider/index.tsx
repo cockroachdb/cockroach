@@ -28,6 +28,9 @@ import {
   MetricsDataComponentProps,
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
+import { PayloadAction } from "oss/src/interfaces/action";
+import { TimeWindow, TimeScale } from "oss/src/redux/timewindow";
+import { History } from "@types/history";
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -87,6 +90,9 @@ interface MetricsDataProviderConnectProps {
   metrics: MetricsQuery;
   timeInfo: QueryTimeInfo;
   requestMetrics: typeof requestMetricsAction;
+  setTimeRange: (TimeWindow) => PayloadAction<TimeWindow>;
+  setTimeScale: (TimeScale) => PayloadAction<TimeScale>;
+  history: History;
 }
 
 /**
@@ -215,6 +221,9 @@ class MetricsDataProvider extends React.Component<
     const dataProps: MetricsDataComponentProps = {
       data: this.getData(),
       timeInfo: this.props.timeInfo,
+      setTimeRange: this.props.setTimeRange,
+      setTimeScale: this.props.setTimeScale,
+      history: this.props.history,
     };
     return React.cloneElement(
       child as React.ReactElement<MetricsDataComponentProps>,

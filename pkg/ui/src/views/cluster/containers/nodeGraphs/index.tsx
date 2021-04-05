@@ -58,6 +58,13 @@ import requestsDashboard from "./dashboards/requests";
 import hardwareDashboard from "./dashboards/hardware";
 import changefeedsDashboard from "./dashboards/changefeeds";
 import { getMatchParamByName } from "src/util/query";
+import { PayloadAction } from "src/interfaces/action";
+import {
+  setTimeRange,
+  setTimeScale,
+  TimeWindow,
+  TimeScale,
+} from "src/redux/timewindow";
 
 interface GraphDashboard {
   label: string;
@@ -97,6 +104,8 @@ type MapDispatchToProps = {
   refreshLiveness: typeof refreshLiveness;
   hoverOn: typeof hoverOn;
   hoverOff: typeof hoverOff;
+  setTimeRange: (TimeWindow) => PayloadAction<TimeWindow>;
+  setTimeScale: (TimeScale) => PayloadAction<TimeScale>;
 };
 
 type NodeGraphsProps = RouteComponentProps &
@@ -226,7 +235,12 @@ export class NodeGraphs extends React.Component<NodeGraphsProps> {
       const key = `nodes.${dashboard}.${idx}`;
       return (
         <div key={key}>
-          <MetricsDataProvider id={key}>
+          <MetricsDataProvider
+            id={key}
+            setTimeRange={this.props.setTimeRange}
+            setTimeScale={this.props.setTimeScale}
+            history={this.props.history}
+          >
             {React.cloneElement(graph, forwardParams)}
           </MetricsDataProvider>
         </div>
@@ -290,6 +304,8 @@ const mapDispatchToProps: MapDispatchToProps = {
   refreshLiveness,
   hoverOn,
   hoverOff,
+  setTimeRange: setTimeRange,
+  setTimeScale: setTimeScale,
 };
 
 export default compose(
