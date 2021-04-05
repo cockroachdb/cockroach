@@ -53,6 +53,7 @@ interface TransactionDetailsProps {
     transactionStats: TransactionStats | null,
   ) => void;
   error?: Error | null;
+  resetSQLStats: () => void;
 }
 
 interface TState {
@@ -88,7 +89,13 @@ export class TransactionDetails extends React.Component<
   };
 
   render() {
-    const { statements, transactionStats, handleDetails, error } = this.props;
+    const {
+      statements,
+      transactionStats,
+      handleDetails,
+      error,
+      resetSQLStats,
+    } = this.props;
     return (
       <div>
         <section className={baseHeadingClasses.wrapper}>
@@ -215,6 +222,7 @@ export class TransactionDetails extends React.Component<
                     lastReset={lastReset}
                     arrayItemName={"statements for this transaction"}
                     activeFilters={0}
+                    resetSQLStats={resetSQLStats}
                   />
                   <div className={cx("table-area")}>
                     <SortedTable

@@ -501,6 +501,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   dismissAlertMessage: noop,
   refreshStatementDiagnosticsRequests: noop,
   refreshStatements: noop,
+  resetSQLStats: noop,
   onActivateStatementDiagnostics: noop,
   onDiagnosticsModalOpen: noop,
   onSearchComplete: noop,
