@@ -127,11 +127,11 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 		setter: func(c *zonepb.ZoneConfig, d tree.Datum) {
 			voterConstraintsList := zonepb.ConstraintsList{
 				Constraints: c.VoterConstraints,
-				Inherited:   c.InheritedVoterConstraints,
+				Inherited:   !c.ExplicitlySetVoterConstraints,
 			}
 			loadYAML(&voterConstraintsList, string(tree.MustBeDString(d)))
 			c.VoterConstraints = voterConstraintsList.Constraints
-			c.InheritedVoterConstraints = false
+			c.ExplicitlySetVoterConstraints = true
 		},
 		checkAllowed: func(ctx context.Context, execCfg *ExecutorConfig, _ tree.Datum) error {
 			return checkVersionActive(ctx, execCfg, clusterversion.NonVotingReplicas, "voter_constraints")
