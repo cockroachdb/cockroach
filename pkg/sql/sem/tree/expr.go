@@ -1624,7 +1624,15 @@ type IndirectionExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *IndirectionExpr) Format(ctx *FmtCtx) {
-	exprFmtWithParen(ctx, node.Expr)
+	// If the subExpr is a CastExpr, we need to wrap it in a ParenExpr,
+	// otherwise the indirection will get interpreted as part of the type.
+	// Ex. ('{a}'::_typ)[1] vs. '{a}'::_typ[1].
+	if _, isCast := node.Expr.(*CastExpr); isCast {
+		withParens := ParenExpr{Expr: node.Expr}
+		exprFmtWithParen(ctx, &withParens)
+	} else {
+		exprFmtWithParen(ctx, node.Expr)
+	}
 	ctx.FormatNode(&node.Indirection)
 }
 
