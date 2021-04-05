@@ -135,16 +135,26 @@ message ZoneConfig {
   // InheritedContraints specifies if the value in the Constraints field was
   // inherited from the zone's parent or specified explicitly by the user.
   //
-  // NB: We need this extra field (and the `inherited_voter_constraints` below)
-  // because the non-nullable nature of `constraints` and `voter_constraints`
-  // means that there is no other way to disambiguate between an unset
-  // `constraints` attribute and an empty one.
+  // NB: We need this extra field because the non-nullable nature of
+  // `constraints` means that there is no other way to disambiguate between an
+  // unset `constraints` attribute and an empty one.
   optional bool inherited_constraints = 10 [(gogoproto.nullable) = false];
 
-  // InheritedVoterConstraints indicates whether the value in the
-  // VoterConstraints field was inherited from the zone's parent or explicitly
-  // specified by the user.
-  optional bool inherited_voter_constraints = 15 [(gogoproto.nullable) = false];
+  // NullVoterConstraintsIsEmpty specifies whether the VoterConstraints field
+  // was explicitly set to be empty or if it was inherited from its parent.
+  //
+  // NB: This extra field is needed because the non-nullable nature of
+  // `voter_constraints` means that there is no other way to disambiguate
+  // between an unset `voter_constraints` attribute and an empty one.
+  //
+  // This flag is not symmetric with `InheritedConstraints` defined above,
+  // and should only be checked when the list of VoterConstraints is empty (as
+  // otherwise they are assumed to _not_ be inherited) because we want 21.1 (and
+  // future versions) nodes to correctly interpret zone configs persisted by
+  // pre-21.1 nodes. That is, in absence of explicit modifications, we want 21.1
+  // nodes to interpret that zone configs written by previous versions inherit
+  // `VoterConstraints` from their parent.
+  optional bool null_voter_constraints_is_empty = 15 [(gogoproto.nullable) = false];
 
   // LeasePreference stores information about where the user would prefer for
   // range leases to be placed. Leases are allowed to be placed elsewhere if
