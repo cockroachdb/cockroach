@@ -4,6 +4,7 @@ go_library(
     name = "kvevent",
     srcs = [
         "chan_buffer.go",
+        "err_buffer.go",
         "event.go",
         "mem_buffer.go",
         "metrics.go",
@@ -11,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/sql/catalog/colinfo",
