@@ -99,6 +99,24 @@ type transientCluster struct {
 	adminUser     security.SQLUsername
 
 	stickyEngineRegistry server.StickyInMemEnginesRegistry
+
+	// delayWaitAtEnd is an additional delay to wait for when shutting
+	// down a transient cluster.
+	//
+	// This is needed because when using simulated non-local latencies,
+	// there will be pending HTTP connection goroutines waiting for the
+	// TCP connection to close, which in turn needs to wait for a
+	// network roundtrip.
+	//
+	// (See the code in `(*Transport) queueForDial()` and `dialConnFor()` in
+	// net/http/transport.go.)
+	//
+	// If left running beyond the termination of the transient cluster,
+	// these goroutines can cause hard-to-understand error messages in
+	// logs.
+	// Also, unit tests would fail because the goroutine leak checker in
+	// unit tests would become confused.
+	delayWaitAtEnd time.Duration
 }
 
 func (c *transientCluster) checkAndApplyConfigAndSetupLogging(
@@ -278,6 +296,7 @@ func (c *transientCluster) start(
 		if c.simulateLatency {
 			// Now, all servers have been started enough to know their own RPC serving
 			// addresses, but nothing else. Assemble the artificial latency map.
+			maxLatency := 0
 			log.Infof(phaseCtx, "initializing latency map")
 			for i, serv := range c.servers {
 				latencyMap := serv.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
@@ -299,8 +318,16 @@ func (c *transientCluster) start(
 					}
 					latency := srcLocalityMap[dstLocality]
 					latencyMap[dst.ServingRPCAddr()] = latency
+
+					if latency > maxLatency {
+						maxLatency = latency
+					}
 				}
 			}
+
+			// Ensure we have enough termination delay at the end.
+			// See the comment on .delayWaitAtEnd for details.
+			c.delayWaitAtEnd = time.Duration(maxLatency) * time.Millisecond * 2 /* 2 for roundrip */
 		}
 	}
 
@@ -656,6 +683,9 @@ func (c *transientCluster) cleanup(ctx context.Context) {
 			_ = err
 		}
 	}
+
+	// Give enough time for connection goroutines to terminate.
+	time.Sleep(c.delayWaitAtEnd)
 }
 
 // DrainAndShutdown will gracefully attempt to drain a node in the cluster, and
