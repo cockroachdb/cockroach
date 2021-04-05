@@ -177,9 +177,3 @@ func (sf *streamIngestionFrontier) maybeMoveFrontier(
 	sf.frontier.Forward(span, resolved)
 	return prevResolved.Less(sf.frontier.Frontier())
 }
-
-// ConsumerClosed is part of the RowSource interface.
-func (sf *streamIngestionFrontier) ConsumerClosed() {
-	// The consumer is done, Next() will not be called again.
-	sf.InternalClose()
-}
