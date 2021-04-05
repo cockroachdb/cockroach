@@ -471,24 +471,29 @@ func (p *planner) initiateDropTable(
 	// Also, changes made here do not affect schema change jobs created in this
 	// transaction with no mutation ID; they remain in the cache, and will be
 	// updated when writing the job record to drop the table.
-	jobIDs := make(map[jobspb.JobID]struct{})
-	var id descpb.MutationID
-	for _, m := range tableDesc.Mutations {
-		if id != m.MutationID {
-			id = m.MutationID
-			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, id)
-			if err != nil {
-				return err
-			}
-			jobIDs[jobID] = struct{}{}
-		}
+	if err := p.markTableMutationJobsSuccessful(ctx, tableDesc); err != nil {
+		return err
 	}
-	for jobID := range jobIDs {
-		// Mark jobs as succeeded when possible, but be defensive about jobs that
-		// are already in a terminal state or nonexistent. This could happen for
-		// schema change jobs that couldn't be successfully reverted and ended up in
-		// a failed state. Such jobs could have already been GCed from the jobs
-		// table by the time this code runs.
+
+	// Initiate an immediate schema change. When dropping a table
+	// in a session, the data and the descriptor are not deleted.
+	// Instead, that is taken care of asynchronously by the schema
+	// change manager, which is notified via a system config gossip.
+	// The schema change manager will properly schedule deletion of
+	// the underlying data when the GC deadline expires.
+	return p.writeDropTable(ctx, tableDesc, queueJob, jobDesc)
+}
+
+// Mark jobs as succeeded when possible, but be defensive about jobs that
+// are already in a terminal state or nonexistent. This could happen for
+// schema change jobs that couldn't be successfully reverted and ended up in
+// a failed state. Such jobs could have already been GCed from the jobs
+// table by the time this code runs.
+func (p *planner) markTableMutationJobsSuccessful(
+	ctx context.Context, tableDesc *tabledesc.Mutable,
+) error {
+	for _, mj := range tableDesc.MutationJobs {
+		jobID := jobspb.JobID(mj.JobID)
 		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
 		if err != nil {
 			if jobs.HasJobNotFoundError(err) {
@@ -519,14 +524,7 @@ func (p *planner) initiateDropTable(
 		}
 		delete(p.ExtendedEvalContext().SchemaChangeJobCache, tableDesc.ID)
 	}
-
-	// Initiate an immediate schema change. When dropping a table
-	// in a session, the data and the descriptor are not deleted.
-	// Instead, that is taken care of asynchronously by the schema
-	// change manager, which is notified via a system config gossip.
-	// The schema change manager will properly schedule deletion of
-	// the underlying data when the GC deadline expires.
-	return p.writeDropTable(ctx, tableDesc, queueJob, jobDesc)
+	return nil
 }
 
 func (p *planner) removeFKForBackReference(
