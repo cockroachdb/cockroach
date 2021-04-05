@@ -241,11 +241,6 @@ func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet {
 
 func init() {
 	initCLIDefaults()
-	defer func() {
-		if err := processEnvVarDefaults(); err != nil {
-			panic(err)
-		}
-	}()
 
 	// Every command but start will inherit the following setting.
 	AddPersistentPreRunE(cockroachCmd, func(cmd *cobra.Command, _ []string) error {
@@ -883,64 +878,52 @@ func (w *tenantIDWrapper) Type() string {
 // to the flags, during initialization and before the command line is
 // actually parsed. For example, it will inject the value of
 // $COCKROACH_URL into the urlParser object linked to the --url flag.
-func processEnvVarDefaults() error {
-	for _, d := range envVarDefaults {
-		f := d.flagSet.Lookup(d.flagName)
-		if f == nil {
-			panic(errors.AssertionFailedf("unknown flag: %s", d.flagName))
+func processEnvVarDefaults(cmd *cobra.Command) error {
+	fl := flagSetForCmd(cmd)
+
+	var retErr error
+	fl.VisitAll(func(f *pflag.Flag) {
+		envv, ok := f.Annotations[envValueAnnotationKey]
+		if !ok || len(envv) < 2 {
+			// No env var associated. Nothing to do.
+			return
 		}
-		var err error
-		if url, ok := f.Value.(urlParser); ok {
-			// URLs are a special case: they can emit a warning if there's
-			// excess configuration for certain commands.
-			// Since the env-var initialization is ran for all commands
-			// all the time, regardless of which particular command is
-			// currently active, we want to silence this warning here.
-			//
-			// TODO(knz): rework this code to only pull env var values
-			// for the current command.
-			err = url.setInternal(d.envValue, false /* warn */)
-		} else {
-			err = d.flagSet.Set(d.flagName, d.envValue)
+		varName, value := envv[0], envv[1]
+		if err := fl.Set(f.Name, value); err != nil {
+			retErr = errors.CombineErrors(retErr,
+				errors.Wrapf(err, "setting --%s from %s", f.Name, varName))
 		}
-		if err != nil {
-			return errors.Wrapf(err, "setting --%s from %s", d.flagName, d.envVar)
-		}
-	}
-	return nil
+	})
+	return retErr
 }
 
-// envVarDefault describes a delayed default initialization of the
-// setting covered by a flag from the value of an environment
-// variable.
-type envVarDefault struct {
-	envVar   string
-	envValue string
-	flagName string
-	flagSet  *pflag.FlagSet
-}
-
-// envVarDefaults records the initializations from environment variables
-// for processing at the end of initialization, before flag parsing.
-var envVarDefaults []envVarDefault
+const (
+	// envValueAnnotationKey is the map key used in pflag.Flag instances
+	// to associate flags with a possible default value set by an
+	// env var.
+	envValueAnnotationKey = "envvalue"
+)
 
 // registerEnvVarDefault registers a deferred initialization of a flag
 // from an environment variable.
+// The caller is responsible for ensuring that the flagInfo has been
+// efined in the FlagSet already.
 func registerEnvVarDefault(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
 	if flagInfo.EnvVar == "" {
 		return
 	}
+
 	value, set := envutil.EnvString(flagInfo.EnvVar, 2)
 	if !set {
-		// Env var not set. Nothing to do.
+		// Env var is not set. Nothing to do.
 		return
 	}
-	envVarDefaults = append(envVarDefaults, envVarDefault{
-		envVar:   flagInfo.EnvVar,
-		envValue: value,
-		flagName: flagInfo.Name,
-		flagSet:  f,
-	})
+
+	if err := f.SetAnnotation(flagInfo.Name, envValueAnnotationKey, []string{flagInfo.EnvVar, value}); err != nil {
+		// This should never happen: an error is only returned if the flag
+		// name was not defined yet.
+		panic(err)
+	}
 }
 
 // extraServerFlagInit configures the server.Config based on the command-line flags.
