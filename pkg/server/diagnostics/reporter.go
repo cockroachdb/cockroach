@@ -375,6 +375,7 @@ func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret s
 		}
 	}
 	dst.VoterConstraints = make([]zonepb.ConstraintsConjunction, len(src.VoterConstraints))
+	dst.NullVoterConstraintsIsEmpty = src.NullVoterConstraintsIsEmpty
 	for i := range src.VoterConstraints {
 		dst.VoterConstraints[i].NumReplicas = src.VoterConstraints[i].NumReplicas
 		dst.VoterConstraints[i].Constraints = make([]zonepb.Constraint, len(src.VoterConstraints[i].Constraints))
