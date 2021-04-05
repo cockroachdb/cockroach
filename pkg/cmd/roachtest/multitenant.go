@@ -12,9 +12,7 @@ package main
 
 import (
 	"context"
-	gosql "database/sql"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -26,30 +24,19 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 
 	c.Start(ctx, t, c.All())
 
-	_, err := c.Conn(ctx, 1).Exec(`SELECT crdb_internal.create_tenant(123)`)
-	require.NoError(t, err)
+	{
+		_, err := c.Conn(ctx, 1).Exec(`SELECT crdb_internal.create_tenant(123)`)
+		require.NoError(t, err)
+	}
 
 	kvAddrs := c.ExternalAddr(ctx, c.All())
 
 	tenantCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- c.RunE(tenantCtx, c.Node(1),
-			"./cockroach", "mt", "start-sql",
-			// TODO(tbg): make this test secure.
-			// "--certs-dir", "certs",
-			"--insecure",
-			"--tenant-id", "123",
-			"--http-addr", "127.0.0.1:8081",
-			"--kv-addrs", strings.Join(kvAddrs, ","),
-			// Don't bind to external interfaces when running locally.
-			"--sql-addr", ifLocal("127.0.0.1", "0.0.0.0")+":36257",
-			// Ensure that log files get created.
-			"--log='file-defaults: {dir: .}'",
-		)
-		close(errCh)
-	}()
+	errCh := startTenantServer(c, tenantCtx, "./cockroach", kvAddrs,
+		// Ensure that log files get created.
+		"--log='file-defaults: {dir: .}'",
+	)
 	u, err := url.Parse(c.ExternalPGUrl(ctx, c.Node(1))[0])
 	require.NoError(t, err)
 	u.Host = c.ExternalIP(ctx, c.Node(1))[0] + ":36257"
@@ -66,22 +53,11 @@ func runAcceptanceMultitenant(ctx context.Context, t *test, c *cluster) {
 
 	t.Status("checking that a client can connect to the tenant server")
 
-	db, err := gosql.Open("postgres", url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	_, err = db.Exec(`CREATE TABLE foo (id INT PRIMARY KEY, v STRING)`)
-	require.NoError(t, err)
-
-	_, err = db.Exec(`INSERT INTO foo VALUES($1, $2)`, 1, "bar")
-	require.NoError(t, err)
-
-	var id int
-	var v string
-	require.NoError(t, db.QueryRow(`SELECT * FROM foo LIMIT 1`).Scan(&id, &v))
-	require.Equal(t, 1, id)
-	require.Equal(t, "bar", v)
+	verifySQL(t, url,
+		mkStmt(`CREATE TABLE foo (id INT PRIMARY KEY, v STRING)`),
+		mkStmt(`INSERT INTO foo VALUES($1, $2)`, 1, "bar"),
+		mkStmt(`SELECT * FROM foo LIMIT 1`).
+			withResults([][]string{{"1", "bar"}}))
 
 	t.Status("stopping the server ahead of checking for the tenant server")
 
