@@ -47,7 +47,9 @@ func (b *chanBuffer) AddResolved(
 	ts hlc.Timestamp,
 	boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) error {
-	return b.addEvent(ctx, makeResolvedEvent(span, ts, boundaryType))
+	e := makeResolvedEvent(span, ts, boundaryType)
+	e.resolved.DeprecatedBoundaryReached = boundaryType != jobspb.ResolvedSpan_NONE
+	return b.addEvent(ctx, e)
 }
 
 func (b *chanBuffer) Close(_ context.Context) {

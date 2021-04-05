@@ -18,20 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
-
-// MemBufferDefaultCapacity is the default capacity for a memBuffer for a single
-// changefeed.
-//
-// TODO(dan): It would be better if all changefeeds shared a single capacity
-// that was given by the operater at startup, like we do for RocksDB and SQL.
-var MemBufferDefaultCapacity = envutil.EnvOrDefaultBytes(
-	"COCKROACH_CHANGEFEED_BUFFER_CAPACITY", 1<<30) // 1GB
 
 var memBufferColTypes = []*types.T{
 	types.Bytes, // KV.Key
