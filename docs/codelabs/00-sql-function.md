@@ -103,7 +103,7 @@ github.com/cockroachdb/cockroach
 Now, let’s run a single-node Cockroach instance:
 
 ```text
-$ rm -fr cockroach-data/ && ./cockroach start --insecure
+$ rm -fr cockroach-data/ && ./cockroach start-single-node --insecure
 ...
 status:     initialized new cluster
 ...
@@ -114,7 +114,7 @@ built-in:
 
 ```text
 $ ./cockroach sql --insecure -e "select whois()"
-Error: pq: whois(): nothing to see here
+ERROR: whois(): nothing to see here
 Failed running "sql"
 ```
 
@@ -124,7 +124,8 @@ a non-existent function we’d get a different error:
 
 ```go
 $ ./cockroach sql --insecure -e 'select nonexistent()'
-Error: pq: unknown function: nonexistent()
+ERROR: unknown function: nonexistent()
+...
 Failed running "sql"
 ```
 
@@ -184,23 +185,19 @@ function:
 
 ```text
 $ ./cockroach sql --insecure -e "select whois('pmattis')"
-+------------------+
-| whois('pmattis') |
-+------------------+
-| Peter Mattis     |
-+------------------+
+     whois
+----------------
+  Peter Mattis
 (1 row)
 
 $ ./cockroach sql --insecure -e "select whois('pmattis', 'bdarnell')"
-+------------------------------+
-| whois('pmattis', 'bdarnell') |
-+------------------------------+
-| Peter Mattis, Ben Darnell    |
-+------------------------------+
+            whois
+-----------------------------
+  Peter Mattis, Ben Darnell
 (1 row)
 
 $ ./cockroach sql --insecure -e "select whois('non-existent')"
-Error: pq: whois(): unknown username: 'non-existent'
+ERROR: whois(): unknown username: 'non-existent'
 Failed running "sql"
 ```
 
@@ -226,11 +223,9 @@ Rebuild, restart and test:
 
 ```text
 $ ./cockroach sql --insecure -e "select whois()"
-+--------------------------------------------+
-|                  whois()                   |
-+--------------------------------------------+
-| Ben Darnell, Peter Mattis, Spencer Kimball |
-+--------------------------------------------+
+                    whois
+----------------------------------------------
+  Ben Darnell, Peter Mattis, Spencer Kimball
 (1 row)
 ```
 

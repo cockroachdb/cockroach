@@ -199,10 +199,10 @@ Make a new file for our statement type: `pkg/sql/sem/tree/frobnicate.go`.  In
 it, put the implementation of our AST node.
 
 ```go
-package tree 
+package tree
 
 type Frobnicate struct {
-    Mode FrobnicateMode
+	Mode FrobnicateMode
 }
 
 var _ Statement = &Frobnicate{}
@@ -210,27 +210,28 @@ var _ Statement = &Frobnicate{}
 type FrobnicateMode int
 
 const (
-    FrobnicateModeAll FrobnicateMode = iota
-    FrobnicateModeCluster
-    FrobnicateModeSession
+	FrobnicateModeAll FrobnicateMode = iota
+	FrobnicateModeCluster
+	FrobnicateModeSession
 )
 
 func (node *Frobnicate) StatementType() StatementType { return Ack }
 func (node *Frobnicate) StatementTag() string { return "FROBNICATE" }
 
 func (node *Frobnicate) Format(ctx *FmtCtx) {
-    ctx.WriteString("FROBNICATE ")
-    switch node.Mode {
-    case FrobnicateModeAll:
-        ctx.WriteString("ALL")
-    case FrobnicateModeCluster:
-        ctx.WriteString("CLUSTER")
-    case FrobnicateModeSession:
-        ctx.WriteString("SESSION")
+	ctx.WriteString("FROBNICATE ")
+	switch node.Mode {
+	case FrobnicateModeAll:
+		ctx.WriteString("ALL")
+	case FrobnicateModeCluster:
+		ctx.WriteString("CLUSTER")
+	case FrobnicateModeSession:
+		ctx.WriteString("SESSION")
+	}
 }
 
 func (node *Frobnicate) String() string {
-    return AsString(node)
+	return AsString(node)
 }
 ```
 
@@ -258,8 +259,8 @@ Then rebuild and run the tests to watch them fail:
 $ make test
 ...
 --- FAIL: TestParse (0.00s)
-    parse_test.go:721: FROBNICATE CLUSTER: expected success, but found unimplemented at or near "cluster"
-        FROBNICATE CLUSTER
+    parse_test.go:1598: FROBNICATE CLUSTER: expected success, but found at or near 
+"cluster": syntax error: unimplemented: this syntax
 ...
 ```
 
@@ -330,7 +331,7 @@ import (
 )
 
 func (p *planner) Frobnicate(ctx context.Context, stmt *tree.Frobnicate) (planNode, error) {
-    return nil, AssertionFailedf("We're not quite frobnicating yet...")
+    return nil, errors.AssertionFailedf("We're not quite frobnicating yet...")
 }
 ```
 
@@ -338,7 +339,8 @@ Run `make build` again and give it another go:
 
 ```text
 $ ./cockroach sql --insecure -e "frobnicate cluster"
-Error: pq: We're not quite frobnicating yet...
+ERROR: internal error: We're not quite frobnicating yet...
+...
 Failed running "sql"
 ```
 
