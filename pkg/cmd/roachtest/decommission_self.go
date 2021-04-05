@@ -22,7 +22,7 @@ func runDecommissionSelf(ctx context.Context, t *test, c *cluster) {
 
 	allNodes := c.All()
 	u := newVersionUpgradeTest(c,
-		uploadVersion(allNodes, mainVersion),
+		uploadVersionStep(allNodes, mainVersion),
 		startVersion(allNodes, mainVersion),
 		fullyDecommissionStep(2, 2, mainVersion),
 		func(ctx context.Context, t *test, u *versionUpgradeTest) {
