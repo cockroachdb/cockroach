@@ -235,7 +235,7 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	if c.NumVoters != nil && *c.NumVoters != 0 {
 		m.NumVoters = proto.Int32(*c.NumVoters)
 	}
-	m.VoterConstraints = ConstraintsList{c.VoterConstraints, c.InheritedVoterConstraints}
+	m.VoterConstraints = ConstraintsList{c.VoterConstraints, c.InheritedVoterConstraints()}
 	if !c.InheritedLeasePreferences {
 		m.LeasePreferences = c.LeasePreferences
 	}
@@ -272,7 +272,7 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig, c ZoneConfig) ZoneConfig
 		c.NumVoters = proto.Int32(*m.NumVoters)
 	}
 	c.VoterConstraints = m.VoterConstraints.Constraints
-	c.InheritedVoterConstraints = m.VoterConstraints.Inherited
+	c.NullVoterConstraintsIsEmpty = !m.VoterConstraints.Inherited
 	if m.LeasePreferences != nil {
 		c.LeasePreferences = m.LeasePreferences
 	}
