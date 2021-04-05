@@ -902,6 +902,8 @@ func (d delayingConn) Write(b []byte) (n int, err error) {
 	return n, err
 }
 
+var errMagicNotFound = errors.New("didn't get expected magic bytes header")
+
 func (d *delayingConn) Read(b []byte) (n int, err error) {
 	if d.readBuf.Len() == 0 {
 		var hdr delayingHeader
@@ -910,7 +912,7 @@ func (d *delayingConn) Read(b []byte) (n int, err error) {
 		}
 		// If we somehow don't get our expected magic, throw an error.
 		if hdr.Magic != magic {
-			panic(errors.New("didn't get expected magic bytes header"))
+			return 0, errors.WithStack(errMagicNotFound)
 		} else {
 			// Once we receive our first packet, we set our delay to the expected
 			// delay that was sent on the write side.
