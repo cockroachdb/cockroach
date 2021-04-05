@@ -235,25 +235,25 @@ limit
  ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  ├── cardinality: [0 - 6000]
  ├── stats: [rows=6000]
- ├── cost: 47174.55
+ ├── cost: 42964.05
  ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  │    ├── key columns: [7] = [1]
  │    ├── lookup columns are key
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(7)=1000, null(7)=0]
- │    ├── cost: 47114.54
+ │    ├── cost: 42904.04
  │    ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  │    ├── limit hint: 6000.00
  │    ├── select
  │    │    ├── columns: x:6!null z:7!null
  │    │    ├── stats: [rows=10000, distinct(6)=1000, null(6)=0, distinct(7)=1000, null(7)=0]
- │    │    ├── cost: 10574.53
+ │    │    ├── cost: 6364.03
  │    │    ├── limit hint: 6000.00
  │    │    ├── scan b
  │    │    │    ├── columns: x:6 z:7!null
  │    │    │    ├── stats: [rows=10000, distinct(6)=1000, null(6)=0, distinct(7)=1000, null(7)=0]
- │    │    │    ├── cost: 10514.51
+ │    │    │    ├── cost: 6304.01
  │    │    │    └── limit hint: 6000.00
  │    │    └── filters
  │    │         └── (x:6 > 0) AND (x:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
@@ -270,25 +270,25 @@ limit
  ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  ├── cardinality: [0 - 5950]
  ├── stats: [rows=5950]
- ├── cost: 47174.05
+ ├── cost: 42963.55
  ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:6!null z:7!null
  │    ├── key columns: [7] = [1]
  │    ├── lookup columns are key
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(7)=1000, null(7)=0]
- │    ├── cost: 47114.54
+ │    ├── cost: 42904.04
  │    ├── fd: (1)-->(2-4), (1)==(7), (7)==(1)
  │    ├── limit hint: 5950.00
  │    ├── select
  │    │    ├── columns: x:6!null z:7!null
  │    │    ├── stats: [rows=10000, distinct(6)=1000, null(6)=0, distinct(7)=1000, null(7)=0]
- │    │    ├── cost: 10574.53
+ │    │    ├── cost: 6364.03
  │    │    ├── limit hint: 6000.00
  │    │    ├── scan b
  │    │    │    ├── columns: x:6 z:7!null
  │    │    │    ├── stats: [rows=10000, distinct(6)=1000, null(6)=0, distinct(7)=1000, null(7)=0]
- │    │    │    ├── cost: 10514.51
+ │    │    │    ├── cost: 6304.01
  │    │    │    └── limit hint: 6000.00
  │    │    └── filters
  │    │         └── (x:6 > 0) AND (x:6 <= 5000) [outer=(6), constraints=(/6: [/1 - /5000]; tight)]
@@ -347,7 +347,7 @@ limit
  ├── columns: id:1!null sender_id:2!null receiver_id:3!null amount:4!null creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 id:15!null name:16!null gender:17 email:18 first_name:19 last_name:20 creation_date:21!null situation:22 balance:23!null is_blocked:24 id:26!null name:27!null gender:28 email:29 first_name:30 last_name:31 creation_date:32!null situation:33 balance:34!null is_blocked:35
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 2364.51
+ ├── cost: 2112.51
  ├── key: (1)
  ├── fd: (1)-->(2-13), (15)-->(16-24), (2)==(15), (15)==(2), (26)-->(27-35), (3)==(26), (26)==(3)
  ├── inner-join (lookup wallet [as=r])
@@ -355,7 +355,7 @@ limit
  │    ├── key columns: [3] = [26]
  │    ├── lookup columns are key
  │    ├── stats: [rows=980.1, distinct(3)=98.9950071, null(3)=0, distinct(26)=98.9950071, null(26)=0]
- │    ├── cost: 2364.4
+ │    ├── cost: 2112.4
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-13), (15)-->(16-24), (2)==(15), (15)==(2), (26)-->(27-35), (3)==(26), (26)==(3)
  │    ├── limit hint: 10.00
@@ -364,14 +364,14 @@ limit
  │    │    ├── key columns: [2] = [15]
  │    │    ├── lookup columns are key
  │    │    ├── stats: [rows=990, distinct(1)=628.605476, null(1)=0, distinct(2)=99, null(2)=0, distinct(3)=99.9950071, null(3)=9.9, distinct(4)=99.9950071, null(4)=0, distinct(5)=99.9950071, null(5)=0, distinct(15)=99, null(15)=0, distinct(16)=99.9950071, null(16)=0, distinct(21)=99.9950071, null(21)=0, distinct(23)=99.9950071, null(23)=0]
- │    │    ├── cost: 1745.6
+ │    │    ├── cost: 1493.6
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-13), (15)-->(16-24), (2)==(15), (15)==(2)
  │    │    ├── limit hint: 100.00
  │    │    ├── scan transaction [as=t]
  │    │    │    ├── columns: t.id:1!null sender_id:2 receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13
  │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0]
- │    │    │    ├── cost: 508.01
+ │    │    │    ├── cost: 256.01
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(2-13)
  │    │    │    └── limit hint: 200.00
@@ -725,7 +725,7 @@ project
  ├── columns: w:1!null x:2!null y:3!null z:4!null  [hidden: d:9!null]
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 703.94172
+ ├── cost: 595.94172
  ├── key: (9)
  ├── fd: ()-->(1,2), (3)-->(4,9), (9)-->(3,4)
  ├── ordering: +9 opt(1,2) [actual: +9]
@@ -734,7 +734,7 @@ project
       ├── internal-ordering: +9 opt(1,2,6,7)
       ├── cardinality: [0 - 10]
       ├── stats: [rows=10]
-      ├── cost: 703.83172
+      ├── cost: 595.83172
       ├── key: (8)
       ├── fd: ()-->(1,2,6,7), (3)-->(4), (8)-->(9), (9)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
       ├── ordering: +9 opt(1,2,6,7) [actual: +9]
@@ -743,7 +743,7 @@ project
       │    ├── key columns: [6 7 8] = [1 2 3]
       │    ├── lookup columns are key
       │    ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=2500, null(8)=0]
-      │    ├── cost: 703.72172
+      │    ├── cost: 595.72172
       │    ├── key: (8)
       │    ├── fd: ()-->(1,2,6,7), (3)-->(4), (8)-->(9), (9)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
       │    ├── ordering: +9 opt(1,2,6,7) [actual: +9]
@@ -752,7 +752,7 @@ project
       │    │    ├── columns: a:6!null b:7!null c:8!null d:9!null
       │    │    ├── constraint: /6/7/9: [/'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2']
       │    │    ├── stats: [rows=125000, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=24975.5859, null(8)=0, distinct(9)=93750, null(9)=0]
-      │    │    ├── cost: 220.01
+      │    │    ├── cost: 112.01
       │    │    ├── key: (8)
       │    │    ├── fd: ()-->(6,7), (8)-->(9), (9)-->(8)
       │    │    ├── ordering: +9 opt(6,7) [actual: +9]
