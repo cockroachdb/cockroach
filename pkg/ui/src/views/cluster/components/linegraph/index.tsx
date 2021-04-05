@@ -15,24 +15,33 @@ import * as nvd3 from "nvd3";
 import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
-import { HoverState, hoverOn, hoverOff } from "src/redux/hover";
+import { cockroach } from "src/js/protos";
+import { hoverOff, hoverOn, HoverState } from "src/redux/hover";
 import { findChildrenOfType } from "src/util/find";
 import {
-  ConfigureLineChart,
-  InitLineChart,
+  AxisDomain,
+  calculateXAxisDomain,
+  calculateYAxisDomain,
   CHART_MARGINS,
+  ConfigureLineChart,
   ConfigureLinkedGuideline,
+  configureUPlotLineChart,
+  InitLineChart,
 } from "src/views/cluster/util/graphs";
 import {
-  Metric,
-  MetricProps,
   Axis,
   AxisProps,
+  Metric,
+  MetricProps,
+  MetricsDataComponentProps,
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
-import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
-import { NanoToMilli } from "src/util/convert";
+import { MilliToSeconds, NanoToMilli } from "src/util/convert";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
+import { findClosestTimeScale } from "src/redux/timewindow";
+import TimeSeriesQueryResponse = cockroach.ts.tspb.TimeSeriesQueryResponse;
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -47,7 +56,7 @@ interface LineGraphProps extends MetricsDataComponentProps {
   hoverState?: HoverState;
 }
 
-interface LineGraphState {
+interface LineGraphStateOld {
   lastData?: TSResponse;
   lastTimeInfo?: QueryTimeInfo;
 }
@@ -57,7 +66,10 @@ interface LineGraphState {
  * supports a single Y-axis, but multiple metrics can be graphed on the same
  * axis.
  */
-export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
+export class LineGraphOld extends React.Component<
+  LineGraphProps,
+  LineGraphStateOld
+> {
   // The SVG Element reference in the DOM used to render the graph.
   graphEl: React.RefObject<SVGSVGElement> = React.createRef();
 
@@ -286,6 +298,227 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
             ref={this.graphEl}
             {...hoverProps}
           />
+        </div>
+      </Visualization>
+    );
+  }
+}
+
+// touPlot formats our timeseries data into the format
+// uPlot expects which is a 2-dimensional array where the
+// first array contains the x-values (time).
+function touPlot(data: TimeSeriesQueryResponse): any {
+  // Here's an example of what this code is attempting to control for.
+  // We produce `result` series that contain their own x-values. uPlot
+  // expects *one* x-series that all y-values match up to. So first we
+  // need to take the union of all timestamps across all series, and then
+  // produce y-values that match up to those. Any missing values will
+  // be set to null and uPlot expects that.
+  //
+  // our data: [
+  //   [(11:00, 1),             (11:05, 2),  (11:06, 3), (11:10, 4),           ],
+  //   [(11:00, 1), (11:03, 20),             (11:06, 7),            (11:11, 40)],
+  // ]
+  //
+  // for uPlot: [
+  //   [11:00, 11:03, 11:05, 11:06, 11:10, 11:11]
+  //   [1, null, 2, 3, 4, null],
+  //   [1, 20, null, 7, null, 40],
+  // ]
+  if (!data || !data.results) {
+    return [];
+  }
+
+  const xValuesComplete: number[] = [
+    ...new Set(
+      data.results.flatMap((result) =>
+        result.datapoints.map((d) => d.timestamp_nanos.toNumber()),
+      ),
+    ),
+  ].sort((a, b) => a - b);
+
+  const yValuesComplete: (number | null)[][] = data.results.map((result) => {
+    return xValuesComplete.map((ts) => {
+      const found = result.datapoints.find(
+        (dp) => dp.timestamp_nanos.toNumber() === ts,
+      );
+      return found ? found.value : null;
+    });
+  });
+
+  return [xValuesComplete.map((ts) => NanoToMilli(ts)), ...yValuesComplete];
+}
+
+// LineGraph wraps the uPlot library into a React component
+// when the component is first initialized, we wait until
+// data is available and then construct the uPlot object
+// and store its ref in a global variable.
+// Once we receive updates to props, we push new data to the
+// uPlot object.
+export class LineGraph extends React.Component<LineGraphProps, {}> {
+  constructor(props: LineGraphProps) {
+    super(props);
+
+    this.setNewTimeRange = this.setNewTimeRange.bind(this);
+  }
+
+  // axis is copied from the nvd3 LineGraph component above
+  axis = createSelector(
+    (props: { children?: React.ReactNode }) => props.children,
+    (children) => {
+      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(
+        children as any,
+        Axis,
+      );
+      if (axes.length === 0) {
+        console.warn(
+          "LineGraph requires the specification of at least one axis.",
+        );
+        return null;
+      }
+      if (axes.length > 1) {
+        console.warn(
+          "LineGraph currently only supports a single axis; ignoring additional axes.",
+        );
+      }
+      return axes[0];
+    },
+  );
+
+  // metrics is copied from the nvd3 LineGraph component above
+  metrics = createSelector(
+    (props: { children?: React.ReactNode }) => props.children,
+    (children) => {
+      return findChildrenOfType(
+        children as any,
+        Metric,
+      ) as React.ReactElement<MetricProps>[];
+    },
+  );
+
+  // setNewTimeRange uses code from the TimeScaleDropdown component
+  // to set new start/end ranges in the query params and force a
+  // reload of the rest of the dashboard at new ranges via the props
+  // `setTimeRange` and `setTimeScale`.
+  // TODO(davidh): centralize management of query params for time range
+  // TODO(davidh): figure out why the timescale doesn't get more granular
+  // automatically when a narrower time frame is selected.
+  setNewTimeRange(startMillis: number, endMillis: number) {
+    const start = MilliToSeconds(startMillis);
+    // Enforce 10m minimum range from start
+    const end = Math.max(start + 600, MilliToSeconds(endMillis));
+    this.props.setTimeRange({
+      start: moment.unix(start),
+      end: moment.unix(end),
+    });
+    const newTimeScale = findClosestTimeScale(end - start);
+    this.props.setTimeScale(newTimeScale);
+    const { pathname, search } = this.props.history.location;
+    const urlParams = new URLSearchParams(search);
+
+    urlParams.set("start", moment.unix(start).format("X"));
+    urlParams.set("end", moment.unix(end).format("X"));
+
+    this.props.history.push({
+      pathname,
+      search: urlParams.toString(),
+    });
+  }
+
+  u: uPlot;
+  el = React.createRef<HTMLDivElement>();
+
+  // yAxisDomain holds our computed AxisDomain object
+  // for the y Axis. The function to compute this was
+  // created to support the prior iteration
+  // of our line graphs. We recompute it manually
+  // when data changes, and uPlot options have access
+  // to a closure that holds a reference to this value.
+  yAxisDomain: AxisDomain;
+
+  // xAxisDomain holds our computed AxisDomain object
+  // for the x Axis. The function to compute this was
+  // created to support the prior iteration
+  // of our line graphs. We recompute it manually
+  // when data changes, and uPlot options have access
+  // to a closure that holds a reference to this value.
+  xAxisDomain: AxisDomain;
+
+  componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
+    if (
+      // data was missing last time or we already have a `u`
+      // the latter could happen if we click away to a
+      // different dashboard and then back to one we had
+      // open previously.
+      (!prevProps.data || !this.u) &&
+      this.props.data &&
+      this.props.data.results
+    ) {
+      const data = this.props.data;
+      const metrics = this.metrics(this.props);
+      const axis = this.axis(this.props);
+      const uPlotData = touPlot(data);
+      this.yAxisDomain = calculateYAxisDomain(axis.props.units, data);
+      this.xAxisDomain = calculateXAxisDomain(this.props.timeInfo);
+
+      const options = configureUPlotLineChart(
+        metrics,
+        axis,
+        data,
+        this.setNewTimeRange,
+        () => this.xAxisDomain,
+        () => this.yAxisDomain,
+      );
+
+      this.u = new uPlot(options, uPlotData, this.el.current);
+    }
+    if (this.u && this.props.data && prevProps.data !== this.props.data) {
+      const axis = this.axis(this.props);
+      // The values of `this.yAxisDomain` and `this.xAxisDomain`
+      // are captured in arguments to `configureUPlotLineChart`
+      // and are called when recomputing certain axis and
+      // series options. This lets us use updated domains
+      // when redrawing the uPlot chart on data change.
+      this.yAxisDomain = calculateYAxisDomain(
+        axis.props.units,
+        this.props.data,
+      );
+      this.xAxisDomain = calculateXAxisDomain(this.props.timeInfo);
+
+      // The axis label option on uPlot doesn't accept
+      // a function that recomputes the label, so we need
+      // to manually update it in cases where we change
+      // the scale (this happens on byte/time-based Y
+      // axes where can change from MiB or KiB scales,
+      // for instance).
+      this.u.axes[1].label =
+        axis.props.label +
+        (this.yAxisDomain.label ? ` (${this.yAxisDomain.label})` : "");
+
+      const uPlotData = touPlot(this.props.data);
+      this.u.setData(uPlotData);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.u) {
+      this.u.destroy();
+      this.u = null;
+    }
+  }
+
+  render() {
+    const { title, subtitle, tooltip, data } = this.props;
+
+    return (
+      <Visualization
+        title={title}
+        subtitle={subtitle}
+        tooltip={tooltip}
+        loading={!data}
+      >
+        <div className="linegraph">
+          <div ref={this.el} />
         </div>
       </Visualization>
     );
