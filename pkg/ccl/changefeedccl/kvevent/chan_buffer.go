@@ -37,11 +37,7 @@ func MakeChanBuffer() Buffer {
 func (b *chanBuffer) AddKV(
 	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
 ) error {
-	return b.addEvent(ctx, Event{
-		kv:                kv,
-		prevVal:           prevVal,
-		backfillTimestamp: backfillTimestamp,
-	})
+	return b.addEvent(ctx, makeKVEvent(kv, prevVal, backfillTimestamp))
 }
 
 // AddResolved inserts a Resolved timestamp notification in the buffer.
@@ -51,12 +47,7 @@ func (b *chanBuffer) AddResolved(
 	ts hlc.Timestamp,
 	boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) error {
-	return b.addEvent(ctx, Event{resolved: &jobspb.ResolvedSpan{
-		Span:                      span,
-		Timestamp:                 ts,
-		DeprecatedBoundaryReached: boundaryType != jobspb.ResolvedSpan_NONE,
-		BoundaryType:              boundaryType,
-	}})
+	return b.addEvent(ctx, makeResolvedEvent(span, ts, boundaryType))
 }
 
 func (b *chanBuffer) Close(_ context.Context) {
