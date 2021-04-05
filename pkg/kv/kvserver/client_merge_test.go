@@ -3974,7 +3974,7 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	}
 	testingPostApplyFilter := func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		state.Lock()
-		if state.stop && !state.stopping && args.RangeID == state.rhsDesc.RangeID && args.IsLeaseRequest {
+		if state.stop && !state.stopping && args.RangeID == state.rhsDesc.RangeID && args.IsLeaseRequest() {
 			// Shut down the store. The lease acquisition will notice that a merge is
 			// in progress and attempt to run a task to watch for its completion.
 			// Shutting down the store before running leasePostApply will prevent that

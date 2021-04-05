@@ -825,8 +825,10 @@ func (r *Replica) evaluateProposal(
 
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
-		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
-		res.Replicated.WriteTimestamp = ba.WriteTimestamp()
+		if ba.IsLeaseRequest() {
+			res.Replicated.SetLeaseRequest()
+		}
+		res.Replicated.WriteTimestamp = ba.Timestamp
 		res.Replicated.Delta = ms.ToStatsDelta()
 
 		// This is the result of a migration. See the field for more details.

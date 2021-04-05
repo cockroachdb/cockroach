@@ -927,12 +927,12 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	raftCmd := kvserverpb.RaftCommand{
 		ProposerLeaseSequence: lease.Sequence,
 		ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
-			IsLeaseRequest: true,
 			State: &kvserverpb.ReplicaState{
 				Lease: &invalidLease,
 			},
 		},
 	}
+	raftCmd.ReplicatedEvalResult.SetLeaseRequest()
 	tc.repl.mu.Lock()
 	_, _, pErr := checkForcedErr(
 		context.Background(), makeIDKey(), &raftCmd, false, /* isLocal */

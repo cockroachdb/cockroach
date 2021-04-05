@@ -182,7 +182,7 @@ func checkForcedErr(
 	replicaState *kvserverpb.ReplicaState,
 ) (uint64, proposalReevaluationReason, *roachpb.Error) {
 	leaseIndex := replicaState.LeaseAppliedIndex
-	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
+	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest()
 	var requestedLease roachpb.Lease
 	if isLeaseRequest {
 		requestedLease = *raftCmd.ReplicatedEvalResult.State.Lease

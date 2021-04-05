@@ -109,6 +109,14 @@ message SuggestedCompaction {
   Compaction compaction = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// ReplicatedEvalResultFlags represent the bits in ReplicatedEvalResult.flags.
+enum ReplicatedEvalResultFlags {
+  Empty = 0;
+  // LeaseRequest indicates that the command corresponds to a RequestLease
+  // request. Note that lease transfers don't have this flag.
+  LeaseRequest = 1;
+}
+
 // ReplicatedEvalResult is the structured information which together with
 // a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
 // KV. For the majority of proposals, we expect ReplicatedEvalResult to be
@@ -124,7 +132,9 @@ message ReplicatedEvalResult {
   Split split = 3;
   Merge merge = 4;
   ComputeChecksum compute_checksum = 21;
-  bool is_lease_request = 6;
+  // flags indicates various attributes of the command. The interpretation of
+  // the bits is given by ReplicatedEvalResultFlags.
+  int64 flags = 6;
   // The timestamp at which this command is writing. Used to verify the validity
   // of the command against the GC threshold and to update the followers'
   // clocks.
