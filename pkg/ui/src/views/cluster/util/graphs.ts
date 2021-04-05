@@ -15,7 +15,7 @@ import * as d3 from "d3";
 import moment from "moment";
 
 import * as protos from "src/js/protos";
-import { NanoToMilli } from "src/util/convert";
+import { MilliToSeconds, NanoToMilli } from "src/util/convert";
 import {
   DurationFitScale,
   BytesFitScale,
@@ -29,6 +29,7 @@ import {
   AxisUnits,
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
+import uPlot from "uplot";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -70,14 +71,14 @@ const Y_AXIS_TICK_COUNT: number = 3;
 const X_AXIS_TICK_COUNT: number = 10;
 
 // A tuple of numbers for the minimum and maximum values of an axis.
-type Extent = [number, number];
+export type Extent = [number, number];
 
 /**
  * AxisDomain is a class that describes the domain of a graph axis; this
  * includes the minimum/maximum extend, tick values, and formatting information
  * for axis values as displayed in various contexts.
  */
-class AxisDomain {
+export class AxisDomain {
   // the values at the ends of the axis.
   extent: Extent;
   // numbers at which an intermediate tick should be displayed on the axis.
@@ -257,7 +258,7 @@ const timeIncrementDurations = [
   moment.duration(24, "h"),
   moment.duration(1, "week"),
 ];
-const timeIncrements = _.map(timeIncrementDurations, (inc) =>
+const timeIncrements: number[] = _.map(timeIncrementDurations, (inc) =>
   inc.asMilliseconds(),
 );
 
@@ -330,7 +331,7 @@ function calculateXAxisDomain(timeInfo: QueryTimeInfo): AxisDomain {
   return ComputeTimeAxisDomain(xExtent);
 }
 
-type formattedSeries = {
+export type formattedSeries = {
   values: protos.cockroach.ts.tspb.ITimeSeriesDatapoint[];
   key: string;
   area: boolean;
@@ -526,4 +527,76 @@ function updateLinkedGuideline(
     .attr("x2", (d) => d)
     .attr("y1", () => yExtent[0])
     .attr("y2", () => yExtent[1]);
+}
+
+// configureUPlotLineChart constructs the uplot Options object based on
+// information about the metrics, axis, and datat that we'd like to plot
+export function configureUPlotLineChart(
+  metrics: React.ReactElement<MetricProps>[],
+  axis: React.ReactElement<AxisProps>,
+  data: TSResponse,
+  timeInfo: QueryTimeInfo,
+): uPlot.Options {
+  const formattedRaw = formatMetricData(metrics, data);
+  const xAxisDomain = calculateXAxisDomain(timeInfo);
+  const yAxisDomain = calculateYAxisDomain(axis.props.units, data);
+
+  const strokeColors = seriesPalette;
+
+  // Please see https://github.com/leeoniya/uPlot/tree/master/docs for
+  // information on how to construct this object.
+  return {
+    width: 947,
+    height: 300,
+    legend: {
+      show: true,
+    },
+    series: [
+      {},
+      // Generate a series object for reach of our results
+      // picking colors from our palette.
+      ...formattedRaw.map((result) => {
+        const color = strokeColors.shift();
+        strokeColors.push(color);
+        return {
+          show: true,
+          width: 1,
+          label: result.key,
+          stroke: color,
+          // value determines how these values show up in the legend
+          value: (self, rawValue) => yAxisDomain.guideFormat(rawValue),
+        };
+      }),
+    ],
+    axes: [
+      {
+        // values determines how time shows up on each tick
+        // we use a millisecond formatter, and uplot uses seconds,
+        // so we multiply back by 1e3 to use the existing
+        // `tickFormat` function
+        values: (u, vals, space) =>
+          vals.map((v) => xAxisDomain.tickFormat(v * 1e3)),
+      },
+      {
+        label: `${axis.props.label} (${yAxisDomain.label})`,
+        // values determines how the y values are formatted on the
+        // axis ticks
+        values: (u, vals, space) => vals.map(yAxisDomain.tickFormat),
+      },
+    ],
+    scales: {
+      // We *could* set the `range` here directly instead of
+      // letting uplot autocalculate it but that turns off the
+      // interactive zoom at the moment.
+      // TODO(davidh): Figure out how to re-enable select-to-zoom
+      // with a custom range setting.
+      //
+      // Note: Any custom range setting here will need to get
+      // auto-updated when the timescale or data changes.a
+      x: {},
+      "%": {
+        range: yAxisDomain.extent,
+      },
+    },
+  };
 }

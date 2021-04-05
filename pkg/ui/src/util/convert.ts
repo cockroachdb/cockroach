@@ -19,6 +19,17 @@ export function NanoToMilli(nano: number): number {
   return nano / 1.0e6;
 }
 
+export function MilliToSeconds(milli: number): number {
+  return milli / 1.0e3;
+}
+
+/**
+ * NanoToSeconds converts a nanoseconds value into seconds.
+ */
+export function NanoToSeconds(nano: number): number {
+  return nano / 1.0e9;
+}
+
 /**
  * MilliToNano converts a millisecond value into nanoseconds.
  */

@@ -22,6 +22,7 @@ import {
   InitLineChart,
   CHART_MARGINS,
   ConfigureLinkedGuideline,
+  configureUPlotLineChart,
 } from "src/views/cluster/util/graphs";
 import {
   Metric,
@@ -32,7 +33,11 @@ import {
 } from "src/views/shared/components/metricQuery";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
-import { NanoToMilli } from "src/util/convert";
+import { NanoToMilli, NanoToSeconds } from "src/util/convert";
+import uPlot from "uplot";
+import { cockroach } from "src/js/protos";
+import TimeSeriesQueryResponse = cockroach.ts.tspb.TimeSeriesQueryResponse;
+import "uplot/dist/uPlot.min.css";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -57,7 +62,10 @@ interface LineGraphState {
  * supports a single Y-axis, but multiple metrics can be graphed on the same
  * axis.
  */
-export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
+export class LineGraphOld extends React.Component<
+  LineGraphProps,
+  LineGraphState
+> {
   // The SVG Element reference in the DOM used to render the graph.
   graphEl: React.RefObject<SVGSVGElement> = React.createRef();
 
@@ -285,6 +293,128 @@ export class LineGraph extends React.Component<LineGraphProps, LineGraphState> {
             className="graph linked-guideline"
             ref={this.graphEl}
             {...hoverProps}
+          />
+        </div>
+      </Visualization>
+    );
+  }
+}
+
+// touPlot formats our timeseries data into the format
+// uPlot expects which is a 2-dimentional array where the
+// first array contains the x-values (time).
+function touPlot(data: TimeSeriesQueryResponse): any {
+  //insert x values
+  const xValues: number[] = [];
+  data.results[0].datapoints.forEach((datapoint) => {
+    xValues.push(NanoToSeconds(datapoint.timestamp_nanos.toNumber()));
+  });
+
+  const yValues: (number | null)[][] = [];
+  data.results.forEach((result) => {
+    yValues.push(result.datapoints.map((d) => d.value));
+  });
+
+  return [xValues, ...yValues];
+}
+
+// LineGraph wraps the uPlot library into a React component
+// when the component is first initialized, we wait until
+// data is available and then construct the uPlot object
+// and store its ref in a global variable.
+// Once we receive updates to props, we push new data to the
+// uPlot object.
+export class LineGraph extends React.Component<LineGraphProps> {
+  constructor(props: LineGraphProps) {
+    super(props);
+  }
+
+  // axis is copied from the nvd3 LineGraph component above
+  axis = createSelector(
+    (props: { children?: React.ReactNode }) => props.children,
+    (children) => {
+      const axes: React.ReactElement<AxisProps>[] = findChildrenOfType(
+        children as any,
+        Axis,
+      );
+      if (axes.length === 0) {
+        console.warn(
+          "LineGraph requires the specification of at least one axis.",
+        );
+        return null;
+      }
+      if (axes.length > 1) {
+        console.warn(
+          "LineGraph currently only supports a single axis; ignoring additional axes.",
+        );
+      }
+      return axes[0];
+    },
+  );
+
+  // metrics is copied from the nvd3 LineGraph component above
+  metrics = createSelector(
+    (props: { children?: React.ReactNode }) => props.children,
+    (children) => {
+      return findChildrenOfType(
+        children as any,
+        Metric,
+      ) as React.ReactElement<MetricProps>[];
+    },
+  );
+
+  u: any;
+  el: HTMLDivElement;
+
+  componentDidUpdate(prevProps: Readonly<LineGraphProps>) {
+    if (
+      // data was missing last time or we already have a `u`
+      // the latter could happen if we click away to a
+      // different dashboard and then back to one we had
+      // open previously.
+      (!prevProps.data || !this.u) &&
+      this.props.data &&
+      this.props.data.results
+    ) {
+      console.log("rendering uplot...");
+      const data = this.props.data;
+      const metrics = this.metrics(this.props);
+      const axis = this.axis(this.props);
+      const options = configureUPlotLineChart(
+        metrics,
+        axis,
+        data,
+        this.props.timeInfo,
+      );
+
+      const uPlotData = touPlot(data);
+      this.u = new uPlot(options, uPlotData, this.el);
+    }
+    if (this.u && prevProps.data != this.props.data) {
+      this.u.setData(touPlot(this.props.data));
+    }
+  }
+
+  componentWillUnmount() {
+    this.u.destroy();
+    this.u = null;
+  }
+
+  render() {
+    const { title, subtitle, tooltip, data } = this.props;
+
+    return (
+      <Visualization
+        title={title}
+        subtitle={subtitle}
+        tooltip={tooltip}
+        loading={!data}
+      >
+        <div className="linegraph">
+          <div
+            ref={(el) => {
+              this.el = el;
+            }}
           />
         </div>
       </Visualization>
