@@ -21,8 +21,6 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
-        "//pkg/sql/catalog/colinfo",
-        "//pkg/sql/catalog/lease",
         "//pkg/sql/covering",
         "//pkg/storage/enginepb",
         "//pkg/util/ctxgroup",
