@@ -28,6 +28,8 @@ export const ALTER_DATABASE_OWNER = "alter_database_owner";
 export const ALTER_DATABASE_ADD_REGION = "alter_database_add_region";
 // Recorded when the primary region of a database is altered.
 export const ALTER_DATABASE_PRIMARY_REGION = "alter_database_primary_region";
+// Recorded when the survival goal of a database is altered.
+export const ALTER_DATABASE_SURVIVAL_GOAL = "alter_database_survival_goal";
 // Recorded when a table is created.
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
