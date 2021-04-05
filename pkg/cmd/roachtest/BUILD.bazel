@@ -67,6 +67,7 @@ go_library(
         "mixed_version_jobs.go",
         "mixed_version_schemachange.go",
         "multitenant.go",
+        "multitenant_upgrade.go",
         "namespace_upgrade.go",
         "network.go",
         "orm_helpers.go",
