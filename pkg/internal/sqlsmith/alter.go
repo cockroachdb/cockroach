@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	alters               = append(append(altersTableExistence, altersExistingTable...), altersTypeExistence...)
+	alters               = append(append(append(altersTableExistence, altersExistingTable...), altersTypeExistence...), altersExistingTypes...)
 	altersTableExistence = []statementWeight{
 		{10, makeCreateTable},
 		{2, makeCreateSchema},
@@ -40,6 +40,9 @@ var (
 	}
 	altersTypeExistence = []statementWeight{
 		{5, makeCreateType},
+	}
+	altersExistingTypes = []statementWeight{
+		{5, makeAlterTypeDropValue},
 	}
 )
 
@@ -341,4 +344,17 @@ func makeRenameIndex(s *Smither) (tree.Statement, bool) {
 func makeCreateType(s *Smither) (tree.Statement, bool) {
 	name := s.name("typ")
 	return rowenc.RandCreateType(s.rnd, string(name), letters), true
+}
+
+func makeAlterTypeDropValue(s *Smither) (tree.Statement, bool) {
+	enumVal, udtName, ok := s.getRandUserDefinedTypeLabel()
+	if !ok {
+		return nil, false
+	}
+	return &tree.AlterType{
+		Type: udtName.ToUnresolvedObjectName(),
+		Cmd: &tree.AlterTypeDropValue{
+			Val: *enumVal,
+		},
+	}, ok
 }
