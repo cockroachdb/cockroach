@@ -1125,3 +1125,223 @@ func (c *CustomFuncs) MakeProjectionsForOuterJoin(
 	}
 	return result
 }
+
+// LocalAndRemoteLookupExprs is used by the GenerateLocalityOptimizedAntiJoin
+// rule to hold two sets of filters: one targeting local partitions and one
+// targeting remote partitions.
+type LocalAndRemoteLookupExprs struct {
+	Local  memo.FiltersExpr
+	Remote memo.FiltersExpr
+}
+
+// LocalAndRemoteLookupExprsSucceeded returns true if the
+// LocalAndRemoteLookupExprs is not empty.
+func (c *CustomFuncs) LocalAndRemoteLookupExprsSucceeded(le LocalAndRemoteLookupExprs) bool {
+	return len(le.Local) != 0 && len(le.Remote) != 0
+}
+
+// CreateLocalityOptimizedAntiLookupJoinPrivate creates a new lookup join
+// private from the given private and replaces the LookupExpr with the given
+// filters. It also marks the private as locality optimized.
+func (c *CustomFuncs) CreateLocalityOptimizedAntiLookupJoinPrivate(
+	lookupExpr memo.FiltersExpr, private *memo.LookupJoinPrivate,
+) *memo.LookupJoinPrivate {
+	newPrivate := *private
+	newPrivate.LookupExpr = lookupExpr
+	newPrivate.LocalityOptimized = true
+	return &newPrivate
+}
+
+// LocalLookupExpr extracts the Local filters expr from the given
+// LocalAndRemoteLookupExprs.
+func (c *CustomFuncs) LocalLookupExpr(le LocalAndRemoteLookupExprs) memo.FiltersExpr {
+	return le.Local
+}
+
+// RemoteLookupExpr extracts the Remote filters expr from the given
+// LocalAndRemoteLookupExprs.
+func (c *CustomFuncs) RemoteLookupExpr(le LocalAndRemoteLookupExprs) memo.FiltersExpr {
+	return le.Remote
+}
+
+// GetLocalityOptimizedAntiJoinLookupExprs gets the lookup expressions needed to
+// build a locality optimized anti join if possible from the given lookup join
+// private. See the comment above the GenerateLocalityOptimizedAntiJoin rule for
+// more details.
+func (c *CustomFuncs) GetLocalityOptimizedAntiJoinLookupExprs(
+	input memo.RelExpr, private *memo.LookupJoinPrivate,
+) LocalAndRemoteLookupExprs {
+	// Respect the session setting LocalityOptimizedSearch.
+	if !c.e.evalCtx.SessionData.LocalityOptimizedSearch {
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// Check whether this lookup join has already been locality optimized.
+	if private.LocalityOptimized {
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// We can only apply this optimization to anti-joins.
+	if private.JoinType != opt.AntiJoinOp {
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// This lookup join cannot not be part of a paired join.
+	if private.IsSecondJoinInPairedJoiner {
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// This lookup join should have the LookupExpr filled in, indicating that one
+	// or more of the join filters constrain an index column to multiple constant
+	// values.
+	if private.LookupExpr == nil {
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// The local region must be set, or we won't be able to determine which
+	// partitions are local.
+	localRegion, found := c.e.evalCtx.Locality.Find(regionKey)
+	if !found {
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// There should be at least two partitions, or we won't be able to
+	// differentiate between local and remote partitions.
+	tabMeta := c.e.mem.Metadata().TableMeta(private.Table)
+	index := tabMeta.Table.Index(private.Index)
+	if index.PartitionCount() < 2 {
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// Determine whether the index has both local and remote partitions.
+	var localPartitions util.FastIntSet
+	for i, n := 0, index.PartitionCount(); i < n; i++ {
+		part := index.Partition(i)
+		if isZoneLocal(part.Zone(), localRegion) {
+			localPartitions.Add(i)
+		}
+	}
+	if localPartitions.Len() == 0 || localPartitions.Len() == index.PartitionCount() {
+		// The partitions are either all local or all remote.
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// Find a filter that constrains the first column of the index.
+	filterIdx, ok := c.getConstPrefixFilter(index, private.Table, private.LookupExpr)
+	if !ok {
+		return LocalAndRemoteLookupExprs{}
+	}
+	filter := private.LookupExpr[filterIdx]
+
+	// Check whether the filter constrains the first column of the index
+	// to at least two constant values. We need at least two values so that one
+	// can target a local partition and one can target a remote partition.
+	col, vals, ok := filter.ScalarProps().Constraints.HasSingleColumnConstValues(c.e.evalCtx)
+	if !ok || len(vals) < 2 {
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// Determine whether the values target both local and remote partitions.
+	localValOrds := c.getLocalValues(index, localPartitions, vals)
+	if localValOrds.Len() == 0 || localValOrds.Len() == len(vals) {
+		// The values target all local or all remote partitions.
+		return LocalAndRemoteLookupExprs{}
+	}
+
+	// Split the values into local and remote sets.
+	localValues, remoteValues := c.splitValues(vals, localValOrds)
+
+	// Copy all of the filters from the LookupExpr, and replace the filter that
+	// constrains the first index column with a filter targeting only local
+	// partitions or only remote partitions.
+	localExpr := make(memo.FiltersExpr, len(private.LookupExpr))
+	copy(localExpr, private.LookupExpr)
+	localExpr[filterIdx] = c.makeConstFilter(col, localValues)
+
+	remoteExpr := make(memo.FiltersExpr, len(private.LookupExpr))
+	copy(remoteExpr, private.LookupExpr)
+	remoteExpr[filterIdx] = c.makeConstFilter(col, remoteValues)
+
+	// Return the two sets of lookup expressions. They will be used to construct
+	// two nested anti joins.
+	return LocalAndRemoteLookupExprs{
+		Local:  localExpr,
+		Remote: remoteExpr,
+	}
+}
+
+// getConstPrefixFilter finds the position of the filter in the given slice of
+// filters that constrains the first index column to one or more constant
+// values. If such a filter is found, getConstPrefixFilter returns the position
+// of the filter and ok=true. Otherwise, returns ok=false.
+func (c CustomFuncs) getConstPrefixFilter(
+	index cat.Index, table opt.TableID, filters memo.FiltersExpr,
+) (pos int, ok bool) {
+	idxCol := table.IndexColumnID(index, 0)
+	for i := range filters {
+		props := filters[i].ScalarProps()
+		if !props.TightConstraints {
+			continue
+		}
+		if props.OuterCols.Len() != 1 {
+			continue
+		}
+		col := props.OuterCols.SingleColumn()
+		if col == idxCol {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// getLocalValues returns the indexes of the values in the given Datums slice
+// that target local partitions.
+func (c *CustomFuncs) getLocalValues(
+	index cat.Index, localPartitions util.FastIntSet, values tree.Datums,
+) util.FastIntSet {
+	// Collect all the prefixes from all the different partitions (remembering
+	// which ones came from local partitions), and sort them so that longer
+	// prefixes come before shorter prefixes. For each value in the given Datums,
+	// we will iterate through the list of prefixes until we find a match, so
+	// ordering them with longer prefixes first ensures that the correct match is
+	// found.
+	allPrefixes := getSortedPrefixes(index, localPartitions)
+
+	// TODO(rytaft): Sort the prefixes by key in addition to length, and use
+	// binary search here.
+	var localVals util.FastIntSet
+	for i, val := range values {
+		for j := range allPrefixes {
+			prefix := allPrefixes[j].prefix
+			isLocal := allPrefixes[j].isLocal
+			if len(prefix) > 1 {
+				continue
+			}
+			if val.Compare(c.e.evalCtx, prefix[0]) == 0 {
+				if isLocal {
+					localVals.Add(i)
+				}
+				break
+			}
+		}
+	}
+	return localVals
+}
+
+// splitValues splits the given slice of Datums into local and remote slices
+// by putting the Datums at positions identified by localValOrds into the local
+// slice, and the remaining Datums into the remote slice.
+func (c *CustomFuncs) splitValues(
+	values tree.Datums, localValOrds util.FastIntSet,
+) (localVals, remoteVals tree.Datums) {
+	localVals = make(tree.Datums, 0, localValOrds.Len())
+	remoteVals = make(tree.Datums, 0, len(values)-len(localVals))
+	for i, val := range values {
+		if localValOrds.Contains(i) {
+			localVals = append(localVals, val)
+		} else {
+			remoteVals = append(remoteVals, val)
+		}
+	}
+	return localVals, remoteVals
+}

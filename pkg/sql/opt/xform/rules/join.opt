@@ -317,3 +317,113 @@
     (MakeProjectionsForOuterJoin $canaryCol $projections)
     (UnionCols $passthrough (OutputCols $left))
 )
+
+# GenerateLocalityOptimizedAntiJoin converts an anti join into a locality
+# optimized anti join if possible. A locality optimized anti join is implemented
+# as a nested pair of anti lookup joins and is designed to avoid communicating
+# with remote nodes (relative to the gateway region) if at all possible.
+#
+# A locality optimized anti join can be planned under the following conditions:
+#  - The anti join can be planned as a lookup join.
+#  - The lookup join scans multiple spans in the lookup index for each input
+#    row, with some spans targeting partitions on local nodes (relative to the
+#    gateway region), and some targeting partitions on remote nodes. It is not
+#    known which span(s) will contain the matching row(s).
+#
+# The result of GenerateLocalityOptimizedAntiJoin will be a nested pair of anti
+# lookup joins in which the first lookup join is an anti join targeting the
+# local values from the original join, and the second lookup join is an anti
+# join targeting the remote values. Because of the way anti join is defined, a
+# row will only be returned by the first anti join if a match is *not* found
+# locally. If a match is found, no row will be returned and therefore the second
+# lookup join will not need to search the remote nodes. This nested pair of anti
+# joins is logically equivalent to the original, single anti join.
+#
+# This is a useful optimization if there is locality of access in the workload,
+# such that rows tend to be accessed from the region where they are located. If
+# there is no locality of access, using a locality optimized anti join could be
+# a slight pessimization, since rows residing in remote regions will be found
+# slightly more slowly than they would be otherwise.
+#
+# For example, suppose we have a multi-region database with regions 'us-east1',
+# 'us-west1' and 'europe-west1', and we have the following tables and query,
+# issued from 'us-east1':
+#
+#   CREATE TABLE parent (
+#     p_id INT PRIMARY KEY
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   CREATE TABLE child (
+#     c_id INT PRIMARY KEY,
+#     c_p_id INT REFERENCES parent (p_id)
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM child WHERE NOT EXISTS (
+#     SELECT * FROM parent WHERE p_id = c_p_id
+#   ) AND c_id = 10;
+#
+# Normally, this would produce the following plan:
+#
+#   anti-join (lookup parent)
+#    ├── lookup columns are key
+#    ├── lookup expr: (p_id = c_p_id) AND (crdb_region IN ('europe-west1', 'us-east1', 'us-west1'))
+#    ├── scan child
+#    │    └── constraint: /7/5
+#    │         ├── [/'europe-west1'/10 - /'europe-west1'/10]
+#    │         ├── [/'us-east1'/10 - /'us-east1'/10]
+#    │         └── [/'us-west1'/10 - /'us-west1'/10]
+#    └── filters (true)
+#
+# but if the session setting locality_optimized_partitioned_index_scan is enabled,
+# the optimizer will produce this plan, using locality optimized search, both for
+# the scan of child and for the lookup join with parent. See the rule
+# GenerateLocalityOptimizedScan for details about how the optimization is applied
+# for scans.
+#
+#   anti-join (lookup parent)
+#    ├── lookup columns are key
+#    ├── lookup expr: (p_id = c_p_id) AND (crdb_region IN ('europe-west1', 'us-west1'))
+#    ├── anti-join (lookup parent)
+#    │    ├── lookup columns are key
+#    │    ├── lookup expr: (p_id = c_p_id) AND (crdb_region = 'us-east1')
+#    │    ├── locality-optimized-search
+#    │    │    ├── scan child
+#    │    │    │    └── constraint: /13/11: [/'us-east1'/10 - /'us-east1'/10]
+#    │    │    └── scan child
+#    │    │         └── constraint: /18/16
+#    │    │              ├── [/'europe-west1'/10 - /'europe-west1'/10]
+#    │    │              └── [/'us-west1'/10 - /'us-west1'/10]
+#    │    └── filters (true)
+#    └── filters (true)
+#
+# As long as child.c_id = 10 and the matching row in parent are both located in
+# 'us-east1', the second plan will be much faster. But if they are located in
+# one of the other regions, the first plan would be slightly faster.
+[GenerateLocalityOptimizedAntiJoin, Explore]
+(LookupJoin
+    $input:*
+    $on:*
+    $private:* &
+        (LocalAndRemoteLookupExprsSucceeded
+            $localAndRemoteLookupExprs:(GetLocalityOptimizedAntiJoinLookupExprs
+                $input
+                $private
+            )
+        )
+)
+=>
+(LookupJoin
+    (LookupJoin
+        $input
+        $on
+        (CreateLocalityOptimizedAntiLookupJoinPrivate
+            (LocalLookupExpr $localAndRemoteLookupExprs)
+            $private
+        )
+    )
+    $on
+    (CreateLocalityOptimizedAntiLookupJoinPrivate
+        (RemoteLookupExpr $localAndRemoteLookupExprs)
+        $private
+    )
+)

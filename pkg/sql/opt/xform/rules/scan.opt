@@ -66,6 +66,9 @@
 # As long as k = 10 is located in 'us-east1', the second plan will be much faster.
 # But if k = 10 is located in one of the other regions, the first plan would be
 # slightly faster.
+#
+# Note: we also apply a similar optimization for anti lookup joins; see
+# GenerateLocalityOptimizedAntiJoin.
 [GenerateLocalityOptimizedScan, Explore]
 (Scan
     $scanPrivate:* &
