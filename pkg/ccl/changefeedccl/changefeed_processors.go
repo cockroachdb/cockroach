@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -244,7 +245,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	buf := kvfeed.MakeChanBuffer()
+	buf := kvevent.MakeChanBuffer()
 	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)
 	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.kvFeedMemMon, ca.spec,
@@ -285,13 +286,13 @@ func (ca *changeAggregator) startKVFeed(ctx context.Context, kvfeedCfg kvfeed.Co
 }
 
 type errorWrapperEventBuffer struct {
-	kvfeed.EventBuffer
+	kvevent.Buffer
 }
 
 func (e errorWrapperEventBuffer) AddKV(
 	ctx context.Context, kv roachpb.KeyValue, prevVal roachpb.Value, backfillTimestamp hlc.Timestamp,
 ) error {
-	if err := e.EventBuffer.AddKV(ctx, kv, prevVal, backfillTimestamp); err != nil {
+	if err := e.Buffer.AddKV(ctx, kv, prevVal, backfillTimestamp); err != nil {
 		return MarkRetryableError(err)
 	}
 	return nil
@@ -303,13 +304,13 @@ func (e errorWrapperEventBuffer) AddResolved(
 	ts hlc.Timestamp,
 	boundaryType jobspb.ResolvedSpan_BoundaryType,
 ) error {
-	if err := e.EventBuffer.AddResolved(ctx, span, ts, boundaryType); err != nil {
+	if err := e.Buffer.AddResolved(ctx, span, ts, boundaryType); err != nil {
 		return MarkRetryableError(err)
 	}
 	return nil
 }
 
-var _ kvfeed.EventBuffer = (*errorWrapperEventBuffer)(nil)
+var _ kvevent.Buffer = (*errorWrapperEventBuffer)(nil)
 
 func makeKVFeedCfg(
 	cfg *execinfra.ServerConfig,
@@ -318,7 +319,7 @@ func makeKVFeedCfg(
 	spec execinfrapb.ChangeAggregatorSpec,
 	spans []roachpb.Span,
 	withDiff bool,
-	buf kvfeed.EventBuffer,
+	buf kvevent.Buffer,
 	metrics *Metrics,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
@@ -326,9 +327,9 @@ func makeKVFeedCfg(
 	schemaChangePolicy := changefeedbase.SchemaChangePolicy(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangePolicy])
 	initialHighWater, needsInitialScan := getKVFeedInitialParameters(spec)
-	bf := func() kvfeed.EventBuffer {
+	bf := func() kvevent.Buffer {
 		return &errorWrapperEventBuffer{
-			EventBuffer: kvfeed.MakeMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics),
+			Buffer: kvevent.NewMemBuffer(mm.MakeBoundAccount(), &metrics.KVFeedMetrics),
 		}
 	}
 	kvfeedCfg := kvfeed.Config{
@@ -474,7 +475,7 @@ func (ca *changeAggregator) tick() error {
 	processingNanos := timeutil.Since(event.BufferGetTimestamp()).Nanoseconds()
 	ca.metrics.ProcessingNanos.Inc(processingNanos)
 
-	if event.Type() == kvfeed.KVEvent {
+	if event.Type() == kvevent.TypeKV {
 		if err := ca.eventConsumer.ConsumeEvent(ca.Ctx, event); err != nil {
 			return err
 		}
@@ -542,23 +543,23 @@ func (ca *changeAggregator) ConsumerClosed() {
 
 type kvEventProducer interface {
 	// GetEvent returns the next kv event.
-	GetEvent(ctx context.Context) (kvfeed.Event, error)
+	GetEvent(ctx context.Context) (kvevent.Event, error)
 }
 
 type bufEventProducer struct {
-	kvfeed.EventBufferReader
+	kvevent.Reader
 }
 
 var _ kvEventProducer = &bufEventProducer{}
 
 // GetEvent implements kvEventProducer interface
-func (p *bufEventProducer) GetEvent(ctx context.Context) (kvfeed.Event, error) {
+func (p *bufEventProducer) GetEvent(ctx context.Context) (kvevent.Event, error) {
 	return p.Get(ctx)
 }
 
 type kvEventConsumer interface {
 	// ConsumeEvent responsible for consuming kv event.
-	ConsumeEvent(ctx context.Context, event kvfeed.Event) error
+	ConsumeEvent(ctx context.Context, event kvevent.Event) error
 }
 
 type kvEventToRowConsumer struct {
@@ -606,12 +607,12 @@ type tableDescriptorTopic struct {
 var _ TopicDescriptor = &tableDescriptorTopic{}
 
 // ConsumeEvent implements kvEventConsumer interface
-func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Event) error {
-	if event.Type() != kvfeed.KVEvent {
-		return errors.AssertionFailedf("expected kv event, got %v", event.Type())
+func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
+	if ev.Type() != kvevent.TypeKV {
+		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
 	}
 
-	r, err := c.eventToRow(ctx, event)
+	r, err := c.eventToRow(ctx, ev)
 	if err != nil {
 		return err
 	}
@@ -657,7 +658,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Ev
 }
 
 func (c *kvEventToRowConsumer) eventToRow(
-	ctx context.Context, event kvfeed.Event,
+	ctx context.Context, event kvevent.Event,
 ) (encodeRow, error) {
 	var r encodeRow
 	schemaTimestamp := event.KV().Value.Timestamp
@@ -796,12 +797,12 @@ func (n noTopic) GetVersion() descpb.DescriptorVersion {
 }
 
 // ConsumeEvent implements kvEventConsumer interface.
-func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, event kvfeed.Event) error {
-	if event.Type() != kvfeed.KVEvent {
-		return errors.AssertionFailedf("expected kv event, got %v", event.Type())
+func (c *nativeKVConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
+	if ev.Type() != kvevent.TypeKV {
+		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
 	}
-	keyBytes := []byte(event.KV().Key)
-	val := event.KV().Value
+	keyBytes := []byte(ev.KV().Key)
+	val := ev.KV().Value
 	valBytes, err := protoutil.Marshal(&val)
 	if err != nil {
 		return err

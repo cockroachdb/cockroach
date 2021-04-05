@@ -12,7 +12,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -152,7 +152,7 @@ var (
 
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
-	KVFeedMetrics   kvfeed.Metrics
+	KVFeedMetrics   kvevent.Metrics
 	EmittedMessages *metric.Counter
 	EmittedBytes    *metric.Counter
 	Flushes         *metric.Counter
@@ -180,7 +180,7 @@ func (*Metrics) MetricStruct() {}
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		KVFeedMetrics:   kvfeed.MakeMetrics(histogramWindow),
+		KVFeedMetrics:   kvevent.MakeMetrics(histogramWindow),
 		EmittedMessages: metric.NewCounter(metaChangefeedEmittedMessages),
 		EmittedBytes:    metric.NewCounter(metaChangefeedEmittedBytes),
 		Flushes:         metric.NewCounter(metaChangefeedFlushes),
