@@ -148,6 +148,17 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		}
 	}()
 
+	// At the end of the test, we need to wait for the goroutines
+	// created by pending HTTP connections to terminate after realizing
+	// that the server they are connecting to is being shut down.
+	var maxRoundTripLatency time.Duration
+	for _, latencyMS := range regionRoundTripLatencies {
+		if d := time.Duration(latencyMS) * time.Millisecond; d > maxRoundTripLatency {
+			maxRoundTripLatency = d
+		}
+	}
+	defer time.Sleep(maxRoundTripLatency)
+
 	ctx := context.Background()
 
 	// Setup the transient cluster.
