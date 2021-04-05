@@ -26,6 +26,8 @@ export const RENAME_DATABASE = "rename_database";
 export const ALTER_DATABASE_OWNER = "alter_database_owner";
 // Recorded when a region is added to a database.
 export const ALTER_DATABASE_ADD_REGION = "alter_database_add_region";
+// Recorded when a region is dropped from a database.
+export const ALTER_DATABASE_DROP_REGION = "alter_database_drop_region";
 // Recorded when the primary region of a database is altered.
 export const ALTER_DATABASE_PRIMARY_REGION = "alter_database_primary_region";
 // Recorded when the survival goal of a database is altered.
