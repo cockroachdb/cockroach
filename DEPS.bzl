@@ -4027,14 +4027,6 @@ def go_deps():
     )
 
     go_repository(
-        name = "in_gopkg_yaml_v2",
-        build_file_proto_mode = "disable_global",
-        importpath = "gopkg.in/yaml.v2",
-        replace = "github.com/cockroachdb/yaml",
-        sum = "h1:EqoCicA1pbWWDGniFxhTElh2hvui7E7tEvuBNJSDn3A=",
-        version = "v0.0.0-20180705215940-0e2822948641",
-    )
-    go_repository(
         name = "in_gopkg_yaml_v3",
         build_file_proto_mode = "disable_global",
         importpath = "gopkg.in/yaml.v3",
@@ -4338,13 +4330,6 @@ def go_deps():
         importpath = "golang.org/x/time",
         sum = "h1:/5xXl8Y5W96D+TtHSlonuFqGHIWVuyCkGJLwGh9JJFs=",
         version = "v0.0.0-20191024005414-555d28b269f0",
-    )
-    go_repository(
-        name = "org_golang_x_xerrors",
-        build_file_proto_mode = "disable_global",
-        importpath = "golang.org/x/xerrors",
-        sum = "h1:go1bK/D/BFZV2I8cIQd1NKEZ+0owSTG1fDTci4IqFcE=",
-        version = "v0.0.0-20200804184101-5ec99f83aff1",
     )
     go_repository(
         name = "org_gonum_v1_gonum",

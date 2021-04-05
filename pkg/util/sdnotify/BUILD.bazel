@@ -50,9 +50,6 @@ go_test(
         "@io_bazel_rules_go//go/platform:linux": [
             "//pkg/util/log",
         ],
-        "@io_bazel_rules_go//go/platform:nacl": [
-            "//pkg/util/log",
-        ],
         "@io_bazel_rules_go//go/platform:netbsd": [
             "//pkg/util/log",
         ],

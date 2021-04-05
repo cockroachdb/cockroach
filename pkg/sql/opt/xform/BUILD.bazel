@@ -54,11 +54,11 @@ go_test(
     size = "small",
     srcs = [
         "coster_test.go",
+        "general_funcs_test.go",
         "join_order_builder_test.go",
         "main_test.go",
         "optimizer_test.go",
         "physical_props_test.go",
-        "scan_funcs_test.go",
     ],
     data = glob(["testdata/**"]) + [
         "@cockroach//c-deps:libgeos",

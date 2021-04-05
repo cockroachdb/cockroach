@@ -715,7 +715,7 @@ locality-optimized-search
  ├── right columns: t.public.abc_part.r:11(string) t.public.abc_part.a:12(int) t.public.abc_part.b:13(int) t.public.abc_part.c:14(string)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.910000001, distinct(3)=0.910000001, null(3)=0, distinct(4)=0.910000001, null(4)=0, distinct(3,4)=0.910000001, null(3,4)=0]
- ├── cost: 5.101218
+ ├── cost: 5.083216
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── prune: (1,2)
@@ -740,3 +740,59 @@ locality-optimized-search
       ├── fd: ()-->(11-14)
       ├── prune: (11-14)
       └── interesting orderings: (+12) (+11,+13,+14,+12) (+11,+13,+12)
+
+# We should prefer locality optimized anti join (a pair of nested anti joins).
+opt locality=(region=east,dc=a)
+SELECT * FROM abc_part AS a1 WHERE NOT EXISTS (
+  SELECT * FROM abc_part AS a2 WHERE a1.a = a2.b
+) AND b = 1 AND c = 'foo'
+----
+anti-join (lookup abc_part@bc_idx [as=a2])
+ ├── columns: r:1!null a:2!null b:3!null c:4!null
+ ├── lookup expression
+ │    └── filters
+ │         ├── a1.a:2 = a2.b:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │         └── a2.r:6 = 'west' [outer=(6), constraints=(/6: [/'west' - /'west']; tight), fd=()-->(6)]
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1e-10]
+ ├── cost: 23.4031483
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── anti-join (lookup abc_part@bc_idx [as=a2])
+ │    ├── columns: a1.r:1!null a1.a:2!null a1.b:3!null a1.c:4!null
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── a1.a:2 = a2.b:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ │    │         └── a2.r:6 = 'east' [outer=(6), constraints=(/6: [/'east' - /'east']; tight), fd=()-->(6)]
+ │    ├── cardinality: [0 - 1]
+ │    ├── stats: [rows=0.900900001, distinct(1)=0.89738934, null(1)=0, distinct(2)=0.900900001, null(2)=0, distinct(3)=0.900900001, null(3)=0, distinct(4)=0.900900001, null(4)=0]
+ │    ├── cost: 14.2891619
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-4)
+ │    ├── locality-optimized-search
+ │    │    ├── columns: a1.r:1!null a1.a:2!null a1.b:3!null a1.c:4!null
+ │    │    ├── left columns: a1.r:11 a1.a:12 a1.b:13 a1.c:14
+ │    │    ├── right columns: a1.r:16 a1.a:17 a1.b:18 a1.c:19
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── stats: [rows=0.910000001, distinct(1)=0.906282579, null(1)=0, distinct(2)=0.910000001, null(2)=0, distinct(3)=0.910000001, null(3)=0, distinct(4)=0.910000001, null(4)=0, distinct(3,4)=0.910000001, null(3,4)=0]
+ │    │    ├── cost: 5.083216
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1-4)
+ │    │    ├── scan abc_part@bc_idx [as=a1]
+ │    │    │    ├── columns: a1.r:11!null a1.a:12!null a1.b:13!null a1.c:14!null
+ │    │    │    ├── constraint: /11/13/14: [/'east'/1/'foo' - /'east'/1/'foo']
+ │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    ├── stats: [rows=0.9001, distinct(11)=0.9001, null(11)=0, distinct(13)=0.9001, null(13)=0, distinct(14)=0.9001, null(14)=0, distinct(11,13,14)=0.9001, null(11,13,14)=0]
+ │    │    │    ├── cost: 2.532058
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(11-14)
+ │    │    └── scan abc_part@bc_idx [as=a1]
+ │    │         ├── columns: a1.r:16!null a1.a:17!null a1.b:18!null a1.c:19!null
+ │    │         ├── constraint: /16/18/19: [/'west'/1/'foo' - /'west'/1/'foo']
+ │    │         ├── cardinality: [0 - 1]
+ │    │         ├── stats: [rows=0.9001, distinct(16)=0.9001, null(16)=0, distinct(18)=0.9001, null(18)=0, distinct(19)=0.9001, null(19)=0, distinct(16,18,19)=0.9001, null(16,18,19)=0]
+ │    │         ├── cost: 2.532058
+ │    │         ├── key: ()
+ │    │         └── fd: ()-->(16-19)
+ │    └── filters (true)
+ └── filters (true)
