@@ -5,5 +5,8 @@
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
 test --test_env=GO_TEST_WRAP_TESTV=1
 
+# Dump all output for failed tests to the build log.
+test --test_output=errors
+
 # Adding building info
 build --stamp --workspace_status_command=$(pwd)/build-rev.sh
