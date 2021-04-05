@@ -12,7 +12,10 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/errors"
+	"github.com/twpayne/go-geom"
 )
 
 // ValidDetail contains information about the validity of a geometry.
@@ -62,6 +65,37 @@ func IsValidDetail(g geo.Geometry, flags int) (ValidDetail, error) {
 		Reason:          reason,
 		InvalidLocation: loc,
 	}, nil
+}
+
+// IsValidTrajectory returns whether a geometry encodes a valid trajectory
+func IsValidTrajectory(line geo.Geometry) (bool, error) {
+	if line.ShapeType() != geopb.ShapeType_LineStringM && line.ShapeType() != geopb.ShapeType_LineStringZM {
+		return false, errors.New("geom is not a LINESTRING(Z)M")
+	}
+	t, err := line.AsGeomT()
+	if err != nil {
+		return false, err
+	}
+	if t.Empty() {
+		return false, errors.New("line is an empty LINESTRING(Z)M")
+	}
+
+	isValid := true
+	mIndex := geom.Layout.MIndex(t.Layout())
+	currIndex := mIndex
+	prevIndex := -1
+	flatLen := len(t.FlatCoords())
+
+	for currIndex < flatLen {
+		if prevIndex != -1 && t.FlatCoords()[currIndex] <= t.FlatCoords()[prevIndex] {
+			isValid = false
+			break
+		}
+		prevIndex = currIndex
+		currIndex += mIndex + 1
+	}
+
+	return isValid, nil
 }
 
 // MakeValid returns a valid form of the given Geometry.

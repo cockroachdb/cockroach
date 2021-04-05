@@ -975,6 +975,16 @@ valid geom                 true   true   true   Valid Geometry                 V
 invalid polygon            false  false  false  Self-intersection[1.5 1.5]     Self-intersection       Self-intersection  GEOMETRYCOLLECTION (POLYGON ((1 1, 1.5 1.5, 1.5 -1.5, 1 1)), LINESTRING (1.5 1.5, 2 2))
 self-intersecting polygon  false  false  true   Ring Self-intersection[14 20]  Ring Self-intersection  Valid Geometry     POLYGON ((14 20, 8 45, 20 35, 14 20), (14 20, 16 30, 12 30, 14 20))
 
+query TB
+SELECT
+  dsc,
+  ST_IsValidTrajectory(geom)
+FROM ( VALUES
+  ('valid trajectory', 'LINESTRINGM(0 0 1,0 1 2)'::geometry)
+) t(dsc, geom)
+----
+valid trajectory  true
+
 # Unary operators
 query TRRRRRRRT
 SELECT

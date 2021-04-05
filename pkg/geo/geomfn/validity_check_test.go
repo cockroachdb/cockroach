@@ -113,6 +113,33 @@ func TestIsValidDetail(t *testing.T) {
 	}
 }
 
+func TestIsValidTrajectory(t *testing.T) {
+	testCases := []struct {
+		wkt      string
+		expected bool
+	}{
+		{"LINESTRINGM(0 0 1,0 1 2)", true},
+		{"LINESTRINGM(0 0 1,1 1 1.01)", true},
+		{"LINESTRINGM(2 2 1,1 1 2,0 0 3)", true},
+		{"LINESTRINGZM(0 0 0 1,0 1 2 3)", true},
+		{"LINESTRINGZM(2 2 2 1,1 1 1 2,0 0 0 3)", true},
+		{"LINESTRINGM(0 0 1,0 0 1)", false},
+		{"LINESTRINGM(2 2 1,1 1 2,3 3 1)", false},
+		{"LINESTRINGZM(0 0 0 1,0 0 0 1)", false},
+		{"LINESTRINGZM(2 2 2 1,1 1 1 2,3 3 3 1)", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.wkt, func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+			ret, err := IsValidTrajectory(g)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, ret)
+		})
+	}
+}
+
 func TestMakeValid(t *testing.T) {
 	testCases := []struct {
 		wkt      string
