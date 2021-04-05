@@ -142,6 +142,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Restore Job: User ${info.User} has a job ${info.JobID} running with status ${info.Status}`;
     case eventTypes.ALTER_DATABASE_ADD_REGION:
       return `Add Region: User ${info.User} added region ${info.RegionName} to database ${info.DatabaseName}`;
+    case eventTypes.ALTER_DATABASE_DROP_REGION:
+      return `Drop Region: User ${info.User} dropped region ${info.RegionName} from database ${info.DatabaseName}`;
     case eventTypes.ALTER_DATABASE_PRIMARY_REGION:
       return `Primary Region Changed: User ${info.User} changed primary region of database ${info.DatabaseName} to ${info.PrimaryRegionName}`;
     case eventTypes.ALTER_DATABASE_SURVIVAL_GOAL:
