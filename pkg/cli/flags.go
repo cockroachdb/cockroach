@@ -241,11 +241,6 @@ func flagSetForCmd(cmd *cobra.Command) *pflag.FlagSet {
 
 func init() {
 	initCLIDefaults()
-	defer func() {
-		if err := processEnvVarDefaults(); err != nil {
-			panic(err)
-		}
-	}()
 
 	// Every command but start will inherit the following setting.
 	AddPersistentPreRunE(cockroachCmd, func(cmd *cobra.Command, _ []string) error {
@@ -883,27 +878,17 @@ func (w *tenantIDWrapper) Type() string {
 // to the flags, during initialization and before the command line is
 // actually parsed. For example, it will inject the value of
 // $COCKROACH_URL into the urlParser object linked to the --url flag.
-func processEnvVarDefaults() error {
+func processEnvVarDefaults(cmd *cobra.Command) error {
+	fl := flagSetForCmd(cmd)
 	for _, d := range envVarDefaults {
-		f := d.flagSet.Lookup(d.flagName)
+		f := fl.Lookup(d.flagName)
 		if f == nil {
-			panic(errors.AssertionFailedf("unknown flag: %s", d.flagName))
+			// The environment variable is for a flag that does not
+			// exist for the current command (e.g. COCKROACH_HOST for
+			// 'start'). Ignore.
+			continue
 		}
-		var err error
-		if url, ok := f.Value.(urlParser); ok {
-			// URLs are a special case: they can emit a warning if there's
-			// excess configuration for certain commands.
-			// Since the env-var initialization is ran for all commands
-			// all the time, regardless of which particular command is
-			// currently active, we want to silence this warning here.
-			//
-			// TODO(knz): rework this code to only pull env var values
-			// for the current command.
-			err = url.setInternal(d.envValue, false /* warn */)
-		} else {
-			err = d.flagSet.Set(d.flagName, d.envValue)
-		}
-		if err != nil {
+		if err := fl.Set(d.flagName, d.envValue); err != nil {
 			return errors.Wrapf(err, "setting --%s from %s", d.flagName, d.envVar)
 		}
 	}
@@ -917,7 +902,6 @@ type envVarDefault struct {
 	envVar   string
 	envValue string
 	flagName string
-	flagSet  *pflag.FlagSet
 }
 
 // envVarDefaults records the initializations from environment variables
@@ -939,7 +923,6 @@ func registerEnvVarDefault(f *pflag.FlagSet, flagInfo cliflags.FlagInfo) {
 		envVar:   flagInfo.EnvVar,
 		envValue: value,
 		flagName: flagInfo.Name,
-		flagSet:  f,
 	})
 }
 
