@@ -8,24 +8,21 @@
 
   // Table header
   :global(.ant-table-thead) {
-    background-color: $colors--neutral-1;
     @include table-header-text;
+    background-color: $colors--neutral-0;
   }
 
   :global(.ant-table-thead) > tr > th {
-    padding: $spacing-base $spacing-base $spacing-base $spacing-small;
-    color: $colors--neutral-6;
-    background-color: $colors--neutral-1;
+    color: $colors--neutral-7;
+    background-color: $colors--neutral-0;
+    padding: $spacing-smaller $spacing-smaller;
+    height: $line-height--x-large;
     &, span {
       @include table-header-text;
     }
-
-    :global(.ant-table-column-sorter) {
-      vertical-align: baseline;
-    }
     :global{
       .ant-table-header-column .ant-table-column-sorters:hover::before {
-        background-color: $colors--neutral-1;
+        background-color: $colors--neutral-0;
       }
     }
   }
@@ -57,6 +54,7 @@
   // Table row
   :global(.ant-table-row) {
     @include text--body;
+    height: $line-height--xxx-large;
   }
 
   :global(.ant-table-row) .cell--show-on-hover {
