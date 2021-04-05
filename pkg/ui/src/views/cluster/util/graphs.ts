@@ -17,18 +17,19 @@ import moment from "moment";
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
 import {
-  DurationFitScale,
   BytesFitScale,
   ComputeByteScale,
   ComputeDurationScale,
+  DurationFitScale,
 } from "src/util/format";
 
 import {
-  MetricProps,
   AxisProps,
   AxisUnits,
+  MetricProps,
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
+import uPlot from "uplot";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -70,14 +71,14 @@ const Y_AXIS_TICK_COUNT: number = 3;
 const X_AXIS_TICK_COUNT: number = 10;
 
 // A tuple of numbers for the minimum and maximum values of an axis.
-type Extent = [number, number];
+export type Extent = [number, number];
 
 /**
  * AxisDomain is a class that describes the domain of a graph axis; this
  * includes the minimum/maximum extend, tick values, and formatting information
  * for axis values as displayed in various contexts.
  */
-class AxisDomain {
+export class AxisDomain {
   // the values at the ends of the axis.
   extent: Extent;
   // numbers at which an intermediate tick should be displayed on the axis.
@@ -206,7 +207,7 @@ function ComputeCountAxisDomain(extent: Extent): AxisDomain {
   return axisDomain;
 }
 
-function ComputeByteAxisDomain(extent: Extent): AxisDomain {
+export function ComputeByteAxisDomain(extent: Extent): AxisDomain {
   // Compute an appropriate unit for the maximum value to be displayed.
   const scale = ComputeByteScale(extent[1]);
   const prefixFactor = scale.value;
@@ -257,7 +258,7 @@ const timeIncrementDurations = [
   moment.duration(24, "h"),
   moment.duration(1, "week"),
 ];
-const timeIncrements = _.map(timeIncrementDurations, (inc) =>
+const timeIncrements: number[] = _.map(timeIncrementDurations, (inc) =>
   inc.asMilliseconds(),
 );
 
@@ -292,14 +293,12 @@ function ComputeTimeAxisDomain(extent: Extent): AxisDomain {
   };
 
   axisDomain.guideFormat = (num) => {
-    return moment(num)
-      .utc()
-      .format('HH:mm:ss [<span class="legend-subtext">on</span>] MMM Do, YYYY');
+    return moment(num).utc().format("HH:mm:ss on MMM Do, YYYY");
   };
   return axisDomain;
 }
 
-function calculateYAxisDomain(
+export function calculateYAxisDomain(
   axisUnits: AxisUnits,
   data: TSResponse,
 ): AxisDomain {
@@ -330,7 +329,7 @@ function calculateXAxisDomain(timeInfo: QueryTimeInfo): AxisDomain {
   return ComputeTimeAxisDomain(xExtent);
 }
 
-type formattedSeries = {
+export type formattedSeries = {
   values: protos.cockroach.ts.tspb.ITimeSeriesDatapoint[];
   key: string;
   area: boolean;
@@ -526,4 +525,180 @@ function updateLinkedGuideline(
     .attr("x2", (d) => d)
     .attr("y1", () => yExtent[0])
     .attr("y2", () => yExtent[1]);
+}
+
+function calculateYAxisDomainUplot(axisUnits: AxisUnits, yExtent: number[]) {
+  switch (axisUnits) {
+    case AxisUnits.Bytes:
+      return ComputeByteAxisDomain(yExtent);
+    case AxisUnits.Duration:
+      return ComputeDurationAxisDomain(yExtent);
+    case AxisUnits.Percentage:
+      return ComputePercentageAxisDomain(0, 1);
+    default:
+      return ComputeCountAxisDomain(yExtent);
+  }
+}
+
+// configureUPlotLineChart constructs the uplot Options object based on
+// information about the metrics, axis, and data that we'd like to plot.
+// Most of the settings are defined as functions instead of static values
+// in order to take advantage of auto-updating behavior built into uPlot
+// when we send new data to the uPlot object. This will ensure that all
+// axis labeling and extent settings get updated properly.
+export function configureUPlotLineChart(
+  metrics: React.ReactElement<MetricProps>[],
+  axis: React.ReactElement<AxisProps>,
+  data: TSResponse,
+  timeInfo: QueryTimeInfo,
+  setTimeRange: (startMillis: number, endMillis: number) => void,
+): uPlot.Options {
+  const formattedRaw = formatMetricData(metrics, data);
+  const xAxisDomain = calculateXAxisDomain(timeInfo);
+  const yAxisDomain = calculateYAxisDomain(axis.props.units, data);
+  // Copy palette over since we mutate it in the `series` function
+  // below to cycle through the colors. This ensures that we always
+  // start from the same color for each graph so a single-series
+  // graph will always have the first color, etc.
+  const strokeColors = [...seriesPalette];
+
+  // Please see https://github.com/leeoniya/uPlot/tree/master/docs for
+  // information on how to construct this object.
+  return {
+    width: 947,
+    height: 300,
+    legend: {
+      show: true,
+      // This setting sets the default legend behavior to isolate
+      // a series when it's clicked in the legend.
+      isolate: true,
+    },
+    // By default, uPlot expects unix seconds in the x axis.
+    // This setting defaults it to milliseconds which our
+    // internal functions already supported.
+    ms: 1,
+    // These settings govern how the individual series are
+    // drawn and how their values are displayed in the legend.
+    series: [
+      {
+        value: (self, rawValue) => xAxisDomain.guideFormat(rawValue),
+      },
+      // Generate a series object for reach of our results
+      // picking colors from our palette.
+      ...formattedRaw.map((result) => {
+        const color = strokeColors.shift();
+        strokeColors.push(color);
+        return {
+          show: true,
+          scale: "yAxis",
+          width: 1,
+          label: result.key,
+          stroke: color,
+          // Adds transparency to the fill color
+          fill: color + "10",
+          // value determines how these values show up in the legend
+          value: (self, rawValue) => yAxisDomain.guideFormat(rawValue),
+        };
+      }),
+    ],
+    axes: [
+      {
+        values: (u, vals, space) => vals.map(xAxisDomain.tickFormat),
+        splits: (u, idx, min, max) => {
+          // This is extracted from `calculateXAxisDomain` up above
+          return ComputeTimeAxisDomain([min, max]).ticks;
+        },
+      },
+      {
+        // In the case of Percentage and Count units, we display a label
+        // like: `CPU usage (Percentage)`
+        // In the case of Bytes or Duration, we omit the units in the label
+        // because it can change as data in the graph changes. In the `values`
+        // calculation below, we show the units next to the tick values instead
+        //
+        // TODO(davidh): If the label here could be changed dynamically based
+        // on data, we wouldn't need this odd workaround because the unit in
+        // parentheses in the label could adjust as the scale adjusted. Using a
+        // function for the label appears to be unsupported at the moment.
+        label:
+          axis.props.label +
+          (yAxisDomain.label &&
+          (axis.props.units === AxisUnits.Percentage ||
+            axis.props.units === AxisUnits.Count)
+            ? ` (${yAxisDomain.label})`
+            : ""),
+        values: (u, vals, space) => {
+          const domain = calculateYAxisDomainUplot(axis.props.units, [
+            Math.min(...vals),
+            Math.max(...vals),
+          ]);
+          if (
+            axis.props.units === AxisUnits.Percentage ||
+            axis.props.units === AxisUnits.Count
+          ) {
+            return vals.map(domain.tickFormat);
+          } else {
+            return vals.map((v) => `${domain.tickFormat(v)} (${domain.label})`);
+          }
+        },
+        splits: (u, something, min, max) => {
+          const domain = calculateYAxisDomainUplot(axis.props.units, [
+            min,
+            max,
+          ]);
+          return [domain.extent[0], ...domain.ticks, domain.extent[1]];
+        },
+        // size is set to give the tick labels some extra room since we
+        // squeeze in a unit with it for bytes and times:
+        // ex: 4.2 (MiB), 34 (ms)
+        size: 70,
+        scale: "yAxis",
+      },
+    ],
+    scales: {
+      x: {
+        range: (self, initMin, initMax) => {
+          if (initMin === null) {
+            return xAxisDomain.extent;
+          } else {
+            return [initMin, initMax];
+          }
+        },
+      },
+      yAxis: {
+        // Manually setting the range in here is necessary since we're
+        // setting the `splits` manually above as well. For instance,
+        // since we insist on a [0,1] range and splits at 25% intervals
+        // for percentage scales, we need to ensure the full range from
+        // 0% to 100% is displayed.
+        range: (u, min, max) => {
+          // The Math operations here seem a bit silly and maybe there's a better
+          // way to do this but in cases where the data is completely empty
+          // we need to set a domain and previously we defaulted to [0,1] by
+          // manually ensuring the dataset contained those values when computing
+          // extents.
+          const domain = calculateYAxisDomainUplot(axis.props.units, [
+            Math.min(min, 0),
+            Math.max(max, 1),
+          ]);
+          return domain.extent;
+        },
+      },
+    },
+    hooks: {
+      // setSelect is a hook that fires when a selection is made on the graph
+      // by dragging a range to zoom.
+      setSelect: [
+        (self) => {
+          // From what I understand, `self.select` contains the pixel edges
+          // of the user's selection. Then I use the `posToIdx` to tell me
+          // what the xAxis range is of the pixels.
+          setTimeRange(
+            self.data[0][self.posToIdx(self.select.left)],
+            self.data[0][self.posToIdx(self.select.left + self.select.width)],
+          );
+        },
+      ],
+    },
+  };
 }

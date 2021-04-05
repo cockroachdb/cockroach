@@ -13610,6 +13610,11 @@ upath@^1.0.0:
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/upath/-/upath-1.1.0.tgz#35256597e46a581db4793d0ce47fa9aebfc9fabd"
 
+uplot@^1.6.8:
+  version "1.6.8"
+  resolved "https://registry.yarnpkg.com/uplot/-/uplot-1.6.8.tgz#0a7920018de24fa9aa0ba78ab59c99b4a23f8322"
+  integrity sha512-Hqg7iv/3fJlD9nockD7heaUj28RhrIwzugXglnoX//W27wgRAJIJMV2VFMZ5oRVM0RIchByAle1ylf/GdnXgjA==
+
 upper-case@^1.1.1:
   version "1.1.3"
   resolved "https://registry.yarnpkg.com/upper-case/-/upper-case-1.1.3.tgz#f6b4501c2ec4cdd26ba78be7222961de77621598"
