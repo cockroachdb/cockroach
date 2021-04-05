@@ -1126,3 +1126,32 @@ ALTER PARTITION p3 OF INDEX test.public.t@i2 CONFIGURE ZONE USING
   gc.ttlseconds = 15411;
 ALTER PARTITION p4 OF INDEX test.public.t@i2 CONFIGURE ZONE USING
   gc.ttlseconds = 15418
+
+# Test that the global_reads attribute can be set with an enterprise license.
+# This same test fails in pkg/sql/logictest/testdata/logic_test/zone_config.
+statement ok
+CREATE TABLE global (id INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE global CONFIGURE ZONE USING global_reads = true
+
+# This should reflect in the metrics.
+query T
+SELECT feature_name FROM crdb_internal.feature_usage
+WHERE feature_name IN (
+  'sql.schema.zone_config.table.global_reads'
+) AND usage_count > 0 ORDER BY feature_name
+----
+sql.schema.zone_config.table.global_reads
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE global
+----
+TABLE global  ALTER TABLE global CONFIGURE ZONE USING
+              range_min_bytes = 134217728,
+              range_max_bytes = 536870912,
+              gc.ttlseconds = 90000,
+              global_reads = true,
+              num_replicas = 7,
+              constraints = '[]',
+              lease_preferences = '[]'
