@@ -195,17 +195,6 @@ func (n *scanNode) disableBatchLimit() {
 	n.softLimit = 0
 }
 
-func (n *scanNode) limitHint() int64 {
-	var limitHint int64
-	if n.hardLimit != 0 {
-		limitHint = n.hardLimit
-	} else {
-		// Read a multiple of the limit when the limit is "soft" to avoid needing a second batch.
-		limitHint = n.softLimit * 2
-	}
-	return limitHint
-}
-
 // Initializes a scanNode with a table descriptor.
 func (n *scanNode) initTable(
 	ctx context.Context,
