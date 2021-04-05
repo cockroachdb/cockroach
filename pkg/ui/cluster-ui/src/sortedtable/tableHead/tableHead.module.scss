@@ -2,11 +2,8 @@
 @import '../table.module.scss';
 
 @mixin table-header-text {
-  @include text--heading-6;
-  color: $colors--neutral-6;
-  font-weight: 600;
-  font-family: $font-family--semi-bold;
-  letter-spacing: 1.5px;
+  @include text--body-strong;
+  color: $colors--neutral-7;
 }
 
 .head-wrapper {
@@ -18,9 +15,7 @@
   }
   &__row--header {
     border-bottom: 1px solid $colors--neutral-3;
-    height: $line-height--large;
-    padding: $spacing-medium-small;
-    background-color: $colors--neutral-1;
+    height: $line-height--x-large;
     // Display the sort direction arrow in header cells.
     .sorted__cell {
       padding: $spacing-base $spacing-base $spacing-base $spacing-small;

@@ -48,17 +48,14 @@
   }
 
   &__row--header {
-    background-color: $background-color;
+    background-color: $colors--neutral-0;
     border-bottom: 1px solid $table-border;
     .sort-table__cell {
+      @include text--body-strong;
       position: relative;
-      font-family: SourceSansPro-SemiBold;
-      font-size: 12px;
-      font-weight: 600;
-      line-height: 1.17;
-      letter-spacing: 1.5px;
-      color: $placeholder;
+      color: $colors--neutral-7;
       cursor: pointer;
+      height: $line-height--x-large;
 
       .sortable__actions {
         position: relative;
@@ -106,7 +103,7 @@
 .cl-table-wrapper {
   padding: 9.55px 20px 17px;
   background-color: $colors--white;
-  width: fit-content;
+  width: 100%;
 }
 
 .table__no-results {
