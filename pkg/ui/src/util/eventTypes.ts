@@ -24,6 +24,8 @@ export const DROP_DATABASE = "drop_database";
 export const RENAME_DATABASE = "rename_database";
 // Recorded when a database's owner is changed.
 export const ALTER_DATABASE_OWNER = "alter_database_owner";
+// Recorded when a region is added to a database.
+export const ALTER_DATABASE_ADD_REGION = "alter_database_add_region";
 // Recorded when a table is created.
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
