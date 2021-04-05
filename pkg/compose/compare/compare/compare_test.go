@@ -27,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/jackc/pgx/v4"
 )
 
 var (
@@ -45,6 +47,9 @@ func TestCompare(t *testing.T) {
 			init: []string{
 				"drop schema if exists public cascade",
 				"create schema public",
+				"CREATE EXTENSION IF NOT EXISTS postgis",
+				"CREATE EXTENSION IF NOT EXISTS postgis_topology",
+				"CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;",
 			},
 		},
 		"cockroach1": {
@@ -64,9 +69,10 @@ func TestCompare(t *testing.T) {
 	}
 	configs := map[string]testConfig{
 		"postgres": {
-			setup:         sqlsmith.Setups["rand-tables"],
-			setupMutators: []rowenc.Mutator{mutations.PostgresCreateTableMutator},
-			opts:          []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
+			setup:           sqlsmith.Setups["rand-tables"],
+			setupMutators:   []rowenc.Mutator{mutations.PostgresCreateTableMutator},
+			opts:            []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
+			ignoreSQLErrors: true,
 			conns: []testConn{
 				{
 					name:     "cockroach1",
@@ -79,8 +85,9 @@ func TestCompare(t *testing.T) {
 			},
 		},
 		"mutators": {
-			setup: sqlsmith.Setups["rand-tables"],
-			opts:  []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
+			setup:           sqlsmith.Setups["rand-tables"],
+			opts:            []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
+			ignoreSQLErrors: true,
 			conns: []testConn{
 				{
 					name:     "cockroach1",
@@ -102,14 +109,28 @@ func TestCompare(t *testing.T) {
 	}
 
 	ctx := context.Background()
+
+	// docker-compose requires us to manually check for when a container
+	// is ready to receive connections.
+	// See https://docs.docker.com/compose/startup-order/
+	for name, uri := range uris {
+		t.Logf("Checking connection to: %s", name)
+		testutils.SucceedsSoon(t, func() error {
+			_, err := pgx.Connect(ctx, uri.addr)
+			return err
+		})
+	}
+
 	for confName, config := range configs {
 		t.Run(confName, func(t *testing.T) {
+			t.Logf("starting test: %s", confName)
 			rng, _ := randutil.NewPseudoRand()
 			setup := config.setup(rng)
 			setup, _ = mutations.ApplyString(rng, setup, config.setupMutators...)
 
 			conns := map[string]cmpconn.Conn{}
 			for _, testCn := range config.conns {
+				t.Logf("initializing connection: %s", testCn.name)
 				uri, ok := uris[testCn.name]
 				if !ok {
 					t.Fatalf("bad connection name: %s", testCn.name)
@@ -140,13 +161,13 @@ func TestCompare(t *testing.T) {
 			for {
 				select {
 				case <-until:
+					t.Logf("done with test: %s", confName)
 					return
 				default:
 				}
 				query := smither.Generate()
-				query, _ = mutations.ApplyString(rng, query, mutations.PostgresMutator)
 				if err := cmpconn.CompareConns(
-					ctx, time.Second*30, conns, "" /* prep */, query, true, /* ignoreSQLErrors */
+					ctx, time.Second*30, conns, "" /* prep */, query, config.ignoreSQLErrors,
 				); err != nil {
 					path := filepath.Join(*flagArtifacts, confName+".log")
 					if err := ioutil.WriteFile(path, []byte(err.Error()), 0666); err != nil {
@@ -168,10 +189,11 @@ func TestCompare(t *testing.T) {
 }
 
 type testConfig struct {
-	opts          []sqlsmith.SmitherOption
-	conns         []testConn
-	setup         sqlsmith.Setup
-	setupMutators []rowenc.Mutator
+	opts            []sqlsmith.SmitherOption
+	conns           []testConn
+	setup           sqlsmith.Setup
+	setupMutators   []rowenc.Mutator
+	ignoreSQLErrors bool
 }
 
 type testConn struct {
