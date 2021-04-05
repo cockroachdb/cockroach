@@ -2886,11 +2886,10 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		// The RowContainer used internally by the memBuffer seems to request from
-		// the budget in 10240 chunks. Set this number high enough for one but not
-		// for a second. I'd love to be able to derive this from constants, but I
-		// don't see how to do that without a refactor.
-		knobs.MemBufferCapacity = 20000
+		// The buffer internally will happily buffer and block unless a single
+		// row exceeds the capacity.
+		const memBufferCapacity = 20000
+		knobs.MemBufferCapacity = memBufferCapacity
 		beforeEmitRowCh := make(chan struct{}, 1)
 		knobs.BeforeEmitRow = func(ctx context.Context) error {
 			select {
@@ -2916,14 +2915,35 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 		})
 
 		// Put enough data in to overflow the buffer and verify that at some point
-		// we get the "memory budget exceeded" error.
-		sqlDB.Exec(t, `INSERT INTO foo SELECT i, 'foofoofoo' FROM generate_series(1, $1) AS g(i)`, 1000)
+		// we get the "memory budget exceeded" error. If we didn't block then
+		// we'd see this flake sometimes.
+		const N = 1000
+		sqlDB.Exec(t, `INSERT INTO foo SELECT i, 'foofoofoo' FROM generate_series(1, $1) AS g(i)`, N)
+
+		// For the enterprise feed we can have problems deadlocking with the
+		// testing knob as the enterprise feed does not emit one row at a time.
+		failed := make(chan struct{})
+		defer close(failed)
+		go func() {
+			for i := 0; i < N; i++ {
+				select {
+				case beforeEmitRowCh <- struct{}{}:
+				case <-failed:
+					// in case the test failed
+				}
+			}
+		}()
+		for i := 0; i < N; i++ {
+			_, err := foo.Next()
+			require.NoError(t, err)
+		}
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (-1, $1)`, strings.Repeat("a", memBufferCapacity))
+		beforeEmitRowCh <- struct{}{}
 		if _, err := foo.Next(); !testutils.IsError(err, `memory budget exceeded`) {
 			t.Fatalf(`expected "memory budget exceeded" error got: %v`, err)
 		}
 	}
 
-	// The mem buffer is only used with RangeFeed.
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
