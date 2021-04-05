@@ -144,6 +144,8 @@ export function getEventDescription(e: Event$Properties): string {
       return `Add Region: User ${info.User} added region ${info.RegionName} to database ${info.DatabaseName}`;
     case eventTypes.ALTER_DATABASE_PRIMARY_REGION:
       return `Primary Region Changed: User ${info.User} changed primary region of database ${info.DatabaseName} to ${info.PrimaryRegionName}`;
+    case eventTypes.ALTER_DATABASE_SURVIVAL_GOAL:
+      return `Survival Goal Changed: User ${info.User} changed survival goal of database ${info.DatabaseName} to ${info.SurvivalGoal}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(
         info,
@@ -194,6 +196,7 @@ export interface EventInfo {
   Status?: string;
   RegionName?: string;
   PrimaryRegionName?: string;
+  SurvivalGoal?: string;
 }
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {
