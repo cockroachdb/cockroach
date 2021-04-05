@@ -213,6 +213,7 @@ var sshAuthArgsOnce sync.Once
 func sshAuthArgs() []string {
 	sshAuthArgsOnce.Do(func() {
 		paths := []string{
+			filepath.Join(config.OSUser.HomeDir, ".ssh", "id_ed25519"),
 			filepath.Join(config.OSUser.HomeDir, ".ssh", "id_rsa"),
 			filepath.Join(config.OSUser.HomeDir, ".ssh", "google_compute_engine"),
 		}
