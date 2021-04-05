@@ -513,7 +513,7 @@ func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
 	h.hash = hash
 }
 
-func (h *hasher) HashStatementType(val tree.StatementType) {
+func (h *hasher) HashStatementReturnType(val tree.StatementReturnType) {
 	h.HashUint64(uint64(val))
 }
 
@@ -919,7 +919,7 @@ func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {
 	return l == r
 }
 
-func (h *hasher) IsStatementTypeEqual(l, r tree.StatementType) bool {
+func (h *hasher) IsStatementReturnTypeEqual(l, r tree.StatementReturnType) bool {
 	return l == r
 }
 
