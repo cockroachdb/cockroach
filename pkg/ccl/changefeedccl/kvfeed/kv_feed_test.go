@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -91,17 +92,17 @@ func TestKVFeed(t *testing.T) {
 	}
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
-		buf := MakeChanBuffer()
+		buf := kvevent.MakeChanBuffer()
 		mm := mon.NewUnlimitedMonitor(
 			context.Background(), "test", mon.MemoryResource,
 			nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 		)
-		metrics := MakeMetrics(time.Minute)
-		bufferFactory := func() EventBuffer {
-			return makeMemBuffer(mm.MakeBoundAccount(), &metrics)
+		metrics := kvevent.MakeMetrics(time.Minute)
+		bufferFactory := func() kvevent.Buffer {
+			return kvevent.NewMemBuffer(mm.MakeBoundAccount(), &metrics)
 		}
 		scans := make(chan physicalConfig)
-		sf := scannerFunc(func(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error {
+		sf := scannerFunc(func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
 			select {
 			case scans <- cfg:
 				return nil
@@ -256,9 +257,9 @@ func TestKVFeed(t *testing.T) {
 	}
 }
 
-type scannerFunc func(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error
+type scannerFunc func(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error
 
-func (s scannerFunc) Scan(ctx context.Context, sink EventBufferWriter, cfg physicalConfig) error {
+func (s scannerFunc) Scan(ctx context.Context, sink kvevent.Writer, cfg physicalConfig) error {
 	return s(ctx, sink, cfg)
 }
 
