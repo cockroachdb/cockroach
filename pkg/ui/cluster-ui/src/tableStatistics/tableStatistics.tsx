@@ -5,8 +5,15 @@ import { statisticsClasses } from "../transactionsPage/transactionsPageClasses";
 import { ISortedTablePagination } from "../sortedtable";
 import { Button } from "src/button";
 import { ResultsPerPageLabel } from "src/pagination";
+import { Tooltip } from "../tooltip";
+import statementStyles from "src/statementDetails/statementDetails.module.scss";
+import tableStatsStyles from "./tableStatistics.module.scss";
+import classNames from "classnames/bind";
+import { Icon } from "@cockroachlabs/ui-components";
 
 const { statistic, countTitle, lastCleared } = statisticsClasses;
+const cxStmt = classNames.bind(statementStyles);
+const cxStats = classNames.bind(tableStatsStyles);
 
 interface TableStatistics {
   pagination: ISortedTablePagination;
@@ -16,7 +23,11 @@ interface TableStatistics {
   activeFilters: number;
   search?: string;
   onClearFilters?: () => void;
+  resetSQLStats: () => void;
 }
+
+const toolTipText = `Statement history is cleared once an hour by default, which can be configured with the cluster setting
+ diagnostics.reporting.interval. Clicking ‘Clear SQL stats’ will reset SQL stats on the statements and transactions pages.`;
 
 const renderLastCleared = (lastReset: string | Date) => {
   return `Last cleared ${moment.utc(lastReset).format(DATE_FORMAT)}`;
@@ -30,6 +41,7 @@ export const TableStatistics: React.FC<TableStatistics> = ({
   arrayItemName,
   onClearFilters,
   activeFilters,
+  resetSQLStats,
 }) => {
   const resultsPerPageLabel = (
     <ResultsPerPageLabel
@@ -54,7 +66,18 @@ export const TableStatistics: React.FC<TableStatistics> = ({
       <h4 className={countTitle}>
         {activeFilters ? resultsCountAndClear : resultsPerPageLabel}
       </h4>
-      <h4 className={lastCleared}>{renderLastCleared(lastReset)}</h4>
+      <div className={cxStats("flex-display")}>
+        <Tooltip text={toolTipText}>
+          <div className={cxStats("tooltip-hover-area")}>
+            <Icon iconName={"InfoCircle"} />
+          </div>
+        </Tooltip>
+        <div className={lastCleared}>
+          {renderLastCleared(lastReset)}
+          {"  "}-{"  "}
+          <a onClick={resetSQLStats}>Clear SQL Stats</a>
+        </div>
+      </div>
     </div>
   );
 };
