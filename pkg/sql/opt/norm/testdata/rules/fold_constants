@@ -814,6 +814,97 @@ values
  └── ('2017-05-10 00:00:00+00:00',)
 
 # --------------------------------------------------
+# FoldFunctionWithNullArgs
+# --------------------------------------------------
+
+norm expect=FoldFunctionWithNullArg
+SELECT lpad(NULL::STRING, i) FROM a
+----
+project
+ ├── columns: lpad:8
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── CAST(NULL AS STRING) [as=lpad:8]
+
+norm expect=FoldFunctionWithNullArg
+SELECT lpad(s, NULL::INT) FROM a
+----
+project
+ ├── columns: lpad:8
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── CAST(NULL AS STRING) [as=lpad:8]
+
+# Fold a stable function.
+norm expect=FoldFunctionWithNullArg
+SELECT date_trunc(s, NULL::TIMESTAMPTZ) FROM a
+----
+project
+ ├── columns: date_trunc:8
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── CAST(NULL AS TIMESTAMPTZ) [as=date_trunc:8]
+
+# Fold a volatile function.
+norm expect=FoldFunctionWithNullArg
+SELECT nextval(NULL::STRING) FROM a
+----
+project
+ ├── columns: nextval:8
+ ├── fd: ()-->(8)
+ ├── scan a
+ └── projections
+      └── CAST(NULL AS INT8) [as=nextval:8]
+
+# Do not fold an aggregate function.
+norm expect-not=FoldFunctionWithNullArg
+SELECT string_agg(s, NULL::STRING) FROM a
+----
+scalar-group-by
+ ├── columns: string_agg:9
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(9)
+ ├── project
+ │    ├── columns: column8:8 s:4
+ │    ├── fd: ()-->(8)
+ │    ├── scan a
+ │    │    └── columns: s:4
+ │    └── projections
+ │         └── CAST(NULL AS STRING) [as=column8:8]
+ └── aggregations
+      └── string-agg [as=string_agg:9, outer=(4,8)]
+           ├── s:4
+           └── column8:8
+
+# Do not fold a function that allows null arguments.
+norm expect-not=FoldFunctionWithNullArg
+SELECT concat(s, NULL::STRING) FROM a
+----
+project
+ ├── columns: concat:8
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── concat(s:4, CAST(NULL AS STRING)) [as=concat:8, outer=(4), immutable]
+
+# Do not fold a function without a Null argument.
+norm expect-not=FoldFunctionWithNullArg
+SELECT lpad(s, 5) FROM a
+----
+project
+ ├── columns: lpad:8
+ ├── immutable
+ ├── scan a
+ │    └── columns: s:4
+ └── projections
+      └── lpad(s:4, 5) [as=lpad:8, outer=(4), immutable]
+
+# --------------------------------------------------
 # FoldFunction
 # --------------------------------------------------
 norm expect=FoldFunction
