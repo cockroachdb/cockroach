@@ -845,13 +845,38 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 		return nil
 	}
 
+	var ids []descpb.ID
+	if err := p.forEachTableInMultiRegionDatabase(
+		ctx,
+		dbDesc,
+		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+			ids = append(ids, tbDesc.GetID())
+			return nil
+		},
+	); err != nil {
+		return err
+	}
+	ids = append(ids, dbDesc.GetID())
+
+	zoneConfigs, err := getZoneConfigRawBatch(
+		ctx,
+		p.txn,
+		p.ExecCfg().Codec,
+		ids,
+	)
+	if err != nil {
+		return err
+	}
+
 	if err := p.validateZoneConfigForMultiRegionDatabase(
 		ctx,
 		dbDesc,
+		zoneConfigs[dbDesc.GetID()],
 		&validateZoneConfigForMultiRegionErrorHandlerValidation{},
 	); err != nil {
 		return err
 	}
+
 	return p.forEachTableInMultiRegionDatabase(
 		ctx,
 		dbDesc,
@@ -860,6 +885,7 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 				ctx,
 				dbDesc,
 				tbDesc,
+				zoneConfigs[tbDesc.GetID()],
 				&validateZoneConfigForMultiRegionErrorHandlerValidation{},
 			)
 		},
@@ -1125,6 +1151,8 @@ type validateZoneConfigForMultiRegionErrorHandler interface {
 // interface validateZoneConfigForMultiRegionErrorHandler.
 type validateZoneConfigForMultiRegionErrorHandlerModifiedByUser struct{}
 
+var _ validateZoneConfigForMultiRegionErrorHandler = (*validateZoneConfigForMultiRegionErrorHandlerModifiedByUser)(nil)
+
 func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newMismatchFieldError(
 	descType string, descName string, field string,
 ) error {
@@ -1181,6 +1209,8 @@ func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newExtraSub
 // interface validateZoneConfigForMultiRegionErrorHandler.
 type validateZoneConfigForMultiRegionErrorHandlerValidation struct{}
 
+var _ validateZoneConfigForMultiRegionErrorHandler = (*validateZoneConfigForMultiRegionErrorHandlerValidation)(nil)
+
 func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newMismatchFieldError(
 	descType string, descName string, field string,
 ) error {
@@ -1227,9 +1257,14 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 	if p.SessionData().OverrideMultiRegionZoneConfigEnabled {
 		return nil
 	}
+	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, dbDesc.ID)
+	if err != nil {
+		return err
+	}
 	return p.validateZoneConfigForMultiRegionDatabase(
 		ctx,
 		dbDesc,
+		currentZoneConfig,
 		&validateZoneConfigForMultiRegionErrorHandlerModifiedByUser{},
 	)
 }
@@ -1239,18 +1274,17 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 func (p *planner) validateZoneConfigForMultiRegionDatabase(
 	ctx context.Context,
 	dbDesc *dbdesc.Immutable,
+	currentZoneConfig *zonepb.ZoneConfig,
 	validateZoneConfigForMultiRegionErrorHandler validateZoneConfigForMultiRegionErrorHandler,
 ) error {
+	if currentZoneConfig == nil {
+		currentZoneConfig = zonepb.NewZoneConfig()
+	}
 	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.ID, p.Descriptors())
 	if err != nil {
 		return err
 	}
 	expectedZoneConfig, err := zoneConfigForMultiRegionDatabase(regionConfig)
-	if err != nil {
-		return err
-	}
-
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, dbDesc.ID)
 	if err != nil {
 		return err
 	}
@@ -1291,11 +1325,16 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	if p.SessionData().OverrideMultiRegionZoneConfigEnabled || desc.GetLocalityConfig() == nil {
 		return nil
 	}
+	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
+	if err != nil {
+		return err
+	}
 
 	return p.validateZoneConfigForMultiRegionTable(
 		ctx,
 		dbDesc,
 		desc,
+		currentZoneConfig,
 		&validateZoneConfigForMultiRegionErrorHandlerModifiedByUser{},
 	)
 }
@@ -1306,12 +1345,9 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	dbDesc *dbdesc.Immutable,
 	desc catalog.TableDescriptor,
+	currentZoneConfig *zonepb.ZoneConfig,
 	validateZoneConfigForMultiRegionErrorHandler validateZoneConfigForMultiRegionErrorHandler,
 ) error {
-	currentZoneConfig, err := getZoneConfigRaw(ctx, p.txn, p.ExecCfg().Codec, desc.GetID())
-	if err != nil {
-		return err
-	}
 	if currentZoneConfig == nil {
 		currentZoneConfig = zonepb.NewZoneConfig()
 	}
