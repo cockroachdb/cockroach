@@ -31,7 +31,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/storage/enginepb",
         "//pkg/util/ctxgroup",
-        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",
