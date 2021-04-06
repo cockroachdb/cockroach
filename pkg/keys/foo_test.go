@@ -187,3 +187,26 @@ func TestBar(t *testing.T) {
 
 	*/
 }
+
+func TestDecodeHardState(t *testing.T) {
+	n1withAppending5171 := "120408001000180020002800320cc17f6e520308091002189f28"
+
+	n2withAppending5171 := "120408001000180020002800320cc17f6e520308091002189f28" // same actually
+
+	n1withAppending5252 := "120408001000180020002800320c1f4e955e0308091002188429"
+
+	do := func(t *testing.T, name, hexS string) {
+		b, err := hex.DecodeString(strings.TrimSpace(hexS))
+		require.NoError(t, err)
+		var meta enginepb.MVCCMetadata
+		require.NoError(t, meta.Unmarshal(b))
+		v := roachpb.Value{RawBytes: meta.RawBytes}
+		hs := &raftpb.HardState{}
+		require.NoError(t, v.GetProto(hs))
+		t.Logf("term=%d commit=%d vote=%d", hs.Term, hs.Commit, hs.Vote)
+	}
+
+	do(t, "n1-with-5171", n1withAppending5171)
+	do(t, "n2-with-5171", n2withAppending5171)
+	do(t, "n1-with-5252", n1withAppending5252)
+}
