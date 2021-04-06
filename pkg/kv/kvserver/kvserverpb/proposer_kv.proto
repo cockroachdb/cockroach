@@ -127,7 +127,9 @@ message ReplicatedEvalResult {
   bool is_lease_request = 6;
   // The timestamp at which this command is writing. Used to verify the validity
   // of the command against the GC threshold and to update the followers'
-  // clocks.
+  // clocks. If the request that produced this command is not an IntentWrite
+  // one, then the request's write timestamp is meaningless; for such request's,
+  // this field is simply a clock reading from the proposer.
   util.hlc.Timestamp write_timestamp = 8 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.

@@ -808,7 +808,15 @@ func (r *Replica) evaluateProposal(
 		// Set the proposal's replicated result, which contains metadata and
 		// side-effects that are to be replicated to all replicas.
 		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
-		res.Replicated.WriteTimestamp = ba.WriteTimestamp()
+		if ba.IsIntentWrite() {
+			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
+		} else {
+			// For misc requests, use WriteTimestamp to propagate a clock signal. This
+			// is particularly important for lease transfers, as it assures that the
+			// follower getting the lease will have a clock above the start time of
+			// its lease.
+			res.Replicated.WriteTimestamp = r.store.Clock().Now()
+		}
 		res.Replicated.Delta = ms.ToStatsDelta()
 
 		// This is the result of a migration. See the field for more details.
