@@ -1368,7 +1368,14 @@ CREATE TABLE information_schema.statistics (
 						col := index.GetColumnName(i)
 						// We add a row for each column of index.
 						dir := dStringForIndexDirection(index.GetColumnDirection(i))
-						if err := appendRow(index.IndexDesc(), col, sequence, dir, false, false); err != nil {
+						if err := appendRow(
+							index.IndexDesc(),
+							col,
+							sequence,
+							dir,
+							false,
+							i < index.ExplicitColumnStartIdx(),
+						); err != nil {
 							return err
 						}
 						sequence++

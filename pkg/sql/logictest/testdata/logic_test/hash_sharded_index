@@ -58,6 +58,13 @@ ORDER BY 1, 2, 3
 tablename        indexname  indexdef
 sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC)
 
+query TTB
+SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM sharded_primary]
+ORDER BY index_name, seq_in_index
+----
+primary  crdb_internal_a_shard_10  true
+primary  a                         false
+
 query TTB colnames
 SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
 WHERE descriptor_name = 'sharded_primary' AND column_type = 'key'
