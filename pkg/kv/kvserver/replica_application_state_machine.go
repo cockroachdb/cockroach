@@ -460,10 +460,13 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		// we can only assert on the leaseholder, as only that replica has
 		// cmd.proposal.Request filled in.
 		if cmd.IsLocal() && cmd.proposal.Request.IsIntentWrite() {
-			wts := cmd.proposal.Request.WriteTimestamp()
-			if wts.LessEq(b.state.RaftClosedTimestamp) {
-				return nil, makeNonDeterministicFailure("writing at %s below closed ts: %s (%s)",
-					wts, b.state.RaftClosedTimestamp.String(), cmd.proposal.Request.String())
+			wts := cmd.raftCmd.ReplicatedEvalResult.WriteTimestamp
+			if !wts.IsEmpty() && wts.LessEq(b.state.RaftClosedTimestamp) {
+				wts := wts // Shadow variable that escapes to the heap.
+				return nil, wrapWithNonDeterministicFailure(
+					errors.AssertionFailedf("writing at %s below closed ts: %s (%s)",
+						wts, b.state.RaftClosedTimestamp.String(), cmd.proposal.Request),
+					"attempting to write below closed timestamp")
 			}
 		}
 		log.Event(ctx, "applying command")
