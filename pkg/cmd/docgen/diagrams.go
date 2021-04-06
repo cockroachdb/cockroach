@@ -375,6 +375,12 @@ var specs = []stmtSpec{
 		unlink: []string{"name", "password"},
 	},
 	{
+		name:    "alter_schema",
+		stmt:    "alter_schema_stmt",
+		inline:  []string{"qualifiable_schema_name"},
+		nosplit: true,
+	},
+	{
 		name:    "alter_sequence_options_stmt",
 		inline:  []string{"sequence_option_list", "sequence_option_elem"},
 		replace: map[string]string{"relation_expr": "sequence_name", "signed_iconst64": "integer", "column_path": "column_name"},
@@ -620,6 +626,11 @@ var specs = []stmtSpec{
 			"targets":                           "( | ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )"},
 	},
 	{
+		name:    "create_schema_stmt",
+		inline: []string{"qualifiable_schema_name", "opt_schema_name", "opt_name"},
+		nosplit: true,
+	},
+	{
 		name:    "create_sequence_stmt",
 		inline:  []string{"opt_sequence_option_list", "sequence_option_list", "sequence_option_elem"},
 		replace: map[string]string{"signed_iconst64": "integer", "any_name": "sequence_name", "column_path": "column_name"},
@@ -735,6 +746,12 @@ var specs = []stmtSpec{
 		name:   "drop_sequence_stmt",
 		inline: []string{"table_name_list", "opt_drop_behavior"},
 		unlink: []string{"sequence_name"},
+	},
+	{
+		name:   "drop_schema",
+		stmt:   "drop_schema_stmt",
+		inline: []string{"opt_drop_behavior", "qualifiable_schema_name"},
+		nosplit: true,
 	},
 	{
 		name:   "drop_stmt",
