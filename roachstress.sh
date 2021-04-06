@@ -17,5 +17,5 @@ if [ ! -f cockroach.$sha ]; then
 fi
 
 TEST=hotspotsplits/nodes=4
-time caffeinate -- ./roachtest.$sha run "${TEST}" --port 8080 --debug --count 800 --parallelism 6 --cpu-quota 800 --roachprod roachprod.${sha} --workload workload.${sha} --cockroach ./cockroach.$sha --artifacts artifacts.$sha
+time caffeinate -- ./roachtest.$sha run "${TEST}" --port 8081 --debug --count 800 --parallelism 6 --cpu-quota 800 --roachprod roachprod.${sha} --workload workload.${sha} --cockroach ./cockroach.$sha --artifacts artifacts.$sha
 

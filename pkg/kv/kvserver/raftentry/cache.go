@@ -144,6 +144,9 @@ func (c *Cache) Drop(id roachpb.RangeID) {
 // provided. ents is expected to consist of entries with a contiguous sequence
 // of indices.
 func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
+	if true {
+		return // HACK: disable raft entry cache
+	}
 	if len(ents) == 0 {
 		return
 	}
