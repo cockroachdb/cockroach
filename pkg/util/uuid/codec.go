@@ -140,7 +140,7 @@ func (u *UUID) decodeCanonical(t []byte) error {
 	return nil
 }
 
-// decodeCanonical decodes UUID strings that are formatted as defined in RFC-4122 (section 3):
+// decodeGroupOfFour decodes UUID strings that are formatted as following:
 // "6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8".
 func (u *UUID) decodeGroupOfFour(t []byte) error {
 	if t[4] != '-' || t[9] != '-' || t[14] != '-' || t[19] != '-' || t[24] != '-' || t[29] != '-' || t[34] != '-' {
