@@ -1047,6 +1047,7 @@ unreserved_keyword ::=
 	| 'SETTINGS'
 	| 'STATUS'
 	| 'SAVEPOINT'
+	| 'SCANS'
 	| 'SCATTER'
 	| 'SCHEMA'
 	| 'SCHEMAS'

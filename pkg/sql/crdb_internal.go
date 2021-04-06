@@ -872,7 +872,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   max_disk_usage_var  FLOAT,
   contention_time_avg FLOAT,
   contention_time_var FLOAT,
-  implicit_txn        BOOL NOT NULL
+  implicit_txn        BOOL NOT NULL,
+  full_scan           BOOL NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
 		hasViewActivity, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
@@ -976,6 +977,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					execStatAvg(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),      // contention_time_avg
 					execStatVar(s.mu.data.ExecStats.Count, s.mu.data.ExecStats.ContentionTime),      // contention_time_var
 					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),                                 // implicit_txn
+					tree.MakeDBool(tree.DBool(s.mu.fullScan)),                                       // full_scan
 				)
 				s.mu.Unlock()
 				if err != nil {
