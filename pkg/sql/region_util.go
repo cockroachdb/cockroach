@@ -132,7 +132,7 @@ func makeRequiredConstraintForRegion(r descpb.RegionName) zonepb.Constraint {
 // are set the way they are.
 func zoneConfigForMultiRegionDatabase(
 	regionConfig multiregion.RegionConfig,
-) (*zonepb.ZoneConfig, error) {
+) (zonepb.ZoneConfig, error) {
 	numVoters, numReplicas := getNumVotersAndNumReplicas(regionConfig)
 	constraints := make([]zonepb.ConstraintsConjunction, len(regionConfig.Regions()))
 	for i, region := range regionConfig.Regions() {
@@ -145,10 +145,10 @@ func zoneConfigForMultiRegionDatabase(
 
 	voterConstraints, err := synthesizeVoterConstraints(regionConfig.PrimaryRegion(), regionConfig)
 	if err != nil {
-		return nil, err
+		return zonepb.ZoneConfig{}, err
 	}
 
-	return &zonepb.ZoneConfig{
+	return zonepb.ZoneConfig{
 		NumReplicas: &numReplicas,
 		NumVoters:   &numVoters,
 		LeasePreferences: []zonepb.LeasePreference{
@@ -662,7 +662,7 @@ func discardMultiRegionFieldsForDatabaseZoneConfig(
 	return applyZoneConfigForMultiRegionDatabase(
 		ctx,
 		dbID,
-		zonepb.NewZoneConfig(),
+		*zonepb.NewZoneConfig(),
 		txn,
 		execConfig,
 	)
@@ -671,7 +671,7 @@ func discardMultiRegionFieldsForDatabaseZoneConfig(
 func applyZoneConfigForMultiRegionDatabase(
 	ctx context.Context,
 	dbID descpb.ID,
-	mergeZoneConfig *zonepb.ZoneConfig,
+	mergeZoneConfig zonepb.ZoneConfig,
 	txn *kv.Txn,
 	execConfig *ExecutorConfig,
 ) error {
@@ -684,7 +684,7 @@ func applyZoneConfigForMultiRegionDatabase(
 		newZoneConfig = *currentZoneConfig
 	}
 	newZoneConfig.CopyFromZone(
-		*mergeZoneConfig,
+		mergeZoneConfig,
 		zonepb.MultiRegionZoneConfigFields,
 	)
 	// If the new zone config is the same as a blank zone config, delete it.
@@ -844,7 +844,26 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 	if !dbDesc.IsMultiRegion() {
 		return nil
 	}
+	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.ID, p.Descriptors())
+	if err != nil {
+		return err
+	}
+	return p.validateAllMultiRegionZoneConfigsInDatabase(
+		ctx,
+		dbDesc,
+		&zoneConfigForMultiRegionValidatorValidation{
+			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
+				regionConfig: regionConfig,
+			},
+		},
+	)
+}
 
+func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
+	ctx context.Context,
+	dbDesc *dbdesc.Immutable,
+	zoneConfigForMultiRegionValidator zoneConfigForMultiRegionValidator,
+) error {
 	var ids []descpb.ID
 	if err := p.forEachTableInMultiRegionDatabase(
 		ctx,
@@ -872,7 +891,7 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 		ctx,
 		dbDesc,
 		zoneConfigs[dbDesc.GetID()],
-		&validateZoneConfigForMultiRegionErrorHandlerValidation{},
+		zoneConfigForMultiRegionValidator,
 	); err != nil {
 		return err
 	}
@@ -886,7 +905,7 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 				dbDesc,
 				tbDesc,
 				zoneConfigs[tbDesc.GetID()],
-				&validateZoneConfigForMultiRegionErrorHandlerValidation{},
+				zoneConfigForMultiRegionValidator,
 			)
 		},
 	)
@@ -1138,22 +1157,54 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 	return nil
 }
 
-// validateZoneConfigForMultiRegionErrorHandler is an interface representing
-// an error to generate if validating a zone config for multi-region
-// fails.
-type validateZoneConfigForMultiRegionErrorHandler interface {
+// zoneConfigForMultiRegionValidator is an interface representing
+// actions to take when validating a zone config for multi-region
+// purposes.
+type zoneConfigForMultiRegionValidator interface {
+	getExpectedDatabaseZoneConfig() (zonepb.ZoneConfig, error)
+	getExpectedTableZoneConfig(desc catalog.TableDescriptor) (zonepb.ZoneConfig, error)
+
 	newMismatchFieldError(descType string, descName string, field string) error
 	newMissingSubzoneError(descType string, descName string) error
 	newExtraSubzoneError(descType string, descName string) error
 }
 
-// validateZoneConfigForMultiRegionErrorHandlerModifiedByUser implements
-// interface validateZoneConfigForMultiRegionErrorHandler.
-type validateZoneConfigForMultiRegionErrorHandlerModifiedByUser struct{}
+// zoneConfigForMultiRegionValidatorExistingMultiRegionObject partially implements
+// the zoneConfigForMultiRegionValidator interface.
+type zoneConfigForMultiRegionValidatorExistingMultiRegionObject struct {
+	regionConfig multiregion.RegionConfig
+}
 
-var _ validateZoneConfigForMultiRegionErrorHandler = (*validateZoneConfigForMultiRegionErrorHandlerModifiedByUser)(nil)
+func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) getExpectedDatabaseZoneConfig() (
+	zonepb.ZoneConfig,
+	error,
+) {
+	return zoneConfigForMultiRegionDatabase(v.regionConfig)
+}
 
-func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newMismatchFieldError(
+func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) getExpectedTableZoneConfig(
+	desc catalog.TableDescriptor,
+) (zonepb.ZoneConfig, error) {
+	_, expectedZoneConfig, err := ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes(
+		*zonepb.NewZoneConfig(),
+		v.regionConfig,
+		desc,
+	)
+	if err != nil {
+		return zonepb.ZoneConfig{}, err
+	}
+	return expectedZoneConfig, err
+}
+
+// zoneConfigForMultiRegionValidatorModifiedByUser implements
+// interface zoneConfigForMultiRegionValidator.
+type zoneConfigForMultiRegionValidatorModifiedByUser struct {
+	zoneConfigForMultiRegionValidatorExistingMultiRegionObject
+}
+
+var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorModifiedByUser)(nil)
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMismatchFieldError(
 	descType string, descName string, field string,
 ) error {
 	return v.wrapErr(
@@ -1167,7 +1218,7 @@ func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newMismatch
 	)
 }
 
-func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) wrapErr(err error) error {
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) wrapErr(err error) error {
 	err = errors.WithDetail(
 		err,
 		"the attempted operation will overwrite a user modified field",
@@ -1179,7 +1230,7 @@ func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) wrapErr(err
 	)
 }
 
-func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newMissingSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newMissingSubzoneError(
 	descType string, descName string,
 ) error {
 	return v.wrapErr(
@@ -1192,7 +1243,7 @@ func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newMissingS
 	)
 }
 
-func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newExtraSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) newExtraSubzoneError(
 	descType string, descName string,
 ) error {
 	return v.wrapErr(
@@ -1205,13 +1256,15 @@ func (v *validateZoneConfigForMultiRegionErrorHandlerModifiedByUser) newExtraSub
 	)
 }
 
-// validateZoneConfigForMultiRegionErrorHandlerValidation implements
-// interface validateZoneConfigForMultiRegionErrorHandler.
-type validateZoneConfigForMultiRegionErrorHandlerValidation struct{}
+// zoneConfigForMultiRegionValidatorValidation implements
+// interface zoneConfigForMultiRegionValidator.
+type zoneConfigForMultiRegionValidatorValidation struct {
+	zoneConfigForMultiRegionValidatorExistingMultiRegionObject
+}
 
-var _ validateZoneConfigForMultiRegionErrorHandler = (*validateZoneConfigForMultiRegionErrorHandlerValidation)(nil)
+var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorValidation)(nil)
 
-func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newMismatchFieldError(
+func (v *zoneConfigForMultiRegionValidatorValidation) newMismatchFieldError(
 	descType string, descName string, field string,
 ) error {
 	return pgerror.Newf(
@@ -1223,7 +1276,7 @@ func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newMismatchFiel
 	)
 }
 
-func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newMissingSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorValidation) newMissingSubzoneError(
 	descType string, descName string,
 ) error {
 	return pgerror.Newf(
@@ -1234,7 +1287,7 @@ func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newMissingSubzo
 	)
 }
 
-func (v *validateZoneConfigForMultiRegionErrorHandlerValidation) newExtraSubzoneError(
+func (v *zoneConfigForMultiRegionValidatorValidation) newExtraSubzoneError(
 	descType string, descName string,
 ) error {
 	return pgerror.Newf(
@@ -1261,11 +1314,19 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 	if err != nil {
 		return err
 	}
+	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.ID, p.Descriptors())
+	if err != nil {
+		return err
+	}
 	return p.validateZoneConfigForMultiRegionDatabase(
 		ctx,
 		dbDesc,
 		currentZoneConfig,
-		&validateZoneConfigForMultiRegionErrorHandlerModifiedByUser{},
+		&zoneConfigForMultiRegionValidatorModifiedByUser{
+			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
+				regionConfig: regionConfig,
+			},
+		},
 	)
 }
 
@@ -1275,22 +1336,18 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 	ctx context.Context,
 	dbDesc *dbdesc.Immutable,
 	currentZoneConfig *zonepb.ZoneConfig,
-	validateZoneConfigForMultiRegionErrorHandler validateZoneConfigForMultiRegionErrorHandler,
+	zoneConfigForMultiRegionValidator zoneConfigForMultiRegionValidator,
 ) error {
 	if currentZoneConfig == nil {
 		currentZoneConfig = zonepb.NewZoneConfig()
 	}
-	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.ID, p.Descriptors())
-	if err != nil {
-		return err
-	}
-	expectedZoneConfig, err := zoneConfigForMultiRegionDatabase(regionConfig)
+	expectedZoneConfig, err := zoneConfigForMultiRegionValidator.getExpectedDatabaseZoneConfig()
 	if err != nil {
 		return err
 	}
 
 	same, mismatch, err := currentZoneConfig.DiffWithZone(
-		*expectedZoneConfig,
+		expectedZoneConfig,
 		zonepb.MultiRegionZoneConfigFields,
 	)
 	if err != nil {
@@ -1298,7 +1355,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 	}
 	if !same {
 		dbName := tree.Name(dbDesc.GetName())
-		return validateZoneConfigForMultiRegionErrorHandler.newMismatchFieldError(
+		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
 			"database",
 			dbName.String(),
 			mismatch.Field,
@@ -1329,39 +1386,41 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	if err != nil {
 		return err
 	}
+	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
+	if err != nil {
+		return err
+	}
 
 	return p.validateZoneConfigForMultiRegionTable(
 		ctx,
 		dbDesc,
 		desc,
 		currentZoneConfig,
-		&validateZoneConfigForMultiRegionErrorHandlerModifiedByUser{},
+		&zoneConfigForMultiRegionValidatorModifiedByUser{
+			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
+				regionConfig: regionConfig,
+			},
+		},
 	)
 }
 
 // validateZoneConfigForMultiRegionTableOptions validates that
-// the table's zone configuration matches exactly what is expected.
+// the multi-region fields of the table's zone configuration
+// matches what is expected for the given table.
 func (p *planner) validateZoneConfigForMultiRegionTable(
 	ctx context.Context,
 	dbDesc *dbdesc.Immutable,
 	desc catalog.TableDescriptor,
 	currentZoneConfig *zonepb.ZoneConfig,
-	validateZoneConfigForMultiRegionErrorHandler validateZoneConfigForMultiRegionErrorHandler,
+	zoneConfigForMultiRegionValidator zoneConfigForMultiRegionValidator,
 ) error {
 	if currentZoneConfig == nil {
 		currentZoneConfig = zonepb.NewZoneConfig()
 	}
 
-	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.ID, p.Descriptors())
-	if err != nil {
-		return err
-	}
-
 	tableName := tree.Name(desc.GetName())
 
-	_, expectedZoneConfig, err := ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes(
-		*zonepb.NewZoneConfig(),
-		regionConfig,
+	expectedZoneConfig, err := zoneConfigForMultiRegionValidator.getExpectedTableZoneConfig(
 		desc,
 	)
 	if err != nil {
@@ -1440,18 +1499,18 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		}
 
 		if mismatch.IsMissingSubzone {
-			return validateZoneConfigForMultiRegionErrorHandler.newMissingSubzoneError(
+			return zoneConfigForMultiRegionValidator.newMissingSubzoneError(
 				descType,
 				name,
 			)
 		}
 		if mismatch.IsExtraSubzone {
-			return validateZoneConfigForMultiRegionErrorHandler.newExtraSubzoneError(
+			return zoneConfigForMultiRegionValidator.newExtraSubzoneError(
 				descType,
 				name,
 			)
 		}
-		return validateZoneConfigForMultiRegionErrorHandler.newMismatchFieldError(
+		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
 			descType,
 			name,
 			mismatch.Field,
