@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -245,15 +246,22 @@ func expectResolvedTimestampAvro(
 	return parseTimeToHLC(t, resolved.(map[string]interface{})[`string`].(string))
 }
 
-func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
+func sinlesttTestWithServerArgs(
+	argsFn func(args *base.TestServerArgs),
+	testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory),
+) func(*testing.T) {
 	return func(t *testing.T) {
 		defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
 		ctx := context.Background()
 		knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}}}
-		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		args := base.TestServerArgs{
 			Knobs:       knobs,
 			UseDatabase: `d`,
-		})
+		}
+		if argsFn != nil {
+			argsFn(&args)
+		}
+		s, db, _ := serverutils.StartServer(t, args)
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
@@ -281,6 +289,10 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) f
 	}
 }
 
+func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
+	return sinlesttTestWithServerArgs(nil, testFn)
+}
+
 func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
 	return enterpriseTestWithServerArgs(nil, testFn)
 }
@@ -291,6 +303,7 @@ func enterpriseTestWithServerArgs(
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
+		defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 		ctx := context.Background()
 
 		flushCh := make(chan struct{}, 1)
@@ -331,6 +344,7 @@ func cloudStorageTest(
 ) func(*testing.T) {
 	return func(t *testing.T) {
 		defer changefeedbase.TestingSetDefaultFlushFrequency(testSinkFlushFrequency)()
+		defer jobs.TestingSetAdoptAndCancelIntervals(10*time.Millisecond, 10*time.Millisecond)()
 		ctx := context.Background()
 
 		dir, dirCleanupFn := testutils.TempDir(t)
