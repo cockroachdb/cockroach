@@ -315,7 +315,7 @@ func GetAllDatabaseDescriptorIDs(
 		return nil, err
 	}
 	// See the comment in physical_schema_accessors.go,
-	// func (a UncachedPhysicalAccessor) GetObjectNames. Same concept
+	// func (a UncachedPhysicalAccessor) GetObjectNamesAndIDs. Same concept
 	// applies here.
 	// TODO(solon): This complexity can be removed in 20.2.
 	nameKey = catalogkeys.NewDeprecatedDatabaseKey("" /* name */).Key(codec)

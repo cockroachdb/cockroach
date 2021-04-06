@@ -1835,14 +1835,14 @@ func (tc *Collection) GetSchemasForDatabase(
 	return tc.allSchemasForDatabase[dbID], nil
 }
 
-// GetObjectNames returns the names of all objects in a database and schema.
-func (tc *Collection) GetObjectNames(
+// GetObjectNamesAndIDs returns the names and IDs of all objects in a database and schema.
+func (tc *Collection) GetObjectNamesAndIDs(
 	ctx context.Context,
 	txn *kv.Txn,
 	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
-) (tree.TableNames, error) {
+) (tree.TableNames, descpb.IDs, error) {
 	schemaFlags := tree.SchemaLookupFlags{
 		Required:       flags.Required,
 		AvoidCached:    flags.RequireMutable || flags.AvoidCached,
@@ -1851,37 +1851,39 @@ func (tc *Collection) GetObjectNames(
 	}
 	ok, schema, err := tc.GetImmutableSchemaByName(ctx, txn, dbDesc.GetID(), scName, schemaFlags)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !ok {
 		if flags.Required {
 			tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), "")
-			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.ObjectNamePrefix))
+			return nil, nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.ObjectNamePrefix))
 		}
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.GetName())
 	prefix := catalogkeys.NewTableKey(dbDesc.GetID(), schema.ID, "").Key(tc.codec())
 	sr, err := txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	alreadySeen := make(map[string]bool)
 	var tableNames tree.TableNames
+	var tableIDs descpb.IDs
 
 	for _, row := range sr {
 		_, tableName, err := encoding.DecodeUnsafeStringAscending(bytes.TrimPrefix(
 			row.Key, prefix), nil)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		alreadySeen[tableName] = true
 		tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.GetName()), tree.Name(scName), tree.Name(tableName))
 		tn.ExplicitCatalog = flags.ExplicitPrefix
 		tn.ExplicitSchema = flags.ExplicitPrefix
 		tableNames = append(tableNames, tn)
+		tableIDs = append(tableIDs, descpb.ID(row.ValueInt()))
 	}
 
 	// When constructing the list of entries under the `public` schema (and only
@@ -1905,13 +1907,13 @@ func (tc *Collection) GetObjectNames(
 	// scenario, we must do this filtering logic.
 	// TODO(solon): This complexity can be removed in  20.2.
 	if scName != tree.PublicSchema {
-		return tableNames, nil
+		return tableNames, tableIDs, nil
 	}
 
 	dprefix := catalogkeys.NewDeprecatedTableKey(dbDesc.GetID(), "").Key(tc.codec())
 	dsr, err := txn.Scan(ctx, dprefix, dprefix.PrefixEnd(), 0)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for _, row := range dsr {
@@ -1919,7 +1921,7 @@ func (tc *Collection) GetObjectNames(
 		_, tableName, err := encoding.DecodeUnsafeStringAscending(
 			bytes.TrimPrefix(row.Key, dprefix), nil)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if alreadySeen[tableName] {
 			continue
@@ -1928,9 +1930,10 @@ func (tc *Collection) GetObjectNames(
 		tn.ExplicitCatalog = flags.ExplicitPrefix
 		tn.ExplicitSchema = flags.ExplicitPrefix
 		tableNames = append(tableNames, tn)
+		tableIDs = append(tableIDs, descpb.ID(row.ValueInt()))
 	}
 
-	return tableNames, nil
+	return tableNames, tableIDs, nil
 }
 
 // releaseAllDescriptors releases the cached slice of all descriptors

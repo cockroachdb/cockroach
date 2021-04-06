@@ -95,17 +95,18 @@ func (l *LogicalSchemaAccessor) GetSchema(
 	return l.tc.GetImmutableSchemaByName(ctx, txn, dbID, scName, flags)
 }
 
-// GetObjectNames implements the DatabaseLister interface.
-func (l *LogicalSchemaAccessor) GetObjectNames(
+// GetObjectNamesAndIDs implements the DatabaseLister interface.
+func (l *LogicalSchemaAccessor) GetObjectNamesAndIDs(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
 	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	flags tree.DatabaseListFlags,
-) (tree.TableNames, error) {
+) (tree.TableNames, descpb.IDs, error) {
 	if entry, ok := l.vs.GetVirtualSchema(scName); ok {
 		names := make(tree.TableNames, 0, entry.NumTables())
+		IDs := make(descpb.IDs, 0, entry.NumTables())
 		schemaDesc := entry.Desc()
 		entry.VisitTables(func(table catalog.VirtualObject) {
 			name := tree.MakeTableNameWithSchema(
@@ -113,12 +114,13 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 			name.ExplicitCatalog = flags.ExplicitPrefix
 			name.ExplicitSchema = flags.ExplicitPrefix
 			names = append(names, name)
+			IDs = append(IDs, table.Desc().GetID())
 		})
-		return names, nil
+		return names, IDs, nil
 	}
 
 	// Fallthrough.
-	return l.tc.GetObjectNames(ctx, txn, dbDesc, scName, flags)
+	return l.tc.GetObjectNamesAndIDs(ctx, txn, dbDesc, scName, flags)
 }
 
 // GetObjectDesc implements the ObjectAccessor interface.

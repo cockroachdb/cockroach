@@ -57,7 +57,7 @@ func newDropCascadeState() *dropCascadeState {
 func (d *dropCascadeState) collectObjectsInSchema(
 	ctx context.Context, p *planner, db *dbdesc.Mutable, schema *catalog.ResolvedSchema,
 ) error {
-	names, err := resolver.GetObjectNames(ctx, p.txn, p, p.ExecCfg().Codec, db, schema.Name, true /* explicitPrefix */)
+	names, _, err := resolver.GetObjectNamesAndIDs(ctx, p.txn, p, p.ExecCfg().Codec, db, schema.Name, true /* explicitPrefix */)
 	if err != nil {
 		return err
 	}
