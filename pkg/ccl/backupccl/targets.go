@@ -210,6 +210,46 @@ func getAllDescChanges(
 	return res, nil
 }
 
+func loadAllDescsInInterval(
+	ctx context.Context, codec keys.SQLCodec, db *kv.DB, startTime, endTime hlc.Timestamp,
+) ([]catalog.Descriptor, error) {
+	seen := make(map[descpb.ID]struct{})
+	allDescs := make([]catalog.Descriptor, 0)
+
+	currentDescs, err := backupresolver.LoadAllDescs(ctx, codec, db, endTime)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, desc := range currentDescs {
+		if _, wasSeen := seen[desc.GetID()]; wasSeen {
+			continue
+		}
+		seen[desc.GetID()] = struct{}{}
+		allDescs = append(allDescs, desc)
+	}
+
+	revs, err := getAllDescChanges(ctx, codec, db, startTime, endTime, nil /* priorIDs */)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, rev := range revs {
+		if rev.Desc == nil {
+			// rev.Desc may be nil when the descriptor was deleted in this revision.
+			continue
+		}
+		desc := catalogkv.NewBuilder(rev.Desc).BuildImmutable()
+		if _, wasSeen := seen[desc.GetID()]; wasSeen {
+			continue
+		}
+		seen[desc.GetID()] = struct{}{}
+		allDescs = append(allDescs, desc)
+	}
+
+	return allDescs, nil
+}
+
 // validateMultiRegionBackup validates that for all tables included in the
 // backup, their parent database is also being backed up. For multi-region
 // tables, we require that the parent database is included to ensure that the
