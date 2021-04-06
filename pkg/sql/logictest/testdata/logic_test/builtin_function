@@ -1946,7 +1946,7 @@ cafef00ddeadbeef
 query error uuid: incorrect UUID length
 SELECT to_uuid('63616665-6630-3064-6465')
 
-query error uuid: incorrect UUID length
+query error uuid: incorrect UUID format
 SELECT to_uuid('63616665-6630-3064-6465-616462656566-123')
 
 query error uuid: incorrect UUID format
