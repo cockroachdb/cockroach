@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -48,7 +49,8 @@ func TestLoadShowSummary(t *testing.T) {
 	sqlDB.Exec(t, `USE testDB`)
 
 	const dbOnlyBackupPath = "nodelocal://0/dbOnlyFooFolder"
-	sqlDB.Exec(t, `BACKUP DATABASE testDB TO $1`, dbOnlyBackupPath)
+	ts1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, `BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME `+ts1.AsOfSystemTime(), dbOnlyBackupPath)
 
 	sqlDB.Exec(t, `CREATE SCHEMA testDB.testschema`)
 	sqlDB.Exec(t, `CREATE TYPE fooType AS ENUM ()`)
@@ -57,56 +59,90 @@ func TestLoadShowSummary(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE testDB.testschema.fooTable (a INT)`)
 	sqlDB.Exec(t, `INSERT INTO testDB.testschema.fooTable VALUES (123)`)
 	const backupPath = "nodelocal://0/fooFolder"
-	sqlDB.Exec(t, `BACKUP DATABASE testDB TO $1`, backupPath)
+	ts2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, `BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME `+ts2.AsOfSystemTime(), backupPath)
 
 	t.Run("show-summary-without-types-or-tables", func(t *testing.T) {
 		out, err := c.RunWithCapture(fmt.Sprintf("load show summary %s --external-io-dir=%s", dbOnlyBackupPath, dir))
 		require.NoError(t, err)
-		expectedMetadataOutputSubstr := []string{"StartTime:", "EndTime:", "DataSize: 0 (0 B)", "Rows: 0", "IndexEntries: 0", "FormatVersion: 1", "ClusterID:", "NodeID: 0", "BuildInfo:"}
-		expectedOutputSubstr := append(expectedMetadataOutputSubstr, `
-Spans:
-	(No spans included in the specified backup path.)
-Files:
-	(No sst files included in the specified backup path.)
-Databases:
-	52: testdb
-Schemas:
-	29: public
-Types:
-	(No user-defined types included in the specified backup path.)
-Tables:
-	(No tables included in the specified backup path.)`)
-		for _, substr := range expectedOutputSubstr {
-			require.Contains(t, out, substr)
-		}
+		expectedOutput := fmt.Sprintf(
+			`{
+	"StartTime": "1970-01-01T00:00:00Z",
+	"EndTime": "%s",
+	"DataSize": "0 B",
+	"Rows": 0,
+	"IndexEntries": 0,
+	"FormatVersion": 1,
+	"ClusterID": "%s",
+	"NodeID": 0,
+	"BuildInfo": "%s",
+	"Files": [],
+	"Spans": "[]",
+	"DatabaseDescriptors": {
+		"52": "testdb"
+	},
+	"TableDescriptors": {},
+	"TypeDescriptors": {},
+	"SchemaDescriptors": {
+		"29": "public"
+	}
+}
+`, ts1.GoTime().Format(time.RFC3339), srv.ClusterID(), build.GetInfo().Short())
+		checkExpectedOutput(t, expectedOutput, out)
 	})
 
 	t.Run("show-summary-with-full-information", func(t *testing.T) {
 		out, err := c.RunWithCapture(fmt.Sprintf("load show summary %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
-		expectedMetadataOutputSubstr := []string{"StartTime:", "EndTime:", "DataSize: 20 (20 B)", "Rows: 1", "IndexEntries: 0", "FormatVersion: 1", "ClusterID:", "NodeID: 0", "BuildInfo:"}
-		expectedSpansOutput := "Spans:\n\t/Table/58/{1-2}\n\t/Table/59/{1-2}\n"
-		expectedFilesOutputSubstr := []string{"Files:\n\t", ".sst", "Span: /Table/59/{1-2}", "DataSize: 20 (20 B)", "Rows: 1", "IndexEntries: 0"}
-		expectedDescOutput := `
-Databases:
-	52: testdb
-Schemas:
-	29: public
-	53: testdb.testschema
-Types:
-	54: testdb.public.footype
-	55: testdb.public._footype
-	56: testdb.testschema.footype
-	57: testdb.testschema._footype
-Tables:
-	58: testdb.public.footable
-	59: testdb.testschema.footable`
-		expectedOutputSubstr := append(expectedMetadataOutputSubstr, expectedSpansOutput)
-		expectedOutputSubstr = append(expectedOutputSubstr, expectedFilesOutputSubstr...)
-		expectedOutputSubstr = append(expectedOutputSubstr, expectedDescOutput)
-		for _, substr := range expectedOutputSubstr {
-			require.Contains(t, out, substr)
+
+		var sstFile string
+		rows := sqlDB.Query(t, `select path from [show backup files $1]`, backupPath)
+		defer rows.Close()
+		rows.Next()
+		err = rows.Scan(&sstFile)
+		require.NoError(t, err)
+
+		expectedOutput := fmt.Sprintf(
+			`{
+	"StartTime": "1970-01-01T00:00:00Z",
+	"EndTime": "%s",
+	"DataSize": "20 B",
+	"Rows": 1,
+	"IndexEntries": 0,
+	"FormatVersion": 1,
+	"ClusterID": "%s",
+	"NodeID": 0,
+	"BuildInfo": "%s",
+	"Files": [
+		{
+			"Path": "%s",
+			"Span": "/Table/59/{1-2}",
+			"DataSize": "20 B",
+			"IndexEntries": 0,
+			"Rows": 1
 		}
+	],
+	"Spans": "[/Table/58/{1-2} /Table/59/{1-2}]",
+	"DatabaseDescriptors": {
+		"52": "testdb"
+	},
+	"TableDescriptors": {
+		"58": "testdb.public.footable",
+		"59": "testdb.testschema.footable"
+	},
+	"TypeDescriptors": {
+		"54": "testdb.public.footype",
+		"55": "testdb.public._footype",
+		"56": "testdb.testschema.footype",
+		"57": "testdb.testschema._footype"
+	},
+	"SchemaDescriptors": {
+		"29": "public",
+		"53": "testdb.testschema"
+	}
+}
+`, ts2.GoTime().Format(time.RFC3339), srv.ClusterID(), build.GetInfo().Short(), sstFile)
+		checkExpectedOutput(t, expectedOutput, out)
 	})
 }
 
