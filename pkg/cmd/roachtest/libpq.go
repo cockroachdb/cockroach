@@ -17,6 +17,7 @@ import (
 )
 
 var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+var libPQSupportedTag = "v1.10.0"
 
 func registerLibPQ(r *testRegistry) {
 	runLibPQ := func(ctx context.Context, t *test, c *cluster) {
@@ -42,6 +43,7 @@ func registerLibPQ(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest lib/pq release is %s.", latestTag)
+		c.l.Printf("Supported lib/pq release is %s.", libPQSupportedTag)
 
 		installLatestGolang(ctx, t, c, node)
 
@@ -73,7 +75,7 @@ func registerLibPQ(r *testRegistry) {
 			c,
 			fmt.Sprintf("https://%s.git", libPQRepo),
 			libPQPath,
-			latestTag,
+			libPQSupportedTag,
 			node,
 		); err != nil {
 			t.Fatal(err)
