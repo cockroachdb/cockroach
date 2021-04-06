@@ -570,8 +570,8 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sum = "h1:8LC3Yq7XHfMg68L3q99s3jHJgXbCrJJ/19OLOBwvSNI=",
-        version = "v0.0.0-20210326172335-294d5706b57a",
+        sum = "h1:5wi3lgnXMQNmfCJ/0+VQxFm0jQ1P5U5WVfs9h5yQ0xM=",
+        version = "v0.0.0-20210406003833-3d4c32f510a8",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
@@ -4251,8 +4251,8 @@ def go_deps():
         name = "org_golang_x_exp",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/exp",
-        sum = "h1:GrkO5AtFUU9U/1f5ctbIBXtBGeSJbWwIYfIsTcFMaX4=",
-        version = "v0.0.0-20210220032938-85be41e4509f",
+        sum = "h1:ZsldXBaaFMK70l0+CbgvsHOcjhgd9LzPhePQIsm5aS4=",
+        version = "v0.0.0-20210405174845-4513512abef3",
     )
     go_repository(
         name = "org_golang_x_image",
