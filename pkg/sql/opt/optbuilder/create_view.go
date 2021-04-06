@@ -39,9 +39,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.qualifyDataSourceNamesInAST = false
 	}()
 
-	defScope := b.cteBoundary(func() *scope {
-		return b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */, inScope)
-	})
+	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)
 
 	p := defScope.makePhysicalProps().Presentation
 	if len(cv.ColumnNames) != 0 {
