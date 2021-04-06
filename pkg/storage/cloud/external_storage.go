@@ -51,6 +51,8 @@ type ExternalStorage interface {
 	Settings() *cluster.Settings
 
 	// ReadFile is shorthand for ReadFileAt with offset 0.
+	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
+	// This can be leveraged for an existence check.
 	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
 
 	// ReadFileAt returns a Reader for requested name reading at offset.

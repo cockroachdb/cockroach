@@ -13,6 +13,8 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/errors"
+	"github.com/twpayne/go-geom"
 )
 
 // ValidDetail contains information about the validity of a geometry.
@@ -62,6 +64,30 @@ func IsValidDetail(g geo.Geometry, flags int) (ValidDetail, error) {
 		Reason:          reason,
 		InvalidLocation: loc,
 	}, nil
+}
+
+// IsValidTrajectory returns whether a geometry encodes a valid trajectory
+func IsValidTrajectory(line geo.Geometry) (bool, error) {
+	t, err := line.AsGeomT()
+	if err != nil {
+		return false, err
+	}
+	lineString, ok := t.(*geom.LineString)
+	if !ok {
+		return false, errors.Newf("expected LineString, got %s", line.ShapeType().String())
+	}
+	mIndex := t.Layout().MIndex()
+	if mIndex < 0 {
+		return false, errors.New("LineString does not have M coordinates")
+	}
+
+	coords := lineString.Coords()
+	for i := 1; i < len(coords); i++ {
+		if coords[i][mIndex] <= coords[i-1][mIndex] {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // MakeValid returns a valid form of the given Geometry.

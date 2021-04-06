@@ -3872,6 +3872,25 @@ For flags=1, validity considers self-intersecting rings forming holes as valid a
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
+	"st_isvalidtrajectory": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(ctx *tree.EvalContext, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.IsValidTrajectory(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			types.Bool,
+			infoBuilder{
+				info: `Returns whether the geometry encodes a valid trajectory.
+
+Note the geometry must be a LineString with M coordinates.`,
+			},
+			tree.VolatilityImmutable,
+		),
+	),
 	"st_makevalid": makeBuiltin(
 		defProps(),
 		geometryOverload1(
