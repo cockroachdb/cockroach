@@ -679,6 +679,17 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	msgApps, otherMsgs := splitMsgApps(rd.Messages)
 	r.traceMessageSends(msgApps, "sending msgApp")
 	r.sendRaftMessages(ctx, msgApps)
+	{
+		for i := range msgApps {
+			app := msgApps[i]
+			for _, ent := range app.Entries {
+				if app.LogTerm > ent.Term {
+					log.Fatalf(ctx, "TBG term regression: idx %d at term=%d appended with logterm=%d",
+						ent.Term, app.LogTerm)
+				}
+			}
+		}
+	}
 
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed on the underlying DB.
