@@ -129,6 +129,18 @@ var fromStringTests = []fromStringTest{
 		input:   "urn:uuid:6ba7b8109dad11d180b400c04fd430c8",
 		variant: "URNHashlike",
 	},
+	{
+		input:   "{6ba7-b8109dad11d180b400c04fd4-30c8}",
+		variant: "BracedExtraHyphens",
+	},
+	{
+		input:   "6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8",
+		variant: "ExtraHyphens",
+	},
+	{
+		input:   "urn:uuid:6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8",
+		variant: "URNExtraHyphens",
+	},
 }
 
 var invalidFromStringInputs = []string{
@@ -159,10 +171,14 @@ var invalidFromStringInputs = []string{
 	"(6ba7b810-9dad-11d1-80b4-00c04fd430c8}",
 	"{6ba7b810-9dad-11d1-80b4-00c04fd430c8>",
 	"zba7b810-9dad-11d1-80b4-00c04fd430c8",
-	"6ba7b810-9dad11d180b400c04fd430c8",
-	"6ba7b8109dad-11d180b400c04fd430c8",
-	"6ba7b8109dad11d1-80b400c04fd430c8",
-	"6ba7b8109dad11d180b4-00c04fd430c8",
+	"6ba7b810-9dad11d180b400c04fd430-c8",
+	"6-ba7b810-9dad11d180b400c04fd430c8",
+	"6ba7b810-9dad11d180b400c04fd430c8-",
+	"-6ba7b810-9dad11d180b400c04fd430c8",
+	"uuid:urn:zba7b810-9dad-11d1-80b4-00c04fd430c8",
+	"{6ba7b810-9dad1-1d1-80b4-00c04fd430c8}",
+	"{-6ba7b810-9dad11d180b400c04fd430c8}",
+	"uuid:urn:6-ba7b810-9dad11d180b400c04fd430c8",
 }
 
 func TestFromString(t *testing.T) {

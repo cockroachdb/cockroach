@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"regexp"
+	"strings"
 )
 
 // FromBytes returns a UUID generated from the raw byte slice input.
@@ -72,7 +74,8 @@ func (u UUID) MarshalText() ([]byte, error) {
 //   "urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 //   "6ba7b8109dad11d180b400c04fd430c8"
 //   "{6ba7b8109dad11d180b400c04fd430c8}",
-//   "urn:uuid:6ba7b8109dad11d180b400c04fd430c8"
+//   "urn:uuid:6ba7b8109dad11d180b400c04fd430c8",
+//	 "6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8"
 //
 // ABNF for supported UUID text representation follows:
 //
@@ -99,17 +102,17 @@ func (u UUID) MarshalText() ([]byte, error) {
 //   urn := URN ':' UUID-NID ':' plain
 //
 func (u *UUID) UnmarshalText(text []byte) error {
-	switch len(text) {
-	case 32:
-		return u.decodeHashLike(text)
-	case 34, 38:
-		return u.decodeBraced(text)
-	case 36:
-		return u.decodeCanonical(text)
-	case 41, 45:
-		return u.decodeURN(text)
-	default:
+	l := len(text)
+	stringifiedText := string(text)
+
+	if l < 32 || l > 48 {
 		return fmt.Errorf("uuid: incorrect UUID length: %s", text)
+	} else if stringifiedText[0] == '{' && stringifiedText[l-1] == '}' {
+		return u.decodeHyphenated(text[1 : l-1])
+	} else if bytes.Equal(text[:9], urnPrefix) {
+		return u.decodeHyphenated(text[9:l])
+	} else {
+		return u.decodeHyphenated(text)
 	}
 }
 
@@ -148,34 +151,6 @@ func (u *UUID) decodeHashLike(t []byte) error {
 	return err
 }
 
-// decodeBraced decodes UUID strings that are using the following formats:
-//  "{6ba7b810-9dad-11d1-80b4-00c04fd430c8}"
-//  "{6ba7b8109dad11d180b400c04fd430c8}".
-func (u *UUID) decodeBraced(t []byte) error {
-	l := len(t)
-
-	if t[0] != '{' || t[l-1] != '}' {
-		return fmt.Errorf("uuid: incorrect UUID format %s", t)
-	}
-
-	return u.decodePlain(t[1 : l-1])
-}
-
-// decodeURN decodes UUID strings that are using the following formats:
-//  "urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-//  "urn:uuid:6ba7b8109dad11d180b400c04fd430c8".
-func (u *UUID) decodeURN(t []byte) error {
-	total := len(t)
-
-	urnUUIDPrefix := t[:9]
-
-	if !bytes.Equal(urnUUIDPrefix, urnPrefix) {
-		return fmt.Errorf("uuid: incorrect UUID format: %s", t)
-	}
-
-	return u.decodePlain(t[9:total])
-}
-
 // decodePlain decodes UUID strings that are using the following formats:
 //  "6ba7b810-9dad-11d1-80b4-00c04fd430c8" or in hash-like format
 //  "6ba7b8109dad11d180b400c04fd430c8".
@@ -186,8 +161,30 @@ func (u *UUID) decodePlain(t []byte) error {
 	case 36:
 		return u.decodeCanonical(t)
 	default:
-		return fmt.Errorf("uuid: incorrrect UUID length: %s", t)
+		return fmt.Errorf("uuid: incorrect UUID format %s", t)
 	}
+}
+
+// decodeHyphenated decodes UUID strings that are using the following format:
+//  "6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8"
+//  "6ba7b810-9dad-11d1-80b400c0-4fd4-30c8"
+func (u *UUID) decodeHyphenated(t []byte) error {
+	hashLike := []byte("")
+	l := len(t)
+	isHexaDecimal := regexp.MustCompile(`^[A-Fa-f0-9]+$`).MatchString
+	unhyphenatedStringsArray := strings.Split(string(t), "-")
+
+	if len(unhyphenatedStringsArray) > 8 || l > 40 || !isHexaDecimal(string(t[:4])) || !isHexaDecimal(string(t[l-4:])) {
+		return fmt.Errorf("uuid: incorrect UUID format %s", t)
+	}
+
+	for _, substring := range unhyphenatedStringsArray {
+		if len(substring)%4 != 0 {
+			return fmt.Errorf("uuid: incorrect UUID format %s", t)
+		}
+		hashLike = append(hashLike, substring...)
+	}
+	return u.decodeHashLike(hashLike)
 }
 
 // MarshalBinary implements the encoding.BinaryMarshaler interface.
