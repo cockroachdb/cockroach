@@ -719,40 +719,10 @@ func applyZoneConfigForMultiRegionDatabase(
 	return nil
 }
 
-// forEachTableInMultiRegionDatabase calls the given function on every table
-// descriptor inside the given multi-region database. Tables that have been
-// dropped are skipped.
-func (p *planner) forEachTableInMultiRegionDatabase(
-	ctx context.Context,
-	dbDesc *dbdesc.Immutable,
-	fn func(ctx context.Context, tbDesc *tabledesc.Mutable) error,
-) error {
-	if !dbDesc.IsMultiRegion() {
-		return errors.AssertionFailedf("db %q is not multi-region", dbDesc.Name)
-	}
-	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
-	if err != nil {
-		return err
-	}
-
-	lCtx := newInternalLookupCtx(ctx, allDescs, dbDesc, nil /* fallback */)
-	for _, tbID := range lCtx.tbIDs {
-		desc := lCtx.tbDescs[tbID]
-		if desc.Dropped() {
-			continue
-		}
-		mutable := tabledesc.NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
-		if err := fn(ctx, mutable); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // updateZoneConfigsForAllTables loops through all of the tables in the
 // specified database and refreshes the zone configs for all tables.
 func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdesc.Mutable) error {
-	return p.forEachTableInMultiRegionDatabase(
+	return p.forEachMutableTableInDatabase(
 		ctx,
 		&desc.Immutable,
 		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
@@ -872,7 +842,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	zoneConfigForMultiRegionValidator zoneConfigForMultiRegionValidator,
 ) error {
 	var ids []descpb.ID
-	if err := p.forEachTableInMultiRegionDatabase(
+	if err := p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
 		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
@@ -903,7 +873,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 		return err
 	}
 
-	return p.forEachTableInMultiRegionDatabase(
+	return p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
 		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
