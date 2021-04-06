@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -687,7 +687,7 @@ func testRandomSyntax(
 	defer s.Stopper().Stop(ctx)
 	db := &verifyFormatDB{db: rawDB}
 
-	yBytes, err := ioutil.ReadFile(filepath.Join("..", "parser", "sql.y"))
+	yBytes, err := ioutil.ReadFile(testutils.TestDataPath(t, "rsg", "sql.y"))
 	if err != nil {
 		t.Fatal(err)
 	}
