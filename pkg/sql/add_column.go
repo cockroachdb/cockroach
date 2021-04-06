@@ -81,6 +81,19 @@ func (p *planner) addColumnImpl(
 	}
 	incTelemetryForNewColumn(d, col)
 
+	// Ensure all new indexes are partitioned appropriately.
+	if idx != nil {
+		*idx, err = p.configureIndexDescForNewIndexPartitioning(
+			params.ctx,
+			desc,
+			*idx,
+			nil, /* PartitionByIndex */
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	// If the new column has a DEFAULT expression that uses a sequence, add references between
 	// its descriptor and this column descriptor.
 	if d.HasDefaultExpr() {
