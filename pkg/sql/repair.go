@@ -16,6 +16,8 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -617,4 +620,60 @@ func checkPlannerStateForRepairFunctions(ctx context.Context, p *planner, method
 		return pgerror.Newf(pgcode.InsufficientPrivilege, "admin role required for %s", method)
 	}
 	return nil
+}
+
+// ForceDeleteTableData only clears the spans backing this table, and does
+// not clean up any descriptors or metadata.
+func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error {
+	const method = "crdb_internal.force_delete_table_data()"
+	err := checkPlannerStateForRepairFunctions(ctx, p, method)
+	if err != nil {
+		return err
+	}
+
+	// Validate no descriptor exists for this table
+	id := descpb.ID(descID)
+	desc, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				Required:    true,
+				AvoidCached: true,
+			},
+			DesiredTableDescKind: tree.ResolveRequireTableDesc,
+		})
+	if err != nil && pgerror.GetPGCode(err) != pgcode.UndefinedTable {
+		return err
+	}
+	if desc != nil {
+		return errors.New("descriptor still exists force deletion is blocked")
+	}
+	// Validate the descriptor ID could have been used
+	maxDescID, err := p.extendedEvalCtx.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
+	if err != nil {
+		return err
+	}
+	if maxDescID.ValueInt() <= descID {
+		return errors.Newf("descriptor id was never used (descID: %d exceeds maxDescID: %d)",
+			descID, maxDescID)
+	}
+
+	prefix := p.extendedEvalCtx.Codec.TablePrefix(uint32(id))
+	tableSpans := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	b := &kv.Batch{}
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    tableSpans.Key,
+			EndKey: tableSpans.EndKey,
+		},
+	})
+
+	err = p.txn.DB().Run(ctx, b)
+	if err != nil {
+		return err
+	}
+
+	return p.logEvent(ctx, id,
+		&eventpb.ForceDeleteTableDataEntry{
+			DescriptorID: uint32(descID),
+		})
 }
