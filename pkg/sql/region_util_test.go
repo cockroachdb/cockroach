@@ -27,7 +27,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 	testCases := []struct {
 		desc         string
 		regionConfig multiregion.RegionConfig
-		expected     *zonepb.ZoneConfig
+		expected     zonepb.ZoneConfig
 	}{
 		{
 			desc: "one region, zone survival",
@@ -39,7 +39,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(3),
 				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -77,7 +77,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(4),
 				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -122,7 +122,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
 				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -173,7 +173,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
 				NumVoters:   proto.Int32(5),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -225,7 +225,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(6),
 				NumVoters:   proto.Int32(3),
 				LeasePreferences: []zonepb.LeasePreference{
@@ -283,7 +283,7 @@ func TestZoneConfigForMultiRegionDatabase(t *testing.T) {
 				descpb.SurvivalGoal_REGION_FAILURE,
 				descpb.InvalidID,
 			),
-			expected: &zonepb.ZoneConfig{
+			expected: zonepb.ZoneConfig{
 				NumReplicas: proto.Int32(5),
 				NumVoters:   proto.Int32(5),
 				LeasePreferences: []zonepb.LeasePreference{
