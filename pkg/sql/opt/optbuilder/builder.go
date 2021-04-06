@@ -91,8 +91,14 @@ type Builder struct {
 	catalog    cat.Catalog
 	scopeAlloc []scope
 
-	// ctes stores information about CTEs which are hoisted up.
-	ctes []cteSource
+	// ctes stores CTEs which may need to be built at the top-level.
+	ctes cteSources
+
+	// cteRefMap stores information about CTE-to-CTE references.
+	//
+	// For each WithID, the map stores a list of CTEs that refer to that WithID.
+	// Together, they form a directed acyclic graph.
+	cteRefMap map[opt.WithID]cteSources
 
 	// If set, the planner will skip checking for the SELECT privilege when
 	// resolving data sources (tables, views, etc). This is used when compiling

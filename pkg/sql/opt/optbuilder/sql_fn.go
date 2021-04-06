@@ -84,7 +84,7 @@ func (b *Builder) buildSQLFn(
 
 	id := b.factory.Memo().NextWithID()
 	b.factory.Metadata().AddWithBinding(id, innerScope.expr)
-	cte := cteSource{
+	cte := &cteSource{
 		name:         tree.AliasClause{},
 		cols:         innerScope.makePresentationWithHiddenCols(),
 		originalExpr: stmt.AST,

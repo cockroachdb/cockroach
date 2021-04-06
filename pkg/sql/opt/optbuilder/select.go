@@ -168,7 +168,7 @@ func (b *Builder) buildDataSource(
 
 		id := b.factory.Memo().NextWithID()
 		b.factory.Metadata().AddWithBinding(id, innerScope.expr)
-		cte := cteSource{
+		cte := &cteSource{
 			name:         tree.AliasClause{},
 			cols:         innerScope.makePresentationWithHiddenCols(),
 			originalExpr: source.Statement,
