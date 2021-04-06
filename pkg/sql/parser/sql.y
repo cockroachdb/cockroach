@@ -684,7 +684,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %token <str> RELEASE RESET RESTORE RESTRICT RESUME RETURNING RETRY REVISION_HISTORY REVOKE RIGHT
 %token <str> ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT RULE RUNNING
 
-%token <str> SAVEPOINT SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
@@ -925,6 +925,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> show_users_stmt
 %type <tree.Statement> show_zone_stmt
 %type <tree.Statement> show_schedules_stmt
+%type <tree.Statement> show_full_scans_stmt
 
 %type <str> statements_or_queries
 
@@ -4533,7 +4534,7 @@ zone_value:
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS, SHOW SCHEDULES,
-// SHOW LOCALITY, SHOW ZONE CONFIGURATION
+// SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS
 show_stmt:
   show_backup_stmt          // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt         // EXTEND WITH HELP: SHOW COLUMNS
@@ -4572,6 +4573,7 @@ show_stmt:
 | show_zone_stmt            // EXTEND WITH HELP: SHOW ZONE CONFIGURATION
 | SHOW error                // SHOW HELP: SHOW
 | show_last_query_stats_stmt
+| show_full_scans_stmt
 
 // Cursors are not yet supported by CockroachDB. CLOSE ALL is safe to no-op
 // since there will be no open cursors.
@@ -5444,6 +5446,13 @@ show_fingerprints_stmt:
   {
     /* SKIP DOC */
     $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
+  }
+
+show_full_scans_stmt:
+  SHOW FULL TABLE SCANS
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowFullTableScans{}
   }
 
 opt_on_targets_roles:
@@ -12558,6 +12567,7 @@ unreserved_keyword:
 | SETTINGS
 | STATUS
 | SAVEPOINT
+| SCANS
 | SCATTER
 | SCHEMA
 | SCHEMAS
@@ -12752,7 +12762,7 @@ type_func_name_no_crdb_extra_keyword:
 type_func_name_crdb_extra_keyword:
   FAMILY
 
-// Reserved keyword --- these keywords are usable only as a unrestricted_name.
+// Reserved keyword --- these keywords are usable only as an unrestricted_name.
 //
 // Keywords appear here if they could not be distinguished from variable, type,
 // or function names in some contexts.
