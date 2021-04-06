@@ -82,6 +82,7 @@ func TimestampFromV1(u UUID) (Timestamp, error) {
 var (
 	urnPrefix  = []byte("urn:uuid:")
 	byteGroups = []int{8, 4, 4, 4, 12}
+	groupOfFour = []int{4, 4, 4, 4, 4, 4, 4, 4}
 )
 
 // Nil is the nil UUID, as specified in RFC-4122, that has all 128 bits set to
