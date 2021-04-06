@@ -39,6 +39,7 @@ func TestEvalResultIsZero(t *testing.T) {
 				defer func() { f.GossipFirstRange = false }()
 			case *kvserverpb.ReplicatedEvalResult:
 				f.SetLeaseRequest()
+				f.SetNonMVCC()
 				defer func() { f.Flags = 0 }()
 			case **kvserverpb.WriteBatch:
 				*f = new(kvserverpb.WriteBatch)

@@ -1023,7 +1023,7 @@ func (rp *replicaProposer) closedTimestampTarget() hlc.Timestamp {
 }
 
 func (rp *replicaProposer) raftTransportClosedTimestampEnabled() bool {
-	return !(*Replica)(rp).mu.state.RaftClosedTimestamp.IsEmpty()
+	return (*Replica)(rp).mu.state.MigratedToRaftClosedTimestamp()
 }
 
 func (rp *replicaProposer) withGroupLocked(fn func(raftGroup proposerRaft) error) error {

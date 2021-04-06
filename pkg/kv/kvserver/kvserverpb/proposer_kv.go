@@ -50,8 +50,37 @@ func (r ReplicatedEvalResult) IsLeaseRequest() bool {
 	return (r.Flags & int64(ReplicatedEvalResultFlags_LeaseRequest)) != 0
 }
 
-// SetLeaseRequest set the respective flag on the command, indicating that this
+// SetLeaseRequest sets the respective flag on the command, indicating that this
 // command corresponds to a lease request.
 func (r *ReplicatedEvalResult) SetLeaseRequest() {
 	r.Flags |= int64(ReplicatedEvalResultFlags_LeaseRequest)
+}
+
+// IsNonMVCC indicates that this command does not writes MVCC keys and it does
+// no result in intents. Requests with this flag set can evaluate below the
+// range's closed timestamp. This is the inverse of ba.IsIntentWrite(). Note
+// that an EndTxn by itself sets this flag - it doesn't write any *new* intents
+// and so it can evaluate below the closed timestamp. IsNonMVCC is the inverse
+// of IsIntentWrite.
+func (r ReplicatedEvalResult) IsNonMVCC() bool {
+	return (r.Flags & int64(ReplicatedEvalResultFlags_NonMVCC)) != 0
+}
+
+// IsIntentWrite returns whether the command corresponds to a request with the
+// isIntentWrite flag. This is the inverse of IsNonMVCC.
+// Note that all requests proposed by 20.2 nodes return true.
+func (r ReplicatedEvalResult) IsIntentWrite() bool {
+	return !r.IsNonMVCC()
+}
+
+// SetNonMVCC sets the respective flag on the command, indicating that this
+// command corresponds to a non-MVCC request, or more generally a request that
+// doesn't write new intents.
+func (r *ReplicatedEvalResult) SetNonMVCC() {
+	r.Flags |= int64(ReplicatedEvalResultFlags_NonMVCC)
+}
+
+// ClearNonMVCC clears the NonMVCC flag.
+func (r *ReplicatedEvalResult) ClearNonMVCC() {
+	r.Flags &= ^(int64(ReplicatedEvalResultFlags_NonMVCC))
 }

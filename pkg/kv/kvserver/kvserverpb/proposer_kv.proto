@@ -115,6 +115,13 @@ enum ReplicatedEvalResultFlags {
   // LeaseRequest indicates that the command corresponds to a RequestLease
   // request. Note that lease transfers don't have this flag.
   LeaseRequest = 1;
+  // NonMVCC indicates that this command does not writes MVCC keys and it does
+  // no result in intents. Requests with this flag set can evaluate below the
+  // range's closed timestamp. This is the inverse of ba.IsIntentWrite(). Note
+  // that an EndTxn by itself sets this flag - it doesn't write any *new*
+  // intents and so it can evaluate below the closed timestamp.
+  NonMVCC = 2;
+  // next flag = 4;
 }
 
 // ReplicatedEvalResult is the structured information which together with
@@ -135,9 +142,11 @@ message ReplicatedEvalResult {
   // flags indicates various attributes of the command. The interpretation of
   // the bits is given by ReplicatedEvalResultFlags.
   int64 flags = 6;
-  // The timestamp at which this command is writing. Used to verify the validity
-  // of the command against the GC threshold and to update the followers'
-  // clocks.
+  // The timestamp at which this command is writing. This is well defined for
+  // requests with the NonMVCC flag *not set*, for which the field is used to
+  // verify the validity of the command against the GC threshold. For all other
+  // commands, the timestamp is to be interpreted simply as a clock signal from
+  // the proposer - the field is used to bump the followers' clocks.
   util.hlc.Timestamp write_timestamp = 8 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.
