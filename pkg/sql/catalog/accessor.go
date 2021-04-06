@@ -37,7 +37,7 @@ type Accessor interface {
 	// exists under the target database.
 	GetSchema(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, dbID descpb.ID, scName string, flags tree.SchemaLookupFlags) (bool, ResolvedSchema, error)
 
-	// GetObjectNames returns the list of all objects in the given
+	// GetObjectNamesAndIDs returns the list of all objects in the given
 	// database and schema.
 	// TODO(solon): when separate schemas are supported, this
 	// API should be extended to use schema descriptors.
@@ -46,9 +46,9 @@ type Accessor interface {
 	// are fundamentally sometimes ambiguous (see GRANT and the ambiguity between
 	// tables and types). Furthermore, the fact that this buffers everything
 	// in ram in unfortunate.
-	GetObjectNames(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+	GetObjectNamesAndIDs(ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
 		db DatabaseDescriptor, scName string, flags tree.DatabaseListFlags,
-	) (tree.TableNames, error)
+	) (tree.TableNames, descpb.IDs, error)
 
 	// GetObjectDesc looks up an object by name and returns both its
 	// descriptor and that of its parent database. If the object is not

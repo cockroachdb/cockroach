@@ -144,7 +144,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 	b := p.txn.NewBatch()
 
 	// Get all objects under the target database.
-	objNames, err := resolver.GetObjectNames(ctx, p.txn, p, codec, n.db, tree.PublicSchema, true /* explicitPrefix */)
+	objNames, _, err := resolver.GetObjectNamesAndIDs(ctx, p.txn, p, codec, n.db, tree.PublicSchema, true /* explicitPrefix */)
 	if err != nil {
 		return err
 	}
