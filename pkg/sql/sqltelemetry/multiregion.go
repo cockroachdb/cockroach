@@ -50,6 +50,12 @@ var (
 	AlterDatabaseDropPrimaryRegionCounter = telemetry.GetCounterOnce(
 		"sql.multiregion.drop_primary_region",
 	)
+
+	// ImportIntoMultiRegionDatabaseCounter is to be incremented when an import
+	// statement is run against a multi-region database.
+	ImportIntoMultiRegionDatabaseCounter = telemetry.GetCounterOnce(
+		"sql.multiregion.import",
+	)
 )
 
 // CreateDatabaseSurvivalGoalCounter is to be incremented when the survival goal
