@@ -201,7 +201,8 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CONSTRAINT positive CHECK (a > 0))`},
 		{`CREATE TABLE a (a INT8 CONSTRAINT one CHECK (a > 0) CONSTRAINT two CHECK (a < 10))`},
 		{`CREATE TABLE a (b INT8 NOT VISIBLE)`},
-		{`CREATE TABLE a (b INT8 NOT VISIBLE NULL)`},
+		{`CREATE TABLE a (b INT8 NULL NOT VISIBLE)`},
+		{`CREATE TABLE a (b INT8 CONSTRAINT c NOT NULL NOT VISIBLE)`},
 		// "0" lost quotes previously.
 		{`CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0"))`},
 		{`CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other)`},
@@ -1757,6 +1758,7 @@ func TestParse(t *testing.T) {
 		{`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'`},
 		{`IMPORT INTO foo(id, email) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT INTO foo CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
+		{`IMPORT TABLE a.foo (LIKE tab, col INT8 CONSTRAINT conname NULL NOT VISIBLE) CSV DATA ('placeholder')`},
 
 		{`IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'`},
 		{`EXPLAIN IMPORT PGDUMP 'nodelocal://0/foo/bar' WITH temp = 'path/to/temp'`},
