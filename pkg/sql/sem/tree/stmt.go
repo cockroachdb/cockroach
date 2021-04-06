@@ -1343,6 +1343,15 @@ func (*ShowUsers) StatementType() StatementType { return TypeDML }
 func (*ShowUsers) StatementTag() string { return "SHOW USERS" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowFullTableScans) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowFullTableScans) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowFullTableScans) StatementTag() string { return "SHOW FULL TABLE SCANS" }
+
+// StatementReturnType implements the Statement interface.
 func (*ShowRoles) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -1651,6 +1660,7 @@ func (n *ShowTraceForSession) String() string            { return AsString(n) }
 func (n *ShowTransactionStatus) String() string          { return AsString(n) }
 func (n *ShowTransactions) String() string               { return AsString(n) }
 func (n *ShowLastQueryStatistics) String() string        { return AsString(n) }
+func (n *ShowFullTableScans) String() string             { return AsString(n) }
 func (n *ShowUsers) String() string                      { return AsString(n) }
 func (n *ShowVar) String() string                        { return AsString(n) }
 func (n *ShowZoneConfig) String() string                 { return AsString(n) }
