@@ -5140,6 +5140,30 @@ table's zone configuration this will return NULL.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+	// Deletes the underlying spans backing a table, only
+	// if the user provides explicit acknowledgement of the
+	// form "I acknowledge this will irrevocably delete all revisions
+	// for table %d"
+	"crdb_internal.force_delete_table_data": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemRepair,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"id", types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				id := int64(*args[0].(*tree.DInt))
+
+				err := ctx.Planner.ForceDeleteTableData(ctx.Context, id)
+				if err != nil {
+					return tree.DBoolFalse, err
+				}
+				return tree.DBoolTrue, err
+			},
+			Info:       "This function can be used to clear the data belonging to a table, when the table cannot be dropped.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
@@ -7260,12 +7284,7 @@ func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 		telemetry.Inc(sqltelemetry.FollowerReadDisabledCCLCounter)
 		ctx.ClientNoticeSender.BufferClientNotice(
 			ctx.Context,
-			pgnotice.Newf(
-				tree.FollowerReadTimestampFunctionName+
-					" does not returns a value that is less likely to read from the closest replica "+
-					"in a non-CCL distribution, using %s from statement time instead",
-				defaultFollowerReadDuration,
-			),
+			pgnotice.Newf("follower reads disabled because you are running a non-CCL distribution"),
 		)
 		return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
 	}
@@ -7274,12 +7293,7 @@ func recentTimestamp(ctx *tree.EvalContext) (time.Time, error) {
 		if code := pgerror.GetPGCode(err); code == pgcode.CCLValidLicenseRequired {
 			telemetry.Inc(sqltelemetry.FollowerReadDisabledNoEnterpriseLicense)
 			ctx.ClientNoticeSender.BufferClientNotice(
-				ctx.Context,
-				pgnotice.Newf(
-					"%s: using %s from current statement time instead",
-					defaultFollowerReadDuration,
-					err.Error(),
-				),
+				ctx.Context, pgnotice.Newf("follower reads disabled: %s", err.Error()),
 			)
 			return ctx.StmtTimestamp.Add(defaultFollowerReadDuration), nil
 		}

@@ -256,9 +256,12 @@ func (vea *validationErrorAccumulator) validateDescriptorsAtLevel(
 		}
 	}
 	vea.currentDescriptor = nil // ensures we don't needlessly hold a reference.
-	if len(vea.errors) > 0 {
+	// Stop validating when self-validation is unsuccessful.
+	// This prevents panics in subsequent validation levels.
+	if level == ValidationLevelSelfOnly && len(vea.errors) > 0 {
 		return false
 	}
+	// Stop validating when target level is reached.
 	if vea.targetLevel <= vea.currentLevel {
 		return false
 	}

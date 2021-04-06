@@ -752,7 +752,9 @@ func (e *distSQLSpecExecFactory) ConstructExplainOpt(
 }
 
 func (e *distSQLSpecExecFactory) ConstructExplain(
-	options *tree.ExplainOptions, stmtType tree.StatementType, buildFn exec.BuildPlanForExplainFn,
+	options *tree.ExplainOptions,
+	stmtType tree.StatementReturnType,
+	buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")

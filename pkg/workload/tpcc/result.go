@@ -55,7 +55,6 @@ var passing90ThPercentile = map[string]time.Duration{
 
 // Result represents the outcome of a TPCC run.
 type Result struct {
-
 	// ActiveWarehouses is the number of warehouses used in the TPC-C run.
 	ActiveWarehouses int
 
@@ -155,7 +154,11 @@ func NewResultWithSnapshots(
 // TpmC returns a tpmC value with a warehouse factor of 12.86.
 // TpmC will panic if r does not contain a "newOrder" histogram in Cumulative.
 func (r *Result) TpmC() float64 {
-	return float64(r.Cumulative["newOrder"].TotalCount()) / (r.Elapsed.Seconds() / 60)
+	no := r.Cumulative["newOrder"]
+	if no == nil {
+		return 0
+	}
+	return float64(no.TotalCount()) / (r.Elapsed.Seconds() / 60)
 }
 
 // Efficiency returns the efficiency of a TPC-C run.

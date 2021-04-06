@@ -59,6 +59,3 @@ RUN apt-get purge -y \
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 RUN ln -s /usr/bin/bazel-3.6.0 /usr/bin/bazel
-
-COPY bazelbuild.sh /usr/local/bin
-COPY bazeltest.sh /usr/local/bin

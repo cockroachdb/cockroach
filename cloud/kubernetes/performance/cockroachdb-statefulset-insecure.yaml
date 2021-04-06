@@ -140,7 +140,7 @@ spec:
       - name: cockroachdb
         # NOTE: Always use the most recent version of CockroachDB for the best
         # performance and reliability.
-        image: cockroachdb/cockroach:v20.2.6
+        image: cockroachdb/cockroach:v20.2.7
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the resources that can be allocated on each of your Kubernetes nodes by running:
@@ -202,7 +202,7 @@ spec:
       # TODO: This specifically asks for a storage class with the name "ssd". A
       # storage class of this name doesn't exist by default. See our docs for
       # more information on how to create an optimized storage class for use here:
-      # https://www.cockroachlabs.com/docs/stable/orchestrate-cockroachdb-with-kubernetes-performance.html#disk-type
+      # https://www.cockroachlabs.com/docs/stable/kubernetes-performance.html#disk-type
       storageClassName: ssd
       resources:
         requests:

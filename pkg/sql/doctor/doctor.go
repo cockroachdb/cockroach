@@ -54,12 +54,13 @@ type NamespaceTable []NamespaceTableRow
 type JobsTable []jobs.JobMetadata
 
 func newDescGetter(
-	descRows []DescriptorTableRow, nsRows []NamespaceTableRow,
+	ctx context.Context, stdout io.Writer, descRows []DescriptorTableRow, nsRows []NamespaceTableRow,
 ) (catalog.MapDescGetter, error) {
 	ddg := catalog.MapDescGetter{
 		Descriptors: make(map[descpb.ID]catalog.Descriptor, len(descRows)),
 		Namespace:   make(map[descpb.NameInfo]descpb.ID, len(nsRows)),
 	}
+	// Build the descGetter first with un-upgraded descriptors.
 	for _, r := range descRows {
 		var d descpb.Descriptor
 		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
@@ -68,6 +69,21 @@ func newDescGetter(
 		b := catalogkv.NewBuilderWithMVCCTimestamp(&d, r.ModTime)
 		if b != nil {
 			ddg.Descriptors[descpb.ID(r.ID)] = b.BuildImmutable()
+		}
+	}
+	// Rebuild the descGetter with upgrades.
+	for _, r := range descRows {
+		var d descpb.Descriptor
+		if err := protoutil.Unmarshal(r.DescBytes, &d); err != nil {
+			return ddg, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
+		}
+		b := catalogkv.NewBuilderWithMVCCTimestamp(&d, r.ModTime)
+		if b != nil {
+			if err := b.RunPostDeserializationChanges(ctx, ddg); err != nil {
+				descReport(stdout, ddg.Descriptors[descpb.ID(r.ID)], "failed to upgrade descriptor: %v", err)
+			} else {
+				ddg.Descriptors[descpb.ID(r.ID)] = b.BuildImmutable()
+			}
 		}
 	}
 	for _, r := range nsRows {
@@ -107,12 +123,12 @@ func ExamineDescriptors(
 	fmt.Fprintf(
 		stdout, "Examining %d descriptors and %d namespace entries...\n",
 		len(descTable), len(namespaceTable))
-	ddg, err := newDescGetter(descTable, namespaceTable)
+	ddg, err := newDescGetter(ctx, stdout, descTable, namespaceTable)
 	if err != nil {
 		return false, err
 	}
-
 	var problemsFound bool
+
 	for _, row := range descTable {
 		desc, ok := ddg.Descriptors[descpb.ID(row.ID)]
 		if !ok {
@@ -210,7 +226,7 @@ func ExamineJobs(
 	stdout io.Writer,
 ) (ok bool, err error) {
 	fmt.Fprintf(stdout, "Examining %d running jobs...\n", len(jobsTable))
-	ddg, err := newDescGetter(descTable, nil /* nsRows */)
+	ddg, err := newDescGetter(ctx, stdout, descTable, nil)
 	if err != nil {
 		return false, err
 	}

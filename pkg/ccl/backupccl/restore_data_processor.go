@@ -152,11 +152,6 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 	return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 }
 
-// ConsumerClosed is part of the RowSource interface.
-func (rd *restoreDataProcessor) ConsumerClosed() {
-	rd.InternalClose()
-}
-
 func init() {
 	rowexec.NewRestoreDataProcessor = newRestoreDataProcessor
 }

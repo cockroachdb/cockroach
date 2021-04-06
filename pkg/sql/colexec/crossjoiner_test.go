@@ -399,6 +399,7 @@ func TestCrossJoiner(t *testing.T) {
 }
 
 func BenchmarkCrossJoiner(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

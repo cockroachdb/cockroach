@@ -84,6 +84,9 @@ const (
 	OptFormatAvro   FormatType = `experimental_avro`
 	OptFormatNative FormatType = `native`
 
+	// OptKafkaSinkConfig is a JSON configuration for kafka sink (kafkaSinkConfig).
+	OptKafkaSinkConfig = `kafka_sink_config`
+
 	SinkParamCACert           = `ca_cert`
 	SinkParamClientCert       = `client_cert`
 	SinkParamClientKey        = `client_key`
@@ -96,6 +99,7 @@ const (
 	SinkSchemeBuffer          = ``
 	SinkSchemeExperimentalSQL = `experimental-sql`
 	SinkSchemeKafka           = `kafka`
+	SinkSchemeNull            = `null`
 	SinkParamSASLEnabled      = `sasl_enabled`
 	SinkParamSASLHandshake    = `sasl_handshake`
 	SinkParamSASLUser         = `sasl_user`

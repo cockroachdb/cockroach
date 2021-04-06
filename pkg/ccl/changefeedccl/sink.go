@@ -14,6 +14,7 @@ import (
 	"crypto/x509"
 	gosql "database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"hash"
 	"hash/fnv"
@@ -99,6 +100,8 @@ func getSink(
 	switch {
 	case u.Scheme == changefeedbase.SinkSchemeBuffer:
 		makeSink = func() (Sink, error) { return &bufferSink{}, nil }
+	case u.Scheme == changefeedbase.SinkSchemeNull:
+		makeSink = func() (Sink, error) { return &nullSink{}, nil }
 	case u.Scheme == changefeedbase.SinkSchemeKafka:
 		var cfg kafkaSinkConfig
 		cfg.kafkaTopicPrefix = q.Get(changefeedbase.SinkParamTopicPrefix)
@@ -208,7 +211,7 @@ func getSink(
 		}
 
 		makeSink = func() (Sink, error) {
-			return makeKafkaSink(cfg, u.Host, targets)
+			return makeKafkaSink(cfg, u.Host, targets, opts)
 		}
 	case isCloudStorageSink(u):
 		fileSizeParam := q.Get(changefeedbase.SinkParamFileSize)
@@ -380,8 +383,98 @@ func makeTopicsMap(
 	return topics
 }
 
+type jsonDuration time.Duration
+
+func (j *jsonDuration) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	dur, err := time.ParseDuration(s)
+	if err != nil {
+		return err
+	}
+	*j = jsonDuration(dur)
+	return nil
+}
+
+type saramaConfig struct {
+	// These settings mirror ones in sarama config.
+	// We just tag them w/ JSON annotations.
+	// Flush describes settings specific to producer flushing.
+	// See sarama.Config.Producer.Flush
+	Flush struct {
+		Bytes       int          `json:",omitempty"`
+		Messages    int          `json:",omitempty"`
+		Frequency   jsonDuration `json:",omitempty"`
+		MaxMessages int          `json:",omitempty"`
+	}
+}
+
+// Apply configures provided kafka configuration struct based on this config.
+func (c *saramaConfig) Apply(kafka *sarama.Config) {
+	kafka.Producer.Flush.Bytes = c.Flush.Bytes
+	kafka.Producer.Flush.Messages = c.Flush.Messages
+	kafka.Producer.Flush.Frequency = time.Duration(c.Flush.Frequency)
+	kafka.Producer.Flush.MaxMessages = c.Flush.MaxMessages
+}
+
+var defaultSaramaConfig = func() *saramaConfig {
+	config := &saramaConfig{}
+
+	// When we emit messages to sarama, they're placed in a queue (as does any
+	// reasonable kafka producer client). When our sink's Flush is called, we
+	// have to wait for all buffered and inflight requests to be sent and then
+	// acknowledged. Quite unfortunately, we have no way to hint to the producer
+	// that it should immediately send out whatever is buffered. This
+	// configuration can have a dramatic impact on how quickly this happens
+	// naturally (and some configurations will block forever!).
+	//
+	// We can configure the producer to send out its batches based on number of
+	// messages and/or total buffered message size and/or time. If none of them
+	// are set, it uses some defaults, but if any of the three are set, it does
+	// no defaulting. Which means that if `Flush.Messages` is set to 10 and
+	// nothing else is set, then 9/10 times `Flush` will block forever. We can
+	// work around this by also setting `Flush.Frequency` but a cleaner way is
+	// to set `Flush.Messages` to 1. In the steady state, this sends a request
+	// with some messages, buffers any messages that come in while it is in
+	// flight, then sends those out.
+	config.Flush.Messages = 1
+
+	// This works around what seems to be a bug in sarama where it isn't
+	// computing the right value to compare against `Producer.MaxMessageBytes`
+	// and the server sends it back with a "Message was too large, server
+	// rejected it to avoid allocation" error. The other flush tunings are
+	// hints, but this one is a hard limit, so it's useful here as a workaround.
+	//
+	// This workaround should probably be something like setting
+	// `Producer.MaxMessageBytes` to 90% of it's value for some headroom, but
+	// this workaround is the one that's been running in roachtests and I'd want
+	// to test this one more before changing it.
+	config.Flush.MaxMessages = 1000
+
+	// config.Producer.Flush.Messages is set to 1 so we don't need this, but
+	// sarama prints scary things to the logs if we don't.
+	config.Flush.Frequency = jsonDuration(time.Hour)
+
+	return config
+}()
+
+func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
+	if configStr, haveOverride := opts[changefeedbase.OptKafkaSinkConfig]; haveOverride {
+		config = &saramaConfig{}
+		err = json.Unmarshal([]byte(configStr), config)
+	} else {
+		config = defaultSaramaConfig
+	}
+	return
+}
+
 func makeKafkaSink(
-	cfg kafkaSinkConfig, bootstrapServers string, targets jobspb.ChangefeedTargets,
+	cfg kafkaSinkConfig,
+	bootstrapServers string,
+	targets jobspb.ChangefeedTargets,
+	opts map[string]string,
 ) (Sink, error) {
 	sink := &kafkaSink{
 		cfg:    cfg,
@@ -444,42 +537,13 @@ func makeKafkaSink(
 		}
 	}
 
-	// When we emit messages to sarama, they're placed in a queue (as does any
-	// reasonable kafka producer client). When our sink's Flush is called, we
-	// have to wait for all buffered and inflight requests to be sent and then
-	// acknowledged. Quite unfortunately, we have no way to hint to the producer
-	// that it should immediately send out whatever is buffered. This
-	// configuration can have a dramatic impact on how quickly this happens
-	// naturally (and some configurations will block forever!).
-	//
-	// We can configure the producer to send out its batches based on number of
-	// messages and/or total buffered message size and/or time. If none of them
-	// are set, it uses some defaults, but if any of the three are set, it does
-	// no defaulting. Which means that if `Flush.Messages` is set to 10 and
-	// nothing else is set, then 9/10 times `Flush` will block forever. We can
-	// work around this by also setting `Flush.Frequency` but a cleaner way is
-	// to set `Flush.Messages` to 1. In the steady state, this sends a request
-	// with some messages, buffers any messages that come in while it is in
-	// flight, then sends those out.
-	config.Producer.Flush.Messages = 1
+	saramaCfg, err := getSaramaConfig(opts)
+	if err != nil {
+		return nil, errors.Wrapf(err,
+			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
+	}
+	saramaCfg.Apply(config)
 
-	// This works around what seems to be a bug in sarama where it isn't
-	// computing the right value to compare against `Producer.MaxMessageBytes`
-	// and the server sends it back with a "Message was too large, server
-	// rejected it to avoid allocation" error. The other flush tunings are
-	// hints, but this one is a hard limit, so it's useful here as a workaround.
-	//
-	// This workaround should probably be something like setting
-	// `Producer.MaxMessageBytes` to 90% of it's value for some headroom, but
-	// this workaround is the one that's been running in roachtests and I'd want
-	// to test this one more before changing it.
-	config.Producer.Flush.MaxMessages = 1000
-
-	// config.Producer.Flush.Messages is set to 1 so we don't need this, but
-	// sarama prints scary things to the logs if we don't.
-	config.Producer.Flush.Frequency = time.Hour
-
-	var err error
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
 	if err != nil {
 		err = pgerror.Wrapf(err, pgcode.CannotConnectNow,
@@ -918,3 +982,37 @@ func (s *bufferSink) Close() error {
 	s.closed = true
 	return nil
 }
+
+type nullSink struct {
+}
+
+func (n *nullSink) EmitRow(
+	ctx context.Context, topic TopicDescriptor, key, value []byte, updated hlc.Timestamp,
+) error {
+	log.Dev.VInfof(ctx, 2, "emitting row %s@%s", key, updated.String())
+	return nil
+}
+
+func (n *nullSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	if log.V(2) {
+		log.Infof(ctx, "emitting resolved %s", resolved.String())
+	}
+
+	return nil
+}
+
+func (n *nullSink) Flush(ctx context.Context) error {
+	if log.V(2) {
+		log.Info(ctx, "flushing")
+	}
+
+	return nil
+}
+
+func (n *nullSink) Close() error {
+	return nil
+}
+
+var _ Sink = (*nullSink)(nil)

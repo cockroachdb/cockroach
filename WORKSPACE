@@ -10,13 +10,10 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
-http_archive(
+git_repository(
     name = "io_bazel_rules_go",
-    sha256 = "7c10271940c6bce577d51a075ae77728964db285dac0a46614a7934dc34303e6",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.26.0/rules_go-v0.26.0.tar.gz",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.26.0/rules_go-v0.26.0.tar.gz",
-    ],
+    commit = "2fe8a6256c818840cc9a10cf3f366d8410437245",
+    remote = "https://github.com/cockroachdb/rules_go",
 )
 
 # Like the above, but for nodeJS.
@@ -28,12 +25,9 @@ http_archive(
 
 # Load gazelle. This lets us auto-generate BUILD.bazel files throughout the
 # repo.
-#
-# TODO(irfansharif): Point to a proper bazelle-gazelle release once
-# https://github.com/bazelbuild/bazel-gazelle/pull/933 lands upstream.
 git_repository(
     name = "bazel_gazelle",
-    commit = "493b9adf67665beede36502c2094496af9f245a3",
+    commit = "e9091445339de2ba7c01c3561f751b64a7fab4a5",
     remote = "https://github.com/bazelbuild/bazel-gazelle",
 )
 
@@ -58,6 +52,14 @@ go_repository(
     importpath = "golang.org/x/tools",
     sum = "h1:po9/4sTYwZU9lPhi1tOrb4hCv3qrhiQ77LZfGa2OjwY=",
     version = "v0.1.0",
+)
+
+go_repository(
+    name = "org_golang_x_xerrors",
+    build_file_proto_mode = "disable_global",
+    importpath = "golang.org/x/xerrors",
+    sum = "h1:go1bK/D/BFZV2I8cIQd1NKEZ+0owSTG1fDTci4IqFcE=",
+    version = "v0.0.0-20200804184101-5ec99f83aff1",
 )
 
 go_repository(
@@ -91,6 +93,15 @@ go_repository(
     importpath = "google.golang.org/genproto",
     sum = "h1:PDIOdWxZ8eRizhKa1AAvY53xsvLB1cWorMjslvY3VA8=",
     version = "v0.0.0-20200825200019-8632dd797987",
+)
+
+go_repository(
+    name = "in_gopkg_yaml_v2",
+    build_file_proto_mode = "disable_global",
+    importpath = "gopkg.in/yaml.v2",
+    replace = "github.com/cockroachdb/yaml",
+    sum = "h1:EqoCicA1pbWWDGniFxhTElh2hvui7E7tEvuBNJSDn3A=",
+    version = "v0.0.0-20180705215940-0e2822948641",
 )
 
 # Load the go dependencies and invoke them.

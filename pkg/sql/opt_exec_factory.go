@@ -1900,7 +1900,9 @@ func (ef *execFactory) ConstructCreateStatistics(cs *tree.CreateStats) (exec.Nod
 
 // ConstructExplain is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExplain(
-	options *tree.ExplainOptions, stmtType tree.StatementType, buildFn exec.BuildPlanForExplainFn,
+	options *tree.ExplainOptions,
+	stmtType tree.StatementReturnType,
+	buildFn exec.BuildPlanForExplainFn,
 ) (exec.Node, error) {
 	if options.Flags[tree.ExplainFlagEnv] {
 		return nil, errors.New("ENV only supported with (OPT) option")

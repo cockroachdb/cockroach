@@ -244,7 +244,7 @@ func newRootTxnCoordSender(
 		// Various interceptors below rely on sequence number allocation,
 		// so the sequence number allocator is near the top of the stack.
 		&tcs.interceptorAlloc.txnSeqNumAllocator,
-		// The pipelinger sits above the span refresher because it will
+		// The pipeliner sits above the span refresher because it will
 		// never generate transaction retry errors that could be avoided
 		// with a refresh.
 		&tcs.interceptorAlloc.txnPipeliner,
@@ -280,8 +280,10 @@ func (tc *TxnCoordSender) initCommonInterceptors(
 		riGen.ds = ds
 	}
 	tc.interceptorAlloc.txnPipeliner = txnPipeliner{
-		st:    tcf.st,
-		riGen: riGen,
+		st:                     tcf.st,
+		riGen:                  riGen,
+		txnMetrics:             &tc.metrics,
+		condensedIntentsEveryN: &tc.TxnCoordSenderFactory.condensedIntentsEveryN,
 	}
 	tc.interceptorAlloc.txnSpanRefresher = txnSpanRefresher{
 		st:    tcf.st,

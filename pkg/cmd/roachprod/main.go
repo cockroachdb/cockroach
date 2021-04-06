@@ -1272,6 +1272,42 @@ var runCmd = &cobra.Command{
 	}),
 }
 
+var resetCmd = &cobra.Command{
+	Use:   "reset <cluster>",
+	Short: "reset *all* VMs in a cluster",
+	Long: `Reset a cloud VM. This may not be implemented for all
+environments and will fall back to a no-op.`,
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
+		if numNodes <= 0 || numNodes >= 1000 {
+			// Upper limit is just for safety.
+			return fmt.Errorf("number of nodes must be in [1..999]")
+		}
+
+		clusterName, err := verifyClusterName(args[0])
+		if err != nil {
+			return err
+		}
+
+		if clusterName == config.Local {
+			return nil
+		}
+
+		cloud, err := cld.ListCloud()
+		if err != nil {
+			return err
+		}
+		c, ok := cloud.Clusters[clusterName]
+		if !ok {
+			return errors.New("cluster not found")
+		}
+
+		return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+			return p.Reset(vms)
+		})
+	}),
+}
+
 var installCmd = &cobra.Command{
 	Use:   "install <cluster> <software>",
 	Short: "install 3rd party software",
@@ -1737,6 +1773,7 @@ func main() {
 	cobra.EnableCommandSorting = false
 	rootCmd.AddCommand(
 		createCmd,
+		resetCmd,
 		destroyCmd,
 		extendCmd,
 		listCmd,

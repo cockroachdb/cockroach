@@ -25,8 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,4 +109,13 @@ func CheckTableKeyCountExact(ctx context.Context, kvDB *kv.DB, e int) error {
 // should be the number of columns.
 func CheckTableKeyCount(ctx context.Context, kvDB *kv.DB, multiple int, maxValue int) error {
 	return CheckTableKeyCountExact(ctx, kvDB, multiple*(maxValue+1))
+}
+
+// IsClientSideQueryCanceledErr returns whether err is a client-side
+// QueryCanceled error.
+func IsClientSideQueryCanceledErr(err error) bool {
+	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+		return pgcode.MakeCode(string(pqErr.Code)) == pgcode.QueryCanceled
+	}
+	return pgerror.GetPGCode(err) == pgcode.QueryCanceled
 }
