@@ -206,8 +206,7 @@ func (b *Builder) Build() (err error) {
 
 	// Build the memo, and call SetRoot on the memo to indicate the root group
 	// and physical properties.
-	outScope := b.buildStmtAtRoot(b.stmt, nil /* desiredTypes */, b.allocScope())
-	outScope.expr = b.buildWiths(outScope.expr, b.ctes)
+	outScope := b.buildStmtAtRoot(b.stmt, nil /* desiredTypes */)
 
 	physical := outScope.makePhysicalProps()
 	b.factory.Memo().SetRoot(outScope.expr, physical)
@@ -222,16 +221,22 @@ func unimplementedWithIssueDetailf(issue int, detail, format string, args ...int
 }
 
 // buildStmtAtRoot builds a statement, beginning a new conceptual query
-// "context".
-func (b *Builder) buildStmtAtRoot(
-	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
-) (outScope *scope) {
-	defer func(prevAtRoot bool) {
-		inScope.atRoot = prevAtRoot
-	}(inScope.atRoot)
+// "context". This is used at the top-level of every statement, and inside
+// EXPLAIN, CREATE VIEW, CREATE TABLE AS.
+func (b *Builder) buildStmtAtRoot(stmt tree.Statement, desiredTypes []*types.T) (outScope *scope) {
+	// A "root" statement cannot refer to anything from an enclosing query, so we
+	// always start with an empty scope.
+	inScope := b.allocScope()
 	inScope.atRoot = true
 
-	return b.buildStmt(stmt, desiredTypes, inScope)
+	// Save any CTEs above the boundary.
+	prevCTEs := b.ctes
+	b.ctes = nil
+	outScope = b.buildStmt(stmt, desiredTypes, inScope)
+	// Build With operators for any CTEs hoisted to the top level.
+	outScope.expr = b.buildWiths(outScope.expr, b.ctes)
+	b.ctes = prevCTEs
+	return outScope
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL

@@ -49,22 +49,9 @@ func (b *Builder) addCTERef(referencedID opt.WithID, referencedBy *cteSource) {
 	b.cteRefMap[referencedID] = append(b.cteRefMap[referencedID], referencedBy)
 }
 
-// cteBoundary is used to build statements which impose a CTE boundary, like
-// EXPLAIN or CREATE VIEW. The With operators for any CTEs defined inside the
-// statement are all built before returning.
-func (b *Builder) cteBoundary(buildFn func() *scope) *scope {
-	// Save the CTEs above the boundary.
-	prevCTEs := b.ctes
-	b.ctes = nil
-	scope := buildFn()
-	scope.expr = b.buildWiths(scope.expr, b.ctes)
-	b.ctes = prevCTEs
-	return scope
-}
-
 // addCTE adds a CTE to the list and adds its references to cteRefMap. If CTE
-// does not reference any other CTEs, it will be built at the top level (or more
-// generally, at the current CTE boundary). If it does, it will be built as a
+// does not reference any other CTEs, it will be built at the root level (see
+// buildStmtAtRoot). If it does reference other CTEs, it will be built as a
 // pre-requisite to building the referenced CTEs.
 func (b *Builder) addCTE(cte *cteSource) {
 	withUses := memo.WithUses(cte.expr)
