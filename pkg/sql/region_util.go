@@ -719,17 +719,14 @@ func applyZoneConfigForMultiRegionDatabase(
 	return nil
 }
 
-// forEachTableInMultiRegionDatabase calls the given function on every table
-// descriptor inside the given multi-region database. Tables that have been
+// forEachMutableTableInDatabase calls the given function on every table
+// descriptor inside the given database. Tables that have been
 // dropped are skipped.
-func (p *planner) forEachTableInMultiRegionDatabase(
+func (p *planner) forEachMutableTableInDatabase(
 	ctx context.Context,
 	dbDesc *dbdesc.Immutable,
 	fn func(ctx context.Context, tbDesc *tabledesc.Mutable) error,
 ) error {
-	if !dbDesc.IsMultiRegion() {
-		return errors.AssertionFailedf("db %q is not multi-region", dbDesc.Name)
-	}
 	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
@@ -752,7 +749,7 @@ func (p *planner) forEachTableInMultiRegionDatabase(
 // updateZoneConfigsForAllTables loops through all of the tables in the
 // specified database and refreshes the zone configs for all tables.
 func (p *planner) updateZoneConfigsForAllTables(ctx context.Context, desc *dbdesc.Mutable) error {
-	return p.forEachTableInMultiRegionDatabase(
+	return p.forEachMutableTableInDatabase(
 		ctx,
 		&desc.Immutable,
 		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
@@ -872,7 +869,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 	zoneConfigForMultiRegionValidator zoneConfigForMultiRegionValidator,
 ) error {
 	var ids []descpb.ID
-	if err := p.forEachTableInMultiRegionDatabase(
+	if err := p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
 		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
@@ -903,7 +900,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 		return err
 	}
 
-	return p.forEachTableInMultiRegionDatabase(
+	return p.forEachMutableTableInDatabase(
 		ctx,
 		dbDesc,
 		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
