@@ -273,6 +273,11 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				switch lower {
 				case "pg_sleep":
 					continue
+				case "st_segmentize":
+					// Segmentizing can be slow and resource intensive, and bounding
+					// these builtins is tedious and unlikely to uncover any real
+					// issues.
+					continue
 				case "st_frechetdistance":
 					// Calculating the Frechet distance is slow and testing it here
 					// is not worth it.
