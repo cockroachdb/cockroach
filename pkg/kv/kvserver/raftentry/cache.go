@@ -380,11 +380,17 @@ func (p *partition) setSize(orig, new cacheSize) bool {
 // entries in ents have contiguous indices.
 func analyzeEntries(ents []raftpb.Entry) (size int32) {
 	var prevIndex uint64
+	var prevTerm uint64
 	for i, e := range ents {
 		if i != 0 && e.Index != prevIndex+1 {
 			panic(errors.Errorf("invalid non-contiguous set of entries %d and %d", prevIndex, e.Index))
 		}
+		if i != 0 && e.Term < prevTerm {
+			panic(errors.Errorf("term regression idx %d: %s -> %d", prevIndex, e.Term, prevTerm))
+
+		}
 		prevIndex = e.Index
+		prevTerm = e.Term
 		size += int32(e.Size())
 	}
 	return

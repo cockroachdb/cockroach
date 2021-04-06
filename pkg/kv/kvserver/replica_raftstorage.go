@@ -117,6 +117,7 @@ func entries(
 	ents := make([]raftpb.Entry, 0, n)
 
 	ents, size, hitIndex, exceededMaxBytes := eCache.Scan(ents, rangeID, lo, hi, maxBytes)
+	// NB: `ents` is regression free so far.
 
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
@@ -179,6 +180,18 @@ func entries(
 	if err := iterateEntries(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, err
 	}
+
+	for i := range ents {
+		if i > 0 {
+			ent := &ents[i]
+			prevEnt := &ents[i-1]
+			if prevEnt.Term > ent.Term {
+				log.Fatalf(ctx, "TBG idx %d term regression after iterateEntries %d -> %d",
+					ent.Index, prevEnt.Term, ent.Term)
+			}
+		}
+	}
+
 	// Cache the fetched entries, if we may.
 	if canCache {
 		eCache.Add(rangeID, ents, false /* truncate */)

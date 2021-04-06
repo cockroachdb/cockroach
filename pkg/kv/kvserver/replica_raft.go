@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -799,6 +800,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
 	r.store.raftEntryCache.Add(r.RangeID, rd.Entries, true /* truncate */)
+	if len(rd.Entries) > 0 {
+		idx := rd.Entries[len(rd.Entries)-1].Index
+		ents, _, _, _ := r.store.raftEntryCache.Scan(nil, r.RangeID, idx+1, idx+2, math.MaxUint64)
+		if len(ents) > 0 {
+			log.Fatalf(ctx, "truncated cache to [..., %d] but got an entry for %d..%d", idx, ents[0].Index, ents[len(ents)-1].Index)
+		}
+	}
 	r.sendRaftMessages(ctx, otherMsgs)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 
