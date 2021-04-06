@@ -152,3 +152,9 @@ query B
 SELECT pg_type_is_visible(NULL)
 ----
 NULL
+
+
+query TT
+SELECT pg_get_partkeydef(1), pg_get_partkeydef(NULL)
+----
+NULL  NULL
