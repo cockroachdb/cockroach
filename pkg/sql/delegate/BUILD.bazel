@@ -9,6 +9,7 @@ go_library(
         "show_database_indexes.go",
         "show_databases.go",
         "show_enums.go",
+        "show_full_table_scans.go",
         "show_grants.go",
         "show_jobs.go",
         "show_partitions.go",

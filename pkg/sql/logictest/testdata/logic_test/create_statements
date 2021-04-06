@@ -688,7 +688,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    max_disk_usage_var FLOAT8 NULL,
    contention_time_avg FLOAT8 NULL,
    contention_time_var FLOAT8 NULL,
-   implicit_txn BOOL NOT NULL
+   implicit_txn BOOL NOT NULL,
+   full_scan BOOL NOT NULL
 )  CREATE TABLE crdb_internal.node_statement_statistics (
    node_id INT8 NOT NULL,
    application_name STRING NOT NULL,
@@ -725,7 +726,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
    max_disk_usage_var FLOAT8 NULL,
    contention_time_avg FLOAT8 NULL,
    contention_time_var FLOAT8 NULL,
-   implicit_txn BOOL NOT NULL
+   implicit_txn BOOL NOT NULL,
+   full_scan BOOL NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_transaction_statistics (
    node_id INT8 NOT NULL,
