@@ -1439,7 +1439,6 @@ func (ex *connExecutor) run(
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	ex.planner.extendedEvalCtx.setSessionID(ex.sessionID)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
-	var uuidTmp *kv.Txn
 	for {
 		ex.curStmtAST = nil
 		if err := ctx.Err(); err != nil {
@@ -1447,14 +1446,6 @@ func (ex *connExecutor) run(
 		}
 
 		var err error
-		// Update the deadline on the transaction based on the collections
-		if deadline, haveDeadline := ex.extraTxnState.descCollection.Deadline(); haveDeadline && ex.state.mu.txn != nil {
-			err := ex.state.mu.txn.UpdateDeadline(ctx, deadline)
-			if err != nil && uuidTmp != ex.state.mu.txn {
-				return err
-			}
-		}
-		uuidTmp = ex.state.mu.txn
 		if err = ex.execCmd(ex.Ctx()); err != nil {
 			if errors.IsAny(err, io.EOF, errDrainingComplete) {
 				return nil
@@ -1503,9 +1494,16 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	var ev fsm.Event
 	var payload fsm.EventPayload
 	var res ResultBase
-
 	switch tcmd := cmd.(type) {
 	case ExecStmt:
+		// Update the deadline on the transaction based on the collections
+		if deadline, haveDeadline := ex.extraTxnState.descCollection.Deadline(); haveDeadline && ex.state.mu.txn != nil {
+			err := ex.state.mu.txn.UpdateDeadline(ctx, deadline)
+			if err != nil {
+				return err
+			}
+		}
+
 		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
 		ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
 		ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
@@ -1549,6 +1547,13 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	case ExecPortal:
 		// ExecPortal is handled like ExecStmt, except that the placeholder info
 		// is taken from the portal.
+		// Update the deadline on the transaction based on the collections
+		if deadline, haveDeadline := ex.extraTxnState.descCollection.Deadline(); haveDeadline && ex.state.mu.txn != nil {
+			err := ex.state.mu.txn.UpdateDeadline(ctx, deadline)
+			if err != nil {
+				return err
+			}
+		}
 
 		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
 		// When parsing has been done earlier, via a separate parse
@@ -2338,7 +2343,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	if advInfo.code == rewind {
 		ex.extraTxnState.autoRetryCounter++
 	}
-
 	// Handle transaction events which cause updates to txnState.
 	switch advInfo.txnEvent {
 	case noEvent:
@@ -2347,7 +2351,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		ex.extraTxnState.onTxnFinish, ex.extraTxnState.onTxnRestart = ex.recordTransactionStart()
 		// Bump the txn counter for logging.
 		ex.extraTxnState.txnCounter++
-
 	case txnCommit:
 		if res.Err() != nil {
 			err := errorutil.UnexpectedWithIssueErrorf(
@@ -2414,7 +2417,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		return advanceInfo{}, errors.AssertionFailedf(
 			"unexpected event: %v", errors.Safe(advInfo.txnEvent))
 	}
-
 	return advInfo, nil
 }
 

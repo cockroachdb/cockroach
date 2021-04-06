@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/safedetails"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
@@ -289,11 +288,11 @@ func (s storage) acquire(
 		s.outstandingLeases.Inc(1)
 		return nil
 	})
-	if s.testingKnobs.LeaseAcquiredEvent != nil {
-		s.testingKnobs.LeaseAcquiredEvent(desc, err)
-	}
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
+	}
+	if s.testingKnobs.LeaseAcquiredEvent != nil {
+		s.testingKnobs.LeaseAcquiredEvent(desc, err)
 	}
 	return desc, expiration, nil
 }
@@ -822,7 +821,7 @@ func (m *Manager) AcquireFreshestFromStore(ctx context.Context, id descpb.ID) er
 	return nil
 }
 
-var _ safedetails.SafeMessager = (*descriptorVersionState)(nil)
+var _ redact.SafeMessager = (*descriptorVersionState)(nil)
 
 // upsertLeaseLocked inserts a lease for a particular descriptor version.
 // If an existing lease exists for the descriptor version it replaces
@@ -1012,7 +1011,6 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 	if l := maybeRemoveLease(); l != nil {
 		releaseLease(l, t.m)
 	}
-	return
 }
 
 // releaseLease from store.
@@ -1461,20 +1459,16 @@ func (m *Manager) AcquireByName(
 	// to be cached, but callers still need the offline error generated.
 	// This logic will release the lease (the lease manager will still
 	// cache it), and generate the offline descriptor error.
-	validateDescriptorForReturn := func(desc catalog.Descriptor,
-		expiration hlc.Timestamp) (catalog.Descriptor, hlc.Timestamp, error) {
-		if desc.Offline() {
+	validateDescriptorForReturn := func(desc LeasedDescriptor) (LeasedDescriptor, error) {
+		if desc.Desc().Offline() {
 			if err := catalog.FilterDescriptorState(
-				desc, tree.CommonLookupFlags{},
+				desc.Desc(), tree.CommonLookupFlags{},
 			); err != nil {
-				releaseErr := m.Release(desc)
-				if releaseErr != nil {
-					log.Warningf(ctx, "error releasing lease: %s", releaseErr)
-				}
-				return nil, hlc.Timestamp{}, err
+				desc.Release(ctx)
+				return nil, err
 			}
 		}
-		return desc, expiration, nil
+		return desc, nil
 	}
 	// Check if we have cached an ID for this name.
 	descVersion := m.names.get(parentID, parentSchemaID, name, timestamp)
@@ -1491,7 +1485,7 @@ func (m *Manager) AcquireByName(
 					}
 				}
 			}
-			return validateDescriptorForReturn(descVersion.Descriptor, descVersion.expiration)
+			return validateDescriptorForReturn(descVersion)
 		}
 		// m.names.get() incremented the refcount, we decrement it to get a new
 		// version.
@@ -1501,7 +1495,7 @@ func (m *Manager) AcquireByName(
 		if err != nil {
 			return nil, err
 		}
-		return validateDescriptorForReturn(desc, expiration)
+		return validateDescriptorForReturn(leasedDesc)
 	}
 
 	// We failed to find something in the cache, or what we found is not
@@ -1566,7 +1560,7 @@ func (m *Manager) AcquireByName(
 			return nil, catalog.ErrDescriptorNotFound
 		}
 	}
-	return validateDescriptorForReturn(desc, expiration)
+	return validateDescriptorForReturn(desc)
 }
 
 // resolveName resolves a descriptor name to a descriptor ID at a particular
@@ -1609,6 +1603,8 @@ func (m *Manager) resolveName(
 	return id, nil
 }
 
+// LeasedDescriptor tracks and manages leasing related
+// information for a descriptor.
 type LeasedDescriptor interface {
 	Desc() catalog.Descriptor
 	Expiration() hlc.Timestamp

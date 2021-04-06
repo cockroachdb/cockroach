@@ -226,6 +226,11 @@ func (ex *connExecutor) prepare(
 		if err := ex.server.cfg.DB.Txn(ctx, prepare); err != nil {
 			return nil, err
 		}
+		// Prepare is an implicit transaction and we know it with any
+		// other descriptors. Once the implicit transaction is done
+		// we can safely drop the leases, since the collections object
+		// will be shared.
+		ex.extraTxnState.descCollection.ReleaseAll(ctx)
 	}
 
 	// Account for the memory used by this prepared statement.

@@ -311,7 +311,6 @@ func (tc *Collection) getLeasedDescriptorByName(
 	// reduce the deadline. We use ReadTimestamp() that doesn't return the commit
 	// timestamp, so we need to set a deadline on the transaction to prevent it
 	// from committing beyond the version's expiration time.
-
 	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
 		err := txn.UpdateDeadline(ctx, deadline)
 		if err != nil {
@@ -321,6 +320,8 @@ func (tc *Collection) getLeasedDescriptorByName(
 	return ldesc.Desc(), false, nil
 }
 
+// Deadline returns the latest expiration from our leased
+// descriptors which should b e the transactions deadline.
 func (tc *Collection) Deadline() (deadline hlc.Timestamp, haveDeadline bool) {
 	for _, l := range tc.leasedDescriptors.descs {
 		expiration := l.Expiration()
@@ -330,30 +331,6 @@ func (tc *Collection) Deadline() (deadline hlc.Timestamp, haveDeadline bool) {
 		}
 	}
 	return deadline, haveDeadline
-}
-
-// GetTableVersionByID is a by-ID variant of GetTableVersion (i.e. uses same cache).
-func (tc *Collection) GetTableVersionByID(
-	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
-) (*catalog.TableDescriptor, error) {
-	desc, err := tc.getDescriptorByIDMaybeSetTxnDeadline(ctx, txn, tableID, flags.CommonLookupFlags, false, true /* setTxnDeadline */)
-	if err != nil {
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			return nil, sqlerrors.NewUndefinedRelationError(
-				&tree.TableRef{TableID: int64(tableID)})
-		}
-		return nil, err
-	}
-	table, ok := desc.(catalog.TableDescriptor)
-	if !ok {
-		return nil, sqlerrors.NewUndefinedRelationError(
-			&tree.TableRef{TableID: int64(tableID)})
-	}
-	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
-	if err != nil {
-		return nil, err
-	}
-	return &hydrated, nil
 }
 
 // getLeasedDescriptorByID return a leased descriptor valid for the transaction,
@@ -528,12 +505,6 @@ func (tc *Collection) getDatabaseByName(
 	if dropped, err := filterDescriptorState(db, flags.Required, flags); err != nil || dropped {
 		return false, nil, err
 	}
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return false, nil, err
-		}
-	}
 	return true, db, nil
 }
 
@@ -615,12 +586,6 @@ func (tc *Collection) getObjectByName(
 		return tc.getDescriptorFromStore(
 			ctx, txn, tc.codec(), dbID, schemaID, objectName, mutable)
 	}
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return false, nil, err
-		}
-	}
 	return true, desc, nil
 }
 
@@ -633,12 +598,6 @@ func (tc *Collection) GetMutableTableByName(
 	if err != nil || !found {
 		return false, nil, err
 	}
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return false, nil, err
-		}
-	}
 	return true, desc.(*tabledesc.Mutable), nil
 }
 
@@ -650,12 +609,6 @@ func (tc *Collection) GetImmutableTableByName(
 	found, desc, err := tc.getTableByName(ctx, txn, name, flags, false /* mutable */)
 	if err != nil || !found {
 		return false, nil, err
-	}
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return false, nil, err
-		}
 	}
 	return true, desc, nil
 }
@@ -706,12 +659,6 @@ func (tc *Collection) getTableByName(
 		return false, nil, err
 	}
 
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return false, nil, err
-		}
-	}
 	return true, hydrated, nil
 }
 
@@ -723,12 +670,6 @@ func (tc *Collection) GetMutableTypeByName(
 	found, desc, err := tc.getTypeByName(ctx, txn, name, flags, true /* mutable */)
 	if err != nil || !found {
 		return false, nil, err
-	}
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return false, nil, err
-		}
 	}
 	return true, desc.(*typedesc.Mutable), nil
 }
@@ -769,12 +710,6 @@ func (tc *Collection) getTypeByName(
 	}
 	if dropped, err := filterDescriptorState(typ, flags.Required, flags.CommonLookupFlags); err != nil || dropped {
 		return false, nil, err
-	}
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return false, nil, err
-		}
 	}
 	return true, typ, nil
 }
@@ -1053,12 +988,6 @@ func (tc *Collection) GetImmutableTableByID(
 	if err != nil {
 		return nil, err
 	}
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return desc, nil
 }
 
@@ -1081,12 +1010,6 @@ func (tc *Collection) getTableByID(
 	hydrated, err := tc.hydrateTypesInTableDesc(ctx, txn, table)
 	if err != nil {
 		return nil, err
-	}
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return hydrated, nil
 }
@@ -1189,12 +1112,6 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 			return desc, nil
 		}
 		return nil, err
-	}
-	if deadline, haveDeadline := tc.Deadline(); haveDeadline {
-		err := txn.UpdateDeadline(ctx, deadline)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return desc, nil
 }
@@ -1439,10 +1356,9 @@ func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.
 // ReleaseLeases releases all leases. Errors are logged but ignored.
 func (tc *Collection) ReleaseLeases(ctx context.Context) {
 	log.VEventf(ctx, 2, "releasing %d descriptors", tc.leasedDescriptors.numDescriptors())
-	for _, desc := range tc.leasedDescriptors.descs {
+	for _, desc := range tc.leasedDescriptors.releaseAll() {
 		desc.Release(ctx)
 	}
-	tc.leasedDescriptors.descs = tc.leasedDescriptors.descs[:0]
 }
 
 // ReleaseAll releases all state currently held by the Collection.

@@ -342,12 +342,12 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 				require.NoError(t, err, "Deadline update to past failed")
 			case 2:
 				// Equal deadline.
-				txn.UpdateDeadline(ctx, pushedTimestamp)
+				err := txn.UpdateDeadline(ctx, pushedTimestamp)
 				require.NoError(t, err, "Deadline update to equal failed")
 
 			case 3:
 				// Future deadline.
-				txn.UpdateDeadline(ctx, pushedTimestamp.Next())
+				err := txn.UpdateDeadline(ctx, pushedTimestamp.Next())
 				require.NoError(t, err, "Deadline update to future failed")
 			}
 			err = txn.CommitOrCleanup(ctx)

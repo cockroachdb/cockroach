@@ -698,10 +698,10 @@ func (txn *Txn) UpdateDeadline(ctx context.Context, deadline hlc.Timestamp) erro
 
 	readTimestamp := txn.readTimestampLocked()
 	if deadline.Less(readTimestamp) {
-
-		log.Fatalf(ctx, "deadline below read timestamp is nonsensical; "+
-			"txn has would have no change to commit. Deadline: %s. Read timestamp: %s Old Deadline: %s.",
-			deadline, readTimestamp, txn.mu.deadline)
+		/*	log.Fatalf(ctx, "deadline below read timestamp is nonsensical; "+
+			"txn has would have no change to commit. Deadline: %s. Read timestamp: %s Previous Deadline: %s.",
+			deadline, readTimestamp, txn.mu.deadline)*/
+		return errors.New("DIE")
 	}
 	txn.mu.deadline = new(hlc.Timestamp)
 	*txn.mu.deadline = deadline
