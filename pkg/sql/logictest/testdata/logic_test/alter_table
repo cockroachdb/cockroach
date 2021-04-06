@@ -1135,3 +1135,26 @@ CREATE TABLE t54629 (c INT NOT NULL, UNIQUE INDEX (c));
 ALTER TABLE t54629 ADD CONSTRAINT pk PRIMARY KEY (c);
 INSERT INTO t54629 VALUES (1);
 DELETE FROM t54629 WHERE c = 1;
+
+# Regression test for #60786. Handle in-transaction constraint ADD+DROP correctly.
+subtest regression_60786
+
+statement ok
+CREATE TABLE t60786(i INT PRIMARY KEY);
+
+statement error pgcode 0A000 constraint "fk" in the middle of being added, try again later
+BEGIN;
+CREATE TABLE child_60786(i INT PRIMARY KEY);
+ALTER TABLE t60786 ADD CONSTRAINT fk FOREIGN KEY (i) REFERENCES child_60786(i) NOT VALID;
+ALTER TABLE t60786 DROP CONSTRAINT fk CASCADE
+
+statement ok
+ROLLBACK
+
+statement error pgcode 0A000 constraint "ck" in the middle of being added, try again later
+BEGIN;
+ALTER TABLE t60786 ADD CONSTRAINT ck CHECK(i > 0) NOT VALID;
+ALTER TABLE t60786 DROP CONSTRAINT ck CASCADE
+
+statement ok
+ROLLBACK
