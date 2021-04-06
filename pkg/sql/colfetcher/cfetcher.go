@@ -320,10 +320,12 @@ type cFetcher struct {
 func (rf *cFetcher) resetBatch(timestampOutputIdx, tableOidOutputIdx int) {
 	var reallocated bool
 	var minCapacity int
-	if rf.estimatedRowCount == 0 && rf.machine.limitHint > 0 {
-		// If we don't have an estimate but we have a limit hint, use the hint
-		// to size the batch. Note that if it exceeds coldata.BatchSize,
-		// ResetMaybeReallocate will chop it down.
+	if rf.machine.limitHint > 0 && (rf.estimatedRowCount == 0 || uint64(rf.machine.limitHint) < rf.estimatedRowCount) {
+		// If we have a limit hint, and either
+		//   1) we don't have an estimate, or
+		//   2) we have a soft limit,
+		// use the hint to size the batch. Note that if it exceeds
+		// coldata.BatchSize, ResetMaybeReallocate will chop it down.
 		minCapacity = rf.machine.limitHint
 	} else {
 		// Otherwise, use the estimate. Note that if the estimate is not

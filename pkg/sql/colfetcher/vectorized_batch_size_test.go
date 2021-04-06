@@ -27,93 +27,98 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestScanBatchSize tests that the the cfetcher's dynamic batch size algorithm
+type scanBatchSizeTestCase struct {
+	needsStats         bool
+	query              string
+	expectedKVRowsRead int
+}
+
+var scanBatchSizeTestCases = []scanBatchSizeTestCase{
+	// Uses the hard limit.
+	{
+		needsStats:         false,
+		query:              "SELECT * FROM t LIMIT 511",
+		expectedKVRowsRead: 511,
+	},
+	// Uses the estimated row count.
+	{
+		needsStats:         true,
+		query:              "SELECT * FROM t",
+		expectedKVRowsRead: 511,
+	},
+	// Uses the soft limit.
+	{
+		needsStats: true,
+		query:      "SELECT * FROM t WHERE b <= 256 LIMIT 1",
+		// We have a soft limit of 2 calculated by the optimizer given the
+		// selectivity of the filter (511 / 256).
+		expectedKVRowsRead: 2,
+	},
+}
+
+// TestScanBatchSize tests that the the cFetcher's dynamic batch size algorithm
 // uses the limit hint or the optimizer's estimated row count for its initial
-// batch size. This test sets up a scan against a table with a known row count,
-// and either
-// - disables stats collection and uses a hard limit
-// or
-// - makes sure that the optimizer uses its statistics to produce an estimated
-//   row count that is equal to the number of rows in the table
-// allowing the fetcher to create a single batch for the scan.
+// batch size. This test confirms that cFetcher returns a single batch but also
+// checks that the expected number of KV rows were read. See the test cases
+// above for more details.
 func TestScanBatchSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderMetamorphic(t, "This test doesn't work with metamorphic batch sizes.")
 
-	for _, tc := range []struct {
-		needsStats bool
-		query      string
-	}{
-		{
-			needsStats: false,
-			query:      "SELECT * FROM t LIMIT 511",
-		},
-		{
-			needsStats: true,
-			query:      "SELECT * FROM t",
-		},
-	} {
-		testScanBatchSize(t, tc.needsStats, tc.query)
-	}
-}
+	for _, testCase := range scanBatchSizeTestCases {
+		t.Run(testCase.query, func(t *testing.T) {
+			testClusterArgs := base.TestClusterArgs{
+				ReplicationMode: base.ReplicationAuto,
+			}
+			tc := testcluster.StartTestCluster(t, 1, testClusterArgs)
+			ctx := context.Background()
+			defer tc.Stopper().Stop(ctx)
 
-func testScanBatchSize(t *testing.T, needsStats bool, query string) {
-	t.Run(query, func(t *testing.T) {
-		testClusterArgs := base.TestClusterArgs{
-			ReplicationMode: base.ReplicationAuto,
-		}
-		tc := testcluster.StartTestCluster(t, 1, testClusterArgs)
-		ctx := context.Background()
-		defer tc.Stopper().Stop(ctx)
+			conn := tc.Conns[0]
 
-		conn := tc.Conns[0]
-
-		if !needsStats {
-			// Disable auto stats before creating a table.
-			_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
+			// Create the table with disabled automatic table stats collection (so
+			// that we can control whether they are present or not).
+			_, err := conn.ExecContext(ctx, `
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false;
+CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 511) AS g(i)
+`)
 			assert.NoError(t, err)
-		}
 
-		_, err := conn.ExecContext(ctx, `CREATE TABLE t (a PRIMARY KEY) AS SELECT generate_series(1, 511)`)
-		assert.NoError(t, err)
-
-		if needsStats {
-			// This test needs the stats info, so analyze the table.
-			_, err := conn.ExecContext(ctx, `ANALYZE t`)
-			assert.NoError(t, err)
-		}
-
-		testutils.SucceedsSoon(t, func() error {
-			rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE, DISTSQL) `+query)
-			assert.NoError(t, err)
-			batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
-			var found, failed bool
-			var foundBatches int
-			var sb strings.Builder
-			for rows.Next() {
-				var res string
-				assert.NoError(t, rows.Scan(&res))
-				sb.WriteString(res)
-				sb.WriteByte('\n')
-				matches := batchCountRegex.FindStringSubmatch(res)
-				if len(matches) == 0 {
-					continue
-				}
-				foundBatches, err = strconv.Atoi(matches[1])
+			if testCase.needsStats {
+				// This test needs the stats info, so analyze the table.
+				_, err := conn.ExecContext(ctx, `ANALYZE t`)
 				assert.NoError(t, err)
-				if foundBatches != 1 {
-					failed = true
+			}
+
+			kvRowsReadRegex := regexp.MustCompile(`KV rows read: (\d+)`)
+			batchCountRegex := regexp.MustCompile(`vectorized batch count: (\d+)`)
+			testutils.SucceedsSoon(t, func() error {
+				rows, err := conn.QueryContext(ctx, `EXPLAIN ANALYZE (VERBOSE, DISTSQL) `+testCase.query)
+				assert.NoError(t, err)
+				foundKVRowsRead, foundBatches := -1, -1
+				var sb strings.Builder
+				for rows.Next() {
+					var res string
+					assert.NoError(t, rows.Scan(&res))
+					sb.WriteString(res)
+					sb.WriteByte('\n')
+					if matches := kvRowsReadRegex.FindStringSubmatch(res); len(matches) > 0 {
+						foundKVRowsRead, err = strconv.Atoi(matches[1])
+						assert.NoError(t, err)
+					} else if matches = batchCountRegex.FindStringSubmatch(res); len(matches) > 0 {
+						foundBatches, err = strconv.Atoi(matches[1])
+						assert.NoError(t, err)
+					}
 				}
-				found = true
-			}
-			if failed {
-				return fmt.Errorf("should use just 1 batch to scan 511 rows, found %d:\n%s", foundBatches, sb.String())
-			}
-			if !found {
-				t.Fatalf("expected to find a vectorized batch count; found nothing. text:\n%s", sb.String())
-			}
-			return nil
+				if foundKVRowsRead != testCase.expectedKVRowsRead {
+					return fmt.Errorf("expected to scan %d rows, found %d:\n%s", testCase.expectedKVRowsRead, foundKVRowsRead, sb.String())
+				}
+				if foundBatches != 1 {
+					return fmt.Errorf("should use just 1 batch to scan rows, found %d:\n%s", foundBatches, sb.String())
+				}
+				return nil
+			})
 		})
-	})
+	}
 }
