@@ -14,11 +14,16 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// Dummy import to pull in kvtenantccl. This allows us to start tenants.
+// TODO(yuzefovich): break up the dependency on CCL code.
+var _ = kvtenantccl.Connector{}
 
 func TestTelemetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
