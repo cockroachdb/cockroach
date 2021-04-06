@@ -54,28 +54,28 @@ project
  ├── cardinality: [0 - 10]
  ├── immutable
  ├── stats: [rows=10]
- ├── cost: 285.159091
+ ├── cost: 190.613636
  ├── key: (1)
  └── limit
       ├── columns: id:1!null geog:2!null
       ├── cardinality: [0 - 10]
       ├── immutable
       ├── stats: [rows=10]
-      ├── cost: 285.049091
+      ├── cost: 190.503636
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── select
       │    ├── columns: id:1!null geog:2!null
       │    ├── immutable
       │    ├── stats: [rows=55000, distinct(2)=50000, null(2)=0]
-      │    ├── cost: 284.939091
+      │    ├── cost: 190.393636
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── limit hint: 10.00
       │    ├── scan g
       │    │    ├── columns: id:1!null geog:2
       │    │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(2)=50000, null(2)=5000]
-      │    │    ├── cost: 193.100909
+      │    │    ├── cost: 98.5554545
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2)
       │    │    └── limit hint: 90.91
