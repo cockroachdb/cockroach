@@ -1124,6 +1124,9 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 		drop := false
 		switch message.Type {
 		case raftpb.MsgApp:
+			if n := message.Size(); n > 5*(32<<10) { // 5 * 32kb
+				log.Infof(ctx, "large MsgApp: %s", humanizeutil.IBytes(int64(n)))
+			}
 			if util.RaceEnabled {
 				// Iterate over the entries to assert that all sideloaded commands
 				// are already inlined. replicaRaftStorage.Entries already performs
