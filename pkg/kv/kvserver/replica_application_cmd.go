@@ -169,11 +169,13 @@ func (c *replicatedCmd) AckOutcomeAndFinish(ctx context.Context) error {
 	if err != nil {
 		s = fmt.Sprint(err)
 	}
-	log.Infof(ctx, "idx=%d mlai=%d forcedErr=%v: %v",
-		c.ent.Index,
-		c.decodedRaftEntry.raftCmd.MaxLeaseIndex,
-		c.forcedErr,
-		s)
+	if false {
+		log.Infof(ctx, "idx=%d mlai=%d forcedErr=%v: %v",
+			c.ent.Index,
+			c.decodedRaftEntry.raftCmd.MaxLeaseIndex,
+			c.forcedErr,
+			s)
+	}
 	if c.IsLocal() {
 		c.proposal.finishApplication(ctx, c.response)
 	}
