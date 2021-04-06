@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"reflect"
 	"testing"
 	"time"
 
@@ -449,14 +450,14 @@ func TestVerifySession(t *testing.T) {
 		},
 	} {
 		t.Run(tc.testname, func(t *testing.T) {
-			valid, username, err := ts.authentication.verifySession(context.Background(), &tc.cookie)
+			valid, username, _, err := ts.authentication.verifySession(context.Background(), &tc.cookie)
 			if err != nil {
 				t.Fatalf("test got error %s, wanted no error", err)
 			}
 			if a, e := valid, tc.shouldVerify; a != e {
 				t.Fatalf("cookie %v verification = %t, wanted %t", tc.cookie, a, e)
 			}
-			if a, e := username, sessionUsername.Normalized(); tc.shouldVerify && a != e {
+			if a, e := username, sessionUsername; tc.shouldVerify && a != e {
 				t.Fatalf("cookie %v verification returned username %s, wanted %s", tc.cookie, a, e)
 			}
 		})
@@ -551,6 +552,21 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 			e,
 			sessionCookie.Secret,
 		)
+	}
+
+	// Now also try to log in using the cookie that was returned as
+	// password. This should succeed too.
+	cookiePassword := cookies[0].Name + "=" + cookies[0].Value
+	response, err = tryLogin(validUsername, cookiePassword)
+	if err != nil {
+		t.Fatalf("good login got error %s, wanted no error", err)
+	}
+	newCookies := response.Cookies()
+	if len(cookies) == 0 {
+		t.Fatalf("good login got no cookies: %v", response)
+	}
+	if !reflect.DeepEqual(newCookies[0], cookies[0]) {
+		t.Fatalf("new cookie is different from first cookie\ngot: %+v\nexpected: %+v", *newCookies[0], *cookies[0])
 	}
 }
 

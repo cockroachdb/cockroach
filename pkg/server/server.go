@@ -639,8 +639,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		contentionRegistry,
 		internalExecutor,
 	)
-	// TODO(tbg): don't pass all of Server into this to avoid this hack.
+	// TODO(tbg,knz): don't pass all of Server into this
 	sAuth := newAuthenticationServer(lateBoundServer)
+
 	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
 		if reflect.ValueOf(gw).IsNil() {
 			return nil, errors.Errorf("%d: nil", i)
@@ -740,6 +741,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		sqlServer:              sqlServer,
 		externalStorageBuilder: externalStorageBuilder,
 	}
+
+	// Ensure the load function is called at least once during server startup.
+	// We cannot call this earlier because it requires lateBoundServer to be initialized.
+	sAuth.loadDataFromFile(ctx)
+	if err := sAuth.registerSignalHandler(ctx, stopper); err != nil {
+		return nil, err
+	}
+
 	return lateBoundServer, err
 }
 

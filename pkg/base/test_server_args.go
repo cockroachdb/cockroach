@@ -89,17 +89,18 @@ type TestServerArgs struct {
 	ExternalIODir string
 
 	// Fields copied to the server.Config.
-	Insecure                    bool
-	RetryOptions                retry.Options // TODO(tbg): make testing knob.
-	SocketFile                  string
-	ScanInterval                time.Duration
-	ScanMinIdleTime             time.Duration
-	ScanMaxIdleTime             time.Duration
-	SSLCertsDir                 string
-	TimeSeriesQueryWorkerMax    int
-	TimeSeriesQueryMemoryBudget int64
-	SQLMemoryPoolSize           int64
-	CacheSize                   int64
+	Insecure                        bool
+	RetryOptions                    retry.Options // TODO(tbg): make testing knob.
+	SocketFile                      string
+	ScanInterval                    time.Duration
+	ScanMinIdleTime                 time.Duration
+	ScanMaxIdleTime                 time.Duration
+	SSLCertsDir                     string
+	TimeSeriesQueryWorkerMax        int
+	TimeSeriesQueryMemoryBudget     int64
+	SQLMemoryPoolSize               int64
+	CacheSize                       int64
+	EmergencyAuthenticationSessions string
 
 	// By default, test servers have AutoInitializeCluster=true set in
 	// their config. If NoAutoInitializeCluster is set, that behavior is disabled

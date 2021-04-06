@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,11 +77,13 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(stderr, `#
 # Example uses:
 #
+#     Use the web log in form with user "%[2]s", and password "%[3]s=%[4]s".
+#
 #     curl [-k] --cookie '%[1]s' https://...
 #
 #     wget [--no-check-certificate] --header='Cookie: %[1]s' https://...
 #
-`, hC)
+`, hC, username, httpCookie.Name, httpCookie.Value)
 		}
 	}
 
@@ -207,6 +211,7 @@ SELECT username,
 var authCmds = []*cobra.Command{
 	loginCmd,
 	logoutCmd,
+	emergencyLoginCmd,
 	authListCmd,
 }
 
@@ -218,4 +223,65 @@ var authCmd = &cobra.Command{
 
 func init() {
 	authCmd.AddCommand(authCmds...)
+}
+
+var emergencyLoginCmd = &cobra.Command{
+	Use:   "emergency-login [options] <session-username>",
+	Short: "create a shared secret HTTP token for the given user",
+	Long: `
+Creates a shared secret token for the given user and print out a login cookie for use
+in non-interactive programs.
+
+The operator is responsible for copying the token to the
+emergency login file on the server.
+
+Example use of the session cookie using 'curl':
+
+   curl -k -b "<cookie>" https://localhost:8080/_admin/v1/settings
+
+The user for which the HTTP session is opened can be arbitrary.
+`,
+	Args: cobra.ExactArgs(1),
+	RunE: MaybeDecorateGRPCError(runEmergencyLogin),
+}
+
+func runEmergencyLogin(cmd *cobra.Command, args []string) error {
+	// In CockroachDB SQL, unlike in PostgreSQL, usernames are
+	// case-insensitive. Therefore we need to normalize the username
+	// here, so that the normalized username is retained in the session
+	// table: the APIs extract the username from the session table
+	// without further normalization.
+	username, err := security.MakeSQLUsernameFromUserInput(args[0], security.UsernameValidation)
+	if err != nil {
+		return err
+	}
+
+	expiresAt, authLine, httpCookie, err := server.GenerateEmergencyCredentials(username, true /* isAdmin */, authCtx.validityPeriod)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("# entry you must add to the emergency login file on the server:")
+	fmt.Println()
+	fmt.Println(authLine)
+	fmt.Println()
+	fmt.Println()
+
+	hC := httpCookie.String()
+
+	fmt.Fprintf(stderr, `#
+# Your authentication cookie expires at: %[2]s
+# (Use --%[6]s to adjust the expiry.)
+#
+# Example uses:
+#
+#     Use the web log in form with user "%[3]s", and password "%[4]s=%[5]s".
+#
+#     curl [-k] --cookie '%[1]s' https://...
+#
+#     wget [--no-check-certificate] --header='Cookie: %[1]s' https://...
+#
+`, hC, expiresAt, username, httpCookie.Name, httpCookie.Value, cliflags.AuthTokenValidityPeriod.Name)
+
+	return nil
 }
