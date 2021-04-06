@@ -971,6 +971,12 @@ func (*ShowUsers) StatementType() StatementType { return Rows }
 func (*ShowUsers) StatementTag() string { return "SHOW USERS" }
 
 // StatementType implements the Statement interface.
+func (*ShowFullTableScans) StatementType() StatementType { return Rows }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowFullTableScans) StatementTag() string { return "SHOW FULL TABLE SCANS" }
+
+// StatementType implements the Statement interface.
 func (*ShowRoles) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -1198,16 +1204,17 @@ func (n *ShowCreateAllTables) String() string            { return AsString(n) }
 func (n *ShowDatabases) String() string                  { return AsString(n) }
 func (n *ShowDatabaseIndexes) String() string            { return AsString(n) }
 func (n *ShowEnums) String() string                      { return AsString(n) }
+func (n *ShowFullTableScans) String() string             { return AsString(n) }
 func (n *ShowGrants) String() string                     { return AsString(n) }
 func (n *ShowHistogram) String() string                  { return AsString(n) }
 func (n *ShowSchedules) String() string                  { return AsString(n) }
 func (n *ShowIndexes) String() string                    { return AsString(n) }
-func (n *ShowPartitions) String() string                 { return AsString(n) }
 func (n *ShowJobs) String() string                       { return AsString(n) }
+func (n *ShowLastQueryStatistics) String() string        { return AsString(n) }
+func (n *ShowPartitions) String() string                 { return AsString(n) }
 func (n *ShowQueries) String() string                    { return AsString(n) }
 func (n *ShowRanges) String() string                     { return AsString(n) }
 func (n *ShowRangeForRow) String() string                { return AsString(n) }
-func (n *ShowSurvivalGoal) String() string               { return AsString(n) }
 func (n *ShowRegions) String() string                    { return AsString(n) }
 func (n *ShowRoleGrants) String() string                 { return AsString(n) }
 func (n *ShowRoles) String() string                      { return AsString(n) }
@@ -1215,6 +1222,7 @@ func (n *ShowSavepointStatus) String() string            { return AsString(n) }
 func (n *ShowSchemas) String() string                    { return AsString(n) }
 func (n *ShowSequences) String() string                  { return AsString(n) }
 func (n *ShowSessions) String() string                   { return AsString(n) }
+func (n *ShowSurvivalGoal) String() string               { return AsString(n) }
 func (n *ShowSyntax) String() string                     { return AsString(n) }
 func (n *ShowTableStats) String() string                 { return AsString(n) }
 func (n *ShowTables) String() string                     { return AsString(n) }
@@ -1222,7 +1230,6 @@ func (n *ShowTypes) String() string                      { return AsString(n) }
 func (n *ShowTraceForSession) String() string            { return AsString(n) }
 func (n *ShowTransactionStatus) String() string          { return AsString(n) }
 func (n *ShowTransactions) String() string               { return AsString(n) }
-func (n *ShowLastQueryStatistics) String() string        { return AsString(n) }
 func (n *ShowUsers) String() string                      { return AsString(n) }
 func (n *ShowVar) String() string                        { return AsString(n) }
 func (n *ShowZoneConfig) String() string                 { return AsString(n) }
