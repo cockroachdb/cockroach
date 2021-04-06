@@ -170,7 +170,7 @@ FROM "".information_schema.type_privileges`
 				}
 				// We avoid the cache so that we can observe the grants taking
 				// a lease, like other SHOW commands.
-				tables, err := cat.ExpandDataSourceGlob(
+				tables, _, err := cat.ExpandDataSourceGlob(
 					d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, tableGlob,
 				)
 				if err != nil {

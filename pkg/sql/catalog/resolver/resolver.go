@@ -58,10 +58,10 @@ type SchemaResolver interface {
 var ErrNoPrimaryKey = pgerror.Newf(pgcode.NoPrimaryKey,
 	"requested table does not have a primary key")
 
-// GetObjectNames retrieves the names of all objects in the target database/
-// schema. If explicitPrefix is set, the returned table names will have an
-// explicit schema and catalog name.
-func GetObjectNames(
+// GetObjectNamesAndIDs retrieves the names and IDs of all objects in the
+// target database/schema. If explicitPrefix is set, the returned
+// table names will have an explicit schema and catalog name.
+func GetObjectNamesAndIDs(
 	ctx context.Context,
 	txn *kv.Txn,
 	sc SchemaResolver,
@@ -69,8 +69,8 @@ func GetObjectNames(
 	dbDesc catalog.DatabaseDescriptor,
 	scName string,
 	explicitPrefix bool,
-) (res tree.TableNames, err error) {
-	return sc.LogicalSchemaAccessor().GetObjectNames(ctx, txn, codec, dbDesc, scName,
+) (tree.TableNames, descpb.IDs, error) {
+	return sc.LogicalSchemaAccessor().GetObjectNamesAndIDs(ctx, txn, codec, dbDesc, scName,
 		tree.DatabaseListFlags{
 			CommonLookupFlags: sc.CommonLookupFlags(true /* required */),
 			ExplicitPrefix:    explicitPrefix,
