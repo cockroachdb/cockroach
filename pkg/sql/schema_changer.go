@@ -300,6 +300,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			// other fields are used.
 			&SessionTracing{},
 			sc.execCfg.ContentionRegistry,
+			nil, /* testingPushCallback */
 		)
 		defer recv.Release()
 
@@ -312,9 +313,6 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 					localPlanner.curPlan.subqueryPlans, recv,
 				) {
 					if planAndRunErr = rw.Err(); planAndRunErr != nil {
-						return
-					}
-					if planAndRunErr = recv.commErr; planAndRunErr != nil {
 						return
 					}
 				}
@@ -332,9 +330,6 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			PlanAndRunCTAS(ctx, sc.distSQLPlanner, localPlanner,
 				txn, isLocal, localPlanner.curPlan.main, out, recv)
 			if planAndRunErr = rw.Err(); planAndRunErr != nil {
-				return
-			}
-			if planAndRunErr = recv.commErr; planAndRunErr != nil {
 				return
 			}
 		})

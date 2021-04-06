@@ -131,6 +131,7 @@ func distStreamIngest(
 		nil, /* clockUpdater */
 		evalCtx.Tracing,
 		execCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

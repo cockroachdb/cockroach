@@ -240,6 +240,7 @@ func runPlanInsidePlan(
 		params.ExecCfg().Clock,
 		params.p.extendedEvalCtx.Tracing,
 		params.p.ExecCfg().ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 
@@ -250,10 +251,7 @@ func runPlanInsidePlan(
 		plan.subqueryPlans,
 		recv,
 	) {
-		if err := rowResultWriter.Err(); err != nil {
-			return err
-		}
-		return recv.commErr
+		return rowResultWriter.Err()
 	}
 
 	// Make a copy of the EvalContext so it can be safely modified.
@@ -272,10 +270,7 @@ func runPlanInsidePlan(
 	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(
 		params.ctx, evalCtx, planCtx, params.p.Txn(), plan.main, recv,
 	)()
-	if recv.commErr != nil {
-		return recv.commErr
-	}
-	return rowResultWriter.err
+	return rowResultWriter.Err()
 }
 
 func (a *applyJoinNode) Values() tree.Datums {
