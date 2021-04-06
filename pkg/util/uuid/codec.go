@@ -106,6 +106,8 @@ func (u *UUID) UnmarshalText(text []byte) error {
 		return u.decodeBraced(text)
 	case 36:
 		return u.decodeCanonical(text)
+	case 39:
+		return u.decodeGroupOfFour(text)
 	case 41, 45:
 		return u.decodeURN(text)
 	default:
@@ -124,6 +126,31 @@ func (u *UUID) decodeCanonical(t []byte) error {
 	dst := u[:]
 
 	for i, byteGroup := range byteGroups {
+		if i > 0 {
+			src = src[1:] // skip dash
+		}
+		_, err := hex.Decode(dst[:byteGroup/2], src[:byteGroup])
+		if err != nil {
+			return err
+		}
+		src = src[byteGroup:]
+		dst = dst[byteGroup/2:]
+	}
+
+	return nil
+}
+
+// decodeGroupOfFour decodes UUID strings that are formatted as defined in RFC-4122 (section 3):
+// "6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8".
+func (u *UUID) decodeGroupOfFour(t []byte) error {
+	if t[4] != '-' || t[9] != '-' || t[14] != '-' || t[19] != '-' || t[24] != '-' || t[29] != '-' || t[34] != '-' {
+		return fmt.Errorf("uuid: incorrect UUID format %s", t)
+	}
+
+	src := t
+	dst := u[:]
+
+	for i, byteGroup := range groupOfFour {
 		if i > 0 {
 			src = src[1:] // skip dash
 		}
