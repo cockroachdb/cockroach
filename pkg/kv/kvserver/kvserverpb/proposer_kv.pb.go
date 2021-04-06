@@ -287,7 +287,9 @@ type ReplicatedEvalResult struct {
 	IsLeaseRequest  bool             `protobuf:"varint,6,opt,name=is_lease_request,json=isLeaseRequest,proto3" json:"is_lease_request,omitempty"`
 	// The timestamp at which this command is writing. Used to verify the validity
 	// of the command against the GC threshold and to update the followers'
-	// clocks.
+	// clocks. If the request that produced this command is not an IntentWrite
+	// one, then the request's write timestamp is meaningless; for such request's,
+	// this field is simply a clock reading from the proposer.
 	WriteTimestamp hlc.Timestamp `protobuf:"bytes,8,opt,name=write_timestamp,json=writeTimestamp,proto3" json:"write_timestamp"`
 	// The stats delta corresponding to the data in this WriteBatch. On
 	// a split, contains only the contributions to the left-hand side.
