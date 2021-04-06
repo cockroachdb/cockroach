@@ -37,3 +37,11 @@ func TestingSetDefaultFlushFrequency(f time.Duration) func() {
 	DefaultFlushFrequency = f
 	return func() { DefaultFlushFrequency = old }
 }
+
+// PerChangefeedMemLimit controls how much data can be buffered by
+// a single changefeed.
+var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
+	"changefeed.memory.per_changefeed_limit",
+	"controls amount of data that can be buffered per changefeed",
+	1<<30,
+)
