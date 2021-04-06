@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,50 +34,62 @@ func TestExpandDataSourceGlob(t *testing.T) {
 	exec("CREATE TABLE b (x INT)")
 	exec("CREATE TABLE c (x INT)")
 
+	// TODO: Add test case.
 	testCases := []struct {
-		pattern  tree.TablePattern
-		expected string
+		pattern              tree.TablePattern
+		expectedNamesOrError string
+		expectedIDs          string
 	}{
 		{
-			pattern:  tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a"),
-			expected: `[t.public.a]`,
+			pattern:              tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "a"),
+			expectedNamesOrError: `[t.public.a]`,
+			expectedIDs:          `[53]`,
 		},
 		{
-			pattern:  tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "z"),
-			expected: `error: no data source matches prefix: "t.public.z"`,
+			pattern:              tree.NewTableNameWithSchema("t", tree.PublicSchemaName, "z"),
+			expectedNamesOrError: `error: no data source matches prefix: "t.public.z"`,
 		},
 		{
-			pattern:  &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{}},
-			expected: `[t.public.a t.public.b t.public.c]`,
+			pattern:              &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{}},
+			expectedNamesOrError: `[t.public.a t.public.b t.public.c]`,
+			expectedIDs:          `[53 54 55]`,
 		},
 		{
 			pattern: &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{
 				SchemaName: "t", ExplicitSchema: true,
 			}},
-			expected: `[t.public.a t.public.b t.public.c]`,
+			expectedNamesOrError: `[t.public.a t.public.b t.public.c]`,
+			expectedIDs:          `[53 54 55]`,
 		},
 		{
 			pattern: &tree.AllTablesSelector{ObjectNamePrefix: tree.ObjectNamePrefix{
 				SchemaName: "z", ExplicitSchema: true,
 			}},
-			expected: `error: target database or schema does not exist`,
+			expectedNamesOrError: `error: target database or schema does not exist`,
 		},
 	}
 
 	for _, tc := range testCases {
-		var res string
-		names, err := cat.ExpandDataSourceGlob(ctx, testcat, cat.Flags{}, tc.pattern)
+		var namesOrErrorRes string
+		var IDsRes string
+		names, IDs, err := cat.ExpandDataSourceGlob(ctx, testcat, cat.Flags{}, tc.pattern)
 		if err != nil {
-			res = fmt.Sprintf("error: %v", err)
+			namesOrErrorRes = fmt.Sprintf("error: %v", err)
 		} else {
-			var r []string
-			for _, n := range names {
-				r = append(r, n.FQString())
+			var namesArr []string
+			var IDsArr []descpb.ID
+			for i := range names {
+				namesArr = append(namesArr, names[i].FQString())
+				IDsArr = append(IDsArr, IDs[i])
 			}
-			res = fmt.Sprintf("%v", r)
+			namesOrErrorRes = fmt.Sprintf("%v", namesArr)
+			IDsRes = fmt.Sprintf("%v", IDsArr)
 		}
-		if res != tc.expected {
-			t.Errorf("pattern: %v  expected: %s  got: %s", tc.pattern, tc.expected, res)
+		if namesOrErrorRes != tc.expectedNamesOrError {
+			t.Errorf("pattern: %v  expectedNamesOrError: %s  got: %s", tc.pattern, tc.expectedNamesOrError, namesOrErrorRes)
+		}
+		if len(tc.expectedIDs) > 0 && IDsRes != tc.expectedIDs {
+			t.Errorf("pattern: %v  expectedIDs: %s  got: %s", tc.pattern, tc.expectedIDs, IDsRes)
 		}
 	}
 }
@@ -184,7 +197,7 @@ func TestResolveTableIndex(t *testing.T) {
 			res = fmt.Sprintf("%s@%s", tn.FQString(), idx.Name())
 		}
 		if res != tc.expected {
-			t.Errorf("pattern: %v  expected: %s  got: %s", tc.name.String(), tc.expected, res)
+			t.Errorf("pattern: %v  expectedNamesOrError: %s  got: %s", tc.name.String(), tc.expected, res)
 		}
 	}
 }

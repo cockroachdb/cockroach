@@ -488,17 +488,19 @@ func (s *Schema) Name() *cat.SchemaName {
 }
 
 // GetDataSourceNames is part of the cat.Schema interface.
-func (s *Schema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
+func (s *Schema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, descpb.IDs, error) {
 	var keys []string
 	for k := range s.dataSources {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	var res []cat.DataSourceName
+	var names []cat.DataSourceName
+	var IDs descpb.IDs
 	for _, k := range keys {
-		res = append(res, s.dataSources[k].fqName())
+		names = append(names, s.dataSources[k].fqName())
+		IDs = append(IDs, descpb.ID(s.dataSources[k].ID()))
 	}
-	return res, nil
+	return names, IDs, nil
 }
 
 // View implements the cat.View interface for testing purposes.
