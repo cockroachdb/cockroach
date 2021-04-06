@@ -116,7 +116,7 @@ func TestKVFeed(t *testing.T) {
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater,
 			keys.SystemSQLCodec,
-			&tf, sf, rangefeedFactory(ref.run), bufferFactory)
+			&tf, sf, rangefeedFactory(ref.run), bufferFactory, TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
 		g.GoCtx(func(ctx context.Context) error {
