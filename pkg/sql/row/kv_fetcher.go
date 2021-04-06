@@ -16,10 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // KVFetcher wraps kvBatchFetcher, providing a NextKV interface that returns the
@@ -165,3 +167,75 @@ func (f *SpanKVFetcher) nextBatch(
 }
 
 func (f *SpanKVFetcher) close(context.Context) {}
+
+// BackupSSTKVFetcher is a kvBatchFetcher that wraps storage.SimpleMVCCIterator
+// and returns a single kv from backupSST.
+type BackupSSTKVFetcher struct {
+	iter       storage.SimpleMVCCIterator
+	endKeyMVCC storage.MVCCKey
+	endTime    hlc.Timestamp
+}
+
+// MakeBackupSSTKVFetcher creates a BackupSSTKVFetcher and
+// advances the iter to the first key >= startKeyMVCC
+func MakeBackupSSTKVFetcher(
+	startKeyMVCC, endKeyMVCC storage.MVCCKey, iter storage.SimpleMVCCIterator, endTime hlc.Timestamp,
+) BackupSSTKVFetcher {
+	res := BackupSSTKVFetcher{
+		iter,
+		endKeyMVCC,
+		endTime,
+	}
+	res.iter.SeekGE(startKeyMVCC)
+	return res
+}
+
+func (f *BackupSSTKVFetcher) nextBatch(
+	_ context.Context,
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, span roachpb.Span, err error) {
+
+	for {
+		valid, err := f.iter.Valid()
+		if err != nil {
+			err = errors.Wrapf(err, "iter key value of table data")
+			return false, nil, nil, roachpb.Span{}, err
+		}
+		if !valid || !f.iter.UnsafeKey().Less(f.endKeyMVCC) {
+			return false, nil, nil, roachpb.Span{}, nil
+		}
+		if !f.endTime.IsEmpty() {
+			if f.endTime.Less(f.iter.UnsafeKey().Timestamp) {
+				f.iter.Next()
+				continue
+			}
+		}
+		if len(f.iter.UnsafeValue()) == 0 {
+			// Value is deleted.
+			f.iter.NextKey()
+			continue
+		}
+		break
+	}
+
+	keyScratch := f.iter.UnsafeKey().Key
+	keyCopy := make([]byte, len(keyScratch))
+	copy(keyCopy, keyScratch)
+
+	valueScratch := f.iter.UnsafeValue()
+	valueCopy := make([]byte, len(valueScratch))
+	copy(valueCopy, valueScratch)
+
+	value := roachpb.Value{RawBytes: valueCopy, Timestamp: f.iter.UnsafeKey().Timestamp}
+
+	res := []roachpb.KeyValue{{
+		Key:   keyCopy,
+		Value: value,
+	}}
+
+	f.iter.NextKey()
+	return true, res, nil, roachpb.Span{}, nil
+}
+
+func (f *BackupSSTKVFetcher) close(context.Context) {
+	f.iter.Close()
+}

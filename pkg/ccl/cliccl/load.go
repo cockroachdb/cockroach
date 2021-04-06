@@ -9,7 +9,9 @@
 package cliccl
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"net/url"
 	"os"
@@ -18,9 +20,11 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/cockroachdb/apd/v2"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,18 +32,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
 
 var externalIODir string
+var readTime string
+var destination string
+var format string
+var nullas string
 
 func init() {
 
@@ -65,6 +81,14 @@ func init() {
 		Long:  "Shows incremental chain of a SQL backup.",
 		Args:  cobra.ExactArgs(1),
 		RunE:  cli.MaybeDecorateGRPCError(runLoadShowIncremental),
+	}
+
+	loadShowDataCmd := &cobra.Command{
+		Use:   "data <table> <backup_path>",
+		Short: "show data",
+		Long:  "Shows data of a SQL backup.",
+		Args:  cobra.MinimumNArgs(2),
+		RunE:  cli.MaybeDecorateGRPCError(runLoadShowData),
 	}
 
 	loadShowCmds := &cobra.Command{
@@ -94,16 +118,48 @@ func init() {
 		"", /*value*/
 		cliflags.ExternalIODir.Usage())
 
+	loadShowDataCmd.Flags().StringVarP(
+		&readTime,
+		cliflags.ReadTime.Name,
+		cliflags.ReadTime.Shorthand,
+		"", /*value*/
+		cliflags.ReadTime.Usage())
+
+	loadShowDataCmd.Flags().StringVarP(
+		&destination,
+		cliflags.ExportDestination.Name,
+		cliflags.ExportDestination.Shorthand,
+		"", /*value*/
+		cliflags.ExportDestination.Usage())
+
+	loadShowDataCmd.Flags().StringVarP(
+		&format,
+		cliflags.ExportTableFormat.Name,
+		cliflags.ExportTableFormat.Shorthand,
+		"csv", /*value*/
+		cliflags.ExportTableFormat.Usage())
+
+	loadShowDataCmd.Flags().StringVarP(
+		&nullas,
+		cliflags.ExportCSVNullas.Name,
+		cliflags.ExportCSVNullas.Shorthand,
+		"null", /*value*/
+		cliflags.ExportCSVNullas.Usage())
+
 	cli.AddCmd(loadCmds)
 	loadCmds.AddCommand(loadShowCmds)
-	loadShowCmds.AddCommand([]*cobra.Command{
+
+	loadShowSubCmds := []*cobra.Command{
 		loadShowSummaryCmd,
 		loadShowBackupsCmd,
 		loadShowIncrementalCmd,
-	}...)
-	loadShowSummaryCmd.Flags().AddFlagSet(loadFlags)
-	loadShowBackupsCmd.Flags().AddFlagSet(loadFlags)
-	loadShowIncrementalCmd.Flags().AddFlagSet(loadFlags)
+		loadShowDataCmd,
+	}
+
+	for _, cmd := range loadShowSubCmds {
+		loadShowCmds.AddCommand(cmd)
+		cmd.Flags().AddFlagSet(loadFlags)
+	}
 }
 
 func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClient, error) {
@@ -116,28 +172,37 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 	return blobs.NewLocalClient(externalIODir)
 }
 
-func runLoadShowSummary(cmd *cobra.Command, args []string) error {
+func externalStorageFromURIFactory(
+	ctx context.Context, uri string, user security.SQLUsername,
+) (cloud.ExternalStorage, error) {
+	return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
+		cluster.NoSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
+}
 
-	path := args[0]
+func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManifest, error) {
+
 	if !strings.Contains(path, "://") {
 		path = cloudimpl.MakeLocalStorageURI(path)
 	}
-
-	ctx := context.Background()
-	externalStorageFromURI := func(ctx context.Context, uri string,
-		user security.SQLUsername) (cloud.ExternalStorage, error) {
-		return cloudimpl.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
-			cluster.NoSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
-	}
-
 	// This reads the raw backup descriptor (with table descriptors possibly not
 	// upgraded from the old FK representation, or even older formats). If more
 	// fields are added to the output, the table descriptors may need to be
 	// upgraded.
-	desc, err := backupccl.ReadBackupManifestFromURI(ctx, path, security.RootUserName(),
-		externalStorageFromURI, nil)
+	backupManifest, err := backupccl.ReadBackupManifestFromURI(ctx, path, security.RootUserName(),
+		externalStorageFromURIFactory, nil)
 	if err != nil {
-		return err
+		return backupccl.BackupManifest{}, err
+	}
+	return backupManifest, nil
+}
+
+func runLoadShowSummary(cmd *cobra.Command, args []string) error {
+
+	path := args[0]
+	ctx := context.Background()
+	desc, err := getManifestFromURI(ctx, path)
+	if err != nil {
+		return errors.Wrapf(err, "fetching backup manifest")
 	}
 	showMeta(desc)
 	showSpans(desc)
@@ -153,8 +218,7 @@ func runLoadShowBackups(cmd *cobra.Command, args []string) error {
 		path = cloudimpl.MakeLocalStorageURI(path)
 	}
 	ctx := context.Background()
-	store, err := cloudimpl.ExternalStorageFromURI(ctx, path, base.ExternalIODirConfig{},
-		cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+	store, err := externalStorageFromURIFactory(ctx, path, security.RootUserName())
 	if err != nil {
 		return errors.Wrapf(err, "connect to external storage")
 	}
@@ -189,8 +253,7 @@ func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	store, err := cloudimpl.ExternalStorageFromURI(ctx, uri.String(), base.ExternalIODirConfig{},
-		cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+	store, err := externalStorageFromURIFactory(ctx, uri.String(), security.RootUserName())
 	if err != nil {
 		return errors.Wrapf(err, "connect to external storage")
 	}
@@ -211,8 +274,7 @@ func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
 
 		if i > 0 {
 			uri.Path = filepath.Join(basepath, manifestPaths[i])
-			stores[i], err = cloudimpl.ExternalStorageFromURI(ctx, uri.String(), base.ExternalIODirConfig{},
-				cluster.NoSettings, newBlobFactory, security.RootUserName(), nil /*Internal Executor*/, nil /*kvDB*/)
+			stores[i], err = externalStorageFromURIFactory(ctx, uri.String(), security.RootUserName())
 			if err != nil {
 				return errors.Wrapf(err, "connect to external storage")
 			}
@@ -349,4 +411,215 @@ func showDescriptors(desc backupccl.BackupManifest) {
 		fmt.Printf("	%d: %s\n",
 			id, tableIDToFullyQualifiedName[id])
 	}
+}
+
+func runLoadShowData(cmd *cobra.Command, args []string) error {
+
+	fullyQualifiedTableName := strings.ToLower(args[0])
+	manifestPaths := args[1:]
+
+	ctx := context.Background()
+	manifests := make([]backupccl.BackupManifest, 0, len(manifestPaths))
+	for _, path := range manifestPaths {
+		manifest, err := getManifestFromURI(ctx, path)
+		if err != nil {
+			return errors.Wrapf(err, "fetching backup manifests from %s", path)
+		}
+		manifests = append(manifests, manifest)
+	}
+
+	endTime, err := evalAsOfTimestamp(readTime)
+	if err != nil {
+		return errors.Wrapf(err, "eval as of timestamp %s", readTime)
+	}
+
+	codec := keys.TODOSQLCodec
+	entry, err := backupccl.MakeBackupTableEntry(
+		ctx,
+		fullyQualifiedTableName,
+		manifests,
+		endTime,
+		security.RootUserName(),
+		codec,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "fetching entry")
+	}
+
+	if err = showData(ctx, entry, endTime, codec); err != nil {
+		return errors.Wrapf(err, "show data")
+	}
+	return nil
+}
+
+func evalAsOfTimestamp(readTime string) (hlc.Timestamp, error) {
+	if readTime == "" {
+		return hlc.Timestamp{}, nil
+	}
+	var err error
+	// Attempt to parse as timestamp.
+	if ts, _, err := pgdate.ParseTimestampWithoutTimezone(timeutil.Now(), pgdate.ParseModeYMD, readTime); err == nil {
+		readTS := hlc.Timestamp{WallTime: ts.UnixNano()}
+		return readTS, nil
+	}
+	// Attempt to parse as a decimal.
+	if dec, _, err := apd.NewFromString(readTime); err == nil {
+		if readTS, err := tree.DecimalToHLC(dec); err == nil {
+			return readTS, nil
+		}
+	}
+	err = errors.Newf("value %s is neither timestamp nor decimal", readTime)
+	return hlc.Timestamp{}, err
+}
+
+func showData(
+	ctx context.Context, entry backupccl.BackupTableEntry, endTime hlc.Timestamp, codec keys.SQLCodec,
+) (err error) {
+
+	iters, cleanup, err := makeIters(ctx, entry)
+	if err != nil {
+		return errors.Wrapf(err, "make iters")
+	}
+	defer func() {
+		cleanupErr := cleanup()
+		if err == nil {
+			err = cleanupErr
+		}
+	}()
+
+	iter := storage.MakeMultiIterator(iters)
+	defer iter.Close()
+
+	rf, err := makeRowFetcher(ctx, entry, codec)
+	if err != nil {
+		return errors.Wrapf(err, "make row fetcher")
+	}
+	defer rf.Close(ctx)
+
+	startKeyMVCC, endKeyMVCC := storage.MVCCKey{Key: entry.Span.Key}, storage.MVCCKey{Key: entry.Span.EndKey}
+	kvFetcher := row.MakeBackupSSTKVFetcher(startKeyMVCC, endKeyMVCC, iter, endTime)
+
+	if err := rf.StartScanFrom(ctx, &kvFetcher); err != nil {
+		return errors.Wrapf(err, "row fetcher starts scan")
+	}
+
+	var writer *csv.Writer
+	if format != "csv" {
+		return errors.Newf("only exporting to csv format is supported")
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+	if destination == "" {
+		writer = csv.NewWriter(os.Stdout)
+	} else {
+		writer = csv.NewWriter(buf)
+	}
+
+	for {
+		datums, _, _, err := rf.NextRowDecoded(ctx)
+		if err != nil {
+			return errors.Wrapf(err, "decode row")
+		}
+		if datums == nil {
+			break
+		}
+		row := make([]string, datums.Len())
+		for i, datum := range datums {
+			if datum == tree.DNull {
+				row[i] = nullas
+			} else {
+				row[i] = datum.String()
+			}
+		}
+		if err := writer.Write(row); err != nil {
+			return err
+		}
+		writer.Flush()
+	}
+
+	if destination != "" {
+		dir, file := filepath.Split(destination)
+		store, err := externalStorageFromURIFactory(ctx, dir, security.RootUserName())
+		if err != nil {
+			return errors.Wrapf(err, "unable to open store to write files: %s", destination)
+		}
+		if err = store.WriteFile(ctx, file, bytes.NewReader(buf.Bytes())); err != nil {
+			_ = store.Close()
+			return err
+		}
+		return store.Close()
+	}
+	return err
+}
+
+func makeIters(
+	ctx context.Context, entry backupccl.BackupTableEntry,
+) ([]storage.SimpleMVCCIterator, func() error, error) {
+	iters := make([]storage.SimpleMVCCIterator, len(entry.Files))
+	dirStorage := make([]cloud.ExternalStorage, len(entry.Files))
+	for i, file := range entry.Files {
+		var err error
+		clusterSettings := cluster.MakeClusterSettings()
+		dirStorage[i], err = cloudimpl.MakeExternalStorage(ctx, file.Dir, base.ExternalIODirConfig{},
+			clusterSettings, newBlobFactory, nil /*internal executor*/, nil /*kvDB*/)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "making external storage")
+		}
+
+		iters[i], err = storageccl.ExternalSSTReader(ctx, dirStorage[i], file.Path, nil)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "fetching sst reader")
+		}
+	}
+
+	cleanup := func() error {
+		for _, iter := range iters {
+			iter.Close()
+		}
+		for _, dir := range dirStorage {
+			if err := dir.Close(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return iters, cleanup, nil
+}
+
+func makeRowFetcher(
+	ctx context.Context, entry backupccl.BackupTableEntry, codec keys.SQLCodec,
+) (row.Fetcher, error) {
+	var colIdxMap catalog.TableColMap
+	var valNeededForCol util.FastIntSet
+	colDescs := make([]descpb.ColumnDescriptor, len(entry.Desc.PublicColumns()))
+	for i, col := range entry.Desc.PublicColumns() {
+		colIdxMap.Set(col.GetID(), i)
+		valNeededForCol.Add(i)
+		colDescs[i] = *col.ColumnDesc()
+	}
+	table := row.FetcherTableArgs{
+		Spans:            []roachpb.Span{entry.Span},
+		Desc:             entry.Desc,
+		Index:            entry.Desc.GetPrimaryIndex().IndexDesc(),
+		ColIdxMap:        colIdxMap,
+		IsSecondaryIndex: false,
+		Cols:             colDescs,
+		ValNeededForCol:  valNeededForCol,
+	}
+
+	var rf row.Fetcher
+	if err := rf.Init(
+		ctx,
+		codec,
+		false, /*reverse*/
+		descpb.ScanLockingStrength_FOR_NONE,
+		descpb.ScanLockingWaitPolicy_BLOCK,
+		false, /*isCheck*/
+		&rowenc.DatumAlloc{},
+		nil, /*mon.BytesMonitor*/
+		table,
+	); err != nil {
+		return rf, err
+	}
+	return rf, nil
 }

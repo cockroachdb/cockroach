@@ -11,12 +11,14 @@ package backupccl
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -438,4 +441,90 @@ func selectTargets(
 	}
 
 	return matched.Descs, matched.RequestedDBs, nil, nil
+}
+
+// BackupTableEntry wraps information of a table retrieved
+// from backup manifests.
+// exported to cliccl for exporting data directly from backup sst.
+type BackupTableEntry struct {
+	Desc  catalog.TableDescriptor
+	Span  roachpb.Span
+	Files []roachpb.ImportRequest_File
+}
+
+// MakeBackupTableEntry looks up the descriptor of fullyQualifiedTableName
+// from backupManifests and returns a BackupTableEntry, which contains
+// the table descriptor, the primary index span, and the sst files.
+func MakeBackupTableEntry(
+	ctx context.Context,
+	fullyQualifiedTableName string,
+	backupManifests []BackupManifest,
+	endTime hlc.Timestamp,
+	user security.SQLUsername,
+	backupCodec keys.SQLCodec,
+) (BackupTableEntry, error) {
+	var descName []string
+	if descName = strings.Split(fullyQualifiedTableName, "."); len(descName) != 3 {
+		return BackupTableEntry{}, errors.Newf("table name should be specified in format databaseName.schemaName.tableName")
+	}
+
+	if !endTime.IsEmpty() {
+		ind := -1
+		for i, b := range backupManifests {
+			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
+				if endTime != b.EndTime {
+					return BackupTableEntry{}, errors.Newf("should specify the exact backup time, next backup timestamp is %s", b.EndTime.AsOfSystemTime())
+				}
+				ind = i
+				break
+			}
+		}
+		if ind == -1 {
+			return BackupTableEntry{}, errors.Newf("supplied backups do not cover requested time %s", endTime.AsOfSystemTime())
+		}
+		backupManifests = backupManifests[:ind+1]
+	}
+
+	allDescs, _ := loadSQLDescsFromBackupsAtTime(backupManifests, endTime)
+	resolver, err := backupresolver.NewDescriptorResolver(allDescs)
+	if err != nil {
+		return BackupTableEntry{}, errors.Wrapf(err, "creating a new resolver for all descriptors")
+	}
+
+	found, desc, err := resolver.LookupObject(ctx, tree.ObjectLookupFlags{}, descName[0], descName[1], descName[2])
+	if err != nil {
+		return BackupTableEntry{}, errors.Wrapf(err, "looking up table %s", fullyQualifiedTableName)
+	}
+	if !found {
+		return BackupTableEntry{}, errors.Newf("table %s not found", fullyQualifiedTableName)
+	}
+	tbMutable, ok := desc.(*tabledesc.Mutable)
+	if !ok {
+		return BackupTableEntry{}, errors.Newf("object %s not mutable", fullyQualifiedTableName)
+	}
+	tbDesc, err := catalog.AsTableDescriptor(tbMutable)
+	if err != nil {
+		return BackupTableEntry{}, errors.Wrapf(err, "fetching table %s descriptor", fullyQualifiedTableName)
+	}
+
+	tablePrimaryIndexSpan := tbDesc.PrimaryIndexSpan(backupCodec)
+
+	entry, _, err := makeImportSpans(
+		[]roachpb.Span{tablePrimaryIndexSpan},
+		backupManifests,
+		nil,           /*backupLocalityInfo*/
+		roachpb.Key{}, /*lowWaterMark*/
+		user,
+		errOnMissingRange)
+	if err != nil {
+		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
+	}
+
+	res := BackupTableEntry{
+		tbDesc,
+		tablePrimaryIndexSpan,
+		entry[0].Files,
+	}
+
+	return res, nil
 }
