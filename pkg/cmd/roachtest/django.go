@@ -19,7 +19,8 @@ import (
 var djangoReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)(\.(?P<point>\d+))?$`)
 var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)$`)
 
-var djangoSupportedTag = "cockroach-3.1.x"
+var djangoSupportedTag = "cockroach-3.2.x"
+var djangoCockroachDBSupportedTag = "3.2"
 
 func registerDjango(r *testRegistry) {
 	runDjango := func(
@@ -126,6 +127,7 @@ func registerDjango(r *testRegistry) {
 			t.Fatal(err)
 		}
 		c.l.Printf("Latest django-cockroachdb release is %s.", djangoCockroachDBLatestTag)
+		c.l.Printf("Supported django-cockroachdb release is %s.", djangoCockroachDBSupportedTag)
 
 		if err := repeatGitCloneE(
 			ctx,
@@ -133,7 +135,7 @@ func registerDjango(r *testRegistry) {
 			c,
 			"https://github.com/cockroachdb/django-cockroachdb",
 			"/mnt/data1/django/tests/django-cockroachdb",
-			"master",
+			djangoCockroachDBSupportedTag,
 			node,
 		); err != nil {
 			t.Fatal(err)

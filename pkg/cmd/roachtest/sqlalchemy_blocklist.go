@@ -11,9 +11,6 @@
 package main
 
 var sqlAlchemyBlocklists = blocklistsForVersion{
-	{"v2.1", "sqlAlchemyBlocklist", sqlAlchemyBlocklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
-	{"v19.1", "sqlAlchemyBlocklist", sqlAlchemyBlocklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
-	{"v19.2", "sqlAlchemyBlocklist", sqlAlchemyBlocklist, "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList},
 	{"v20.1", "sqlAlchemyBlocklist20_1", sqlAlchemyBlocklist20_1, "sqlAlchemyIgnoreList20_1", sqlAlchemyIgnoreList20_1},
 	{"v20.2", "sqlAlchemyBlocklist20_2", sqlAlchemyBlocklist20_2, "sqlAlchemyIgnoreList20_2", sqlAlchemyIgnoreList20_2},
 	{"v21.1", "sqlAlchemyBlocklist21_1", sqlAlchemyBlocklist21_1, "sqlAlchemyIgnoreList21_1", sqlAlchemyIgnoreList21_1},
@@ -27,16 +24,10 @@ var sqlAlchemyBlocklist20_1 = blocklist{
 	"test/dialect/test_suite.py::ExpandingBoundInTest_cockroachdb+psycopg2_9_5_0::test_null_in_empty_set_is_false": "41596",
 }
 
-var sqlAlchemyBlocklist = blocklist{
-	"test/dialect/test_suite.py::ExpandingBoundInTest_cockroachdb+psycopg2_9_5_0::test_null_in_empty_set_is_false": "41596",
-}
+var sqlAlchemyIgnoreList21_1 = sqlAlchemyIgnoreList20_2
 
-var sqlAlchemyIgnoreList21_1 = sqlAlchemyIgnoreList
+var sqlAlchemyIgnoreList20_2 = sqlAlchemyIgnoreList20_1
 
-var sqlAlchemyIgnoreList20_2 = sqlAlchemyIgnoreList
-
-var sqlAlchemyIgnoreList20_1 = sqlAlchemyIgnoreList
-
-var sqlAlchemyIgnoreList = blocklist{
+var sqlAlchemyIgnoreList20_1 = blocklist{
 	"test/dialect/test_suite.py::ComponentReflectionTest_cockroachdb+psycopg2_9_5_0::test_deprecated_get_primary_keys": "test has a bug and is getting removed",
 }
