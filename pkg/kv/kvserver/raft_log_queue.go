@@ -528,6 +528,8 @@ func computeTruncateDecision(input truncateDecisionInput) truncateDecision {
 func (rlq *raftLogQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, r *Replica, _ *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
+	return false, 0.0 // HACK
+
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
 		log.Warningf(ctx, "%v", err)
@@ -570,6 +572,7 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 func (rlq *raftLogQueue) process(
 	ctx context.Context, r *Replica, _ *config.SystemConfig,
 ) (processed bool, err error) {
+	return false, nil // HACK
 	decision, err := newTruncateDecision(ctx, r)
 	if err != nil {
 		return false, err
