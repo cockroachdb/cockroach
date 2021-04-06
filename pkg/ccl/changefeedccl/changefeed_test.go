@@ -51,10 +51,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -2890,7 +2892,14 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 		// the budget in 10240 chunks. Set this number high enough for one but not
 		// for a second. I'd love to be able to derive this from constants, but I
 		// don't see how to do that without a refactor.
-		knobs.MemBufferCapacity = 20000
+		mm := mon.NewMonitor(
+			"test-mm", mon.MemoryResource,
+			nil, nil, 1, 100,
+			f.Server().ClusterSettings())
+		mm.Start(context.Background(), nil, mon.MakeStandaloneBudget(20000))
+		defer mm.Stop(context.Background())
+		knobs.MemMonitor = mm
+
 		beforeEmitRowCh := make(chan struct{}, 1)
 		knobs.BeforeEmitRow = func(ctx context.Context) error {
 			select {
@@ -2921,6 +2930,70 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 		if _, err := foo.Next(); !testutils.IsError(err, `memory budget exceeded`) {
 			t.Fatalf(`expected "memory budget exceeded" error got: %v`, err)
 		}
+	}
+
+	// The mem buffer is only used with RangeFeed.
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestChangefeedMemBufferCapacityMultipleChangefeeds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numChangefeeds = 3
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		// The RowContainer used internally by the memBuffer seems to request from
+		// the budget in 10240 chunks. Set this number to be high enough to
+		// be able to store a single changefeed, but not multiple ones.
+		mm := mon.NewMonitor(
+			"test-mm", mon.MemoryResource,
+			nil, nil, 1, 100,
+			f.Server().ClusterSettings())
+		mm.Start(context.Background(), nil, mon.MakeStandaloneBudget(60000))
+		defer mm.Stop(context.Background())
+		knobs.MemMonitor = mm
+
+		beforeTableEvents := make(chan struct{}, numChangefeeds)
+		knobs.FeedKnobs.BeforeTableEvents = func() {
+			beforeTableEvents <- struct{}{}
+		}
+		defer close(beforeTableEvents)
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		// Start changefeeds.
+		g := ctxgroup.WithContext(context.Background())
+		for i := 0; i < numChangefeeds; i++ {
+			g.GoCtx(func(ctx context.Context) error {
+				foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+				defer closeFeed(t, foo)
+				for {
+					_, err := foo.Next()
+					if err != nil {
+						return err
+					}
+				}
+			})
+		}
+
+		// Wait for all feeds to start waiting for table events.
+		for i := 0; i < numChangefeeds; i++ {
+			<-beforeTableEvents
+		}
+
+		// Put enough data into the table such that we do not overlow a single changefeed limit,
+		// but overflow the limit in the parent monitor.
+		sqlDB.Exec(t, `INSERT INTO foo SELECT i, 'foofoofoo' FROM generate_series(1, $1) AS g(i)`, 1000)
+
+		err := g.Wait()
+		require.True(t, testutils.IsError(err, `memory budget exceeded`), err)
 	}
 
 	// The mem buffer is only used with RangeFeed.

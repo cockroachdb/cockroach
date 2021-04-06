@@ -60,6 +60,9 @@ type Config struct {
 	// InitialHighWater is the timestamp after which new events are guaranteed to
 	// be produced.
 	InitialHighWater hlc.Timestamp
+
+	// Knobs is the testing knobs for kvfeed.
+	Knobs TestingKnobs
 }
 
 // Run will run the kvfeed. The feed runs synchronously and returns an
@@ -101,7 +104,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.NeedsInitialScan, cfg.WithDiff,
 		cfg.InitialHighWater,
 		cfg.Codec,
-		sf, sc, pff, bf)
+		sf, sc, pff, bf, cfg.Knobs)
 	g.GoCtx(f.run)
 	err := g.Wait()
 	// NB: The higher layers of the changefeed should detect the boundary and the
@@ -166,6 +169,7 @@ type kvFeed struct {
 	tableFeed     schemaFeed
 	scanner       kvScanner
 	physicalFeed  physicalFeedFactory
+	knobs         TestingKnobs
 }
 
 func newKVFeed(
@@ -180,6 +184,7 @@ func newKVFeed(
 	sc kvScanner,
 	pff physicalFeedFactory,
 	bf func() EventBuffer,
+	knobs TestingKnobs,
 ) *kvFeed {
 	return &kvFeed{
 		sink:                sink,
@@ -194,6 +199,7 @@ func newKVFeed(
 		scanner:             sc,
 		physicalFeed:        pff,
 		bufferFactory:       bf,
+		knobs:               knobs,
 	}
 }
 
@@ -205,6 +211,9 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		initialScan := i == 0
 		if err = f.scanIfShould(ctx, initialScan, highWater); err != nil {
 			return err
+		}
+		if f.knobs.BeforeTableEvents != nil {
+			f.knobs.BeforeTableEvents()
 		}
 		highWater, err = f.runUntilTableEvent(ctx, highWater)
 		if err != nil {

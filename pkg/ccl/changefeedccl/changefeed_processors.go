@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -232,23 +231,22 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.knobs = *cfKnobs
 	}
 
-	// It seems like we should also be able to use `ca.ProcessorBase.MemMonitor`
-	// for the poller, but there is a race between the flow's MemoryMonitor
-	// getting Stopped and `changeAggregator.Close`, which causes panics. Not sure
-	// what to do about this yet.
-	kvFeedMemMonCapacity := kvfeed.MemBufferDefaultCapacity
-	if ca.knobs.MemBufferCapacity != 0 {
-		kvFeedMemMonCapacity = ca.knobs.MemBufferCapacity
+	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
+	// for all changefeeds to control memory allocated to all changefeeds.
+	pool := ca.flowCtx.Cfg.BackfillerMonitor
+	if ca.knobs.MemMonitor != nil {
+		pool = ca.knobs.MemMonitor
 	}
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", math.MaxInt64, ca.ProcessorBase.MemMonitor)
-	kvFeedMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(kvFeedMemMonCapacity))
+	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", limit, pool)
+	kvFeedMemMon.Start(ctx, pool, pool.MakeBoundAccount())
 	ca.kvFeedMemMon = kvFeedMemMon
 
 	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)
 	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
 	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.kvFeedMemMon, ca.spec,
-		spans, withDiff, buf, ca.metrics)
+		spans, withDiff, buf, ca.metrics, ca.knobs)
 	cfg := ca.flowCtx.Cfg
 
 	ca.eventProducer = &bufEventProducer{buf}
@@ -293,6 +291,7 @@ func makeKVFeedCfg(
 	withDiff bool,
 	buf kvfeed.EventBuffer,
 	metrics *Metrics,
+	knobs TestingKnobs,
 ) kvfeed.Config {
 	schemaChangeEvents := changefeedbase.SchemaChangeEventClass(
 		spec.Feed.Opts[changefeedbase.OptSchemaChangeEvents])
@@ -316,6 +315,7 @@ func makeKVFeedCfg(
 		NeedsInitialScan:   needsInitialScan,
 		SchemaChangeEvents: schemaChangeEvents,
 		SchemaChangePolicy: schemaChangePolicy,
+		Knobs:              knobs.FeedKnobs,
 	}
 	return kvfeedCfg
 }
