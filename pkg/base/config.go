@@ -119,7 +119,7 @@ var (
 	// defaultRaftElectionTimeoutTicks specifies the number of Raft Tick
 	// invocations that must pass between elections.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
-		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 7) // extra aggressive
 
 	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
 	// Range's Raft log can grow to before log truncations are triggered while at
