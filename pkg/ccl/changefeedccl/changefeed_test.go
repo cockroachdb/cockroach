@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -50,10 +51,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -2782,50 +2785,139 @@ func TestChangefeedMemBufferCapacity(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
-			DistSQL.(*execinfra.TestingKnobs).
-			Changefeed.(*TestingKnobs)
-		// The RowContainer used internally by the memBuffer seems to request from
-		// the budget in 10240 chunks. Set this number high enough for one but not
-		// for a second. I'd love to be able to derive this from constants, but I
-		// don't see how to do that without a refactor.
-		knobs.MemBufferCapacity = 20000
-		beforeEmitRowCh := make(chan struct{}, 1)
-		knobs.BeforeEmitRow = func(ctx context.Context) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-beforeEmitRowCh:
+	// memLimitTest returns a test runner which starts numFeeds changefeeds,
+	// and verifies that memory limits are honored.
+	memLimitTest := func(numFeeds int) func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		return func(t *testing.T, db *gosql.DB, ff cdctest.TestFeedFactory) {
+			feeds := make([]cdctest.TestFeed, numFeeds)
+			knobs := ff.Server().(*server.TestServer).Cfg.TestingKnobs.
+				DistSQL.(*execinfra.TestingKnobs).
+				Changefeed.(*TestingKnobs)
+
+			// Override monitor used as a pool for the for the changefeeds.
+			// Normally, this is BulkMonitor, but we create our own, with limited memory.
+			// Note: even though it's possible to reduce allocation size from its default
+			// value of mon.DefaultPoolAllocationSize (10240), doing so would result in slower tests.
+			//
+			// We allocate 1 byte less than the 10KB*(numFeeds+1).  This is because
+			// the test below first inserts a single row (and has the feed consume that row).
+			// This action allocates 10KB (minimum chunk size).  Then, we want to insert enough rows
+			// into the table to fill up the 10KB buffer, and cause the next chunk to be requested.
+			// But this should fail since we have the limit set 1 byte lower.
+			memLimit := mon.DefaultPoolAllocationSize*int64(numFeeds+1) - 1
+			limitedMemMonitor := mon.NewMonitor(
+				"test-mm", mon.MemoryResource,
+				nil /* curCount */, nil, /* maxHist */
+				mon.DefaultPoolAllocationSize, 100, /* noteworthy */
+				cluster.MakeTestingClusterSettings())
+			limitedMemMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(memLimit))
+
+			// Normally, request scoped monitors should be Stop()ed.
+			// However, in our case, we're overriding a monitor that lives for the duration
+			// of the server and is never stopped.
+			// In this test, we start multiple changefeeds; one or more of them will fail
+			// (and will correctly release their memory), but some may still remaining running.
+			// The Close() method invoked on the feeds is a bit of a best effort:
+			// we request job cancellation, but we don't wait for that.
+			// We could wait for the feed job to enter terminal state, but that makes this test
+			// slower.  So, we just EmergencyStop the monitor to ignore any memory that has not
+			// been released yet.
+			defer limitedMemMonitor.EmergencyStop(context.Background())
+			knobs.MemMonitor = limitedMemMonitor
+
+			// Each changefeed gets enough memory to work by itself, but not enough
+			// to have all the changefeeds succeed.
+			changefeedbase.PerChangefeedMemLimit.Override(
+				&ff.Server().ClusterSettings().SV, 2*mon.DefaultPoolAllocationSize)
+
+			// beforeEmitRowCh is used to block feeds from processing messages.
+			// This channel is closed below to speed up test termination.
+			beforeEmitRowCh := make(chan struct{}, 1)
+			knobs.BeforeEmitRow = func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case _, ok := <-beforeEmitRowCh:
+					if !ok {
+						return context.Canceled
+					}
+				}
+				return nil
 			}
-			return nil
-		}
-		defer close(beforeEmitRowCh)
 
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'small')`)
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		defer closeFeed(t, foo)
+			// Insert 1 row for this feed;
+			sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'small')`)
 
-		// Small amounts of data fit in the buffer.
-		beforeEmitRowCh <- struct{}{}
-		assertPayloads(t, foo, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "small"}}`,
-		})
+			// Start changefeeds.
+			for i := 0; i < numFeeds; i++ {
+				feeds[i] = feed(t, ff, `CREATE CHANGEFEED FOR foo`)
+				defer func(f cdctest.TestFeed) {
+					require.NoError(t, f.Close())
+				}(feeds[i])
 
-		// Put enough data in to overflow the buffer and verify that at some point
-		// we get the "memory budget exceeded" error.
-		sqlDB.Exec(t, `INSERT INTO foo SELECT i, 'foofoofoo' FROM generate_series(1, $1) AS g(i)`, 1000)
-		if _, err := foo.Next(); !testutils.IsError(err, `memory budget exceeded`) {
-			t.Fatalf(`expected "memory budget exceeded" error got: %v`, err)
+				// Ensure new feed sees our row and subsequently gets blocked
+				// waiting for additional events.
+				beforeEmitRowCh <- struct{}{}
+				assertPayloads(t, feeds[i], []string{
+					`foo: [0]->{"after": {"a": 0, "b": "small"}}`,
+				})
+			}
+
+			// Insert enough rows into the table to trigger "memory budget exceeded" error.
+			// Note: because we no longer signal beforeEmitRowCh, all feeds are effectively
+			// blocked from reading KV events.  However, KV feed is still running, putting those events
+			// into memory buffer, thus resulting in an out of memory error (note, in addition to the
+			// rows we insert below, there are also smaller resolved timestamp events being
+			// generated every 100ms).
+			// We want each feed to be able to buffer all of the rows (inserted below); but combined
+			// memory used should be above the limits in our memory monitor.
+			// It's helpful to understand how the memory is accounted for.
+			// memBuf uses RowContainer -- and that object allocates data in chunks.  For this test,
+			// the chunk size is 7192 bytes (enough to hold 64 rows worth of Datums).  In addition,
+			// we also reserve the number of bytes that are required for the row itself.
+			// (68 bytes in this test).  The first time we grow memory region, we will request
+			// 10K bytes from memory monitor.  7192 will be used up right away, and the rest will
+			// be used for ~45 rows.  Inserting any number of rows beyond 45 should trigger
+			// request for additional 10K -- which is fine based on PerChangefeedMemLimit setting,
+			// but should overflow limited monitor we have.
+			const numRows = 50
+			sqlDB.Exec(t,
+				`INSERT INTO foo SELECT i, 'foofoofoo' FROM generate_series(1, $1) AS g(i)`,
+				numRows)
+
+			// We don't quite know which feed will error out first, so, just call Next on all of
+			// them and record the first error encountered.
+			firstErr := make(chan error, 1)
+			_ = ctxgroup.GroupWorkers(context.Background(), len(feeds),
+				func(ctx context.Context, i int) error {
+					_, err := feeds[i].Next()
+					if err != nil {
+						select {
+						case firstErr <- err:
+							// As soon as we get an error, close beforeEmitRowCh to unblock
+							// any other changfeeds that maybe blocked emitting rows.
+							close(beforeEmitRowCh)
+						default:
+						}
+					}
+					return err
+				})
+
+			err := <-firstErr
+			require.Regexp(t, `memory budget exceeded`, err)
 		}
 	}
 
 	// The mem buffer is only used with RangeFeed.
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	t.Run(`sinkless-one-feed`, sinklessTest(memLimitTest(1)))
+	t.Run(`sinkless-two-feeds`, sinklessTest(memLimitTest(2)))
+	t.Run(`sinkless-many-feeds`, sinklessTest(memLimitTest(3)))
+	t.Run(`enterprise-one-feed`, enterpriseTest(memLimitTest(1)))
+	t.Run(`enterprise-two-feeds`, enterpriseTest(memLimitTest(2)))
+	t.Run(`enterprise-many-feeds`, enterpriseTest(memLimitTest(3)))
 }
 
 // Regression test for #41694.

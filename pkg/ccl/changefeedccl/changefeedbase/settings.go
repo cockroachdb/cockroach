@@ -24,3 +24,11 @@ var TableDescriptorPollInterval = settings.RegisterNonNegativeDurationSetting(
 	"polling interval for the table descriptors",
 	1*time.Second,
 )
+
+// PerChangefeedMemLimit controls how much data can be buffered by
+// a single changefeed.
+var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
+	"changefeed.memory.per_changefeed_limit",
+	"controls amount of data that can be buffered per changefeed",
+	1<<30,
+)

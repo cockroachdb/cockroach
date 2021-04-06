@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -188,16 +187,15 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		knobs = *cfKnobs
 	}
 
-	// It seems like we should also be able to use `ca.ProcessorBase.MemMonitor`
-	// for the poller, but there is a race between the flow's MemoryMonitor
-	// getting Stopped and `changeAggregator.Close`, which causes panics. Not sure
-	// what to do about this yet.
-	kvFeedMemMonCapacity := kvfeed.MemBufferDefaultCapacity
-	if knobs.MemBufferCapacity != 0 {
-		kvFeedMemMonCapacity = knobs.MemBufferCapacity
+	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
+	// for all changefeeds to control memory allocated to all changefeeds.
+	pool := ca.flowCtx.Cfg.BackfillerMonitor
+	if knobs.MemMonitor != nil {
+		pool = knobs.MemMonitor
 	}
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", math.MaxInt64, ca.ProcessorBase.MemMonitor)
-	kvFeedMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(kvFeedMemMonCapacity))
+	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", limit, pool)
+	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
 	ca.kvFeedMemMon = kvFeedMemMon
 
 	buf := kvfeed.MakeChanBuffer()
