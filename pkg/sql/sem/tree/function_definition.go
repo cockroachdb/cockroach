@@ -51,10 +51,17 @@ type FunctionProperties struct {
 	// considered undocumented.
 	Private bool
 
-	// NullableArgs is set to true when a function's definition can
-	// handle NULL arguments. When set, the function will be given the
-	// chance to see NULL arguments. When not, the function will
-	// evaluate directly to NULL in the presence of any NULL arguments.
+	// NullableArgs is set to true when a function's definition can handle NULL
+	// arguments. When set to true, the function will be given the chance to see NULL
+	// arguments.
+	//
+	// When set to false, the function will directly result in NULL in the
+	// presence of any NULL arguments without evaluating the function's
+	// implementation defined in Overload.Fn. Therefore, if the function is
+	// expected to produce side-effects with a NULL argument, NullableArgs must
+	// be true. Note that if this behavior changes so that NullableArgs=false
+	// functions can produce side-effects, the FoldFunctionWithNullArg optimizer
+	// rule must be changed to avoid folding those functions.
 	//
 	// NOTE: when set, a function should be prepared for any of its arguments to
 	// be NULL and should act accordingly.

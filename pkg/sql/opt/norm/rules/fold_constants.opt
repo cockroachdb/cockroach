@@ -160,6 +160,40 @@ $result
 =>
 $result
 
+# FoldFunctionWithNullArg folds a Function to Null when one of its arguments is
+# Null and all of the following are true:
+#
+#   1. The function does not allow Null arguments (NullableArgs=false).
+#   2. The function is a normal function not an aggregate, window, or generator.
+#
+# It is safe to fold functions to Null in this case because a function with
+# NullableArgs=false would never error with a Null argument, even if the other
+# args are invalid. For example, calling encode with NULL bytes and an invalid
+# encoding format does not error:
+#
+#     SELECT encode(NULL::BYTES, 'foo')
+#       => NULL
+#
+# Stable and volatile functions that rely on context or produce side-effects can
+# also be folded to Null in this case because a function with NullableArgs=false
+# is never evaluated if any of its arguments are Null. The function results
+# directly in Null without being invoked, so it is guaranteed not to rely on
+# context or produce side-effects. See FunctionProperties.NullableArgs for more
+# details.
+#
+# FoldFunctionWithNullArg is defined before FoldFunction so that we can avoid
+# the overhead of evaluating the function in FoldFunction if it has any Null
+# arguments.
+[FoldFunctionWithNullArg, Normalize]
+(Function
+    $args:*
+    $private:* &
+        (CanFoldFunctionWithNullArg $private) &
+        (HasNullArg $args)
+)
+=>
+(Null (FunctionReturnType $private))
+
 # FoldFunction is similar to FoldBinary, but it involves a function with
 # constant inputs. As with FoldBinary, FoldFunction applies as long as the
 # evaluation would not cause an error. Additionally, only certain functions
@@ -174,7 +208,7 @@ $result
 =>
 $result
 
-# FoldEqualsAnyNull, conversts a scalar ANY operation to NULL if the right-hand
+# FoldEqualsAnyNull, converts a scalar ANY operation to NULL if the right-hand
 # side tuple is NULL, e.g. x = ANY(NULL::int[]). See #42562.
 [FoldEqualsAnyNull, Normalize]
 (AnyScalar * (Null) *)
