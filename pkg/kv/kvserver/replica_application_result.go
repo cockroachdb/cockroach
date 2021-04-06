@@ -71,6 +71,7 @@ func isTrivial(r *kvserverpb.ReplicatedEvalResult) bool {
 	allowlist.DeprecatedDelta = nil
 	allowlist.PrevLeaseProposal = nil
 	allowlist.State = nil
+	allowlist.ClearIntentWrite()
 	return allowlist.IsZero()
 }
 

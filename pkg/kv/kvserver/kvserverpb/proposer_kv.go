@@ -50,8 +50,25 @@ func (r ReplicatedEvalResult) IsLeaseRequest() bool {
 	return (r.Flags & int64(EvalResultFlags_LeaseRequest)) != 0
 }
 
-// SetLeaseRequest set the respective flag on the command, indicating that this
+// SetLeaseRequest sets the respective flag on the command, indicating that this
 // command corresponds to a lease request.
 func (r *ReplicatedEvalResult) SetLeaseRequest() {
 	r.Flags |= int64(EvalResultFlags_LeaseRequest)
+}
+
+// IsIntentWrite returns whether the command corresponds to a request with the
+// isIntentWrite flag.
+func (r ReplicatedEvalResult) IsIntentWrite() bool {
+	return (r.Flags & int64(EvalResultFlags_IntentWrite)) != 0
+}
+
+// SetIntentWrite sets the respective flag on the command, indicating that this
+// command corresponds to a request with the isIntentWrite flag.
+func (r *ReplicatedEvalResult) SetIntentWrite() {
+	r.Flags |= int64(EvalResultFlags_IntentWrite)
+}
+
+// ClearIntentWrite clears the IntentWrite flag.
+func (r *ReplicatedEvalResult) ClearIntentWrite() {
+	r.Flags &= ^(int64(EvalResultFlags_IntentWrite))
 }

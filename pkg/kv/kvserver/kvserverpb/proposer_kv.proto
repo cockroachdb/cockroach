@@ -115,6 +115,10 @@ enum EvalResultFlags {
   // LeaseRequest indicates that the command corresponds to a RequestLease
   // request. Note that lease transfers don't have this flag.
   LeaseRequest = 1;
+  // IntentWrite indicates that this command writes MVCC keys and results in
+  // intents (unless done outside of a txn or the command corresponds to a 1PC
+  // batch). See ba.IsIntentWrite().
+  IntentWrite = 2;
 }
 
 // ReplicatedEvalResult is the structured information which together with
@@ -135,9 +139,11 @@ message ReplicatedEvalResult {
   // flags indicates various attributes of the command. The interpretation of
   // the bits is given by EvalResultFlags.
   int64 flags = 6;
-  // The timestamp at which this command is writing. Used to verify the validity
-  // of the command against the GC threshold and to update the followers'
-  // clocks.
+  // The timestamp at which this command is writing. This is well defined by
+  // IntentWrite requests, for which the field is used to verify the validity of
+  // the command against the GC threshold. For all other commands, the timestamp
+  // is to be interpreted simply as a clock signal from the proposer - the field is
+  // also used to bump the followers' clocks.
   util.hlc.Timestamp write_timestamp = 8 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.

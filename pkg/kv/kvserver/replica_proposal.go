@@ -810,7 +810,26 @@ func (r *Replica) evaluateProposal(
 		if ba.IsLeaseRequest() {
 			res.Replicated.SetLeaseRequest()
 		}
-		res.Replicated.WriteTimestamp = ba.Timestamp
+		// Set the timestamp fields. If this range has not "migrated" to 21.1, then
+		// we'll maintain compatibility with 20.2 and indiscriminately set
+		// WriteTimestamp = ba.WriteTimestamp. If we know we're only proposing to
+		// 21.1+ nodes, then we set WriteTimestamp differently when writing intents
+		// versus other requests; see comments on the field.
+		r.mu.RLock()
+		migratedToRaftClosedTimestamp := r.mu.state.MigratedToRaftClosedTimestamp()
+		r.mu.RUnlock()
+		if !migratedToRaftClosedTimestamp {
+			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
+		} else if ba.IsIntentWrite() {
+			res.Replicated.SetIntentWrite()
+			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
+		} else {
+			// For misc requests, use WriteTimestamp to propagate a clock signal. This
+			// is particularly important for lease transfers, as it assures that the
+			// follower getting the lease will have a clock above the start time of
+			// its lease.
+			res.Replicated.WriteTimestamp = r.store.Clock().Now()
+		}
 		res.Replicated.Delta = ms.ToStatsDelta()
 
 		// This is the result of a migration. See the field for more details.

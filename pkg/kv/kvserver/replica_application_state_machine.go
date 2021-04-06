@@ -327,8 +327,9 @@ func checkForcedErr(
 	// necessary, given that we've check at evaluation time that the request
 	// evaluates at a timestamp above the GC threshold? Does it actually matter if
 	// the GC threshold has advanced since then?
+	isIntentWrite := raftCmd.ReplicatedEvalResult.IsIntentWrite()
 	wts := raftCmd.ReplicatedEvalResult.WriteTimestamp
-	if !wts.IsEmpty() && wts.LessEq(*replicaState.GCThreshold) {
+	if isIntentWrite && !wts.IsEmpty() && wts.LessEq(*replicaState.GCThreshold) {
 		return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
 			Timestamp: wts,
 			Threshold: *replicaState.GCThreshold,
@@ -454,17 +455,18 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		cmd.raftCmd.LogicalOpLog = nil
 		cmd.raftCmd.ClosedTimestamp = nil
 	} else {
-		// Assert that we're not writing under the closed timestamp. We can only do
-		// these checks on IsIntentWrite requests, since others (for example,
-		// EndTxn) can operate below the closed timestamp. In turn, this means that
-		// we can only assert on the leaseholder, as only that replica has
-		// cmd.proposal.Request filled in.
-		if cmd.IsLocal() && cmd.proposal.Request.IsIntentWrite() {
-			wts := cmd.proposal.Request.WriteTimestamp()
-			if wts.LessEq(b.state.RaftClosedTimestamp) {
-				return nil, makeNonDeterministicFailure("writing at %s below closed ts: %s (%s)",
-					wts, b.state.RaftClosedTimestamp.String(), cmd.proposal.Request.String())
+		// Assert that we're not writing under the closed timestamp.
+		isIntentWrite := cmd.raftCmd.ReplicatedEvalResult.IsIntentWrite()
+		wts := cmd.raftCmd.ReplicatedEvalResult.WriteTimestamp
+		if isIntentWrite && !wts.IsEmpty() && wts.LessEq(b.state.RaftClosedTimestamp) && b.state.MigratedToRaftClosedTimestamp() {
+			var req string
+			if cmd.proposal != nil {
+				req = cmd.proposal.Request.String()
+			} else {
+				req = "request unknown; not leaseholder"
 			}
+			return nil, errors.AssertionFailedf("writing at %s below closed ts: %s (%s)",
+				wts, b.state.RaftClosedTimestamp.String(), req)
 		}
 		log.Event(ctx, "applying command")
 	}
