@@ -11,6 +11,16 @@ statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
 
 statement ok
+CREATE DATABASE bad_db PRIMARY REGION "ca-central-1";
+USE bad_db;
+SET override_multi_region_zone_config = true;
+ALTER DATABASE bad_db CONFIGURE ZONE DISCARD;
+SET override_multi_region_zone_config = false
+
+statement error zone configuration for database bad_db contains incorrectly configured field "num_replicas"
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+statement ok
 CREATE DATABASE "mr-zone-configs" primary region "ca-central-1" regions "ap-southeast-2", "us-east-1"
 
 statement ok
@@ -274,12 +284,13 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
 query TTTTT colnames
 SHOW DATABASES
 ----
-database_name    owner  primary_region  regions  survival_goal
-defaultdb        root   NULL            {}       NULL
-mr-zone-configs  root   NULL            {}       NULL
-postgres         root   NULL            {}       NULL
-system           node   NULL            {}       NULL
-test             root   NULL            {}       NULL
+database_name    owner  primary_region  regions         survival_goal
+bad_db           root   ca-central-1    {ca-central-1}  zone
+defaultdb        root   NULL            {}              NULL
+mr-zone-configs  root   NULL            {}              NULL
+postgres         root   NULL            {}              NULL
+system           node   NULL            {}              NULL
+test             root   NULL            {}              NULL
 
 statement ok
 ALTER DATABASE "mr-zone-configs" SET PRIMARY REGION "us-east-1"
@@ -294,6 +305,7 @@ query TTTTT colnames
 SHOW DATABASES
 ----
 database_name    owner  primary_region  regions                                  survival_goal
+bad_db           root   ca-central-1    {ca-central-1}                           zone
 defaultdb        root   NULL            {}                                       NULL
 mr-zone-configs  root   us-east-1       {ap-southeast-2,ca-central-1,us-east-1}  zone
 postgres         root   NULL            {}                                       NULL
