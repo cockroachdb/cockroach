@@ -24,6 +24,14 @@ export const DROP_DATABASE = "drop_database";
 export const RENAME_DATABASE = "rename_database";
 // Recorded when a database's owner is changed.
 export const ALTER_DATABASE_OWNER = "alter_database_owner";
+// Recorded when a region is added to a database.
+export const ALTER_DATABASE_ADD_REGION = "alter_database_add_region";
+// Recorded when a region is dropped from a database.
+export const ALTER_DATABASE_DROP_REGION = "alter_database_drop_region";
+// Recorded when the primary region of a database is altered.
+export const ALTER_DATABASE_PRIMARY_REGION = "alter_database_primary_region";
+// Recorded when the survival goal of a database is altered.
+export const ALTER_DATABASE_SURVIVAL_GOAL = "alter_database_survival_goal";
 // Recorded when a table is created.
 export const CREATE_TABLE = "create_table";
 // Recorded when a table is dropped.
@@ -44,6 +52,12 @@ export const ALTER_INDEX = "alter_index";
 export const CREATE_VIEW = "create_view";
 // Recorded when a view is dropped.
 export const DROP_VIEW = "drop_view";
+// Recorded when a type is created.
+export const CREATE_TYPE = "create_type";
+// Recorded when a type is altered.
+export const ALTER_TYPE = "alter_type";
+// Recorded when a type is dropped.
+export const DROP_TYPE = "drop_type";
 // Recorded when a sequence is created.
 export const CREATE_SEQUENCE = "create_sequence";
 // Recorded when a sequence is altered.
