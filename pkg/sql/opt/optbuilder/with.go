@@ -11,15 +11,70 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
 
+// cteSource represents a CTE in the given query.
+type cteSource struct {
+	id           opt.WithID
+	name         tree.AliasClause
+	cols         physical.Presentation
+	originalExpr tree.Statement
+	expr         memo.RelExpr
+	mtr          tree.MaterializeClause
+	// If set, this function is called when a CTE is referenced. It can throw an
+	// error.
+	onRef func()
+}
+
+// cteBoundary is used to build statements which impose a CTE boundary, like
+// EXPLAIN or CREATE VIEW. The With operators for any CTEs defined inside the
+// statement are all built before returning.
+func (b *Builder) cteBoundary(buildFn func() *scope) *scope {
+	// Save the CTEs above the boundary.
+	prevCTEs := b.ctes
+	b.ctes = nil
+	scope := buildFn()
+	scope.expr = b.buildWiths(scope.expr, b.ctes)
+	b.ctes = prevCTEs
+	return scope
+}
+
+func (b *Builder) addCTE(cte cteSource) {
+	b.ctes = append(b.ctes, cte)
+}
+
+// buildWiths adds With expressions on top of an expression.
+func (b *Builder) buildWiths(expr memo.RelExpr, ctes []cteSource) memo.RelExpr {
+	// Since later CTEs can refer to earlier ones, we want to add these in
+	// reverse order.
+	for i := len(ctes) - 1; i >= 0; i-- {
+		expr = b.factory.ConstructWith(
+			ctes[i].expr,
+			expr,
+			&memo.WithPrivate{
+				ID:           ctes[i].id,
+				Name:         string(ctes[i].name.Alias),
+				Mtr:          ctes[i].mtr,
+				OriginalExpr: ctes[i].originalExpr,
+			},
+		)
+	}
+	return expr
+}
+
+// processWiths is used when building a statement that has a WITH clause. It
+// builds any CTEs defined by the WITH clause and calls the given function to
+// build the statement itself.
 func (b *Builder) processWiths(
 	with *tree.With, inScope *scope, buildStmt func(inScope *scope) *scope,
 ) *scope {
@@ -31,6 +86,75 @@ func (b *Builder) processWiths(
 	return outScope
 }
 
+// buildCTEs constructs expressions for the CTEs defined by a WITH clause and
+// adds them to the CTE stack.
+func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
+	if with == nil {
+		return inScope
+	}
+
+	outScope = inScope.push()
+	addedCTEs := make([]cteSource, len(with.CTEList))
+	hasRecursive := false
+
+	// Make a fake subquery to ensure that no CTEs are correlated.
+	// TODO(justin): relax this restriction.
+	outer := b.subquery
+	defer func() { b.subquery = outer }()
+	b.subquery = &subquery{}
+
+	outScope.ctes = make(map[string]*cteSource)
+	for i, cte := range with.CTEList {
+		hasRecursive = hasRecursive || with.Recursive
+		cteExpr, cteCols := b.buildCTE(cte, outScope, with.Recursive)
+
+		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
+		if b.subquery != nil && !b.subquery.outerCols.Empty() {
+			panic(pgerror.Newf(pgcode.FeatureNotSupported, "CTEs may not be correlated"))
+		}
+
+		aliasStr := cte.Name.Alias.String()
+		if _, ok := outScope.ctes[aliasStr]; ok {
+			panic(pgerror.Newf(
+				pgcode.DuplicateAlias, "WITH query name %s specified more than once", aliasStr,
+			))
+		}
+
+		id := b.factory.Memo().NextWithID()
+		b.factory.Metadata().AddWithBinding(id, cteExpr)
+
+		addedCTEs[i] = cteSource{
+			name:         cte.Name,
+			cols:         cteCols,
+			originalExpr: cte.Stmt,
+			expr:         cteExpr,
+			id:           id,
+			mtr:          cte.Mtr,
+		}
+		cte := &addedCTEs[i]
+		outScope.ctes[cte.name.Alias.String()] = cte
+		b.addCTE(*cte)
+
+		if cteExpr.Relational().CanMutate && !inScope.atRoot {
+			panic(
+				pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"WITH clause containing a data-modifying statement must be at the top level",
+				),
+			)
+		}
+
+	}
+
+	telemetry.Inc(sqltelemetry.CteUseCounter)
+	if hasRecursive {
+		telemetry.Inc(sqltelemetry.RecursiveCteUseCounter)
+	}
+
+	return outScope
+}
+
+// buildCTE constructs an expression for a CTE.
 func (b *Builder) buildCTE(
 	cte *tree.CTE, inScope *scope, isRecursive bool,
 ) (memo.RelExpr, physical.Presentation) {
@@ -108,9 +232,7 @@ func (b *Builder) buildCTE(
 	}
 	// If the initial statement contains CTEs, we don't want the Withs hoisted
 	// above the recursive CTE.
-	b.pushWithFrame()
 	initialScope := b.buildStmt(initial, nil /* desiredTypes */, cteScope)
-	b.popWithFrame(initialScope)
 
 	initialScope.removeHiddenCols()
 	b.dropOrderingAndExtraCols(initialScope)
@@ -162,9 +284,12 @@ func (b *Builder) buildCTE(
 
 	// If the recursive statement contains CTEs, we don't want the Withs hoisted
 	// above the recursive CTE.
-	b.pushWithFrame()
-	recursiveScope := b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
-	b.popWithFrame(recursiveScope)
+	// TODO(radu): introducing a boundary here is a hack, and won't work well if
+	// the CTE contains [..] operators or SQLClass functions.
+
+	recursiveScope := b.cteBoundary(func() *scope {
+		return b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
+	})
 
 	if numRefs == 0 {
 		// Build this as a non-recursive CTE.

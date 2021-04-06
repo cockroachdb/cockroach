@@ -20,13 +20,13 @@ import (
 )
 
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
-	b.pushWithFrame()
+	stmtScope := b.cteBoundary(func() *scope {
+		// We don't allow the statement under Explain to reference outer columns, so we
+		// pass a "blank" scope rather than inScope.
+		emptyScope := b.allocScope()
+		return b.buildStmtAtRoot(explain.Statement, nil /* desiredTypes */, emptyScope)
+	})
 
-	// We don't allow the statement under Explain to reference outer columns, so we
-	// pass a "blank" scope rather than inScope.
-	stmtScope := b.buildStmtAtRoot(explain.Statement, nil /* desiredTypes */, b.allocScope())
-
-	b.popWithFrame(stmtScope)
 	outScope = inScope.push()
 
 	switch explain.Mode {

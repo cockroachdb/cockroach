@@ -175,7 +175,7 @@ func (b *Builder) buildDataSource(
 			expr:         innerScope.expr,
 			id:           id,
 		}
-		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], cte)
+		b.addCTE(cte)
 
 		inCols := make(opt.ColList, len(cte.cols))
 		outCols := make(opt.ColList, len(cte.cols))
@@ -750,110 +750,6 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	})
 
 	return inScope
-}
-
-func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
-	if with == nil {
-		return inScope
-	}
-
-	outScope = inScope.push()
-	addedCTEs := make([]cteSource, len(with.CTEList))
-	hasRecursive := false
-
-	// Make a fake subquery to ensure that no CTEs are correlated.
-	// TODO(justin): relax this restriction.
-	outer := b.subquery
-	defer func() { b.subquery = outer }()
-	b.subquery = &subquery{}
-
-	outScope.ctes = make(map[string]*cteSource)
-	for i, cte := range with.CTEList {
-		hasRecursive = hasRecursive || with.Recursive
-		cteExpr, cteCols := b.buildCTE(cte, outScope, with.Recursive)
-
-		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
-		if b.subquery != nil && !b.subquery.outerCols.Empty() {
-			panic(pgerror.Newf(pgcode.FeatureNotSupported, "CTEs may not be correlated"))
-		}
-
-		aliasStr := cte.Name.Alias.String()
-		if _, ok := outScope.ctes[aliasStr]; ok {
-			panic(pgerror.Newf(
-				pgcode.DuplicateAlias, "WITH query name %s specified more than once", aliasStr,
-			))
-		}
-
-		id := b.factory.Memo().NextWithID()
-		b.factory.Metadata().AddWithBinding(id, cteExpr)
-
-		addedCTEs[i] = cteSource{
-			name:         cte.Name,
-			cols:         cteCols,
-			originalExpr: cte.Stmt,
-			expr:         cteExpr,
-			id:           id,
-			mtr:          cte.Mtr,
-		}
-		cte := &addedCTEs[i]
-		outScope.ctes[cte.name.Alias.String()] = cte
-		b.cteStack[len(b.cteStack)-1] = append(b.cteStack[len(b.cteStack)-1], *cte)
-
-		if cteExpr.Relational().CanMutate && !inScope.atRoot {
-			panic(
-				pgerror.Newf(
-					pgcode.FeatureNotSupported,
-					"WITH clause containing a data-modifying statement must be at the top level",
-				),
-			)
-		}
-
-	}
-
-	telemetry.Inc(sqltelemetry.CteUseCounter)
-	if hasRecursive {
-		telemetry.Inc(sqltelemetry.RecursiveCteUseCounter)
-	}
-
-	return outScope
-}
-
-// A WITH constructed within an EXPLAIN should not be hoisted above it, and so
-// we need to denote a boundary which blocks them.
-func (b *Builder) pushWithFrame() {
-	b.cteStack = append(b.cteStack, []cteSource{})
-}
-
-// popWithFrame wraps the given scope's expression in the CTEs that have been
-// queued up at this level.
-func (b *Builder) popWithFrame(s *scope) {
-	s.expr = b.flushCTEs(s.expr)
-}
-
-// flushCTEs adds With expressions on top of an expression.
-func (b *Builder) flushCTEs(expr memo.RelExpr) memo.RelExpr {
-	ctes := b.cteStack[len(b.cteStack)-1]
-	b.cteStack = b.cteStack[:len(b.cteStack)-1]
-
-	if len(ctes) == 0 {
-		return expr
-	}
-
-	// Since later CTEs can refer to earlier ones, we want to add these in
-	// reverse order.
-	for i := len(ctes) - 1; i >= 0; i-- {
-		expr = b.factory.ConstructWith(
-			ctes[i].expr,
-			expr,
-			&memo.WithPrivate{
-				ID:           ctes[i].id,
-				Name:         string(ctes[i].name.Alias),
-				Mtr:          ctes[i].mtr,
-				OriginalExpr: ctes[i].originalExpr,
-			},
-		)
-	}
-	return expr
 }
 
 // buildSelectStmt builds a set of memo groups that represent the given select
