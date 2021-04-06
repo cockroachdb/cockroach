@@ -13,11 +13,13 @@
 package raftentry
 
 import (
+	"context"
 	"math"
 	"sync/atomic"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -252,6 +254,15 @@ func (c *Cache) Scan(
 		// Only consider an access a "hit" if it returns all requested entries or
 		// stops short because of a maximum bytes limit.
 		c.metrics.Hits.Inc(1)
+	}
+	for i := range ents {
+		if i > 0 {
+			ent := &ents[i]
+			prevEnt := &ents[i-1]
+			if prevEnt.Term > ent.Term {
+				log.Fatalf(context.Background(), "r%d idx %d TBG log regression during Cache.Scan: term %d -> %d", id, ent.Index, prevEnt.Term, ent.Term)
+			}
+		}
 	}
 	return ents, bytes, nextIdx, exceededMaxBytes
 }

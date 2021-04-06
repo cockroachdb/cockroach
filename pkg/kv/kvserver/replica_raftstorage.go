@@ -622,6 +622,12 @@ func (r *Replica) append(
 	var value roachpb.Value
 	for i := range entries {
 		ent := &entries[i]
+		if i > 0 {
+			prevEnt := &entries[i-1]
+			if prevEnt.Term > ent.Term {
+				log.Fatalf(ctx, "idx %d TBG term regression during append: %d -> %d", ent.Index, prevEnt.Term, ent.Term)
+			}
+		}
 		key := r.raftMu.stateLoader.RaftLogKey(ent.Index)
 
 		if err := value.SetProto(ent); err != nil {
