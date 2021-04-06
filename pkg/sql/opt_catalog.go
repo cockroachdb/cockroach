@@ -126,8 +126,10 @@ func (os *optSchema) Name() *cat.SchemaName {
 }
 
 // GetDataSourceNames is part of the cat.Schema interface.
-func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
-	return resolver.GetObjectNames(
+func (os *optSchema) GetDataSourceNames(
+	ctx context.Context,
+) ([]cat.DataSourceName, descpb.IDs, error) {
+	return resolver.GetObjectNamesAndIDs(
 		ctx,
 		os.planner.Txn(),
 		os.planner,
