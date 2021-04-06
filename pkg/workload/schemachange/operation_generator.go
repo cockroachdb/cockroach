@@ -302,7 +302,11 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 		Name: tree.Name(columnName),
 		Type: typName,
 	}
-	def.Nullable.Nullability = tree.Nullability(rand.Intn(1 + int(tree.SilentNull)))
+	def.Nullable.Nullability = tree.Nullability(og.randIntn(1 + int(tree.SilentNull)))
+
+	if og.randIntn(10) == 0 {
+		def.Unique.IsUnique = true
+	}
 
 	columnExistsOnTable, err := columnExistsOnTable(tx, tableName, columnName)
 	if err != nil {

@@ -13,6 +13,7 @@ package cloudimpltests
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -35,8 +36,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -717,4 +721,88 @@ func testAntagonisticRead(t *testing.T, conf roachpb.ExternalStorage) {
 	read, err := ioutil.ReadAll(stream)
 	require.NoError(t, err)
 	require.Equal(t, data, read)
+}
+
+func makeUserfile(
+	ctx context.Context,
+	t *testing.T,
+	s serverutils.TestServerInterface,
+	sqlDB *gosql.DB,
+	kvDB *kv.DB,
+) cloud.ExternalStorage {
+	qualifiedTableName := "defaultdb.public.user_file_table_test"
+
+	dest := cloudimpl.MakeUserFileStorageURI(qualifiedTableName, "")
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+
+	// Create a user and grant them privileges on defaultdb.
+	user1 := security.MakeSQLUsernameFromPreNormalizedString("foo")
+	require.NoError(t, createUserGrantAllPrivieleges(user1, "defaultdb", sqlDB))
+
+	// Create a userfile connection as user1.
+	fileTableSystem, err := cloudimpl.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
+		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, kvDB)
+	require.NoError(t, err)
+
+	return fileTableSystem
+}
+
+func makeNodelocal(ctx context.Context, t *testing.T, kvDB *kv.DB) cloud.ExternalStorage {
+	user := security.RootUserName()
+
+	// Setup a sink for the given args.
+	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+	store := storeFromURI(ctx, t, "nodelocal://self/base", clientFactory,
+		user, nil /* ie */, kvDB)
+	return store
+}
+
+// TestFileExistence checks that the appropriate error is returned when trying
+// to read a file that doesn't exist.
+func TestFileExistence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	// Setup a server.
+	params, _ := tests.CreateTestServerParams()
+
+	tmp, cleanupTmp := testutils.TempDir(t)
+	defer cleanupTmp()
+	testSettings.ExternalIODir = tmp
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	// Create external storages to tests.
+	// TODO: Add more here (e.g. s3, azure, gcs).
+	uf := makeUserfile(ctx, t, s, sqlDB, kvDB)
+	defer uf.Close()
+	nl := makeNodelocal(ctx, t, kvDB)
+	defer nl.Close()
+
+	externalStorages := []cloud.ExternalStorage{uf, nl}
+
+	for _, es := range externalStorages {
+		// Try reading a file that doesn't exist and assert we get the error the
+		// interface claims it provides.
+		_, err := es.ReadFile(ctx, "this-doesnt-exist")
+		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+			t.Fatalf("expected a file does not exist error, got %+v", err)
+		}
+
+		_, _, err = es.ReadFileAt(ctx, "this-doesnt-exist", 0 /* offset */)
+		if !errors.Is(err, cloudimpl.ErrFileDoesNotExist) {
+			t.Fatalf("expected a file does not exist error, got %+v", err)
+		}
+
+		// Create a file that exists and assert that we don't get the error.
+		filename := "exists"
+		require.NoError(t, es.WriteFile(ctx, filename, bytes.NewReader([]byte("data"))))
+
+		_, err = es.ReadFile(ctx, filename)
+		require.NoError(t, err)
+		_, _, err = es.ReadFileAt(ctx, filename, 0 /* offset */)
+		require.NoError(t, err)
+	}
 }
