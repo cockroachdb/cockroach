@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -4076,6 +4077,12 @@ may increase either contention or retry errors, or both.`,
 					return nil, err
 				}
 				msg := string(*args[0].(*tree.DString))
+				// Use a special method to panic in order to go around the
+				// vectorized panic-catcher (which would catch the panic from
+				// Golang's 'panic' and would convert it into an internal
+				// error).
+				colexecerror.NonCatchablePanic(msg)
+				// This code is unreachable.
 				panic(msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",

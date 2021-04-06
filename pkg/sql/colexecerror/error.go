@@ -122,10 +122,10 @@ func shouldCatchPanic(panicEmittedFrom string) bool {
 		// unchanged by the higher-level catchers.
 		return false
 	}
-	const nonVectorizedTestPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecerror.NonVectorizedTestPanic"
-	if strings.HasPrefix(panicEmittedFrom, nonVectorizedTestPrefix) {
-		// This panic came from NonVectorizedTestPanic() method and should not
-		// be caught for testing purposes.
+	const nonCatchablePanicPrefix = "github.com/cockroachdb/cockroach/pkg/sql/colexecerror.NonCatchablePanic"
+	if strings.HasPrefix(panicEmittedFrom, nonCatchablePanicPrefix) {
+		// This panic came from NonCatchablePanic() method and should not be
+		// caught.
 		return false
 	}
 	return strings.HasPrefix(panicEmittedFrom, colPackagesPrefix) ||
@@ -200,9 +200,10 @@ func ExpectedError(err error) {
 	panic(newNotInternalError(err))
 }
 
-// NonVectorizedTestPanic is the equivalent of Golang's 'panic' word that should
-// be used by the testing code within the vectorized engine to simulate a panic
-// that occurs outside of the engine (and, thus, should not be caught).
-func NonVectorizedTestPanic(object interface{}) {
+// NonCatchablePanic is the equivalent of Golang's 'panic' word that can be used
+// in order to crash the goroutine. It could be used by the testing code within
+// the vectorized engine to simulate a panic that occurs outside of the engine
+// (and, thus, should not be caught).
+func NonCatchablePanic(object interface{}) {
 	panic(object)
 }
