@@ -287,7 +287,7 @@ public class MainTest extends CockroachDBTest {
         PreparedStatement stmt = conn.prepareStatement("SELECT * FROM x WHERE b = ?");
         stmt.setObject(1, "e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
         exception.expectMessage("ERROR: could not parse \"e81bb788-2291-4b6e-9cf3-b237fe6c2f3\" as " +
-            "type uuid: uuid: incorrect UUID length: e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
+            "type uuid: uuid: incorrect UUID format: e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
         stmt.executeQuery();
     }
 
