@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -60,7 +59,6 @@ type changeAggregator struct {
 	errCh chan error
 	// kvFeedDoneCh is closed when the kvfeed exits.
 	kvFeedDoneCh chan struct{}
-	kvFeedMemMon *mon.BytesMonitor
 
 	// encoder is the Encoder to use for key and value serialization.
 	encoder Encoder
@@ -131,11 +129,16 @@ func newChangeAggregatorProcessor(
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	ctx := flowCtx.EvalCtx.Ctx()
-	memMonitor := execinfra.NewMonitor(ctx, flowCtx.EvalCtx.Mon, "changeagg-mem")
+	memMonCapacity := kvfeed.MemBufferDefaultCapacity
+	if cfKnobs, ok := flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok && cfKnobs.MemBufferCapacity != 0 {
+		memMonCapacity = cfKnobs.MemBufferCapacity
+	}
+	memMon := mon.NewMonitorInheritWithLimit("changeagg-mem", memMonCapacity, flowCtx.EvalCtx.Mon)
+	memMon.Start(ctx, flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 	ca := &changeAggregator{
 		flowCtx:   flowCtx,
 		spec:      spec,
-		memAcc:    memMonitor.MakeBoundAccount(),
+		memAcc:    memMon.MakeBoundAccount(),
 		lastFlush: timeutil.Now(),
 	}
 	if err := ca.Init(
@@ -145,7 +148,7 @@ func newChangeAggregatorProcessor(
 		flowCtx,
 		processorID,
 		output,
-		memMonitor,
+		memMon,
 		execinfra.ProcStateOpts{
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				ca.close()
@@ -228,26 +231,10 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
-	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
-		ca.knobs = *cfKnobs
-	}
-
-	// It seems like we should also be able to use `ca.ProcessorBase.MemMonitor`
-	// for the poller, but there is a race between the flow's MemoryMonitor
-	// getting Stopped and `changeAggregator.Close`, which causes panics. Not sure
-	// what to do about this yet.
-	kvFeedMemMonCapacity := kvfeed.MemBufferDefaultCapacity
-	if ca.knobs.MemBufferCapacity != 0 {
-		kvFeedMemMonCapacity = ca.knobs.MemBufferCapacity
-	}
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", math.MaxInt64, ca.ProcessorBase.MemMonitor)
-	kvFeedMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(kvFeedMemMonCapacity))
-	ca.kvFeedMemMon = kvFeedMemMon
-
 	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)
 	_, withDiff := ca.spec.Feed.Opts[changefeedbase.OptDiff]
-	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.kvFeedMemMon, ca.spec,
+	kvfeedCfg := makeKVFeedCfg(ca.flowCtx.Cfg, leaseMgr, ca.MemMonitor, ca.spec,
 		spans, withDiff, buf, ca.metrics)
 	cfg := ca.flowCtx.Cfg
 
@@ -387,9 +374,6 @@ func (ca *changeAggregator) close() {
 			}
 		}
 		ca.memAcc.Close(ca.Ctx)
-		if ca.kvFeedMemMon != nil {
-			ca.kvFeedMemMon.Stop(ca.Ctx)
-		}
 		ca.MemMonitor.Stop(ca.Ctx)
 	}
 }
