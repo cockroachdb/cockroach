@@ -286,6 +286,11 @@ func (s *s2GeometryIndex) convertToGeomTAndTryClip(g geo.Geometry) (geom.T, bool
 	}
 	clipped := false
 	if s.geomExceedsBounds(gt) {
+		// TODO(#63126): Replace workaround for bug in geos.ClipByRect.
+		g, err = geomfn.ForceLayout(g, geom.XY)
+		if err != nil {
+			return nil, false, err
+		}
 		clipped = true
 		clippedEWKB, err :=
 			geos.ClipByRect(g.EWKB(), s.minX+s.deltaX, s.minY+s.deltaY, s.maxX-s.deltaX, s.maxY-s.deltaY)
