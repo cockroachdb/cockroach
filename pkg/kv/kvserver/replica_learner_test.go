@@ -74,7 +74,7 @@ func (rtl *replicationTestKnobs) withStopAfterJointConfig(f func()) {
 
 func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
 	var k replicationTestKnobs
-	k.storeKnobs.ReplicaAddStopAfterLearnerSnapshot = func(_ []roachpb.ReplicationTarget) bool {
+	k.storeKnobs.VoterAddStopAfterLearnerSnapshot = func(_ []roachpb.ReplicationTarget) bool {
 		return atomic.LoadInt64(&k.replicaAddStopAfterLearnerAtomic) > 0
 	}
 	k.storeKnobs.VoterAddStopAfterJointConfig = func() bool {
@@ -198,17 +198,8 @@ func TestAddRemoveNonVotingReplicasBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	knobs, ltk := makeReplicationTestKnobs()
-	blockUntilSnapshotCh := make(chan struct{})
-	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
-		if h.Type == kvserver.SnapshotRequest_VIA_SNAPSHOT_QUEUE {
-			close(blockUntilSnapshotCh)
-		}
-		return nil
-	}
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
-		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 	})
 	defer tc.Stopper().Stop(ctx)
 
@@ -218,16 +209,6 @@ func TestAddRemoveNonVotingReplicasBasic(t *testing.T) {
 		_, err := tc.AddNonVoters(scratchStartKey, tc.Target(1))
 		return err
 	})
-
-	// When we create a non-voting replica, we queue up its range leaseholder into
-	// the raft snapshot queue so that it can receive its LEARNER snapshot and
-	// upreplicate relatively soon (i.e. without having to wait up to a full scanner
-	// cycle).
-	select {
-	case <-blockUntilSnapshotCh:
-	case <-time.After(30 * time.Second):
-		t.Fatal(`test timed out; did not receive snapshot of type VIA_SNAPSHOT_QUEUE as expected`)
-	}
 	require.NoError(t, g.Wait())
 
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -350,8 +331,8 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	// returning the error from the `ReceiveSnapshot` knob to test the codepath
 	// that uses a new context for the rollback, but plumbing that context is
 	// annoying.
-	if !testutils.IsError(err, `remote couldn't accept LEARNER_INITIAL snapshot`) {
-		t.Fatalf(`expected "remote couldn't accept LEARNER_INITIAL snapshot" error got: %+v`, err)
+	if !testutils.IsError(err, `remote couldn't accept INITIAL snapshot`) {
+		t.Fatalf(`expected "remote couldn't accept INITIAL snapshot" error got: %+v`, err)
 	}
 
 	// Make sure we cleaned up after ourselves (by removing the learner).
@@ -558,7 +539,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 		if processErr != nil {
 			return processErr
 		}
-		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
+		const msg = `skipping snapshot; replica is likely a LEARNER in the process of being added: (n2,s2):2LEARNER`
 		formattedTrace := trace.String()
 		if !strings.Contains(formattedTrace, msg) {
 			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)

@@ -3333,7 +3333,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		ReplicaSkipLearnerSnapshot: func() bool {
 			return atomic.LoadInt32(&skipLearnerSnaps) != 0
 		},
-		ReplicaAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
+		VoterAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
 			if atomic.LoadInt32(&skipLearnerSnaps) != 0 {
 				return false
 			}
@@ -3342,7 +3342,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 			}
 			return false
 		},
-		ReplicaAddSkipLearnerRollback: func() bool {
+		VoterAddSkipLearnerRollback: func() bool {
 			return true
 		},
 		// We rely on replicas remaining where they are even when they are removed
@@ -3421,7 +3421,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 
 	// Normally AddVoters will return the latest version of the RangeDescriptor,
 	// but because we're getting snapshot errors and using the
-	// ReplicaAddSkipLearnerRollback hook, we have to look it up again ourselves
+	// VoterAddSkipLearnerRollback hook, we have to look it up again ourselves
 	// to find the current replicaID for the RHS learner.
 	descRHS = tc.LookupRangeOrFatal(t, kRHS)
 	learnerDescRHS, ok := descRHS.GetReplicaDescriptor(store.StoreID())
