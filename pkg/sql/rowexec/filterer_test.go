@@ -74,7 +74,7 @@ func TestFilterer(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 
-			in := distsqlutils.NewRowBuffer(randgen.ThreeIntCols, input, distsqlutils.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(types.ThreeIntCols, input, distsqlutils.RowBufferArgs{})
 			out := &distsqlutils.RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
@@ -106,7 +106,7 @@ func TestFilterer(t *testing.T) {
 				res = append(res, row)
 			}
 
-			if result := res.String(randgen.ThreeIntCols); result != c.expected {
+			if result := res.String(types.ThreeIntCols); result != c.expected {
 				t.Errorf("invalid results: %s, expected %s", result, c.expected)
 			}
 		})

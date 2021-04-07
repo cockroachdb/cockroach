@@ -58,7 +58,7 @@ func verifyRows(
 			return err
 		}
 		if cmp, err := compareRows(
-			randgen.OneIntCol, row, expectedRows[0], evalCtx, &rowenc.DatumAlloc{}, ordering,
+			types.OneIntCol, row, expectedRows[0], evalCtx, &rowenc.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
 		} else if cmp != 0 {
@@ -145,7 +145,7 @@ func TestRowContainerIterators(t *testing.T) {
 	var mc MemRowContainer
 	mc.Init(
 		ordering,
-		randgen.OneIntCol,
+		types.OneIntCol,
 		evalCtx,
 	)
 	defer mc.Close(ctx)
@@ -225,7 +225,7 @@ func TestDiskBackedRowContainer(t *testing.T) {
 	rc := DiskBackedRowContainer{}
 	rc.Init(
 		ordering,
-		randgen.OneIntCol,
+		types.OneIntCol,
 		&evalCtx,
 		tempEngine,
 		memoryMonitor,
@@ -738,7 +738,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			storedTypes := make([]*types.T, len(typs)+1)
 			copy(storedTypes, typs)
 			// The container will add an extra int column for indices.
-			storedTypes[len(typs)] = randgen.OneIntCol[0]
+			storedTypes[len(typs)] = types.OneIntCol[0]
 
 			func() {
 				rc := NewDiskBackedIndexedRowContainer(ordering, typs, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
@@ -779,7 +779,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			storedTypes := make([]*types.T, len(typs)+1)
 			copy(storedTypes, typs)
 			// The container will add an extra int column for indices.
-			storedTypes[len(typs)] = randgen.OneIntCol[0]
+			storedTypes[len(typs)] = types.OneIntCol[0]
 
 			func() {
 				d := NewDiskBackedIndexedRowContainer(ordering, typs, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
@@ -942,7 +942,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 	accessPattern := generateAccessPattern(numRows)
 
 	b.Run("InMemory", func(b *testing.B) {
-		rc := NewDiskBackedIndexedRowContainer(nil, randgen.OneIntCol, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+		rc := NewDiskBackedIndexedRowContainer(nil, types.OneIntCol, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
 		defer rc.Close(ctx)
 		for i := 0; i < len(rows); i++ {
 			if err := rc.AddRow(ctx, rows[i]); err != nil {
@@ -964,7 +964,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 	})
 
 	b.Run("OnDiskWithCache", func(b *testing.B) {
-		rc := NewDiskBackedIndexedRowContainer(nil, randgen.OneIntCol, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+		rc := NewDiskBackedIndexedRowContainer(nil, types.OneIntCol, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
 		defer rc.Close(ctx)
 		if err := rc.SpillToDisk(ctx); err != nil {
 			b.Fatal(err)
@@ -989,7 +989,7 @@ func BenchmarkDiskBackedIndexedRowContainer(b *testing.B) {
 	})
 
 	b.Run("OnDiskWithoutCache", func(b *testing.B) {
-		rc := NewDiskBackedIndexedRowContainer(nil, randgen.OneIntCol, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
+		rc := NewDiskBackedIndexedRowContainer(nil, types.OneIntCol, &evalCtx, tempEngine, memoryMonitor, diskMonitor)
 		defer rc.Close(ctx)
 		if err := rc.SpillToDisk(ctx); err != nil {
 			b.Fatal(err)

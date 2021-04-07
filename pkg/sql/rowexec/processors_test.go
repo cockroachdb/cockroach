@@ -79,7 +79,7 @@ func TestPostProcess(t *testing.T) {
 	}{
 		{
 			post:          execinfrapb.PostProcessSpec{},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -90,7 +90,7 @@ func TestPostProcess(t *testing.T) {
 				Projection:    true,
 				OutputColumns: []uint32{0, 2},
 			},
-			outputTypes:   randgen.TwoIntCols,
+			outputTypes:   types.TwoIntCols,
 			expNeededCols: []int{0, 2},
 			expected:      "[[0 2] [0 3] [0 4] [0 3] [0 4] [0 4] [1 3] [1 4] [1 4] [2 4]]",
 		},
@@ -100,7 +100,7 @@ func TestPostProcess(t *testing.T) {
 			post: execinfrapb.PostProcessSpec{
 				RenderExprs: []execinfrapb.Expression{{Expr: "@1"}, {Expr: "@2"}, {Expr: "@1 + @2"}},
 			},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1},
 			expected:      "[[0 1 1] [0 1 1] [0 1 1] [0 2 2] [0 2 2] [0 3 3] [1 2 3] [1 2 3] [1 3 4] [2 3 5]]",
 		},
@@ -136,7 +136,7 @@ func TestPostProcess(t *testing.T) {
 		// Offset.
 		{
 			post:          execinfrapb.PostProcessSpec{Offset: 3},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -144,25 +144,25 @@ func TestPostProcess(t *testing.T) {
 		// Limit.
 		{
 			post:          execinfrapb.PostProcessSpec{Limit: 3},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4]]",
 		},
 		{
 			post:          execinfrapb.PostProcessSpec{Limit: 9},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
 			post:          execinfrapb.PostProcessSpec{Limit: 10},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
 			post:          execinfrapb.PostProcessSpec{Limit: 11},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 1 2] [0 1 3] [0 1 4] [0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -170,25 +170,25 @@ func TestPostProcess(t *testing.T) {
 		// Offset + limit.
 		{
 			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 2},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4]]",
 		},
 		{
 			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 6},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4]]",
 		},
 		{
 			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 7},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
 		{
 			post:          execinfrapb.PostProcessSpec{Offset: 3, Limit: 8},
-			outputTypes:   randgen.ThreeIntCols,
+			outputTypes:   types.ThreeIntCols,
 			expNeededCols: []int{0, 1, 2},
 			expected:      "[[0 2 3] [0 2 4] [0 3 4] [1 2 3] [1 2 4] [1 3 4] [2 3 4]]",
 		},
@@ -196,7 +196,7 @@ func TestPostProcess(t *testing.T) {
 
 	for tcIdx, tc := range testCases {
 		t.Run(strconv.Itoa(tcIdx), func(t *testing.T) {
-			inBuf := distsqlutils.NewRowBuffer(randgen.ThreeIntCols, input, distsqlutils.RowBufferArgs{})
+			inBuf := distsqlutils.NewRowBuffer(types.ThreeIntCols, input, distsqlutils.RowBufferArgs{})
 			outBuf := &distsqlutils.RowBuffer{}
 
 			var out execinfra.ProcOutputHelper
@@ -352,7 +352,7 @@ func TestProcessorBaseContext(t *testing.T) {
 		}
 		defer flowCtx.EvalCtx.Stop(ctx)
 
-		input := execinfra.NewRepeatableRowSource(randgen.OneIntCol, randgen.MakeIntRows(10, 1))
+		input := execinfra.NewRepeatableRowSource(types.OneIntCol, randgen.MakeIntRows(10, 1))
 		noop, err := newNoopProcessor(flowCtx, 0 /* processorID */, input, &execinfrapb.PostProcessSpec{}, &rowDisposer{})
 		if err != nil {
 			t.Fatal(err)

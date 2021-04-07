@@ -67,7 +67,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	const numCols = 1
 	rows := randgen.MakeIntRows(numRows, numCols)
 	storedEqColumns := columns{0}
-	types := randgen.OneIntCol
+	typs := types.OneIntCol
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	getRowContainer := func() *HashDiskBackedRowContainer {
@@ -75,7 +75,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		err = rc.Init(
 			ctx,
 			false, /* shouldMark */
-			types,
+			typs,
 			storedEqColumns,
 			true, /*encodeNull */
 		)
@@ -216,7 +216,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				randgen.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
+				types.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -241,7 +241,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				randgen.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
+				types.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -291,7 +291,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				randgen.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
+				types.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {

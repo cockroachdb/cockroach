@@ -106,7 +106,7 @@ func TestOrdinality(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			os := c.spec
 
-			in := distsqlutils.NewRowBuffer(randgen.TwoIntCols, c.input, distsqlutils.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(types.TwoIntCols, c.input, distsqlutils.RowBufferArgs{})
 			out := &distsqlutils.RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
@@ -138,14 +138,14 @@ func TestOrdinality(t *testing.T) {
 			var typs []*types.T
 			switch len(res[0]) {
 			case 1:
-				typs = randgen.OneIntCol
+				typs = types.OneIntCol
 			case 2:
-				typs = randgen.TwoIntCols
+				typs = types.TwoIntCols
 			case 3:
-				typs = randgen.ThreeIntCols
+				typs = types.ThreeIntCols
 			}
 			if result := res.String(typs); result != c.expected.String(typs) {
-				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(randgen.TwoIntCols))
+				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(types.TwoIntCols))
 			}
 		})
 	}
@@ -168,7 +168,7 @@ func BenchmarkOrdinality(b *testing.B) {
 
 	post := &execinfrapb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		input := execinfra.NewRepeatableRowSource(randgen.TwoIntCols, randgen.MakeIntRows(numRows, numCols))
+		input := execinfra.NewRepeatableRowSource(types.TwoIntCols, randgen.MakeIntRows(numRows, numCols))
 		b.SetBytes(int64(8 * numRows * numCols))
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {

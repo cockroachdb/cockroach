@@ -61,7 +61,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.InnerJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -70,7 +70,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: types.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -88,12 +88,12 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.InnerJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -122,14 +122,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			onExpr:      execinfrapb.Expression{Expr: "@4 >= 4"},
 			// Implicit AND @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[0]},
 				{v[1], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -163,7 +163,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftOuterJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -172,7 +172,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: types.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -193,13 +193,13 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.RightOuterJoin,
 			// Implicit @1 = @4 constraint.
 			outCols:   []uint32{3, 1, 2},
-			leftTypes: randgen.ThreeIntCols,
+			leftTypes: types.ThreeIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -223,7 +223,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.FullOuterJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -231,7 +231,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[3], v[1]},
 				{v[4], v[5]},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: types.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -253,7 +253,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.InnerJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[2], v[4]},
@@ -261,7 +261,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: types.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -279,7 +279,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftOuterJoin,
 			onExpr:      execinfrapb.Expression{Expr: "@3 = 9"},
 			outCols:     []uint32{0, 1},
-			leftTypes:   randgen.OneIntCol,
+			leftTypes:   types.OneIntCol,
 			leftInput: rowenc.EncDatumRows{
 				{v[1]},
 				{v[2]},
@@ -288,7 +288,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[6]},
 				{v[7]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[2], v[8]},
 				{v[3], v[9]},
@@ -323,13 +323,13 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.RightOuterJoin,
 			onExpr:      execinfrapb.Expression{Expr: "@2 > 1"},
 			outCols:     []uint32{0, 1},
-			leftTypes:   randgen.OneIntCol,
+			leftTypes:   types.OneIntCol,
 			leftInput: rowenc.EncDatumRows{
 				{v[0]},
 				{v[1]},
 				{v[2]},
 			},
-			rightTypes: randgen.OneIntCol,
+			rightTypes: types.OneIntCol,
 			rightInput: rowenc.EncDatumRows{
 				{v[1]},
 				{v[2]},
@@ -348,13 +348,13 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.FullOuterJoin,
 			onExpr:      execinfrapb.Expression{Expr: "@2 > 1"},
 			outCols:     []uint32{0, 1},
-			leftTypes:   randgen.OneIntCol,
+			leftTypes:   types.OneIntCol,
 			leftInput: rowenc.EncDatumRows{
 				{v[0]},
 				{v[1]},
 				{v[2]},
 			},
-			rightTypes: randgen.OneIntCol,
+			rightTypes: types.OneIntCol,
 			rightInput: rowenc.EncDatumRows{
 				{v[1]},
 				{v[2]},
@@ -376,14 +376,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.InnerJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], null},
 				{null, v[2]},
 				{null, null},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: types.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[1], null, v[5]},
@@ -401,14 +401,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftOuterJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], null},
 				{null, v[2]},
 				{null, null},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: types.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[1], null, v[5]},
@@ -429,14 +429,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.RightOuterJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], null},
 				{null, v[2]},
 				{null, null},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: types.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[1], null, v[5]},
@@ -457,14 +457,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.FullOuterJoin,
 			// Implicit @1,@2 = @3,@4 constraint.
 			outCols:   []uint32{0, 1, 2, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], null},
 				{null, v[2]},
 				{null, null},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: types.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[1], null, v[5]},
@@ -490,7 +490,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[2], v[0]},
@@ -499,7 +499,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[3], v[4]},
 				{v[3], v[3]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -521,14 +521,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[2], v[0]},
@@ -551,14 +551,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{null, v[1]},
@@ -579,14 +579,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{null, v[1]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{null, v[1]},
@@ -606,14 +606,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			onExpr:      execinfrapb.Expression{Expr: "@1 > 1"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},
@@ -634,14 +634,14 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			onExpr:      execinfrapb.Expression{Expr: "@4 > 4 and @2 + @4 = 8"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},
@@ -661,13 +661,13 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[2], v[5]},
@@ -686,7 +686,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -695,7 +695,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[2], v[1]},
 				{v[3], v[4]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[2], v[5]},
@@ -714,7 +714,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -723,7 +723,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[2], v[1]},
 				{v[3], v[4]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{null, v[5]},
@@ -742,7 +742,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -751,7 +751,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[2], v[1]},
 				{v[3], v[4]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{null, v[5]},
@@ -772,7 +772,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			onExpr:      execinfrapb.Expression{Expr: "(@2 + @4) % 2 = 0"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[1], v[2]},
@@ -780,7 +780,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[2], v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[2]},
 				{v[2], v[1]},
@@ -801,7 +801,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 			onExpr:      execinfrapb.Expression{Expr: "(@2 + @4) % 2 = 0"},
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[1], v[2]},
@@ -809,7 +809,7 @@ func hashJoinerTestCases() []hashJoinerTestCase {
 				{v[2], v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[2]},
 				{v[2], v[1]},
@@ -859,14 +859,14 @@ func hashJoinerErrorTestCases() []hashJoinerErrorTestCase {
 			joinType:    descpb.LeftSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 2},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},
@@ -883,14 +883,14 @@ func hashJoinerErrorTestCases() []hashJoinerErrorTestCase {
 			joinType:    descpb.LeftAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 2},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},
@@ -907,14 +907,14 @@ func hashJoinerErrorTestCases() []hashJoinerErrorTestCase {
 			joinType:    descpb.RightSemiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 2},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},
@@ -931,14 +931,14 @@ func hashJoinerErrorTestCases() []hashJoinerErrorTestCase {
 			joinType:    descpb.RightAntiJoin,
 			// Implicit @1 = @3 constraint.
 			outCols:   []uint32{0, 1, 2},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: types.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[1]},
 				{v[2], v[1]},
 				{v[2], v[2]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: types.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[4]},
@@ -1248,13 +1248,13 @@ func TestHashJoinerDrain(t *testing.T) {
 		leftInputDrainNotification <- nil
 	}
 	leftInput := distsqlutils.NewRowBuffer(
-		randgen.OneIntCol,
+		types.OneIntCol,
 		inputs[0],
 		distsqlutils.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
-	rightInput := distsqlutils.NewRowBuffer(randgen.OneIntCol, inputs[1], distsqlutils.RowBufferArgs{})
+	rightInput := distsqlutils.NewRowBuffer(types.OneIntCol, inputs[1], distsqlutils.RowBufferArgs{})
 	out := distsqlutils.NewRowBuffer(
-		randgen.OneIntCol,
+		types.OneIntCol,
 		nil, /* rows */
 		distsqlutils.RowBufferArgs{AccumulateRowsWhileDraining: true},
 	)
@@ -1305,7 +1305,7 @@ func TestHashJoinerDrain(t *testing.T) {
 		t.Fatalf("left input not drained; still %d rows in it", len(leftInput.Mu.Records))
 	}
 
-	if err := checkExpectedRows(randgen.OneIntCol, expected, out); err != nil {
+	if err := checkExpectedRows(types.OneIntCol, expected, out); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1374,12 +1374,12 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		return nil, nil
 	}
 	leftInput := distsqlutils.NewRowBuffer(
-		randgen.OneIntCol,
+		types.OneIntCol,
 		inputs[0],
 		distsqlutils.RowBufferArgs{OnConsumerDone: leftInputConsumerDone},
 	)
 	rightInput := distsqlutils.NewRowBuffer(
-		randgen.OneIntCol,
+		types.OneIntCol,
 		inputs[1],
 		distsqlutils.RowBufferArgs{
 			OnConsumerDone: rightInputConsumerDone,
@@ -1387,7 +1387,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		},
 	)
 	out := distsqlutils.NewRowBuffer(
-		randgen.OneIntCol,
+		types.OneIntCol,
 		nil, /* rows */
 		distsqlutils.RowBufferArgs{},
 	)
@@ -1491,8 +1491,8 @@ func BenchmarkHashJoiner(b *testing.B) {
 				}
 				b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 					rows := randgen.MakeIntRows(numRows, numCols)
-					leftInput := execinfra.NewRepeatableRowSource(randgen.OneIntCol, rows)
-					rightInput := execinfra.NewRepeatableRowSource(randgen.OneIntCol, rows)
+					leftInput := execinfra.NewRepeatableRowSource(types.OneIntCol, rows)
+					rightInput := execinfra.NewRepeatableRowSource(types.OneIntCol, rows)
 					b.SetBytes(int64(8 * numRows * numCols * 2))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
