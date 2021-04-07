@@ -16,6 +16,8 @@ if [ ! -f cockroach.$sha ]; then
 	mv cockroach-linux-2.6.32-gnu-amd64 cockroach.$sha
 fi
 
+export GCE_PROJECT=andrei-jepsen
+
 TEST=hotspotsplits/nodes=4
-time caffeinate -- ./roachtest.$sha run "${TEST}" --port 8081 --debug --count 800 --parallelism 6 --cpu-quota 800 --roachprod roachprod.${sha} --workload workload.${sha} --cockroach ./cockroach.$sha --artifacts artifacts.$sha
+time caffeinate -- ./roachtest.$sha run "${TEST}" --port 8080 --debug --count 800 --parallelism 50 --cpu-quota 800 --roachprod roachprod.${sha} --workload workload.${sha} --cockroach ./cockroach.$sha --artifacts artifacts.$sha
 

@@ -33,6 +33,7 @@ go_library(
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_petermattis_goid//:goid",
         "@org_golang_x_tools//container/intsets",
     ],
 )
