@@ -136,6 +136,8 @@ type Index interface {
 	FindPartitionByName(name string) descpb.PartitioningDescriptor
 	PartitionNames() []string
 
+	ExplicitColumnStartIdx() int
+
 	NumInterleaveAncestors() int
 	GetInterleaveAncestor(ancestorOrdinal int) descpb.InterleaveDescriptor_Ancestor
 
