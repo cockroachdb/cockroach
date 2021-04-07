@@ -3330,10 +3330,10 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		atomic.StoreInt32(&skipLearnerSnaps, 0)
 	}
 	knobs := base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-		ReplicaSkipLearnerSnapshot: func() bool {
+		ReplicaSkipInitialSnapshot: func() bool {
 			return atomic.LoadInt32(&skipLearnerSnaps) != 0
 		},
-		ReplicaAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
+		VoterAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
 			if atomic.LoadInt32(&skipLearnerSnaps) != 0 {
 				return false
 			}

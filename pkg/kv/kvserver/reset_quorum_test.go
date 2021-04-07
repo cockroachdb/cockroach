@@ -86,7 +86,7 @@ func TestResetQuorum(t *testing.T) {
 		require.NoError(t, err)
 		desc, err := tc.AddVoters(k, tc.Target(n4))
 		require.NoError(t, err)
-		_, err = tc.AddNonVoters(k, tc.Target(n5))
+		_, err = tc.AddNonVoters(k, true, tc.Target(n5))
 		require.NoError(t, err)
 		require.NoError(t, tc.TransferRangeLease(desc, tc.Target(n2)))
 		desc, err = tc.RemoveVoters(k, tc.Target(n1))

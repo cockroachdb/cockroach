@@ -609,7 +609,10 @@ func (tc *TestCluster) changeReplicas(
 }
 
 func (tc *TestCluster) addReplica(
-	startKey roachpb.Key, typ roachpb.ReplicaChangeType, targets ...roachpb.ReplicationTarget,
+	startKey roachpb.Key,
+	typ roachpb.ReplicaChangeType,
+	waitForInit bool,
+	targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
 
@@ -620,7 +623,9 @@ func (tc *TestCluster) addReplica(
 		return roachpb.RangeDescriptor{}, err
 	}
 
-	if err := tc.waitForNewReplicas(startKey, false /* waitForVoter */, targets...); err != nil {
+	if err := tc.waitForNewReplicas(
+		startKey, waitForInit, false /* waitForVoter */, targets...,
+	); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 
@@ -631,21 +636,21 @@ func (tc *TestCluster) addReplica(
 func (tc *TestCluster) AddVoters(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
-	return tc.addReplica(startKey, roachpb.ADD_VOTER, targets...)
+	return tc.addReplica(startKey, roachpb.ADD_VOTER, true, targets...)
 }
 
 // AddNonVoters is part of TestClusterInterface.
 func (tc *TestCluster) AddNonVoters(
-	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+	startKey roachpb.Key, waitForInit bool, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
-	return tc.addReplica(startKey, roachpb.ADD_NON_VOTER, targets...)
+	return tc.addReplica(startKey, roachpb.ADD_NON_VOTER, waitForInit, targets...)
 }
 
 // AddNonVotersOrFatal is part of TestClusterInterface.
 func (tc *TestCluster) AddNonVotersOrFatal(
 	t testing.TB, startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) roachpb.RangeDescriptor {
-	desc, err := tc.addReplica(startKey, roachpb.ADD_NON_VOTER, targets...)
+	desc, err := tc.addReplica(startKey, roachpb.ADD_NON_VOTER, true /* waitForInit */, targets...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -673,7 +678,9 @@ func (tc *TestCluster) AddVotersMulti(
 	}
 
 	for _, kt := range kts {
-		if err := tc.waitForNewReplicas(kt.StartKey, false, kt.Targets...); err != nil {
+		if err := tc.waitForNewReplicas(
+			kt.StartKey, true /* waitForInit */, false /* waitForVoter */, kt.Targets...,
+		); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -687,7 +694,9 @@ func (tc *TestCluster) AddVotersMulti(
 func (tc *TestCluster) WaitForVoters(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) error {
-	return tc.waitForNewReplicas(startKey, true /* waitForVoter */, targets...)
+	return tc.waitForNewReplicas(
+		startKey, true /* waitForInit */, true /* waitForVoter */, targets...,
+	)
 }
 
 // waitForNewReplicas waits for each of the targets to have a fully initialized
@@ -700,35 +709,37 @@ func (tc *TestCluster) WaitForVoters(
 //
 // targets are replication target for change replica.
 func (tc *TestCluster) waitForNewReplicas(
-	startKey roachpb.Key, waitForVoter bool, targets ...roachpb.ReplicationTarget,
+	startKey roachpb.Key, waitForInit bool, waitForVoter bool, targets ...roachpb.ReplicationTarget,
 ) error {
 	rKey := keys.MustAddr(startKey)
 	errRetry := errors.Errorf("target not found")
 
 	// Wait for the replication to complete on all destination nodes.
-	if err := retry.ForDuration(time.Second*25, func() error {
-		for _, target := range targets {
-			// Use LookupReplica(keys) instead of GetRange(rangeID) to ensure that the
-			// snapshot has been transferred and the descriptor initialized.
-			store, err := tc.findMemberStore(target.StoreID)
-			if err != nil {
-				log.Errorf(context.TODO(), "unexpected error: %s", err)
-				return err
+	if waitForInit {
+		if err := retry.ForDuration(time.Second*25, func() error {
+			for _, target := range targets {
+				// Use LookupReplica(keys) instead of GetRange(rangeID) to ensure that the
+				// snapshot has been transferred and the descriptor initialized.
+				store, err := tc.findMemberStore(target.StoreID)
+				if err != nil {
+					log.Errorf(context.TODO(), "unexpected error: %s", err)
+					return err
+				}
+				repl := store.LookupReplica(rKey)
+				if repl == nil {
+					return errors.Wrapf(errRetry, "for target %s", target)
+				}
+				desc := repl.Desc()
+				if replDesc, ok := desc.GetReplicaDescriptor(target.StoreID); !ok {
+					return errors.Errorf("target store %d not yet in range descriptor %v", target.StoreID, desc)
+				} else if waitForVoter && replDesc.GetType() != roachpb.VOTER_FULL {
+					return errors.Errorf("target store %d not yet voter in range descriptor %v", target.StoreID, desc)
+				}
 			}
-			repl := store.LookupReplica(rKey)
-			if repl == nil {
-				return errors.Wrapf(errRetry, "for target %s", target)
-			}
-			desc := repl.Desc()
-			if replDesc, ok := desc.GetReplicaDescriptor(target.StoreID); !ok {
-				return errors.Errorf("target store %d not yet in range descriptor %v", target.StoreID, desc)
-			} else if waitForVoter && replDesc.GetType() != roachpb.VOTER_FULL {
-				return errors.Errorf("target store %d not yet voter in range descriptor %v", target.StoreID, desc)
-			}
+			return nil
+		}); err != nil {
+			return err
 		}
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	return nil
