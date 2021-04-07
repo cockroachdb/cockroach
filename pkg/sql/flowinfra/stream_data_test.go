@@ -158,7 +158,7 @@ func BenchmarkStreamEncoder(b *testing.B) {
 	for _, numCols := range []int{1, 4, 16, 64} {
 		b.Run(fmt.Sprintf("rows=%d,cols=%d", numRows, numCols), func(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
-			cols := randgen.MakeIntCols(numCols)
+			cols := types.MakeIntCols(numCols)
 			rows := randgen.MakeIntRows(numRows, numCols)
 			input := execinfra.NewRepeatableRowSource(cols, rows)
 
@@ -208,7 +208,7 @@ func BenchmarkStreamDecoder(b *testing.B) {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
 			b.SetBytes(int64(flowinfra.OutboxBufRows * numCols * 8))
 			var se flowinfra.StreamEncoder
-			colTypes := randgen.MakeIntCols(numCols)
+			colTypes := types.MakeIntCols(numCols)
 			se.Init(colTypes)
 			inRow := randgen.MakeIntRows(1, numCols)[0]
 			for i := 0; i < flowinfra.OutboxBufRows; i++ {

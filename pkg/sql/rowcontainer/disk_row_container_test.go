@@ -428,7 +428,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	d := MakeDiskRowContainer(diskMonitor, randgen.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(diskMonitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const numCols = 1
@@ -448,8 +448,8 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 			} else if cmp != 0 {
 				return fmt.Errorf(
 					"unexpected row %v, expected %v",
-					row.String(randgen.OneIntCol),
-					otherRow.String(randgen.OneIntCol),
+					row.String(types.OneIntCol),
+					otherRow.String(types.OneIntCol),
 				)
 			}
 		}
@@ -555,7 +555,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 
-	d := MakeDiskRowContainer(monitor, randgen.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(monitor, types.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const (
@@ -593,8 +593,8 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if row.String(randgen.OneIntCol) != firstRow.String(randgen.OneIntCol) {
-				t.Fatalf("unexpected row read %s, expected %s", row.String(randgen.OneIntCol), firstRow.String(randgen.OneIntCol))
+			if row.String(types.OneIntCol) != firstRow.String(types.OneIntCol) {
+				t.Fatalf("unexpected row read %s, expected %s", row.String(types.OneIntCol), firstRow.String(types.OneIntCol))
 			}
 		}()
 

@@ -35,7 +35,7 @@ func runSampler(
 	for i := range rows {
 		rows[i] = rowenc.EncDatumRow{randgen.IntEncDatum(i)}
 	}
-	in := distsqlutils.NewRowBuffer(randgen.OneIntCol, rows, distsqlutils.RowBufferArgs{})
+	in := distsqlutils.NewRowBuffer(types.OneIntCol, rows, distsqlutils.RowBufferArgs{})
 	outTypes := []*types.T{
 		types.Int, // original column
 		types.Int, // rank
@@ -198,7 +198,7 @@ func TestSamplerSketch(t *testing.T) {
 	numNulls := []int{4, 2, 1}
 
 	rows := randgen.GenEncDatumRowsInt(inputRows)
-	in := distsqlutils.NewRowBuffer(randgen.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
+	in := distsqlutils.NewRowBuffer(types.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
 	outTypes := []*types.T{
 		types.Int,   // original column
 		types.Int,   // original column

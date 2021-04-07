@@ -60,7 +60,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			wg.Add(len(rc))
 
 			for i := range rc {
-				rc[i].InitWithNumSenders(randgen.OneIntCol, 1)
+				rc[i].InitWithNumSenders(types.OneIntCol, 1)
 
 				go func(i int) {
 					defer wg.Done()
@@ -107,7 +107,7 @@ func BenchmarkMultiplexedRowChannel(b *testing.B) {
 				var wg sync.WaitGroup
 				wg.Add(senders + 1)
 				mrc := &RowChannel{}
-				mrc.InitWithNumSenders(randgen.OneIntCol, senders)
+				mrc.InitWithNumSenders(types.OneIntCol, senders)
 				go func() {
 					for {
 						if r, _ := mrc.Next(); r == nil {

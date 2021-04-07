@@ -898,8 +898,10 @@ func makeBegin(s *Smither) (tree.Statement, bool) {
 	return &tree.BeginTransaction{}, true
 }
 
+const letters = "abcdefghijklmnopqrstuvwxyz"
+
 func makeSavepoint(s *Smither) (tree.Statement, bool) {
-	savepointName := s.randString(s.d9(), letters)
+	savepointName := randgen.RandString(s.rnd, s.d9(), letters)
 	s.activeSavepoints = append(s.activeSavepoints, savepointName)
 	return &tree.Savepoint{Name: tree.Name(savepointName)}, true
 }

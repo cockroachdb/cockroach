@@ -115,7 +115,7 @@ func TestSampleAggregator(t *testing.T) {
 		outputs := make([]*distsqlutils.RowBuffer, numSamplers)
 		for i := 0; i < numSamplers; i++ {
 			rows := randgen.GenEncDatumRowsInt(rowPartitions[i])
-			in := distsqlutils.NewRowBuffer(randgen.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(types.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
 			outputs[i] = distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 			spec := &execinfrapb.SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}
