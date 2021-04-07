@@ -62,9 +62,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		}()
 
 		// Build the input query.
-		outScope = b.cteBoundary(func() *scope {
-			return b.buildStmt(ct.AsSource, nil /* desiredTypes */, inScope)
-		})
+		outScope = b.buildStmtAtRoot(ct.AsSource, nil /* desiredTypes */)
 
 		numColNames := 0
 		for i := 0; i < len(ct.Defs); i++ {

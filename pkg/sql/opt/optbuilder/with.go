@@ -34,30 +34,56 @@ type cteSource struct {
 	// If set, this function is called when a CTE is referenced. It can throw an
 	// error.
 	onRef func()
+
+	// built is true if we have constructed a With operator for this CTE.
+	built bool
 }
 
-// cteBoundary is used to build statements which impose a CTE boundary, like
-// EXPLAIN or CREATE VIEW. The With operators for any CTEs defined inside the
-// statement are all built before returning.
-func (b *Builder) cteBoundary(buildFn func() *scope) *scope {
-	// Save the CTEs above the boundary.
-	prevCTEs := b.ctes
-	b.ctes = nil
-	scope := buildFn()
-	scope.expr = b.buildWiths(scope.expr, b.ctes)
-	b.ctes = prevCTEs
-	return scope
+type cteSources []*cteSource
+
+// addCTERef adds a CTE-to-CTE reference to cteRefMap.
+func (b *Builder) addCTERef(referencedID opt.WithID, referencedBy *cteSource) {
+	if b.cteRefMap == nil {
+		b.cteRefMap = make(map[opt.WithID]cteSources)
+	}
+	b.cteRefMap[referencedID] = append(b.cteRefMap[referencedID], referencedBy)
 }
 
-func (b *Builder) addCTE(cte cteSource) {
+// addCTE adds a CTE to the list and adds its references to cteRefMap. If CTE
+// does not reference any other CTEs, it will be built at the root level (see
+// buildStmtAtRoot). If it does reference other CTEs, it will be built as a
+// pre-requisite to building the referenced CTEs.
+func (b *Builder) addCTE(cte *cteSource) {
+	withUses := memo.WithUses(cte.expr)
+	for refWithID := range withUses {
+		b.addCTERef(refWithID, cte)
+	}
+	// Note: if the CTE references other CTEs, we don't need to add it to the list
+	// (it will get built anyway). But that is fragile because withIDs are used
+	// for other purposes; in addition, adding it to the list helps ensure that we
+	// build the CTEs in the order in which they appear in the query, whenever
+	// possible.
 	b.ctes = append(b.ctes, cte)
 }
 
-// buildWiths adds With expressions on top of an expression.
-func (b *Builder) buildWiths(expr memo.RelExpr, ctes []cteSource) memo.RelExpr {
-	// Since later CTEs can refer to earlier ones, we want to add these in
-	// reverse order.
+// buildWiths adds With operators on top of an expression. Operators are built
+// for all given CTEs as well as any CTEs which refer to them (directly or
+// indirectly).
+func (b *Builder) buildWiths(expr memo.RelExpr, ctes cteSources) memo.RelExpr {
+	// Any order here would be correct, but we prefer to match the order in the
+	// query as much as possible. We are building the operators from the bottom
+	// up, so we start with the last CTE.
 	for i := len(ctes) - 1; i >= 0; i-- {
+		cte := ctes[i]
+		if cte.built {
+			continue
+		}
+		cte.built = true
+
+		// First, build all the CTEs that directly or indirectly reference this CTE.
+		// This is a depth-first search achieving a reverse topological sort.
+		expr = b.buildWiths(expr, b.cteRefMap[cte.id])
+
 		expr = b.factory.ConstructWith(
 			ctes[i].expr,
 			expr,
@@ -108,6 +134,15 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 		hasRecursive = hasRecursive || with.Recursive
 		cteExpr, cteCols := b.buildCTE(cte, outScope, with.Recursive)
 
+		if cteExpr.Relational().CanMutate && !inScope.atRoot {
+			panic(
+				pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"WITH clause containing a data-modifying statement must be at the top level",
+				),
+			)
+		}
+
 		// TODO(justin): lift this restriction when possible. WITH should be hoistable.
 		if b.subquery != nil && !b.subquery.outerCols.Empty() {
 			panic(pgerror.Newf(pgcode.FeatureNotSupported, "CTEs may not be correlated"))
@@ -133,17 +168,7 @@ func (b *Builder) buildCTEs(with *tree.With, inScope *scope) (outScope *scope) {
 		}
 		cte := &addedCTEs[i]
 		outScope.ctes[cte.name.Alias.String()] = cte
-		b.addCTE(*cte)
-
-		if cteExpr.Relational().CanMutate && !inScope.atRoot {
-			panic(
-				pgerror.Newf(
-					pgcode.FeatureNotSupported,
-					"WITH clause containing a data-modifying statement must be at the top level",
-				),
-			)
-		}
-
+		b.addCTE(cte)
 	}
 
 	telemetry.Inc(sqltelemetry.CteUseCounter)
@@ -282,15 +307,7 @@ func (b *Builder) buildCTE(
 		numRefs++
 	}
 
-	// If the recursive statement contains CTEs, we don't want the Withs hoisted
-	// above the recursive CTE.
-	// TODO(radu): introducing a boundary here is a hack, and won't work well if
-	// the CTE contains [..] operators or SQLClass functions.
-
-	recursiveScope := b.cteBoundary(func() *scope {
-		return b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
-	})
-
+	recursiveScope := b.buildStmt(recursive, initialTypes /* desiredTypes */, cteScope)
 	if numRefs == 0 {
 		// Build this as a non-recursive CTE.
 		cteScope := b.buildSetOp(tree.UnionOp, false /* all */, inScope, initialScope, recursiveScope)
@@ -305,6 +322,11 @@ func (b *Builder) buildCTE(
 			cte.Name.Alias,
 		))
 	}
+
+	// Build the With operators for any CTEs that refer to this CTE recursively.
+	// They would become invalid if we let them get hoisted above the
+	// RecursiveCTE operator.
+	recursiveScope.expr = b.buildWiths(recursiveScope.expr, b.cteRefMap[cteSrc.id])
 
 	recursiveScope.removeHiddenCols()
 	b.dropOrderingAndExtraCols(recursiveScope)

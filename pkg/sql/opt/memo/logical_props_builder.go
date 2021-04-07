@@ -2460,6 +2460,9 @@ func deriveWithUses(r opt.Expr) props.WithUsesMap {
 	case *WithExpr:
 		excludedID = e.ID
 
+	case *RecursiveCTEExpr:
+		excludedID = e.WithID
+
 	default:
 		if opt.IsMutationOp(e) {
 			if p, ok := e.Private().(*MutationPrivate); ok {
