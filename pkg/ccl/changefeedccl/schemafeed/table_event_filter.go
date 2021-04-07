@@ -16,15 +16,15 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type tableEventType int
+type tableEventType uint64
 
 const (
-	tableEventTypeUnknown tableEventType = iota
-	tableEventTypeAddColumnNoBackfill
-	tableEventTypeAddColumnWithBackfill
-	tableEventTypeDropColumn
-	tableEventTruncate
-	tableEventPrimaryKeyChange
+	tableEventTypeUnknown               tableEventType = 0
+	tableEventTypeAddColumnNoBackfill   tableEventType = 1 << 0
+	tableEventTypeAddColumnWithBackfill tableEventType = 1 << 1
+	tableEventTypeDropColumn            tableEventType = 1 << 2
+	tableEventTruncate                  tableEventType = 1 << 3
+	tableEventPrimaryKeyChange          tableEventType = 1 << 4
 )
 
 var (
@@ -51,20 +51,27 @@ var (
 )
 
 func classifyTableEvent(e TableEvent) tableEventType {
-	switch {
-	case newColumnBackfillComplete(e):
-		return tableEventTypeAddColumnWithBackfill
-	case newColumnNoBackfill(e):
-		return tableEventTypeAddColumnNoBackfill
-	case hasNewColumnDropBackfillMutation(e):
-		return tableEventTypeDropColumn
-	case tableTruncated(e):
-		return tableEventTruncate
-	case primaryKeyChanged(e):
-		return tableEventPrimaryKeyChange
-	default:
-		return tableEventTypeUnknown
+	et := tableEventTypeUnknown
+	if primaryKeyChanged(e) {
+		et = et | tableEventPrimaryKeyChange
 	}
+
+	if newColumnBackfillComplete(e) {
+		et = et | tableEventTypeAddColumnWithBackfill
+	}
+
+	if newColumnNoBackfill(e) {
+		et = et | tableEventTypeAddColumnNoBackfill
+	}
+
+	if hasNewColumnDropBackfillMutation(e) {
+		et = et | tableEventTypeDropColumn
+	}
+
+	if tableTruncated(e) {
+		et = et | tableEventTruncate
+	}
+	return et
 }
 
 // typeFilters indicates whether a table event of a given type should be
@@ -73,12 +80,19 @@ type tableEventFilter map[tableEventType]bool
 
 func (b tableEventFilter) shouldFilter(ctx context.Context, e TableEvent) (bool, error) {
 	et := classifyTableEvent(e)
+
 	// Truncation events are not ignored and return an error.
-	if et == tableEventTruncate {
+	if et&tableEventTruncate > 0 {
 		return false, errors.Errorf(`"%s" was truncated`, e.Before.GetName())
 	}
-	shouldFilter, ok := b[et]
-	if !ok {
+	shouldFilter := true
+	for filterEvent, filterPolicy := range b {
+		if et&filterEvent > 0 && !filterPolicy {
+			shouldFilter = false
+		}
+		et = et & (^filterEvent)
+	}
+	if et > 0 {
 		return false, errors.AssertionFailedf("policy does not specify how to handle event type %v", et)
 	}
 	return shouldFilter, nil
@@ -138,5 +152,14 @@ func primaryKeyChanged(e TableEvent) bool {
 // IsPrimaryIndexChange returns true if the event corresponds to a change
 // in the primary index.
 func IsPrimaryIndexChange(e TableEvent) bool {
-	return classifyTableEvent(e) == tableEventPrimaryKeyChange
+	et := classifyTableEvent(e)
+	return et&tableEventPrimaryKeyChange > 0
+}
+
+// IsOnlyPrimaryIndexChange returns to true if the event corresponds
+// to a change in the primary index and _only_ a change in the primary
+// index.
+func IsOnlyPrimaryIndexChange(e TableEvent) bool {
+	et := classifyTableEvent(e)
+	return et&(^tableEventPrimaryKeyChange) == 0
 }
