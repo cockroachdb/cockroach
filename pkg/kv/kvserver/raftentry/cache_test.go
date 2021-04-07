@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -166,7 +167,10 @@ func TestIgnoredAdd(t *testing.T) {
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(100 + uint64(partitionSize))
 	// Show that adding entries which are larger than maxBytes is ignored.
-	_ = addEntries(c, rangeID, 1, 41)
+	{
+		ignoredEnts := addEntries(c, rangeID, 1, 41)
+		require.True(t, 42*ignoredEnts[0].Size() > int(c.maxBytes)) // sanity check
+	}
 	verifyGet(t, c, rangeID, 1, 41, nil, 1, false)
 	verifyMetrics(t, c, 0, 0)
 	// Add some entries so we can show that a non-overlapping add is ignored.
@@ -175,6 +179,67 @@ func TestIgnoredAdd(t *testing.T) {
 	verifyMetrics(t, c, 3, 27+int64(partitionSize))
 	addEntries(c, rangeID, 1, 3)
 	verifyMetrics(t, c, 3, 27+int64(partitionSize))
+
+	// Cache has entries 4, 5, 6. Offer an oversize entry at index 7 (which is
+	// notably after 6) and request truncation. This should be a no-op.
+	c.Add(rangeID, []raftpb.Entry{newEntry(7, uint64(c.maxBytes+1))}, true /* truncate */)
+	verifyGet(t, c, rangeID, 4, 7, ents, 7, false)
+
+	// Cache has entries 4, 5, 6. Offer an oversize entry at index 6 and request
+	// truncation. This should remove index 6 (as requested due to the truncation)
+	// without replacing it with the input entry.
+	c.Add(rangeID, []raftpb.Entry{newEntry(6, uint64(c.maxBytes+1))}, true /* truncate */)
+	verifyGet(t, c, rangeID, 4, 7, ents[:len(ents)-1], 6, false)
+
+	// Cache has entries 4, 5. Offer an oversize entry at index 3 (which is
+	// notably before 4) and request truncation. This should clear all entries
+	//>= 3, i.e. everything.
+	c.Add(rangeID, []raftpb.Entry{newEntry(3, uint64(c.maxBytes+1))}, true /* truncate */)
+	// And it did.
+	verifyGet(t, c, rangeID, 0, 0, nil, 0, false)
+	verifyMetrics(t, c, 0, int64(partitionSize))
+}
+
+func TestRingBuffer_truncateFrom(t *testing.T) {
+	// NB: this is also exercised through the truncate=true test cases in
+	// TestIgnoredAdd, but this tests it more directly.
+	rangeID := roachpb.RangeID(1)
+	const maxBytes = 100
+	c := NewCache(maxBytes)
+	// Add one entry.
+	c.Add(rangeID, newEntries(100, 101, 0), false /* truncate */)
+	ents, _, _, _ := c.Scan(nil, rangeID, 100, 101, noLimit)
+	// Entry is actually there.
+	require.Len(t, ents, 1)
+	p := c.getPartLocked(rangeID, false /* create */, false /* recordUse */)
+	require.NotNil(t, p)
+	// Truncate range [99, infinity], which should work even though
+	// 99 isn't itself in `p`.
+	_, numRemovedEntries := p.truncateFrom(99)
+	require.EqualValues(t, 1, numRemovedEntries)
+	require.Zero(t, p.len)
+	ents, _, _, _ = c.Scan(nil, rangeID, 100, 101, noLimit)
+	require.Empty(t, ents)
+}
+
+func TestRingBuffer_clearTo(t *testing.T) {
+	// Ensure that clearTo isn't sensitive to whether its argument actually
+	// refers to a cached index.
+	rangeID := roachpb.RangeID(1)
+	const maxBytes = 100
+	c := NewCache(maxBytes)
+	// Add one entry.
+	c.Add(rangeID, newEntries(100, 101, 0), false /* truncate */)
+	ents, _, _, _ := c.Scan(nil, rangeID, 100, 101, noLimit)
+	// Entry is actually there.
+	require.Len(t, ents, 1)
+	p := c.getPartLocked(rangeID, false /* create */, false /* recordUse */)
+	require.NotNil(t, p)
+	_, numRemovedEntries := p.clearTo(101)
+	require.EqualValues(t, 1, numRemovedEntries)
+	require.Zero(t, p.len)
+	ents, _, _, _ = c.Scan(nil, rangeID, 100, 101, noLimit)
+	require.Empty(t, ents)
 }
 
 func TestAddAndTruncate(t *testing.T) {
