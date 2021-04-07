@@ -1511,6 +1511,9 @@ func TestLint(t *testing.T) {
 		cmd, stderr, filter, err := dirCmd(
 			crdb.Dir,
 			"staticcheck",
+			// TODO(radu): we have started getting spurious "unused" (U1001) errors
+			// (#62753); disabling unused checks altogether.
+			"-checks=inherit,-U1001",
 			"-unused.whole-program",
 			pkgScope,
 		)
