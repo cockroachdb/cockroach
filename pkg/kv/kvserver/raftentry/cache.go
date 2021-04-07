@@ -212,6 +212,9 @@ func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
 		bytesAdded, entriesAdded = p.add(ents)
 	}
 	if truncate {
+		// Note that if !add, ents[0].Index may not even be in the cache
+		// at this point. `truncateFrom` will still remove any entries
+		// it may have at indexes >= truncIdx, as instructed.
 		truncIdx := ents[0].Index
 		if add {
 			// Some entries were already overwritten.

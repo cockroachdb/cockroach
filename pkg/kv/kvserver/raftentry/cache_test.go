@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -579,4 +580,42 @@ func BenchmarkEntryCacheClearTo(b *testing.B) {
 		b.StartTimer()
 		c.Clear(rangeID, uint64(len(ents)-10))
 	}
+}
+
+func TestRingBuffer_truncateFrom(t *testing.T) {
+	rangeID := roachpb.RangeID(1)
+	const maxBytes = 100
+	c := NewCache(maxBytes)
+	// Add one entry.
+	c.Add(rangeID, newEntries(100, 101, 0), false /* truncate */)
+	ents, _, _, _ := c.Scan(nil, rangeID, 100, 101, noLimit)
+	// Entry is actually there.
+	require.Len(t, ents, 1)
+	p := c.getPartLocked(rangeID, false /* create */, false /* recordUse */)
+	require.NotNil(t, p)
+	// Truncate range [99, infinity], which should work even though
+	// 99 isn't itself in `p`.
+	_, numRemovedEntries := p.truncateFrom(99)
+	require.EqualValues(t, 1, numRemovedEntries)
+	require.Zero(t, p.len)
+	ents, _, _, _ = c.Scan(nil, rangeID, 100, 101, noLimit)
+	require.Empty(t, ents)
+}
+
+func TestRingBuffer_clearTo(t *testing.T) {
+	rangeID := roachpb.RangeID(1)
+	const maxBytes = 100
+	c := NewCache(maxBytes)
+	// Add one entry.
+	c.Add(rangeID, newEntries(100, 101, 0), false /* truncate */)
+	ents, _, _, _ := c.Scan(nil, rangeID, 100, 101, noLimit)
+	// Entry is actually there.
+	require.Len(t, ents, 1)
+	p := c.getPartLocked(rangeID, false /* create */, false /* recordUse */)
+	require.NotNil(t, p)
+	_, numRemovedEntries := p.clearTo(101)
+	require.EqualValues(t, 1, numRemovedEntries)
+	require.Zero(t, p.len)
+	ents, _, _, _ = c.Scan(nil, rangeID, 100, 101, noLimit)
+	require.Empty(t, ents)
 }
