@@ -738,10 +738,10 @@ func (r *DistSQLReceiver) Push(
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
-		if errors.Is(commErr, ErrLimitedResultClosed) {
-			// ErrLimitedResultClosed is not a real error, it is a signal to
-			// stop distsql and return success to the client (that's why we
-			// don't set the error on the resultWriter).
+		if errors.Is(commErr, ErrLimitedResultClosed) || errors.Is(commErr, errIEResultChannelClosed) {
+			// ErrLimitedResultClosed and errIEResultChannelClosed are not real
+			// errors, it is a signal to stop distsql and return success to the
+			// client (that's why we don't set the error on the resultWriter).
 			r.status = execinfra.DrainRequested
 		} else {
 			// Set the error on the resultWriter to notify the consumer about

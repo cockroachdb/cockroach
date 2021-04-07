@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/catalog/catalogkv",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/colexecerror",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/paramparse",
