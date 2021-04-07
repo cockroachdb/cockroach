@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -60,7 +61,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 	typesToTest := 20
 
 	for i := 0; i < typesToTest; i++ {
-		typ := rowenc.RandType(rng)
+		typ := randgen.RandType(rng)
 		for _, numRows := range []int{
 			// A few interesting sizes.
 			1,
@@ -71,7 +72,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 			rows := make(rowenc.EncDatumRows, numRows)
 			for i := 0; i < numRows; i++ {
 				rows[i] = make(rowenc.EncDatumRow, 1)
-				rows[i][0] = rowenc.DatumToEncDatum(typ, rowenc.RandDatum(rng, typ, true /* nullOk */))
+				rows[i][0] = rowenc.DatumToEncDatum(typ, randgen.RandDatum(rng, typ, true /* nullOk */))
 			}
 			typs := []*types.T{typ}
 			source := execinfra.NewRepeatableRowSource(typs, rows)

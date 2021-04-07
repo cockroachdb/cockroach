@@ -79,7 +79,7 @@ go_test(
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",

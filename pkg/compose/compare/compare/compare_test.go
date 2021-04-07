@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/jackc/pgx/v4"
@@ -70,17 +70,17 @@ func TestCompare(t *testing.T) {
 	configs := map[string]testConfig{
 		"postgres": {
 			setup:           sqlsmith.Setups["rand-tables"],
-			setupMutators:   []rowenc.Mutator{mutations.PostgresCreateTableMutator},
+			setupMutators:   []randgen.Mutator{mutations.PostgresCreateTableMutator},
 			opts:            []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
 			ignoreSQLErrors: true,
 			conns: []testConn{
 				{
 					name:     "cockroach1",
-					mutators: []rowenc.Mutator{},
+					mutators: []randgen.Mutator{},
 				},
 				{
 					name:     "postgres",
-					mutators: []rowenc.Mutator{mutations.PostgresMutator},
+					mutators: []randgen.Mutator{mutations.PostgresMutator},
 				},
 			},
 		},
@@ -91,11 +91,11 @@ func TestCompare(t *testing.T) {
 			conns: []testConn{
 				{
 					name:     "cockroach1",
-					mutators: []rowenc.Mutator{},
+					mutators: []randgen.Mutator{},
 				},
 				{
 					name: "cockroach2",
-					mutators: []rowenc.Mutator{
+					mutators: []randgen.Mutator{
 						mutations.StatisticsMutator,
 						mutations.ForeignKeyMutator,
 						mutations.ColumnFamilyMutator,
@@ -192,11 +192,11 @@ type testConfig struct {
 	opts            []sqlsmith.SmitherOption
 	conns           []testConn
 	setup           sqlsmith.Setup
-	setupMutators   []rowenc.Mutator
+	setupMutators   []randgen.Mutator
 	ignoreSQLErrors bool
 }
 
 type testConn struct {
 	name     string
-	mutators []rowenc.Mutator
+	mutators []randgen.Mutator
 }

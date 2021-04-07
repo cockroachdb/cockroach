@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -79,7 +80,7 @@ func TestOutbox(t *testing.T) {
 	}
 	streamID := execinfrapb.StreamID(42)
 	outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
-	outbox.Init(rowenc.OneIntCol)
+	outbox.Init(randgen.OneIntCol)
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -155,12 +156,12 @@ func TestOutbox(t *testing.T) {
 		// about the draining.
 		last := -1
 		for i := 0; i < len(rows); i++ {
-			if rows[i].String(rowenc.OneIntCol) != "[-1]" {
+			if rows[i].String(randgen.OneIntCol) != "[-1]" {
 				last = i
 				continue
 			}
 			for j := i; j < len(rows); j++ {
-				if rows[j].String(rowenc.OneIntCol) == "[-1]" {
+				if rows[j].String(randgen.OneIntCol) == "[-1]" {
 					continue
 				}
 				rows[i] = rows[j]
@@ -193,7 +194,7 @@ func TestOutbox(t *testing.T) {
 			t.Fatalf("expected: %q, got: %q", expectedStr, m.Err.Error())
 		}
 	}
-	str := rows.String(rowenc.OneIntCol)
+	str := rows.String(randgen.OneIntCol)
 	expected := "[[0]]"
 	if str != expected {
 		t.Errorf("invalid results: %s, expected %s'", str, expected)
@@ -241,7 +242,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	var outboxWG sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	outbox.Init(rowenc.OneIntCol)
+	outbox.Init(randgen.OneIntCol)
 	// Start the outbox. This should cause the stream to connect, even though
 	// we're not sending any rows.
 	outbox.Start(ctx, &outboxWG, cancel)
@@ -314,7 +315,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			outbox = flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
-			outbox.Init(rowenc.OneIntCol)
+			outbox.Init(randgen.OneIntCol)
 			outbox.Start(ctx, &wg, cancel)
 
 			// Wait for the outbox to connect the stream.
@@ -394,7 +395,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	}
 
 	outbox = flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
-	outbox.Init(rowenc.OneIntCol)
+	outbox.Init(randgen.OneIntCol)
 	outbox.Start(ctx, &wg, mockCancel)
 
 	// Wait for the outbox to connect the stream.
@@ -442,7 +443,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 	defer cancel()
 
 	outbox = flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
-	outbox.Init(rowenc.OneIntCol)
+	outbox.Init(randgen.OneIntCol)
 
 	// Fill up the outbox.
 	for i := 0; i < flowinfra.OutboxBufRows; i++ {
@@ -508,7 +509,7 @@ func BenchmarkOutbox(b *testing.B) {
 				NodeID: base.TestingIDContainer,
 			}
 			outbox := flowinfra.NewOutbox(&flowCtx, execinfra.StaticNodeID, streamID, nil /* numOutboxes */, false /* isGatewayNode */)
-			outbox.Init(rowenc.MakeIntCols(numCols))
+			outbox.Init(randgen.MakeIntCols(numCols))
 			var outboxWG sync.WaitGroup
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

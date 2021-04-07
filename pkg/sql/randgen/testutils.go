@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowenc
+package randgen
 
 import (
 	"bytes"
@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -696,7 +697,7 @@ func init() {
 
 	for _, typ := range types.OidToType {
 		// Don't include un-encodable types.
-		encTyp, err := datumTypeToArrayElementEncodingType(typ)
+		encTyp, err := rowenc.DatumTypeToArrayElementEncodingType(typ)
 		if err != nil || encTyp == 0 {
 			continue
 		}
@@ -937,19 +938,19 @@ func RandEncodableColumnTypes(rng *rand.Rand, numCols int) []*types.T {
 }
 
 // RandEncDatum generates a random EncDatum (of a random type).
-func RandEncDatum(rng *rand.Rand) (EncDatum, *types.T) {
+func RandEncDatum(rng *rand.Rand) (rowenc.EncDatum, *types.T) {
 	typ := RandEncodableType(rng)
 	datum := RandDatum(rng, typ, true /* nullOk */)
-	return DatumToEncDatum(typ, datum), typ
+	return rowenc.DatumToEncDatum(typ, datum), typ
 }
 
 // RandSortingEncDatumSlice generates a slice of random EncDatum values of the
 // same random type which is key-encodable.
-func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, *types.T) {
+func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]rowenc.EncDatum, *types.T) {
 	typ := RandSortingType(rng)
-	vals := make([]EncDatum, numVals)
+	vals := make([]rowenc.EncDatum, numVals)
 	for i := range vals {
-		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
+		vals[i] = rowenc.DatumToEncDatum(typ, RandDatum(rng, typ, true))
 	}
 	return vals, typ
 }
@@ -958,8 +959,8 @@ func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, *types.T
 // random type which is key-encodable.
 func RandSortingEncDatumSlices(
 	rng *rand.Rand, numSets, numValsPerSet int,
-) ([][]EncDatum, []*types.T) {
-	vals := make([][]EncDatum, numSets)
+) ([][]rowenc.EncDatum, []*types.T) {
+	vals := make([][]rowenc.EncDatum, numSets)
 	types := make([]*types.T, numSets)
 	for i := range vals {
 		val, typ := RandSortingEncDatumSlice(rng, numValsPerSet)
@@ -970,25 +971,25 @@ func RandSortingEncDatumSlices(
 
 // RandEncDatumRowOfTypes generates a slice of random EncDatum values for the
 // corresponding type in types.
-func RandEncDatumRowOfTypes(rng *rand.Rand, types []*types.T) EncDatumRow {
-	vals := make([]EncDatum, len(types))
+func RandEncDatumRowOfTypes(rng *rand.Rand, types []*types.T) rowenc.EncDatumRow {
+	vals := make([]rowenc.EncDatum, len(types))
 	for i := range types {
-		vals[i] = DatumToEncDatum(types[i], RandDatum(rng, types[i], true))
+		vals[i] = rowenc.DatumToEncDatum(types[i], RandDatum(rng, types[i], true))
 	}
 	return vals
 }
 
 // RandEncDatumRows generates EncDatumRows where all rows follow the same random
 // []ColumnType structure.
-func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (EncDatumRows, []*types.T) {
+func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (rowenc.EncDatumRows, []*types.T) {
 	types := RandEncodableColumnTypes(rng, numCols)
 	return RandEncDatumRowsOfTypes(rng, numRows, types), types
 }
 
 // RandEncDatumRowsOfTypes generates EncDatumRows, each row with values of the
 // corresponding type in types.
-func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []*types.T) EncDatumRows {
-	vals := make(EncDatumRows, numRows)
+func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []*types.T) rowenc.EncDatumRows {
+	vals := make(rowenc.EncDatumRows, numRows)
 	for i := range vals {
 		vals[i] = RandEncDatumRowOfTypes(rng, types)
 	}
@@ -1051,8 +1052,8 @@ func TestingMakePrimaryIndexKeyForTenant(
 		colIDToRowIndex.Set(index.GetColumnID(i), i)
 	}
 
-	keyPrefix := MakeIndexKeyPrefix(codec, desc, index.GetID())
-	key, _, err := EncodeIndexKey(desc, index.IndexDesc(), colIDToRowIndex, datums, keyPrefix)
+	keyPrefix := rowenc.MakeIndexKeyPrefix(codec, desc, index.GetID())
+	key, _, err := rowenc.EncodeIndexKey(desc, index.IndexDesc(), colIDToRowIndex, datums, keyPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -1862,19 +1863,19 @@ func MakeIntCols(numCols int) []*types.T {
 }
 
 // IntEncDatum returns an EncDatum representation of DInt(i).
-func IntEncDatum(i int) EncDatum {
-	return EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
+func IntEncDatum(i int) rowenc.EncDatum {
+	return rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(i))}
 }
 
 // NullEncDatum returns and EncDatum representation of tree.DNull.
-func NullEncDatum() EncDatum {
-	return EncDatum{Datum: tree.DNull}
+func NullEncDatum() rowenc.EncDatum {
+	return rowenc.EncDatum{Datum: tree.DNull}
 }
 
 // GenEncDatumRowsInt converts rows of ints to rows of EncDatum DInts.
 // If an int is negative, the corresponding value is NULL.
-func GenEncDatumRowsInt(inputRows [][]int) EncDatumRows {
-	rows := make(EncDatumRows, len(inputRows))
+func GenEncDatumRowsInt(inputRows [][]int) rowenc.EncDatumRows {
+	rows := make(rowenc.EncDatumRows, len(inputRows))
 	for i, inputRow := range inputRows {
 		for _, x := range inputRow {
 			if x < 0 {
@@ -1888,10 +1889,10 @@ func GenEncDatumRowsInt(inputRows [][]int) EncDatumRows {
 }
 
 // MakeIntRows constructs a numRows x numCols table where rows[i][j] = i + j.
-func MakeIntRows(numRows, numCols int) EncDatumRows {
-	rows := make(EncDatumRows, numRows)
+func MakeIntRows(numRows, numCols int) rowenc.EncDatumRows {
+	rows := make(rowenc.EncDatumRows, numRows)
 	for i := range rows {
-		rows[i] = make(EncDatumRow, numCols)
+		rows[i] = make(rowenc.EncDatumRow, numCols)
 		for j := 0; j < numCols; j++ {
 			rows[i][j] = IntEncDatum(i + j)
 		}
@@ -1900,10 +1901,10 @@ func MakeIntRows(numRows, numCols int) EncDatumRows {
 }
 
 // MakeRandIntRows constructs a numRows x numCols table where the values are random.
-func MakeRandIntRows(rng *rand.Rand, numRows int, numCols int) EncDatumRows {
-	rows := make(EncDatumRows, numRows)
+func MakeRandIntRows(rng *rand.Rand, numRows int, numCols int) rowenc.EncDatumRows {
+	rows := make(rowenc.EncDatumRows, numRows)
 	for i := range rows {
-		rows[i] = make(EncDatumRow, numCols)
+		rows[i] = make(rowenc.EncDatumRow, numCols)
 		for j := 0; j < numCols; j++ {
 			rows[i][j] = IntEncDatum(rng.Int())
 		}
@@ -1915,10 +1916,10 @@ func MakeRandIntRows(rng *rand.Rand, numRows int, numCols int) EncDatumRows {
 // are random integers in the range [0, maxNum).
 func MakeRandIntRowsInRange(
 	rng *rand.Rand, numRows int, numCols int, maxNum int, nullProbability float64,
-) EncDatumRows {
-	rows := make(EncDatumRows, numRows)
+) rowenc.EncDatumRows {
+	rows := make(rowenc.EncDatumRows, numRows)
 	for i := range rows {
-		rows[i] = make(EncDatumRow, numCols)
+		rows[i] = make(rowenc.EncDatumRow, numCols)
 		for j := 0; j < numCols; j++ {
 			rows[i][j] = IntEncDatum(rng.Intn(maxNum))
 			if rng.Float64() < nullProbability {
@@ -1931,10 +1932,10 @@ func MakeRandIntRowsInRange(
 
 // MakeRepeatedIntRows constructs a numRows x numCols table where blocks of n
 // consecutive rows have the same value.
-func MakeRepeatedIntRows(n int, numRows int, numCols int) EncDatumRows {
-	rows := make(EncDatumRows, numRows)
+func MakeRepeatedIntRows(n int, numRows int, numCols int) rowenc.EncDatumRows {
+	rows := make(rowenc.EncDatumRows, numRows)
 	for i := range rows {
-		rows[i] = make(EncDatumRow, numCols)
+		rows[i] = make(rowenc.EncDatumRow, numCols)
 		for j := 0; j < numCols; j++ {
 			rows[i][j] = IntEncDatum(i/n + j)
 		}
