@@ -128,6 +128,12 @@ func (w index) PartitionNames() []string {
 	return w.desc.Partitioning.PartitionNames()
 }
 
+// ExplicitColumnStartIdx returns the first index in which the column is
+// explicitly part of the index.
+func (w index) ExplicitColumnStartIdx() int {
+	return w.desc.ExplicitColumnStartIdx()
+}
+
 // IsValidOriginIndex returns whether the index can serve as an origin index for
 // a foreign key constraint with the provided set of originColIDs.
 func (w index) IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool {

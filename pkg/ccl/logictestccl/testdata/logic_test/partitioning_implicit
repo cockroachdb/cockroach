@@ -490,6 +490,38 @@ CREATE TABLE public.t (
 )
 -- Warning: Partitioned table with no zone configurations.
 
+query TTB
+SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM t]
+ORDER BY index_name, seq_in_index
+----
+created_idx           partition_by  true
+created_idx           c             false
+created_idx           pk            true
+primary               partition_by  true
+primary               pk            false
+t_a_idx               partition_by  true
+t_a_idx               a             false
+t_a_idx               pk            true
+t_b_key               partition_by  true
+t_b_key               b             false
+t_b_key               pk            true
+t_e_key               partition_by  true
+t_e_key               e             false
+t_e_key               pk            true
+t_j_idx               partition_by  true
+t_j_idx               j             false
+t_j_idx               pk            true
+t_partition_by_c_idx  partition_by  false
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  pk            true
+t_u_key               partition_by  true
+t_u_key               u             false
+t_u_key               pk            true
+unique_c_d            partition_by  true
+unique_c_d            c             false
+unique_c_d            d             false
+unique_c_d            pk            true
+
 query TTB colnames
 SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
 WHERE descriptor_name = 't' AND column_type = 'key'
