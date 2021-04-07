@@ -546,7 +546,9 @@ func init() {
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
-		doctorClusterCmd,
+		doctorExamineClusterCmd,
+		doctorExamineFallbackClusterCmd,
+		doctorRecreateClusterCmd,
 		genHAProxyCmd,
 		initCmd,
 		quitCmd,
@@ -586,7 +588,9 @@ func init() {
 		statusNodeCmd,
 		lsNodesCmd,
 		debugZipCmd,
-		doctorClusterCmd,
+		doctorExamineClusterCmd,
+		doctorExamineFallbackClusterCmd,
+		doctorRecreateClusterCmd,
 		// If you add something here, make sure the actual implementation
 		// of the command uses `cmdTimeoutContext(.)` or it will ignore
 		// the timeout.
@@ -645,7 +649,9 @@ func init() {
 	sqlCmds := []*cobra.Command{
 		sqlShellCmd,
 		demoCmd,
-		doctorClusterCmd,
+		doctorExamineClusterCmd,
+		doctorExamineFallbackClusterCmd,
+		doctorRecreateClusterCmd,
 		lsNodesCmd,
 		statusNodeCmd,
 	}
@@ -820,6 +826,20 @@ func init() {
 	{
 		f := debugBallastCmd.Flags()
 		varFlag(f, &debugCtx.ballastSize, cliflags.Size)
+	}
+	{
+		for _, c := range []*cobra.Command{
+			doctorExamineClusterCmd,
+			doctorExamineZipDirCmd,
+			doctorExamineFallbackClusterCmd,
+			doctorExamineFallbackZipDirCmd,
+			doctorRecreateClusterCmd,
+			doctorRecreateZipDirCmd,
+		} {
+			f := c.Flags()
+			boolFlag(f, &debugCtx.verbose, cliflags.Verbose)
+
+		}
 	}
 
 	// Multi-tenancy commands.
