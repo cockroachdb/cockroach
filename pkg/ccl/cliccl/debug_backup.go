@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2021 The Cockroach Authors.
 //
 // Licensed as a CockroachDB Enterprise file under the Cockroach Community
 // License (the "License"); you may not use this file except in compliance with
@@ -54,6 +54,7 @@ import (
 )
 
 var externalIODir string
+var exportTableName string
 var readTime string
 var destination string
 var format string
@@ -61,41 +62,41 @@ var nullas string
 
 func init() {
 
-	loadShowSummaryCmd := &cobra.Command{
-		Use:   "summary <backup_path>",
-		Short: "show backups summary",
+	showCmd := &cobra.Command{
+		Use:   "show <backup_path>",
+		Short: "show backup summary",
 		Long:  "Shows summary of meta information about a SQL backup.",
 		Args:  cobra.ExactArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runLoadShowSummary),
+		RunE:  cli.MaybeDecorateGRPCError(runShowCmd),
 	}
 
-	loadShowBackupsCmd := &cobra.Command{
-		Use:   "backups <backup_path>",
-		Short: "show backups in collections",
-		Long:  "Shows full backups in a backup collections.",
+	listBackupsCmd := &cobra.Command{
+		Use:   "list-backups <collection_path>",
+		Short: "show backups in collection",
+		Long:  "Shows full backup paths in a backup collection.",
 		Args:  cobra.ExactArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runLoadShowBackups),
+		RunE:  cli.MaybeDecorateGRPCError(runListBackupsCmd),
 	}
 
-	loadShowIncrementalCmd := &cobra.Command{
-		Use:   "incremental <backup_path>",
+	listIncrementalCmd := &cobra.Command{
+		Use:   "list-incremental <backup_path>",
 		Short: "show incremental backups",
 		Long:  "Shows incremental chain of a SQL backup.",
 		Args:  cobra.ExactArgs(1),
-		RunE:  cli.MaybeDecorateGRPCError(runLoadShowIncremental),
+		RunE:  cli.MaybeDecorateGRPCError(runListIncrementalCmd),
 	}
 
-	loadShowDataCmd := &cobra.Command{
-		Use:   "data <table> <backup_path>",
-		Short: "show data",
-		Long:  "Shows data of a SQL backup.",
-		Args:  cobra.MinimumNArgs(2),
-		RunE:  cli.MaybeDecorateGRPCError(runLoadShowData),
+	exportDataCmd := &cobra.Command{
+		Use:   "export <backup_path>",
+		Short: "export table data from a backup",
+		Long:  "export table data from a backup, requires specifying --table to export data from",
+		Args:  cobra.MinimumNArgs(1),
+		RunE:  cli.MaybeDecorateGRPCError(runExportDataCmd),
 	}
 
-	loadShowCmds := &cobra.Command{
-		Use:   "show [command]",
-		Short: "show backups",
+	backupCmds := &cobra.Command{
+		Use:   "backup [command]",
+		Short: "debug backups",
 		Long:  "Shows information about a SQL backup.",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -103,64 +104,61 @@ func init() {
 		},
 	}
 
-	loadCmds := &cobra.Command{
-		Use:   "load [command]",
-		Short: "load backup commands",
-		Long:  `Commands for bulk loading external files.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cmd.Usage()
-		},
-	}
-
-	loadFlags := loadCmds.Flags()
-	loadFlags.StringVarP(
+	backupFlags := backupCmds.Flags()
+	backupFlags.StringVarP(
 		&externalIODir,
 		cliflags.ExternalIODir.Name,
 		cliflags.ExternalIODir.Shorthand,
 		"", /*value*/
 		cliflags.ExternalIODir.Usage())
 
-	loadShowDataCmd.Flags().StringVarP(
+	exportDataCmd.Flags().StringVarP(
+		&exportTableName,
+		cliflags.ExportTableTarget.Name,
+		cliflags.ExportTableTarget.Shorthand,
+		"", /*value*/
+		cliflags.ExportTableTarget.Usage())
+
+	exportDataCmd.Flags().StringVarP(
 		&readTime,
 		cliflags.ReadTime.Name,
 		cliflags.ReadTime.Shorthand,
 		"", /*value*/
 		cliflags.ReadTime.Usage())
 
-	loadShowDataCmd.Flags().StringVarP(
+	exportDataCmd.Flags().StringVarP(
 		&destination,
 		cliflags.ExportDestination.Name,
 		cliflags.ExportDestination.Shorthand,
 		"", /*value*/
 		cliflags.ExportDestination.Usage())
 
-	loadShowDataCmd.Flags().StringVarP(
+	exportDataCmd.Flags().StringVarP(
 		&format,
 		cliflags.ExportTableFormat.Name,
 		cliflags.ExportTableFormat.Shorthand,
 		"csv", /*value*/
 		cliflags.ExportTableFormat.Usage())
 
-	loadShowDataCmd.Flags().StringVarP(
+	exportDataCmd.Flags().StringVarP(
 		&nullas,
 		cliflags.ExportCSVNullas.Name,
 		cliflags.ExportCSVNullas.Shorthand,
 		"null", /*value*/
 		cliflags.ExportCSVNullas.Usage())
 
-	cli.AddCmd(loadCmds)
-	loadCmds.AddCommand(loadShowCmds)
+	cli.DebugCmd.AddCommand(backupCmds)
 
-	loadShowSubCmds := []*cobra.Command{
-		loadShowSummaryCmd,
-		loadShowBackupsCmd,
-		loadShowIncrementalCmd,
-		loadShowDataCmd,
+	backupSubCmds := []*cobra.Command{
+		showCmd,
+		listBackupsCmd,
+		listIncrementalCmd,
+		exportDataCmd,
 	}
 
-	for _, cmd := range loadShowSubCmds {
-		loadShowCmds.AddCommand(cmd)
-		cmd.Flags().AddFlagSet(loadFlags)
+	for _, cmd := range backupSubCmds {
+		backupCmds.AddCommand(cmd)
+		cmd.Flags().AddFlagSet(backupFlags)
 	}
 }
 
@@ -198,7 +196,7 @@ func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManif
 	return backupManifest, nil
 }
 
-func runLoadShowSummary(cmd *cobra.Command, args []string) error {
+func runShowCmd(cmd *cobra.Command, args []string) error {
 
 	path := args[0]
 	ctx := context.Background()
@@ -217,7 +215,7 @@ func runLoadShowSummary(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runLoadShowBackups(cmd *cobra.Command, args []string) error {
+func runListBackupsCmd(cmd *cobra.Command, args []string) error {
 
 	path := args[0]
 	if !strings.Contains(path, "://") {
@@ -246,7 +244,7 @@ func runLoadShowBackups(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
+func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 
 	path := args[0]
 	if !strings.Contains(path, "://") {
@@ -305,10 +303,13 @@ func runLoadShowIncremental(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runLoadShowData(cmd *cobra.Command, args []string) error {
+func runExportDataCmd(cmd *cobra.Command, args []string) error {
 
-	fullyQualifiedTableName := strings.ToLower(args[0])
-	manifestPaths := args[1:]
+	if exportTableName == "" {
+		return errors.New("export data requires table name specified by --table flag")
+	}
+	fullyQualifiedTableName := strings.ToLower(exportTableName)
+	manifestPaths := args
 
 	ctx := context.Background()
 	manifests := make([]backupccl.BackupManifest, 0, len(manifestPaths))

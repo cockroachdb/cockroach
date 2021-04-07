@@ -1428,12 +1428,17 @@ exist. The interval is specified with a suffix of 's' for seconds,
 `,
 	}
 
+	ExportTableTarget = FlagInfo{
+		Name:        "table",
+		Description: `Select the table to export data from.`,
+	}
+
 	ExportDestination = FlagInfo{
 		Name: "destination",
 		Description: `
 The destination to export data. 
-If the export format is readable and this flag left specified,
-defaults to displays the exported data in the terminal output.
+If the export format is readable and this flag left unspecified,
+defaults to display the exported data in the terminal output.
 `,
 	}
 

@@ -63,7 +63,7 @@ func TestLoadShowSummary(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME `+ts2.AsOfSystemTime(), backupPath)
 
 	t.Run("show-summary-without-types-or-tables", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show summary %s --external-io-dir=%s", dbOnlyBackupPath, dir))
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup show %s --external-io-dir=%s", dbOnlyBackupPath, dir))
 		require.NoError(t, err)
 		expectedOutput := fmt.Sprintf(
 			`{
@@ -92,7 +92,7 @@ func TestLoadShowSummary(t *testing.T) {
 	})
 
 	t.Run("show-summary-with-full-information", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show summary %s --external-io-dir=%s", backupPath, dir))
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup show %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 
 		var sstFile string
@@ -166,7 +166,7 @@ func TestLoadShowBackups(t *testing.T) {
 
 	ts := generateBackupTimestamps(3)
 	t.Run("show-backups-without-backups-in-collection", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show backups %s --external-io-dir=%s", backupPath, dir))
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup list-backups %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 		expectedOutput := "no backups found.\n"
 		checkExpectedOutput(t, expectedOutput, out)
@@ -177,7 +177,7 @@ func TestLoadShowBackups(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, ts[2].AsOfSystemTime()), backupPath)
 
 	t.Run("show-backups-with-backups-in-collection", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show backups %s --external-io-dir=%s", backupPath, dir))
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup list-backups %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 
 		expectedOutput := fmt.Sprintf(".%s\n.%s\n.%s\n",
@@ -210,7 +210,7 @@ func TestLoadShowIncremental(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, ts[1].AsOfSystemTime()), backupPath)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, ts[2].AsOfSystemTime()), backupPath)
 
-	out, err := c.RunWithCapture(fmt.Sprintf("load show incremental %s --external-io-dir=%s", backupPath, dir))
+	out, err := c.RunWithCapture(fmt.Sprintf("debug backup list-incremental %s --external-io-dir=%s", backupPath, dir))
 	require.NoError(t, err)
 	expectedIncFolder := ts[1].GoTime().Format(backupccl.DateBasedIncFolderName)
 	expectedIncFolder2 := ts[2].GoTime().Format(backupccl.DateBasedIncFolderName)
@@ -280,13 +280,18 @@ func TestLoadShowData(t *testing.T) {
 			"testDB.testschema.fooTable",
 			[]string{backupPublicSchemaPath},
 			"ERROR: fetching entry: table testdb.testschema.footable not found\n",
+		}, {
+			"show-data-fail-without-table-specified",
+			"",
+			[]string{backupPublicSchemaPath},
+			"ERROR: export data requires table name specified by --table flag\n",
 		},
 	}
 	for _, tc := range testCasesOnError {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --external-io-dir=%s",
-				tc.tableName,
+			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s",
 				strings.Join(tc.backupPaths, " "),
+				tc.tableName,
 				dir))
 			require.NoError(t, err)
 			checkExpectedOutput(t, tc.expectedOutput, out)
@@ -320,9 +325,9 @@ func TestLoadShowData(t *testing.T) {
 
 	for _, tc := range testCasesDatumOutput {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --external-io-dir=%s",
-				tc.tableName,
+			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s",
 				strings.Join(tc.backupPaths, " "),
+				tc.tableName,
 				dir))
 			require.NoError(t, err)
 			checkExpectedOutput(t, tc.expectedDatums, out)
@@ -375,9 +380,9 @@ func TestLoadShowDataAOST(t *testing.T) {
 	tsNotCovered := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 
 	t.Run("show-data-as-of-a-uncovered-timestamp", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --as-of=%s --external-io-dir=%s",
-			"testDB.public.fooTable",
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s --as-of=%s --external-io-dir=%s",
 			backupPath,
+			"testDB.public.fooTable",
 			tsNotCovered.AsOfSystemTime(),
 			dir))
 		require.NoError(t, err)
@@ -388,9 +393,9 @@ func TestLoadShowDataAOST(t *testing.T) {
 	})
 
 	t.Run("show-data-as-of-non-backup-ts-should-return-error", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --as-of=%s --external-io-dir=%s",
-			"testDB.public.fooTable",
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --as-of=%s --external-io-dir=%s",
 			backupPath,
+			"testDB.public.fooTable",
 			ts.AsOfSystemTime(),
 			dir))
 		require.NoError(t, err)
@@ -483,9 +488,9 @@ func TestLoadShowDataAOST(t *testing.T) {
 
 	for _, tc := range testCasesForTableChanges {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s --as-of=%s --external-io-dir=%s ",
-				tc.tableName,
+			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s --as-of=%s --external-io-dir=%s ",
 				strings.Join(tc.backupPaths, " "),
+				tc.tableName,
 				tc.asof,
 				dir))
 			require.NoError(t, err)
