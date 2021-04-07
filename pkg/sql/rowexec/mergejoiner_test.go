@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -66,7 +67,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -75,13 +76,13 @@ func TestMergeJoiner(t *testing.T) {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: sql.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			expectedTypes: randgen.ThreeIntCols,
+			expectedTypes: sql.ThreeIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
@@ -102,12 +103,12 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -115,7 +116,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[0], v[5]},
 				{v[0], v[4]},
 			},
-			expectedTypes: randgen.ThreeIntCols,
+			expectedTypes: sql.ThreeIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[0], v[0], v[1]},
@@ -144,14 +145,14 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
 				{v[1], v[0]},
 				{v[1], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -164,7 +165,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[1], v[5]},
 				{v[1], v[4]},
 			},
-			expectedTypes: randgen.ThreeIntCols,
+			expectedTypes: sql.ThreeIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[4]},
 				{v[0], v[0], v[5]},
@@ -195,7 +196,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[0]},
@@ -209,7 +210,7 @@ func TestMergeJoiner(t *testing.T) {
 
 				{v[6], v[0]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[5]},
 				{v[0], v[5]},
@@ -224,7 +225,7 @@ func TestMergeJoiner(t *testing.T) {
 
 				{v[5], v[0]},
 			},
-			expectedTypes: randgen.ThreeIntCols,
+			expectedTypes: sql.ThreeIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[0], null},
 				{v[0], v[0], null},
@@ -259,7 +260,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -268,13 +269,13 @@ func TestMergeJoiner(t *testing.T) {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: sql.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			expectedTypes: randgen.ThreeIntCols,
+			expectedTypes: sql.ThreeIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[0], null, null},
 				{v[1], v[0], v[4]},
@@ -298,13 +299,13 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{3, 1, 2},
-			leftTypes: randgen.ThreeIntCols,
+			leftTypes: sql.ThreeIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -313,7 +314,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[4], v[5]},
 				{v[5], v[5]},
 			},
-			expectedTypes: randgen.ThreeIntCols,
+			expectedTypes: sql.ThreeIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[0], null, null},
 				{v[1], v[0], v[4]},
@@ -337,7 +338,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[1], v[4]},
@@ -345,14 +346,14 @@ func TestMergeJoiner(t *testing.T) {
 				{v[3], v[1]},
 				{v[4], v[5]},
 			},
-			rightTypes: randgen.ThreeIntCols,
+			rightTypes: sql.ThreeIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[1], v[0], v[4]},
 				{v[3], v[4], v[1]},
 				{v[4], v[4], v[5]},
 				{v[5], v[5], v[1]},
 			},
-			expectedTypes: randgen.ThreeIntCols,
+			expectedTypes: sql.ThreeIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[0], null, null},
 				{v[1], v[0], v[4]},
@@ -377,14 +378,14 @@ func TestMergeJoiner(t *testing.T) {
 				Type: descpb.FullOuterJoin,
 			},
 			outCols:   []uint32{0, 1, 2, 3},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{null, v[4]},
 				{v[0], null},
 				{v[0], v[1]},
 				{v[2], v[4]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{null, v[4]},
 				{v[0], null},
@@ -415,17 +416,17 @@ func TestMergeJoiner(t *testing.T) {
 				Type: descpb.InnerJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.OneIntCol,
+			leftTypes: sql.OneIntCol,
 			leftInput: rowenc.EncDatumRows{
 				{null},
 				{v[0]},
 			},
-			rightTypes: randgen.OneIntCol,
+			rightTypes: sql.OneIntCol,
 			rightInput: rowenc.EncDatumRows{
 				{null},
 				{v[1]},
 			},
-			expectedTypes: randgen.TwoIntCols,
+			expectedTypes: sql.TwoIntCols,
 			expected:      rowenc.EncDatumRows{},
 		},
 		{
@@ -443,18 +444,18 @@ func TestMergeJoiner(t *testing.T) {
 				Type: descpb.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[1], v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[2], v[2]},
 				{v[2], v[2]},
 				{v[3], v[3]},
 			},
-			expectedTypes: randgen.TwoIntCols,
+			expectedTypes: sql.TwoIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[2], v[3]},
 			},
@@ -474,7 +475,7 @@ func TestMergeJoiner(t *testing.T) {
 				Type: descpb.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[2]},
@@ -482,12 +483,12 @@ func TestMergeJoiner(t *testing.T) {
 				{v[3], v[4]},
 				{v[3], v[5]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[2], v[2]},
 				{v[3], v[3]},
 			},
-			expectedTypes: randgen.TwoIntCols,
+			expectedTypes: sql.TwoIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[2], v[3]},
 				{v[3], v[4]},
@@ -508,18 +509,18 @@ func TestMergeJoiner(t *testing.T) {
 				Type: descpb.LeftSemiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{null, v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{null, v[3]},
 				{v[2], v[4]},
 				{v[2], v[5]},
 			},
-			expectedTypes: randgen.TwoIntCols,
+			expectedTypes: sql.TwoIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[2], v[3]},
 			},
@@ -540,7 +541,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -551,7 +552,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[6], v[0]},
 				{v[6], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -564,7 +565,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[5], v[5]},
 				{v[5], v[4]},
 			},
-			expectedTypes: randgen.TwoIntCols,
+			expectedTypes: sql.TwoIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[5], v[0]},
 				{v[5], v[1]},
@@ -585,7 +586,7 @@ func TestMergeJoiner(t *testing.T) {
 				Type: descpb.LeftAntiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[3]},
@@ -593,12 +594,12 @@ func TestMergeJoiner(t *testing.T) {
 				{v[3], v[4]},
 				{v[3], v[5]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[2], v[2]},
 				{v[3], v[3]},
 			},
-			expectedTypes: randgen.TwoIntCols,
+			expectedTypes: sql.TwoIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[1], v[2]},
 				{v[1], v[3]},
@@ -618,18 +619,18 @@ func TestMergeJoiner(t *testing.T) {
 				Type: descpb.LeftAntiJoin,
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{null, v[2]},
 				{v[2], v[3]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{null, v[3]},
 				{v[2], v[4]},
 				{v[2], v[5]},
 			},
-			expectedTypes: randgen.TwoIntCols,
+			expectedTypes: sql.TwoIntCols,
 			expected: rowenc.EncDatumRows{
 				{null, v[2]},
 			},
@@ -650,7 +651,7 @@ func TestMergeJoiner(t *testing.T) {
 				// Implicit AND @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
-			leftTypes: randgen.TwoIntCols,
+			leftTypes: sql.TwoIntCols,
 			leftInput: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -661,7 +662,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[6], v[0]},
 				{v[6], v[1]},
 			},
-			rightTypes: randgen.TwoIntCols,
+			rightTypes: sql.TwoIntCols,
 			rightInput: rowenc.EncDatumRows{
 				{v[0], v[4]},
 				{v[0], v[1]},
@@ -674,7 +675,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[5], v[5]},
 				{v[5], v[4]},
 			},
-			expectedTypes: randgen.TwoIntCols,
+			expectedTypes: sql.TwoIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -778,8 +779,8 @@ func TestConsumerClosed(t *testing.T) {
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
-	leftTypes := randgen.OneIntCol
-	rightTypes := randgen.OneIntCol
+	leftTypes := sql.OneIntCol
+	rightTypes := sql.OneIntCol
 
 	testCases := []struct {
 		typ       descpb.JoinType
@@ -876,8 +877,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("InputSize=%d", inputSize), func(b *testing.B) {
 			rows := randgen.MakeIntRows(inputSize, numCols)
-			leftInput := execinfra.NewRepeatableRowSource(randgen.OneIntCol, rows)
-			rightInput := execinfra.NewRepeatableRowSource(randgen.OneIntCol, rows)
+			leftInput := execinfra.NewRepeatableRowSource(sql.OneIntCol, rows)
+			rightInput := execinfra.NewRepeatableRowSource(sql.OneIntCol, rows)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -895,8 +896,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		numRepeats := inputSize
 		b.Run(fmt.Sprintf("OneSideRepeatInputSize=%d", inputSize), func(b *testing.B) {
-			leftInput := execinfra.NewRepeatableRowSource(randgen.OneIntCol, randgen.MakeIntRows(inputSize, numCols))
-			rightInput := execinfra.NewRepeatableRowSource(randgen.OneIntCol, randgen.MakeRepeatedIntRows(numRepeats, inputSize, numCols))
+			leftInput := execinfra.NewRepeatableRowSource(sql.OneIntCol, randgen.MakeIntRows(inputSize, numCols))
+			rightInput := execinfra.NewRepeatableRowSource(sql.OneIntCol, randgen.MakeRepeatedIntRows(numRepeats, inputSize, numCols))
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -915,8 +916,8 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		numRepeats := int(math.Sqrt(float64(inputSize)))
 		b.Run(fmt.Sprintf("BothSidesRepeatInputSize=%d", inputSize), func(b *testing.B) {
 			row := randgen.MakeRepeatedIntRows(numRepeats, inputSize, numCols)
-			leftInput := execinfra.NewRepeatableRowSource(randgen.OneIntCol, row)
-			rightInput := execinfra.NewRepeatableRowSource(randgen.OneIntCol, row)
+			leftInput := execinfra.NewRepeatableRowSource(sql.OneIntCol, row)
+			rightInput := execinfra.NewRepeatableRowSource(sql.OneIntCol, row)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

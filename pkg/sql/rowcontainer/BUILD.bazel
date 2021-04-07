@@ -47,6 +47,7 @@ go_test(
         "//pkg/base",
         "//pkg/kv/kvserver/diskmap",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/execinfra",
         "//pkg/sql/pgwire/pgcode",

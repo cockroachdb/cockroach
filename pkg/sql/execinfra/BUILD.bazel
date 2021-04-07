@@ -81,6 +81,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc",

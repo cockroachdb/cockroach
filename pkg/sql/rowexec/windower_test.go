@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -67,7 +68,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 	}
 
 	post := &execinfrapb.PostProcessSpec{}
-	input := execinfra.NewRepeatableRowSource(randgen.OneIntCol, randgen.MakeIntRows(1000, 1))
+	input := execinfra.NewRepeatableRowSource(sql.OneIntCol, randgen.MakeIntRows(1000, 1))
 	aggSpec := execinfrapb.AggregatorSpec_ARRAY_AGG
 	spec := execinfrapb.WindowerSpec{
 		PartitionBy: []uint32{},
@@ -89,7 +90,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 		}},
 	}
 	output := distsqlutils.NewRowBuffer(
-		randgen.OneIntCol, nil, distsqlutils.RowBufferArgs{},
+		sql.OneIntCol, nil, distsqlutils.RowBufferArgs{},
 	)
 
 	d, err := newWindower(flowCtx, 0 /* processorID */, &spec, input, post, output)
@@ -246,7 +247,7 @@ func BenchmarkWindower(b *testing.B) {
 			b.Run(runName, func(b *testing.B) {
 				post := &execinfrapb.PostProcessSpec{}
 				disposer := &rowDisposer{}
-				input := execinfra.NewRepeatableRowSource(randgen.ThreeIntCols, rowsGenerator(numRows, numCols))
+				input := execinfra.NewRepeatableRowSource(sql.ThreeIntCols, rowsGenerator(numRows, numCols))
 
 				b.SetBytes(int64(8 * numRows * numCols))
 				b.ResetTimer()

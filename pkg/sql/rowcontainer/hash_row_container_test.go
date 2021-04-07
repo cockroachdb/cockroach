@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -67,7 +68,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 	const numCols = 1
 	rows := randgen.MakeIntRows(numRows, numCols)
 	storedEqColumns := columns{0}
-	types := randgen.OneIntCol
+	types := sql.OneIntCol
 	ordering := colinfo.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}}
 
 	getRowContainer := func() *HashDiskBackedRowContainer {
@@ -216,7 +217,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				randgen.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
+				sql.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -241,7 +242,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				randgen.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
+				sql.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
@@ -291,7 +292,7 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			if cmp, err := compareRows(
-				randgen.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
+				sql.OneIntCol, row, rows[counter], &evalCtx, &rowenc.DatumAlloc{}, ordering,
 			); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {

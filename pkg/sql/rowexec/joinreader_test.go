@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -142,8 +143,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:                  []uint32{0, 1},
-			inputTypes:                  randgen.TwoIntCols,
-			outputTypes:                 randgen.ThreeIntCols,
+			inputTypes:                  sql.TwoIntCols,
+			outputTypes:                 sql.ThreeIntCols,
 			expected:                    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
 			expectedWithContinuation:    "[[0 2 2 false] [0 5 5 false] [1 0 1 false] [1 5 6 false]]",
 			outputColumnForContinuation: 6,
@@ -162,8 +163,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:                  []uint32{0, 1},
-			inputTypes:                  randgen.TwoIntCols,
-			outputTypes:                 randgen.ThreeIntCols,
+			inputTypes:                  sql.TwoIntCols,
+			outputTypes:                 sql.ThreeIntCols,
 			expected:                    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
 			expectedWithContinuation:    "[[0 2 2 false] [0 2 2 false] [0 5 5 false] [1 0 0 false] [1 5 5 false]]",
 			outputColumnForContinuation: 6,
@@ -181,8 +182,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:                  []uint32{0, 1},
-			inputTypes:                  randgen.TwoIntCols,
-			outputTypes:                 randgen.FourIntCols,
+			inputTypes:                  sql.TwoIntCols,
+			outputTypes:                 sql.FourIntCols,
 			expected:                    "[[0 2 2 2] [0 5 5 5] [1 0 0 1] [1 5 5 6]]",
 			expectedWithContinuation:    "[[0 2 2 2 false] [0 5 5 5 false] [1 0 0 1 false] [1 5 5 6 false]]",
 			outputColumnForContinuation: 6,
@@ -201,8 +202,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:                  []uint32{0, 1},
-			inputTypes:                  randgen.TwoIntCols,
-			outputTypes:                 randgen.ThreeIntCols,
+			inputTypes:                  sql.TwoIntCols,
+			outputTypes:                 sql.ThreeIntCols,
 			expected:                    "[[0 2 2] [0 5 5] [0 2 2] [1 0 0] [1 5 5]]",
 			expectedWithContinuation:    "[[0 2 2 false] [0 5 5 false] [0 2 2 false] [1 0 0 false] [1 5 5 false]]",
 			outputColumnForContinuation: 6,
@@ -220,8 +221,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:                  []uint32{0, 1},
-			inputTypes:                  randgen.TwoIntCols,
-			outputTypes:                 randgen.ThreeIntCols,
+			inputTypes:                  sql.TwoIntCols,
+			outputTypes:                 sql.ThreeIntCols,
 			onExpr:                      "@2 < @5",
 			expected:                    "[[1 0 1] [1 5 6]]",
 			expectedWithContinuation:    "[[1 0 1 false] [1 5 6 false]]",
@@ -239,8 +240,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:                  []uint32{0, 1},
 			joinType:                    descpb.LeftOuterJoin,
-			inputTypes:                  randgen.TwoIntCols,
-			outputTypes:                 randgen.ThreeIntCols,
+			inputTypes:                  sql.TwoIntCols,
+			outputTypes:                 sql.ThreeIntCols,
 			expected:                    "[[10 0 NULL] [0 2 2]]",
 			expectedWithContinuation:    "[[10 0 NULL false] [0 2 2 false]]",
 			outputColumnForContinuation: 6,
@@ -258,8 +259,8 @@ func TestJoinReader(t *testing.T) {
 				{aFn(12), bFn(12)},
 			},
 			lookupCols:  []uint32{0},
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.FourIntCols,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.FourIntCols,
 			expected: "[[0 2 0 1] [0 2 0 2] [0 2 0 3] [0 2 0 4] [0 2 0 5] [0 2 0 6] [0 2 0 7] " +
 				"[0 2 0 8] [0 2 0 9] " +
 				"[1 2 1 1] [1 2 1 2] [1 2 1 3] [1 2 1 4] [1 2 1 5] [1 2 1 6] [1 2 1 7] [1 2 1 8] " +
@@ -284,8 +285,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0},
 			joinType:    descpb.LeftOuterJoin,
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.FourIntCols,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.FourIntCols,
 			expected: "[[0 2 0 1] [0 2 0 2] [0 2 0 3] [0 2 0 4] [0 2 0 5] [0 2 0 6] [0 2 0 7] " +
 				"[0 2 0 8] [0 2 0 9] " +
 				"[20 0 NULL NULL] " +
@@ -309,8 +310,8 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(0), tree.DNull},
 			},
 			lookupCols:                  []uint32{0, 1},
-			inputTypes:                  randgen.TwoIntCols,
-			outputTypes:                 randgen.OneIntCol,
+			inputTypes:                  sql.TwoIntCols,
+			outputTypes:                 sql.OneIntCol,
 			expected:                    "[]",
 			expectedWithContinuation:    "[]",
 			outputColumnForContinuation: 6,
@@ -327,8 +328,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:                  []uint32{0, 1},
 			joinType:                    descpb.LeftOuterJoin,
-			inputTypes:                  randgen.TwoIntCols,
-			outputTypes:                 randgen.TwoIntCols,
+			inputTypes:                  sql.TwoIntCols,
+			outputTypes:                 sql.TwoIntCols,
 			expected:                    "[[0 NULL]]",
 			expectedWithContinuation:    "[[0 NULL false]]",
 			outputColumnForContinuation: 6,
@@ -345,7 +346,7 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:                  []uint32{1, 2, 0},
 			inputTypes:                  []*types.T{types.Int, types.Int, types.String},
-			outputTypes:                 randgen.OneIntCol,
+			outputTypes:                 sql.OneIntCol,
 			expected:                    "[['two']]",
 			expectedWithContinuation:    "[['two' false]]",
 			outputColumnForContinuation: 7,
@@ -368,7 +369,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:  []uint32{0},
 			joinType:    descpb.LeftSemiJoin,
 			inputTypes:  []*types.T{types.Int, types.String},
-			outputTypes: randgen.TwoIntCols,
+			outputTypes: sql.TwoIntCols,
 			expected:    "[[1 'two'] [1 'two'] [6 'two'] [7 'two'] [1 'two']]",
 		},
 		{
@@ -383,8 +384,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0, 1},
 			joinType:    descpb.LeftSemiJoin,
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.OneIntCol,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.OneIntCol,
 			expected:    "[]",
 		},
 		{
@@ -405,8 +406,8 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:  []uint32{0},
 			joinType:    descpb.LeftSemiJoin,
 			onExpr:      "@2 > 2",
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.TwoIntCols,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.TwoIntCols,
 			expected:    "[[1 3] [7 3]]",
 		},
 		{
@@ -421,8 +422,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0},
 			joinType:    descpb.LeftAntiJoin,
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.TwoIntCols,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.TwoIntCols,
 			expected:    "[[1234 1234]]",
 		},
 		{
@@ -442,8 +443,8 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:  []uint32{0},
 			joinType:    descpb.LeftAntiJoin,
 			onExpr:      "@2 > 2",
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.TwoIntCols,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.TwoIntCols,
 			expected:    "[[1 2] [6 2] [1 2]]",
 		},
 		{
@@ -458,8 +459,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0},
 			joinType:    descpb.LeftAntiJoin,
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.OneIntCol,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.OneIntCol,
 			expected:    "[]",
 		},
 		{
@@ -474,8 +475,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0, 1},
 			joinType:    descpb.LeftAntiJoin,
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.TwoIntCols,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.TwoIntCols,
 			expected:    "[[0 NULL]]",
 		},
 		{
@@ -522,7 +523,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:             []uint32{1, 2},
 			joinType:               descpb.LeftSemiJoin,
 			inputTypes:             threeIntColsAndBoolCol,
-			outputTypes:            randgen.ThreeIntCols,
+			outputTypes:            sql.ThreeIntCols,
 			secondJoinInPairedJoin: true,
 			expected:               "[[12 0 2] [26 0 7]]",
 		},
@@ -546,7 +547,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:             []uint32{1, 2},
 			joinType:               descpb.LeftAntiJoin,
 			inputTypes:             threeIntColsAndBoolCol,
-			outputTypes:            randgen.ThreeIntCols,
+			outputTypes:            sql.ThreeIntCols,
 			secondJoinInPairedJoin: true,
 			expected:               "[[23 NULL NULL] [34 12 0]]",
 		},
@@ -604,7 +605,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:             []uint32{1, 2},
 			joinType:               descpb.LeftSemiJoin,
 			inputTypes:             threeIntColsAndBoolCol,
-			outputTypes:            randgen.ThreeIntCols,
+			outputTypes:            sql.ThreeIntCols,
 			secondJoinInPairedJoin: true,
 			expected:               "[[12 0 2] [34 0 5]]",
 		},
@@ -633,7 +634,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:             []uint32{1, 2},
 			joinType:               descpb.LeftAntiJoin,
 			inputTypes:             threeIntColsAndBoolCol,
-			outputTypes:            randgen.ThreeIntCols,
+			outputTypes:            sql.ThreeIntCols,
 			secondJoinInPairedJoin: true,
 			expected:               "[[43 10 5]]",
 		},
@@ -652,8 +653,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupExpr:  "@3 IN (1, 2) AND @2 = @4",
 			joinType:    descpb.LeftOuterJoin,
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.ThreeIntCols,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.ThreeIntCols,
 			expected:    "[[0 1 0] [0 2 0] [11 NULL NULL] [2 1 2] [2 2 2] [2 1 2] [2 2 2]]",
 			expectedWithContinuation: "[[0 1 0 false] [0 2 0 true] [11 NULL NULL false] [2 1 2 false] " +
 				"[2 2 2 true] [2 1 2 false] [2 2 2 true]]",
@@ -674,8 +675,8 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupExpr:  "@4 = @2 AND @3 IN (1, 2)",
 			joinType:    descpb.LeftAntiJoin,
-			inputTypes:  randgen.TwoIntCols,
-			outputTypes: randgen.OneIntCol,
+			inputTypes:  sql.TwoIntCols,
+			outputTypes: sql.OneIntCol,
 			expected:    "[[11]]",
 		},
 		{
@@ -723,7 +724,7 @@ func TestJoinReader(t *testing.T) {
 			lookupExpr:  "@5 IN (1, 2, 5) AND @7 IN ('one', 'two', 'one-two') AND @1 = @4",
 			joinType:    descpb.LeftAntiJoin,
 			inputTypes:  []*types.T{types.Int, types.Int, types.String},
-			outputTypes: randgen.TwoIntCols,
+			outputTypes: sql.TwoIntCols,
 			expected:    "[[2 0] [NULL 1]]",
 		},
 	}
@@ -958,7 +959,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			// Disk storage is only used when the input ordering must be maintained.
 			MaintainOrdering: true,
 		},
-		distsqlutils.NewRowBuffer(randgen.OneIntCol, inputRows, distsqlutils.RowBufferArgs{}),
+		distsqlutils.NewRowBuffer(sql.OneIntCol, inputRows, distsqlutils.RowBufferArgs{}),
 		&execinfrapb.PostProcessSpec{
 			Projection:    true,
 			OutputColumns: []uint32{2},
@@ -1046,7 +1047,7 @@ func TestJoinReaderDrain(t *testing.T) {
 			&flowCtx,
 			0, /* processorID */
 			&execinfrapb.JoinReaderSpec{Table: *td.TableDesc()},
-			distsqlutils.NewRowBuffer(randgen.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{}),
+			distsqlutils.NewRowBuffer(sql.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{}),
 			&execinfrapb.PostProcessSpec{},
 			out,
 			lookupJoinReaderType,
@@ -1058,7 +1059,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	// called on the consumer.
 	t.Run("ConsumerDone", func(t *testing.T) {
 		expectedMetaErr := errors.New("dummy")
-		in := distsqlutils.NewRowBuffer(randgen.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
+		in := distsqlutils.NewRowBuffer(sql.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
 		if status := in.Push(encRow, &execinfrapb.ProducerMetadata{Err: expectedMetaErr}); status != execinfra.NeedMoreRows {
 			t.Fatalf("unexpected response: %d", status)
 		}
@@ -1076,7 +1077,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		jr.Run(ctx)
 		row, meta := out.Next()
 		if row != nil {
-			t.Fatalf("row was pushed unexpectedly: %s", row.String(randgen.OneIntCol))
+			t.Fatalf("row was pushed unexpectedly: %s", row.String(sql.OneIntCol))
 		}
 		if !errors.Is(meta.Err, expectedMetaErr) {
 			t.Fatalf("unexpected error in metadata: %v", meta.Err)
@@ -1087,7 +1088,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		for {
 			row, meta = out.Next()
 			if row != nil {
-				t.Fatalf("row was pushed unexpectedly: %s", row.String(randgen.OneIntCol))
+				t.Fatalf("row was pushed unexpectedly: %s", row.String(sql.OneIntCol))
 			}
 			if meta == nil {
 				break
@@ -1169,7 +1170,7 @@ func TestIndexJoiner(t *testing.T) {
 				{v[1], v[0]},
 				{v[1], v[5]},
 			},
-			outputTypes: randgen.ThreeIntCols,
+			outputTypes: sql.ThreeIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[2], v[2]},
 				{v[0], v[5], v[5]},
@@ -1190,7 +1191,7 @@ func TestIndexJoiner(t *testing.T) {
 				{v[1], v[0]},
 				{v[1], v[5]},
 			},
-			outputTypes: randgen.ThreeIntCols,
+			outputTypes: sql.ThreeIntCols,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[2], v[2]},
 				{v[0], v[5], v[5]},
@@ -1211,7 +1212,7 @@ func TestIndexJoiner(t *testing.T) {
 				t,
 				execinfrapb.ProcessorCoreUnion{JoinReader: &spec},
 				c.post,
-				randgen.TwoIntCols,
+				sql.TwoIntCols,
 				c.input,
 				c.outputTypes,
 				c.expected,
@@ -1373,7 +1374,7 @@ func BenchmarkJoinReader(b *testing.B) {
 								b.Fatalf("failed to find secondary index for column %s", columnDef.name)
 							}
 							indexIdx := uint32(foundIndex.Ordinal())
-							input := newRowGeneratingSource(randgen.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
+							input := newRowGeneratingSource(sql.OneIntCol, sqlutils.ToRowFn(func(rowIdx int) tree.Datum {
 								// Convert to 0-based.
 								return tree.NewDInt(tree.DInt(rowIdx - 1))
 							}), numLookupRows)

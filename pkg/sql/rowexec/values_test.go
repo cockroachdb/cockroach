@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -115,7 +116,7 @@ func BenchmarkValuesProcessor(b *testing.B) {
 		for _, rowsPerChunk := range []int{1, 4, 16} {
 			b.Run(fmt.Sprintf("rows=%d,chunkSize=%d", numRows, rowsPerChunk), func(b *testing.B) {
 				rows := randgen.MakeIntRows(numRows, numCols)
-				spec, err := execinfra.GenerateValuesSpec(randgen.TwoIntCols, rows, rowsPerChunk)
+				spec, err := execinfra.GenerateValuesSpec(sql.TwoIntCols, rows, rowsPerChunk)
 				if err != nil {
 					b.Fatal(err)
 				}

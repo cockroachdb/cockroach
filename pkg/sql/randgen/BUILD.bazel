@@ -2,7 +2,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "randgen",
-    srcs = ["testutils.go"],
+    srcs = [
+        "datum.go",
+        "encdatum.go",
+        "expr.go",
+        "mutator.go",
+        "schema.go",
+        "string.go",
+        "type.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/randgen",
     visibility = ["//visibility:public"],
     deps = [
@@ -31,5 +39,6 @@ go_library(
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
+        "@com_github_pkg_errors//:errors",
     ],
 )

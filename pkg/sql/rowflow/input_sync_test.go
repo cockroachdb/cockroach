@@ -16,10 +16,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -111,7 +111,7 @@ func TestOrderedSync(t *testing.T) {
 	for testIdx, c := range testCases {
 		var sources []execinfra.RowSource
 		for _, srcRows := range c.sources {
-			rowBuf := distsqlutils.NewRowBuffer(randgen.ThreeIntCols, srcRows, distsqlutils.RowBufferArgs{})
+			rowBuf := distsqlutils.NewRowBuffer(sql.ThreeIntCols, srcRows, distsqlutils.RowBufferArgs{})
 			sources = append(sources, rowBuf)
 		}
 		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -132,8 +132,8 @@ func TestOrderedSync(t *testing.T) {
 			}
 			retRows = append(retRows, row)
 		}
-		expStr := c.expected.String(randgen.ThreeIntCols)
-		retStr := retRows.String(randgen.ThreeIntCols)
+		expStr := c.expected.String(sql.ThreeIntCols)
+		retStr := retRows.String(sql.ThreeIntCols)
 		if expStr != retStr {
 			t.Errorf("invalid results for case %d; expected:\n   %s\ngot:\n   %s",
 				testIdx, expStr, retStr)
@@ -148,7 +148,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 
 	var sources []execinfra.RowSource
 	for i := 0; i < 4; i++ {
-		rowBuf := distsqlutils.NewRowBuffer(randgen.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
+		rowBuf := distsqlutils.NewRowBuffer(sql.OneIntCol, nil /* rows */, distsqlutils.RowBufferArgs{})
 		sources = append(sources, rowBuf)
 		rowBuf.Push(nil, expectedMeta)
 	}
@@ -219,7 +219,7 @@ func TestUnorderedSync(t *testing.T) {
 		for _, row := range retRows {
 			if int(tree.MustBeDInt(row[0].Datum)) == i {
 				if int(tree.MustBeDInt(row[1].Datum)) != j {
-					t.Errorf("Expected [%d %d], got %s", i, j, row.String(randgen.TwoIntCols))
+					t.Errorf("Expected [%d %d], got %s", i, j, row.String(sql.TwoIntCols))
 				}
 				j++
 			}

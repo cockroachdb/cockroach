@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -48,13 +49,13 @@ func TestProjectSet(t *testing.T) {
 				Exprs: []execinfrapb.Expression{
 					{Expr: "@1 + 1"},
 				},
-				GeneratedColumns: randgen.OneIntCol,
+				GeneratedColumns: sql.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
 			input: rowenc.EncDatumRows{
 				{v[2]},
 			},
-			inputTypes: randgen.OneIntCol,
+			inputTypes: sql.OneIntCol,
 			expected: rowenc.EncDatumRows{
 				{v[2], v[3]},
 			},
@@ -65,14 +66,14 @@ func TestProjectSet(t *testing.T) {
 				Exprs: []execinfrapb.Expression{
 					{Expr: "generate_series(@1, 2)"},
 				},
-				GeneratedColumns: randgen.OneIntCol,
+				GeneratedColumns: sql.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
 			input: rowenc.EncDatumRows{
 				{v[0]},
 				{v[1]},
 			},
-			inputTypes: randgen.OneIntCol,
+			inputTypes: sql.OneIntCol,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[0]},
 				{v[0], v[1]},
@@ -96,7 +97,7 @@ func TestProjectSet(t *testing.T) {
 			input: rowenc.EncDatumRows{
 				{v[0]},
 			},
-			inputTypes: randgen.OneIntCol,
+			inputTypes: sql.OneIntCol,
 			expected: rowenc.EncDatumRows{
 				{v[0], v[0], v[0], v[0], v[0]},
 				{v[0], null, null, v[1], v[1]},
@@ -146,13 +147,13 @@ func BenchmarkProjectSet(b *testing.B) {
 				Exprs: []execinfrapb.Expression{
 					{Expr: "generate_series(1, 100000)"},
 				},
-				GeneratedColumns: randgen.OneIntCol,
+				GeneratedColumns: sql.OneIntCol,
 				NumColsPerGen:    []uint32{1},
 			},
 			input: rowenc.EncDatumRows{
 				{v[0]},
 			},
-			inputTypes: randgen.OneIntCol,
+			inputTypes: sql.OneIntCol,
 		},
 	}
 

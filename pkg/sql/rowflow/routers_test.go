@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -812,9 +813,9 @@ func TestRouterDiskSpill(t *testing.T) {
 		spec.Streams = make([]execinfrapb.StreamEndpointSpec, 1)
 		// Initialize the RowChannel with the minimal buffer size so as to block
 		// writes to the channel (after the first one).
-		rowChan.InitWithBufSizeAndNumSenders(randgen.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
+		rowChan.InitWithBufSizeAndNumSenders(sql.OneIntCol, 1 /* chanBufSize */, 1 /* numSenders */)
 		rb.setupStreams(&spec, []execinfra.RowReceiver{&rowChan})
-		rb.init(ctx, &flowCtx, randgen.OneIntCol)
+		rb.init(ctx, &flowCtx, sql.OneIntCol)
 		// output is the sole router output in this test.
 		output := &rb.outputs[0]
 		if !memErrorWhenConsumingRows {
@@ -915,8 +916,8 @@ func TestRouterDiskSpill(t *testing.T) {
 					t.Fatalf(
 						"order violated on row %d, expected %v got %v",
 						i,
-						rows[i].String(randgen.OneIntCol),
-						row.String(randgen.OneIntCol),
+						rows[i].String(sql.OneIntCol),
+						row.String(sql.OneIntCol),
 					)
 				}
 			}
@@ -1000,7 +1001,7 @@ func TestRangeRouterInit(t *testing.T) {
 func BenchmarkRouter(b *testing.B) {
 	numCols := 1
 	numRows := 1 << 16
-	colTypes := randgen.MakeIntCols(numCols)
+	colTypes := sql.MakeIntCols(numCols)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -1009,7 +1010,7 @@ func BenchmarkRouter(b *testing.B) {
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
-	input := execinfra.NewRepeatableRowSource(randgen.OneIntCol, randgen.MakeIntRows(numRows, numCols))
+	input := execinfra.NewRepeatableRowSource(sql.OneIntCol, randgen.MakeIntRows(numRows, numCols))
 
 	for _, spec := range []execinfrapb.OutputRouterSpec{
 		{

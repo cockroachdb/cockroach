@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -115,7 +116,7 @@ func TestSampleAggregator(t *testing.T) {
 		outputs := make([]*distsqlutils.RowBuffer, numSamplers)
 		for i := 0; i < numSamplers; i++ {
 			rows := randgen.GenEncDatumRowsInt(rowPartitions[i])
-			in := distsqlutils.NewRowBuffer(randgen.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(sql.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
 			outputs[i] = distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
 
 			spec := &execinfrapb.SamplerSpec{SampleSize: 100, Sketches: sketchSpecs}

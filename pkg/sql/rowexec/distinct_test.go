@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -268,7 +269,7 @@ func TestDistinct(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			ds := c.spec
 
-			in := distsqlutils.NewRowBuffer(randgen.ThreeIntCols, c.input, distsqlutils.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(sql.ThreeIntCols, c.input, distsqlutils.RowBufferArgs{})
 			out := &distsqlutils.RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
@@ -306,8 +307,8 @@ func TestDistinct(t *testing.T) {
 					t.Errorf("expected error: %v, got %v", c.error, err)
 				}
 			} else {
-				if result := res.String(randgen.ThreeIntCols); result != c.expected.String(randgen.ThreeIntCols) {
-					t.Errorf("invalid results: %v, expected %v'", result, c.expected.String(randgen.ThreeIntCols))
+				if result := res.String(sql.ThreeIntCols); result != c.expected.String(sql.ThreeIntCols) {
+					t.Errorf("invalid results: %v, expected %v'", result, c.expected.String(sql.ThreeIntCols))
 				}
 			}
 		})
@@ -335,7 +336,7 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 	post := &execinfrapb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
-			input := execinfra.NewRepeatableRowSource(randgen.TwoIntCols, randgen.MakeIntRows(numRows, numCols))
+			input := execinfra.NewRepeatableRowSource(sql.TwoIntCols, randgen.MakeIntRows(numRows, numCols))
 
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()

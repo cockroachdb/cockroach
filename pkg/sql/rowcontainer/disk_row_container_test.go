@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -428,7 +429,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
 
-	d := MakeDiskRowContainer(diskMonitor, randgen.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(diskMonitor, sql.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const numCols = 1
@@ -448,8 +449,8 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 			} else if cmp != 0 {
 				return fmt.Errorf(
 					"unexpected row %v, expected %v",
-					row.String(randgen.OneIntCol),
-					otherRow.String(randgen.OneIntCol),
+					row.String(sql.OneIntCol),
+					otherRow.String(sql.OneIntCol),
 				)
 			}
 		}
@@ -555,7 +556,7 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
 
-	d := MakeDiskRowContainer(monitor, randgen.OneIntCol, nil /* ordering */, tempEngine)
+	d := MakeDiskRowContainer(monitor, sql.OneIntCol, nil /* ordering */, tempEngine)
 	defer d.Close(ctx)
 
 	const (
@@ -593,8 +594,8 @@ func TestDiskRowContainerUnsafeReset(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if row.String(randgen.OneIntCol) != firstRow.String(randgen.OneIntCol) {
-				t.Fatalf("unexpected row read %s, expected %s", row.String(randgen.OneIntCol), firstRow.String(randgen.OneIntCol))
+			if row.String(sql.OneIntCol) != firstRow.String(sql.OneIntCol) {
+				t.Fatalf("unexpected row read %s, expected %s", row.String(sql.OneIntCol), firstRow.String(sql.OneIntCol))
 			}
 		}()
 

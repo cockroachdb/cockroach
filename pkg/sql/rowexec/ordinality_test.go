@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
@@ -106,7 +107,7 @@ func TestOrdinality(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			os := c.spec
 
-			in := distsqlutils.NewRowBuffer(randgen.TwoIntCols, c.input, distsqlutils.RowBufferArgs{})
+			in := distsqlutils.NewRowBuffer(sql.TwoIntCols, c.input, distsqlutils.RowBufferArgs{})
 			out := &distsqlutils.RowBuffer{}
 
 			st := cluster.MakeTestingClusterSettings()
@@ -138,14 +139,14 @@ func TestOrdinality(t *testing.T) {
 			var typs []*types.T
 			switch len(res[0]) {
 			case 1:
-				typs = randgen.OneIntCol
+				typs = sql.OneIntCol
 			case 2:
-				typs = randgen.TwoIntCols
+				typs = sql.TwoIntCols
 			case 3:
-				typs = randgen.ThreeIntCols
+				typs = sql.ThreeIntCols
 			}
 			if result := res.String(typs); result != c.expected.String(typs) {
-				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(randgen.TwoIntCols))
+				t.Errorf("invalid results: %s, expected %s'", result, c.expected.String(sql.TwoIntCols))
 			}
 		})
 	}
@@ -168,7 +169,7 @@ func BenchmarkOrdinality(b *testing.B) {
 
 	post := &execinfrapb.PostProcessSpec{}
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		input := execinfra.NewRepeatableRowSource(randgen.TwoIntCols, randgen.MakeIntRows(numRows, numCols))
+		input := execinfra.NewRepeatableRowSource(sql.TwoIntCols, randgen.MakeIntRows(numRows, numCols))
 		b.SetBytes(int64(8 * numRows * numCols))
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			for i := 0; i < b.N; i++ {

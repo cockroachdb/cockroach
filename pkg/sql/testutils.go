@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -149,4 +150,27 @@ func (dsp *DistSQLPlanner) Exec(
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()
 	return rw.Err()
+}
+
+// The following variables are useful for testing.
+// TODO(mgartner): There's no randomness for these variables or MakeIntCols, so
+// they probably don't belong in randgen.
+var (
+	// OneIntCol is a slice of one IntType.
+	OneIntCol = []*types.T{types.Int}
+	// TwoIntCols is a slice of two IntTypes.
+	TwoIntCols = []*types.T{types.Int, types.Int}
+	// ThreeIntCols is a slice of three IntTypes.
+	ThreeIntCols = []*types.T{types.Int, types.Int, types.Int}
+	// FourIntCols is a slice of four IntTypes.
+	FourIntCols = []*types.T{types.Int, types.Int, types.Int, types.Int}
+)
+
+// MakeIntCols makes a slice of numCols IntTypes.
+func MakeIntCols(numCols int) []*types.T {
+	ret := make([]*types.T, numCols)
+	for i := 0; i < numCols; i++ {
+		ret[i] = types.Int
+	}
+	return ret
 }

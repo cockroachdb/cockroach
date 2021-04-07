@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -46,7 +47,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 
 	nRows := 10
 	nCols := 1
-	types := randgen.OneIntCol
+	types := sql.OneIntCol
 
 	input := distsqlutils.NewRowBuffer(types, randgen.MakeIntRows(nRows, nCols), distsqlutils.RowBufferArgs{})
 	mtsSpec := execinfrapb.ProcessorCoreUnion{

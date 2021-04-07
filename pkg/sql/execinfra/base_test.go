@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -60,7 +61,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			wg.Add(len(rc))
 
 			for i := range rc {
-				rc[i].InitWithNumSenders(randgen.OneIntCol, 1)
+				rc[i].InitWithNumSenders(sql.OneIntCol, 1)
 
 				go func(i int) {
 					defer wg.Done()
@@ -107,7 +108,7 @@ func BenchmarkMultiplexedRowChannel(b *testing.B) {
 				var wg sync.WaitGroup
 				wg.Add(senders + 1)
 				mrc := &RowChannel{}
-				mrc.InitWithNumSenders(randgen.OneIntCol, senders)
+				mrc.InitWithNumSenders(sql.OneIntCol, senders)
 				go func() {
 					for {
 						if r, _ := mrc.Next(); r == nil {

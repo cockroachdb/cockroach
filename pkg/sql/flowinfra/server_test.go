@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -113,7 +113,7 @@ func TestServer(t *testing.T) {
 	if len(metas) != 0 {
 		t.Errorf("unexpected metadata: %v", metas)
 	}
-	str := rows.String(randgen.TwoIntCols)
+	str := rows.String(sql.TwoIntCols)
 	expected := "[[1 10] [2 20] [3 30]]"
 	if str != expected {
 		t.Errorf("invalid results: %s, expected %s'", str, expected)

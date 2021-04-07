@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -45,7 +46,7 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	}
 
 	nRows, nCols := 1, 1
-	types := randgen.OneIntCol
+	types := sql.OneIntCol
 	input := execinfra.NewRepeatableRowSource(types, randgen.MakeIntRows(nRows, nCols))
 
 	col, err := colexec.NewBufferingColumnarizer(ctx, testAllocator, &flowCtx, 0 /* processorID */, input)
@@ -92,7 +93,7 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	}
 
 	nRows, nCols := 1, 1
-	types := randgen.OneIntCol
+	types := sql.OneIntCol
 	input := execinfra.NewRepeatableRowSource(types, randgen.MakeIntRows(nRows, nCols))
 
 	col, err := colexec.NewBufferingColumnarizer(ctx, testAllocator, &flowCtx, 0 /* processorID */, input)

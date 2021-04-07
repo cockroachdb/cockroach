@@ -16,10 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -61,7 +61,7 @@ func TestInvertedFilterer(t *testing.T) {
 					{3, 50},
 					{3, 51},
 				},
-				Types: randgen.MakeIntCols(2),
+				Types: sql.MakeIntCols(2),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
@@ -69,7 +69,7 @@ func TestInvertedFilterer(t *testing.T) {
 					{nil, 41},
 					{nil, 50},
 				},
-				Types: randgen.MakeIntCols(2),
+				Types: sql.MakeIntCols(2),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{},
@@ -86,14 +86,14 @@ func TestInvertedFilterer(t *testing.T) {
 					{12, 3, 41},
 					{14, 3, 43},
 				},
-				Types: randgen.MakeIntCols(3),
+				Types: sql.MakeIntCols(3),
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
 					{12, nil, 41},
 					{14, nil, 43},
 				},
-				Types: randgen.MakeIntCols(3),
+				Types: sql.MakeIntCols(3),
 			},
 			ProcessorCore: execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: &execinfrapb.InvertedFiltererSpec{
