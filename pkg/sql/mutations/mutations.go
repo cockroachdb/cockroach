@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -38,15 +39,15 @@ var (
 
 	// ColumnFamilyMutator modifies a CREATE TABLE statement without any FAMILY
 	// definitions to have random FAMILY definitions.
-	ColumnFamilyMutator StatementMutator = rowenc.ColumnFamilyMutator
+	ColumnFamilyMutator StatementMutator = randgen.ColumnFamilyMutator
 
 	// IndexStoringMutator modifies the STORING clause of CREATE INDEX and
 	// indexes in CREATE TABLE.
-	IndexStoringMutator MultiStatementMutation = rowenc.IndexStoringMutator
+	IndexStoringMutator MultiStatementMutation = randgen.IndexStoringMutator
 
 	// PartialIndexMutator adds random partial index predicate expressions to
 	// indexes.
-	PartialIndexMutator MultiStatementMutation = rowenc.PartialIndexMutator
+	PartialIndexMutator MultiStatementMutation = randgen.PartialIndexMutator
 
 	// PostgresMutator modifies strings such that they execute identically
 	// in both Postgres and Cockroach (however this mutator does not remove
@@ -96,7 +97,7 @@ func (msm MultiStatementMutation) Mutate(
 // changed in place) statements and a boolean indicating whether any changes
 // were made.
 func Apply(
-	rng *rand.Rand, stmts []tree.Statement, mutators ...rowenc.Mutator,
+	rng *rand.Rand, stmts []tree.Statement, mutators ...randgen.Mutator,
 ) (mutated []tree.Statement, changed bool) {
 	var mc bool
 	for _, m := range mutators {
@@ -132,7 +133,7 @@ func (sm StatementStringMutator) MutateString(
 // ApplyString executes all mutators on input. A mutator can also be a
 // StringMutator which will operate after all other mutators.
 func ApplyString(
-	rng *rand.Rand, input string, mutators ...rowenc.Mutator,
+	rng *rand.Rand, input string, mutators ...randgen.Mutator,
 ) (output string, changed bool) {
 	parsed, err := parser.Parse(input)
 	if err != nil {
@@ -144,7 +145,7 @@ func ApplyString(
 		stmts[i] = p.AST
 	}
 
-	var normalMutators []rowenc.Mutator
+	var normalMutators []randgen.Mutator
 	var stringMutators []StringMutator
 	for _, m := range mutators {
 		if sm, ok := m.(StringMutator); ok {
@@ -293,7 +294,7 @@ func randHistogram(rng *rand.Rand, colType *types.T) stats.HistogramData {
 	// Generate random values for histogram bucket upper bounds.
 	var encodedUpperBounds [][]byte
 	for i, numDatums := 0, rng.Intn(10); i < numDatums; i++ {
-		upper := rowenc.RandDatum(rng, colType, false /* nullOk */)
+		upper := randgen.RandDatum(rng, colType, false /* nullOk */)
 		if colinfo.ColumnTypeIsInvertedIndexable(colType) {
 			encs := encodeInvertedIndexHistogramUpperBounds(colType, upper)
 			encodedUpperBounds = append(encodedUpperBounds, encs...)
@@ -828,10 +829,10 @@ func postgresCreateTableMutator(
 													Cond: &tree.IsNullExpr{
 														Expr: castExpr.Expr,
 													},
-													Val: rowenc.RandDatum(rng, types.String, true /* nullOK */),
+													Val: randgen.RandDatum(rng, types.String, true /* nullOK */),
 												},
 											},
-											Else: rowenc.RandDatum(rng, types.String, true /* nullOK */),
+											Else: randgen.RandDatum(rng, types.String, true /* nullOK */),
 										}
 										changed = true
 									}

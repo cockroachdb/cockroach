@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -30,28 +31,28 @@ import (
 
 func genColumnType() gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
-		columnType := RandColumnType(genParams.Rng)
+		columnType := randgen.RandColumnType(genParams.Rng)
 		return gopter.NewGenResult(columnType, gopter.NoShrinker)
 	}
 }
 
 func genRandomArrayType() gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
-		arrType := RandArrayType(genParams.Rng)
+		arrType := randgen.RandArrayType(genParams.Rng)
 		return gopter.NewGenResult(arrType, gopter.NoShrinker)
 	}
 }
 
 func genDatum() gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
-		return gopter.NewGenResult(RandDatum(genParams.Rng, RandColumnType(genParams.Rng),
+		return gopter.NewGenResult(randgen.RandDatum(genParams.Rng, randgen.RandColumnType(genParams.Rng),
 			false), gopter.NoShrinker)
 	}
 }
 
 func genDatumWithType(columnType interface{}) gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
-		datum := RandDatum(genParams.Rng, columnType.(*types.T), false)
+		datum := randgen.RandDatum(genParams.Rng, columnType.(*types.T), false)
 		return gopter.NewGenResult(datum, gopter.NoShrinker)
 	}
 }
@@ -59,7 +60,7 @@ func genDatumWithType(columnType interface{}) gopter.Gen {
 func genArrayDatumWithType(arrTyp interface{}) gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
 		// Mark the array contents to have a 1 in 10 chance of being null.
-		datum := RandArray(genParams.Rng, arrTyp.(*types.T), 10)
+		datum := randgen.RandArray(genParams.Rng, arrTyp.(*types.T), 10)
 		return gopter.NewGenResult(datum, gopter.NoShrinker)
 	}
 }

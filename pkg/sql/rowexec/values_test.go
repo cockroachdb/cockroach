@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
@@ -33,7 +34,7 @@ func TestValuesProcessor(t *testing.T) {
 		for _, numCols := range []int{1, 3} {
 			for _, rowsPerChunk := range []int{1, 2, 5} {
 				t.Run(fmt.Sprintf("%d-%d-%d", numRows, numCols, rowsPerChunk), func(t *testing.T) {
-					inRows, colTypes := rowenc.RandEncDatumRows(rng, numRows, numCols)
+					inRows, colTypes := randgen.RandEncDatumRows(rng, numRows, numCols)
 
 					spec, err := execinfra.GenerateValuesSpec(colTypes, inRows, rowsPerChunk)
 					if err != nil {
@@ -113,8 +114,8 @@ func BenchmarkValuesProcessor(b *testing.B) {
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		for _, rowsPerChunk := range []int{1, 4, 16} {
 			b.Run(fmt.Sprintf("rows=%d,chunkSize=%d", numRows, rowsPerChunk), func(b *testing.B) {
-				rows := rowenc.MakeIntRows(numRows, numCols)
-				spec, err := execinfra.GenerateValuesSpec(rowenc.TwoIntCols, rows, rowsPerChunk)
+				rows := randgen.MakeIntRows(numRows, numCols)
+				spec, err := execinfra.GenerateValuesSpec(randgen.TwoIntCols, rows, rowsPerChunk)
 				if err != nil {
 					b.Fatal(err)
 				}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -105,11 +106,11 @@ func TestStreamEncodeDecode(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 100; test++ {
 		rowLen := rng.Intn(20)
-		types := rowenc.RandEncodableColumnTypes(rng, rowLen)
+		types := randgen.RandEncodableColumnTypes(rng, rowLen)
 		info := make([]execinfrapb.DatumInfo, rowLen)
 		for i := range info {
 			info[i].Type = types[i]
-			info[i].Encoding = rowenc.RandDatumEncoding(rng)
+			info[i].Encoding = randgen.RandDatumEncoding(rng)
 		}
 		numRows := rng.Intn(100)
 		rows := make([]rowOrMeta, numRows)
@@ -118,7 +119,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 				rows[i].row = make(rowenc.EncDatumRow, rowLen)
 				for j := range rows[i].row {
 					rows[i].row[j] = rowenc.DatumToEncDatum(info[j].Type,
-						rowenc.RandDatum(rng, info[j].Type, true))
+						randgen.RandDatum(rng, info[j].Type, true))
 				}
 			} else {
 				rows[i].meta.Err = fmt.Errorf("test error %d", i)
@@ -152,8 +153,8 @@ func BenchmarkStreamEncoder(b *testing.B) {
 	for _, numCols := range []int{1, 4, 16, 64} {
 		b.Run(fmt.Sprintf("rows=%d,cols=%d", numRows, numCols), func(b *testing.B) {
 			b.SetBytes(int64(numRows * numCols * 8))
-			cols := rowenc.MakeIntCols(numCols)
-			rows := rowenc.MakeIntRows(numRows, numCols)
+			cols := randgen.MakeIntCols(numCols)
+			rows := randgen.MakeIntRows(numRows, numCols)
 			input := execinfra.NewRepeatableRowSource(cols, rows)
 
 			b.ResetTimer()
@@ -201,9 +202,9 @@ func BenchmarkStreamDecoder(b *testing.B) {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
 			b.SetBytes(int64(outboxBufRows * numCols * 8))
 			var se StreamEncoder
-			colTypes := rowenc.MakeIntCols(numCols)
+			colTypes := randgen.MakeIntCols(numCols)
 			se.Init(colTypes)
-			inRow := rowenc.MakeIntRows(1, numCols)[0]
+			inRow := randgen.MakeIntRows(1, numCols)[0]
 			for i := 0; i < outboxBufRows; i++ {
 				if err := se.AddRow(inRow); err != nil {
 					b.Fatal(err)

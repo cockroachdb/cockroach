@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -130,7 +131,7 @@ func TestEncDatumNull(t *testing.T) {
 	// Generate random EncDatums (some of which are null), and verify that a datum
 	// created from its encoding has the same IsNull() value.
 	for cases := 0; cases < 100; cases++ {
-		a, typ := RandEncDatum(rng)
+		a, typ := randgen.RandEncDatum(rng)
 		for enc := range descpb.DatumEncoding_name {
 			if !columnTypeCompatibleWithEncoding(typ, descpb.DatumEncoding(enc)) {
 				continue
@@ -213,14 +214,14 @@ func TestEncDatumCompare(t *testing.T) {
 		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily:
 			continue
 		case types.CollatedStringFamily:
-			typ = types.MakeCollatedString(types.String, *RandCollationLocale(rng))
+			typ = types.MakeCollatedString(types.String, *randgen.RandCollationLocale(rng))
 		}
 
 		// Generate two datums d1 < d2
 		var d1, d2 tree.Datum
 		for {
-			d1 = RandDatum(rng, typ, false)
-			d2 = RandDatum(rng, typ, false)
+			d1 = randgen.RandDatum(rng, typ, false)
+			d2 = randgen.RandDatum(rng, typ, false)
 			if cmp := d1.Compare(evalCtx, d2); cmp < 0 {
 				break
 			}
@@ -272,7 +273,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		ed := make([]EncDatum, 1+rng.Intn(10))
 		typs := make([]*types.T, len(ed))
 		for i := range ed {
-			d, t := RandEncDatum(rng)
+			d, t := randgen.RandEncDatum(rng)
 			ed[i], typs[i] = d, t
 		}
 		// Encode them in a single buffer.
@@ -284,9 +285,9 @@ func TestEncDatumFromBuffer(t *testing.T) {
 				// encoding.
 				enc[i] = descpb.DatumEncoding_VALUE
 			} else {
-				enc[i] = RandDatumEncoding(rng)
+				enc[i] = randgen.RandDatumEncoding(rng)
 				for !columnTypeCompatibleWithEncoding(typs[i], enc[i]) {
-					enc[i] = RandDatumEncoding(rng)
+					enc[i] = randgen.RandDatumEncoding(rng)
 				}
 			}
 			buf, err = ed[i].Encode(typs[i], &alloc, enc[i], buf)
@@ -471,12 +472,12 @@ func TestEncDatumRowAlloc(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	for _, cols := range []int{1, 2, 4, 10, 40, 100} {
 		for _, rows := range []int{1, 2, 3, 5, 10, 20} {
-			colTypes := RandColumnTypes(rng, cols)
+			colTypes := randgen.RandColumnTypes(rng, cols)
 			in := make(EncDatumRows, rows)
 			for i := 0; i < rows; i++ {
 				in[i] = make(EncDatumRow, cols)
 				for j := 0; j < cols; j++ {
-					datum := RandDatum(rng, colTypes[j], true /* nullOk */)
+					datum := randgen.RandDatum(rng, colTypes[j], true /* nullOk */)
 					in[i][j] = DatumToEncDatum(colTypes[j], datum)
 				}
 			}
@@ -516,10 +517,10 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		len := rng.Intn(5)
 		contents := make([]*types.T, len)
 		for j := range contents {
-			contents[j] = RandEncodableType(rng)
+			contents[j] = randgen.RandEncodableType(rng)
 		}
 		colTypes[i] = types.MakeTuple(contents)
-		tests[i] = RandDatum(rng, colTypes[i], true)
+		tests[i] = randgen.RandDatum(rng, colTypes[i], true)
 	}
 
 	for i, test := range tests {
