@@ -530,6 +530,15 @@ func (node *ShowLastQueryStatistics) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW LAST QUERY STATISTICS")
 }
 
+// ShowFullTableScans represents a SHOW FULL TABLE SCANS statement.
+type ShowFullTableScans struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowFullTableScans) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW FULL TABLE SCANS")
+}
+
 // ShowSavepointStatus represents a SHOW SAVEPOINT STATUS statement.
 type ShowSavepointStatus struct {
 }
