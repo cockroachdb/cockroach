@@ -210,18 +210,7 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 			row[i].Datum = tree.DNull
 		}
 	}
-	// Transform to keyRow.
-	copy(ifr.keyRow, row[:ifr.invertedColIdx])
-	copy(ifr.keyRow[ifr.invertedColIdx:], row[ifr.invertedColIdx+1:])
 
-	// Add the primary key in the row to the row container. The first column in
-	// the inverted index is the value that was indexed, and the remaining are
-	// the primary key columns.
-	keyIndex, err := ifr.rc.AddRow(ifr.Ctx, ifr.keyRow)
-	if err != nil {
-		ifr.MoveToDraining(err)
-		return ifrStateUnknown, ifr.DrainHelper()
-	}
 	// Add to the evaluator.
 	//
 	// NB: Inverted columns are custom encoded in a manner that does not
@@ -247,13 +236,26 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		}
 		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DBytes))
 	}
-	if _, err = ifr.invertedEval.prepareAddIndexRow(enc, nil /* encFull */); err != nil {
+	if shouldAdd, err := ifr.invertedEval.prepareAddIndexRow(enc, nil /* encFull */); err != nil {
 		ifr.MoveToDraining(err)
 		return ifrStateUnknown, ifr.DrainHelper()
-	}
-	if err = ifr.invertedEval.addIndexRow(keyIndex); err != nil {
-		ifr.MoveToDraining(err)
-		return ifrStateUnknown, ifr.DrainHelper()
+	} else if shouldAdd {
+		// Transform to keyRow.
+		copy(ifr.keyRow, row[:ifr.invertedColIdx])
+		copy(ifr.keyRow[ifr.invertedColIdx:], row[ifr.invertedColIdx+1:])
+
+		// Add the primary key in the row to the row container. The first column
+		// in the inverted index is the value that was indexed, and the
+		// remaining are the primary key columns.
+		keyIndex, err := ifr.rc.AddRow(ifr.Ctx, ifr.keyRow)
+		if err != nil {
+			ifr.MoveToDraining(err)
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
+		if err = ifr.invertedEval.addIndexRow(keyIndex); err != nil {
+			ifr.MoveToDraining(err)
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
 	}
 	return ifrReadingInput, nil
 }
