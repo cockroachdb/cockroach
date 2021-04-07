@@ -54,6 +54,8 @@ const (
 	Roles
 	// Schedules represents the SHOW SCHEDULE command.
 	Schedules
+	// FullTableScans represents the SHOW FULL TABLE SCANS command.
+	FullTableScans
 )
 
 var showTelemetryNameMap = map[ShowTelemetryType]string{
@@ -73,6 +75,7 @@ var showTelemetryNameMap = map[ShowTelemetryType]string{
 	Jobs:                    "jobs",
 	Roles:                   "roles",
 	Schedules:               "schedules",
+	FullTableScans:          "full_table_scans",
 }
 
 func (s ShowTelemetryType) String() string {
