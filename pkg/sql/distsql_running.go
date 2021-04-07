@@ -459,9 +459,9 @@ type DistSQLReceiver struct {
 	// outputTypes are the types of the result columns produced by the plan.
 	outputTypes []*types.T
 
-	// noColsRequired indicates that the caller is only interested in the
-	// existence of a single row. Used by subqueries in EXISTS mode.
-	noColsRequired bool
+	// existsMode indicates that the caller is only interested in the existence
+	// of a single row. Used by subqueries in EXISTS mode.
+	existsMode bool
 
 	// discardRows is set when we want to discard rows (for testing/benchmarks).
 	// See EXECUTE .. DISCARD ROWS.
@@ -705,6 +705,7 @@ func (r *DistSQLReceiver) Push(
 	}
 	if r.resultWriter.Err() != nil {
 		// TODO(andrei): We should drain here if we weren't canceled.
+		log.VEventf(r.ctx, 1, "resultWriter encountered error (transitioning to shutting down): %v", r.resultWriter.Err())
 		return execinfra.ConsumerClosed
 	}
 	if r.status != execinfra.NeedMoreRows {
@@ -727,8 +728,9 @@ func (r *DistSQLReceiver) Push(
 	// If no columns are needed by the output, the consumer is only looking for
 	// whether a single row is pushed or not, so the contents do not matter, and
 	// planNodeToRowSource is not set up to handle decoding the row.
-	if r.noColsRequired {
+	if r.existsMode {
 		r.row = []tree.Datum{}
+		log.VEvent(r.ctx, 1, `a row is pushed in "exists" mode, so transition to shutting down`)
 		r.status = execinfra.ConsumerClosed
 	} else {
 		if r.row == nil {
@@ -738,6 +740,7 @@ func (r *DistSQLReceiver) Push(
 			err := encDatum.EnsureDecoded(r.outputTypes[i], &r.alloc)
 			if err != nil {
 				r.resultWriter.SetError(err)
+				log.VEventf(r.ctx, 1, "encountered error while decoding (transitioning to shutting down): %v", err)
 				r.status = execinfra.ConsumerClosed
 				return r.status
 			}
@@ -772,6 +775,7 @@ func (r *DistSQLReceiver) Push(
 		// TODO(andrei): We should drain here. Metadata from this query would be
 		// useful, particularly as it was likely a large query (since AddRow()
 		// above failed, presumably with an out-of-memory error).
+		log.VEventf(r.ctx, 1, "encountered error in AddRow (transitioning to shutting down): %v", commErr)
 		r.status = execinfra.ConsumerClosed
 	}
 	return r.status
@@ -894,7 +898,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	var typ colinfo.ColTypeInfo
 	var rows *rowcontainer.RowContainer
 	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
-		subqueryRecv.noColsRequired = true
+		subqueryRecv.existsMode = true
 		typ = colinfo.ColTypeInfoFromColTypes([]*types.T{})
 	} else {
 		typ = colinfo.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
