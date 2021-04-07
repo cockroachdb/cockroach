@@ -79,7 +79,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		types,
 		nil, /* output */
 		nil, /* getStats */
-		[]execinfrapb.MetadataSource{col},
+		[]colexecop.MetadataSource{col},
 		nil, /* toClose */
 		nil, /* cancelFlow */
 	)

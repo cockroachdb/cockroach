@@ -109,7 +109,7 @@ func (s *ParallelUnorderedSynchronizer) Child(nth int, verbose bool) execinfra.O
 
 // SynchronizerInput is a wrapper over a colexecop.Operator that a
 // synchronizer goroutine will be calling Next on. An accompanying
-// []execinfrapb.MetadataSource may also be specified, in which case
+// colexecop.MetadataSources may also be specified, in which case
 // DrainMeta will be called from the same goroutine.
 type SynchronizerInput struct {
 	// Op is the input Operator.
@@ -123,7 +123,7 @@ type SynchronizerInput struct {
 	StatsCollectors []VectorizedStatsCollector
 	// MetadataSources are metadata sources in the input tree that should be
 	// drained in the same goroutine as Op.
-	MetadataSources execinfrapb.MetadataSources
+	MetadataSources colexecop.MetadataSources
 	// ToClose are Closers in the input tree that should be closed in the same
 	// goroutine as Op.
 	ToClose colexecop.Closers
@@ -358,7 +358,7 @@ func (s *ParallelUnorderedSynchronizer) notifyInputToReadNextBatch(inputIdx int)
 	}
 }
 
-// DrainMeta is part of the MetadataSource interface.
+// DrainMeta is part of the colexecop.MetadataSource interface.
 func (s *ParallelUnorderedSynchronizer) DrainMeta(
 	ctx context.Context,
 ) []execinfrapb.ProducerMetadata {

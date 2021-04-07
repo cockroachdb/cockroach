@@ -146,7 +146,6 @@ type joinReader struct {
 
 var _ execinfra.Processor = &joinReader{}
 var _ execinfra.RowSource = &joinReader{}
-var _ execinfrapb.MetadataSource = &joinReader{}
 var _ execinfra.OpNode = &joinReader{}
 
 const joinReaderProcName = "join reader"
@@ -761,11 +760,6 @@ func (jr *joinReader) generateMeta(ctx context.Context) []execinfrapb.ProducerMe
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (jr *joinReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return jr.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

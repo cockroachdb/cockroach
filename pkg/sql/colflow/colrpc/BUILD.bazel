@@ -45,6 +45,7 @@ go_test(
         "//pkg/col/colserde",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colexecop",

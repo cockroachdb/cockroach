@@ -77,7 +77,7 @@ func (s *SerialUnorderedSynchronizer) Next(ctx context.Context) coldata.Batch {
 	}
 }
 
-// DrainMeta is part of the MetadataSource interface.
+// DrainMeta is part of the colexecop.MetadataSource interface.
 func (s *SerialUnorderedSynchronizer) DrainMeta(
 	ctx context.Context,
 ) []execinfrapb.ProducerMetadata {
