@@ -842,8 +842,8 @@ func (s *Smither) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
 		ref := upRefs[n]
 		upRefs = append(upRefs[:n], upRefs[n+1:]...)
 		col := cols[ref.item.ColumnName]
-		// Ignore computed columns.
-		if col == nil || col.Computed.Computed {
+		// Ignore computed and hidden columns.
+		if col == nil || col.Computed.Computed || col.Hidden {
 			continue
 		}
 		var expr tree.TypedExpr
@@ -960,7 +960,8 @@ func (s *Smither) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 		for _, c := range tableRef.Columns {
 			// We *must* write a column if it's writable and non-nullable.
 			// We *can* write a column if it's writable and nullable.
-			if c.Computed.Computed {
+			// We *cannot* write a column if it's computed or hidden.
+			if c.Computed.Computed || c.Hidden {
 				continue
 			}
 			if unnamed || c.Nullable.Nullability == tree.NotNull || s.coin() {
