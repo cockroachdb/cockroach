@@ -26,6 +26,7 @@ go_test(
     deps = [
         "//pkg/roachpb",
         "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
