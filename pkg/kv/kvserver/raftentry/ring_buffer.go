@@ -62,9 +62,17 @@ func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
 
 // truncateFrom clears all entries from the ringBuf with index equal to or
 // greater than lo. The method returns the aggregate size and count of entries
-// removed.
+// removed. Note that lo itself may or may not be in the cache.
 func (b *ringBuf) truncateFrom(lo uint64) (removedBytes, removedEntries int32) {
 	it, ok := iterateFrom(b, lo)
+	if !ok {
+		if first(b).index(b) > lo {
+			// If `lo` precedes the indexes in the buffer
+			// (say the buf is idx=[100, 101, 102] and `lo` is 99),
+			// we need to truncate everything.
+			it, ok = iterateFrom(b, first(b).index(b))
+		}
+	}
 	for ok {
 		removedBytes += int32(it.entry(b).Size())
 		removedEntries++
