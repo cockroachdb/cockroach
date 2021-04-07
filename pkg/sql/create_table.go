@@ -2576,6 +2576,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 			if c.ComputeExpr != nil {
 				if opts.Has(tree.LikeTableOptGenerated) {
 					def.Computed.Computed = true
+					def.Computed.Virtual = c.Virtual
 					def.Computed.Expr, err = parser.ParseExpr(*c.ComputeExpr)
 					if err != nil {
 						return nil, err
