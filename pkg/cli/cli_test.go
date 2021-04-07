@@ -1018,7 +1018,7 @@ func TestRenderHTML(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
 			err := render(&tc.reporter, &buf,
-				cols, newRowSliceIter(rows, align),
+				cols, NewRowSliceIter(rows, align),
 				nil /* completedHook */, nil /* noRowsHook */)
 			if err != nil {
 				t.Fatal(err)

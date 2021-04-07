@@ -5,8 +5,8 @@ go_library(
     srcs = [
         "cliccl.go",
         "debug.go",
+        "debug_backup.go",
         "demo.go",
-        "load.go",
         "mtproxy.go",
         "start.go",
     ],
@@ -65,7 +65,7 @@ go_test(
     name = "cliccl_test",
     size = "small",
     srcs = [
-        "load_test.go",
+        "debug_backup_test.go",
         "main_test.go",
     ],
     embed = [":cliccl"],
