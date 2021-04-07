@@ -902,6 +902,12 @@ The size can be given in various ways:
   --size=.2              -> 20% of available space</PRE>`,
 	}
 
+	Verbose = FlagInfo{
+		Name: "verbose",
+		Description: `
+Verbose output.`,
+	}
+
 	TempDir = FlagInfo{
 		Name: "temp-dir",
 		Description: `
