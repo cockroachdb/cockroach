@@ -21,6 +21,195 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTableEventIsPrimaryIndexChange(t *testing.T) {
+	ts := func(seconds int) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
+	}
+	var (
+		mkTableDesc     = schematestutils.MakeTableDesc
+		addColBackfill  = schematestutils.AddNewColumnBackfillMutation
+		dropColBackfill = schematestutils.AddColumnDropBackfillMutation
+		addIdx          = schematestutils.AddNewIndexMutation
+		pkSwap          = schematestutils.AddPrimaryKeySwapMutation
+		dropIdx         = schematestutils.AddDropIndexMutation
+	)
+	for _, c := range []struct {
+		name string
+		e    TableEvent
+		exp  bool
+	}{
+		{
+			name: "primary index change",
+			e: TableEvent{
+				Before: pkSwap(addIdx(mkTableDesc(42, 1, ts(2), 2, 1))),
+				After:  dropIdx(mkTableDesc(42, 2, ts(3), 2, 2)),
+			},
+			exp: true,
+		},
+		{
+			name: "primary index change with column addition",
+			e: TableEvent{
+				Before: pkSwap(addIdx(addColBackfill(
+					mkTableDesc(42, 1, ts(2), 1, 1),
+				))),
+				After: dropIdx(mkTableDesc(42, 2, ts(3), 2, 2)),
+			},
+			exp: true,
+		},
+		{
+			name: "drop column",
+			e: TableEvent{
+				Before: mkTableDesc(42, 1, ts(2), 2, 1),
+				After:  dropColBackfill(mkTableDesc(42, 2, ts(3), 1, 1)),
+			},
+			exp: false,
+		},
+		{
+			name: "add non-NULL column",
+			e: TableEvent{
+				Before: addColBackfill(mkTableDesc(42, 3, ts(2), 1, 1)),
+				After:  mkTableDesc(42, 4, ts(4), 2, 1),
+			},
+			exp: false,
+		},
+		{
+			name: "add NULL-able computed column",
+			e: TableEvent{
+				Before: func() catalog.TableDescriptor {
+					td := addColBackfill(mkTableDesc(42, 4, ts(4), 1, 1))
+					col := td.TableDesc().Mutations[0].GetColumn()
+					col.Nullable = true
+					col.ComputeExpr = proto.String("1")
+					return tabledesc.NewBuilder(td.TableDesc()).BuildImmutableTable()
+				}(),
+				After: mkTableDesc(42, 4, ts(4), 2, 1),
+			},
+			exp: false,
+		},
+		{
+			name: "unknown table event",
+			e: TableEvent{
+				Before: mkTableDesc(42, 1, ts(2), 2, 1),
+				After:  mkTableDesc(42, 1, ts(2), 2, 1),
+			},
+			exp: false,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equalf(t, c.exp, IsPrimaryIndexChange(c.e), "event %v", c.e)
+		})
+	}
+}
+
+func TestTableEventIsOnlyPrimaryIndexChange(t *testing.T) {
+	ts := func(seconds int) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
+	}
+	var (
+		mkTableDesc     = schematestutils.MakeTableDesc
+		addColBackfill  = schematestutils.AddNewColumnBackfillMutation
+		dropColBackfill = schematestutils.AddColumnDropBackfillMutation
+		addIdx          = schematestutils.AddNewIndexMutation
+		pkSwap          = schematestutils.AddPrimaryKeySwapMutation
+		dropIdx         = schematestutils.AddDropIndexMutation
+	)
+	for _, c := range []struct {
+		name string
+		e    TableEvent
+		exp  bool
+	}{
+		{
+			name: "primary index change",
+			e: TableEvent{
+				Before: pkSwap(addIdx(mkTableDesc(42, 1, ts(2), 2, 1))),
+				After:  dropIdx(mkTableDesc(42, 2, ts(3), 2, 2)),
+			},
+			exp: true,
+		},
+		{
+			name: "primary index change with column addition",
+			e: TableEvent{
+				Before: pkSwap(addIdx(addColBackfill(
+					mkTableDesc(42, 1, ts(2), 1, 1),
+				))),
+				After: dropIdx(mkTableDesc(42, 2, ts(3), 2, 2)),
+			},
+			exp: false,
+		},
+		{
+			name: "drop column",
+			e: TableEvent{
+				Before: mkTableDesc(42, 1, ts(2), 2, 1),
+				After:  dropColBackfill(mkTableDesc(42, 2, ts(3), 1, 1)),
+			},
+			exp: false,
+		},
+		{
+			name: "add non-NULL column",
+			e: TableEvent{
+				Before: addColBackfill(mkTableDesc(42, 3, ts(2), 1, 1)),
+				After:  mkTableDesc(42, 4, ts(4), 2, 1),
+			},
+			exp: false,
+		},
+		{
+			name: "add NULL-able computed column",
+			e: TableEvent{
+				Before: func() catalog.TableDescriptor {
+					td := addColBackfill(mkTableDesc(42, 4, ts(4), 1, 1))
+					col := td.TableDesc().Mutations[0].GetColumn()
+					col.Nullable = true
+					col.ComputeExpr = proto.String("1")
+					return tabledesc.NewBuilder(td.TableDesc()).BuildImmutableTable()
+				}(),
+				After: mkTableDesc(42, 4, ts(4), 2, 1),
+			},
+			exp: false,
+		},
+		{
+			name: "unknown table event",
+			e: TableEvent{
+				Before: mkTableDesc(42, 1, ts(2), 2, 1),
+				After:  mkTableDesc(42, 1, ts(2), 2, 1),
+			},
+			exp: false,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equalf(t, c.exp, IsOnlyPrimaryIndexChange(c.e), "event %v", c.e)
+		})
+	}
+}
+
+func TestTableEventFilterErrorsWithIncompletePolicy(t *testing.T) {
+	ts := func(seconds int) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
+	}
+	mkTableDesc := schematestutils.MakeTableDesc
+	dropColBackfill := schematestutils.AddColumnDropBackfillMutation
+
+	incompleteFilter := tableEventFilter{
+		// tableEventTypeDropColumn:            false,
+		tableEventTypeAddColumnWithBackfill: false,
+		tableEventTypeAddColumnNoBackfill:   true,
+		// tableEventTypeUnknown:               true,
+		tableEventPrimaryKeyChange: false,
+	}
+	dropColEvent := TableEvent{
+		Before: mkTableDesc(42, 1, ts(2), 2, 1),
+		After:  dropColBackfill(mkTableDesc(42, 2, ts(3), 1, 1)),
+	}
+	_, err := incompleteFilter.shouldFilter(context.Background(), dropColEvent)
+	require.Error(t, err)
+
+	unknownEvent := TableEvent{
+		Before: mkTableDesc(42, 1, ts(2), 2, 1),
+		After:  mkTableDesc(42, 1, ts(2), 2, 1),
+	}
+	_, err = incompleteFilter.shouldFilter(context.Background(), unknownEvent)
+	require.Error(t, err)
+}
+
 func TestTableEventFilter(t *testing.T) {
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
@@ -38,8 +227,8 @@ func TestTableEventFilter(t *testing.T) {
 			name: "don't filter drop column",
 			p:    defaultTableEventFilter,
 			e: TableEvent{
-				Before: mkTableDesc(42, 1, ts(2), 2),
-				After:  dropColBackfill(mkTableDesc(42, 2, ts(3), 1)),
+				Before: mkTableDesc(42, 1, ts(2), 2, 1),
+				After:  dropColBackfill(mkTableDesc(42, 2, ts(3), 1, 1)),
 			},
 			exp: false,
 		},
@@ -47,8 +236,8 @@ func TestTableEventFilter(t *testing.T) {
 			name: "filter first step of add non-NULL column",
 			p:    defaultTableEventFilter,
 			e: TableEvent{
-				Before: mkTableDesc(42, 1, ts(2), 1),
-				After:  addColBackfill(mkTableDesc(42, 2, ts(4), 1)),
+				Before: mkTableDesc(42, 1, ts(2), 1, 1),
+				After:  addColBackfill(mkTableDesc(42, 2, ts(4), 1, 1)),
 			},
 			exp: true,
 		},
@@ -56,8 +245,8 @@ func TestTableEventFilter(t *testing.T) {
 			name: "filter rollback of add column",
 			p:    defaultTableEventFilter,
 			e: TableEvent{
-				Before: addColBackfill(mkTableDesc(42, 3, ts(2), 1)),
-				After:  mkTableDesc(42, 4, ts(4), 1),
+				Before: addColBackfill(mkTableDesc(42, 3, ts(2), 1, 1)),
+				After:  mkTableDesc(42, 4, ts(4), 1, 1),
 			},
 			exp: true,
 		},
@@ -65,8 +254,8 @@ func TestTableEventFilter(t *testing.T) {
 			name: "don't filter end of add non-NULL column",
 			p:    defaultTableEventFilter,
 			e: TableEvent{
-				Before: addColBackfill(mkTableDesc(42, 3, ts(2), 1)),
-				After:  mkTableDesc(42, 4, ts(4), 2),
+				Before: addColBackfill(mkTableDesc(42, 3, ts(2), 1, 1)),
+				After:  mkTableDesc(42, 4, ts(4), 2, 1),
 			},
 			exp: false,
 		},
@@ -75,13 +264,13 @@ func TestTableEventFilter(t *testing.T) {
 			p:    defaultTableEventFilter,
 			e: TableEvent{
 				Before: func() catalog.TableDescriptor {
-					td := addColBackfill(mkTableDesc(42, 4, ts(4), 1))
+					td := addColBackfill(mkTableDesc(42, 4, ts(4), 1, 1))
 					col := td.TableDesc().Mutations[0].GetColumn()
 					col.Nullable = true
 					col.ComputeExpr = proto.String("1")
 					return tabledesc.NewBuilder(td.TableDesc()).BuildImmutableTable()
 				}(),
-				After: mkTableDesc(42, 4, ts(4), 2),
+				After: mkTableDesc(42, 4, ts(4), 2, 1),
 			},
 			exp: false,
 		},
@@ -89,8 +278,17 @@ func TestTableEventFilter(t *testing.T) {
 			name: "filter end of add NULL column",
 			p:    defaultTableEventFilter,
 			e: TableEvent{
-				Before: mkTableDesc(42, 3, ts(2), 1),
-				After:  mkTableDesc(42, 4, ts(4), 2),
+				Before: mkTableDesc(42, 3, ts(2), 1, 1),
+				After:  mkTableDesc(42, 4, ts(4), 2, 1),
+			},
+			exp: true,
+		},
+		{
+			name: "filter unknown table event",
+			p:    defaultTableEventFilter,
+			e: TableEvent{
+				Before: mkTableDesc(42, 1, ts(2), 2, 1),
+				After:  mkTableDesc(42, 1, ts(2), 2, 1),
 			},
 			exp: true,
 		},
@@ -98,10 +296,19 @@ func TestTableEventFilter(t *testing.T) {
 			name: "columnChange - don't filter end of add NULL column",
 			p:    columnChangeTableEventFilter,
 			e: TableEvent{
-				Before: mkTableDesc(42, 3, ts(2), 1),
-				After:  mkTableDesc(42, 4, ts(4), 2),
+				Before: mkTableDesc(42, 3, ts(2), 1, 1),
+				After:  mkTableDesc(42, 4, ts(4), 2, 1),
 			},
 			exp: false,
+		},
+		{
+			name: "columnChange - filter unknown table event",
+			p:    columnChangeTableEventFilter,
+			e: TableEvent{
+				Before: mkTableDesc(42, 1, ts(2), 2, 1),
+				After:  mkTableDesc(42, 1, ts(2), 2, 1),
+			},
+			exp: true,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
