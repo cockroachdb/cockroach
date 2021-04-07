@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Column is an interface that represents a raw array of a Go native type.
@@ -162,6 +163,9 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 	case types.BoolFamily:
 		return make(Bools, length)
 	case types.BytesFamily:
+		if t.Family() == types.UuidFamily {
+			return NewBytesWithAvgLength(length, uuid.Size)
+		}
 		return NewBytes(length)
 	case types.IntFamily:
 		switch t.Width() {
