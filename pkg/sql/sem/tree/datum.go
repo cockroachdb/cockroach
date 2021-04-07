@@ -3119,6 +3119,7 @@ func MustBeDJSON(e Expr) DJSON {
 
 // AsJSON converts a datum into our standard json representation.
 func AsJSON(d Datum, loc *time.Location) (json.JSON, error) {
+	d = UnwrapDatum(nil /* evalCtx */, d)
 	switch t := d.(type) {
 	case *DBool:
 		return json.FromBool(bool(*t)), nil
