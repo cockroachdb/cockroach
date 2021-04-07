@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // Limiter is used to rate-limit KV requests for a given tenant.
@@ -68,7 +67,7 @@ type Limiter interface {
 type limiter struct {
 	parent   *LimiterFactory
 	tenantID roachpb.TenantID
-	qp       *quotapool.QuotaPool
+	qp       *quotapool.AbstractPool
 	metrics  tenantMetrics
 }
 
@@ -126,16 +125,32 @@ func (rl *limiter) Wait(ctx context.Context, isWrite bool, writeBytes int64) err
 }
 
 func (rl *limiter) RecordRead(ctx context.Context, readBytes int64) {
-	rb := newReadBytesResource(readBytes)
-	defer putReadBytesResource(rb)
 	rl.metrics.readBytesAdmitted.Inc(readBytes)
-	rl.qp.Add(rb)
+	rl.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
+		rb := res.(*tokenBuckets)
+		rb.readBytes.tokens -= float64(readBytes)
+		// Do not notify the head of the queue. In the best case we did not disturb
+		// the time at which it can be fulfilled and in the worst case, we made it
+		// further in the future.
+		return false
+	})
 }
 
 // updateLimits is used by the factory to inform the limiter of a new
 // configuration.
-func (rl *limiter) updateLimits(limits LimitConfigs) {
-	rl.qp.Add(limits)
+func (rl *limiter) updateLimits(l LimitConfigs) {
+	rl.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
+		rb := res.(*tokenBuckets)
+		// Account for the accumulation since lastUpdate and now under the old
+		// configuration.
+		rb.update()
+
+		rb.readRequests.setConf(l.ReadRequests)
+		rb.writeRequests.setConf(l.WriteRequests)
+		rb.readBytes.setConf(l.ReadBytes)
+		rb.writeBytes.setConf(l.WriteBytes)
+		return true
+	})
 }
 
 // tokenBuckets is the implementation of Resource which remains in the quotapool
@@ -191,29 +206,6 @@ func (rb *tokenBuckets) subtract(req *waitRequest) {
 	rb.writeRequests.tokens -= float64(req.writeRequests)
 	rb.readBytes.tokens -= float64(req.readBytes)
 	rb.writeBytes.tokens -= float64(req.writeBytes)
-}
-
-func (rb *tokenBuckets) Merge(val interface{}) (shouldNotify bool) {
-	switch toAdd := val.(type) {
-	case LimitConfigs:
-		// Account for the accumulation since lastUpdate and now under the old
-		// configuration.
-		rb.update()
-
-		rb.readRequests.setConf(toAdd.ReadRequests)
-		rb.writeRequests.setConf(toAdd.WriteRequests)
-		rb.readBytes.setConf(toAdd.ReadBytes)
-		rb.writeBytes.setConf(toAdd.WriteBytes)
-		return true
-	case *readBytesResource:
-		rb.readBytes.tokens -= float64(*toAdd)
-		// Do not notify the head of the queue. In the best case we did not disturb
-		// the time at which it can be fulfilled and in the worst case, we made it
-		// further in the future.
-		return false
-	default:
-		panic(errors.AssertionFailedf("merge not implemented for %T", val))
-	}
 }
 
 // tokenBucket represents a token bucket for a given resource and its associated
@@ -311,23 +303,6 @@ func newWaitRequest(isWrite bool, writeBytes int64) *waitRequest {
 func putWaitRequest(r *waitRequest) {
 	*r = waitRequest{}
 	waitRequestSyncPool.Put(r)
-}
-
-type readBytesResource int64
-
-var readBytesResourceSyncPool = sync.Pool{
-	New: func() interface{} { return new(readBytesResource) },
-}
-
-func newReadBytesResource(readBytes int64) *readBytesResource {
-	rb := readBytesResourceSyncPool.Get().(*readBytesResource)
-	*rb = readBytesResource(readBytes)
-	return rb
-}
-
-func putReadBytesResource(rb *readBytesResource) {
-	*rb = 0
-	readBytesResourceSyncPool.Put(rb)
 }
 
 func (req *waitRequest) Acquire(

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// Option is used to configure a QuotaPool.
+// Option is used to configure a quotapool.
 type Option interface {
 	apply(*config)
 }
@@ -77,7 +77,7 @@ func WithTimeSource(ts timeutil.TimeSource) Option {
 }
 
 // WithCloser allows the client to provide a channel which will lead to the
-// QuotaPool being closed.
+// AbstractPool being closed.
 func WithCloser(closer <-chan struct{}) Option {
 	return optionFunc(func(cfg *config) {
 		cfg.closer = closer

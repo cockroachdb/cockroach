@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 // Limit defines a rate in terms of quota per second.
@@ -26,7 +25,7 @@ type Limit float64
 // It has the added feature that quota acquired from the pool can be returned
 // in the case that they end up not getting used.
 type RateLimiter struct {
-	qp *QuotaPool
+	qp *AbstractPool
 }
 
 // NewRateLimiter defines a new RateLimiter. The limiter is implemented as a
@@ -89,8 +88,15 @@ func (rl *RateLimiter) AdmitN(n int64) bool {
 // decreased by 10, the current quota will decrease accordingly, potentially
 // putting the limiter into debt.
 func (rl *RateLimiter) UpdateLimit(rate Limit, burst int64) {
-	cfg := limitConfig{rate: rate, burst: burst}
-	rl.qp.Add(&cfg)
+	rl.qp.Update(func(res Resource) (shouldNotify bool) {
+		r := res.(*rateBucket)
+		shouldNotify = r.burst < burst || r.rate < rate
+		burstDelta := burst - r.burst
+		r.limitConfig = limitConfig{rate: rate, burst: burst}
+		r.cur += float64(burstDelta)
+		r.update(r.p.qp.TimeSource().Now())
+		return shouldNotify
+	})
 }
 
 // rateBucket is the implementation of Resource which remains in the quotapool
@@ -107,29 +113,6 @@ type limitConfig struct {
 	burst int64
 }
 
-var _ Resource = (*rateBucket)(nil)
-
-func (r *rateBucket) Merge(v interface{}) (shouldNotify bool) {
-	switch v := v.(type) {
-	case *rateAlloc:
-		r.cur += float64(v.alloc)
-		v.rl.putRateAlloc(v)
-		if r.cur > float64(r.burst) {
-			r.cur = float64(r.burst)
-		}
-		return true
-	case *limitConfig:
-		shouldNotify = r.burst < v.burst || r.rate < v.rate
-		burstDelta := v.burst - r.burst
-		r.limitConfig = *v
-		r.cur += float64(burstDelta)
-		r.update(r.p.qp.TimeSource().Now())
-		return shouldNotify
-	default:
-		panic(errors.Errorf("unexpected merge value type %T", v))
-	}
-}
-
 // RateAlloc is an allocated quantity of quota which can be released back into
 // the token-bucket RateLimiter.
 type RateAlloc struct {
@@ -140,7 +123,15 @@ type RateAlloc struct {
 // Return returns the RateAlloc to the RateLimiter. It is not safe to call any
 // methods on the RateAlloc after this call.
 func (ra *RateAlloc) Return() {
-	ra.rl.qp.Add((*rateAlloc)(ra))
+	ra.rl.qp.Update(func(res Resource) (shouldNotify bool) {
+		r := res.(*rateBucket)
+		r.cur += float64(ra.alloc)
+		if r.cur > float64(r.burst) {
+			r.cur = float64(r.burst)
+		}
+		return true
+	})
+	ra.rl.putRateAlloc((*rateAlloc)(ra))
 }
 
 // Consume destroys the RateAlloc. It is not safe to call any methods on the
