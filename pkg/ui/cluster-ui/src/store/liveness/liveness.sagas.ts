@@ -3,6 +3,7 @@ import { getLiveness } from "src/api/livenessApi";
 import { actions } from "./liveness.reducer";
 
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
+import { rootActions } from "../reducers";
 
 export function* refreshLivenessSaga() {
   yield put(actions.request());
@@ -29,7 +30,7 @@ export function* livenessSaga(
     throttleWithReset(
       cacheInvalidationPeriod,
       actions.refresh,
-      [actions.invalidated, actions.failed],
+      [actions.invalidated, actions.failed, rootActions.resetState],
       refreshLivenessSaga,
     ),
     takeLatest(actions.request, requestLivenessSaga),
