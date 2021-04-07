@@ -89,6 +89,7 @@ go_library(
         "//pkg/testutils",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/log",
