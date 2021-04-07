@@ -29,7 +29,7 @@ import (
 // allows the client to provide a function which will be used to determine
 // whether a quantity of quota is sufficient when it becomes available.
 type IntPool struct {
-	qp *QuotaPool
+	qp *AbstractPool
 
 	// capacity maintains how much total quota there is (not necessarily available).
 	// Accessed atomically!
@@ -53,7 +53,11 @@ type IntAlloc struct {
 // Release releases an IntAlloc back into the IntPool.
 // It is safe to release into a closed pool.
 func (ia *IntAlloc) Release() {
-	ia.p.qp.Add((*intAlloc)(ia))
+	ia.p.qp.Update(func(res Resource) (shouldNotify bool) {
+		r := res.(*intAlloc)
+		(*IntAlloc)(r).Merge(ia)
+		return true
+	})
 }
 
 // Acquired returns the quantity that this alloc has acquired.
@@ -108,12 +112,6 @@ func (ia *IntAlloc) from(p *IntPool) bool {
 // intAlloc is used to make IntAlloc implement Resource without muddling its
 // exported interface.
 type intAlloc IntAlloc
-
-// Merge makes intAlloc a Resource.
-func (ia *intAlloc) Merge(val interface{}) (shouldNotify bool) {
-	(*IntAlloc)(ia).Merge((*IntAlloc)(val.(*intAlloc)))
-	return true
-}
 
 // NewIntPool creates a new named IntPool.
 //
@@ -295,10 +293,11 @@ func (p *IntPool) Len() int {
 // the capacity either before that acquisitions started or after it will have
 // finished.
 func (p *IntPool) ApproximateQuota() (q uint64) {
-	p.qp.ApproximateQuota(func(r Resource) {
+	p.qp.Update(func(r Resource) (shouldNotify bool) {
 		if ia, ok := r.(*intAlloc); ok {
 			q = uint64(max(0, ia.alloc))
 		}
+		return false
 	})
 	return q
 }
