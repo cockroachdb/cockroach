@@ -605,8 +605,10 @@ func (r *DistSQLReceiver) SetError(err error) {
 	// If we encountered an error, we will transition to draining unless we were
 	// canceled.
 	if r.ctx.Err() != nil {
+		log.VEventf(r.ctx, 1, "%v encountered, so transition to shutting down", r.ctx.Err())
 		r.status = execinfra.ConsumerClosed
 	} else {
+		log.VEventf(r.ctx, 1, "%v encountered, so transition to draining", err)
 		r.status = execinfra.DrainRequested
 	}
 }
@@ -722,6 +724,7 @@ func (r *DistSQLReceiver) Push(
 	// planNodeToRowSource is not set up to handle decoding the row.
 	if r.noColsRequired {
 		r.row = []tree.Datum{}
+		log.VEvent(r.ctx, 1, "a single row is pushed and no columns are needed, so transition to draining")
 		r.status = execinfra.DrainRequested
 	} else {
 		if r.row == nil {
@@ -742,6 +745,7 @@ func (r *DistSQLReceiver) Push(
 			// ErrLimitedResultClosed and errIEResultChannelClosed are not real
 			// errors, it is a signal to stop distsql and return success to the
 			// client (that's why we don't set the error on the resultWriter).
+			log.VEvent(r.ctx, 1, "either ErrLimitedResultClosed or errIEResultChannelClosed was encountered, so transition to draining")
 			r.status = execinfra.DrainRequested
 		} else {
 			// Set the error on the resultWriter to notify the consumer about
