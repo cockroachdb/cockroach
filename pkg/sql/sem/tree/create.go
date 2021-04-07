@@ -599,14 +599,14 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		ctx.WriteString(" CONSTRAINT ")
 		ctx.FormatNode(&node.Nullable.ConstraintName)
 	}
-	if node.Hidden {
-		ctx.WriteString(" NOT VISIBLE")
-	}
 	switch node.Nullable.Nullability {
 	case Null:
 		ctx.WriteString(" NULL")
 	case NotNull:
 		ctx.WriteString(" NOT NULL")
+	}
+	if node.Hidden {
+		ctx.WriteString(" NOT VISIBLE")
 	}
 	if node.PrimaryKey.IsPrimaryKey || node.Unique.IsUnique {
 		if node.Unique.ConstraintName != "" {
