@@ -620,7 +620,7 @@ func (tc *TestCluster) addReplica(
 		return roachpb.RangeDescriptor{}, err
 	}
 
-	if err := tc.waitForNewReplicas(startKey, false /* waitForVoter */, targets...); err != nil {
+	if err := tc.waitForNewReplicas(startKey, false, targets...); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 
@@ -687,7 +687,7 @@ func (tc *TestCluster) AddVotersMulti(
 func (tc *TestCluster) WaitForVoters(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) error {
-	return tc.waitForNewReplicas(startKey, true /* waitForVoter */, targets...)
+	return tc.waitForNewReplicas(startKey, true, targets...)
 }
 
 // waitForNewReplicas waits for each of the targets to have a fully initialized
