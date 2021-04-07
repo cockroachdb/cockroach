@@ -170,7 +170,7 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 			// TODO(asubiotto): We should probably create some random spec struct that
 			//  we pass in to RandomBatch.
 			bytes := batch.ColVec(0).Bytes()
-			newBytes := coldata.NewBytes(bytes.Len())
+			newBytes := coldata.NewBytes(bytes.Len(), 0 /* avgElementLength */)
 			for i := 0; i < bytes.Len(); i++ {
 				diff := len(bytes.Get(i)) - fixedLen
 				if diff < 0 {

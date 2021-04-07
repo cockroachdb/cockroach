@@ -202,7 +202,7 @@ func TestBytesRefImpl(t *testing.T) {
 	for nRun := 0; nRun < nRuns; nRun++ {
 		n := 1 + rng.Intn(maxLength)
 
-		flat := NewBytes(n)
+		flat := NewBytes(n, 0)
 		reference := make([][]byte, n)
 		for i := 0; i < n; i++ {
 			v := make([]byte, rng.Intn(16))
@@ -219,7 +219,7 @@ func TestBytesRefImpl(t *testing.T) {
 		if rng.Float64() < 0.5 {
 			selfReferencingSources = false
 			sourceN := 1 + rng.Intn(maxLength)
-			flatSource = NewBytes(sourceN)
+			flatSource = NewBytes(sourceN, 0)
 			referenceSource = make([][]byte, sourceN)
 			for i := 0; i < sourceN; i++ {
 				v := make([]byte, rng.Intn(16))
@@ -249,7 +249,7 @@ func TestBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("Simple", func(t *testing.T) {
-		b1 := NewBytes(0)
+		b1 := NewBytes(0, 0)
 		b1.AppendVal([]byte("hello"))
 		require.Equal(t, "hello", string(b1.Get(0)))
 		b1.AppendVal(nil)
@@ -281,8 +281,8 @@ func TestBytes(t *testing.T) {
 	})
 
 	t.Run("Append", func(t *testing.T) {
-		b1 := NewBytes(0)
-		b2 := NewBytes(0)
+		b1 := NewBytes(0, 0)
+		b2 := NewBytes(0, 0)
 		b2.AppendVal([]byte("source bytes value"))
 		b1.AppendVal([]byte("one"))
 		b1.AppendVal([]byte("two"))
@@ -303,7 +303,7 @@ func TestBytes(t *testing.T) {
 			}
 		}
 
-		b2 = NewBytes(0)
+		b2 = NewBytes(0, 0)
 		b2.AppendVal([]byte("hello again"))
 		b2.AppendVal([]byte("hello again"))
 		b2.AppendVal([]byte("hello again"))
@@ -321,7 +321,7 @@ func TestBytes(t *testing.T) {
 		// truncate the vector. The expected behavior is that offsets must be
 		// backfilled, and once a new value is appended, it should be
 		// retrievable.
-		b := NewBytes(5)
+		b := NewBytes(5, 0)
 		b.Set(0, []byte("zero"))
 		require.Equal(t, 5, b.Len())
 		b.AppendSlice(b, 3, 0, 0)
@@ -334,8 +334,8 @@ func TestBytes(t *testing.T) {
 	})
 
 	t.Run("Copy", func(t *testing.T) {
-		b1 := NewBytes(0)
-		b2 := NewBytes(0)
+		b1 := NewBytes(0, 0)
+		b2 := NewBytes(0, 0)
 		b1.AppendVal([]byte("one"))
 		b1.AppendVal([]byte("two"))
 		b1.AppendVal([]byte("three"))
@@ -374,7 +374,7 @@ func TestBytes(t *testing.T) {
 	})
 
 	t.Run("Window", func(t *testing.T) {
-		b1 := NewBytes(0)
+		b1 := NewBytes(0, 0)
 		b1.AppendVal([]byte("one"))
 		b1.AppendVal([]byte("two"))
 		b1.AppendVal([]byte("three"))
@@ -390,7 +390,7 @@ func TestBytes(t *testing.T) {
 	})
 
 	t.Run("String", func(t *testing.T) {
-		b1 := NewBytes(0)
+		b1 := NewBytes(0, 0)
 		vals := [][]byte{
 			[]byte("one"),
 			[]byte("two"),
@@ -421,12 +421,12 @@ func TestBytes(t *testing.T) {
 	})
 
 	t.Run("InvariantSimple", func(t *testing.T) {
-		b1 := NewBytes(8)
+		b1 := NewBytes(8, 0)
 		b1.Set(0, []byte("zero"))
 		other := b1.Window(0, 2)
 		other.AssertOffsetsAreNonDecreasing(2)
 
-		b2 := NewBytes(8)
+		b2 := NewBytes(8, 0)
 		b2.Set(0, []byte("zero"))
 		b2.Set(2, []byte("two"))
 		other = b2.Window(0, 4)
@@ -443,7 +443,7 @@ func TestProportionalSize(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	// We need a number divisible by 4.
 	fullCapacity := (1 + rng.Intn(100)) * 4
-	b := NewBytes(fullCapacity)
+	b := NewBytes(fullCapacity, BytesInitialAllocationFactor)
 	for i := 0; i < fullCapacity; i++ {
 		b.Set(i, value)
 	}
