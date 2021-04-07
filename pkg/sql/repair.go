@@ -75,8 +75,15 @@ func (p *planner) UnsafeUpsertDescriptor(
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, "failed to decode descriptor")
 	}
 
-	// Fetch the existing descriptor.
+	// Check that the new descriptor has a modification time set when applicable.
+	modTime := descpb.GetDescriptorModificationTime(&desc)
+	version := descpb.GetDescriptorVersion(&desc)
+	if version > 1 && modTime.IsEmpty() {
+		return pgerror.Newf(pgcode.InvalidObjectDefinition, "missing descriptor modification time for version %d",
+			version)
+	}
 
+	// Fetch the existing descriptor.
 	existing, err := p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
 	var forceNoticeString string // for the event
 	if !errors.Is(err, catalog.ErrDescriptorNotFound) && err != nil {
@@ -100,10 +107,9 @@ func (p *planner) UnsafeUpsertDescriptor(
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"cannot modify a modified descriptor (%d) with UnsafeUpsertDescriptor", id)
 		}
-		version := descpb.GetDescriptorVersion(&desc)
 		if version != existing.GetVersion() && version != existing.GetVersion()+1 {
-			return pgerror.Newf(pgcode.InvalidTableDefinition, "mismatched descriptor version, expected %v or %v, got %v",
-				version, version+1, existing.GetVersion())
+			return pgerror.Newf(pgcode.InvalidObjectDefinition, "mismatched descriptor version, expected %v or %v, got %v",
+				existing.GetVersion(), existing.GetVersion()+1, version)
 		}
 		marshaled, err := protoutil.Marshal(existing.DescriptorProto())
 		if err != nil {

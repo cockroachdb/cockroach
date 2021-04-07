@@ -1298,7 +1298,14 @@ func init() {
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 
-	debugDoctorCmd.AddCommand(debugDoctorCmds...)
+	for _, c := range debugDoctorCmds {
+		f := c.Flags()
+		f.BoolVarP(&doctorOptions.DumpSQL, "dump-sql", "s", doctorOptions.DumpSQL,
+			"instead of examining descriptors, dump them as SQL statements to recreate them in an empty cluster")
+		f.BoolVarP(&doctorOptions.Verbose, "verbose", "v", doctorOptions.Verbose,
+			"verbose output")
+		debugDoctorCmd.AddCommand(c)
+	}
 	DebugCmd.AddCommand(debugDoctorCmd)
 
 	f := debugSyncBenchCmd.Flags()
