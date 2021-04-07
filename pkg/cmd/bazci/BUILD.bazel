@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "bazci_lib",
+    srcs = [
+        "bazci.go",
+        "main.go",
+        "watch.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/bazci",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)
+
+go_binary(
+    name = "bazci",
+    embed = [":bazci_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "bazci_test",
+    srcs = [
+        "bazci_test.go",
+        "watch_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":bazci_lib"],
+    deps = [
+        "//pkg/testutils",
+        "@com_github_stretchr_testify//assert",
+    ],
+)
