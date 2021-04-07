@@ -455,6 +455,9 @@ CREATE INDEX created_idx ON t(c)
 ----
 
 statement ok
+ALTER TABLE t ADD COLUMN e INT8 NOT NULL UNIQUE
+
+statement ok
 ALTER TABLE t ADD CONSTRAINT unique_c_d UNIQUE(c, d)
 
 query T
@@ -470,6 +473,7 @@ CREATE TABLE public.t (
   d INT8 NOT NULL,
   j JSONB NULL,
   u STRING NULL,
+  e INT8 NOT NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk ASC),
   UNIQUE INDEX t_u_key (u ASC),
   INDEX t_a_idx (a ASC),
@@ -477,8 +481,9 @@ CREATE TABLE public.t (
   INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
   INVERTED INDEX t_j_idx (j),
   INDEX created_idx (c ASC),
+  UNIQUE INDEX t_e_key (e ASC),
   UNIQUE INDEX unique_c_d (c ASC, d ASC),
-  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u)
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
@@ -499,6 +504,8 @@ t_a_idx               a             false
 t_a_idx               partition_by  true
 t_b_key               b             false
 t_b_key               partition_by  true
+t_e_key               e             false
+t_e_key               partition_by  true
 t_j_idx               j             false
 t_j_idx               partition_by  true
 t_partition_by_c_idx  c             false
@@ -525,6 +532,7 @@ CREATE TABLE public.t (
   d INT8 NOT NULL,
   j JSONB NULL,
   u STRING NULL,
+  e INT8 NOT NULL,
   CONSTRAINT "primary" PRIMARY KEY (pk2 ASC),
   UNIQUE INDEX t_pk_key (pk ASC),
   UNIQUE INDEX t_u_key (u ASC),
@@ -533,8 +541,9 @@ CREATE TABLE public.t (
   INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
   INVERTED INDEX t_j_idx (j),
   INDEX created_idx (c ASC),
+  UNIQUE INDEX t_e_key (e ASC),
   UNIQUE INDEX unique_c_d (c ASC, d ASC),
-  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u)
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
@@ -555,6 +564,8 @@ t_a_idx               a             false
 t_a_idx               partition_by  true
 t_b_key               b             false
 t_b_key               partition_by  true
+t_e_key               e             false
+t_e_key               partition_by  true
 t_j_idx               j             false
 t_j_idx               partition_by  true
 t_partition_by_c_idx  c             false
