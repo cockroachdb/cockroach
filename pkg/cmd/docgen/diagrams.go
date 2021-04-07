@@ -627,7 +627,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:    "create_schema_stmt",
-		inline: []string{"qualifiable_schema_name", "opt_schema_name", "opt_name"},
+		inline:  []string{"qualifiable_schema_name", "opt_schema_name", "opt_name"},
 		nosplit: true,
 	},
 	{
@@ -748,9 +748,9 @@ var specs = []stmtSpec{
 		unlink: []string{"sequence_name"},
 	},
 	{
-		name:   "drop_schema",
-		stmt:   "drop_schema_stmt",
-		inline: []string{"opt_drop_behavior", "qualifiable_schema_name"},
+		name:    "drop_schema",
+		stmt:    "drop_schema_stmt",
+		inline:  []string{"opt_drop_behavior", "qualifiable_schema_name"},
 		nosplit: true,
 	},
 	{
