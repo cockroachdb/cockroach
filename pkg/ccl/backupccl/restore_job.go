@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1443,6 +1444,14 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 				return err
 			}
 			backupCodec = keys.MakeSQLCodec(backupTenantID)
+			// Disallow cluster restores, unless the tenant IDs match.
+			if details.DescriptorCoverage == tree.AllDescriptors {
+				if !backupCodec.TenantPrefix().Equal(p.ExecCfg().Codec.TenantPrefix()) {
+					return unimplemented.NewWithIssuef(62277,
+						"cannot cluster RESTORE backups taken from different tenant: %s",
+						backupTenantID.String())
+				}
+			}
 			if backupTenantID != roachpb.SystemTenantID && p.ExecCfg().Codec.ForSystemTenant() {
 				// TODO(pbardea): This is unsupported for now because the key-rewriter
 				// cannot distinguish between RESTORE TENANT and table restore from a
