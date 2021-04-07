@@ -1272,6 +1272,209 @@ with &3 (cte)
            ├──  a:3 => a:13
            └──  b:4 => b:14
 
+
+# Verify that we still hoist inner WITHs that don't refer to the recursive CTE.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION ALL
+    (WITH foo AS (SELECT * FROM cte),
+          bar AS (SELECT 1 AS x, 2 AS y)
+    SELECT a+x, b+y FROM foo, bar)
+) SELECT * FROM cte;
+----
+with &3 (bar)
+ ├── columns: a:15 b:16
+ ├── project
+ │    ├── columns: x:7!null y:8!null
+ │    ├── values
+ │    │    └── ()
+ │    └── projections
+ │         ├── 1 [as=x:7]
+ │         └── 2 [as=y:8]
+ └── with &4 (cte)
+      ├── columns: a:15 b:16
+      ├── recursive-c-t-e
+      │    ├── columns: a:3 b:4
+      │    ├── working table binding: &1
+      │    ├── initial columns: "?column?":1 "?column?":2
+      │    ├── recursive columns: "?column?":13 "?column?":14
+      │    ├── fake-rel
+      │    │    └── columns: "?column?":1 "?column?":2
+      │    ├── project
+      │    │    ├── columns: "?column?":1!null "?column?":2!null
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── projections
+      │    │         ├── 1 [as="?column?":1]
+      │    │         └── 2 [as="?column?":2]
+      │    └── with &2 (foo)
+      │         ├── columns: "?column?":13 "?column?":14
+      │         ├── with-scan &1 (cte)
+      │         │    ├── columns: a:5 b:6
+      │         │    └── mapping:
+      │         │         ├──  a:3 => a:5
+      │         │         └──  b:4 => b:6
+      │         └── project
+      │              ├── columns: "?column?":13 "?column?":14
+      │              ├── inner-join (cross)
+      │              │    ├── columns: a:9 b:10 x:11!null y:12!null
+      │              │    ├── with-scan &2 (foo)
+      │              │    │    ├── columns: a:9 b:10
+      │              │    │    └── mapping:
+      │              │    │         ├──  a:5 => a:9
+      │              │    │         └──  b:6 => b:10
+      │              │    ├── with-scan &3 (bar)
+      │              │    │    ├── columns: x:11!null y:12!null
+      │              │    │    └── mapping:
+      │              │    │         ├──  x:7 => x:11
+      │              │    │         └──  y:8 => y:12
+      │              │    └── filters (true)
+      │              └── projections
+      │                   ├── a:9 + x:11 [as="?column?":13]
+      │                   └── b:10 + y:12 [as="?column?":14]
+      └── with-scan &4 (cte)
+           ├── columns: a:15 b:16
+           └── mapping:
+                ├──  a:3 => a:15
+                └──  b:4 => b:16
+
+# Verify that we don't hoist inner WITHs that indirecly refer to the recursive
+# CTE.
+build
+WITH RECURSIVE cte(a, b) AS (
+    SELECT 1, 2
+  UNION ALL
+    (WITH foo AS (SELECT * FROM cte),
+          bar AS (SELECT a+1 AS x, b+2 AS y FROM foo)
+    SELECT a+x, b+y FROM foo, bar)
+) SELECT * FROM cte;
+----
+with &4 (cte)
+ ├── columns: a:17 b:18
+ ├── recursive-c-t-e
+ │    ├── columns: a:3 b:4
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":15 "?column?":16
+ │    ├── fake-rel
+ │    │    └── columns: "?column?":1 "?column?":2
+ │    ├── project
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         ├── 1 [as="?column?":1]
+ │    │         └── 2 [as="?column?":2]
+ │    └── with &2 (foo)
+ │         ├── columns: "?column?":15 "?column?":16
+ │         ├── with-scan &1 (cte)
+ │         │    ├── columns: a:5 b:6
+ │         │    └── mapping:
+ │         │         ├──  a:3 => a:5
+ │         │         └──  b:4 => b:6
+ │         └── with &3 (bar)
+ │              ├── columns: "?column?":15 "?column?":16
+ │              ├── project
+ │              │    ├── columns: x:9 y:10
+ │              │    ├── with-scan &2 (foo)
+ │              │    │    ├── columns: a:7 b:8
+ │              │    │    └── mapping:
+ │              │    │         ├──  a:5 => a:7
+ │              │    │         └──  b:6 => b:8
+ │              │    └── projections
+ │              │         ├── a:7 + 1 [as=x:9]
+ │              │         └── b:8 + 2 [as=y:10]
+ │              └── project
+ │                   ├── columns: "?column?":15 "?column?":16
+ │                   ├── inner-join (cross)
+ │                   │    ├── columns: a:11 b:12 x:13 y:14
+ │                   │    ├── with-scan &2 (foo)
+ │                   │    │    ├── columns: a:11 b:12
+ │                   │    │    └── mapping:
+ │                   │    │         ├──  a:5 => a:11
+ │                   │    │         └──  b:6 => b:12
+ │                   │    ├── with-scan &3 (bar)
+ │                   │    │    ├── columns: x:13 y:14
+ │                   │    │    └── mapping:
+ │                   │    │         ├──  x:9 => x:13
+ │                   │    │         └──  y:10 => y:14
+ │                   │    └── filters (true)
+ │                   └── projections
+ │                        ├── a:11 + x:13 [as="?column?":15]
+ │                        └── b:12 + y:14 [as="?column?":16]
+ └── with-scan &4 (cte)
+      ├── columns: a:17 b:18
+      └── mapping:
+           ├──  a:3 => a:17
+           └──  b:4 => b:18
+
+# Verify that [...] statements are hoisted to the top level.
+build
+WITH RECURSIVE cte(x, y) AS (
+    SELECT 1, 2
+  UNION ALL
+    SELECT a+x, b+y FROM cte, [INSERT INTO x VALUES (1,1),(2,2) RETURNING a, b] AS bar
+) SELECT * FROM cte;
+----
+with &2
+ ├── columns: x:18 y:19
+ ├── project
+ │    ├── columns: x.a:7!null x.b:8!null
+ │    └── insert x
+ │         ├── columns: x.a:7!null x.b:8!null rowid:9!null
+ │         ├── insert-mapping:
+ │         │    ├── column1:11 => x.a:7
+ │         │    ├── column2:12 => x.b:8
+ │         │    └── column13:13 => rowid:9
+ │         └── project
+ │              ├── columns: column13:13 column1:11!null column2:12!null
+ │              ├── values
+ │              │    ├── columns: column1:11!null column2:12!null
+ │              │    ├── (1, 1)
+ │              │    └── (2, 2)
+ │              └── projections
+ │                   └── unique_rowid() [as=column13:13]
+ └── with &3 (cte)
+      ├── columns: x:18 y:19
+      ├── recursive-c-t-e
+      │    ├── columns: x:3 y:4
+      │    ├── working table binding: &1
+      │    ├── initial columns: "?column?":1 "?column?":2
+      │    ├── recursive columns: "?column?":16 "?column?":17
+      │    ├── fake-rel
+      │    │    └── columns: "?column?":1 "?column?":2
+      │    ├── project
+      │    │    ├── columns: "?column?":1!null "?column?":2!null
+      │    │    ├── values
+      │    │    │    └── ()
+      │    │    └── projections
+      │    │         ├── 1 [as="?column?":1]
+      │    │         └── 2 [as="?column?":2]
+      │    └── project
+      │         ├── columns: "?column?":16 "?column?":17
+      │         ├── inner-join (cross)
+      │         │    ├── columns: x:5 y:6 a:14!null b:15!null
+      │         │    ├── with-scan &1 (cte)
+      │         │    │    ├── columns: x:5 y:6
+      │         │    │    └── mapping:
+      │         │    │         ├──  x:3 => x:5
+      │         │    │         └──  y:4 => y:6
+      │         │    ├── with-scan &2
+      │         │    │    ├── columns: a:14!null b:15!null
+      │         │    │    └── mapping:
+      │         │    │         ├──  x.a:7 => a:14
+      │         │    │         └──  x.b:8 => b:15
+      │         │    └── filters (true)
+      │         └── projections
+      │              ├── a:14 + x:5 [as="?column?":16]
+      │              └── b:15 + y:6 [as="?column?":17]
+      └── with-scan &3 (cte)
+           ├── columns: x:18 y:19
+           └── mapping:
+                ├──  x:3 => x:18
+                └──  y:4 => y:19
+
 # Veryify use of WITH inside the initial statement.
 build
 WITH RECURSIVE cte(a) AS (
