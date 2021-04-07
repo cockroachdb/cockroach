@@ -4,6 +4,7 @@ import { actions } from "./nodes.reducer";
 
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { rootActions } from "../reducers";
 
 export function* refreshNodesSaga() {
   yield put(actions.request());
@@ -32,7 +33,7 @@ export function* nodesSaga(
     throttleWithReset(
       cacheInvalidationPeriod,
       actions.refresh,
-      [actions.invalidated, actions.failed],
+      [actions.invalidated, actions.failed, rootActions.resetState],
       refreshNodesSaga,
     ),
     takeLatest(actions.request, requestNodesSaga),
