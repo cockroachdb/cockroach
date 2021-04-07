@@ -38,7 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -73,7 +73,7 @@ func SplitTable(
 
 	rkts := make(map[roachpb.RangeID]rangeAndKT)
 	for _, sp := range sps {
-		pik, err := rowenc.TestingMakePrimaryIndexKey(desc, sp.Vals...)
+		pik, err := randgen.TestingMakePrimaryIndexKey(desc, sp.Vals...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +167,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 
 				val := rng.Intn(n)
 				t.Logf("splitting at %d", val)
-				pik, err := rowenc.TestingMakePrimaryIndexKey(tableDesc, val)
+				pik, err := randgen.TestingMakePrimaryIndexKey(tableDesc, val)
 				if err != nil {
 					panic(err)
 				}

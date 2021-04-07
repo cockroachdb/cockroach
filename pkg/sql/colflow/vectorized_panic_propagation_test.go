@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
@@ -45,8 +45,8 @@ func TestVectorizedInternalPanic(t *testing.T) {
 	}
 
 	nRows, nCols := 1, 1
-	types := rowenc.OneIntCol
-	input := execinfra.NewRepeatableRowSource(types, rowenc.MakeIntRows(nRows, nCols))
+	types := randgen.OneIntCol
+	input := execinfra.NewRepeatableRowSource(types, randgen.MakeIntRows(nRows, nCols))
 
 	col, err := colexec.NewBufferingColumnarizer(ctx, testAllocator, &flowCtx, 0 /* processorID */, input)
 	if err != nil {
@@ -92,8 +92,8 @@ func TestNonVectorizedPanicPropagation(t *testing.T) {
 	}
 
 	nRows, nCols := 1, 1
-	types := rowenc.OneIntCol
-	input := execinfra.NewRepeatableRowSource(types, rowenc.MakeIntRows(nRows, nCols))
+	types := randgen.OneIntCol
+	input := execinfra.NewRepeatableRowSource(types, randgen.MakeIntRows(nRows, nCols))
 
 	col, err := colexec.NewBufferingColumnarizer(ctx, testAllocator, &flowCtx, 0 /* processorID */, input)
 	if err != nil {

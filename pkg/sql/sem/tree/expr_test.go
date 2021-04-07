@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -85,7 +85,7 @@ func TestStringConcat(t *testing.T) {
 		if typ == types.String || typ == types.Bytes {
 			continue
 		}
-		d := rowenc.RandDatum(rng, typ, false /* nullOk */)
+		d := randgen.RandDatum(rng, typ, false /* nullOk */)
 		expected := tree.NewDString(tree.AsStringWithFlags(d, tree.FmtPgwireText))
 		concatExprLeft := tree.NewTypedBinaryExpr(tree.Concat, tree.NewDString(""), d, types.String)
 		resLeft, err := concatExprLeft.Eval(&evalCtx)

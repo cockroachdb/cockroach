@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,9 +46,9 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 
 	nRows := 10
 	nCols := 1
-	types := rowenc.OneIntCol
+	types := randgen.OneIntCol
 
-	input := distsqlutils.NewRowBuffer(types, rowenc.MakeIntRows(nRows, nCols), distsqlutils.RowBufferArgs{})
+	input := distsqlutils.NewRowBuffer(types, randgen.MakeIntRows(nRows, nCols), distsqlutils.RowBufferArgs{})
 	mtsSpec := execinfrapb.ProcessorCoreUnion{
 		MetadataTestSender: &execinfrapb.MetadataTestSenderSpec{
 			ID: uuid.MakeV4().String(),

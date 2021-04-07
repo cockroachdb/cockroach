@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -898,7 +898,7 @@ func (og *operationGenerator) createTable(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	stmt := rowenc.RandCreateTableWithColumnIndexNumberGenerator(og.params.rng, "table", tableIdx, og.newUniqueSeqNum)
+	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(og.params.rng, "table", tableIdx, og.newUniqueSeqNum)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
 
@@ -931,7 +931,7 @@ func (og *operationGenerator) createEnum(tx *pgx.Tx) (string, error) {
 		{code: pgcode.DuplicateObject, condition: typeExists},
 		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
 	}.add(og.expectedExecErrors)
-	stmt := rowenc.RandCreateType(og.params.rng, typName.Object(), "asdf")
+	stmt := randgen.RandCreateType(og.params.rng, typName.Object(), "asdf")
 	stmt.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
 	return tree.Serialize(stmt), nil
 }
@@ -1762,7 +1762,7 @@ func (og *operationGenerator) setColumnDefault(tx *pgx.Tx) (string, error) {
 		datumTyp = newTyp
 	}
 
-	defaultDatum := rowenc.RandDatum(og.params.rng, datumTyp, columnForDefault.nullable)
+	defaultDatum := randgen.RandDatum(og.params.rng, datumTyp, columnForDefault.nullable)
 
 	if (!datumTyp.Equivalent(columnForDefault.typ)) && defaultDatum != tree.DNull {
 		og.expectedExecErrors.add(pgcode.DatatypeMismatch)
@@ -1949,7 +1949,7 @@ func (og *operationGenerator) insertRow(tx *pgx.Tx) (string, error) {
 	for i := 0; i < numRows; i++ {
 		var row []string
 		for _, col := range cols {
-			d := rowenc.RandDatum(og.params.rng, col.typ, col.nullable)
+			d := randgen.RandDatum(og.params.rng, col.typ, col.nullable)
 			row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
 		}
 
@@ -2592,7 +2592,7 @@ func (og *operationGenerator) randType(
 		}
 		return typName, typ, nil
 	}
-	typ := rowenc.RandSortingType(og.params.rng)
+	typ := randgen.RandSortingType(og.params.rng)
 	typeName := tree.MakeUnqualifiedTypeName(tree.Name(typ.SQLString()))
 	return &typeName, typ, nil
 }
@@ -2613,7 +2613,7 @@ func (og *operationGenerator) createSchema(tx *pgx.Tx) (string, error) {
 	}
 
 	// TODO(jayshrivastava): Support authorization
-	stmt := rowenc.MakeSchemaName(ifNotExists, schemaName, security.RootUserName())
+	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, security.RootUserName())
 	return tree.Serialize(stmt), nil
 }
 

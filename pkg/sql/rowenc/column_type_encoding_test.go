@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rowenc
+package rowenc_test
 
 import (
 	"bytes"
@@ -19,6 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -30,28 +32,28 @@ import (
 
 func genColumnType() gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
-		columnType := RandColumnType(genParams.Rng)
+		columnType := randgen.RandColumnType(genParams.Rng)
 		return gopter.NewGenResult(columnType, gopter.NoShrinker)
 	}
 }
 
 func genRandomArrayType() gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
-		arrType := RandArrayType(genParams.Rng)
+		arrType := randgen.RandArrayType(genParams.Rng)
 		return gopter.NewGenResult(arrType, gopter.NoShrinker)
 	}
 }
 
 func genDatum() gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
-		return gopter.NewGenResult(RandDatum(genParams.Rng, RandColumnType(genParams.Rng),
+		return gopter.NewGenResult(randgen.RandDatum(genParams.Rng, randgen.RandColumnType(genParams.Rng),
 			false), gopter.NoShrinker)
 	}
 }
 
 func genDatumWithType(columnType interface{}) gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
-		datum := RandDatum(genParams.Rng, columnType.(*types.T), false)
+		datum := randgen.RandDatum(genParams.Rng, columnType.(*types.T), false)
 		return gopter.NewGenResult(datum, gopter.NoShrinker)
 	}
 }
@@ -59,7 +61,7 @@ func genDatumWithType(columnType interface{}) gopter.Gen {
 func genArrayDatumWithType(arrTyp interface{}) gopter.Gen {
 	return func(genParams *gopter.GenParameters) *gopter.GenResult {
 		// Mark the array contents to have a 1 in 10 chance of being null.
-		datum := RandArray(genParams.Rng, arrTyp.(*types.T), 10)
+		datum := randgen.RandArray(genParams.Rng, arrTyp.(*types.T), 10)
 		return gopter.NewGenResult(datum, gopter.NoShrinker)
 	}
 }
@@ -85,7 +87,7 @@ func hasKeyEncoding(typ *types.T) bool {
 }
 
 func TestEncodeTableValue(t *testing.T) {
-	a := &DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 10000
@@ -93,11 +95,11 @@ func TestEncodeTableValue(t *testing.T) {
 	var scratch []byte
 	properties.Property("roundtrip", prop.ForAll(
 		func(d tree.Datum) string {
-			b, err := EncodeTableValue(nil, 0, d, scratch)
+			b, err := rowenc.EncodeTableValue(nil, 0, d, scratch)
 			if err != nil {
 				return "error: " + err.Error()
 			}
-			newD, leftoverBytes, err := DecodeTableValue(a, d.ResolvedType(), b)
+			newD, leftoverBytes, err := rowenc.DecodeTableValue(a, d.ResolvedType(), b)
 			if len(leftoverBytes) > 0 {
 				return "Leftover bytes"
 			}
@@ -115,17 +117,17 @@ func TestEncodeTableValue(t *testing.T) {
 }
 
 func TestEncodeTableKey(t *testing.T) {
-	a := &DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 10000
 	properties := gopter.NewProperties(parameters)
 	roundtripDatum := func(d tree.Datum, dir encoding.Direction) string {
-		b, err := EncodeTableKey(nil, d, dir)
+		b, err := rowenc.EncodeTableKey(nil, d, dir)
 		if err != nil {
 			return "error: " + err.Error()
 		}
-		newD, leftoverBytes, err := DecodeTableKey(a, d.ResolvedType(), b, dir)
+		newD, leftoverBytes, err := rowenc.DecodeTableKey(a, d.ResolvedType(), b, dir)
 		if len(leftoverBytes) > 0 {
 			return "Leftover bytes"
 		}
@@ -158,11 +160,11 @@ func TestEncodeTableKey(t *testing.T) {
 	generateAndCompareDatums := func(datums []tree.Datum, dir encoding.Direction) string {
 		d1 := datums[0]
 		d2 := datums[1]
-		b1, err := EncodeTableKey(nil, d1, dir)
+		b1, err := rowenc.EncodeTableKey(nil, d1, dir)
 		if err != nil {
 			return "error: " + err.Error()
 		}
-		b2, err := EncodeTableKey(nil, d2, dir)
+		b2, err := rowenc.EncodeTableKey(nil, d2, dir)
 		if err != nil {
 			return "error: " + err.Error()
 		}
@@ -242,11 +244,11 @@ func TestSkipTableKey(t *testing.T) {
 	properties := gopter.NewProperties(parameters)
 	properties.Property("correctness", prop.ForAll(
 		func(d tree.Datum, dir encoding.Direction) string {
-			b, err := EncodeTableKey(nil, d, dir)
+			b, err := rowenc.EncodeTableKey(nil, d, dir)
 			if err != nil {
 				return "error: " + err.Error()
 			}
-			res, err := SkipTableKey(b)
+			res, err := rowenc.SkipTableKey(b)
 			if err != nil {
 				return "error: " + err.Error()
 			}
@@ -264,7 +266,7 @@ func TestSkipTableKey(t *testing.T) {
 }
 
 func TestMarshalColumnValueRoundtrip(t *testing.T) {
-	a := &DatumAlloc{}
+	a := &rowenc.DatumAlloc{}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 10000
@@ -281,11 +283,11 @@ func TestMarshalColumnValueRoundtrip(t *testing.T) {
 				desc := descpb.ColumnDescriptor{
 					Type: typ,
 				}
-				value, err := MarshalColumnValue(&desc, datum)
+				value, err := rowenc.MarshalColumnValue(&desc, datum)
 				if err != nil {
 					return "error marshaling: " + err.Error()
 				}
-				outDatum, err := UnmarshalColumnValue(a, typ, value)
+				outDatum, err := rowenc.UnmarshalColumnValue(a, typ, value)
 				if err != nil {
 					return "error unmarshaling: " + err.Error()
 				}
@@ -309,10 +311,10 @@ func TestDecodeTableKeyOutOfRangeTimestamp(t *testing.T) {
 	} {
 		for _, dir := range []encoding.Direction{encoding.Ascending, encoding.Descending} {
 			t.Run(fmt.Sprintf("%s/direction:%d", d.String(), dir), func(t *testing.T) {
-				encoded, err := EncodeTableKey([]byte{}, d, dir)
+				encoded, err := rowenc.EncodeTableKey([]byte{}, d, dir)
 				require.NoError(t, err)
-				a := &DatumAlloc{}
-				decoded, _, err := DecodeTableKey(a, d.ResolvedType(), encoded, dir)
+				a := &rowenc.DatumAlloc{}
+				decoded, _, err := rowenc.DecodeTableKey(a, d.ResolvedType(), encoded, dir)
 				require.NoError(t, err)
 				require.Equal(t, d, decoded)
 			})
@@ -330,10 +332,10 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 		t.Run(d.String(), func(t *testing.T) {
 			var b []byte
 			colID := descpb.ColumnID(1)
-			encoded, err := EncodeTableValue(b, colID, d, []byte{})
+			encoded, err := rowenc.EncodeTableValue(b, colID, d, []byte{})
 			require.NoError(t, err)
-			a := &DatumAlloc{}
-			decoded, _, err := DecodeTableValue(a, d.ResolvedType(), encoded)
+			a := &rowenc.DatumAlloc{}
+			decoded, _, err := rowenc.DecodeTableValue(a, d.ResolvedType(), encoded)
 			require.NoError(t, err)
 			require.Equal(t, d, decoded)
 		})

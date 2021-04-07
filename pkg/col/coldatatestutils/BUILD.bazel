@@ -14,7 +14,7 @@ go_library(
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/types",
         "//pkg/util/duration",
         "//pkg/util/timeutil",

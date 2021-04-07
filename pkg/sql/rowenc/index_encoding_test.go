@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	. "github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -185,7 +186,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
 		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
-			t.primaryValues[j] = RandDatum(rng, types.Int, true)
+			t.primaryValues[j] = randgen.RandDatum(rng, types.Int, true)
 		}
 
 		t.secondaryInterleaves = make([]descpb.ID, rng.Intn(10))
@@ -195,7 +196,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
 		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
-			t.secondaryValues[j] = RandDatum(rng, types.Int, true)
+			t.secondaryValues[j] = randgen.RandDatum(rng, types.Int, true)
 		}
 
 		tests = append(tests, t)
@@ -505,11 +506,11 @@ func TestEncodeContainingArrayInvertedIndexSpans(t *testing.T) {
 	// Run a set of randomly generated test cases.
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < 100; i++ {
-		typ := RandArrayType(rng)
+		typ := randgen.RandArrayType(rng)
 
 		// Generate two random arrays and evaluate the result of `left @> right`.
-		left := RandArray(rng, typ, 0 /* nullChance */)
-		right := RandArray(rng, typ, 0 /* nullChance */)
+		left := randgen.RandArray(rng, typ, 0 /* nullChance */)
+		right := randgen.RandArray(rng, typ, 0 /* nullChance */)
 
 		res, err := tree.ArrayContains(&evalCtx, left.(*tree.DArray), right.(*tree.DArray))
 		require.NoError(t, err)
@@ -646,11 +647,11 @@ func TestEncodeContainedArrayInvertedIndexSpans(t *testing.T) {
 	// Run a set of randomly generated test cases.
 	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < 100; i++ {
-		typ := RandArrayType(rng)
+		typ := randgen.RandArrayType(rng)
 
 		// Generate two random arrays and evaluate the result of `left <@ right`.
-		left := RandArray(rng, typ, 0 /* nullChance */)
-		right := RandArray(rng, typ, 0 /* nullChance */)
+		left := randgen.RandArray(rng, typ, 0 /* nullChance */)
+		right := randgen.RandArray(rng, typ, 0 /* nullChance */)
 
 		// We cannot check for false positives with these tests (due to the fact that
 		// the spans are not tight), so we will only test for false negatives.

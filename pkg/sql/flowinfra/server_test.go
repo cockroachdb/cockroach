@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -82,7 +83,7 @@ func TestServer(t *testing.T) {
 				Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 			}},
-			ResultTypes: rowenc.TwoIntCols,
+			ResultTypes: randgen.TwoIntCols,
 		}},
 	}
 
@@ -90,7 +91,7 @@ func TestServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	str := rows.String(rowenc.TwoIntCols)
+	str := rows.String(randgen.TwoIntCols)
 	expected := "[[1 10] [2 20] [3 30]]"
 	if str != expected {
 		t.Errorf("invalid results: %s, expected %s'", str, expected)

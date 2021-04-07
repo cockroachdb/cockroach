@@ -218,7 +218,7 @@ go_test(
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",

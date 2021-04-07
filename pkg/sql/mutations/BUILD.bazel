@@ -13,6 +13,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
+        "//pkg/sql/randgen",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/stats",

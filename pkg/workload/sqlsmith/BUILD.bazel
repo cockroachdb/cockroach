@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/internal/sqlsmith",
-        "//pkg/sql/rowenc",
+        "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/util/timeutil",
         "//pkg/workload",

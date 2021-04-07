@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -43,10 +43,10 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	nCols := 1 + rng.Intn(4)
 	var typs []*types.T
 	for len(typs) < nCols {
-		typs = append(typs, rowenc.RandType(rng))
+		typs = append(typs, randgen.RandType(rng))
 	}
 	nRows := 10000
-	rows := rowenc.RandEncDatumRowsOfTypes(rng, nRows, typs)
+	rows := randgen.RandEncDatumRowsOfTypes(rng, nRows, typs)
 	input := execinfra.NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
@@ -234,7 +234,7 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 	types := []*types.T{types.Int, types.Int}
 	nRows := 10000
 	nCols := 2
-	rows := rowenc.MakeIntRows(nRows, nCols)
+	rows := randgen.MakeIntRows(nRows, nCols)
 	input := execinfra.NewRepeatableRowSource(types, rows)
 
 	ctx := context.Background()

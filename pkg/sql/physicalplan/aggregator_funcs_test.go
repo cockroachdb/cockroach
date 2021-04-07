@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -132,11 +133,11 @@ func checkDistAggregationInfo(
 		}
 
 		var err error
-		tr.Spans[0].Span.Key, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, startPK)
+		tr.Spans[0].Span.Key, err = randgen.TestingMakePrimaryIndexKey(tableDesc, startPK)
 		if err != nil {
 			t.Fatal(err)
 		}
-		tr.Spans[0].Span.EndKey, err = rowenc.TestingMakePrimaryIndexKey(tableDesc, endPK)
+		tr.Spans[0].Span.EndKey, err = randgen.TestingMakePrimaryIndexKey(tableDesc, endPK)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -431,17 +432,17 @@ func TestDistAggregationTable(t *testing.T) {
 			return []tree.Datum{
 				tree.NewDInt(tree.DInt(row)),
 				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
-				rowenc.RandDatum(rng, types.Int, true),
+				randgen.RandDatum(rng, types.Int, true),
 				// Note that we use INT4 here, yet the table schema uses INT8 -
 				// this is ok since we want to limit the range of values but use
 				// the default INT type.
-				rowenc.RandDatum(rng, types.Int4, true),
+				randgen.RandDatum(rng, types.Int4, true),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
-				rowenc.RandDatum(rng, types.Decimal, false),
-				rowenc.RandDatum(rng, types.Decimal, true),
-				rowenc.RandDatum(rng, types.Float, false),
-				rowenc.RandDatum(rng, types.Float, true),
+				randgen.RandDatum(rng, types.Decimal, false),
+				randgen.RandDatum(rng, types.Decimal, true),
+				randgen.RandDatum(rng, types.Float, false),
+				randgen.RandDatum(rng, types.Float, true),
 				tree.NewDBytes(tree.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},

@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -178,7 +178,7 @@ func RandomVec(args RandomVecArgs) {
 	default:
 		datums := args.Vec.Datum()
 		for i := 0; i < args.N; i++ {
-			datums.Set(i, rowenc.RandDatum(args.Rand, args.Vec.Type(), false /* nullOk */))
+			datums.Set(i, randgen.RandDatum(args.Rand, args.Vec.Type(), false /* nullOk */))
 		}
 	}
 	args.Vec.Nulls().UnsetNulls()
@@ -347,7 +347,7 @@ func NewRandomDataOp(
 		// Generate at least one type.
 		typs = make([]*types.T, 1+rng.Intn(maxSchemaLength))
 		for i := range typs {
-			typs[i] = rowenc.RandType(rng)
+			typs[i] = randgen.RandType(rng)
 		}
 	}
 	return &RandomDataOp{
