@@ -479,6 +479,49 @@ SET override_multi_region_zone_config = false
 statement ok
 SELECT crdb_internal.validate_multi_region_zone_configs()
 
+# Table is now GLOBAL, set global_reads to false to validate that an ALTER back
+# to GLOBAL will reset it to true.
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER table regional_by_row CONFIGURE ZONE USING global_reads = false;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
+----
+TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
+                       range_min_bytes = 1000,
+                       range_max_bytes = 100000,
+                       gc.ttlseconds = 100000,
+                       global_reads = false,
+                       num_replicas = 5,
+                       num_voters = 3,
+                       constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE regional_by_row SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE regional_by_row
+----
+TABLE regional_by_row  ALTER TABLE regional_by_row CONFIGURE ZONE USING
+                       range_min_bytes = 1000,
+                       range_max_bytes = 100000,
+                       gc.ttlseconds = 100000,
+                       global_reads = true,
+                       num_replicas = 5,
+                       num_voters = 3,
+                       constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                       voter_constraints = '[+region=us-east-1]',
+                       lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
 statement ok
 SET override_multi_region_zone_config = true;
 ALTER index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10;
