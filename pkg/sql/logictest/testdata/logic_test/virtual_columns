@@ -1092,3 +1092,20 @@ COMMIT;
 
 statement ok
 DROP TABLE t_ref;
+
+# Regression test for #63167. CREATE TABLE LIKE should copy VIRTUAL columns as
+# VIRTUAL, not STORED.
+statement ok
+CREATE TABLE t63167_a (a INT, v INT AS (a + 1) VIRTUAL);
+CREATE TABLE t63167_b (LIKE t63167_a INCLUDING ALL);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t63167_b]
+----
+CREATE TABLE public.t63167_b (
+   a INT8 NULL,
+   v INT8 NULL AS (a + 1:::INT8) VIRTUAL,
+   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+   CONSTRAINT "primary" PRIMARY KEY (rowid ASC),
+   FAMILY "primary" (a, rowid)
+)

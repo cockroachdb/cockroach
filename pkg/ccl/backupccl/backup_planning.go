@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1290,23 +1291,35 @@ func backupPlanHook(
 		// the job record creation happens transactionally.
 		plannerTxn := p.ExtendedEvalContext().Txn
 
+		// Construct the job and commit the transaction. Perform this work in a
+		// closure to ensure that the job is cleaned up if an error occurs.
 		var sj *jobs.StartableJob
-		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-		if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
-			return err
-		}
-		if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
-			return err
-		}
-		if err := protectTimestampForBackup(ctx, p, plannerTxn, jobID, spans, startTime, endTime, backupDetails); err != nil {
-			return err
-		}
+		if err := func() (err error) {
+			defer func() {
+				if err == nil || sj == nil {
+					return
+				}
+				if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
+					log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
+				}
+			}()
+			jobID := p.ExecCfg().JobRegistry.MakeJobID()
+			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
+				return err
+			}
+			if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
+				return err
+			}
+			if err := protectTimestampForBackup(ctx, p, plannerTxn, jobID, spans, startTime, endTime, backupDetails); err != nil {
+				return err
+			}
 
-		// We commit the transaction here so that the job can be started. This
-		// is safe because we're in an implicit transaction. If we were in an
-		// explicit transaction the job would have to be run with the detached
-		// option and would have been handled above.
-		if err := plannerTxn.Commit(ctx); err != nil {
+			// We commit the transaction here so that the job can be started. This
+			// is safe because we're in an implicit transaction. If we were in an
+			// explicit transaction the job would have to be run with the detached
+			// option and would have been handled above.
+			return plannerTxn.Commit(ctx)
+		}(); err != nil {
 			return err
 		}
 
