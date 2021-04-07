@@ -49,6 +49,11 @@ a live cluster or a unzipped debug zip.
 `,
 }
 
+var doctorOptions = struct {
+	DumpSQL bool
+	Verbose bool
+}{}
+
 var debugDoctorCmds = []*cobra.Command{
 	doctorZipDirCmd,
 	doctorClusterCmd,
@@ -88,10 +93,7 @@ func wrapExamine(
 	jobsTable doctor.JobsTable,
 	out io.Writer,
 ) error {
-	// TODO(spaskob): add --verbose flag.
-	valid, err := doctor.Examine(
-		context.Background(), descTable, namespaceTable, jobsTable, false, out)
-	if err != nil {
+	asCliError := func(err error) error {
 		return &cliError{
 			// Note: we are using "unspecified" here because the error
 			// return does not distinguish errors like connection errors
@@ -99,6 +101,18 @@ func wrapExamine(
 			exitCode: exit.UnspecifiedError(),
 			cause:    errors.Wrap(err, "examine failed"),
 		}
+	}
+	if doctorOptions.DumpSQL {
+		err := doctor.DumpSQL(out, descTable, namespaceTable)
+		if err != nil {
+			return asCliError(err)
+		}
+		return nil
+	}
+	valid, err := doctor.Examine(
+		context.Background(), descTable, namespaceTable, jobsTable, doctorOptions.Verbose, out)
+	if err != nil {
+		return asCliError(err)
 	}
 	if !valid {
 		return &cliError{

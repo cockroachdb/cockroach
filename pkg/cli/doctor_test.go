@@ -63,3 +63,20 @@ func TestDoctorZipDir(t *testing.T) {
 		return out
 	})
 }
+
+// This tests the --dump-sql output on a zip dir.
+func TestDoctorDumpSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	c := NewCLITest(TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
+
+	out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip --dump-sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Using datadriven allows TESTFLAGS=-rewrite.
+	datadriven.RunTest(t, "testdata/doctor/testdumpsql", func(t *testing.T, td *datadriven.TestData) string {
+		return out
+	})
+}
