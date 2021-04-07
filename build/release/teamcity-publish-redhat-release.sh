@@ -6,9 +6,12 @@ source "$(dirname "${0}")/teamcity-support.sh"
 source "$(dirname "${0}")/../shlib.sh"
 
 tc_start_block "Sanity Check"
-# Make sure that the version is a substring of TC branch name (e.g. v20.2.4-57-abcd345)
-# The "-" suffix makes sure we differentiate v20.2.4-57 and v20.2.4-5
-if [[ $TC_BUILD_BRANCH != "${NAME}-"* ]]; then
+# Make sure that the version matches the TeamCity branch name. The TeamCity
+# branch name becomes available only after the new tag is pushed to GitHub by
+# the `teamcity-publish-release.sh` script.
+# In the future, when this script becomes a part of the automated process, we
+# may need to change this check to match the tag used by the process.
+if [[ $TC_BUILD_BRANCH != ${NAME} ]]; then
   echo "Release name \"$NAME\" cannot be built using \"$TC_BUILD_BRANCH\""
   exit 1
 fi
