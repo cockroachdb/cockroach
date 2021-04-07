@@ -29,7 +29,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-// rowStrIter is an iterator interface for the printQueryOutput function. It is
+// rowStrIter is an iterator interface for the PrintQueryOutput function. It is
 // used so that results can be streamed to the row formatters as they arrive
 // to the CLI.
 type rowStrIter interface {
@@ -81,10 +81,10 @@ func convertAlign(align string) []int {
 	return result
 }
 
-// newRowSliceIter is an implementation of the rowStrIter interface and it is
+// NewRowSliceIter is an implementation of the rowStrIter interface and it is
 // used when the rows have not been buffered into memory yet and we want to
 // stream them to the row formatters as they arrive over the network.
-func newRowSliceIter(allRows [][]string, align string) *rowSliceIter {
+func NewRowSliceIter(allRows [][]string, align string) *rowSliceIter {
 	return &rowSliceIter{
 		allRows: allRows,
 		index:   0,
@@ -639,9 +639,9 @@ func makeReporter(w io.Writer) (rowReporter, func(), error) {
 	}
 }
 
-// printQueryOutput takes a list of column names and a list of row
+// PrintQueryOutput takes a list of column names and a list of row
 // contents writes a formatted table to 'w'.
-func printQueryOutput(w io.Writer, cols []string, allRows rowStrIter) error {
+func PrintQueryOutput(w io.Writer, cols []string, allRows rowStrIter) error {
 	reporter, cleanup, err := makeReporter(w)
 	if err != nil {
 		return err

@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -31,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadShowSummary(t *testing.T) {
+func TestShowSummary(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -63,7 +62,7 @@ func TestLoadShowSummary(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME `+ts2.AsOfSystemTime(), backupPath)
 
 	t.Run("show-summary-without-types-or-tables", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show summary %s --external-io-dir=%s", dbOnlyBackupPath, dir))
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup show %s --external-io-dir=%s", dbOnlyBackupPath, dir))
 		require.NoError(t, err)
 		expectedOutput := fmt.Sprintf(
 			`{
@@ -92,7 +91,7 @@ func TestLoadShowSummary(t *testing.T) {
 	})
 
 	t.Run("show-summary-with-full-information", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show summary %s --external-io-dir=%s", backupPath, dir))
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup show %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 
 		var sstFile string
@@ -146,7 +145,7 @@ func TestLoadShowSummary(t *testing.T) {
 	})
 }
 
-func TestLoadShowBackups(t *testing.T) {
+func TestListBackups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -165,30 +164,30 @@ func TestLoadShowBackups(t *testing.T) {
 	const backupPath = "nodelocal://0/fooFolder"
 
 	ts := generateBackupTimestamps(3)
-	t.Run("show-backups-without-backups-in-collection", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show backups %s --external-io-dir=%s", backupPath, dir))
-		require.NoError(t, err)
-		expectedOutput := "no backups found.\n"
-		checkExpectedOutput(t, expectedOutput, out)
-	})
-
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, ts[0].AsOfSystemTime()), backupPath)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, ts[1].AsOfSystemTime()), backupPath)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB INTO $1 AS OF SYSTEM TIME '%s'`, ts[2].AsOfSystemTime()), backupPath)
 
 	t.Run("show-backups-with-backups-in-collection", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show backups %s --external-io-dir=%s", backupPath, dir))
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup list-backups %s --external-io-dir=%s", backupPath, dir))
 		require.NoError(t, err)
 
-		expectedOutput := fmt.Sprintf(".%s\n.%s\n.%s\n",
-			ts[0].GoTime().Format(backupccl.DateBasedIntoFolderName),
-			ts[1].GoTime().Format(backupccl.DateBasedIntoFolderName),
-			ts[2].GoTime().Format(backupccl.DateBasedIntoFolderName))
-		checkExpectedOutput(t, expectedOutput, out)
+		var buf bytes.Buffer
+		rows := [][]string{
+			{"." + ts[0].GoTime().Format(backupccl.DateBasedIntoFolderName)},
+			{"." + ts[1].GoTime().Format(backupccl.DateBasedIntoFolderName)},
+			{"." + ts[2].GoTime().Format(backupccl.DateBasedIntoFolderName)},
+		}
+		cols := []string{"path"}
+		rowSliceIter := cli.NewRowSliceIter(rows, "l" /*align*/)
+		if err := cli.PrintQueryOutput(&buf, cols, rowSliceIter); err != nil {
+			t.Fatalf("TestListBackups: PrintQueryOutput: %v", err)
+		}
+		checkExpectedOutput(t, buf.String(), out)
 	})
 }
 
-func TestLoadShowIncremental(t *testing.T) {
+func TestListIncremental(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -210,23 +209,26 @@ func TestLoadShowIncremental(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, ts[1].AsOfSystemTime()), backupPath)
 	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME '%s'`, ts[2].AsOfSystemTime()), backupPath)
 
-	out, err := c.RunWithCapture(fmt.Sprintf("load show incremental %s --external-io-dir=%s", backupPath, dir))
+	out, err := c.RunWithCapture(fmt.Sprintf("debug backup list-incremental %s --external-io-dir=%s", backupPath, dir))
 	require.NoError(t, err)
 	expectedIncFolder := ts[1].GoTime().Format(backupccl.DateBasedIncFolderName)
 	expectedIncFolder2 := ts[2].GoTime().Format(backupccl.DateBasedIncFolderName)
 
 	var buf bytes.Buffer
-	w := tabwriter.NewWriter(&buf, 28 /*minwidth*/, 1 /*tabwidth*/, 2 /*padding*/, ' ' /*padchar*/, 0 /*flags*/)
-	fmt.Fprintf(w, "/fooFolder	-	%s\n", ts[0].GoTime().Format(time.RFC3339))
-	fmt.Fprintf(w, "/fooFolder%s	%s	%s\n", expectedIncFolder, ts[0].GoTime().Format(time.RFC3339), ts[1].GoTime().Format(time.RFC3339))
-	fmt.Fprintf(w, "/fooFolder%s	%s	%s\n", expectedIncFolder2, ts[1].GoTime().Format(time.RFC3339), ts[2].GoTime().Format(time.RFC3339))
-	if err := w.Flush(); err != nil {
-		t.Fatalf("TestLoadShowIncremental: flush: %v", err)
+	rows := [][]string{
+		{"/fooFolder", "-", ts[0].GoTime().Format(time.RFC3339)},
+		{"/fooFolder" + expectedIncFolder, ts[0].GoTime().Format(time.RFC3339), ts[1].GoTime().Format(time.RFC3339)},
+		{"/fooFolder" + expectedIncFolder2, ts[1].GoTime().Format(time.RFC3339), ts[2].GoTime().Format(time.RFC3339)},
+	}
+	cols := []string{"path", "start time", "end time"}
+	rowSliceIter := cli.NewRowSliceIter(rows, "lll" /*align*/)
+	if err := cli.PrintQueryOutput(&buf, cols, rowSliceIter); err != nil {
+		t.Fatalf("TestListIncremental: PrintQueryOutput: %v", err)
 	}
 	checkExpectedOutput(t, buf.String(), out)
 }
 
-func TestLoadShowData(t *testing.T) {
+func TestShowData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -280,13 +282,18 @@ func TestLoadShowData(t *testing.T) {
 			"testDB.testschema.fooTable",
 			[]string{backupPublicSchemaPath},
 			"ERROR: fetching entry: table testdb.testschema.footable not found\n",
+		}, {
+			"show-data-fail-without-table-specified",
+			"",
+			[]string{backupPublicSchemaPath},
+			"ERROR: export data requires table name specified by --table flag\n",
 		},
 	}
 	for _, tc := range testCasesOnError {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --external-io-dir=%s",
-				tc.tableName,
+			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s",
 				strings.Join(tc.backupPaths, " "),
+				tc.tableName,
 				dir))
 			require.NoError(t, err)
 			checkExpectedOutput(t, tc.expectedOutput, out)
@@ -320,9 +327,9 @@ func TestLoadShowData(t *testing.T) {
 
 	for _, tc := range testCasesDatumOutput {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --external-io-dir=%s",
-				tc.tableName,
+			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --external-io-dir=%s",
 				strings.Join(tc.backupPaths, " "),
+				tc.tableName,
 				dir))
 			require.NoError(t, err)
 			checkExpectedOutput(t, tc.expectedDatums, out)
@@ -330,7 +337,7 @@ func TestLoadShowData(t *testing.T) {
 	}
 }
 
-func TestLoadShowDataAOST(t *testing.T) {
+func TestShowDataAOST(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -381,9 +388,9 @@ func TestLoadShowDataAOST(t *testing.T) {
 
 	t.Run("show-data-as-of-a-uncovered-timestamp", func(t *testing.T) {
 		tsNotCovered := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --as-of=%s --external-io-dir=%s",
-			"testDB.public.fooTable",
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s --as-of=%s --external-io-dir=%s",
 			backupPath,
+			"testDB.public.fooTable",
 			tsNotCovered.AsOfSystemTime(),
 			dir))
 		require.NoError(t, err)
@@ -394,9 +401,9 @@ func TestLoadShowDataAOST(t *testing.T) {
 	})
 
 	t.Run("show-data-as-of-non-backup-ts-should-return-error", func(t *testing.T) {
-		out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s  --as-of=%s --external-io-dir=%s",
-			"testDB.public.fooTable",
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --as-of=%s --external-io-dir=%s",
 			backupPath,
+			"testDB.public.fooTable",
 			ts.AsOfSystemTime(),
 			dir))
 		require.NoError(t, err)
@@ -555,9 +562,9 @@ func TestLoadShowDataAOST(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := c.RunWithCapture(fmt.Sprintf("load show data %s %s --as-of=%s --external-io-dir=%s ",
-				tc.tableName,
+			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s --as-of=%s --external-io-dir=%s ",
 				strings.Join(tc.backupPaths, " "),
+				tc.tableName,
 				tc.asof,
 				dir))
 			require.NoError(t, err)
