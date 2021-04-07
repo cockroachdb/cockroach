@@ -190,20 +190,29 @@ type StoreTestingKnobs struct {
 	// acquiring snapshot quota or doing shouldAcceptSnapshotData checks. If an
 	// error is returned from the hook, it's sent as an ERROR SnapshotResponse.
 	ReceiveSnapshot func(*SnapshotRequest_Header) error
-	// ReplicaAddSkipRollback causes replica addition to skip the learner rollback
-	// that happens when promotion to a voter fails.
+	// ReplicaAddSkipLearnerRollback causes replica addition to skip the learner
+	// rollback that happens when either the initial snapshot or the promotion of
+	// a learner to a voter fails.
 	ReplicaAddSkipLearnerRollback func() bool
-	// ReplicaAddStopAfterLearnerSnapshot causes replica addition to return early
+	// VoterAddStopAfterLearnerSnapshot causes voter addition to return early
 	// if the func returns true. Specifically, after the learner txn is successful
 	// and after the LEARNER type snapshot, but before promoting it to a voter.
 	// This ensures the `*Replica` will be materialized on the Store when it
 	// returns.
-	ReplicaAddStopAfterLearnerSnapshot func([]roachpb.ReplicationTarget) bool
-	// ReplicaSkipLearnerSnapshot causes snapshots to never be sent to learners
-	// if the func returns true. Adding replicas proceeds as usual, though if
-	// the added replica has no prior state which can be caught up from the raft
-	// log, the result will be an voter that is unable to participate in quorum.
-	ReplicaSkipLearnerSnapshot func() bool
+	VoterAddStopAfterLearnerSnapshot func([]roachpb.ReplicationTarget) bool
+	// NonVoterAfterInitialization is called after a newly added non-voting
+	// replica receives its initial snapshot. Note that this knob _can_ be used in
+	// conjunction with ReplicaSkipInitialSnapshot.
+	NonVoterAfterInitialization func()
+	// ReplicaSkipInitialSnapshot causes snapshots to never be sent to learners or
+	// non-voters if the func returns true. Adding replicas proceeds as usual,
+	// though if an added voter has no prior state which can be caught up from the
+	// raft log, the result will be an voter that is unable to participate in
+	// quorum.
+	ReplicaSkipInitialSnapshot func() bool
+	// RaftSnapshotQueueSkipReplica causes the raft snapshot queue to skip sending
+	// a snapshot to a follower replica.
+	RaftSnapshotQueueSkipReplica func() bool
 	// VoterAddStopAfterJointConfig causes voter addition to return early if
 	// the func returns true. This happens before transitioning out of a joint
 	// configuration, after the joint configuration has been entered by means
