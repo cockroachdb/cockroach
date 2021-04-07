@@ -31,8 +31,11 @@ go_test(
     ],
     embed = [":keys"],
     deps = [
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
         "//pkg/storage",
+        "//pkg/storage/enginepb",
         "//pkg/testutils",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
@@ -43,5 +46,6 @@ go_test(
         "@com_github_cockroachdb_apd_v2//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )

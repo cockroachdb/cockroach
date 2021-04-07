@@ -13,7 +13,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -685,8 +684,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			app := msgApps[i]
 			for _, ent := range app.Entries {
 				if app.LogTerm > ent.Term {
-					log.Fatalf(ctx, "TBG term regression: idx %d at term=%d appended with logterm=%d",
-						ent.Term, app.LogTerm)
+					util.CrashWithCore(ctx,
+						errors.Errorf("TBG term regression: idx %d at term=%d appended with logterm=%d",
+							ent.Index, ent.Term, app.LogTerm),
+					)
 				}
 			}
 		}
@@ -800,13 +801,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
 	r.store.raftEntryCache.Add(r.RangeID, rd.Entries, true /* truncate */)
-	if len(rd.Entries) > 0 {
-		idx := rd.Entries[len(rd.Entries)-1].Index
-		ents, _, _, _ := r.store.raftEntryCache.Scan(nil, r.RangeID, idx+1, idx+2, math.MaxUint64)
-		if len(ents) > 0 {
-			log.Fatalf(ctx, "truncated cache to [..., %d] but got an entry for %d..%d", idx, ents[0].Index, ents[len(ents)-1].Index)
-		}
-	}
+
 	r.sendRaftMessages(ctx, otherMsgs)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 
@@ -1143,9 +1138,9 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 		drop := false
 		switch message.Type {
 		case raftpb.MsgApp:
-			if n := message.Size(); n > 5*(32<<10) { // 5 * 32kb
-				log.Infof(ctx, "large MsgApp: %s", humanizeutil.IBytes(int64(n)))
-			}
+			// if n := message.Size(); n > 5*(32<<10) { // 5 * 32kb
+			// 	log.Infof(ctx, "large MsgApp: %s", humanizeutil.IBytes(int64(n)))
+			// }
 			if util.RaceEnabled {
 				// Iterate over the entries to assert that all sideloaded commands
 				// are already inlined. replicaRaftStorage.Entries already performs

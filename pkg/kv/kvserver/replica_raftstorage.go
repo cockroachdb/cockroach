@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -186,8 +187,8 @@ func entries(
 			ent := &ents[i]
 			prevEnt := &ents[i-1]
 			if prevEnt.Term > ent.Term {
-				log.Fatalf(ctx, "TBG idx %d term regression after iterateEntries %d -> %d",
-					ent.Index, prevEnt.Term, ent.Term)
+				util.CrashWithCore(ctx, errors.Errorf("TBG idx %d term regression after iterateEntries %d -> %d",
+					ent.Index, prevEnt.Term, ent.Term))
 			}
 		}
 	}
@@ -638,7 +639,8 @@ func (r *Replica) append(
 		if i > 0 {
 			prevEnt := &entries[i-1]
 			if prevEnt.Term > ent.Term {
-				log.Fatalf(ctx, "idx %d TBG term regression during append: %d -> %d", ent.Index, prevEnt.Term, ent.Term)
+				util.CrashWithCore(ctx,
+					errors.Errorf("idx %d TBG term regression during append: %d -> %d", ent.Index, prevEnt.Term, ent.Term))
 			}
 		}
 		key := r.raftMu.stateLoader.RaftLogKey(ent.Index)

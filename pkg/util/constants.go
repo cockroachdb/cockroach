@@ -11,13 +11,38 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
+	runtimepprof "runtime/pprof"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
+	"github.com/petermattis/goid"
 )
+
+// CrashWithCore .
+func CrashWithCore(ctx context.Context, err error) {
+	err = errors.Wrapf(err, "TBG CRASH DETECTED GOID=%d", goid.Get())
+	// Try hard to get the message logged.
+	// See https://github.com/cockroachdb/cockroach/pull/62763.
+	fmt.Fprintln(os.Stderr, err)
+	fmt.Fprintln(os.Stdout, err)
+	os.Stderr.Sync()
+	os.Stdout.Sync()
+	// Make it easier to find the caller goroutine in Goland
+	// when inspecting the core dump.
+	runtimepprof.SetGoroutineLabels(
+		runtimepprof.WithLabels(ctx, runtimepprof.Labels("TBG", "TBG")),
+	)
+	go func() {
+		panic(err)
+	}()
+	time.Sleep(time.Hour)
+}
 
 // IsMetamorphicBuild returns whether this build is metamorphic. By build being
 // "metamorphic" we mean that some magic constants in the codebase might get

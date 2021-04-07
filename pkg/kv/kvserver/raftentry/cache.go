@@ -19,7 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -144,21 +144,45 @@ func (c *Cache) Drop(id roachpb.RangeID) {
 // provided. ents is expected to consist of entries with a contiguous sequence
 // of indices.
 func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
-	if true {
-		return // HACK: disable raft entry cache
-	}
 	if len(ents) == 0 {
 		return
 	}
-	bytesGuessed := analyzeEntries(ents)
-	add := bytesGuessed <= c.maxBytes
+	var bytesAdded, entriesAdded, bytesRemoved, entriesRemoved int32
+
+	var add bool
+	var bytesGuessed int32
+	var p *partition
+	defer func() {
+		if !truncate {
+			return
+		}
+		// Find the last index we were supposed to add here, say 100.
+		lastIdx := ents[len(ents)-1].Index
+		// Scan [101, 200] which should be empty now.
+		postEnts, _, _, _ := c.Scan(nil, id, lastIdx+1, lastIdx+100, math.MaxUint64)
+		// if it's not, explode with as much info as possible.
+		if len(postEnts) > 0 {
+			err := errors.Errorf(
+				"r%d: truncated cache to [%d, %d] but got an entry for %d..%d\n"+
+					"add=%t bytesGuessed=%d"+
+					"bytesAdded=%d entriesAdded=%d bytesRemoved=%d entriesRemoved=%d",
+				id, ents[0].Index, lastIdx, postEnts[0].Index, postEnts[len(postEnts)-1].Index,
+				add, bytesGuessed,
+				bytesAdded, entriesAdded, bytesRemoved, entriesRemoved,
+			)
+			util.CrashWithCore(context.Background(), err)
+		}
+	}()
+
+	bytesGuessed = analyzeEntries(ents)
+	add = bytesGuessed <= c.maxBytes
 	if !add {
 		bytesGuessed = 0
 	}
 
 	c.mu.Lock()
 	// Get p and move the partition to the front of the LRU.
-	p := c.getPartLocked(id, add /* create */, true /* recordUse */)
+	p = c.getPartLocked(id, add /* create */, true /* recordUse */)
 	if bytesGuessed > 0 {
 		c.evictLocked(bytesGuessed)
 		if len(c.parts) == 0 { // Get p again if we evicted everything.
@@ -184,7 +208,6 @@ func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	var bytesAdded, entriesAdded, bytesRemoved, entriesRemoved int32
 	if add {
 		bytesAdded, entriesAdded = p.add(ents)
 	}
@@ -263,7 +286,8 @@ func (c *Cache) Scan(
 			ent := &ents[i]
 			prevEnt := &ents[i-1]
 			if prevEnt.Term > ent.Term {
-				log.Fatalf(context.Background(), "r%d idx %d TBG log regression during Cache.Scan: term %d -> %d", id, ent.Index, prevEnt.Term, ent.Term)
+				err := errors.Errorf("r%d idx %d TBG log regression during Cache.Scan: term %d -> %d", id, ent.Index, prevEnt.Term, ent.Term)
+				util.CrashWithCore(context.Background(), err)
 			}
 		}
 	}
@@ -389,7 +413,8 @@ func analyzeEntries(ents []raftpb.Entry) (size int32) {
 			panic(errors.Errorf("invalid non-contiguous set of entries %d and %d", prevIndex, e.Index))
 		}
 		if i != 0 && e.Term < prevTerm {
-			panic(errors.Errorf("term regression idx %d: %s -> %d", prevIndex, e.Term, prevTerm))
+			util.CrashWithCore(context.Background(),
+				errors.Errorf("term regression idx %d: %s -> %d", prevIndex, e.Term, prevTerm))
 
 		}
 		prevIndex = e.Index
