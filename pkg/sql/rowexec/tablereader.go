@@ -54,7 +54,6 @@ type tableReader struct {
 
 var _ execinfra.Processor = &tableReader{}
 var _ execinfra.RowSource = &tableReader{}
-var _ execinfrapb.MetadataSource = &tableReader{}
 var _ execinfra.Releasable = &tableReader{}
 var _ execinfra.OpNode = &tableReader{}
 
@@ -310,11 +309,6 @@ func (tr *tableReader) generateMeta(ctx context.Context) []execinfrapb.ProducerM
 	meta.Metrics.BytesRead = tr.fetcher.GetBytesRead()
 	meta.Metrics.RowsRead = tr.rowsRead
 	return append(trailingMeta, *meta)
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (tr *tableReader) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
-	return tr.generateMeta(ctx)
 }
 
 // ChildCount is part of the execinfra.OpNode interface.

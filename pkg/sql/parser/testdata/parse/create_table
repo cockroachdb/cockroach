@@ -2134,3 +2134,19 @@ CREATE TABLE a (b INT8) -- normalized!
 CREATE TABLE a (b INT8) -- fully parenthetized
 CREATE TABLE a (b INT8) -- literals removed
 CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE arr_t (i STRING DEFAULT (('{' || 'a' || '}')::STRING[])[1]::STRING)
+----
+CREATE TABLE arr_t (i STRING DEFAULT ((('{' || 'a') || '}')::STRING[])[1]::STRING) -- normalized!
+CREATE TABLE arr_t (i STRING DEFAULT ((((((((((('{') || ('a'))) || ('}'))))::STRING[])))[(1)])::STRING)) -- fully parenthetized
+CREATE TABLE arr_t (i STRING DEFAULT (((_ || _) || _)::STRING[])[_]::STRING) -- literals removed
+CREATE TABLE _ (_ STRING DEFAULT ((('{' || 'a') || '}')::STRING[])[1]::STRING) -- identifiers removed
+
+parse
+CREATE TABLE arr_t (i INT8 DEFAULT (('{' || '1' || '}')::INT8[])[1])
+----
+CREATE TABLE arr_t (i INT8 DEFAULT ((('{' || '1') || '}')::INT8[])[1]) -- normalized!
+CREATE TABLE arr_t (i INT8 DEFAULT (((((((((('{') || ('1'))) || ('}'))))::INT8[])))[(1)])) -- fully parenthetized
+CREATE TABLE arr_t (i INT8 DEFAULT (((_ || _) || _)::INT8[])[_]) -- literals removed
+CREATE TABLE _ (_ INT8 DEFAULT ((('{' || '1') || '}')::INT8[])[1]) -- identifiers removed

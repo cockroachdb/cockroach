@@ -239,15 +239,21 @@ func (c *Columnarizer) Run(context.Context) {
 }
 
 var (
-	_ colexecop.Operator         = &Columnarizer{}
-	_ execinfrapb.MetadataSource = &Columnarizer{}
-	_ colexecop.Closer           = &Columnarizer{}
+	_ colexecop.DrainableOperator = &Columnarizer{}
+	_ colexecop.Closer            = &Columnarizer{}
 )
 
-// DrainMeta is part of the MetadataSource interface.
+// DrainMeta is part of the colexecop.MetadataSource interface.
 func (c *Columnarizer) DrainMeta(ctx context.Context) []execinfrapb.ProducerMetadata {
 	if c.removedFromFlow {
 		return nil
+	}
+	if c.initStatus == colexecop.OperatorNotInitialized {
+		// The columnarizer wasn't initialized, so the wrapped processors might
+		// not have been started leaving them in an unsafe to drain state, so
+		// we skip the draining. Mostly likely this happened because a panic was
+		// encountered in Init.
+		return c.accumulatedMeta
 	}
 	c.MoveToDraining(nil /* err */)
 	for {

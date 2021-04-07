@@ -30,17 +30,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-// CallbackMetadataSource is a utility struct that implements the MetadataSource
-// interface by calling a provided callback.
-type CallbackMetadataSource struct {
-	DrainMetaCb func(context.Context) []ProducerMetadata
-}
-
-// DrainMeta is part of the MetadataSource interface.
-func (s CallbackMetadataSource) DrainMeta(ctx context.Context) []ProducerMetadata {
-	return s.DrainMetaCb(ctx)
-}
-
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
 	return rpc.NewContext(rpc.ContextOptions{
 		TenantID:   roachpb.SystemTenantID,

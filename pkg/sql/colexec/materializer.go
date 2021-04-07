@@ -77,7 +77,7 @@ type drainHelper struct {
 	ctx context.Context
 
 	getStats func() []*execinfrapb.ComponentStats
-	sources  execinfrapb.MetadataSources
+	sources  colexecop.MetadataSources
 
 	bufferedMeta []execinfrapb.ProducerMetadata
 }
@@ -92,7 +92,7 @@ var drainHelperPool = sync.Pool{
 }
 
 func newDrainHelper(
-	getStats func() []*execinfrapb.ComponentStats, sources execinfrapb.MetadataSources,
+	getStats func() []*execinfrapb.ComponentStats, sources colexecop.MetadataSources,
 ) *drainHelper {
 	d := drainHelperPool.Get().(*drainHelper)
 	d.getStats = getStats
@@ -199,7 +199,7 @@ func NewMaterializer(
 	typs []*types.T,
 	output execinfra.RowReceiver,
 	getStats func() []*execinfrapb.ComponentStats,
-	metadataSources []execinfrapb.MetadataSource,
+	metadataSources []colexecop.MetadataSource,
 	toClose []colexecop.Closer,
 	cancelFlow func() context.CancelFunc,
 ) (*Materializer, error) {
@@ -274,7 +274,7 @@ func (m *Materializer) Start(ctx context.Context) {
 		m.MoveToDraining(err)
 	} else {
 		// Note that we intentionally only start the drain helper if
-		// initialization was successful - no starting the helper will tell it
+		// initialization was successful - not starting the helper will tell it
 		// to not drain the metadata sources (which have not been properly
 		// initialized).
 		m.drainHelper.Start(ctx)

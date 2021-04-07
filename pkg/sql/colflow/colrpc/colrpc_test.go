@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -504,8 +505,8 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			}
 			outbox, err := NewOutbox(
 				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-				input, typs, nil /* getStats */, []execinfrapb.MetadataSource{
-					execinfrapb.CallbackMetadataSource{
+				input, typs, nil /* getStats */, []colexecop.MetadataSource{
+					colexectestutils.CallbackMetadataSource{
 						DrainMetaCb: func(context.Context) []execinfrapb.ProducerMetadata {
 							return expectedMetadata
 						},

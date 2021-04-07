@@ -1324,3 +1324,42 @@ query T
 SELECT _enum FROM t58889 WHERE _enum::greeting58889 IN (NULL, 'hi':::greeting58889);
 ----
 hi
+
+
+subtest enum_array_cast
+
+statement ok
+CREATE TYPE typ AS ENUM('a', 'b', 'c')
+
+statement ok
+CREATE TABLE arr_t (i STRING DEFAULT ('{a}'::_typ)[1]::STRING)
+
+statement ok
+INSERT INTO arr_t VALUES (default)
+
+query T
+SELECT * FROM arr_t
+----
+a
+
+statement ok
+CREATE TABLE arr_t2 (i typ DEFAULT ('{a, b, c}'::typ[])[2])
+
+statement ok
+INSERT INTO arr_t2 VALUES (default)
+
+query T
+SELECT * FROM arr_t2
+----
+b
+
+statement ok
+CREATE TABLE arr_t3 (i STRING DEFAULT ('{c}'::_typ:::_typ)[1]::STRING)
+
+statement ok
+INSERT INTO arr_t3 VALUES (default)
+
+query T
+SELECT * FROM arr_t3
+----
+c
