@@ -44,6 +44,7 @@ func TestInvertedFilterer(t *testing.T) {
 	// done in helpers called by invertedFilterer that have their own
 	// comprehensive tests. The intersection intersects the spans for the
 	// inverted column values 1 and 3.
+	// TODO(yuzefovich): add some unit tests that prefiltering works.
 	testCases := []ProcessorTestCase{
 		{
 			Name: "simple-intersection-and-onexpr",
