@@ -546,7 +546,8 @@ func init() {
 		debugGossipValuesCmd,
 		debugTimeSeriesDumpCmd,
 		debugZipCmd,
-		doctorClusterCmd,
+		doctorExamineClusterCmd,
+		doctorRecreateClusterCmd,
 		genHAProxyCmd,
 		initCmd,
 		quitCmd,
@@ -586,7 +587,8 @@ func init() {
 		statusNodeCmd,
 		lsNodesCmd,
 		debugZipCmd,
-		doctorClusterCmd,
+		doctorExamineClusterCmd,
+		doctorRecreateClusterCmd,
 		// If you add something here, make sure the actual implementation
 		// of the command uses `cmdTimeoutContext(.)` or it will ignore
 		// the timeout.
@@ -645,7 +647,8 @@ func init() {
 	sqlCmds := []*cobra.Command{
 		sqlShellCmd,
 		demoCmd,
-		doctorClusterCmd,
+		doctorExamineClusterCmd,
+		doctorRecreateClusterCmd,
 		lsNodesCmd,
 		statusNodeCmd,
 	}
