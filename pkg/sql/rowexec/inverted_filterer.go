@@ -39,9 +39,6 @@ const (
 	ifrEmittingRows
 )
 
-// TODO(sumeer): support pre-filtering, akin to the invertedJoiner, by passing
-// relationship info and parameters in the spec and using it to construct a
-// preFilterer.
 type invertedFilterer struct {
 	execinfra.ProcessorBase
 	runningState   invertedFiltererState
@@ -210,18 +207,7 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 			row[i].Datum = tree.DNull
 		}
 	}
-	// Transform to keyRow.
-	copy(ifr.keyRow, row[:ifr.invertedColIdx])
-	copy(ifr.keyRow[ifr.invertedColIdx:], row[ifr.invertedColIdx+1:])
 
-	// Add the primary key in the row to the row container. The first column in
-	// the inverted index is the value that was indexed, and the remaining are
-	// the primary key columns.
-	keyIndex, err := ifr.rc.AddRow(ifr.Ctx, ifr.keyRow)
-	if err != nil {
-		ifr.MoveToDraining(err)
-		return ifrStateUnknown, ifr.DrainHelper()
-	}
 	// Add to the evaluator.
 	//
 	// NB: Inverted columns are custom encoded in a manner that does not
@@ -247,13 +233,26 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		}
 		enc = []byte(*row[ifr.invertedColIdx].Datum.(*tree.DBytes))
 	}
-	if _, err = ifr.invertedEval.prepareAddIndexRow(enc, nil /* encFull */); err != nil {
+	shouldAdd, err := ifr.invertedEval.prepareAddIndexRow(enc, nil /* encFull */)
+	if err != nil {
 		ifr.MoveToDraining(err)
 		return ifrStateUnknown, ifr.DrainHelper()
 	}
-	if err = ifr.invertedEval.addIndexRow(keyIndex); err != nil {
-		ifr.MoveToDraining(err)
-		return ifrStateUnknown, ifr.DrainHelper()
+	if shouldAdd {
+		// Transform to keyRow which is everything other than the inverted
+		// column and then add it to the row container and the inverted expr
+		// evaluator.
+		copy(ifr.keyRow, row[:ifr.invertedColIdx])
+		copy(ifr.keyRow[ifr.invertedColIdx:], row[ifr.invertedColIdx+1:])
+		keyIndex, err := ifr.rc.AddRow(ifr.Ctx, ifr.keyRow)
+		if err != nil {
+			ifr.MoveToDraining(err)
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
+		if err = ifr.invertedEval.addIndexRow(keyIndex); err != nil {
+			ifr.MoveToDraining(err)
+			return ifrStateUnknown, ifr.DrainHelper()
+		}
 	}
 	return ifrReadingInput, nil
 }

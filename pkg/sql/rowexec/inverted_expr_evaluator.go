@@ -288,7 +288,7 @@ type batchedInvertedExprEvaluator struct {
 	nonInvertedPrefixes []roachpb.Key
 	// Spans here are in sorted order and non-overlapping.
 	fragmentedSpans []invertedSpanRoutingInfo
-	// The routing index computed by prepareAddIndexRow
+	// The routing index computed by prepareAddIndexRow.
 	routingIndex int
 
 	// Temporary state used during initialization.
@@ -514,10 +514,18 @@ func (b *batchedInvertedExprEvaluator) prepareAddIndexRow(
 	if encFull != nil {
 		routingEnc = encFull
 	}
+	// Find the first span that comes after the encoded routing value.
 	i := sort.Search(len(b.fragmentedSpans), func(i int) bool {
 		return bytes.Compare(b.fragmentedSpans[i].span.Start, routingEnc) > 0
 	})
+	// Decrement by 1 so that now i tracks the index of the span that might
+	// contain the encoded routing value.
 	i--
+	if i < 0 {
+		// Negative index indicates that some assumptions are violated, return
+		// an assertion error in this case.
+		return false, errors.AssertionFailedf("unexpectedly negative routing index %d", i)
+	}
 	b.routingIndex = i
 	return b.prefilter(enc)
 }
