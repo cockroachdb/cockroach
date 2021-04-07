@@ -444,6 +444,11 @@ func dropZoneConfigsForMultiRegionIndexes(
 				zoneConfig.DeleteSubzone(uint32(indexID), string(region))
 			}
 		}
+		// Strip placeholder status and spans if there are no more subzones.
+		if len(zoneConfig.Subzones) == 0 && zoneConfig.IsSubzonePlaceholder() {
+			zoneConfig.NumReplicas = nil
+			zoneConfig.SubzoneSpans = nil
+		}
 		return false, zoneConfig, nil
 	}
 }
@@ -580,18 +585,6 @@ func ApplyZoneConfigForMultiRegionTable(
 	currentZoneConfigIsEmpty := currentZoneConfig.Equal(zonepb.NewZoneConfig())
 	rewriteZoneConfig := !newZoneConfigIsEmpty
 	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
-
-	// It's possible at this point that we'll have an empty zone configuration
-	// that doesn't look like an empty zone configuration (i.e. it's a placeholder
-	// zone config - NumReplicas = 0 - with no subzones set). This can happen if
-	// we're ALTERing from REGIONAL BY ROW and dropping all of the subzones for
-	// the partitions. If we encounter this, instead of re-writing the zone
-	// configuration, we want to delete it.
-	numReplicasIsZero := newZoneConfig.NumReplicas != nil && *newZoneConfig.NumReplicas == 0
-	if len(newZoneConfig.Subzones) == 0 && numReplicasIsZero {
-		rewriteZoneConfig = false
-		deleteZoneConfig = true
-	}
 
 	if rewriteZoneConfig {
 		if err := newZoneConfig.Validate(); err != nil {
@@ -1340,9 +1333,9 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 	}
 
 	// Some inactive subzones may remain on the zone configuration until it is cleaned up
-	// at a later step. Keep track of all active indexes from the descriptor.
-	activeSubzoneIndexIDs := make(map[uint32]tree.Name, len(desc.ActiveIndexes()))
-	for _, idx := range desc.ActiveIndexes() {
+	// at a later step. Keep track of all non-drop indexes from the descriptor.
+	activeSubzoneIndexIDs := make(map[uint32]tree.Name, len(desc.NonDropIndexes()))
+	for _, idx := range desc.NonDropIndexes() {
 		activeSubzoneIndexIDs[uint32(idx.GetID())] = tree.Name(idx.GetName())
 	}
 
@@ -1388,9 +1381,10 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 			indexName, ok := activeSubzoneIndexIDs[mismatch.IndexID]
 			if !ok {
 				return errors.AssertionFailedf(
-					"unexpected unknown index id %d on table %s",
+					"unexpected unknown index id %d on table %s (mismatch %#v)",
 					mismatch.IndexID,
 					tableName,
+					mismatch,
 				)
 			}
 
