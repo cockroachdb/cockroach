@@ -1298,12 +1298,19 @@ func init() {
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	DebugCmd.AddCommand(debugPebbleCmd)
 
-	for _, c := range debugDoctorCmds {
+	for _, c := range []*cobra.Command{
+		doctorExamineClusterCmd,
+		doctorExamineZipDirCmd,
+		doctorRecreateClusterCmd,
+		doctorRecreateZipDirCmd,
+	} {
 		f := c.Flags()
 		f.BoolVarP(&doctorOptions.Verbose, "verbose", "v", doctorOptions.Verbose,
 			"verbose output")
-		debugDoctorCmd.AddCommand(c)
 	}
+	doctorExamineCmd.AddCommand(doctorExamineClusterCmd, doctorExamineZipDirCmd)
+	doctorRecreateCmd.AddCommand(doctorRecreateClusterCmd, doctorRecreateZipDirCmd)
+	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
 
 	f := debugSyncBenchCmd.Flags()
