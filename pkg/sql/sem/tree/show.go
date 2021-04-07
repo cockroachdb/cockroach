@@ -282,7 +282,7 @@ func (node *ShowJobs) Format(ctx *FmtCtx) {
 	}
 	if node.Schedules != nil {
 		ctx.WriteString(" FOR SCHEDULES ")
-		node.Schedules.Format(ctx)
+		ctx.FormatNode(node.Schedules)
 	}
 }
 
@@ -296,7 +296,7 @@ func (node *ShowSurvivalGoal) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SURVIVAL GOAL FROM DATABASE")
 	if node.DatabaseName != "" {
 		ctx.WriteString(" ")
-		node.DatabaseName.Format(ctx)
+		ctx.FormatNode(&node.DatabaseName)
 	}
 }
 
@@ -331,7 +331,7 @@ func (node *ShowRegions) Format(ctx *FmtCtx) {
 		ctx.WriteString(" FROM DATABASE")
 		if node.DatabaseName != "" {
 			ctx.WriteString(" ")
-			node.DatabaseName.Format(ctx)
+			ctx.FormatNode(&node.DatabaseName)
 		}
 	case ShowRegionsFromCluster:
 		ctx.WriteString(" FROM CLUSTER")
@@ -506,7 +506,11 @@ type ShowSyntax struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowSyntax) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SYNTAX ")
-	ctx.WriteString(lex.EscapeSQLString(node.Statement))
+	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
+		ctx.WriteByte('_')
+	} else {
+		ctx.WriteString(lex.EscapeSQLString(node.Statement))
+	}
 }
 
 // ShowTransactionStatus represents a SHOW TRANSACTION STATUS statement.
@@ -731,19 +735,22 @@ var _ Statement = &ShowSchedules{}
 // Format implements the NodeFormatter interface.
 func (n *ShowSchedules) Format(ctx *FmtCtx) {
 	if n.ScheduleID != nil {
-		ctx.Printf("SHOW SCHEDULE %s", AsString(n.ScheduleID))
+		ctx.WriteString("SHOW SCHEDULE ")
+		ctx.FormatNode(n.ScheduleID)
 		return
 	}
 	ctx.Printf("SHOW")
 
 	if n.WhichSchedules != SpecifiedSchedules {
 		ctx.WriteString(" ")
-		n.WhichSchedules.Format(ctx)
+		ctx.FormatNode(&n.WhichSchedules)
 	}
 
 	ctx.Printf(" SCHEDULES")
 
 	if n.ExecutorType != InvalidExecutor {
+		// TODO(knz): beware of using ctx.FormatNode here if
+		// FOR changes to support expressions.
 		ctx.Printf(" FOR %s", n.ExecutorType.UserName())
 	}
 }

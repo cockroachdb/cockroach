@@ -1,0 +1,2136 @@
+parse
+CREATE TABLE a ()
+----
+CREATE TABLE a ()
+CREATE TABLE a () -- fully parenthetized
+CREATE TABLE a () -- literals removed
+CREATE TABLE _ () -- identifiers removed
+
+parse
+CREATE TABLE FAMILY (x INT)
+----
+CREATE TABLE "family" (x INT8) -- normalized!
+CREATE TABLE "family" (x INT8) -- fully parenthetized
+CREATE TABLE "family" (x INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE INDEX (x INT)
+----
+CREATE TABLE "index" (x INT8) -- normalized!
+CREATE TABLE "index" (x INT8) -- fully parenthetized
+CREATE TABLE "index" (x INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE NOTHING (x INT)
+----
+CREATE TABLE "nothing" (x INT8) -- normalized!
+CREATE TABLE "nothing" (x INT8) -- fully parenthetized
+CREATE TABLE "nothing" (x INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE MINVALUE (x INT)
+----
+CREATE TABLE minvalue (x INT8) -- normalized!
+CREATE TABLE minvalue (x INT8) -- fully parenthetized
+CREATE TABLE minvalue (x INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE MAXVALUE (x INT)
+----
+CREATE TABLE maxvalue (x INT8) -- normalized!
+CREATE TABLE maxvalue (x INT8) -- fully parenthetized
+CREATE TABLE maxvalue (x INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE foo (MINVALUE INT)
+----
+CREATE TABLE foo (minvalue INT8) -- normalized!
+CREATE TABLE foo (minvalue INT8) -- fully parenthetized
+CREATE TABLE foo (minvalue INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE foo (MAXVALUE INT)
+----
+CREATE TABLE foo (maxvalue INT8) -- normalized!
+CREATE TABLE foo (maxvalue INT8) -- fully parenthetized
+CREATE TABLE foo (maxvalue INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TEMPORARY TABLE a (b INT8)
+----
+CREATE TEMPORARY TABLE a (b INT8)
+CREATE TEMPORARY TABLE a (b INT8) -- fully parenthetized
+CREATE TEMPORARY TABLE a (b INT8) -- literals removed
+CREATE TEMPORARY TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE UNLOGGED TABLE a (b INT8)
+----
+CREATE UNLOGGED TABLE a (b INT8)
+CREATE UNLOGGED TABLE a (b INT8) -- fully parenthetized
+CREATE UNLOGGED TABLE a (b INT8) -- literals removed
+CREATE UNLOGGED TABLE _ (_ INT8) -- identifiers removed
+
+parse
+EXPLAIN CREATE TABLE a ()
+----
+EXPLAIN CREATE TABLE a ()
+EXPLAIN CREATE TABLE a () -- fully parenthetized
+EXPLAIN CREATE TABLE a () -- literals removed
+EXPLAIN CREATE TABLE _ () -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8)
+----
+CREATE TABLE a (b INT8)
+CREATE TABLE a (b INT8) -- fully parenthetized
+CREATE TABLE a (b INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8)
+----
+CREATE TABLE a (b INT8, c INT8)
+CREATE TABLE a (b INT8, c INT8) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8) -- identifiers removed
+
+parse
+CREATE TABLE a (b BIGINT, c SMALLINT, d INTEGER, e INT)
+----
+CREATE TABLE a (b INT8, c INT2, d INT8, e INT8) -- normalized!
+CREATE TABLE a (b INT8, c INT2, d INT8, e INT8) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT2, d INT8, e INT8) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT2, _ INT8, _ INT8) -- identifiers removed
+
+
+parse
+CREATE TABLE a (b CHAR)
+----
+CREATE TABLE a (b CHAR)
+CREATE TABLE a (b CHAR) -- fully parenthetized
+CREATE TABLE a (b CHAR) -- literals removed
+CREATE TABLE _ (_ CHAR) -- identifiers removed
+
+parse
+CREATE TABLE a (b CHAR(3))
+----
+CREATE TABLE a (b CHAR(3))
+CREATE TABLE a (b CHAR(3)) -- fully parenthetized
+CREATE TABLE a (b CHAR(3)) -- literals removed
+CREATE TABLE _ (_ CHAR(3)) -- identifiers removed
+
+parse
+CREATE TABLE a (b VARCHAR)
+----
+CREATE TABLE a (b VARCHAR)
+CREATE TABLE a (b VARCHAR) -- fully parenthetized
+CREATE TABLE a (b VARCHAR) -- literals removed
+CREATE TABLE _ (_ VARCHAR) -- identifiers removed
+
+parse
+CREATE TABLE a (b VARCHAR(3))
+----
+CREATE TABLE a (b VARCHAR(3))
+CREATE TABLE a (b VARCHAR(3)) -- fully parenthetized
+CREATE TABLE a (b VARCHAR(3)) -- literals removed
+CREATE TABLE _ (_ VARCHAR(3)) -- identifiers removed
+
+parse
+CREATE TABLE a (b STRING)
+----
+CREATE TABLE a (b STRING)
+CREATE TABLE a (b STRING) -- fully parenthetized
+CREATE TABLE a (b STRING) -- literals removed
+CREATE TABLE _ (_ STRING) -- identifiers removed
+
+parse
+CREATE TABLE a (b STRING(3))
+----
+CREATE TABLE a (b STRING(3))
+CREATE TABLE a (b STRING(3)) -- fully parenthetized
+CREATE TABLE a (b STRING(3)) -- literals removed
+CREATE TABLE _ (_ STRING(3)) -- identifiers removed
+
+parse
+CREATE TABLE a (b TEXT)
+----
+CREATE TABLE a (b STRING) -- normalized!
+CREATE TABLE a (b STRING) -- fully parenthetized
+CREATE TABLE a (b STRING) -- literals removed
+CREATE TABLE _ (_ STRING) -- identifiers removed
+
+parse
+CREATE TABLE a (b CHAR(1), c CHARACTER(1), d CHARACTER(3))
+----
+CREATE TABLE a (b CHAR, c CHAR, d CHAR(3)) -- normalized!
+CREATE TABLE a (b CHAR, c CHAR, d CHAR(3)) -- fully parenthetized
+CREATE TABLE a (b CHAR, c CHAR, d CHAR(3)) -- literals removed
+CREATE TABLE _ (_ CHAR, _ CHAR, _ CHAR(3)) -- identifiers removed
+
+parse
+CREATE TABLE a (b CHAR VARYING, c CHARACTER VARYING(3))
+----
+CREATE TABLE a (b VARCHAR, c VARCHAR(3)) -- normalized!
+CREATE TABLE a (b VARCHAR, c VARCHAR(3)) -- fully parenthetized
+CREATE TABLE a (b VARCHAR, c VARCHAR(3)) -- literals removed
+CREATE TABLE _ (_ VARCHAR, _ VARCHAR(3)) -- identifiers removed
+
+parse
+CREATE TABLE a (b BIT VARYING(2), c BIT(1))
+----
+CREATE TABLE a (b VARBIT(2), c BIT) -- normalized!
+CREATE TABLE a (b VARBIT(2), c BIT) -- fully parenthetized
+CREATE TABLE a (b VARBIT(2), c BIT) -- literals removed
+CREATE TABLE _ (_ VARBIT(2), _ BIT) -- identifiers removed
+
+
+parse
+CREATE TABLE a (b JSON)
+----
+CREATE TABLE a (b JSONB) -- normalized!
+CREATE TABLE a (b JSONB) -- fully parenthetized
+CREATE TABLE a (b JSONB) -- literals removed
+CREATE TABLE _ (_ JSONB) -- identifiers removed
+
+
+parse
+CREATE TABLE a (b FLOAT4)
+----
+CREATE TABLE a (b FLOAT4)
+CREATE TABLE a (b FLOAT4) -- fully parenthetized
+CREATE TABLE a (b FLOAT4) -- literals removed
+CREATE TABLE _ (_ FLOAT4) -- identifiers removed
+
+parse
+CREATE TABLE a (b FLOAT8)
+----
+CREATE TABLE a (b FLOAT8)
+CREATE TABLE a (b FLOAT8) -- fully parenthetized
+CREATE TABLE a (b FLOAT8) -- literals removed
+CREATE TABLE _ (_ FLOAT8) -- identifiers removed
+
+parse
+CREATE TABLE a (b FLOAT, c FLOAT(10), d FLOAT(40), e REAL, f DOUBLE PRECISION)
+----
+CREATE TABLE a (b FLOAT8, c FLOAT4, d FLOAT8, e FLOAT4, f FLOAT8) -- normalized!
+CREATE TABLE a (b FLOAT8, c FLOAT4, d FLOAT8, e FLOAT4, f FLOAT8) -- fully parenthetized
+CREATE TABLE a (b FLOAT8, c FLOAT4, d FLOAT8, e FLOAT4, f FLOAT8) -- literals removed
+CREATE TABLE _ (_ FLOAT8, _ FLOAT4, _ FLOAT8, _ FLOAT4, _ FLOAT8) -- identifiers removed
+
+parse
+CREATE TABLE a (b NUMERIC, c NUMERIC(10), d DEC)
+----
+CREATE TABLE a (b DECIMAL, c DECIMAL(10), d DECIMAL) -- normalized!
+CREATE TABLE a (b DECIMAL, c DECIMAL(10), d DECIMAL) -- fully parenthetized
+CREATE TABLE a (b DECIMAL, c DECIMAL(10), d DECIMAL) -- literals removed
+CREATE TABLE _ (_ DECIMAL, _ DECIMAL(10), _ DECIMAL) -- identifiers removed
+
+parse
+CREATE TABLE a (b BOOLEAN)
+----
+CREATE TABLE a (b BOOL) -- normalized!
+CREATE TABLE a (b BOOL) -- fully parenthetized
+CREATE TABLE a (b BOOL) -- literals removed
+CREATE TABLE _ (_ BOOL) -- identifiers removed
+
+
+parse
+CREATE TABLE a (b SERIAL8)
+----
+CREATE TABLE a (b SERIAL8)
+CREATE TABLE a (b SERIAL8) -- fully parenthetized
+CREATE TABLE a (b SERIAL8) -- literals removed
+CREATE TABLE _ (_ SERIAL8) -- identifiers removed
+
+parse
+CREATE TABLE a (b BIGSERIAL, c SMALLSERIAL, d SERIAL)
+----
+CREATE TABLE a (b SERIAL8, c SERIAL2, d SERIAL8) -- normalized!
+CREATE TABLE a (b SERIAL8, c SERIAL2, d SERIAL8) -- fully parenthetized
+CREATE TABLE a (b SERIAL8, c SERIAL2, d SERIAL8) -- literals removed
+CREATE TABLE _ (_ SERIAL8, _ SERIAL2, _ SERIAL8) -- identifiers removed
+
+parse
+CREATE TABLE a (b TIMESTAMP WITH TIME ZONE)
+----
+CREATE TABLE a (b TIMESTAMPTZ) -- normalized!
+CREATE TABLE a (b TIMESTAMPTZ) -- fully parenthetized
+CREATE TABLE a (b TIMESTAMPTZ) -- literals removed
+CREATE TABLE _ (_ TIMESTAMPTZ) -- identifiers removed
+
+parse
+CREATE TABLE a (b BYTES, c BYTEA, d BLOB)
+----
+CREATE TABLE a (b BYTES, c BYTES, d BYTES) -- normalized!
+CREATE TABLE a (b BYTES, c BYTES, d BYTES) -- fully parenthetized
+CREATE TABLE a (b BYTES, c BYTES, d BYTES) -- literals removed
+CREATE TABLE _ (_ BYTES, _ BYTES, _ BYTES) -- identifiers removed
+
+
+parse
+CREATE TABLE a (b TIME)
+----
+CREATE TABLE a (b TIME)
+CREATE TABLE a (b TIME) -- fully parenthetized
+CREATE TABLE a (b TIME) -- literals removed
+CREATE TABLE _ (_ TIME) -- identifiers removed
+
+parse
+CREATE TABLE a (b TIMETZ)
+----
+CREATE TABLE a (b TIMETZ)
+CREATE TABLE a (b TIMETZ) -- fully parenthetized
+CREATE TABLE a (b TIMETZ) -- literals removed
+CREATE TABLE _ (_ TIMETZ) -- identifiers removed
+
+parse
+CREATE TABLE a (b TIME(3))
+----
+CREATE TABLE a (b TIME(3))
+CREATE TABLE a (b TIME(3)) -- fully parenthetized
+CREATE TABLE a (b TIME(3)) -- literals removed
+CREATE TABLE _ (_ TIME(3)) -- identifiers removed
+
+parse
+CREATE TABLE a (b TIMETZ(3))
+----
+CREATE TABLE a (b TIMETZ(3))
+CREATE TABLE a (b TIMETZ(3)) -- fully parenthetized
+CREATE TABLE a (b TIMETZ(3)) -- literals removed
+CREATE TABLE _ (_ TIMETZ(3)) -- identifiers removed
+
+parse
+CREATE TABLE a (b BOX2D)
+----
+CREATE TABLE a (b BOX2D)
+CREATE TABLE a (b BOX2D) -- fully parenthetized
+CREATE TABLE a (b BOX2D) -- literals removed
+CREATE TABLE _ (_ BOX2D) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY)
+----
+CREATE TABLE a (b GEOGRAPHY)
+CREATE TABLE a (b GEOGRAPHY) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY(POINT))
+----
+CREATE TABLE a (b GEOGRAPHY(POINT))
+CREATE TABLE a (b GEOGRAPHY(POINT)) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY(POINT)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(POINT)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY(POINT,4326))
+----
+CREATE TABLE a (b GEOGRAPHY(POINT,4326))
+CREATE TABLE a (b GEOGRAPHY(POINT,4326)) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY(POINT,4326)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(POINT,4326)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY(LINESTRING,4326))
+----
+CREATE TABLE a (b GEOGRAPHY(LINESTRING,4326))
+CREATE TABLE a (b GEOGRAPHY(LINESTRING,4326)) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY(LINESTRING,4326)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(LINESTRING,4326)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY(POLYGON,4326))
+----
+CREATE TABLE a (b GEOGRAPHY(POLYGON,4326))
+CREATE TABLE a (b GEOGRAPHY(POLYGON,4326)) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY(POLYGON,4326)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(POLYGON,4326)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY(MULTIPOINT,4326))
+----
+CREATE TABLE a (b GEOGRAPHY(MULTIPOINT,4326))
+CREATE TABLE a (b GEOGRAPHY(MULTIPOINT,4326)) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY(MULTIPOINT,4326)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(MULTIPOINT,4326)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY(MULTILINESTRING,4326))
+----
+CREATE TABLE a (b GEOGRAPHY(MULTILINESTRING,4326))
+CREATE TABLE a (b GEOGRAPHY(MULTILINESTRING,4326)) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY(MULTILINESTRING,4326)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(MULTILINESTRING,4326)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY(MULTIPOLYGON,4326))
+----
+CREATE TABLE a (b GEOGRAPHY(MULTIPOLYGON,4326))
+CREATE TABLE a (b GEOGRAPHY(MULTIPOLYGON,4326)) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY(MULTIPOLYGON,4326)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(MULTIPOLYGON,4326)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY(GEOMETRY,4326))
+----
+CREATE TABLE a (b GEOGRAPHY(GEOMETRY,4326))
+CREATE TABLE a (b GEOGRAPHY(GEOMETRY,4326)) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY(GEOMETRY,4326)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(GEOMETRY,4326)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOGRAPHY(GEOMETRYCOLLECTION,4326))
+----
+CREATE TABLE a (b GEOGRAPHY(GEOMETRYCOLLECTION,4326))
+CREATE TABLE a (b GEOGRAPHY(GEOMETRYCOLLECTION,4326)) -- fully parenthetized
+CREATE TABLE a (b GEOGRAPHY(GEOMETRYCOLLECTION,4326)) -- literals removed
+CREATE TABLE _ (_ GEOGRAPHY(GEOMETRYCOLLECTION,4326)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOMETRY)
+----
+CREATE TABLE a (b GEOMETRY)
+CREATE TABLE a (b GEOMETRY) -- fully parenthetized
+CREATE TABLE a (b GEOMETRY) -- literals removed
+CREATE TABLE _ (_ GEOMETRY) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOMETRY(POINT))
+----
+CREATE TABLE a (b GEOMETRY(POINT))
+CREATE TABLE a (b GEOMETRY(POINT)) -- fully parenthetized
+CREATE TABLE a (b GEOMETRY(POINT)) -- literals removed
+CREATE TABLE _ (_ GEOMETRY(POINT)) -- identifiers removed
+
+parse
+CREATE TABLE a (b GEOMETRY(POINT,4326))
+----
+CREATE TABLE a (b GEOMETRY(POINT,4326))
+CREATE TABLE a (b GEOMETRY(POINT,4326)) -- fully parenthetized
+CREATE TABLE a (b GEOMETRY(POINT,4326)) -- literals removed
+CREATE TABLE _ (_ GEOMETRY(POINT,4326)) -- identifiers removed
+
+parse
+CREATE TABLE a (b UUID)
+----
+CREATE TABLE a (b UUID)
+CREATE TABLE a (b UUID) -- fully parenthetized
+CREATE TABLE a (b UUID) -- literals removed
+CREATE TABLE _ (_ UUID) -- identifiers removed
+
+parse
+CREATE TABLE a (b INET)
+----
+CREATE TABLE a (b INET)
+CREATE TABLE a (b INET) -- fully parenthetized
+CREATE TABLE a (b INET) -- literals removed
+CREATE TABLE _ (_ INET) -- identifiers removed
+
+parse
+CREATE TABLE a (b "char")
+----
+CREATE TABLE a (b "char")
+CREATE TABLE a (b "char") -- fully parenthetized
+CREATE TABLE a (b "char") -- literals removed
+CREATE TABLE _ (_ "char") -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 NULL)
+----
+CREATE TABLE a (b INT8 NULL)
+CREATE TABLE a (b INT8 NULL) -- fully parenthetized
+CREATE TABLE a (b INT8 NULL) -- literals removed
+CREATE TABLE _ (_ INT8 NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT maybe NULL)
+----
+CREATE TABLE a (b INT8 CONSTRAINT maybe NULL)
+CREATE TABLE a (b INT8 CONSTRAINT maybe NULL) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT maybe NULL) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 NOT NULL)
+----
+CREATE TABLE a (b INT8 NOT NULL)
+CREATE TABLE a (b INT8 NOT NULL) -- fully parenthetized
+CREATE TABLE a (b INT8 NOT NULL) -- literals removed
+CREATE TABLE _ (_ INT8 NOT NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT always NOT NULL)
+----
+CREATE TABLE a (b INT8 CONSTRAINT always NOT NULL)
+CREATE TABLE a (b INT8 CONSTRAINT always NOT NULL) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT always NOT NULL) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ NOT NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 PRIMARY KEY)
+----
+CREATE TABLE a (b INT8 PRIMARY KEY)
+CREATE TABLE a (b INT8 PRIMARY KEY) -- fully parenthetized
+CREATE TABLE a (b INT8 PRIMARY KEY) -- literals removed
+CREATE TABLE _ (_ INT8 PRIMARY KEY) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 UNIQUE)
+----
+CREATE TABLE a (b INT8 UNIQUE)
+CREATE TABLE a (b INT8 UNIQUE) -- fully parenthetized
+CREATE TABLE a (b INT8 UNIQUE) -- literals removed
+CREATE TABLE _ (_ INT8 UNIQUE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT, UNIQUE INDEX foo (b))
+----
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b)) -- normalized!
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b)) -- fully parenthetized
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b)) -- literals removed
+CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT, UNIQUE INDEX foo (b) WHERE c > 3)
+----
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > 3) -- normalized!
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE ((c) > (3))) -- fully parenthetized
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) WHERE c > _) -- literals removed
+CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) WHERE _ > 3) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT, UNIQUE INDEX foo (b) INTERLEAVE IN PARENT c (d))
+----
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- normalized!
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- fully parenthetized
+CREATE TABLE a (b INT8, CONSTRAINT foo UNIQUE (b) INTERLEAVE IN PARENT c (d)) -- literals removed
+CREATE TABLE _ (_ INT8, CONSTRAINT _ UNIQUE (_) INTERLEAVE IN PARENT _ (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+----
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))) -- normalized!
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthetized
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 UNIQUE WITHOUT INDEX)
+----
+CREATE TABLE a (b INT8 UNIQUE WITHOUT INDEX)
+CREATE TABLE a (b INT8 UNIQUE WITHOUT INDEX) -- fully parenthetized
+CREATE TABLE a (b INT8 UNIQUE WITHOUT INDEX) -- literals removed
+CREATE TABLE _ (_ INT8 UNIQUE WITHOUT INDEX) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 NULL PRIMARY KEY)
+----
+CREATE TABLE a (b INT8 NULL PRIMARY KEY)
+CREATE TABLE a (b INT8 NULL PRIMARY KEY) -- fully parenthetized
+CREATE TABLE a (b INT8 NULL PRIMARY KEY) -- literals removed
+CREATE TABLE _ (_ INT8 NULL PRIMARY KEY) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 DEFAULT 1)
+----
+CREATE TABLE a (b INT8 DEFAULT 1)
+CREATE TABLE a (b INT8 DEFAULT (1)) -- fully parenthetized
+CREATE TABLE a (b INT8 DEFAULT _) -- literals removed
+CREATE TABLE _ (_ INT8 DEFAULT 1) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT 1)
+----
+CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT 1)
+CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT (1)) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT one DEFAULT _) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ DEFAULT 1) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 DEFAULT now())
+----
+CREATE TABLE a (b INT8 DEFAULT now())
+CREATE TABLE a (b INT8 DEFAULT ((now)())) -- fully parenthetized
+CREATE TABLE a (b INT8 DEFAULT now()) -- literals removed
+CREATE TABLE _ (_ INT8 DEFAULT now()) -- identifiers removed
+
+parse
+CREATE TABLE a (a INT8 CHECK (a > 0))
+----
+CREATE TABLE a (a INT8 CHECK (a > 0))
+CREATE TABLE a (a INT8 CHECK (((a) > (0)))) -- fully parenthetized
+CREATE TABLE a (a INT8 CHECK (a > _)) -- literals removed
+CREATE TABLE _ (_ INT8 CHECK (_ > 0)) -- identifiers removed
+
+parse
+CREATE TABLE a (a INT8 CONSTRAINT positive CHECK (a > 0))
+----
+CREATE TABLE a (a INT8 CONSTRAINT positive CHECK (a > 0))
+CREATE TABLE a (a INT8 CONSTRAINT positive CHECK (((a) > (0)))) -- fully parenthetized
+CREATE TABLE a (a INT8 CONSTRAINT positive CHECK (a > _)) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ CHECK (_ > 0)) -- identifiers removed
+
+parse
+CREATE TABLE a (a INT8 DEFAULT 1 CHECK (a > 0))
+----
+CREATE TABLE a (a INT8 DEFAULT 1 CHECK (a > 0))
+CREATE TABLE a (a INT8 DEFAULT (1) CHECK (((a) > (0)))) -- fully parenthetized
+CREATE TABLE a (a INT8 DEFAULT _ CHECK (a > _)) -- literals removed
+CREATE TABLE _ (_ INT8 DEFAULT 1 CHECK (_ > 0)) -- identifiers removed
+
+parse
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CHECK (a > 0))
+----
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CHECK (a > 0))
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT (1) CHECK (((a) > (0)))) -- fully parenthetized
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT _ CHECK (a > _)) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ DEFAULT 1 CHECK (_ > 0)) -- identifiers removed
+
+parse
+CREATE TABLE a (a INT8 DEFAULT 1 CONSTRAINT positive CHECK (a > 0))
+----
+CREATE TABLE a (a INT8 DEFAULT 1 CONSTRAINT positive CHECK (a > 0))
+CREATE TABLE a (a INT8 DEFAULT (1) CONSTRAINT positive CHECK (((a) > (0)))) -- fully parenthetized
+CREATE TABLE a (a INT8 DEFAULT _ CONSTRAINT positive CHECK (a > _)) -- literals removed
+CREATE TABLE _ (_ INT8 DEFAULT 1 CONSTRAINT _ CHECK (_ > 0)) -- identifiers removed
+
+parse
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CONSTRAINT positive CHECK (a > 0))
+----
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT 1 CONSTRAINT positive CHECK (a > 0))
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT (1) CONSTRAINT positive CHECK (((a) > (0)))) -- fully parenthetized
+CREATE TABLE a (a INT8 CONSTRAINT one DEFAULT _ CONSTRAINT positive CHECK (a > _)) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ DEFAULT 1 CONSTRAINT _ CHECK (_ > 0)) -- identifiers removed
+
+parse
+CREATE TABLE a (a INT8 CONSTRAINT one CHECK (a > 0) CONSTRAINT two CHECK (a < 10))
+----
+CREATE TABLE a (a INT8 CONSTRAINT one CHECK (a > 0) CONSTRAINT two CHECK (a < 10))
+CREATE TABLE a (a INT8 CONSTRAINT one CHECK (((a) > (0))) CONSTRAINT two CHECK (((a) < (10)))) -- fully parenthetized
+CREATE TABLE a (a INT8 CONSTRAINT one CHECK (a > _) CONSTRAINT two CHECK (a < _)) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ CHECK (_ > 0) CONSTRAINT _ CHECK (_ < 10)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT, CHECK (b > 0) NOT VALID)
+----
+CREATE TABLE a (b INT8, CHECK (b > 0)) -- normalized!
+CREATE TABLE a (b INT8, CHECK (((b) > (0)))) -- fully parenthetized
+CREATE TABLE a (b INT8, CHECK (b > _)) -- literals removed
+CREATE TABLE _ (_ INT8, CHECK (_ > 0)) -- identifiers removed
+
+
+parse
+CREATE TABLE a (b INT8 NOT VISIBLE)
+----
+CREATE TABLE a (b INT8 NOT VISIBLE)
+CREATE TABLE a (b INT8 NOT VISIBLE) -- fully parenthetized
+CREATE TABLE a (b INT8 NOT VISIBLE) -- literals removed
+CREATE TABLE _ (_ INT8 NOT VISIBLE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 NOT VISIBLE NULL)
+----
+CREATE TABLE a (b INT8 NULL NOT VISIBLE) -- normalized!
+CREATE TABLE a (b INT8 NULL NOT VISIBLE) -- fully parenthetized
+CREATE TABLE a (b INT8 NULL NOT VISIBLE) -- literals removed
+CREATE TABLE _ (_ INT8 NULL NOT VISIBLE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 NULL NOT VISIBLE)
+----
+CREATE TABLE a (b INT8 NULL NOT VISIBLE)
+CREATE TABLE a (b INT8 NULL NOT VISIBLE) -- fully parenthetized
+CREATE TABLE a (b INT8 NULL NOT VISIBLE) -- literals removed
+CREATE TABLE _ (_ INT8 NULL NOT VISIBLE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT c NOT NULL NOT VISIBLE)
+----
+CREATE TABLE a (b INT8 CONSTRAINT c NOT NULL NOT VISIBLE)
+CREATE TABLE a (b INT8 CONSTRAINT c NOT NULL NOT VISIBLE) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT c NOT NULL NOT VISIBLE) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ NOT NULL NOT VISIBLE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0"))
+----
+CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0"))
+CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0")) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, PRIMARY KEY (b, c, "0")) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, PRIMARY KEY (_, _, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH SIMPLE ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE RESTRICT) -- normalized!
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE RESTRICT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE RESTRICT ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE CASCADE)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE CASCADE ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE SET NULL ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE CASCADE)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE SET DEFAULT ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE CASCADE ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE RESTRICT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE SET NULL ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH SIMPLE)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo) -- normalized!
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar)) -- normalized!
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar)) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar)) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE NO ACTION)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH SIMPLE ON DELETE SET DEFAULT ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH SIMPLE ON DELETE RESTRICT ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH SIMPLE ON DELETE SET DEFAULT ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE CASCADE) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE SET DEFAULT ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH SIMPLE ON DELETE CASCADE ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE SET NULL) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE CASCADE ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH SIMPLE ON DELETE SET NULL ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE RESTRICT) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ ON DELETE SET NULL ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other MATCH SIMPLE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_, _) REFERENCES _) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y)) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_, _) REFERENCES _ (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON UPDATE CASCADE) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_, _) REFERENCES _ (_, _) ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE ON DELETE CASCADE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE CASCADE) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_, _) REFERENCES _ (_, _) ON DELETE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE ON DELETE CASCADE ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE CASCADE ON UPDATE SET NULL) -- normalized!
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE CASCADE ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE CASCADE ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_, _) REFERENCES _ (_, _) ON DELETE CASCADE ON UPDATE SET NULL) -- identifiers removed
+
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT ON DELETE RESTRICT)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE RESTRICT) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE RESTRICT ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT ON DELETE NO ACTION)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE RESTRICT)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE ON DELETE CASCADE)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE CASCADE) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE CASCADE ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE ON DELETE NO ACTION)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE CASCADE)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL ON DELETE SET NULL)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE SET NULL) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE SET NULL ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL ON DELETE NO ACTION)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE SET NULL)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT ON DELETE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT ON DELETE NO ACTION)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE NO ACTION ON DELETE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE RESTRICT ON DELETE CASCADE)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE RESTRICT) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE CASCADE ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE CASCADE ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE CASCADE ON DELETE SET NULL)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE CASCADE) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET NULL ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE SET NULL ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET NULL ON DELETE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET NULL) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE SET DEFAULT ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE SET DEFAULT ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON UPDATE SET DEFAULT ON DELETE RESTRICT)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other MATCH FULL ON UPDATE NO ACTION ON DELETE NO ACTION)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other MATCH FULL) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other MATCH FULL) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other MATCH FULL) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ MATCH FULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET DEFAULT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE RESTRICT ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE RESTRICT ON UPDATE SET DEFAULT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ MATCH FULL ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET DEFAULT ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET DEFAULT ON UPDATE CASCADE)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET DEFAULT ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET DEFAULT ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ MATCH FULL ON DELETE SET DEFAULT ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE CASCADE ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE CASCADE ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE CASCADE ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE CASCADE ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ MATCH FULL ON DELETE CASCADE ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET NULL ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET NULL ON UPDATE RESTRICT)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET NULL ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b) REFERENCES other MATCH FULL ON DELETE SET NULL ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_) REFERENCES _ MATCH FULL ON DELETE SET NULL ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other MATCH FULL)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other MATCH FULL)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other MATCH FULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other MATCH FULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_, _) REFERENCES _ MATCH FULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_, _) REFERENCES _ (_, _) MATCH FULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other)
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other)
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_, _) REFERENCES _) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y))
+----
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y))
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FOREIGN KEY (b, c) REFERENCES other (x, y)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FOREIGN KEY (_, _) REFERENCES _ (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y))
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y))
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ FOREIGN KEY (_, _) REFERENCES _ (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE)
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y)) -- normalized!
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ FOREIGN KEY (_, _) REFERENCES _ (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) ON UPDATE SET NULL) -- normalized!
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ FOREIGN KEY (_, _) REFERENCES _ (_, _) ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH SIMPLE ON DELETE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE SET DEFAULT) -- normalized!
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) ON DELETE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ FOREIGN KEY (_, _) REFERENCES _ (_, _) ON DELETE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL)
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL)
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ FOREIGN KEY (_, _) REFERENCES _ (_, _) MATCH FULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ FOREIGN KEY (_, _) REFERENCES _ (_, _) MATCH FULL ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT)
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ FOREIGN KEY (_, _) REFERENCES _ (_, _) MATCH FULL ON DELETE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT s FOREIGN KEY (b, c) REFERENCES other (x, y) MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ FOREIGN KEY (_, _) REFERENCES _ (_, _) MATCH FULL ON DELETE SET DEFAULT ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT, FOREIGN KEY (b) REFERENCES other (b) NOT VALID)
+----
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other (b)) -- normalized!
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other (b)) -- fully parenthetized
+CREATE TABLE a (b INT8, FOREIGN KEY (b) REFERENCES other (b)) -- literals removed
+CREATE TABLE _ (_ INT8, FOREIGN KEY (_) REFERENCES _ (_)) -- identifiers removed
+
+
+parse
+CREATE TABLE a (b INT8, c STRING, INDEX (b, c))
+----
+CREATE TABLE a (b INT8, c STRING, INDEX (b, c))
+CREATE TABLE a (b INT8, c STRING, INDEX (b, c)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, INDEX (b, c)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, INDEX (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, INDEX d (b, c))
+----
+CREATE TABLE a (b INT8, c STRING, INDEX d (b, c))
+CREATE TABLE a (b INT8, c STRING, INDEX d (b, c)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, INDEX d (b, c)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, INDEX _ (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c))
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c))
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c))
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c))
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE WITHOUT INDEX (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f))
+----
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f))
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE (b, c) INTERLEAVE IN PARENT d (e, f)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, CONSTRAINT _ UNIQUE (_, _) INTERLEAVE IN PARENT _ (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, UNIQUE (b))
+----
+CREATE TABLE a (b INT8, UNIQUE (b))
+CREATE TABLE a (b INT8, UNIQUE (b)) -- fully parenthetized
+CREATE TABLE a (b INT8, UNIQUE (b)) -- literals removed
+CREATE TABLE _ (_ INT8, UNIQUE (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, UNIQUE (b) STORING (c))
+----
+CREATE TABLE a (b INT8, UNIQUE (b) STORING (c))
+CREATE TABLE a (b INT8, UNIQUE (b) STORING (c)) -- fully parenthetized
+CREATE TABLE a (b INT8, UNIQUE (b) STORING (c)) -- literals removed
+CREATE TABLE _ (_ INT8, UNIQUE (_) STORING (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, INDEX (b))
+----
+CREATE TABLE a (b INT8, INDEX (b))
+CREATE TABLE a (b INT8, INDEX (b)) -- fully parenthetized
+CREATE TABLE a (b INT8, INDEX (b)) -- literals removed
+CREATE TABLE _ (_ INT8, INDEX (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, INVERTED INDEX (b))
+----
+CREATE TABLE a (b INT8, INVERTED INDEX (b))
+CREATE TABLE a (b INT8, INVERTED INDEX (b)) -- fully parenthetized
+CREATE TABLE a (b INT8, INVERTED INDEX (b)) -- literals removed
+CREATE TABLE _ (_ INT8, INVERTED INDEX (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE RESTRICT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT ON UPDATE RESTRICT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE RESTRICT ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE CASCADE)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE ON UPDATE CASCADE)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE CASCADE ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE SET NULL ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET DEFAULT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT ON UPDATE SET DEFAULT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE SET DEFAULT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT ON UPDATE SET DEFAULT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE RESTRICT ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT ON UPDATE CASCADE)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET DEFAULT ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE SET DEFAULT ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE CASCADE ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE CASCADE ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL ON UPDATE RESTRICT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON DELETE SET NULL ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON DELETE SET NULL ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE CASCADE)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE CASCADE)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE CASCADE) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE CASCADE) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON UPDATE CASCADE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET NULL)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET NULL)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET NULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET NULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON UPDATE SET NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET DEFAULT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET DEFAULT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET DEFAULT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo ON UPDATE SET DEFAULT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ ON UPDATE SET DEFAULT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar))
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar))
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar)) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar)) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ MATCH FULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON UPDATE RESTRICT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ MATCH FULL ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ MATCH FULL ON DELETE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT ON UPDATE RESTRICT)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT ON UPDATE RESTRICT)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT ON UPDATE RESTRICT) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo MATCH FULL ON DELETE RESTRICT ON UPDATE RESTRICT) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ MATCH FULL ON DELETE RESTRICT ON UPDATE RESTRICT) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar) MATCH FULL)
+----
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar) MATCH FULL)
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar) MATCH FULL) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8 REFERENCES foo (bar) MATCH FULL) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8 REFERENCES _ (_) MATCH FULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, INDEX (b) STORING (c))
+----
+CREATE TABLE a (b INT8, INDEX (b) STORING (c))
+CREATE TABLE a (b INT8, INDEX (b) STORING (c)) -- fully parenthetized
+CREATE TABLE a (b INT8, INDEX (b) STORING (c)) -- literals removed
+CREATE TABLE _ (_ INT8, INDEX (_) STORING (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, INDEX (b) WHERE b > 3)
+----
+CREATE TABLE a (b INT8, INDEX (b) WHERE b > 3)
+CREATE TABLE a (b INT8, INDEX (b) WHERE ((b) > (3))) -- fully parenthetized
+CREATE TABLE a (b INT8, INDEX (b) WHERE b > _) -- literals removed
+CREATE TABLE _ (_ INT8, INDEX (_) WHERE _ > 3) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE b > 3)
+----
+CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE b > 3)
+CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE ((b) > (3))) -- fully parenthetized
+CREATE TABLE a (b INT8, INVERTED INDEX (b) WHERE b > _) -- literals removed
+CREATE TABLE _ (_ INT8, INVERTED INDEX (_) WHERE _ > 3) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c))
+----
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c))
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, INDEX (b ASC, c DESC) STORING (c)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, INDEX (_ ASC, _ DESC) STORING (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e))
+----
+CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e))
+CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e)) -- fully parenthetized
+CREATE TABLE a (b INT8, INDEX (b) INTERLEAVE IN PARENT c (d, e)) -- literals removed
+CREATE TABLE _ (_ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_, _)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, FAMILY (b))
+----
+CREATE TABLE a (b INT8, FAMILY (b))
+CREATE TABLE a (b INT8, FAMILY (b)) -- fully parenthetized
+CREATE TABLE a (b INT8, FAMILY (b)) -- literals removed
+CREATE TABLE _ (_ INT8, FAMILY (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c))
+----
+CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c))
+CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c)) -- fully parenthetized
+CREATE TABLE a (b INT8, c STRING, FAMILY foo (b), FAMILY (c)) -- literals removed
+CREATE TABLE _ (_ INT8, _ STRING, FAMILY _ (_), FAMILY (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d)
+----
+CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d)
+CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d) -- fully parenthetized
+CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c, d) -- literals removed
+CREATE TABLE _ (_ INT8) INTERLEAVE IN PARENT _ (_, _) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE
+----
+CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE
+CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE -- fully parenthetized
+CREATE TABLE a (b INT8) INTERLEAVE IN PARENT foo (c) CASCADE -- literals removed
+CREATE TABLE _ (_ INT8) INTERLEAVE IN PARENT _ (_) CASCADE -- identifiers removed
+
+parse
+CREATE TABLE a.b (b INT8)
+----
+CREATE TABLE a.b (b INT8)
+CREATE TABLE a.b (b INT8) -- fully parenthetized
+CREATE TABLE a.b (b INT8) -- literals removed
+CREATE TABLE _._ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a (b INT8)
+----
+CREATE TABLE IF NOT EXISTS a (b INT8)
+CREATE TABLE IF NOT EXISTS a (b INT8) -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a (b INT8) -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 AS (a + b) STORED)
+----
+CREATE TABLE a (b INT8 AS (a + b) STORED)
+CREATE TABLE a (b INT8 AS (((a) + (b))) STORED) -- fully parenthetized
+CREATE TABLE a (b INT8 AS (a + b) STORED) -- literals removed
+CREATE TABLE _ (_ INT8 AS (_ + _) STORED) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 GENERATED ALWAYS AS (a + b) STORED)
+----
+CREATE TABLE a (b INT8 AS (a + b) STORED) -- normalized!
+CREATE TABLE a (b INT8 AS (((a) + (b))) STORED) -- fully parenthetized
+CREATE TABLE a (b INT8 AS (a + b) STORED) -- literals removed
+CREATE TABLE _ (_ INT8 AS (_ + _) STORED) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 GENERATED ALWAYS AS (a + b) VIRTUAL)
+----
+CREATE TABLE a (b INT8 AS (a + b) VIRTUAL) -- normalized!
+CREATE TABLE a (b INT8 AS (((a) + (b))) VIRTUAL) -- fully parenthetized
+CREATE TABLE a (b INT8 AS (a + b) VIRTUAL) -- literals removed
+CREATE TABLE _ (_ INT8 AS (_ + _) VIRTUAL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 AS (a + b) VIRTUAL)
+----
+CREATE TABLE a (b INT8 AS (a + b) VIRTUAL)
+CREATE TABLE a (b INT8 AS (((a) + (b))) VIRTUAL) -- fully parenthetized
+CREATE TABLE a (b INT8 AS (a + b) VIRTUAL) -- literals removed
+CREATE TABLE _ (_ INT8 AS (_ + _) VIRTUAL) -- identifiers removed
+
+parse
+CREATE TABLE view (view INT8)
+----
+CREATE TABLE view (view INT8)
+CREATE TABLE view (view INT8) -- fully parenthetized
+CREATE TABLE view (view INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT c PRIMARY KEY)
+----
+CREATE TABLE a (b INT8 CONSTRAINT c PRIMARY KEY)
+CREATE TABLE a (b INT8 CONSTRAINT c PRIMARY KEY) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT c PRIMARY KEY) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ PRIMARY KEY) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT c NULL)
+----
+CREATE TABLE a (b INT8 CONSTRAINT c NULL)
+CREATE TABLE a (b INT8 CONSTRAINT c NULL) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT c NULL) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ NULL) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE)
+----
+CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE)
+CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ UNIQUE) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE WITHOUT INDEX)
+----
+CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE WITHOUT INDEX)
+CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE WITHOUT INDEX) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT c UNIQUE WITHOUT INDEX) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ UNIQUE WITHOUT INDEX) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT c DEFAULT d)
+----
+CREATE TABLE a (b INT8 CONSTRAINT c DEFAULT d)
+CREATE TABLE a (b INT8 CONSTRAINT c DEFAULT (d)) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT c DEFAULT d) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ DEFAULT _) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT c CHECK (d))
+----
+CREATE TABLE a (b INT8 CONSTRAINT c CHECK (d))
+CREATE TABLE a (b INT8 CONSTRAINT c CHECK ((d))) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT c CHECK (d)) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ CHECK (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8 CONSTRAINT c REFERENCES d)
+----
+CREATE TABLE a (b INT8 CONSTRAINT c REFERENCES d)
+CREATE TABLE a (b INT8 CONSTRAINT c REFERENCES d) -- fully parenthetized
+CREATE TABLE a (b INT8 CONSTRAINT c REFERENCES d) -- literals removed
+CREATE TABLE _ (_ INT8 CONSTRAINT _ REFERENCES _) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8) PARTITION BY NOTHING
+----
+CREATE TABLE a (b INT8) PARTITION BY NOTHING
+CREATE TABLE a (b INT8) PARTITION BY NOTHING -- fully parenthetized
+CREATE TABLE a (b INT8) PARTITION BY NOTHING -- literals removed
+CREATE TABLE _ (_ INT8) PARTITION BY NOTHING -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8) PARTITION ALL BY NOTHING
+----
+CREATE TABLE a (b INT8) PARTITION ALL BY NOTHING
+CREATE TABLE a (b INT8) PARTITION ALL BY NOTHING -- fully parenthetized
+CREATE TABLE a (b INT8) PARTITION ALL BY NOTHING -- literals removed
+CREATE TABLE _ (_ INT8) PARTITION ALL BY NOTHING -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))
+----
+CREATE TABLE a (b INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))
+CREATE TABLE a (b INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN ((1), (DEFAULT)), PARTITION p2 VALUES IN ((((1), (2))), (((3), (4))))) -- fully parenthetized
+CREATE TABLE a (b INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (_, DEFAULT), PARTITION p2 VALUES IN ((_, _), (_, _))) -- literals removed
+CREATE TABLE _ (_ INT8) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1, DEFAULT), PARTITION _ VALUES IN ((1, 2), (3, 4))) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))
+----
+CREATE TABLE a (b INT8) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))
+CREATE TABLE a (b INT8) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN ((1), (DEFAULT)), PARTITION p2 VALUES IN ((((1), (2))), (((3), (4))))) -- fully parenthetized
+CREATE TABLE a (b INT8) PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (_, DEFAULT), PARTITION p2 VALUES IN ((_, _), (_, _))) -- literals removed
+CREATE TABLE _ (_ INT8) PARTITION ALL BY LIST (_) (PARTITION _ VALUES IN (1, DEFAULT), PARTITION _ VALUES IN ((1, 2), (3, 4))) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT8, c INT8, d INT8) PARTITION BY LIST (b) (
+	PARTITION p1 VALUES IN (1) PARTITION BY LIST (c) (
+		PARTITION p1_1 VALUES IN (3), PARTITION p1_2 VALUES IN (4, 5)
+	), PARTITION p2 VALUES IN (6) PARTITION BY RANGE (c) (
+		PARTITION p2_1 VALUES FROM (7) TO (8) PARTITION BY LIST (d) (
+			PARTITION p2_1_1 VALUES IN (8)
+		)
+	)
+)
+----
+CREATE TABLE a (b INT8, c INT8, d INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1) PARTITION BY LIST (c) (PARTITION p1_1 VALUES IN (3), PARTITION p1_2 VALUES IN (4, 5)), PARTITION p2 VALUES IN (6) PARTITION BY RANGE (c) (PARTITION p2_1 VALUES FROM (7) TO (8) PARTITION BY LIST (d) (PARTITION p2_1_1 VALUES IN (8)))) -- normalized!
+CREATE TABLE a (b INT8, c INT8, d INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (c) (PARTITION p1_1 VALUES IN ((3)), PARTITION p1_2 VALUES IN ((4), (5))), PARTITION p2 VALUES IN ((6)) PARTITION BY RANGE (c) (PARTITION p2_1 VALUES FROM ((7)) TO ((8)) PARTITION BY LIST (d) (PARTITION p2_1_1 VALUES IN ((8))))) -- fully parenthetized
+CREATE TABLE a (b INT8, c INT8, d INT8) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (_) PARTITION BY LIST (c) (PARTITION p1_1 VALUES IN (_), PARTITION p1_2 VALUES IN (_, _)), PARTITION p2 VALUES IN (_) PARTITION BY RANGE (c) (PARTITION p2_1 VALUES FROM (_) TO (_) PARTITION BY LIST (d) (PARTITION p2_1_1 VALUES IN (_)))) -- literals removed
+CREATE TABLE _ (_ INT8, _ INT8, _ INT8) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1) PARTITION BY LIST (_) (PARTITION _ VALUES IN (3), PARTITION _ VALUES IN (4, 5)), PARTITION _ VALUES IN (6) PARTITION BY RANGE (_) (PARTITION _ VALUES FROM (7) TO (8) PARTITION BY LIST (_) (PARTITION _ VALUES IN (8)))) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT) PARTITION BY RANGE (b) (
+   PARTITION p1 VALUES FROM (MINVALUE) TO (1),
+   PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4),
+   PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))
+----
+CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (1), PARTITION p2 VALUES FROM (2, maxvalue) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (maxvalue)) -- normalized!
+CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM ((minvalue)) TO ((1)), PARTITION p2 VALUES FROM ((2), (maxvalue)) TO ((4), (4)), PARTITION p3 VALUES FROM ((4), (4)) TO ((maxvalue))) -- fully parenthetized
+CREATE TABLE a (b INT8) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (_), PARTITION p2 VALUES FROM (_, maxvalue) TO (_, _), PARTITION p3 VALUES FROM (_, _) TO (maxvalue)) -- literals removed
+CREATE TABLE _ (_ INT8) PARTITION BY RANGE (_) (PARTITION _ VALUES FROM (_) TO (1), PARTITION _ VALUES FROM (2, _) TO (4, 4), PARTITION _ VALUES FROM (4, 4) TO (_)) -- identifiers removed
+
+parse
+CREATE TABLE a (b INT) PARTITION ALL BY RANGE (b) (
+  PARTITION p1 VALUES FROM (MINVALUE) TO (1),
+  PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4),
+  PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))
+----
+CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (1), PARTITION p2 VALUES FROM (2, maxvalue) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (maxvalue)) -- normalized!
+CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM ((minvalue)) TO ((1)), PARTITION p2 VALUES FROM ((2), (maxvalue)) TO ((4), (4)), PARTITION p3 VALUES FROM ((4), (4)) TO ((maxvalue))) -- fully parenthetized
+CREATE TABLE a (b INT8) PARTITION ALL BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (_), PARTITION p2 VALUES FROM (_, maxvalue) TO (_, _), PARTITION p3 VALUES FROM (_, _) TO (maxvalue)) -- literals removed
+CREATE TABLE _ (_ INT8) PARTITION ALL BY RANGE (_) (PARTITION _ VALUES FROM (_) TO (1), PARTITION _ VALUES FROM (2, _) TO (4, 4), PARTITION _ VALUES FROM (4, 4) TO (_)) -- identifiers removed
+
+
+parse
+CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
+----
+CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
+CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN ((1))) -- fully parenthetized
+CREATE TABLE a () INTERLEAVE IN PARENT b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (_)) -- literals removed
+CREATE TABLE _ () INTERLEAVE IN PARENT _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1))
+----
+CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (1))
+CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN ((1))) -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a () PARTITION BY LIST (b) (PARTITION c VALUES IN (_)) -- literals removed
+CREATE TABLE IF NOT EXISTS _ () PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
+
+parse
+CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+----
+CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthetized
+CREATE TABLE a (INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE _ (INDEX (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
+
+parse
+CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+----
+CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthetized
+CREATE TABLE a (INVERTED INDEX (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE _ (INVERTED INDEX (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
+
+parse
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+----
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1)))
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) -- fully parenthetized
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
+CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
+
+parse
+CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
+----
+CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
+CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1))) -- fully parenthetized
+CREATE INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_)) -- literals removed
+CREATE INDEX ON _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
+
+parse
+CREATE INVERTED INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
+----
+CREATE INVERTED INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (1))
+CREATE INVERTED INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1))) -- fully parenthetized
+CREATE INVERTED INDEX ON a (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_)) -- literals removed
+CREATE INVERTED INDEX ON _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
+
+parse
+CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
+----
+CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (1))
+CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN ((1))) -- fully parenthetized
+CREATE INDEX IF NOT EXISTS a ON b (c) PARTITION BY LIST (d) (PARTITION e VALUES IN (_)) -- literals removed
+CREATE INDEX IF NOT EXISTS _ ON _ (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
+
+parse
+ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))
+----
+ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))
+ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN ((1))) -- fully parenthetized
+ALTER TABLE a PARTITION BY LIST (b) (PARTITION p1 VALUES IN (_)) -- literals removed
+ALTER TABLE _ PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
+
+parse
+ALTER TABLE a PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1))
+----
+ALTER TABLE a PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (1))
+ALTER TABLE a PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN ((1))) -- fully parenthetized
+ALTER TABLE a PARTITION ALL BY LIST (b) (PARTITION p1 VALUES IN (_)) -- literals removed
+ALTER TABLE _ PARTITION ALL BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
+
+parse
+ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))
+----
+ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1))
+ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN ((1))) -- fully parenthetized
+ALTER INDEX a@idx PARTITION BY LIST (b) (PARTITION p1 VALUES IN (_)) -- literals removed
+ALTER INDEX _@_ PARTITION BY LIST (_) (PARTITION _ VALUES IN (1)) -- identifiers removed
+
+parse
+CREATE TABLE a AS SELECT * FROM b
+----
+CREATE TABLE a AS SELECT * FROM b
+CREATE TABLE a AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE a AS SELECT * FROM b -- literals removed
+CREATE TABLE _ AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b
+----
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b
+CREATE TABLE IF NOT EXISTS a AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b -- literals removed
+CREATE TABLE IF NOT EXISTS _ AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE a AS SELECT * FROM b ORDER BY c
+----
+CREATE TABLE a AS SELECT * FROM b ORDER BY c
+CREATE TABLE a AS SELECT (*) FROM b ORDER BY (c) -- fully parenthetized
+CREATE TABLE a AS SELECT * FROM b ORDER BY c -- literals removed
+CREATE TABLE _ AS SELECT * FROM _ ORDER BY _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b ORDER BY c
+----
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b ORDER BY c
+CREATE TABLE IF NOT EXISTS a AS SELECT (*) FROM b ORDER BY (c) -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b ORDER BY c -- literals removed
+CREATE TABLE IF NOT EXISTS _ AS SELECT * FROM _ ORDER BY _ -- identifiers removed
+
+parse
+CREATE TABLE a AS SELECT * FROM b LIMIT 3
+----
+CREATE TABLE a AS SELECT * FROM b LIMIT 3
+CREATE TABLE a AS SELECT (*) FROM b LIMIT (3) -- fully parenthetized
+CREATE TABLE a AS SELECT * FROM b LIMIT _ -- literals removed
+CREATE TABLE _ AS SELECT * FROM _ LIMIT 3 -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT 3
+----
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT 3
+CREATE TABLE IF NOT EXISTS a AS SELECT (*) FROM b LIMIT (3) -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b LIMIT _ -- literals removed
+CREATE TABLE IF NOT EXISTS _ AS SELECT * FROM _ LIMIT 3 -- identifiers removed
+
+parse
+CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)
+----
+CREATE TABLE a AS VALUES ('one', 1), ('two', 2), ('three', 3)
+CREATE TABLE a AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthetized
+CREATE TABLE a AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE _ AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)
+----
+CREATE TABLE IF NOT EXISTS a AS VALUES ('one', 1), ('two', 2), ('three', 3)
+CREATE TABLE IF NOT EXISTS a AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE IF NOT EXISTS _ AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
+
+parse
+CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
+----
+CREATE TABLE a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
+CREATE TABLE a (str, num) AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthetized
+CREATE TABLE a (str, num) AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE _ (_, _) AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
+----
+CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES ('one', 1), ('two', 2), ('three', 3)
+CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES (('one'), (1)), (('two'), (2)), (('three'), (3)) -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a (str, num) AS VALUES (_, _), (__more2__) -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_, _) AS VALUES ('one', 1), ('two', 2), ('three', 3) -- identifiers removed
+
+parse
+CREATE TABLE a AS SELECT * FROM b UNION SELECT * FROM c
+----
+CREATE TABLE a AS SELECT * FROM b UNION SELECT * FROM c
+CREATE TABLE a AS SELECT (*) FROM b UNION SELECT (*) FROM c -- fully parenthetized
+CREATE TABLE a AS SELECT * FROM b UNION SELECT * FROM c -- literals removed
+CREATE TABLE _ AS SELECT * FROM _ UNION SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION SELECT * FROM c
+----
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION SELECT * FROM c
+CREATE TABLE IF NOT EXISTS a AS SELECT (*) FROM b UNION SELECT (*) FROM c -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION SELECT * FROM c -- literals removed
+CREATE TABLE IF NOT EXISTS _ AS SELECT * FROM _ UNION SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
+----
+CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
+CREATE TABLE a AS SELECT (*) FROM b UNION VALUES (('one'), (1)) ORDER BY (c) LIMIT (5) -- fully parenthetized
+CREATE TABLE a AS SELECT * FROM b UNION VALUES (_, _) ORDER BY c LIMIT _ -- literals removed
+CREATE TABLE _ AS SELECT * FROM _ UNION VALUES ('one', 1) ORDER BY _ LIMIT 5 -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
+----
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5
+CREATE TABLE IF NOT EXISTS a AS SELECT (*) FROM b UNION VALUES (('one'), (1)) ORDER BY (c) LIMIT (5) -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES (_, _) ORDER BY c LIMIT _ -- literals removed
+CREATE TABLE IF NOT EXISTS _ AS SELECT * FROM _ UNION VALUES ('one', 1) ORDER BY _ LIMIT 5 -- identifiers removed
+
+parse
+CREATE TABLE a (z PRIMARY KEY) AS SELECT * FROM b
+----
+CREATE TABLE a (z PRIMARY KEY) AS SELECT * FROM b
+CREATE TABLE a (z PRIMARY KEY) AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE a (z PRIMARY KEY) AS SELECT * FROM b -- literals removed
+CREATE TABLE _ (_ PRIMARY KEY) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a (z PRIMARY KEY) AS SELECT * FROM b
+----
+CREATE TABLE IF NOT EXISTS a (z PRIMARY KEY) AS SELECT * FROM b
+CREATE TABLE IF NOT EXISTS a (z PRIMARY KEY) AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a (z PRIMARY KEY) AS SELECT * FROM b -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_ PRIMARY KEY) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT * FROM b
+----
+CREATE TABLE a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT * FROM b
+CREATE TABLE a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT * FROM b -- literals removed
+CREATE TABLE _ (_, _, _, PRIMARY KEY (_, _, _)) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT * FROM b
+----
+CREATE TABLE IF NOT EXISTS a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT * FROM b
+CREATE TABLE IF NOT EXISTS a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a (x, y, z, PRIMARY KEY (x, y, z)) AS SELECT * FROM b -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_, _, _, PRIMARY KEY (_, _, _)) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE a (x, FAMILY (x)) AS SELECT * FROM b
+----
+CREATE TABLE a (x, FAMILY (x)) AS SELECT * FROM b
+CREATE TABLE a (x, FAMILY (x)) AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE a (x, FAMILY (x)) AS SELECT * FROM b -- literals removed
+CREATE TABLE _ (_, FAMILY (_)) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a (x, FAMILY (x)) AS SELECT * FROM b
+----
+CREATE TABLE IF NOT EXISTS a (x, FAMILY (x)) AS SELECT * FROM b
+CREATE TABLE IF NOT EXISTS a (x, FAMILY (x)) AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a (x, FAMILY (x)) AS SELECT * FROM b -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_, FAMILY (_)) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE a (x, y FAMILY f1) AS SELECT * FROM b
+----
+CREATE TABLE a (x, y FAMILY f1) AS SELECT * FROM b
+CREATE TABLE a (x, y FAMILY f1) AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE a (x, y FAMILY f1) AS SELECT * FROM b -- literals removed
+CREATE TABLE _ (_, _ FAMILY _) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT * FROM b
+----
+CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT * FROM b
+CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT (*) FROM b -- fully parenthetized
+CREATE TABLE IF NOT EXISTS a (x, y FAMILY f1) AS SELECT * FROM b -- literals removed
+CREATE TABLE IF NOT EXISTS _ (_, _ FAMILY _) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE TABLE a (b STRING COLLATE de)
+----
+CREATE TABLE a (b STRING COLLATE de)
+CREATE TABLE a (b STRING COLLATE de) -- fully parenthetized
+CREATE TABLE a (b STRING COLLATE de) -- literals removed
+CREATE TABLE _ (_ STRING COLLATE de) -- identifiers removed
+
+parse
+CREATE TABLE a (b STRING COLLATE "en-us")
+----
+CREATE TABLE a (b STRING COLLATE en_US) -- normalized!
+CREATE TABLE a (b STRING COLLATE en_US) -- fully parenthetized
+CREATE TABLE a (b STRING COLLATE en_US) -- literals removed
+CREATE TABLE _ (_ STRING COLLATE en_US) -- identifiers removed
+
+parse
+CREATE TABLE a (b STRING COLLATE en_us)
+----
+CREATE TABLE a (b STRING COLLATE en_US) -- normalized!
+CREATE TABLE a (b STRING COLLATE en_US) -- fully parenthetized
+CREATE TABLE a (b STRING COLLATE en_US) -- literals removed
+CREATE TABLE _ (_ STRING COLLATE en_US) -- identifiers removed
+
+parse
+CREATE TABLE a (b STRING(3) COLLATE de)
+----
+CREATE TABLE a (b STRING(3) COLLATE de)
+CREATE TABLE a (b STRING(3) COLLATE de) -- fully parenthetized
+CREATE TABLE a (b STRING(3) COLLATE de) -- literals removed
+CREATE TABLE _ (_ STRING(3) COLLATE de) -- identifiers removed
+
+parse
+CREATE TABLE a (b STRING[] COLLATE de)
+----
+CREATE TABLE a (b STRING[] COLLATE de)
+CREATE TABLE a (b STRING[] COLLATE de) -- fully parenthetized
+CREATE TABLE a (b STRING[] COLLATE de) -- literals removed
+CREATE TABLE _ (_ STRING[] COLLATE de) -- identifiers removed
+
+parse
+CREATE TABLE a (b STRING(3)[] COLLATE en_US)
+----
+CREATE TABLE a (b STRING(3)[] COLLATE en_US)
+CREATE TABLE a (b STRING(3)[] COLLATE en_US) -- fully parenthetized
+CREATE TABLE a (b STRING(3)[] COLLATE en_US) -- literals removed
+CREATE TABLE _ (_ STRING(3)[] COLLATE en_US) -- identifiers removed
+
+parse
+CREATE TABLE a (LIKE b)
+----
+CREATE TABLE a (LIKE b)
+CREATE TABLE a (LIKE b) -- fully parenthetized
+CREATE TABLE a (LIKE b) -- literals removed
+CREATE TABLE _ (LIKE _) -- identifiers removed
+
+parse
+CREATE TABLE a (LIKE b, c INT8)
+----
+CREATE TABLE a (LIKE b, c INT8)
+CREATE TABLE a (LIKE b, c INT8) -- fully parenthetized
+CREATE TABLE a (LIKE b, c INT8) -- literals removed
+CREATE TABLE _ (LIKE _, _ INT8) -- identifiers removed
+
+parse
+CREATE TABLE a (LIKE b EXCLUDING INDEXES INCLUDING INDEXES)
+----
+CREATE TABLE a (LIKE b EXCLUDING INDEXES INCLUDING INDEXES)
+CREATE TABLE a (LIKE b EXCLUDING INDEXES INCLUDING INDEXES) -- fully parenthetized
+CREATE TABLE a (LIKE b EXCLUDING INDEXES INCLUDING INDEXES) -- literals removed
+CREATE TABLE _ (LIKE _ EXCLUDING INDEXES INCLUDING INDEXES) -- identifiers removed
+
+parse
+CREATE TABLE a (LIKE b INCLUDING ALL EXCLUDING INDEXES, c INT8)
+----
+CREATE TABLE a (LIKE b INCLUDING ALL EXCLUDING INDEXES, c INT8)
+CREATE TABLE a (LIKE b INCLUDING ALL EXCLUDING INDEXES, c INT8) -- fully parenthetized
+CREATE TABLE a (LIKE b INCLUDING ALL EXCLUDING INDEXES, c INT8) -- literals removed
+CREATE TABLE _ (LIKE _ INCLUDING ALL EXCLUDING INDEXES, _ INT8) -- identifiers removed
+
+parse
+CREATE TABLE a (a INT4) LOCALITY GLOBAL
+----
+CREATE TABLE a (a INT4) LOCALITY GLOBAL
+CREATE TABLE a (a INT4) LOCALITY GLOBAL -- fully parenthetized
+CREATE TABLE a (a INT4) LOCALITY GLOBAL -- literals removed
+CREATE TABLE _ (_ INT4) LOCALITY GLOBAL -- identifiers removed
+
+parse
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN "us-west1"
+----
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN "us-west1"
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN "us-west1" -- fully parenthetized
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN "us-west1" -- literals removed
+CREATE TABLE _ (_ INT4) LOCALITY REGIONAL BY TABLE IN _ -- identifiers removed
+
+parse
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+----
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION -- fully parenthetized
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION -- literals removed
+CREATE TABLE _ (_ INT4) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION -- identifiers removed
+
+
+parse
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE
+----
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION -- normalized!
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION -- fully parenthetized
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION -- literals removed
+CREATE TABLE _ (_ INT4) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION -- identifiers removed
+
+
+parse
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY ROW
+----
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY ROW
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY ROW -- fully parenthetized
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY ROW -- literals removed
+CREATE TABLE _ (_ INT4) LOCALITY REGIONAL BY ROW -- identifiers removed
+
+parse
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY ROW AS bobby
+----
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY ROW AS bobby
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY ROW AS bobby -- fully parenthetized
+CREATE TABLE a (a INT4) LOCALITY REGIONAL BY ROW AS bobby -- literals removed
+CREATE TABLE _ (_ INT4) LOCALITY REGIONAL BY ROW AS _ -- identifiers removed
+
+parse
+CREATE TABLE a (b INT) WITH (fillfactor=100)
+----
+CREATE TABLE a (b INT8) -- normalized!
+CREATE TABLE a (b INT8) -- fully parenthetized
+CREATE TABLE a (b INT8) -- literals removed
+CREATE TABLE _ (_ INT8) -- identifiers removed

@@ -97,7 +97,7 @@ func (v *IndexedVar) Format(ctx *FmtCtx) {
 	} else if f.HasFlags(fmtSymbolicVars) || v.col == nil {
 		ctx.Printf("@%d", v.Idx+1)
 	} else {
-		v.col.Format(ctx)
+		ctx.FormatNode(v.col)
 	}
 }
 

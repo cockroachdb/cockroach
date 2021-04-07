@@ -564,9 +564,9 @@ func (node *AlterTableLocality) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	node.Name.Format(ctx)
+	ctx.FormatNode(node.Name)
 	ctx.WriteString(" SET ")
-	node.Locality.Format(ctx)
+	ctx.FormatNode(node.Locality)
 }
 
 // AlterTableSetSchema represents an ALTER TABLE SET SCHEMA command.
@@ -595,7 +595,7 @@ func (node *AlterTableSetSchema) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	node.Name.Format(ctx)
+	ctx.FormatNode(node.Name)
 	ctx.WriteString(" SET SCHEMA ")
 	ctx.FormatNode(&node.Schema)
 }
@@ -645,7 +645,7 @@ func (node *AlterTableOwner) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	node.Name.Format(ctx)
+	ctx.FormatNode(node.Name)
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatUsername(node.Owner)
 }
