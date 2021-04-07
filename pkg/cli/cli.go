@@ -310,11 +310,6 @@ func hasParentCmd(cmd, refParent *cobra.Command) bool {
 	return hasParent
 }
 
-// AddCmd adds a command to the cli.
-func AddCmd(c *cobra.Command) {
-	cockroachCmd.AddCommand(c)
-}
-
 // Run ...
 func Run(args []string) error {
 	cockroachCmd.SetArgs(args)
