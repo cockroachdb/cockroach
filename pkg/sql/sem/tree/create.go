@@ -59,36 +59,57 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	}
 	ctx.FormatNode(&node.Name)
 	if node.Template != "" {
+		// NB: the template is not currently edited out under FmtAnonymize,
+		// because we don't support custom templates. If/when custom
+		// templates are supported, this should call ctx.FormatNode
+		// on the template expr.
 		ctx.WriteString(" TEMPLATE = ")
 		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.Template, ctx.flags.EncodeFlags())
 	}
 	if node.Encoding != "" {
+		// NB: the encoding is not currently edited out under FmtAnonymize,
+		// because we don't support custom encodings. If/when custom
+		// encodings are supported, this should call ctx.FormatNode
+		// on the encoding expr.
 		ctx.WriteString(" ENCODING = ")
 		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.Encoding, ctx.flags.EncodeFlags())
 	}
 	if node.Collate != "" {
+		// NB: the collation is not currently edited out under FmtAnonymize,
+		// because we don't support custom collations. If/when custom
+		// collations are supported, this should call ctx.FormatNode
+		// on the collation expr.
 		ctx.WriteString(" LC_COLLATE = ")
 		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.Collate, ctx.flags.EncodeFlags())
 	}
 	if node.CType != "" {
+		// NB: the ctype (formatting customization) is not currently
+		// edited out under FmtAnonymize, because we don't support custom
+		// cutomizations. If/when custom customizations are supported,
+		// this should call ctx.FormatNode on the ctype expr.
 		ctx.WriteString(" LC_CTYPE = ")
 		lex.EncodeSQLStringWithFlags(&ctx.Buffer, node.CType, ctx.flags.EncodeFlags())
 	}
 	if node.ConnectionLimit != -1 {
 		ctx.WriteString(" CONNECTION LIMIT = ")
-		ctx.WriteString(strconv.Itoa(int(node.ConnectionLimit)))
+		if ctx.flags.HasFlags(FmtHideConstants) {
+			ctx.WriteByte('_')
+		} else {
+			// NB: use ctx.FormatNode when the connection limit becomes an expression.
+			ctx.WriteString(strconv.Itoa(int(node.ConnectionLimit)))
+		}
 	}
 	if node.PrimaryRegion != "" {
 		ctx.WriteString(" PRIMARY REGION ")
-		node.PrimaryRegion.Format(ctx)
+		ctx.FormatNode(&node.PrimaryRegion)
 	}
 	if node.Regions != nil {
 		ctx.WriteString(" REGIONS = ")
-		node.Regions.Format(ctx)
+		ctx.FormatNode(&node.Regions)
 	}
 	if node.SurvivalGoal != SurvivalGoalDefault {
 		ctx.WriteString(" ")
-		node.SurvivalGoal.Format(ctx)
+		ctx.FormatNode(&node.SurvivalGoal)
 	}
 }
 
@@ -1261,6 +1282,8 @@ func (o *StorageParams) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
+		// TODO(knz): the key may need to be formatted differently
+		// if we want to de-anonymize it.
 		ctx.FormatNode(&n.Key)
 		if n.Value != nil {
 			ctx.WriteString(` = `)
@@ -1360,7 +1383,7 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		// parameters in the output format.
 		if node.Locality != nil {
 			ctx.WriteString(" ")
-			node.Locality.Format(ctx)
+			ctx.FormatNode(node.Locality)
 		}
 	}
 }
@@ -1491,7 +1514,13 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 		case SeqOptCache:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
-			ctx.Printf("%d", *option.IntVal)
+			// TODO(knz): replace all this with ctx.FormatNode if/when
+			// the cache option supports expressions.
+			if ctx.flags.HasFlags(FmtHideConstants) {
+				ctx.WriteByte('_')
+			} else {
+				ctx.Printf("%d", *option.IntVal)
+			}
 		case SeqOptMaxValue, SeqOptMinValue:
 			if option.IntVal == nil {
 				ctx.WriteString("NO ")
@@ -1499,7 +1528,13 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			} else {
 				ctx.WriteString(option.Name)
 				ctx.WriteByte(' ')
-				ctx.Printf("%d", *option.IntVal)
+				// TODO(knz): replace all this with ctx.FormatNode if/when
+				// the min/max value options support expressions.
+				if ctx.flags.HasFlags(FmtHideConstants) {
+					ctx.WriteByte('_')
+				} else {
+					ctx.Printf("%d", *option.IntVal)
+				}
 			}
 		case SeqOptStart:
 			ctx.WriteString(option.Name)
@@ -1507,14 +1542,26 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			if option.OptionalWord {
 				ctx.WriteString("WITH ")
 			}
-			ctx.Printf("%d", *option.IntVal)
+			// TODO(knz): replace all this with ctx.FormatNode if/when
+			// the start option supports expressions.
+			if ctx.flags.HasFlags(FmtHideConstants) {
+				ctx.WriteByte('_')
+			} else {
+				ctx.Printf("%d", *option.IntVal)
+			}
 		case SeqOptIncrement:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
 			if option.OptionalWord {
 				ctx.WriteString("BY ")
 			}
-			ctx.Printf("%d", *option.IntVal)
+			// TODO(knz): replace all this with ctx.FormatNode if/when
+			// the increment option supports expressions.
+			if ctx.flags.HasFlags(FmtHideConstants) {
+				ctx.WriteByte('_')
+			} else {
+				ctx.Printf("%d", *option.IntVal)
+			}
 		case SeqOptVirtual:
 			ctx.WriteString(option.Name)
 		case SeqOptOwnedBy:
@@ -1683,16 +1730,13 @@ func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
 		)
 
 		// Password is a special case.
-		if strings.ToUpper(option.Key.String()) == "PASSWORD" {
+		if strings.ToUpper(option.Key.String()) == "PASSWORD" && option.Value != DNull {
 			ctx.WriteString(" ")
 			if ctx.flags.HasFlags(FmtShowPasswords) {
 				ctx.FormatNode(option.Value)
 			} else {
-				ctx.WriteString("*****")
+				ctx.WriteString(PasswordSubstitution)
 			}
-		} else if option.Value == DNull {
-			ctx.WriteString(" ")
-			ctx.FormatNode(option.Value)
 		} else if option.Value != nil {
 			ctx.WriteString(" ")
 			ctx.FormatNode(option.Value)
@@ -1891,7 +1935,14 @@ func (o *CreateStatsOptions) Empty() bool {
 func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
 	sep := ""
 	if o.Throttling != 0 {
-		fmt.Fprintf(ctx, "THROTTLING %g", o.Throttling)
+		ctx.WriteString("THROTTLING ")
+		// TODO(knz): Remove all this with ctx.FormatNode()
+		// if/when throttling supports full expressions.
+		if ctx.flags.HasFlags(FmtHideConstants) {
+			ctx.WriteByte('_')
+		} else {
+			fmt.Fprintf(ctx, "%g", o.Throttling)
+		}
 		sep = " "
 	}
 	if o.AsOf.Expr != nil {
@@ -1931,5 +1982,10 @@ func (node *CreateExtension) Format(ctx *FmtCtx) {
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
 	}
+	// NB: we do not anonymize the extension name
+	// because 1) we assume that extension names
+	// do not contain sensitive information and
+	// 2) we want to get telemetry on which extensions
+	// users attempt to load.
 	ctx.WriteString(node.Name)
 }

@@ -1,0 +1,10 @@
+parse
+
+----
+----
+
+ -- fully parenthetized
+ -- literals removed
+ -- identifiers removed
+----
+----
