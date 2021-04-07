@@ -4471,6 +4471,79 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 	}
 }
 
+// TestMergeQueueWithSlowNonVoterSnaps aims to check that non-voting replicas
+// are initially upreplicated through a synchronously-sent snapshot inside of
+// `AdminChangeReplicas`, like voting replicas are. Otherwise, range merges
+// could be allowed to proceed with subsuming the right-hand side range while it
+// still has uninitialized non-voters.
+//
+// Regression test for https://github.com/cockroachdb/cockroach/issues/63199.
+func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t, "this test sleeps for a few seconds")
+
+	ctx := context.Background()
+	var delaySnapshotTrap atomic.Value
+	var clusterArgs = base.TestClusterArgs{
+		// We dont want the replicate queue mucking with our test, so disable it.
+		ReplicationMode: base.ReplicationManual,
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			1: {
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						ReceiveSnapshot: func(header *kvserver.SnapshotRequest_Header) error {
+							val := delaySnapshotTrap.Load()
+							if val != nil {
+								fn := val.(func() error)
+								return fn()
+							}
+							return nil
+						},
+					},
+				},
+			},
+		},
+	}
+
+	dbName := "testdb"
+	tableName := "kv"
+	numNodes := 3
+	tc, _ := setupTestClusterWithDummyRange(t, clusterArgs, dbName, tableName, numNodes)
+	defer tc.Stopper().Stop(ctx)
+	// We're controlling merge queue operation via
+	// `store.SetMergeQueueActive`, so enable the cluster setting here.
+	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled=true`)
+	require.NoError(t, err)
+
+	store, err := tc.Server(0).GetStores().(*kvserver.Stores).GetStore(1)
+	require.Nil(t, err)
+	// We're going to split the dummy range created above with an empty
+	// expiration time. Disable the merge queue before splitting so that the
+	// split ranges aren't immediately merged.
+	store.SetMergeQueueActive(false)
+	leftDesc, rightDesc := splitDummyRangeInTestCluster(
+		t, tc, dbName, tableName, hlc.Timestamp{}, /* splitExpirationTime */
+	)
+	require.Equal(t, 1, len(leftDesc.Replicas().Descriptors()))
+	require.Equal(t, 1, len(rightDesc.Replicas().Descriptors()))
+
+	// Add non-voters for the LHS and RHS on servers 1 and 2 respectively so that
+	// the merge queue logic has to explicitly relocate the RHS non-voter to
+	// server 1, in order to align replica sets to proceed with the merge.
+	tc.AddNonVotersOrFatal(t, leftDesc.StartKey.AsRawKey(), tc.Target(1))
+	tc.AddNonVotersOrFatal(t, rightDesc.StartKey.AsRawKey(), tc.Target(2))
+
+	delaySnapshotTrap.Store(func() error {
+		time.Sleep(5 * time.Second)
+		return nil
+	})
+	store.SetMergeQueueActive(true)
+	store.MustForceMergeScanAndProcess()
+	verifyMerged(t, store, leftDesc.StartKey, rightDesc.StartKey)
+}
+
 func TestInvalidSubsumeRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -352,6 +352,10 @@ func (mq *mergeQueue) process(
 	} else if err != nil {
 		// While range merges are unstable, be extra cautious and mark every error
 		// as purgatory-worthy.
+		//
+		// TODO(aayush): Merges are indeed stable now, we can be smarter here about
+		// which errors should be marked as purgatory-worthy.
+		log.Warningf(ctx, "%v", err)
 		return false, rangeMergePurgatoryError{err}
 	}
 	if testingAggressiveConsistencyChecks {

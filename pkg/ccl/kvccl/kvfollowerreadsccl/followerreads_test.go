@@ -578,24 +578,6 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[1], 1)`)
 	n1.Exec(t, `ALTER TABLE test EXPERIMENTAL_RELOCATE NON_VOTERS VALUES (ARRAY[3], 1)`)
 
-	// Wait until the new non-voter is upreplicated to n3.
-	testutils.SucceedsSoon(
-		t, func() error {
-			return tc.Server(2).GetStores().(*kvserver.Stores).VisitStores(
-				func(s *kvserver.Store) error {
-					repl := s.LookupReplica(tablePrefix)
-					if repl == nil {
-						return errors.Errorf("no replica found on store %s", s)
-					}
-					if !repl.IsInitialized() {
-						return errors.Errorf("non-voter not initialized")
-					}
-					return nil
-				},
-			)
-		},
-	)
-
 	// Execute the query again and assert the cache is updated. This query will
 	// not be executed as a follower read since it attempts to use n2 which
 	// doesn't have a replica any more and then it tries n1 which returns an

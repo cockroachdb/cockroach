@@ -603,16 +603,6 @@ func (r *Replica) AdminMerge(
 			return err
 		}
 
-		// Ensure that every current replica of the LHS has been initialized.
-		// Otherwise there is a rare race where the replica GC queue can GC a
-		// replica of the RHS too early. The comment on
-		// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
-		if err := waitForReplicasInit(
-			ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().Descriptors(),
-		); err != nil {
-			return errors.Wrap(err, "waiting for all left-hand replicas to initialize")
-		}
-
 		// Do a consistent read of the right hand side's range descriptor.
 		// Again, use a locking read because we intend to update this key
 		// shortly.
@@ -655,6 +645,29 @@ func (r *Replica) AdminMerge(
 		if !replicasCollocated(lReplicas.Descriptors(), rReplicas.Descriptors()) {
 			return errors.Errorf("ranges not collocated; %s != %s", lReplicas, rReplicas)
 		}
+
+		// Ensure that every current replica of the LHS has been initialized.
+		// Otherwise there is a rare race where the replica GC queue can GC a
+		// replica of the RHS too early. The comment on
+		// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
+		if err := waitForReplicasInit(
+			ctx, r.store.cfg.NodeDialer, origLeftDesc.RangeID, origLeftDesc.Replicas().Descriptors(),
+		); err != nil {
+			return errors.Wrap(err, "waiting for all left-hand replicas to initialize")
+		}
+		// Out of an abundance of caution, also ensure that replicas of the RHS have
+		// all been initialized. If for whatever reason the initial upreplication
+		// snapshot for a NON_VOTER on the RHS fails, it will have to get picked up
+		// by the raft snapshot queue to upreplicate and may be uninitialized at
+		// this point. As such, if we send a subsume request to the RHS in this sort
+		// of state, we will wastefully and unintentionally block all traffic on it
+		// for 5 seconds.
+		if err := waitForReplicasInit(
+			ctx, r.store.cfg.NodeDialer, rightDesc.RangeID, rightDesc.Replicas().Descriptors(),
+		); err != nil {
+			return errors.Wrap(err, "waiting for all right-hand replicas to initialize")
+		}
+
 		mergeReplicas := lReplicas.Descriptors()
 
 		updatedLeftDesc := *origLeftDesc
@@ -1019,39 +1032,33 @@ func (r *Replica) changeReplicasImpl(
 	}
 
 	if adds := targets.voterAdditions; len(adds) > 0 {
-		// Lock learner snapshots even before we run the ConfChange txn to add them
-		// to prevent a race with the raft snapshot queue trying to send it first.
-		// Note that this lock needs to cover sending the snapshots which happens in
-		_ = r.execReplicationChangesForVoters
-		// which also has some more details on what's going on here.
-		//
-		// Also note that the lock only prevents the raft snapshot queue from
-		// sending snapshots to learner replicas, it will still send them to voters.
-		// There are more details about this locking in
-		_ = (*raftSnapshotQueue)(nil).processRaftSnapshot
-		// as well as a TODO about fixing all this to be less subtle and brittle.
-		releaseSnapshotLockFn := r.lockLearnerSnapshot(ctx, adds)
-		defer releaseSnapshotLockFn()
-
-		// For all newly added nodes, first add raft learner replicas. They accept raft traffic
-		// (so they can catch up) but don't get to vote (so they don't affect quorum and thus
-		// don't introduce fragility into the system). For details see:
+		// For all newly added voters, first add LEARNER replicas. They accept raft
+		// traffic (so they can catch up) but don't get to vote (so they don't
+		// affect quorum and thus don't introduce fragility into the system). For
+		// details see:
 		_ = roachpb.ReplicaSet.LearnerDescriptors
 		var err error
-		desc, err = addRaftLearners(ctx, r.store, desc, reason, details, adds, internalChangeTypeAddLearner)
+		desc, err = r.initializeRaftLearners(
+			ctx, desc, priority, reason, details, adds, roachpb.LEARNER,
+		)
 		if err != nil {
 			return nil, err
+		}
+
+		if fn := r.store.cfg.TestingKnobs.VoterAddStopAfterLearnerSnapshot; fn != nil && fn(adds) {
+			return desc, nil
 		}
 	}
 
 	if len(targets.voterAdditions)+len(targets.voterRemovals) > 0 {
-		// Catch up any learners, then run the atomic replication change that adds the
-		// final voters and removes any undesirable replicas.
-		desc, err = r.execReplicationChangesForVoters(ctx, desc, priority, reason, details,
-			targets.voterAdditions, targets.voterRemovals)
+		desc, err = r.execReplicationChangesForVoters(
+			ctx, desc, reason, details,
+			targets.voterAdditions, targets.voterRemovals,
+		)
 		if err != nil {
-			// If the error occurred while transitioning out of an atomic replication change,
-			// try again here with a fresh descriptor; this is a noop otherwise.
+			// If the error occurred while transitioning out of an atomic replication
+			// change, try again here with a fresh descriptor; this is a noop
+			// otherwise.
 			if _, err := maybeLeaveAtomicChangeReplicas(ctx, r.store, r.Desc()); err != nil {
 				return nil, err
 			}
@@ -1063,7 +1070,7 @@ func (r *Replica) changeReplicasImpl(
 			if adds := targets.voterAdditions; len(adds) > 0 {
 				log.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
 				for _, target := range adds {
-					r.tryRollBackLearnerReplica(ctx, r.Desc(), target, reason, details)
+					r.tryRollbackRaftLearner(ctx, r.Desc(), target, reason, details)
 				}
 			}
 			return nil, err
@@ -1071,14 +1078,22 @@ func (r *Replica) changeReplicasImpl(
 	}
 
 	if adds := targets.nonVoterAdditions; len(adds) > 0 {
-		desc, err = addRaftLearners(ctx, r.store, desc, reason, details, adds, internalChangeTypeAddNonVoter)
+		// Add all non-voters and send them initial snapshots since some callers of
+		// `AdminChangeReplicas` (notably the mergeQueue, via `AdminRelocateRange`)
+		// care about only dealing with replicas that are mostly caught up with the
+		// raft leader. Not attempting to upreplicate these non-voters here can lead
+		// to spurious interactions that can fail range merges and cause severe
+		// disruption to foreground traffic. See
+		// https://github.com/cockroachdb/cockroach/issues/63199 for an example.
+		desc, err = r.initializeRaftLearners(
+			ctx, desc, priority, reason, details, adds, roachpb.NON_VOTER,
+		)
 		if err != nil {
 			return nil, err
 		}
-		// Queue the replica up into the raft snapshot queue so that the non-voters
-		// that were added receive their first snapshot relatively soon. See the
-		// comment block above ReplicaSet.NonVoters() for why we do this.
-		r.store.raftSnapshotQueue.AddAsync(ctx, r, raftSnapshotPriority)
+		if fn := r.store.TestingKnobs().NonVoterAfterInitialization; fn != nil {
+			fn()
+		}
 	}
 
 	if removals := targets.nonVoterRemovals; len(removals) > 0 {
@@ -1498,16 +1513,76 @@ func getChangesByNodeID(chgs roachpb.ReplicationChanges) changesByNodeID {
 	return chgsByNodeID
 }
 
-// addRaftLearners adds etcd/raft learners to the given replication targets.
-func addRaftLearners(
+// initializeRaftLearners adds etcd LearnerNodes (LEARNERs or NON_VOTERs in
+// Cockroach-land) to the given replication targets and synchronously sends them
+// an initial snapshot to upreplicate. Once this successfully returns, the
+// callers can assume that the learners were added and have been initialized via
+// that snapshot. Otherwise, if we get any errors trying to add or upreplicate
+// any of these learners, this function will clean up after itself by rolling all
+// of them back.
+func (r *Replica) initializeRaftLearners(
 	ctx context.Context,
-	s *Store,
 	desc *roachpb.RangeDescriptor,
+	priority SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	targets []roachpb.ReplicationTarget,
-	typ internalChangeType,
-) (*roachpb.RangeDescriptor, error) {
+	replicaType roachpb.ReplicaType,
+) (afterDesc *roachpb.RangeDescriptor, err error) {
+	var iChangeType internalChangeType
+	switch replicaType {
+	case roachpb.LEARNER:
+		iChangeType = internalChangeTypeAddLearner
+	case roachpb.NON_VOTER:
+		iChangeType = internalChangeTypeAddNonVoter
+	default:
+		log.Fatalf(ctx, "unexpected replicaType %s", replicaType)
+	}
+	// Lock learner snapshots even before we run the ConfChange txn to add them
+	// to prevent a race with the raft snapshot queue trying to send it first.
+	//
+	// Also note that the lock only prevents the raft snapshot queue from sending
+	// snapshots to learners and non-voters, it will still send them to voters.
+	// There are more details about this locking in
+	_ = (*raftSnapshotQueue)(nil).processRaftSnapshot
+	// as well as a TODO about fixing all this to be less subtle and brittle.
+	releaseSnapshotLockFn := r.lockLearnerSnapshot(ctx, targets)
+	defer releaseSnapshotLockFn()
+
+	// If we fail to add or send a snapshot to the learners we're adding, roll
+	// them all back.
+	defer func() {
+		if err != nil {
+			log.Infof(
+				ctx,
+				"could not successfully add and upreplicate %s replica(s) on %s, rolling back: %v",
+				replicaType,
+				targets,
+				err,
+			)
+			if fn := r.store.cfg.TestingKnobs.ReplicaAddSkipLearnerRollback; fn != nil && fn() {
+				return
+			}
+			// TODO(aayush): We could probably do better here by just rolling back the
+			// learners for which the initial snapshot failed. However:
+			//
+			// - As of the time of this writing, `AdminChangeReplicas` is only called
+			// for one change at a time by its callers so it doesn't seem worth it to
+			// befog its contract.
+			// - If, in the future we start executing multiple changes in an
+			// `AdminChangeReplicas` call: in case of voter addition, if we only
+			// rolled some of the learners back but not the others, its not obvious
+			// how we could still go ahead with their promotion and it also becomes
+			// unclear how the error received here should be propagated to the client.
+			for _, target := range targets {
+				// NB: We're checking `r.Desc()` from this replica's current applied
+				// state, not the `desc` we received as a parameter to this call (which
+				// is stale and won't reflect the work we did in this function).
+				r.tryRollbackRaftLearner(ctx, r.Desc(), target, reason, details)
+			}
+		}
+	}()
+
 	// TODO(tbg): we could add all learners in one go, but then we'd need to
 	// do it as an atomic replication change (raft doesn't know which config
 	// to apply the delta to, so we might be demoting more than one voter).
@@ -1515,18 +1590,86 @@ func addRaftLearners(
 	// before returning from this method, and it's unclear that it's worth
 	// doing.
 	for _, target := range targets {
-		iChgs := []internalReplicationChange{{target: target, typ: typ}}
+		iChgs := []internalReplicationChange{{target: target, typ: iChangeType}}
 		var err error
 		desc, err = execChangeReplicasTxn(
 			ctx, desc, reason, details, iChgs, changeReplicasTxnArgs{
-				db:                                   s.DB(),
-				liveAndDeadReplicas:                  s.allocator.storePool.liveAndDeadReplicas,
-				logChange:                            s.logChange,
-				testForceJointConfig:                 s.TestingKnobs().ReplicationAlwaysUseJointConfig,
-				testAllowDangerousReplicationChanges: s.TestingKnobs().AllowDangerousReplicationChanges,
+				db:                                   r.store.DB(),
+				liveAndDeadReplicas:                  r.store.allocator.storePool.liveAndDeadReplicas,
+				logChange:                            r.store.logChange,
+				testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
+				testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
 			},
 		)
 		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Wait for our replica to catch up with the descriptor change. The replica is
+	// expected to usually be already caught up because it's expected to usually
+	// be the leaseholder - but it doesn't have to be. Being caught up is
+	// important because we are sending snapshots below to newly-added replicas,
+	// and those snapshots would be invalid if our stale descriptor doesn't
+	// contain the respective replicas.
+	// TODO(andrei): Find a better way to wait for replication. If we knew the
+	// LAI of the respective command, we could use waitForApplication().
+	descriptorOK := false
+	start := timeutil.Now()
+	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
+	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
+		rDesc := r.Desc()
+		if rDesc.Generation >= desc.Generation {
+			descriptorOK = true
+			break
+		}
+		log.VEventf(ctx, 1, "stale descriptor detected; waiting to catch up to replication. want: %s, have: %s",
+			desc, rDesc)
+		if _, err := r.IsDestroyed(); err != nil {
+			return nil, errors.Wrapf(
+				err,
+				"replica destroyed while waiting desc replication",
+			)
+		}
+	}
+	if !descriptorOK {
+		return nil, errors.Newf(
+			"waited for %s and replication hasn't caught up with descriptor update",
+			timeutil.Since(start),
+		)
+	}
+
+	for _, target := range targets {
+		rDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
+		if !ok {
+			return nil, errors.Errorf("programming error: replica %v not found in %v", target, desc)
+		}
+
+		if rDesc.GetType() != replicaType {
+			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
+		}
+
+		if fn := r.store.cfg.TestingKnobs.ReplicaSkipInitialSnapshot; fn != nil && fn() {
+			continue
+		}
+
+		// Note that raft snapshot queue will refuse to send a snapshot to a learner
+		// or non-voter replica if its store is already sending a snapshot to that
+		// replica. That would race with this snapshot, except that we've put a
+		// (best effort) lock on it before the conf change txn was run (see call to
+		// `lockLearnerSnapshot` above). This is best effort because the lock can
+		// time out and the lock is local to this node, while the raft leader could
+		// be on another node entirely (they're usually co-located but this is not
+		// guaranteed).
+		//
+		// We originally tried always refusing to send snapshots from the raft
+		// snapshot queue to learner replicas, but this turned out to be brittle.
+		// First, if the snapshot failed, any attempt to use the learner's raft
+		// group would hang until the replicate queue got around to cleaning up the
+		// orphaned learner. Second, this tickled some bugs in etcd/raft around
+		// switching between StateSnapshot and StateProbe. Even if we worked through
+		// these, it would be susceptible to future similar issues.
+		if err := r.sendSnapshot(ctx, rDesc, SnapshotRequest_INITIAL, priority); err != nil {
 			return nil, err
 		}
 	}
@@ -1562,9 +1705,8 @@ func (r *Replica) lockLearnerSnapshot(
 // execReplicationChangesForVoters carries out the atomic membership change that
 // finalizes the addition and/or removal of voting replicas. Any voters in the
 // process of being added (as reflected by the replication changes) must have
-// been added as learners already and will be caught up before being promoted to
-// voters. Cluster version permitting, voter removals (from the replication
-// changes) will preferably be carried out by first demoting to a learner
+// been added as learners already and caught up. Voter removals (from the
+// replication changes) will be carried out by first demoting to a learner
 // instead of outright removal (this avoids a [raft-bug] that can lead to
 // unavailability). All of this occurs in one atomic raft membership change
 // which is carried out across two phases. On error, it is possible that the
@@ -1584,7 +1726,6 @@ func (r *Replica) lockLearnerSnapshot(
 func (r *Replica) execReplicationChangesForVoters(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	voterAdditions, voterRemovals []roachpb.ReplicationTarget,
@@ -1593,77 +1734,9 @@ func (r *Replica) execReplicationChangesForVoters(
 	// this may want to detect that and retry, sending a snapshot and promoting
 	// both sides.
 
-	// Wait for our replica to catch up with the descriptor change. The replica is
-	// expected to usually be already caught up because it's expected to usually
-	// be the leaseholder - but it doesn't have to be. Being caught up is
-	// important because we might need to send snapshots below to newly-added
-	// replicas, and those snapshots would be invalid if our stale descriptor
-	// doesn't contain the respective replicas.
-	// TODO(andrei): Find a better way to wait for replication. If we knew the
-	// LAI of the respective command, we could use waitForApplication().
-	descriptorOK := false
-	start := timeutil.Now()
-	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
-	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
-		rDesc := r.Desc()
-		if rDesc.Generation >= desc.Generation {
-			descriptorOK = true
-			break
-		}
-		log.VEventf(ctx, 1, "stale descriptor detected; waiting to catch up to replication. want: %s, have: %s",
-			desc, rDesc)
-		if _, err := r.IsDestroyed(); err != nil {
-			return nil, errors.Wrapf(err, "replica destroyed while waiting desc replication")
-		}
-	}
-	if !descriptorOK {
-		return nil, errors.Newf(
-			"waited for %s and replication hasn't caught up with descriptor update", timeutil.Since(start))
-	}
-
 	iChgs := make([]internalReplicationChange, 0, len(voterAdditions)+len(voterRemovals))
-
 	for _, target := range voterAdditions {
 		iChgs = append(iChgs, internalReplicationChange{target: target, typ: internalChangeTypePromoteLearner})
-		// All adds must be present as learners right now, and we send them
-		// snapshots in anticipation of promoting them to voters.
-		rDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
-		if !ok {
-			return nil, errors.Errorf("programming error: replica %v not found in %v", target, desc)
-		}
-
-		if rDesc.GetType() != roachpb.LEARNER {
-			return nil, errors.Errorf("programming error: cannot promote replica of type %s", rDesc.Type)
-		}
-
-		if fn := r.store.cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
-			continue
-		}
-
-		// Note that raft snapshot queue will refuse to send a snapshot to a learner
-		// replica if its store is already sending a snapshot to that replica. That
-		// would race with this snapshot, except that we've put a (best effort) lock
-		// on it before the conf change txn was run. This is best effort because the
-		// lock can time out and the lock is local to this node, while the raft
-		// leader could be on another node entirely (they're usually co-located but
-		// this is not guaranteed).
-		//
-		// We originally tried always refusing to send snapshots from the raft
-		// snapshot queue to learner replicas, but this turned out to be brittle.
-		// First, if the snapshot failed, any attempt to use the learner's raft
-		// group would hang until the replicate queue got around to cleaning up the
-		// orphaned learner. Second, this tickled some bugs in etcd/raft around
-		// switching between StateSnapshot and StateProbe. Even if we worked through
-		// these, it would be susceptible to future similar issues.
-		if err := r.sendSnapshot(ctx, rDesc, SnapshotRequest_LEARNER_INITIAL, priority); err != nil {
-			return nil, err
-		}
-	}
-
-	if adds := voterAdditions; len(adds) > 0 {
-		if fn := r.store.cfg.TestingKnobs.ReplicaAddStopAfterLearnerSnapshot; fn != nil && fn(adds) {
-			return desc, nil
-		}
 	}
 
 	for _, target := range voterRemovals {
@@ -1695,19 +1768,20 @@ func (r *Replica) execReplicationChangesForVoters(
 	return maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, r.store, desc)
 }
 
-// tryRollbackLearnerReplica attempts to remove a learner specified by the
-// target. If no such learner is found in the descriptor (including when it is a
-// voter instead), no action is taken. Otherwise, a single time-limited
-// best-effort attempt at removing the learner is made.
-func (r *Replica) tryRollBackLearnerReplica(
+// tryRollbackRaftLearner attempts to remove a learner specified by the target.
+// If no such learner is found in the descriptor (including when it is a voter
+// instead), no action is taken. Otherwise, a single time-limited best-effort
+// attempt at removing the learner is made.
+func (r *Replica) tryRollbackRaftLearner(
 	ctx context.Context,
-	desc *roachpb.RangeDescriptor,
+	rangeDesc *roachpb.RangeDescriptor,
 	target roachpb.ReplicationTarget,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) {
-	repDesc, ok := desc.GetReplicaDescriptor(target.StoreID)
-	if !ok || repDesc.GetType() != roachpb.LEARNER {
+	repDesc, ok := rangeDesc.GetReplicaDescriptor(target.StoreID)
+	isLearnerOrNonVoter := repDesc.GetType() == roachpb.LEARNER || repDesc.GetType() == roachpb.NON_VOTER
+	if !ok || !isLearnerOrNonVoter {
 		// There's no learner to roll back.
 		log.Event(ctx, "learner to roll back not found; skipping")
 		return
@@ -1721,7 +1795,7 @@ func (r *Replica) tryRollBackLearnerReplica(
 
 	rollbackFn := func(ctx context.Context) error {
 		_, err := execChangeReplicasTxn(
-			ctx, desc, reason, details,
+			ctx, rangeDesc, reason, details,
 			[]internalReplicationChange{{target: target, typ: internalChangeTypeRemove}},
 			changeReplicasTxnArgs{
 				db:                                   r.store.DB(),
@@ -1736,11 +1810,16 @@ func (r *Replica) tryRollBackLearnerReplica(
 	if err := contextutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
-		log.Infof(ctx,
-			"failed to rollback learner %s, abandoning it for the replicate queue: %v", target, err)
+		log.Infof(
+			ctx,
+			"failed to rollback %s %s, abandoning it for the replicate queue: %v",
+			repDesc.GetType(),
+			target,
+			err,
+		)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	} else {
-		log.Infof(ctx, "rolled back learner %s in %s", target, desc)
+		log.Infof(ctx, "rolled back %s %s in %s", repDesc.GetType(), target, rangeDesc)
 	}
 }
 

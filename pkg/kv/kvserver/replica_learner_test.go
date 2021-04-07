@@ -74,7 +74,7 @@ func (rtl *replicationTestKnobs) withStopAfterJointConfig(f func()) {
 
 func makeReplicationTestKnobs() (base.TestingKnobs, *replicationTestKnobs) {
 	var k replicationTestKnobs
-	k.storeKnobs.ReplicaAddStopAfterLearnerSnapshot = func(_ []roachpb.ReplicationTarget) bool {
+	k.storeKnobs.VoterAddStopAfterLearnerSnapshot = func(_ []roachpb.ReplicationTarget) bool {
 		return atomic.LoadInt64(&k.replicaAddStopAfterLearnerAtomic) > 0
 	}
 	k.storeKnobs.VoterAddStopAfterJointConfig = func() bool {
@@ -198,17 +198,8 @@ func TestAddRemoveNonVotingReplicasBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	knobs, ltk := makeReplicationTestKnobs()
-	blockUntilSnapshotCh := make(chan struct{})
-	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
-		if h.Type == kvserver.SnapshotRequest_VIA_SNAPSHOT_QUEUE {
-			close(blockUntilSnapshotCh)
-		}
-		return nil
-	}
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
-		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 	})
 	defer tc.Stopper().Stop(ctx)
 
@@ -218,16 +209,6 @@ func TestAddRemoveNonVotingReplicasBasic(t *testing.T) {
 		_, err := tc.AddNonVoters(scratchStartKey, tc.Target(1))
 		return err
 	})
-
-	// When we create a non-voting replica, we queue up its range leaseholder into
-	// the raft snapshot queue so that it can receive its LEARNER snapshot and
-	// upreplicate relatively soon (i.e. without having to wait up to a full scanner
-	// cycle).
-	select {
-	case <-blockUntilSnapshotCh:
-	case <-time.After(30 * time.Second):
-		t.Fatal(`test timed out; did not receive snapshot of type VIA_SNAPSHOT_QUEUE as expected`)
-	}
 	require.NoError(t, g.Wait())
 
 	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -328,35 +309,124 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var rejectSnapshots int64
-	knobs, ltk := makeReplicationTestKnobs()
-	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
-		if atomic.LoadInt64(&rejectSnapshots) > 0 {
-			return errors.New(`nope`)
+	runTest := func(t *testing.T, replicaType roachpb.ReplicaType) {
+		var rejectSnapshots int64
+		knobs, ltk := makeReplicationTestKnobs()
+		ltk.storeKnobs.ReceiveSnapshot = func(h *kvserver.SnapshotRequest_Header) error {
+			if atomic.LoadInt64(&rejectSnapshots) > 0 {
+				return errors.New(`nope`)
+			}
+			return nil
 		}
-		return nil
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+			ServerArgs:      base.TestServerArgs{Knobs: knobs},
+			ReplicationMode: base.ReplicationManual,
+		})
+		defer tc.Stopper().Stop(ctx)
+
+		scratchStartKey := tc.ScratchRange(t)
+		atomic.StoreInt64(&rejectSnapshots, 1)
+		var err error
+		switch replicaType {
+		case roachpb.LEARNER:
+			_, err = tc.AddVoters(scratchStartKey, tc.Target(1))
+		case roachpb.NON_VOTER:
+			_, err = tc.AddNonVoters(scratchStartKey, tc.Target(1))
+		default:
+			log.Fatalf(ctx, "unexpected replicaType: %s", replicaType)
+		}
+
+		if !testutils.IsError(err, `remote couldn't accept INITIAL snapshot`) {
+			t.Fatalf(`expected "remote couldn't accept INITIAL snapshot" error got: %+v`, err)
+		}
+		// Make sure we cleaned up after ourselves (by removing the learner/non-voter).
+		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
+		require.Empty(t, desc.Replicas().LearnerDescriptors())
 	}
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
-		ServerArgs:      base.TestServerArgs{Knobs: knobs},
-		ReplicationMode: base.ReplicationManual,
+
+	t.Run("learner", func(t *testing.T) {
+		runTest(t, roachpb.LEARNER)
 	})
-	defer tc.Stopper().Stop(ctx)
 
+	t.Run("non-voter", func(t *testing.T) {
+		runTest(t, roachpb.NON_VOTER)
+	})
+}
+
+// TestNonVoterCatchesUpViaRaftSnapshotQueue ensures that a non-voting replica
+// in need of a snapshot will receive one via the raft snapshot queue. This is
+// also meant to test that a non-voting replica that is initialized via an
+// `INITIAL` snapshot during its addition is not ignored by the raft snapshot
+// queue for future snapshots.
+func TestNonVoterCatchesUpViaRaftSnapshotQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t, "this test sleeps for a few seconds")
+
+	var skipInitialSnapshot int64
+	knobs, ltk := makeReplicationTestKnobs()
+	ctx := context.Background()
+
+	// Set it up such that the newly added non-voter will not receive its INITIAL
+	// snapshot.
+	ltk.storeKnobs.ReplicaSkipInitialSnapshot = func() bool {
+		return atomic.LoadInt64(&skipInitialSnapshot) == 1
+	}
+	// Synchronize with the removal of the "best effort" lock on log truncation.
+	// See (*Replica).lockLearnerSnapshot for details.
+	nonVoterSnapLockRemoved := make(chan struct{}, 1)
+	ltk.storeKnobs.NonVoterAfterInitialization = func() {
+		nonVoterSnapLockRemoved <- struct{}{}
+	}
+	// Disable the raft snapshot queue, we will manually queue a replica into it
+	// below.
+	ltk.storeKnobs.DisableRaftSnapshotQueue = true
+	tc := testcluster.StartTestCluster(
+		t, 2, base.TestClusterArgs{
+			ServerArgs:      base.TestServerArgs{Knobs: knobs},
+			ReplicationMode: base.ReplicationManual,
+		},
+	)
+	defer tc.Stopper().Stop(ctx)
 	scratchStartKey := tc.ScratchRange(t)
-	atomic.StoreInt64(&rejectSnapshots, 1)
-	_, err := tc.AddVoters(scratchStartKey, tc.Target(1))
-	// TODO(dan): It'd be nice if we could cancel the `AddVoters` context before
-	// returning the error from the `ReceiveSnapshot` knob to test the codepath
-	// that uses a new context for the rollback, but plumbing that context is
-	// annoying.
-	if !testutils.IsError(err, `remote couldn't accept LEARNER_INITIAL snapshot`) {
-		t.Fatalf(`expected "remote couldn't accept LEARNER_INITIAL snapshot" error got: %+v`, err)
+	g, ctx := errgroup.WithContext(ctx)
+
+	// Add a new voting replica, but don't initialize it. Note that
+	// `tc.AddNonVoters` will not return until the newly added non-voter is
+	// initialized, which we will do below via the snapshot queue.
+	g.Go(func() error {
+		atomic.StoreInt64(&skipInitialSnapshot, 1)
+		_, err := tc.AddNonVoters(scratchStartKey, tc.Target(1))
+		return err
+	})
+
+	select {
+	case <-nonVoterSnapLockRemoved:
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		t.Fatal("took too long")
 	}
 
-	// Make sure we cleaned up after ourselves (by removing the learner).
-	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
-	require.Empty(t, desc.Replicas().LearnerDescriptors())
+	scratchDesc := tc.LookupRangeOrFatal(t, scratchStartKey)
+	leaseholderStore := tc.GetFirstStoreFromServer(t, 0)
+	require.NotNil(t, leaseholderStore)
+	leaseholderRepl, err := leaseholderStore.GetReplica(scratchDesc.RangeID)
+	require.NoError(t, err)
+	require.NotNil(t, leaseholderRepl)
+
+	time.Sleep(kvserver.RaftLogQueuePendingSnapshotGracePeriod)
+	// Manually enqueue the leaseholder replica into its store's raft snapshot
+	// queue. We expect it to pick up on the fact that the non-voter on its range
+	// needs a snapshot.
+	recording, pErr, err := leaseholderStore.ManuallyEnqueue(
+		ctx, "raftsnapshot", leaseholderRepl, false, /* skipShouldQueue */
+	)
+	require.NoError(t, pErr)
+	require.NoError(t, err)
+	trace := recording.String()
+	require.Regexp(t, "streamed VIA_SNAPSHOT_QUEUE snapshot.*to.*NON_VOTER", trace)
+	require.NoError(t, g.Wait())
 }
 
 func TestSplitWithLearnerOrJointConfig(t *testing.T) {
@@ -558,7 +628,7 @@ func TestRaftSnapshotQueueSeesLearner(t *testing.T) {
 		if processErr != nil {
 			return processErr
 		}
-		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
+		const msg = `skipping snapshot; replica is likely a LEARNER in the process of being added: (n2,s2):2LEARNER`
 		formattedTrace := trace.String()
 		if !strings.Contains(formattedTrace, msg) {
 			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)

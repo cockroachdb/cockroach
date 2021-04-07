@@ -85,7 +85,8 @@ type TestClusterInterface interface {
 	//
 	//This method blocks until the new replicas become a part of the Raft group.
 	AddNonVoters(
-		startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
+		startKey roachpb.Key,
+		targets ...roachpb.ReplicationTarget,
 	) (roachpb.RangeDescriptor, error)
 
 	// AddNonVotersOrFatal is the same as AddNonVoters but will fatal if it fails.

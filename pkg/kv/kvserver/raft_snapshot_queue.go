@@ -110,20 +110,27 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	}
 	snapType := SnapshotRequest_VIA_SNAPSHOT_QUEUE
 
-	if repDesc.GetType() == roachpb.LEARNER {
-		if fn := repl.store.cfg.TestingKnobs.ReplicaSkipLearnerSnapshot; fn != nil && fn() {
+	if typ := repDesc.GetType(); typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
+		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
 			return nil
 		}
 		if index := repl.getAndGCSnapshotLogTruncationConstraints(
 			timeutil.Now(), repDesc.StoreID,
 		); index > 0 {
-			// There is a snapshot being transferred. It's probably a LEARNER snap, so
-			// bail for now and try again later.
+			// There is a snapshot being transferred. It's probably an INITIAL snap,
+			// so bail for now and try again later.
 			err := errors.Errorf(
-				"skipping snapshot; replica is likely a learner in the process of being added: %s", repDesc)
+				"skipping snapshot; replica is likely a %s in the process of being added: %s",
+				typ,
+				repDesc,
+			)
 			// TODO(knz): print the error instead when the error package
 			// knows how to expose redactable strings.
-			log.Infof(ctx, "skipping snapshot; replica is likely a learner in the process of being added: %s", repDesc)
+			log.Infof(ctx,
+				"skipping snapshot; replica is likely a %s in the process of being added: %s",
+				typ,
+				repDesc,
+			)
 			// TODO(dan): This is super brittle and non-obvious. In the common case,
 			// this check avoids duplicate work, but in rare cases, we send the
 			// learner snap at an index before the one raft wanted here. The raft
@@ -135,7 +142,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 			// sufficient, this message will be ignored, but if we hit the case
 			// described above, this will cause raft to keep asking for a snap and at
 			// some point the snapshot lock above will be released and we'll fall
-			// through to the below.
+			// through to the logic below.
 			repl.reportSnapshotStatus(ctx, repDesc.ReplicaID, err)
 			return nil
 		}
