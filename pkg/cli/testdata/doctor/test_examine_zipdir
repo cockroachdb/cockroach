@@ -1,6 +1,6 @@
-doctor zipdir
+debug doctor examine zipdir testdata/doctor/debugzip
 ----
-debug doctor zipdir testdata/doctor/debugzip
+debug doctor examine zipdir testdata/doctor/debugzip
 Examining 38 descriptors and 43 namespace entries...
   ParentID  52, ParentSchemaID 29: relation "users" (53): referenced database ID 52: descriptor not found
   ParentID  52, ParentSchemaID 29: relation "vehicles" (54): referenced database ID 52: descriptor not found
