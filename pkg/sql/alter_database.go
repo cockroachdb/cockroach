@@ -332,7 +332,11 @@ func (p *planner) AlterDatabaseDropRegion(
 		}
 		if len(regions) != 1 {
 			return nil, errors.WithHintf(
-				errors.Newf("cannot drop region %q", dbDesc.RegionConfig.PrimaryRegion),
+				pgerror.Newf(
+					pgcode.InvalidDatabaseDefinition,
+					"cannot drop region %q",
+					dbDesc.RegionConfig.PrimaryRegion,
+				),
 				"You must designate another region as the primary region using "+
 					"ALTER DATABASE %s PRIMARY REGION <region name> or remove all other regions before "+
 					"attempting to drop region %q", dbDesc.GetName(), n.Region,
