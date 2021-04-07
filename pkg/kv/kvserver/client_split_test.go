@@ -3333,7 +3333,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		ReplicaSkipLearnerSnapshot: func() bool {
 			return atomic.LoadInt32(&skipLearnerSnaps) != 0
 		},
-		ReplicaAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
+		VoterAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
 			if atomic.LoadInt32(&skipLearnerSnaps) != 0 {
 				return false
 			}
