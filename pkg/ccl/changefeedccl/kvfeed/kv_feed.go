@@ -302,7 +302,7 @@ func (f *kvFeed) scanIfShould(
 			// and returns early. This is important because a change to a primary
 			// index may occur in the same transaction as a change requiring a
 			// backfill.
-			if schemafeed.IsPrimaryIndexChange(ev) {
+			if schemafeed.IsOnlyPrimaryIndexChange(ev) {
 				continue
 			}
 			tablePrefix := f.codec.TablePrefix(uint32(ev.After.GetID()))
