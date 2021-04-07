@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 var libPQReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -81,7 +82,7 @@ func registerLibPQ(r *testRegistry) {
 
 		_ = c.RunE(ctx, node, fmt.Sprintf("mkdir -p %s", resultsDir))
 
-		blocklistName, expectedFailures, ignorelistName, ignoredFailures := libPQBlocklists.getLists(version)
+		blocklistName, expectedFailures, ignorelistName, ignoreList := libPQBlocklists.getLists(version)
 		if expectedFailures == nil {
 			t.Fatalf("No lib/pq blocklist defined for cockroach version %s", version)
 		}
@@ -89,16 +90,44 @@ func registerLibPQ(r *testRegistry) {
 
 		t.Status("running lib/pq test suite and collecting results")
 
+		// List all the tests that start with Test or Example.
+		testListRegex := `"(Test|Example)"`
+		buf, err := c.RunWithBuffer(
+			ctx,
+			t.l,
+			node,
+			fmt.Sprintf("cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -list %s", libPQPath, testListRegex),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Convert the output of go test -list into an list.
+		tests := strings.Fields(string(buf))
+		var allowedTests []string
+
+		// The last line of output from go test -list Test is something like
+		// "ok  	github.com/lib/pq	0.003s", we ignore this by slicing the last entry.
+		for _, testName := range tests[:len(tests)-1] {
+			// if the test is part of ignoreList, do not run the test.
+			if _, ok := ignoreList[testName]; !ok {
+				allowedTests = append(allowedTests, testName)
+			}
+		}
+
+		allowedTestsRegExp := fmt.Sprintf(`"^(%s)$"`, strings.Join(allowedTests, "|"))
+
 		// Ignore the error as there will be failing tests.
 		_ = c.RunE(
 			ctx,
 			node,
-			fmt.Sprintf("cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -v 2>&1 | %s/bin/go-junit-report > %s", libPQPath, goPath, resultsPath),
+			fmt.Sprintf("cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -run %s -v 2>&1 | %s/bin/go-junit-report > %s",
+				libPQPath, allowedTestsRegExp, goPath, resultsPath),
 		)
 
 		parseAndSummarizeJavaORMTestsResults(
 			ctx, t, c, node, "lib/pq" /* ormName */, []byte(resultsPath),
-			blocklistName, expectedFailures, ignoredFailures, version, latestTag,
+			blocklistName, expectedFailures, ignoreList, version, latestTag,
 		)
 	}
 

@@ -33,7 +33,6 @@ var libPQBlocklist20_2 = blocklist{
 	"pq.TestContextCancelExec":                       "41335",
 	"pq.TestContextCancelQuery":                      "41335",
 	"pq.TestCopyFromError":                           "5807",
-	"pq.TestCopyInBinaryError":                       "5807",
 	"pq.TestCopyInRaiseStmtTrigger":                  "5807",
 	"pq.TestCopyInTypes":                             "5807",
 	"pq.TestCopyRespLoopConnectionError":             "5807",
@@ -71,7 +70,6 @@ var libPQBlocklist20_1 = blocklist{
 	"pq.TestContextCancelExec":                                 "41335",
 	"pq.TestContextCancelQuery":                                "41335",
 	"pq.TestCopyFromError":                                     "5807",
-	"pq.TestCopyInBinaryError":                                 "5807",
 	"pq.TestCopyInRaiseStmtTrigger":                            "5807",
 	"pq.TestCopyInTypes":                                       "5807",
 	"pq.TestCopyRespLoopConnectionError":                       "5807",
@@ -123,7 +121,6 @@ var libPQBlocklist19_2 = blocklist{
 	"pq.TestContextCancelExec":                       "41335",
 	"pq.TestContextCancelQuery":                      "41335",
 	"pq.TestCopyFromError":                           "5807",
-	"pq.TestCopyInBinaryError":                       "5807",
 	"pq.TestCopyInMultipleValues":                    "5807",
 	"pq.TestCopyInRaiseStmtTrigger":                  "5807",
 	"pq.TestCopyInStmtAffectedRows":                  "5807",
@@ -176,7 +173,17 @@ var libPQIgnorelist21_1 = libPQIgnorelist20_2
 
 var libPQIgnorelist20_2 = libPQIgnorelist20_1
 
-var libPQIgnorelist20_1 = libPQIgnorelist19_2
+var libPQIgnorelist20_1 = blocklist{
+	// TestFormatTsBacked fails due to not returning an error for accepting a
+	// timestamp format that postgres does not.
+	"TestFormatTsBackend": "41690",
+	// TestTxOptions fails because it attempts to change isolation levels.
+	"TestTxOptions": "41690",
+	// TestCopyInBinaryError is expected to error with:
+	// pq: only text format supported for COPY, however no error is returned
+	// for CRDB.
+	"TestCopyInBinaryError": "63235",
+}
 
 var libPQIgnorelist19_2 = blocklist{
 	// TestFormatTsBacked fails due to not returning an error for accepting a
