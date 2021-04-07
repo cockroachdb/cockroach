@@ -1,17 +1,18 @@
 import {
   all,
   call,
+  delay,
   put,
   takeEvery,
   takeLatest,
-  throttle,
 } from "redux-saga/effects";
 import {
   createStatementDiagnosticsReport,
   getStatementDiagnosticsReports,
 } from "src/api/statementDiagnosticsApi";
 import { actions } from "./statementDiagnostics.reducer";
-import { CACHE_INVALIDATION_PERIOD } from "../utils";
+import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
+import { rootActions } from "../reducers";
 
 export function* createDiagnosticsReportSaga(
   action: ReturnType<typeof actions.createReport>,
@@ -40,12 +41,23 @@ export function* requestStatementsDiagnosticsSaga() {
   }
 }
 
+export function* receivedStatementsDiagnosticsSaga(delayMs: number) {
+  yield delay(delayMs);
+  yield put(actions.invalidated());
+}
+
 export function* statementsDiagnosticsSagas(
   delayMs: number = CACHE_INVALIDATION_PERIOD,
 ) {
   yield all([
-    throttle(delayMs, actions.refresh, refreshStatementsDiagnosticsSaga),
+    throttleWithReset(
+      delayMs,
+      actions.refresh,
+      [actions.invalidated, actions.failed, rootActions.resetState],
+      refreshStatementsDiagnosticsSaga,
+    ),
     takeLatest(actions.request, requestStatementsDiagnosticsSaga),
     takeEvery(actions.createReport, createDiagnosticsReportSaga),
+    takeLatest(actions.received, receivedStatementsDiagnosticsSaga, delayMs),
   ]);
 }

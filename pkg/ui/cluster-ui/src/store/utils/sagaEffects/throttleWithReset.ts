@@ -1,7 +1,14 @@
 import { ActionPattern } from "@redux-saga/types";
 import { ForkEffect } from "@redux-saga/core/effects";
-import { actionChannel, delay, fork, race, take } from "redux-saga/effects";
-import { buffers } from "redux-saga";
+import {
+  actionChannel,
+  cancel,
+  delay,
+  fork,
+  race,
+  take,
+} from "redux-saga/effects";
+import { buffers, Task } from "redux-saga";
 import { Action } from "redux";
 
 /***
@@ -41,11 +48,22 @@ export const throttleWithReset = <A extends Action>(
   task: (action: A) => any,
 ): ForkEffect<never> =>
   fork(function*() {
-    const throttleChannel = yield actionChannel(pattern, buffers.sliding(1));
-    const resetChannel = yield actionChannel(resetPattern, buffers.sliding(1));
+    // `actionChannel` creates a queue of the actions to process them sequentially.
+    // Using `buffers.none()` allows to handle only single action and discard any actions
+    // that arrive while current action is processed.
+    const throttleChannel = yield actionChannel(pattern, buffers.none());
+    const resetChannel = yield actionChannel(resetPattern, buffers.none());
+    let t: Task;
     while (true) {
       const action = yield take(throttleChannel);
-      yield fork(task, action);
+      // cancel previous task in order to handle only the most recent one.
+      // it implements the behavior of `takeLatest` effect
+      if (t) {
+        yield cancel(t);
+      }
+      t = yield fork(task, action);
       yield race([delay(ms), take(resetChannel)]);
+      // cancel forked task after timeout or cancellation action triggered
+      yield cancel(t);
     }
   });
