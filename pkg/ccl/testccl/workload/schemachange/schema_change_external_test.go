@@ -36,6 +36,7 @@ func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
+	skip.WithIssue(t, 63226, "flaky test")
 	skip.UnderStressRace(t, "times out")
 
 	dir, err := ioutil.TempDir("", t.Name())
