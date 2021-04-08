@@ -51,6 +51,9 @@ func (*FloatSetting) Typ() string {
 	return "f"
 }
 
+// Defeat the linter.
+var _ = (*FloatSetting).Default
+
 // Override changes the setting panicking if validation fails and also overrides
 // the default value.
 //

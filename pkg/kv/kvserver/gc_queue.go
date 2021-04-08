@@ -456,7 +456,9 @@ func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.S
 	snap := repl.store.Engine().NewSnapshot()
 	defer snap.Close()
 
-	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold, *zone.GC,
+	intentAgeThreshold := gc.IntentAgeThreshold.Get(&repl.store.ClusterSettings().SV)
+
+	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold, intentAgeThreshold, *zone.GC,
 		&replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
 			intentCount, err := repl.store.intentResolver.
