@@ -281,6 +281,14 @@ func runFollowerReadsTest(
 		}
 	}
 
+	// Enable the slow query log so we have a shot at identifying why follower
+	// reads are not being served after the fact when this test fails. Use a
+	// latency threshold of 50ms, which should be well below the latency of a
+	// cross-region hop to read from the leaseholder but well above the latency
+	// of a follower read.
+	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '50ms'")
+	require.NoError(t, err)
+
 	// Read the follower read counts before issuing the follower reads to observe
 	// the delta and protect from follower reads which might have happened due to
 	// system queries.
