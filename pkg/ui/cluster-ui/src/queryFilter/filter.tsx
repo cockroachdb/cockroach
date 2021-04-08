@@ -22,9 +22,9 @@ import {
   dropdown,
   hidden,
   caretDown,
-  dropdownSelect,
   checkbox,
 } from "./filterClasses";
+import { MultiSelectCheckbox } from "../multiSelectCheckbox/multiSelectCheckbox";
 
 interface QueryFilter {
   onSubmitFilters: (filters: Filters) => void;
@@ -32,6 +32,7 @@ interface QueryFilter {
   appNames: SelectOptions[];
   activeFilters: number;
   filters: Filters;
+  showSqlType?: boolean;
   showScan?: boolean;
 }
 interface FilterState {
@@ -48,6 +49,7 @@ export interface Filters {
   app?: string;
   timeNumber?: string;
   timeUnit?: string;
+  sqlType?: string;
   fullScan?: boolean;
   distributed?: boolean;
 }
@@ -58,10 +60,8 @@ const timeUnit = [
 ];
 
 const defaultSelectProps = {
-  className: dropdownSelect,
   searchable: false,
   clearable: false,
-  arrowRenderer: () => <CaretDown className={caretDown} />,
 };
 
 export const defaultFilters: Filters = {
@@ -69,6 +69,7 @@ export const defaultFilters: Filters = {
   timeNumber: "0",
   timeUnit: "seconds",
   fullScan: false,
+  sqlType: "",
 };
 
 /**
@@ -109,6 +110,7 @@ export const inactiveFiltersState: Filters = {
   app: "All",
   timeNumber: "0",
   fullScan: false,
+  sqlType: "",
 };
 
 export const calculateActiveFilters = (filters: Filters) => {
@@ -140,10 +142,10 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
   dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
 
   componentDidMount() {
-    document.addEventListener("click", this.outsideClick, false);
+    window.addEventListener("click", this.outsideClick, false);
   }
   componentWillUnmount() {
-    document.removeEventListener("click", this.outsideClick, false);
+    window.removeEventListener("click", this.outsideClick, false);
   }
   componentDidUpdate(prevProps: QueryFilter) {
     if (prevProps.filters !== this.props.filters) {
@@ -155,10 +157,11 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     }
   }
   outsideClick = (event: any) => {
-    if (this.dropdownRef.current.contains(event.target)) {
-      return;
-    }
     this.setState({ hide: true });
+  };
+
+  insideClick = (event: any) => {
+    event.stopPropagation();
   };
 
   toggleFilters = () => {
@@ -209,10 +212,81 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
   };
 
+  isSQLTypeSelected = (option: string) => {
+    const selection = this.state.filters.sqlType.split(",");
+    if (selection.length > 0 && selection.includes(option)) return true;
+    return false;
+  };
+
   render() {
     const { hide, filters } = this.state;
-    const { appNames, activeFilters, showScan } = this.props;
+    const { appNames, activeFilters, showSqlType, showScan } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
+    const customStyles = {
+      container: (provided: any) => ({
+        ...provided,
+        border: "none",
+      }),
+      option: (provided: any, state: any) => ({
+        ...provided,
+        backgroundColor: state.isSelected
+          ? "#DEEBFF"
+          : provided.backgroundColor,
+        color: "#394455",
+      }),
+      control: (provided: any) => ({
+        ...provided,
+        width: "100%",
+      }),
+      singleValue: (provided: any) => ({
+        ...provided,
+        color: "hsl(0, 0%, 50%)",
+      }),
+    };
+    const customStylesSmall = { ...customStyles };
+    customStylesSmall.container = (provided: any) => ({
+      ...provided,
+      width: "141px",
+      border: "none",
+    });
+    const sqlTypes = [
+      {
+        label: "DDL",
+        value: "TypeDDL",
+        isSelected: this.isSQLTypeSelected("DDL"),
+      },
+      {
+        label: "DML",
+        value: "TypeDML",
+        isSelected: this.isSQLTypeSelected("DML"),
+      },
+      {
+        label: "DCL",
+        value: "TypeDCL",
+        isSelected: this.isSQLTypeSelected("DCL"),
+      },
+      {
+        label: "TCL",
+        value: "TypeTCL",
+        isSelected: this.isSQLTypeSelected("TCL"),
+      },
+    ];
+    const sqlTypeValue = sqlTypes.filter(option => {
+      return filters.sqlType.split(",").includes(option.label);
+    });
+    const sqlTypeFilter = (
+      <div>
+        <div className={filterLabel.margin}>Statement Type</div>
+        <MultiSelectCheckbox
+          options={sqlTypes}
+          placeholder="All"
+          field="sqlType"
+          parent={this}
+          value={sqlTypeValue}
+          {...defaultSelectProps}
+        />
+      </div>
+    );
     const fullScanFilter = (
       <div className={filterLabel.margin}>
         <input
@@ -230,7 +304,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     // TODO replace all onChange actions in Selects and Checkboxes with one onSubmit in <form />
 
     return (
-      <div onClick={this.outsideClick} ref={this.dropdownRef}>
+      <div onClick={this.insideClick} ref={this.dropdownRef}>
         <div className={dropdownButton} onClick={this.toggleFilters}>
           Filters ({activeFilters})&nbsp;
           <CaretDown className={caretDown} />
@@ -241,10 +315,12 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
             <Select
               options={appNames}
               onChange={e => this.handleChange(e, "app")}
-              value={filters.app}
+              value={appNames.filter(app => app.label == filters.app)}
               placeholder="All"
+              styles={customStyles}
               {...defaultSelectProps}
             />
+            {showSqlType ? sqlTypeFilter : ""}
             <div className={filterLabel.margin}>
               Query fingerprint runs longer than
             </div>
@@ -257,9 +333,10 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
               />
               <Select
                 options={timeUnit}
-                value={filters.timeUnit}
+                value={timeUnit.filter(unit => unit.label == filters.timeUnit)}
                 onChange={e => this.handleChange(e, "timeUnit")}
                 className={timePair.timeUnit}
+                styles={customStylesSmall}
                 {...defaultSelectProps}
               />
             </section>
