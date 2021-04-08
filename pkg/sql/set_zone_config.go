@@ -1005,6 +1005,41 @@ func getZoneConfigRaw(
 	return &zone, nil
 }
 
+// getZoneConfigRawBatch looks up the zone config with the given IDs.
+// Unlike getZoneConfig, it does not attempt to ascend the zone config hierarchy.
+// If no zone config exists for the given ID, the map entry is not provided.
+func getZoneConfigRawBatch(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, ids []descpb.ID,
+) (map[descpb.ID]*zonepb.ZoneConfig, error) {
+	if !codec.ForSystemTenant() {
+		// Secondary tenants do not have zone configs for individual objects.
+		return nil, nil
+	}
+	b := txn.NewBatch()
+	for _, id := range ids {
+		b.Get(config.MakeZoneKey(config.SystemTenantObjectID(id)))
+	}
+	if err := txn.Run(ctx, b); err != nil {
+		return nil, err
+	}
+	ret := make(map[descpb.ID]*zonepb.ZoneConfig, len(b.Results))
+	for idx, r := range b.Results {
+		if r.Err != nil {
+			return nil, r.Err
+		}
+		var zone zonepb.ZoneConfig
+		row := r.Rows[0]
+		if row.Value == nil {
+			continue
+		}
+		if err := row.ValueProto(&zone); err != nil {
+			return nil, err
+		}
+		ret[ids[idx]] = &zone
+	}
+	return ret, nil
+}
+
 // RemoveIndexZoneConfigs removes the zone configurations for some
 // indexes being dropped. It is a no-op if there is no zone
 // configuration, there's no index zone configs to be dropped,
