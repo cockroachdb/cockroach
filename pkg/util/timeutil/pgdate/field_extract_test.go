@@ -86,6 +86,10 @@ func TestExtractSentinels(t *testing.T) {
 			s:   keywordNow + " tomorrow",
 			err: true,
 		},
+		{
+			s:   "j66001",
+			err: true,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
@@ -104,6 +108,18 @@ func TestExtractSentinels(t *testing.T) {
 				t.Fatal("did not get expected sentinel value")
 			}
 		})
+	}
+}
+
+func TestExtractInvalidJulianDate(t *testing.T) {
+	now := timeutil.Unix(42, 56)
+	fe := fieldExtract{currentTime: now}
+	err := fe.Extract("j69001")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "field Year is not wanted in 0" {
+		t.Fatal("expected different error message")
 	}
 }
 
