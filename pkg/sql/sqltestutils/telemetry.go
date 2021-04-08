@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -118,19 +119,23 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 }
 
 type telemetryTest struct {
-	t         *testing.T
-	diagSrv   *diagutils.Server
-	cluster   serverutils.TestClusterInterface
-	server    serverutils.TestServerInterface
-	serverDB  *gosql.DB
-	tenant    serverutils.TestTenantInterface
-	tenantDB  *gosql.DB
-	allowlist featureAllowlist
+	t              *testing.T
+	diagSrv        *diagutils.Server
+	cluster        serverutils.TestClusterInterface
+	server         serverutils.TestServerInterface
+	serverDB       *gosql.DB
+	tenant         serverutils.TestTenantInterface
+	tenantDB       *gosql.DB
+	tempDirCleanup func()
+	allowlist      featureAllowlist
 }
 
 func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 	tt.t = t
 	tt.diagSrv = diagutils.NewServer()
+
+	var tempExternalIODir string
+	tempExternalIODir, tt.tempDirCleanup = testutils.TempDir(tt.t)
 
 	diagSrvURL := tt.diagSrv.URL()
 	mapServerArgs := make(map[int]base.TestServerArgs, len(serverArgs))
@@ -140,6 +145,7 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 				OverrideReportingURL: &diagSrvURL,
 			},
 		}
+		v.ExternalIODir = tempExternalIODir
 		mapServerArgs[i] = v
 	}
 	tt.cluster = serverutils.StartNewTestCluster(
@@ -165,6 +171,7 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 func (tt *telemetryTest) Close() {
 	tt.cluster.Stopper().Stop(context.Background())
 	tt.diagSrv.Close()
+	tt.tempDirCleanup()
 }
 
 func (tt *telemetryTest) RunTest(

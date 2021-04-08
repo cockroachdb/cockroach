@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1916,6 +1917,18 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 						schemaMetadata)
 					if err != nil {
 						return err
+					}
+
+					// Telemetry for multi-region.
+					for _, table := range preparedDetails.Tables {
+						_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+							ctx, txn, table.Desc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+						if err != nil {
+							return err
+						}
+						if dbDesc.IsMultiRegion() {
+							telemetry.Inc(sqltelemetry.ImportIntoMultiRegionDatabaseCounter)
+						}
 					}
 
 					// Update the job details now that the schemas and table descs have
