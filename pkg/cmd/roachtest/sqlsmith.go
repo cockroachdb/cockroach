@@ -122,7 +122,7 @@ func registerSQLSmith(r *testRegistry) {
 			t.Fatal(err)
 		}
 
-		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
+		versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0], nil)
 		if err != nil {
 			t.Fatal(err)
 		}
