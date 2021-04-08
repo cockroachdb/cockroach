@@ -65,6 +65,7 @@ go_test(
         "affine_transforms_test.go",
         "angle_test.go",
         "azimuth_test.go",
+        "binary_predicates_bench_test.go",
         "binary_predicates_test.go",
         "buffer_test.go",
         "collections_test.go",
