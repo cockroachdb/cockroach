@@ -78,7 +78,7 @@ type virtualSchemaDef interface {
 type virtualIndex struct {
 	// populate populates the table given the constraint. matched is true if any
 	// rows were generated.
-	populate func(ctx context.Context, constraint tree.Datum, p *planner, db *dbdesc.Immutable,
+	populate func(ctx context.Context, constraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
 		addRow func(...tree.Datum) error,
 	) (matched bool, err error)
 
@@ -103,7 +103,7 @@ type virtualSchemaTable struct {
 	// populate, if non-nil, is a function that is used when creating a
 	// valuesNode. This function eagerly loads every row of the virtual table
 	// during initialization of the valuesNode.
-	populate func(ctx context.Context, p *planner, db *dbdesc.Immutable, addRow func(...tree.Datum) error) error
+	populate func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error
 
 	// indexes, if non empty, is a slice of populate methods that also take a
 	// constraint, only generating rows that match the constraint. The order of
@@ -114,7 +114,7 @@ type virtualSchemaTable struct {
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
-	generator func(ctx context.Context, p *planner, db *dbdesc.Immutable, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error)
+	generator func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error)
 
 	// unimplemented indicates that we do not yet implement the contents of this
 	// table. If the stub_catalog_tables session variable is enabled, the table
@@ -329,7 +329,7 @@ var _ catalog.VirtualSchemas = (*VirtualSchemaHolder)(nil)
 type virtualSchemaEntry struct {
 	// TODO(ajwerner): Use a descpb.SchemaDescriptor here as part of the
 	// user-defined schema work.
-	desc            *dbdesc.Immutable
+	desc            catalog.DatabaseDescriptor
 	defs            map[string]*virtualDefEntry
 	orderedDefNames []string
 	allTableNames   map[string]struct{}
@@ -427,7 +427,7 @@ func (e *mutableVirtualDefEntry) Desc() catalog.Descriptor {
 }
 
 type virtualTypeEntry struct {
-	desc    *typedesc.Immutable
+	desc    catalog.TypeDescriptor
 	mutable bool
 }
 
@@ -493,7 +493,7 @@ func (e *virtualDefEntry) getPlanInfo(
 	}
 
 	constructor := func(ctx context.Context, p *planner, dbName string) (planNode, error) {
-		var dbDesc *dbdesc.Immutable
+		var dbDesc catalog.DatabaseDescriptor
 		var err error
 		if dbName != "" {
 			_, dbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
@@ -571,7 +571,7 @@ func (e *virtualDefEntry) getPlanInfo(
 func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 	ctx context.Context,
 	p *planner,
-	dbDesc *dbdesc.Immutable,
+	dbDesc catalog.DatabaseDescriptor,
 	index *descpb.IndexDescriptor,
 	indexKeyDatums []tree.Datum,
 	columnIdxMap catalog.TableColMap,
@@ -725,7 +725,7 @@ var publicSelectPrivileges = descpb.NewPrivilegeDescriptor(
 	security.PublicRoleName(), privilege.List{privilege.SELECT}, security.NodeUserName(),
 )
 
-func initVirtualDatabaseDesc(id descpb.ID, name string) *dbdesc.Immutable {
+func initVirtualDatabaseDesc(id descpb.ID, name string) catalog.DatabaseDescriptor {
 	return dbdesc.NewBuilder(&descpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,

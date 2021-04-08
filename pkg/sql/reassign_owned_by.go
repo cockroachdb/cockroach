@@ -71,7 +71,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 	}
 
 	lCtx := newInternalLookupCtx(params.ctx, allDescs,
-		currentDbDesc.ImmutableCopy().(*dbdesc.Immutable), nil /* fallback */)
+		currentDbDesc.ImmutableCopy().(catalog.DatabaseDescriptor), nil /* fallback */)
 
 	// Iterate through each object, check for ownership by an old role.
 	for _, oldRole := range n.n.OldRoles {
@@ -98,7 +98,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 			}
 		}
 		for _, typID := range lCtx.typIDs {
-			if IsOwner(lCtx.typDescs[typID], oldRole) && (lCtx.typDescs[typID].Kind != descpb.TypeDescriptor_ALIAS) {
+			if IsOwner(lCtx.typDescs[typID], oldRole) && (lCtx.typDescs[typID].GetKind() != descpb.TypeDescriptor_ALIAS) {
 				if err := n.reassignTypeOwner(lCtx.typDescs[typID], params); err != nil {
 					return err
 				}
@@ -109,9 +109,9 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 }
 
 func (n *reassignOwnedByNode) reassignDatabaseOwner(
-	dbDesc *dbdesc.Immutable, params runParams,
+	dbDesc catalog.DatabaseDescriptor, params runParams,
 ) error {
-	mutableDbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, dbDesc.ID, params.p.txn)
+	mutableDbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, dbDesc.GetID(), params.p.txn)
 	if err != nil {
 		return err
 	}
@@ -130,10 +130,10 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 }
 
 func (n *reassignOwnedByNode) reassignSchemaOwner(
-	schemaDesc *schemadesc.Immutable, params runParams,
+	schemaDesc catalog.SchemaDescriptor, params runParams,
 ) error {
 	mutableSchemaDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
-		params.ctx, schemaDesc.ID, params.p.txn)
+		params.ctx, schemaDesc.GetID(), params.p.txn)
 	if err != nil {
 		return err
 	}
@@ -171,15 +171,15 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 }
 
 func (n *reassignOwnedByNode) reassignTypeOwner(
-	typDesc *typedesc.Immutable, params runParams,
+	typDesc catalog.TypeDescriptor, params runParams,
 ) error {
 	mutableTypDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
-		params.ctx, typDesc.ID, params.p.txn)
+		params.ctx, typDesc.GetID(), params.p.txn)
 	if err != nil {
 		return err
 	}
 	arrayDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-		params.ctx, params.p.txn, typDesc.ArrayTypeID)
+		params.ctx, params.p.txn, typDesc.GetArrayTypeID())
 	if err != nil {
 		return err
 	}

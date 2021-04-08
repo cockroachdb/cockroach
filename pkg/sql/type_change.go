@@ -203,8 +203,10 @@ type TypeSchemaChangerTestingKnobs struct {
 // ModuleTestingKnobs implements the ModuleTestingKnobs interface.
 func (TypeSchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 
-func (t *typeSchemaChanger) getTypeDescFromStore(ctx context.Context) (*typedesc.Immutable, error) {
-	var typeDesc *typedesc.Immutable
+func (t *typeSchemaChanger) getTypeDescFromStore(
+	ctx context.Context,
+) (catalog.TypeDescriptor, error) {
+	var typeDesc catalog.TypeDescriptor
 	if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		typeDesc, err = catalogkv.MustGetTypeDescByID(ctx, txn, t.execCfg.Codec, t.typeID)
 		return err
@@ -218,12 +220,12 @@ func (t *typeSchemaChanger) getTypeDescFromStore(ctx context.Context) (*typedesc
 // and its array type descriptor (if one exists). If a descriptor is not found,
 // it is assumed dropped, and the error is swallowed.
 func refreshTypeDescriptorLeases(
-	ctx context.Context, leaseMgr *lease.Manager, typeDesc *typedesc.Immutable,
+	ctx context.Context, leaseMgr *lease.Manager, typeDesc catalog.TypeDescriptor,
 ) error {
 	var err error
-	var ids = []descpb.ID{typeDesc.ID}
-	if typeDesc.ArrayTypeID != descpb.InvalidID {
-		ids = append(ids, typeDesc.ArrayTypeID)
+	var ids = []descpb.ID{typeDesc.GetID()}
+	if typeDesc.GetArrayTypeID() != descpb.InvalidID {
+		ids = append(ids, typeDesc.GetArrayTypeID())
 	}
 	for _, id := range ids {
 		if updateErr := WaitToUpdateLeases(ctx, leaseMgr, id); updateErr != nil {
@@ -259,7 +261,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	}
 
 	// If there are any names to drain, then do so.
-	if len(typeDesc.DrainingNames) > 0 {
+	if len(typeDesc.GetDrainingNames()) > 0 {
 		if err := drainNamesForDescriptor(
 			ctx, t.execCfg.Settings, typeDesc.GetID(), t.execCfg.DB, t.execCfg.InternalExecutor,
 			leaseMgr, codec, nil,
@@ -276,8 +278,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	// For all the read only members the current job is responsible for, either
 	// promote them to writeable or remove them from the descriptor entirely,
 	// as dictated by the direction.
-	if (typeDesc.Kind == descpb.TypeDescriptor_ENUM ||
-		typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
+	if (typeDesc.GetKind() == descpb.TypeDescriptor_ENUM ||
+		typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
 		len(t.transitioningMembers) != 0 {
 		if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
 			fn()
@@ -417,7 +419,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	if typeDesc.Dropped() {
 		if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			b := txn.NewBatch()
-			b.Del(catalogkeys.MakeDescMetadataKey(codec, typeDesc.ID))
+			b.Del(catalogkeys.MakeDescMetadataKey(codec, typeDesc.GetID()))
 			return txn.Run(ctx, b)
 		}); err != nil {
 			return err
@@ -431,12 +433,12 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 // has completed. A list of re-partitioned tables, if any, is returned.
 func performMultiRegionFinalization(
 	ctx context.Context,
-	typeDesc *typedesc.Immutable,
+	typeDesc catalog.TypeDescriptor,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	descsCol *descs.Collection,
 ) ([]descpb.ID, error) {
-	regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.ParentID, descsCol)
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.GetParentID(), descsCol)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +446,7 @@ func performMultiRegionFinalization(
 	// zone configuration on the database.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		ctx,
-		typeDesc.ParentID,
+		typeDesc.GetParentID(),
 		regionConfig,
 		txn,
 		execCfg,
@@ -461,7 +463,7 @@ func performMultiRegionFinalization(
 // (regions).
 func repartitionRegionalByRowTables(
 	ctx context.Context,
-	typeDesc *typedesc.Immutable,
+	typeDesc catalog.TypeDescriptor,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	descsCol *descs.Collection,
@@ -486,7 +488,7 @@ func repartitionRegionalByRowTables(
 	localPlanner := p.(*planner)
 
 	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-		ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{
+		ctx, txn, typeDesc.GetParentID(), tree.DatabaseLookupFlags{
 			Required: true,
 		})
 	if err != nil {
@@ -565,7 +567,7 @@ func repartitionRegionalByRowTables(
 			}
 
 			// Update the zone configurations now that the partition's been added.
-			regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.ParentID, descsCol)
+			regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.GetParentID(), descsCol)
 			if err != nil {
 				return err
 			}
@@ -644,7 +646,7 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 		}
 		b := txn.NewBatch()
 		// No cleanup required.
-		if !enumHasNonPublic(&typeDesc.Immutable) {
+		if !enumHasNonPublic(typeDesc) {
 			return nil
 		}
 
@@ -753,7 +755,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			}
 			override := sessiondata.InternalExecutorOverride{
 				User:     security.RootUserName(),
-				Database: dbDesc.Name,
+				Database: dbDesc.GetName(),
 			}
 			rows, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
 			if err != nil {
@@ -798,13 +800,14 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 // type.
 func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 	ctx context.Context,
-	arrayTypeDesc *typedesc.Immutable,
+	arrayTypeDesc catalog.TypeDescriptor,
 	member *descpb.TypeDescriptor_EnumMember,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
 ) error {
 	const validationErr = "could not validate removal of enum value %q"
-	for _, ID := range arrayTypeDesc.ReferencingDescriptorIDs {
+	for i := 0; i < arrayTypeDesc.NumReferencingDescriptors(); i++ {
+		ID := arrayTypeDesc.GetReferencingDescriptorID(i)
 		desc, err := descsCol.GetImmutableTableByID(ctx, txn, ID, tree.ObjectLookupFlags{})
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
@@ -821,7 +824,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		//	) WHERE unnest = 'enum_value'
 		firstClause := true
 		for _, col := range desc.PublicColumns() {
-			if arrayTypeDesc.ID == typedesc.GetTypeDescID(col.GetType()) {
+			if arrayTypeDesc.GetID() == typedesc.GetTypeDescID(col.GetType()) {
 				if !firstClause {
 					unionUnnests.WriteString(" UNION ")
 				}
@@ -846,13 +849,13 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		query.WriteString(fmt.Sprintf(") WHERE unnest = %s", sqlPhysRep))
 
 		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, arrayTypeDesc.ParentID, tree.DatabaseLookupFlags{Required: true})
+			ctx, txn, arrayTypeDesc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
 		override := sessiondata.InternalExecutorOverride{
 			User:     security.RootUserName(),
-			Database: dbDesc.Name,
+			Database: dbDesc.GetName(),
 		}
 		rows, err := t.execCfg.InternalExecutor.QueryRowEx(
 			ctx,
@@ -882,10 +885,10 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 	return nil
 }
 
-func enumHasNonPublic(typeDesc *typedesc.Immutable) bool {
+func enumHasNonPublic(typeDesc catalog.TypeDescriptor) bool {
 	hasNonPublic := false
-	for _, member := range typeDesc.EnumMembers {
-		if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY {
+	for i := 0; i < typeDesc.NumEnumMembers(); i++ {
+		if typeDesc.IsMemberReadOnly(i) {
 			hasNonPublic = true
 			break
 		}

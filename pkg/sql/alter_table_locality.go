@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -35,7 +35,7 @@ import (
 type alterTableSetLocalityNode struct {
 	n         tree.AlterTableLocality
 	tableDesc *tabledesc.Mutable
-	dbDesc    *dbdesc.Immutable
+	dbDesc    catalog.DatabaseDescriptor
 }
 
 // AlterTableLocality transforms a tree.AlterTableLocality into a plan node.
@@ -566,7 +566,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 // writeNewTableLocalityAndZoneConfig writes the table descriptor with the newly
 // updated LocalityConfig and writes a new zone configuration for the table.
 func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
-	params runParams, dbDesc *dbdesc.Immutable,
+	params runParams, dbDesc catalog.DatabaseDescriptor,
 ) error {
 	// Write out the table descriptor update.
 	if err := params.p.writeSchemaChange(
@@ -578,7 +578,7 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 		return err
 	}
 
-	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.ID, params.p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.GetID(), params.p.Descriptors())
 	if err != nil {
 		return err
 	}

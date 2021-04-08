@@ -23,7 +23,6 @@ go_library(
         "//pkg/sql/catalog/hydratedtables",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/resolver",
-        "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",

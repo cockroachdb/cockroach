@@ -577,8 +577,8 @@ func allocateDescriptorRewrites(
 						return err
 					}
 					descriptorRewrites[sc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
-						ParentID:   desc.ParentID,
-						ID:         desc.ID,
+						ParentID:   desc.GetParentID(),
+						ID:         desc.GetID(),
 						ToExisting: true,
 					}
 				}
@@ -733,7 +733,7 @@ func allocateDescriptorRewrites(
 					// this type to the type existing in the cluster.
 
 					// If the collided object isn't a type, then error out.
-					existingType, isType := desc.(*typedesc.Immutable)
+					existingType, isType := desc.(catalog.TypeDescriptor)
 					if !isType {
 						return sqlerrors.MakeObjectAlreadyExistsError(desc.DescriptorProto(), typ.Name)
 					}
@@ -743,21 +743,21 @@ func allocateDescriptorRewrites(
 						return errors.Wrapf(
 							err,
 							"%q is not compatible with type %q existing in cluster",
-							existingType.Name,
-							existingType.Name,
+							existingType.GetName(),
+							existingType.GetName(),
 						)
 					}
 
 					// Remap both the type and its array type since they are compatible
 					// with the type existing in the cluster.
 					descriptorRewrites[typ.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
-						ParentID:   existingType.ParentID,
-						ID:         existingType.ID,
+						ParentID:   existingType.GetParentID(),
+						ID:         existingType.GetID(),
 						ToExisting: true,
 					}
 					descriptorRewrites[typ.ArrayTypeID] = &jobspb.RestoreDetails_DescriptorRewrite{
-						ParentID:   existingType.ParentID,
-						ID:         existingType.ArrayTypeID,
+						ParentID:   existingType.GetParentID(),
+						ID:         existingType.GetArrayTypeID(),
 						ToExisting: true,
 					}
 				}

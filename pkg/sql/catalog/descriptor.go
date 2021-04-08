@@ -152,6 +152,8 @@ type DatabaseDescriptor interface {
 	PrimaryRegionName() (descpb.RegionName, error)
 	MultiRegionEnumID() (descpb.ID, error)
 	ForEachSchemaInfo(func(id descpb.ID, name string, isDropped bool) error) error
+	GetSchemaID(name string) descpb.ID
+	GetNonDroppedSchemaName(schemaID descpb.ID) string
 }
 
 // SchemaDescriptor will eventually be called schemadesc.Descriptor.
@@ -338,10 +340,22 @@ type TypeDescriptor interface {
 	MakeTypesT(ctx context.Context, name *tree.TypeName, res TypeDescriptorResolver) (*types.T, error)
 	HasPendingSchemaChanges() bool
 	GetIDClosure() map[descpb.ID]struct{}
+	IsCompatibleWith(other TypeDescriptor) error
 
 	PrimaryRegionName() (descpb.RegionName, error)
 	RegionNames() (descpb.RegionNames, error)
 	RegionNamesIncludingTransitioning() (descpb.RegionNames, error)
+	RegionNamesForZoneConfigValidation() (descpb.RegionNames, error)
+	GetArrayTypeID() descpb.ID
+	GetKind() descpb.TypeDescriptor_Kind
+
+	NumEnumMembers() int
+	GetMemberPhysicalRepresentation(enumMemberOrdinal int) []byte
+	GetMemberLogicalRepresentation(enumMemberOrdinal int) string
+	IsMemberReadOnly(enumMemberOrdinal int) bool
+
+	NumReferencingDescriptors() int
+	GetReferencingDescriptorID(refOrdinal int) descpb.ID
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type

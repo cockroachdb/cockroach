@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -187,7 +186,7 @@ type Collection struct {
 
 	// allDatabaseDescriptors is a slice of all available database descriptors.
 	// These are purged at the same time as allDescriptors.
-	allDatabaseDescriptors []*dbdesc.Immutable
+	allDatabaseDescriptors []catalog.DatabaseDescriptor
 
 	// allSchemasForDatabase maps databaseID -> schemaID -> schemaName.
 	// For each databaseID, all schemas visible under the database can be
@@ -413,12 +412,8 @@ func (tc *Collection) GetMutableDatabaseByName(
 // properties according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableDatabaseByName(
 	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
-) (found bool, _ *dbdesc.Immutable, _ error) {
-	found, desc, err := tc.getDatabaseByName(ctx, txn, name, flags, false /* mutable */)
-	if err != nil || !found {
-		return false, nil, err
-	}
-	return true, desc.(*dbdesc.Immutable), nil
+) (found bool, _ catalog.DatabaseDescriptor, _ error) {
+	return tc.getDatabaseByName(ctx, txn, name, flags, false /* mutable */)
 }
 
 // getDatabaseByName returns a database descriptor with properties according to
@@ -654,12 +649,8 @@ func (tc *Collection) GetMutableTypeByName(
 // according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableTypeByName(
 	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (found bool, _ *typedesc.Immutable, _ error) {
-	found, desc, err := tc.getTypeByName(ctx, txn, name, flags, false /* mutable */)
-	if err != nil || !found {
-		return false, nil, err
-	}
-	return true, desc.(*typedesc.Immutable), nil
+) (found bool, _ catalog.TypeDescriptor, _ error) {
+	return tc.getTypeByName(ctx, txn, name, flags, false /* mutable */)
 }
 
 // getTypeByName returns a type descriptor with properties according to the
@@ -728,16 +719,16 @@ func (tc *Collection) getUserDefinedSchemaByName(
 		if err != nil {
 			return false, nil, err
 		}
-		schemaInfo, found := dbDesc.LookupSchema(schemaName)
-		if !found {
+		schemaID := dbDesc.GetSchemaID(schemaName)
+		if schemaID == descpb.InvalidID {
 			return false, nil, nil
-		} else if schemaInfo.Dropped {
+		}
+		foundSchemaName := dbDesc.GetNonDroppedSchemaName(schemaID)
+		if foundSchemaName != schemaName {
 			// If there's another schema name entry with the same ID as this one, then
 			// the schema has been renamed, so don't return anything.
-			for name, info := range dbDesc.GetSchemas() {
-				if name != schemaName && info.ID == schemaInfo.ID {
-					return false, nil, nil
-				}
+			if foundSchemaName != "" {
+				return false, nil, nil
 			}
 			// Otherwise, the schema has been dropped. Return early, except in the
 			// specific case where flags.Required and flags.IncludeDropped are both
@@ -760,7 +751,7 @@ func (tc *Collection) getUserDefinedSchemaByName(
 		// the database which doesn't reflect the changes to the schema. But this
 		// isn't a problem for correctness; it can only happen on other sessions
 		// before the schema change has returned results.
-		desc, err := tc.getDescriptorByID(ctx, txn, schemaInfo.ID, flags, mutable)
+		desc, err := tc.getDescriptorByID(ctx, txn, schemaID, flags, mutable)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) ||
 				errors.Is(err, catalog.ErrDescriptorDropped) {
@@ -919,12 +910,8 @@ var _ = (*Collection)(nil).GetMutableDatabaseByID
 // properties according to the provided lookup flags. RequireMutable is ignored.
 func (tc *Collection) GetImmutableDatabaseByID(
 	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
-) (bool, *dbdesc.Immutable, error) {
-	found, desc, err := tc.getDatabaseByID(ctx, txn, dbID, flags, false /* mutable */)
-	if err != nil || !found {
-		return false, nil, err
-	}
-	return true, desc.(*dbdesc.Immutable), nil
+) (bool, catalog.DatabaseDescriptor, error) {
+	return tc.getDatabaseByID(ctx, txn, dbID, flags, false /* mutable */)
 }
 
 func (tc *Collection) getDatabaseByID(
@@ -1281,17 +1268,17 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			_, dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.ParentID,
+			_, dbDesc, err := tc.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(),
 				tree.DatabaseLookupFlags{Required: true})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
 			sc, err := tc.GetImmutableSchemaByID(
-				ctx, txn, desc.ParentSchemaID, tree.SchemaLookupFlags{})
+				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{})
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			name := tree.MakeNewQualifiedTypeName(dbDesc.Name, sc.Name, desc.Name)
+			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), sc.Name, desc.GetName())
 			return name, desc, nil
 		})
 
@@ -1575,12 +1562,8 @@ func (tc *Collection) GetMutableTypeByID(
 // the ID exists.
 func (tc *Collection) GetImmutableTypeByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
-) (*typedesc.Immutable, error) {
-	desc, err := tc.getTypeByID(ctx, txn, typeID, flags, false /* mutable */)
-	if err != nil {
-		return nil, err
-	}
-	return desc.(*typedesc.Immutable), nil
+) (catalog.TypeDescriptor, error) {
+	return tc.getTypeByID(ctx, txn, typeID, flags, false /* mutable */)
 }
 
 func (tc *Collection) getTypeByID(
@@ -1740,16 +1723,16 @@ func (tc *Collection) GetAllDescriptors(
 // on sets of descriptors can hydrate a set of descriptors (i.e. on BACKUPs).
 func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) error {
 	// Collect the needed information to set up metadata in those types.
-	dbDescs := make(map[descpb.ID]*dbdesc.Immutable)
-	typDescs := make(map[descpb.ID]*typedesc.Immutable)
-	schemaDescs := make(map[descpb.ID]*schemadesc.Immutable)
+	dbDescs := make(map[descpb.ID]catalog.DatabaseDescriptor)
+	typDescs := make(map[descpb.ID]catalog.TypeDescriptor)
+	schemaDescs := make(map[descpb.ID]catalog.SchemaDescriptor)
 	for _, desc := range descs {
 		switch desc := desc.(type) {
-		case *dbdesc.Immutable:
+		case catalog.DatabaseDescriptor:
 			dbDescs[desc.GetID()] = desc
-		case *typedesc.Immutable:
+		case catalog.TypeDescriptor:
 			typDescs[desc.GetID()] = desc
-		case *schemadesc.Immutable:
+		case catalog.SchemaDescriptor:
 			schemaDescs[desc.GetID()] = desc
 		}
 	}
@@ -1766,9 +1749,9 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 				return tree.TypeName{}, nil, sqlerrors.NewUndefinedObjectError(&n,
 					tree.TypeObject)
 			}
-			dbDesc, ok := dbDescs[typDesc.ParentID]
+			dbDesc, ok := dbDescs[typDesc.GetParentID()]
 			if !ok {
-				n := fmt.Sprintf("[%d]", typDesc.ParentID)
+				n := fmt.Sprintf("[%d]", typDesc.GetParentID())
 				return tree.TypeName{}, nil, sqlerrors.NewUndefinedDatabaseError(n)
 			}
 			// We don't use the collection's ResolveSchemaByID method here because
@@ -1776,11 +1759,11 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 			// members of the public schema or a user defined schema, so those are
 			// the only cases we have to consider here.
 			var scName string
-			switch typDesc.ParentSchemaID {
+			switch typDesc.GetParentSchemaID() {
 			case keys.PublicSchemaID:
 				scName = tree.PublicSchema
 			default:
-				scName = schemaDescs[typDesc.ParentSchemaID].Name
+				scName = schemaDescs[typDesc.GetParentSchemaID()].GetName()
 			}
 			name := tree.MakeNewQualifiedTypeName(dbDesc.GetName(), scName, typDesc.GetName())
 			return name, typDesc, nil
@@ -1815,7 +1798,7 @@ func HydrateGivenDescriptors(ctx context.Context, descs []catalog.Descriptor) er
 // missing database descriptors.
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
-) ([]*dbdesc.Immutable, error) {
+) ([]catalog.DatabaseDescriptor, error) {
 	if tc.allDatabaseDescriptors == nil {
 		dbDescIDs, err := catalogkv.GetAllDatabaseDescriptorIDs(ctx, txn, tc.codec())
 		if err != nil {
@@ -2058,7 +2041,7 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 		return tree.TypeName{}, nil, err
 	}
 	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
-	return name, desc.(*typedesc.Immutable), nil
+	return name, desc.(catalog.TypeDescriptor), nil
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.

@@ -22,7 +22,7 @@ import (
 // for type descriptors.
 type TypeDescriptorBuilder interface {
 	catalog.DescriptorBuilder
-	BuildImmutableType() *Immutable
+	BuildImmutableType() catalog.TypeDescriptor
 	BuildExistingMutableType() *Mutable
 	BuildCreatedMutableType() *Mutable
 }
@@ -60,7 +60,7 @@ func (tdb *typeDescriptorBuilder) BuildImmutable() catalog.Descriptor {
 }
 
 // BuildImmutableType returns an immutable type descriptor.
-func (tdb *typeDescriptorBuilder) BuildImmutableType() *Immutable {
+func (tdb *typeDescriptorBuilder) BuildImmutableType() catalog.TypeDescriptor {
 	imm := makeImmutable(tdb.original)
 	return &imm
 }
@@ -74,7 +74,7 @@ func (tdb *typeDescriptorBuilder) BuildExistingMutable() catalog.MutableDescript
 // which already exists.
 func (tdb *typeDescriptorBuilder) BuildExistingMutableType() *Mutable {
 	clusterVersion := makeImmutable(protoutil.Clone(tdb.original).(*descpb.TypeDescriptor))
-	return &Mutable{Immutable: makeImmutable(tdb.original), ClusterVersion: &clusterVersion}
+	return &Mutable{immutable: makeImmutable(tdb.original), ClusterVersion: &clusterVersion}
 }
 
 // BuildCreatedMutable implements the catalog.DescriptorBuilder interface.
@@ -85,11 +85,11 @@ func (tdb *typeDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescripto
 // BuildCreatedMutableType returns a mutable descriptor for a type
 // which is in the process of being created.
 func (tdb *typeDescriptorBuilder) BuildCreatedMutableType() *Mutable {
-	return &Mutable{Immutable: makeImmutable(tdb.original)}
+	return &Mutable{immutable: makeImmutable(tdb.original)}
 }
 
-func makeImmutable(desc *descpb.TypeDescriptor) Immutable {
-	immutDesc := Immutable{TypeDescriptor: *desc}
+func makeImmutable(desc *descpb.TypeDescriptor) immutable {
+	immutDesc := immutable{TypeDescriptor: *desc}
 
 	// Initialize metadata specific to the TypeDescriptor kind.
 	switch immutDesc.Kind {

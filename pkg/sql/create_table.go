@@ -401,7 +401,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			return errors.Wrap(err, "error resolving database for multi-region")
 		}
 
-		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.ID, params.p.Descriptors())
+		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.GetID(), params.p.Descriptors())
 		if err != nil {
 			return err
 		}
