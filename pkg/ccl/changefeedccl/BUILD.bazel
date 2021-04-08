@@ -124,6 +124,8 @@ go_test(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/kvfeed",
         "//pkg/ccl/importccl",
+        "//pkg/ccl/multiregionccl",
+        "//pkg/ccl/partitionccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
         "//pkg/clusterversion",
