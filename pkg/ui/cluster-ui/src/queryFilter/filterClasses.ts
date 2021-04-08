@@ -8,7 +8,6 @@ export const dropdownContentWrapper = cx("dropdown-content-wrapper");
 export const dropdown = cx("dropdown-area");
 export const hidden = cx("hide");
 export const caretDown = cx("caret-down");
-export const dropdownSelect = cx("dropdown-select");
 
 export const timePair = {
   wrapper: cx("time-pair-wrapper"),
