@@ -611,8 +611,6 @@ type DiffWithZoneMismatch struct {
 	// PartitionName represents a subzone with a mismatching partitionName.
 	PartitionName string
 
-	// NOTE: only one of the below fields is set.
-
 	// IsMissingSubzone indicates a subzone is missing.
 	IsMissingSubzone bool
 	// IsExtraSubzone indicates we have an extraneous subzone.
@@ -782,6 +780,7 @@ func (z *ZoneConfig) DiffWithZone(
 					IndexID:        s.IndexID,
 					PartitionName:  s.PartitionName,
 					IsExtraSubzone: true,
+					Field:          subzoneMismatch.Field,
 				}, nil
 			}
 			continue
@@ -822,6 +821,7 @@ func (z *ZoneConfig) DiffWithZone(
 				IndexID:          o.IndexID,
 				PartitionName:    o.PartitionName,
 				IsMissingSubzone: true,
+				Field:            subzoneMismatch.Field,
 			}, nil
 		}
 	}

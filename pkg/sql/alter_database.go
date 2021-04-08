@@ -756,7 +756,6 @@ func checkCanConvertTableToMultiRegion(
 			)
 		}
 	}
-	// TODO(#57668): check zone configurations are not set here
 	return nil
 }
 
@@ -772,6 +771,15 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 		[]tree.Name{n.n.PrimaryRegion},
 	)
 	if err != nil {
+		return err
+	}
+
+	// Check we are writing valid zone configurations.
+	if err := params.p.validateAllMultiRegionZoneConfigsInDatabase(
+		params.ctx,
+		&n.desc.Immutable,
+		&zoneConfigForMultiRegionValidatorSetInitialRegion{},
+	); err != nil {
 		return err
 	}
 
