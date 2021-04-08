@@ -254,7 +254,7 @@ TestXXA - 1.00s
 				if t.Failed() {
 					return nil
 				}
-				req := c.formatter(ctx, f)
+				_, req := c.formatter(ctx, f)
 
 				if curIssue >= len(c.expIssues) {
 					t.Errorf("unexpected issue filed. title: %s", f.title)
