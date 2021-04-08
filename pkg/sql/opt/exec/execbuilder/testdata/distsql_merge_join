@@ -456,7 +456,7 @@ vectorized: true
     │     ordering: +pid1
     │     estimated row count: 4 (missing stats)
     │     table: parent1@primary
-    │     spans: /1/0- /11/0- /21/0- /31/0-
+    │     spans: /1/0 /11/0 /21/0 /31/0
     │     parallel
     │
     └── • scan
