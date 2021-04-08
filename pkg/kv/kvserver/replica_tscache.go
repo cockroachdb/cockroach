@@ -289,6 +289,12 @@ func init() {
 func (r *Replica) applyTimestampCache(
 	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
 ) bool {
+	if !ba.IsIntentWrite() {
+		// If the request is not a regular MVCC write, the timestamp cache doesn't
+		// apply to it.
+		return false
+	}
+
 	// bumpedDueToMinReadTS is set to true if the highest timestamp bump encountered
 	// below is due to the minReadTS.
 	var bumpedDueToMinReadTS bool
