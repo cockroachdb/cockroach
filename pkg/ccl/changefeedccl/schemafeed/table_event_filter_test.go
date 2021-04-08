@@ -21,6 +21,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTableEventIsRegionalByRowChange(t *testing.T) {
+	ts := func(seconds int) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
+	}
+	mkTableDesc := schematestutils.MakeTableDesc
+	addColBackfill := schematestutils.AddNewColumnBackfillMutation
+	setRBR := schematestutils.SetLocalityRegionalByRow
+	for _, c := range []struct {
+		name string
+		e    TableEvent
+		exp  bool
+	}{
+		{
+			name: "regional by row change",
+			e: TableEvent{
+				Before: mkTableDesc(42, 1, ts(2), 2),
+				After:  setRBR(mkTableDesc(42, 2, ts(3), 2)),
+			},
+			exp: true,
+		},
+		{
+			name: "add non-NULL column",
+			e: TableEvent{
+				Before: addColBackfill(mkTableDesc(42, 3, ts(2), 1)),
+				After:  mkTableDesc(42, 4, ts(4), 2),
+			},
+			exp: false,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.exp, IsRegionalByRowChange(c.e))
+		})
+	}
+
+}
+
 func TestTableEventFilter(t *testing.T) {
 	ts := func(seconds int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
@@ -28,6 +64,7 @@ func TestTableEventFilter(t *testing.T) {
 	mkTableDesc := schematestutils.MakeTableDesc
 	addColBackfill := schematestutils.AddNewColumnBackfillMutation
 	dropColBackfill := schematestutils.AddColumnDropBackfillMutation
+	setRBR := schematestutils.SetLocalityRegionalByRow
 	for _, c := range []struct {
 		name string
 		p    tableEventFilter
@@ -95,11 +132,29 @@ func TestTableEventFilter(t *testing.T) {
 			exp: true,
 		},
 		{
+			name: "don't filter regional by row change",
+			p:    defaultTableEventFilter,
+			e: TableEvent{
+				Before: mkTableDesc(42, 1, ts(2), 2),
+				After:  setRBR(mkTableDesc(42, 2, ts(3), 2)),
+			},
+			exp: false,
+		},
+		{
 			name: "columnChange - don't filter end of add NULL column",
 			p:    columnChangeTableEventFilter,
 			e: TableEvent{
 				Before: mkTableDesc(42, 3, ts(2), 1),
 				After:  mkTableDesc(42, 4, ts(4), 2),
+			},
+			exp: false,
+		},
+		{
+			name: "columnChange - don't filter regional by row change",
+			p:    columnChangeTableEventFilter,
+			e: TableEvent{
+				Before: mkTableDesc(42, 1, ts(2), 2),
+				After:  setRBR(mkTableDesc(42, 2, ts(3), 2)),
 			},
 			exp: false,
 		},

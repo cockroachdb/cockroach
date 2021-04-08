@@ -25,23 +25,26 @@ const (
 	tableEventTypeDropColumn
 	tableEventTruncate
 	tableEventPrimaryKeyChange
+	tableEventLocalityRegionalByRowChange
 )
 
 var (
 	defaultTableEventFilter = tableEventFilter{
-		tableEventTypeDropColumn:            false,
-		tableEventTypeAddColumnWithBackfill: false,
-		tableEventTypeAddColumnNoBackfill:   true,
-		tableEventTypeUnknown:               true,
-		tableEventPrimaryKeyChange:          false,
+		tableEventTypeDropColumn:              false,
+		tableEventTypeAddColumnWithBackfill:   false,
+		tableEventTypeAddColumnNoBackfill:     true,
+		tableEventTypeUnknown:                 true,
+		tableEventPrimaryKeyChange:            false,
+		tableEventLocalityRegionalByRowChange: false,
 	}
 
 	columnChangeTableEventFilter = tableEventFilter{
-		tableEventTypeDropColumn:            false,
-		tableEventTypeAddColumnWithBackfill: false,
-		tableEventTypeAddColumnNoBackfill:   false,
-		tableEventTypeUnknown:               true,
-		tableEventPrimaryKeyChange:          false,
+		tableEventTypeDropColumn:              false,
+		tableEventTypeAddColumnWithBackfill:   false,
+		tableEventTypeAddColumnNoBackfill:     false,
+		tableEventTypeUnknown:                 true,
+		tableEventPrimaryKeyChange:            false,
+		tableEventLocalityRegionalByRowChange: false,
 	}
 
 	schemaChangeEventFilters = map[changefeedbase.SchemaChangeEventClass]tableEventFilter{
@@ -52,6 +55,11 @@ var (
 
 func classifyTableEvent(e TableEvent) tableEventType {
 	switch {
+	// Take care before changing the ordering here.  Until we can
+	// classify events with multiple types, we need to ensure that
+	// we detect regionalByRow changes with priority.
+	case regionalByRowChanged(e):
+		return tableEventLocalityRegionalByRowChange
 	case newColumnBackfillComplete(e):
 		return tableEventTypeAddColumnWithBackfill
 	case newColumnNoBackfill(e):
@@ -135,8 +143,18 @@ func primaryKeyChanged(e TableEvent) bool {
 		pkChangeMutationExists(e.Before)
 }
 
+func regionalByRowChanged(e TableEvent) bool {
+	return e.Before.IsLocalityRegionalByRow() != e.After.IsLocalityRegionalByRow()
+}
+
 // IsPrimaryIndexChange returns true if the event corresponds to a change
 // in the primary index.
 func IsPrimaryIndexChange(e TableEvent) bool {
 	return classifyTableEvent(e) == tableEventPrimaryKeyChange
+}
+
+// IsRegionalByRowChange returns true if the event corresponds to a
+// change in the table's locality to or from RegionalByRow.
+func IsRegionalByRowChange(e TableEvent) bool {
+	return classifyTableEvent(e) == tableEventLocalityRegionalByRowChange
 }
