@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -62,10 +63,26 @@ func (b blocklistsForVersion) getLists(version string) (string, blocklist, strin
 	return "", nil, "", nil
 }
 
-func fetchCockroachVersion(ctx context.Context, c *cluster, nodeIndex int) (string, error) {
-	db, err := c.ConnE(ctx, nodeIndex)
-	if err != nil {
-		return "", err
+// args allows us to optionally pass a username, certsDir and port for creating
+// a secure connection.
+// If optional args are passed, it is assumed we want to create a secure conn
+// and that arg[0] is the username, arg[1] is the certificate directory
+// arg[2] is the port.
+func fetchCockroachVersion(
+	ctx context.Context, c *cluster, nodeIndex int, args ...string,
+) (string, error) {
+	var db *gosql.DB
+	var err error
+	if len(args) > 0 {
+		db, err = c.ConnSecure(ctx, nodeIndex, args[0], args[1], args[2])
+		if err != nil {
+			return "", err
+		}
+	} else {
+		db, err = c.ConnE(ctx, nodeIndex)
+		if err != nil {
+			return "", err
+		}
 	}
 	defer db.Close()
 	var version string

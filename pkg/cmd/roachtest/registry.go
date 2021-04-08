@@ -69,6 +69,7 @@ func registerTests(r *testRegistry) {
 	registerPebble(r)
 	registerPgjdbc(r)
 	registerPgx(r)
+	registerPostgresNode(r)
 	registerPsycopg(r)
 	registerQueue(r)
 	registerQuitAllNodes(r)
