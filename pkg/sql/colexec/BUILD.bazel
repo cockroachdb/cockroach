@@ -35,6 +35,7 @@ go_library(
         "tuple_proj_op.go",
         "unordered_distinct.go",
         "utils.go",
+        "values.go",
         ":gen-exec",  # keep
         ":gen-sort-partitioner",  # keep
     ],
