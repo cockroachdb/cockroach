@@ -124,7 +124,7 @@ type schemaChangeDetectedError struct {
 }
 
 func (e schemaChangeDetectedError) Error() string {
-	return fmt.Sprintf("schema change deteceted at %v", e.ts)
+	return fmt.Sprintf("schema change detected at %v", e.ts)
 }
 
 type schemaFeed interface {
