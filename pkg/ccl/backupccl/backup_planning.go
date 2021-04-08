@@ -182,29 +182,41 @@ func getLogicallyMergedTableSpans(
 	endTime hlc.Timestamp,
 	checkForKVInBounds func(start, end roachpb.Key, endTime hlc.Timestamp) (bool, error),
 ) ([]roachpb.Span, error) {
-	var nonDropIndexIDs []descpb.IndexID
-	if err := catalog.ForEachNonDropIndex(table, func(idx catalog.Index) error {
+	// Spans with adding indexes are not safe to include in the backup since
+	// they may see non-transactional AddSST traffic. Future incremental backups
+	// will not have a way of incrementally backing up the data until #62585 is
+	// resolved.
+	addingIndexIDs := make(map[descpb.IndexID]struct{})
+	var publicIndexIDs []descpb.IndexID
+
+	allPhysicalIndexOpts := catalog.IndexOpts{DropMutations: true, AddMutations: true}
+	if err := catalog.ForEachIndex(table, allPhysicalIndexOpts, func(idx catalog.Index) error {
 		key := tableAndIndex{tableID: table.GetID(), indexID: idx.GetID()}
 		if added[key] {
 			return nil
 		}
 		added[key] = true
-		nonDropIndexIDs = append(nonDropIndexIDs, idx.GetID())
+		if idx.Public() {
+			publicIndexIDs = append(publicIndexIDs, idx.GetID())
+		}
+		if idx.Adding() {
+			addingIndexIDs[idx.GetID()] = struct{}{}
+		}
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
-	if len(nonDropIndexIDs) == 0 {
+	if len(publicIndexIDs) == 0 {
 		return nil, nil
 	}
 
 	// There is no merging possible with only a single index, short circuit.
-	if len(nonDropIndexIDs) == 1 {
-		return []roachpb.Span{table.IndexSpan(codec, nonDropIndexIDs[0])}, nil
+	if len(publicIndexIDs) == 1 {
+		return []roachpb.Span{table.IndexSpan(codec, publicIndexIDs[0])}, nil
 	}
 
-	sort.Sort(sortedIndexIDs(nonDropIndexIDs))
+	sort.Sort(sortedIndexIDs(publicIndexIDs))
 
 	var mergedIndexSpans []roachpb.Span
 
@@ -218,10 +230,10 @@ func getLogicallyMergedTableSpans(
 	// mergedSpan to encompass the lhsSpan as that is the furthest we can go.
 	// After recording the new "merged" span, we update mergedSpan to be the
 	// rhsSpan, and start processing the next logically mergeable span set.
-	mergedSpan := table.IndexSpan(codec, nonDropIndexIDs[0])
-	for curIndex := 0; curIndex < len(nonDropIndexIDs)-1; curIndex++ {
-		lhsIndexID := nonDropIndexIDs[curIndex]
-		rhsIndexID := nonDropIndexIDs[curIndex+1]
+	mergedSpan := table.IndexSpan(codec, publicIndexIDs[0])
+	for curIndex := 0; curIndex < len(publicIndexIDs)-1; curIndex++ {
+		lhsIndexID := publicIndexIDs[curIndex]
+		rhsIndexID := publicIndexIDs[curIndex+1]
 
 		lhsSpan := table.IndexSpan(codec, lhsIndexID)
 		rhsSpan := table.IndexSpan(codec, rhsIndexID)
@@ -244,17 +256,27 @@ func getLogicallyMergedTableSpans(
 			mergedSpan = rhsSpan
 		} else {
 			var foundDroppedKV bool
-			// Iterate over all index IDs between the two candidates (lhs and rhs)
-			// which may be logically merged. These index IDs represent dropped
-			// indexes between the two non-drop index spans.
+			// Iterate over all index IDs between the two candidates (lhs and
+			// rhs) which may be logically merged. These index IDs represent
+			// non-public (and perhaps dropped) indexes between the two public
+			// index spans.
 			for i := lhsIndexID + 1; i < rhsIndexID; i++ {
-				// If we find an index which has been dropped but not gc'ed, we cannot
-				// merge the lhs and rhs spans.
+				// If we find an index which has been dropped but not gc'ed, we
+				// cannot merge the lhs and rhs spans.
 				foundDroppedKV, err = checkForKVInBounds(lhsSpan.EndKey, rhsSpan.Key, endTime)
 				if err != nil {
 					return nil, err
 				}
-				if foundDroppedKV {
+				// If we find an index that is being added, don't merge the
+				// spans. We don't want to backup data that is being backfilled
+				// until the backfill is complete. Even if the backfill has not
+				// started yet and there is not data we should not include this
+				// span in the spans to back up since we want these spans to
+				// appear as introduced when the index becomes PUBLIC.
+				// The indexes will appear in introduced spans because indexes
+				// will never go from PUBLIC to ADDING.
+				_, foundAddingIndex := addingIndexIDs[i]
+				if foundDroppedKV || foundAddingIndex {
 					mergedSpan.EndKey = lhsSpan.EndKey
 					mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
 					mergedSpan = rhsSpan
@@ -264,9 +286,9 @@ func getLogicallyMergedTableSpans(
 		}
 
 		// The loop will terminate after this iteration and so we must update the
-		// current mergedSpan to encompass the last element in the nonDropIndexIDs
+		// current mergedSpan to encompass the last element in the indexIDs
 		// slice as well.
-		if curIndex == len(nonDropIndexIDs)-2 {
+		if curIndex == len(publicIndexIDs)-2 {
 			mergedSpan.EndKey = rhsSpan.EndKey
 			mergedIndexSpans = append(mergedIndexSpans, mergedSpan)
 		}
@@ -330,10 +352,8 @@ func spansForAllTableIndexes(
 		// at least 2 revisions, and the first one should have the table in a PUBLIC
 		// state. We want (and do) ignore tables that have been dropped for the
 		// entire interval. DROPPED tables should never later become PUBLIC.
-		// TODO(pbardea): Consider and test the interaction between revision_history
-		// backups and OFFLINE tables.
 		rawTbl, _, _, _ := descpb.FromDescriptor(rev.Desc)
-		if rawTbl != nil && rawTbl.State != descpb.DescriptorState_DROP {
+		if rawTbl != nil && rawTbl.State == descpb.DescriptorState_PUBLIC {
 			tbl := tabledesc.NewBuilder(rawTbl).BuildImmutableTable()
 			revSpans, err := getLogicallyMergedTableSpans(tbl, added, execCfg.Codec, rev.Time,
 				checkForKVInBounds)
