@@ -11,6 +11,10 @@
 package geosegmentize
 
 import (
+	"strconv"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -125,4 +129,19 @@ func Segmentize(
 		return segGeomCollection, nil
 	}
 	return nil, errors.Newf("unknown type: %T", geometry)
+}
+
+// CheckSegmentizeTooManyPoints checks whether segmentize would break down into
+// to many points.
+func CheckSegmentizeTooManyPoints(numPoints float64, a geom.Coord, b geom.Coord) error {
+	if numPoints > float64(geo.MaxAllowedSplitPoints) {
+		return errors.Newf(
+			"attempting to segmentize into too many coordinates; need %s points between %v and %v, max %d",
+			strings.TrimRight(strconv.FormatFloat(numPoints, 'f', -1, 64), "."),
+			a,
+			b,
+			geo.MaxAllowedSplitPoints,
+		)
+	}
+	return nil
 }
