@@ -120,6 +120,16 @@ sysctl --system  # reload sysctl settings
 sudo apt-get update -q
 sudo apt-get install -qy chrony
 
+# Remove unattended-upgrades. We don't want to upgraded while running a cluster
+systemctl stop unattended-upgrades
+apt-get purge -y unattended-upgrades
+
+# Disable some cronjobs to reduce CPU usage
+systemctl stop cron
+systemctl mask cron
+systemctl mask apt-daily-upgrade.timer
+systemctl mask apt-daily.timer
+
 # Override the chrony config. In particular,
 # log aggressively when clock is adjusted (0.01s)
 # and exclusively use google's time servers.
