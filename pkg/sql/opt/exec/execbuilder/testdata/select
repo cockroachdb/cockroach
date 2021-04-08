@@ -357,7 +357,7 @@ vectorized: true
   columns: (x, y)
   estimated row count: 1 (missing stats)
   table: a@primary
-  spans: /2/0-
+  spans: /2/0
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM a WHERE x > 1 AND y < 30
@@ -874,7 +874,7 @@ vectorized: true
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
   table: dec@primary
-  spans: /NaN/NaN/0-
+  spans: /NaN/NaN/0
 
 # Test again with separate column families.
 
@@ -904,7 +904,7 @@ vectorized: true
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
   table: dec@primary
-  spans: /Infinity/Infinity/0-
+  spans: /Infinity/Infinity/0
 
 query T
 EXPLAIN (TYPES) SELECT * FROM dec WHERE d = '-Infinity' and v = '-Infinity'
@@ -916,7 +916,7 @@ vectorized: true
   columns: (d decimal, v decimal)
   estimated row count: 1 (missing stats)
   table: dec@primary
-  spans: /-Infinity/-Infinity/0-
+  spans: /-Infinity/-Infinity/0
 
 statement ok
 DROP TABLE dec
