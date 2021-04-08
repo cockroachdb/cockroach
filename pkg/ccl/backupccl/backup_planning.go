@@ -1097,6 +1097,7 @@ func backupPlanHook(
 			IntroducedSpans:     newSpans,
 			FormatVersion:       BackupFormatDescriptorTrackingVersion,
 			BuildInfo:           build.GetInfo(),
+			ClusterVersion:      p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version,
 			ClusterID:           p.ExecCfg().ClusterID(),
 			StatisticsFilenames: statsFiles,
 			DescriptorCoverage:  backupStmt.Coverage(),

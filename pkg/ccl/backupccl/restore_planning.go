@@ -1626,6 +1626,18 @@ func doRestorePlan(
 		return err
 	}
 
+	currentVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
+	for i := range mainBackupManifests {
+		if v := mainBackupManifests[i].ClusterVersion; v.Major != 0 {
+			// This is the "cluster" version that does not change between patches but
+			// rather just tracks migrations run. If the backup is more migrated than
+			// this cluster, then this cluster isn't ready to restore this backup.
+			if currentVersion.Less(v) {
+				return errors.Errorf("backup from version %s is newer than current version %s", v, currentVersion)
+			}
+		}
+	}
+
 	// Validate that the table coverage of the backup matches that of the restore.
 	// This prevents FULL CLUSTER backups to be restored as anything but full
 	// cluster restores and vice-versa.
