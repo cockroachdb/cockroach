@@ -712,7 +712,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.OnFailOrCancelExit = true
 		close(rts.failOrCancelCheckCh)
 		rts.failOrCancelCh <- errors.New("injected failure while blocked in reverting")
-		rts.check(t, jobs.StatusFailed)
+		rts.check(t, jobs.StatusRevertFailed)
 	})
 
 	// Fail the job, but also fail to mark it failed.
@@ -744,7 +744,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		// But let it fail.
 		rts.mu.e.OnFailOrCancelExit = true
 		rts.failOrCancelCh <- errors.New("resume failed")
-		rts.check(t, jobs.StatusFailed)
+		rts.check(t, jobs.StatusRevertFailed)
 	})
 
 	t.Run("OnPauseRequest", func(t *testing.T) {

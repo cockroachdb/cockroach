@@ -6943,7 +6943,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 					tc.jobRegex)
 				require.Len(t, result, 1)
 				status, jobError := result[0][0], result[0][1]
-				require.Equal(t, string(jobs.StatusFailed), status)
+				require.Equal(t, string(jobs.StatusRevertFailed), status)
 				require.Regexp(t,
 					"cannot be reverted, manual cleanup may be required: "+
 						"schema change jobs on databases and schemas cannot be reverted",

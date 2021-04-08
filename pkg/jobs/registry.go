@@ -319,7 +319,7 @@ func (r *Registry) WaitForJobs(
 	// populate the crdb_internal.jobs vtable.
 	query := fmt.Sprintf(
 		`SELECT count(*) FROM system.jobs WHERE id IN (%s)
-       AND (status != 'succeeded' AND status != 'failed' AND status != 'canceled')`,
+       AND (status != $1 AND status != $2 AND status != $3 AND status != $4)`,
 		buf.String())
 	for r := retry.StartWithCtx(ctx, retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
@@ -335,6 +335,10 @@ func (r *Registry) WaitForJobs(
 			nil, /* txn */
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			query,
+			StatusSucceeded,
+			StatusFailed,
+			StatusCanceled,
+			StatusRevertFailed,
 		)
 		if err != nil {
 			return errors.Wrap(err, "polling for queued jobs to complete")
@@ -1292,7 +1296,7 @@ func (r *Registry) stepThroughStateMachine(
 			}
 			return sErr
 		}
-		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusFailed,
+		return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusRevertFailed,
 			errors.Wrapf(err, "job %d: cannot be reverted, manual cleanup may be required", job.ID()))
 	case StatusFailed:
 		if jobErr == nil {
@@ -1304,6 +1308,17 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Wrapf(err, "job %d: could not mark as failed: %s", job.ID(), jobErr)
 		}
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
+		return jobErr
+	case StatusRevertFailed:
+		if jobErr == nil {
+			return errors.AssertionFailedf("job %d: has StatusRevertFailed but no error was provided",
+				job.ID())
+		}
+		if err := job.revertFailed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
+			// If we can't transactionally mark the job as failed then it will be
+			// restarted during the next adopt loop and reverting will be retried.
+			return errors.Wrapf(err, "job %d: could not mark as revert field: %s", job.ID(), jobErr)
+		}
 		return jobErr
 	default:
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,

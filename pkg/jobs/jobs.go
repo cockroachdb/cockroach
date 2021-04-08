@@ -147,6 +147,10 @@ const (
 	// job will change its state to StatusPaused the next time it runs
 	// maybeAdoptJobs and will stop running it.
 	StatusPauseRequested Status = "pause-requested"
+	// StatusRevertFailed is for jobs that encountered an non-retryable error when
+	// reverting their changes. Manual cleanup is required when a job ends up in
+	// this state.
+	StatusRevertFailed Status = "revert-failed"
 )
 
 var (
@@ -172,7 +176,7 @@ func deprecatedIsOldSchemaChangeJob(payload *jobspb.Payload) bool {
 // Terminal returns whether this status represents a "terminal" state: a state
 // after which the job should never be updated again.
 func (s Status) Terminal() bool {
-	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled
+	return s == StatusFailed || s == StatusSucceeded || s == StatusCanceled || s == StatusRevertFailed
 }
 
 // InvalidStatusError is the error returned when the desired operation is
@@ -599,6 +603,28 @@ func (j *Job) failed(
 		ju.UpdateStatus(StatusFailed)
 		md.Payload.Error = err.Error()
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		ju.UpdatePayload(md.Payload)
+		return nil
+	})
+}
+
+// RevertFailed marks the tracked job as having failed during revert with the
+// given error. Manual cleanup is required when the job is in this state.
+func (j *Job) revertFailed(
+	ctx context.Context, txn *kv.Txn, err error, fn func(context.Context, *kv.Txn) error,
+) error {
+	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status != StatusReverting {
+			return fmt.Errorf("job with status %s cannot fail during a revert", md.Status)
+		}
+		if fn != nil {
+			if err := fn(ctx, txn); err != nil {
+				return err
+			}
+		}
+		ju.UpdateStatus(StatusRevertFailed)
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(j.registry.clock.Now().GoTime())
+		md.Payload.Error = err.Error()
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})
