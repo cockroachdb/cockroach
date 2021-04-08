@@ -1804,6 +1804,8 @@ func (ds *DistSender) sendToReplicas(
 			// we created replicas.
 			log.Eventf(ctx, "leaseholder %s missing from replicas", leaseholder)
 		}
+	} else {
+		log.VEvent(ctx, 2, "routing to nearest replica")
 	}
 
 	opts := SendOptions{
