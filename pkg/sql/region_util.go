@@ -1332,26 +1332,59 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		return err
 	}
 
+	// We must remove any REGIONAL BY ROW locality swap that is in progress,
+	// as these zone configurations would be incorrect.
+	indexesToRemove := make(map[uint32]struct{})
+	for _, mut := range desc.AllMutations() {
+		if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
+			swapDesc := pkSwap.PrimaryKeySwapDesc()
+			if swapDesc.LocalityConfigSwap != nil {
+				for _, id := range swapDesc.NewIndexes {
+					indexesToRemove[uint32(id)] = struct{}{}
+				}
+				indexesToRemove[uint32(swapDesc.NewPrimaryIndexId)] = struct{}{}
+			}
+			// There can only be one pkSwap at a time, so break now.
+			break
+		}
+	}
+
 	// Some inactive subzones may remain on the zone configuration until it is cleaned up
 	// at a later step. Keep track of all non-drop indexes from the descriptor.
 	activeSubzoneIndexIDs := make(map[uint32]tree.Name, len(desc.NonDropIndexes()))
 	for _, idx := range desc.NonDropIndexes() {
-		activeSubzoneIndexIDs[uint32(idx.GetID())] = tree.Name(idx.GetName())
+		if _, ok := indexesToRemove[uint32(idx.GetID())]; !ok {
+			activeSubzoneIndexIDs[uint32(idx.GetID())] = tree.Name(idx.GetName())
+		}
 	}
 
 	// Remove inactive subzones from the comparison.
-	filteredSubzones := currentZoneConfig.Subzones[:0]
+	filteredCurrentZoneConfigSubzones := currentZoneConfig.Subzones[:0]
 	for _, c := range currentZoneConfig.Subzones {
 		if _, ok := activeSubzoneIndexIDs[c.IndexID]; ok {
-			filteredSubzones = append(filteredSubzones, c)
+			filteredCurrentZoneConfigSubzones = append(filteredCurrentZoneConfigSubzones, c)
 		}
 	}
-	currentZoneConfig.Subzones = filteredSubzones
+	currentZoneConfig.Subzones = filteredCurrentZoneConfigSubzones
 	// Strip the placeholder status if there are no active subzones on the current
 	// zone config.
-	if len(filteredSubzones) == 0 && currentZoneConfig.IsSubzonePlaceholder() {
+	if len(filteredCurrentZoneConfigSubzones) == 0 && currentZoneConfig.IsSubzonePlaceholder() {
 		currentZoneConfig.NumReplicas = nil
 	}
+
+	// Remove irrelevant zone configs from the expectedZoneConfig.
+	// These cannot yet be validated as the locality change is not finalized.
+	filteredExpectedZoneConfigSubzones := expectedZoneConfig.Subzones[:0]
+	for _, c := range expectedZoneConfig.Subzones {
+		if _, ok := indexesToRemove[c.IndexID]; !ok {
+			filteredExpectedZoneConfigSubzones = append(
+				filteredExpectedZoneConfigSubzones,
+				c,
+			)
+		}
+	}
+	expectedZoneConfig.Subzones = filteredExpectedZoneConfigSubzones
+
 	// Mark the expected NumReplicas as 0 if we have a placeholder
 	// and the current zone config is also a placeholder.
 	// The latter check is required as in cases where non-multiregion fields
