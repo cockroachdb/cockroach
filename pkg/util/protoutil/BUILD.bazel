@@ -25,7 +25,10 @@ go_library(
 go_test(
     name = "protoutil_test",
     size = "small",
-    srcs = ["clone_test.go"],
+    srcs = [
+        "clone_test.go",
+        "stringer_test.go",
+    ],
     deps = [
         ":protoutil",
         "//pkg/config/zonepb",
@@ -35,6 +38,8 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/storage/enginepb",
         "@com_github_gogo_protobuf//proto",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
 

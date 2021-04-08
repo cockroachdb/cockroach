@@ -231,7 +231,10 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 	}
 	cmd.WriteBatch = nil
 
-	return fmt.Sprintf("%s by %s\n%s\nwrite batch:\n%s", &ent, leaseStr, &cmd, wbStr), nil
+	// Unfortunately `ent.String()` panics because of gogoproto/golangproto
+	// woes.
+	entStr := fmt.Sprintf("idx=%d term:%d type:%d", ent.Index, ent.Term, ent.Type)
+	return fmt.Sprintf("%s by %s\n%s\nwrite batch:\n%s", entStr, leaseStr, &cmd, wbStr), nil
 }
 
 func tryTxn(kv storage.MVCCKeyValue) (string, error) {
