@@ -130,8 +130,10 @@ func PrettyKey(valDirs []encoding.Direction, key roachpb.Key, skip int) string {
 func PrettySpan(valDirs []encoding.Direction, span roachpb.Span, skip int) string {
 	var b strings.Builder
 	b.WriteString(PrettyKey(valDirs, span.Key, skip))
-	b.WriteByte('-')
-	b.WriteString(PrettyKey(valDirs, span.EndKey, skip))
+	if span.EndKey != nil {
+		b.WriteByte('-')
+		b.WriteString(PrettyKey(valDirs, span.EndKey, skip))
+	}
 	return b.String()
 }
 
