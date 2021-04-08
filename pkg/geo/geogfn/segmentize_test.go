@@ -150,6 +150,15 @@ func TestSegmentize(t *testing.T) {
 			fmt.Sprintf("attempting to segmentize into too many coordinates; need 34359738370 points between [0 0] and [100 80], max %d", geo.MaxAllowedSplitPoints),
 		)
 	})
+	t.Run("overflowing number of coordinates to segmentize", func(t *testing.T) {
+		g := geo.MustParseGeography("LINESTRING Z (-169.79088499002907 8.884172679558333 -4827356730.650944,50.66238188467506 -42.736039899804595 -8796356262.766115,81.80150918285182 -53.84161280004709 -8387269145.754486,30.179109503087716 67.82372267760985 3004789468.230095,20.563302070933446 62.59700266527605 -4314324960.005148)")
+		_, err := Segmentize(g, 1.401298464324817e-45)
+		require.EqualError(
+			t,
+			err,
+			fmt.Sprintf("attempting to segmentize into too many coordinates; need 35917864239044270000000000000000000000000000000000000 points between [-169.79088499002907 8.884172679558333 -4.827356730650944e+09] and [50.66238188467506 -42.736039899804595 -8.796356262766115e+09], max %d", geo.MaxAllowedSplitPoints),
+		)
+	})
 }
 
 func TestSegmentizeCoords(t *testing.T) {

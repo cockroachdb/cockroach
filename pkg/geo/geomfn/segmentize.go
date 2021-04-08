@@ -12,8 +12,6 @@ package geomfn
 
 import (
 	"math"
-	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geosegmentize"
@@ -68,14 +66,8 @@ func segmentizeCoords(a geom.Coord, b geom.Coord, maxSegmentLength float64) ([]f
 
 	doubleNumberOfSegmentsToCreate := math.Ceil(distanceBetweenPoints / maxSegmentLength)
 	doubleNumPoints := float64(len(a)) * (1 + doubleNumberOfSegmentsToCreate)
-	if doubleNumPoints > float64(geo.MaxAllowedSplitPoints) {
-		return nil, errors.Newf(
-			"attempting to segmentize into too many coordinates; need %s points between %v and %v, max %d",
-			strings.TrimRight(strconv.FormatFloat(doubleNumPoints, 'f', -1, 64), "."),
-			a,
-			b,
-			geo.MaxAllowedSplitPoints,
-		)
+	if err := geosegmentize.CheckSegmentizeTooManyPoints(doubleNumPoints, a, b); err != nil {
+		return nil, err
 	}
 
 	// numberOfSegmentsToCreate represent the total number of segments
