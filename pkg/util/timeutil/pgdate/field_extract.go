@@ -765,7 +765,7 @@ func (fe *fieldExtract) Reset(field field, v int) error {
 // the field has already been set.
 func (fe *fieldExtract) Set(field field, v int) error {
 	if !fe.wanted.Has(field) {
-		return errors.AssertionFailedf("field %s is not wanted in %v", errors.Safe(field.Pretty()), errors.Safe(fe.wanted))
+		return inputErrorf("field %s is not wanted in %v", errors.Safe(field.Pretty()), errors.Safe(fe.wanted))
 	}
 	fe.data[field] = v
 	fe.has = fe.has.Add(field)
