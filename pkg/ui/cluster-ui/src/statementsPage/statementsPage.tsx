@@ -229,6 +229,7 @@ export class StatementsPage extends React.Component<
       app: filters.app,
       timeNumber: filters.timeNumber,
       timeUnit: filters.timeUnit,
+      sqlType: filters.sqlType,
     });
     this.selectApp(filters.app);
   };
@@ -252,6 +253,7 @@ export class StatementsPage extends React.Component<
       app: undefined,
       timeNumber: undefined,
       timeUnit: undefined,
+      sqlType: undefined,
     });
     this.selectApp("");
   };
@@ -260,6 +262,14 @@ export class StatementsPage extends React.Component<
     const { search, filters } = this.state;
     const { statements } = this.props;
     const timeValue = getTimeValueInSeconds(filters);
+    const sqlTypes =
+      filters.sqlType.length > 0
+        ? filters.sqlType.split(",").map(function(sqlType: string) {
+            // Adding "Type" to match the value on the Statement
+            // Possible values: TypeDDL, TypeDML, TypeDCL and TypeTCL
+            return "Type" + sqlType;
+          })
+        : [];
 
     return statements
       .filter(statement =>
@@ -276,6 +286,10 @@ export class StatementsPage extends React.Component<
         statement =>
           statement.stats.service_lat.mean >= timeValue ||
           timeValue === "empty",
+      )
+      .filter(
+        statement =>
+          sqlTypes.length == 0 || sqlTypes.includes(statement.stats.sql_type),
       );
   };
 
@@ -314,6 +328,7 @@ export class StatementsPage extends React.Component<
               appNames={appOptions}
               activeFilters={activeFilters}
               filters={filters}
+              showSqlType={true}
               showScan={true}
             />
           </PageConfigItem>

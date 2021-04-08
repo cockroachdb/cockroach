@@ -27,7 +27,7 @@
   "license": "MIT",
   "dependencies": {
     "@babel/runtime": "^7.12.13",
-    "@cockroachlabs/crdb-protobuf-client": "^0.0.8",
+    "@cockroachlabs/crdb-protobuf-client": "^0.0.9",
     "@cockroachlabs/icons": "0.3.0",
     "@cockroachlabs/ui-components": "0.2.14-alpha.0",
     "@popperjs/core": "^2.4.0",
@@ -41,7 +41,7 @@
     "npm-run-all": "^4.1.5",
     "react-helmet": "^5.2.0",
     "react-popper": "^2.2.3",
-    "react-select": "^1.2.1",
+    "react-select": "^4.3.0",
     "reselect": "^4.0.0"
   },
   "devDependencies": {
@@ -75,7 +75,7 @@
     "@types/react-redux": "7.1.6",
     "@types/react-router": "^5.1.8",
     "@types/react-router-dom": "^5.1.5",
-    "@types/react-select": "^1.2.6",
+    "@types/react-select": "^4.0.14",
     "@types/redux-saga": "0.10.5",
     "@types/reselect": "^2.2.0",
     "@types/sinon": "^9.0.4",
