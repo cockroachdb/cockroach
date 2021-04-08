@@ -131,57 +131,79 @@ func TestSegmentizeCoords(t *testing.T) {
 		desc                 string
 		a                    geom.Coord
 		b                    geom.Coord
-		segmentMaxLength     float64
+		segmentMaxAngle      float64
 		resultantCoordinates []float64
 	}{
 		{
 			desc:                 `Coordinate(0, 0) to Coordinate(85, 85), 0.781600222084459`,
 			a:                    geom.Coord{0, 0},
 			b:                    geom.Coord{85, 85},
-			segmentMaxLength:     0.781600222084459,
+			segmentMaxAngle:      0.781600222084459,
 			resultantCoordinates: []float64{0, 0, 4.924985039227315, 44.568038920632105},
 		},
 		{
 			desc:                 `Coordinate(0, 0) to Coordinate(85, 85), 0.7816000651234446`,
 			a:                    geom.Coord{0, 0},
 			b:                    geom.Coord{85, 85},
-			segmentMaxLength:     0.7816000651234446,
+			segmentMaxAngle:      0.7816000651234446,
 			resultantCoordinates: []float64{0, 0, 2.0486953806277866, 22.302074138733936, 4.924985039227315, 44.568038920632105, 11.655816669136822, 66.66485041602017},
 		},
 		{
 			desc:                 `Coordinate(85, 85) to Coordinate(0, 0), 0.29502092024628396`,
 			a:                    geom.Coord{85, 85},
 			b:                    geom.Coord{0, 0},
-			segmentMaxLength:     0.29502092024628396,
+			segmentMaxAngle:      0.29502092024628396,
 			resultantCoordinates: []float64{85, 85, 22.871662720021178, 77.3609628116894, 11.655816669136824, 66.66485041602017, 7.329091976767396, 55.658764687902504, 4.924985039227315, 44.56803892063211, 3.299940624127866, 33.443216802941045, 2.048695380627787, 22.302074138733943, 0.9845421446758968, 11.1527721155093},
-		},
-		{
-			desc:                 `Coordinate(85, 85) to Coordinate(0, 0), -1`,
-			a:                    geom.Coord{85, 85},
-			b:                    geom.Coord{0, 0},
-			segmentMaxLength:     -1,
-			resultantCoordinates: []float64{85, 85},
 		},
 		{
 			desc:                 `Coordinate(0, 0) to Coordinate(0, 0), 0.29`,
 			a:                    geom.Coord{0, 0},
 			b:                    geom.Coord{0, 0},
-			segmentMaxLength:     0.29,
+			segmentMaxAngle:      0.29,
 			resultantCoordinates: []float64{0, 0},
 		},
 		{
 			desc:                 `Coordinate(85, 85) to Coordinate(0, 0), 1.563200444168918`,
 			a:                    geom.Coord{85, 85},
 			b:                    geom.Coord{0, 0},
-			segmentMaxLength:     1.563200444168918,
+			segmentMaxAngle:      1.563200444168918,
 			resultantCoordinates: []float64{85, 85},
 		},
 	}
 	for _, test := range testCases {
 		t.Run(test.desc, func(t *testing.T) {
-			convertedPoints, err := segmentizeCoords(test.a, test.b, test.segmentMaxLength)
+			convertedPoints, err := segmentizeCoords(test.a, test.b, test.segmentMaxAngle)
 			require.NoError(t, err)
 			require.Equal(t, test.resultantCoordinates, convertedPoints)
+		})
+	}
+
+	errorTestCases := []struct {
+		desc            string
+		a               geom.Coord
+		b               geom.Coord
+		segmentMaxAngle float64
+		expectedErr     string
+	}{
+		{
+			desc:            "too many segments required",
+			a:               geom.Coord{0, 100},
+			b:               geom.Coord{1, 1},
+			segmentMaxAngle: 2e-8,
+			expectedErr:     fmt.Sprintf("attempting to segmentize into too many coordinates; need 268435458 points between [0 100] and [1 1], max %d", geo.MaxAllowedSplitPoints),
+		},
+		{
+			desc:            "negative max segment angle",
+			a:               geom.Coord{1, 1},
+			b:               geom.Coord{2, 2},
+			segmentMaxAngle: -1,
+			expectedErr:     "maximum segment angle must be positive",
+		},
+	}
+	for _, test := range errorTestCases {
+		t.Run(test.desc, func(t *testing.T) {
+			_, err := segmentizeCoords(test.a, test.b, test.segmentMaxAngle)
+			require.EqualError(t, err, test.expectedErr)
 		})
 	}
 }
