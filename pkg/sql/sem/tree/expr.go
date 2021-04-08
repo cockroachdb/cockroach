@@ -963,7 +963,7 @@ func (node *Array) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(FmtParsable) && node.typ != nil {
 		if node.typ.ArrayContents().Family() != types.UnknownFamily {
 			ctx.WriteString(":::")
-			ctx.Buffer.WriteString(node.typ.SQLString())
+			ctx.FormatTypeReference(node.typ)
 		}
 	}
 }
