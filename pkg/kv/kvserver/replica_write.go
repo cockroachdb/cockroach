@@ -88,21 +88,28 @@ func (r *Replica) executeWriteBatch(
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
 	defer untrack(ctx, 0, 0, 0) // covers all error returns below
 
-	// Start tracking this request. The act of tracking also gives us a closed
-	// timestamp, which we must ensure to evaluate above of. We're going to pass
-	// in minTS to applyTimestampCache(), which bumps us accordingly if necessary.
-	// We need to start tracking this request before we know the final write
-	// timestamp at which this request will evaluate because we need to atomically
-	// read the closed timestamp and start to be tracked.
+	// Start tracking this request if it is an MVCC write (i.e. if it's the kind
+	// of request that needs to obey the closed timestamp). The act of tracking
+	// also gives us a closed timestamp, which we must ensure to evaluate above
+	// of. We're going to pass in minTS to applyTimestampCache(), which bumps us
+	// accordingly if necessary. We need to start tracking this request before we
+	// know the final write timestamp at which this request will evaluate because
+	// we need to atomically read the closed timestamp and start to be tracked.
 	// TODO(andrei): The timestamp cache (and also the "old closed timestamp
 	// mechanism" in the form of minTS) might bump us above the timestamp at which
 	// we're registering with the proposalBuf. In that case, this request will be
 	// tracked at an unnecessarily low timestamp which can block the closing of
 	// this low timestamp for no reason. We should refactor such that the request
 	// starts being tracked after we apply the timestamp cache.
-	minTS2, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
+	var tok TrackedRequestToken
+	if ba.IsIntentWrite() {
+		var minTS2 hlc.Timestamp
+		minTS2, tok = r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
+		minTS.Forward(minTS2)
+	} else {
+		tok.SetNoop()
+	}
 	defer tok.DoneIfNotMoved(ctx)
-	minTS.Forward(minTS2)
 
 	// Examine the timestamp cache for preceding commands which require this
 	// command to move its timestamp forward. Or, in the case of a transactional
