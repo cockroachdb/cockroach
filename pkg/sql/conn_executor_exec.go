@@ -388,7 +388,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var needFinish bool
 	ctx, needFinish = ih.Setup(
 		ctx, ex.server.cfg, ex.appStats, p, ex.stmtDiagnosticsRecorder,
-		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectExecutionStats,
+		stmt.AnonymizedStr, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
 	)
 	if needFinish {
 		sql := stmt.SQL
@@ -397,6 +397,7 @@ func (ex *connExecutor) execStmtInOpenState(
 				ex.server.cfg,
 				ex.appStats,
 				&ex.extraTxnState.accumulatedStats,
+				ex.extraTxnState.shouldCollectTxnExecutionStats,
 				ex.statsCollector,
 				p,
 				ast,
@@ -1485,12 +1486,12 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 	ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 	ex.extraTxnState.transactionStatementIDs = nil
 	ex.extraTxnState.numRows = 0
-	ex.extraTxnState.shouldCollectExecutionStats = false
+	ex.extraTxnState.shouldCollectTxnExecutionStats = false
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 	ex.extraTxnState.rowsRead = 0
 	ex.extraTxnState.bytesRead = 0
-	if execStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); execStatsSampleRate > 0 {
-		ex.extraTxnState.shouldCollectExecutionStats = execStatsSampleRate > ex.rng.Float64()
+	if txnExecStatsSampleRate := collectTxnStatsSampleRate.Get(&ex.server.GetExecutorConfig().Settings.SV); txnExecStatsSampleRate > 0 {
+		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 	}
 
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
@@ -1504,7 +1505,7 @@ func (ex *connExecutor) recordTransactionStart() (onTxnFinish func(txnEvent), on
 		ex.extraTxnState.transactionStatementIDs = nil
 		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
 		ex.extraTxnState.numRows = 0
-		// accumulatedStats are cleared, but shouldCollectExecutionStats is
+		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
 		// unchanged.
 		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
 		ex.extraTxnState.rowsRead = 0
@@ -1534,7 +1535,7 @@ func (ex *connExecutor) recordTransaction(ev txnEvent, implicit bool, txnStart t
 		txnRetryLat,
 		commitLat,
 		ex.extraTxnState.numRows,
-		ex.extraTxnState.shouldCollectExecutionStats,
+		ex.extraTxnState.shouldCollectTxnExecutionStats,
 		ex.extraTxnState.accumulatedStats,
 		ex.extraTxnState.rowsRead,
 		ex.extraTxnState.bytesRead,
