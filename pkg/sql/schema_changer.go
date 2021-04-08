@@ -2441,9 +2441,10 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 ) error {
 	if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
 		if lcSwap := pkSwap.LocalityConfigSwap; lcSwap != nil {
-			// We will add up to two options - one for the table itself, and one
+			// We will add up to three options - one for the table itself,
+			// one for dropping any zone configs for old indexes and one
 			// for all the new indexes associated with the table.
-			opts := make([]applyZoneConfigForMultiRegionTableOption, 0, 2)
+			opts := make([]applyZoneConfigForMultiRegionTableOption, 0, 3)
 
 			// For locality configs, we need to update the zone configs to match
 			// the new multi-region locality configuration, instead of
@@ -2452,24 +2453,25 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 				// Only apply the zone configuration on the table when the mutation
 				// is complete.
 				if isDone {
+					// The table re-writing the LocalityConfig does most of the work for
+					// us here, but if we're coming from REGIONAL BY ROW, it's also
+					// necessary to drop the zone configurations on the index partitions.
+					if lcSwap.OldLocalityConfig.GetRegionalByRow() != nil {
+						opts = append(
+							opts,
+							dropZoneConfigsForMultiRegionIndexes(
+								append(
+									[]descpb.IndexID{pkSwap.OldPrimaryIndexId},
+									pkSwap.OldIndexes...,
+								)...,
+							),
+						)
+					}
+
 					opts = append(
 						opts,
 						applyZoneConfigForMultiRegionTableOptionTableNewConfig(
 							lcSwap.NewLocalityConfig,
-						),
-					)
-				}
-				// The table re-writing the LocalityConfig does most of the work for
-				// us here, but if we're coming from REGIONAL BY ROW, it's also
-				// necessary to drop the zone configurations on the index partitions.
-				if lcSwap.OldLocalityConfig.GetRegionalByRow() != nil {
-					opts = append(
-						opts,
-						dropZoneConfigsForMultiRegionIndexes(
-							append(
-								[]descpb.IndexID{pkSwap.OldPrimaryIndexId},
-								pkSwap.OldIndexes...,
-							)...,
 						),
 					)
 				}

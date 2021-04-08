@@ -466,6 +466,10 @@ USE t;
 									)
 								}
 
+								// Validate zone configs are still correct.
+								_, err = sqlDB.Exec(`SELECT crdb_internal.validate_multi_region_zone_configs()`)
+								require.NoError(t, err)
+
 								return nil
 							})
 
