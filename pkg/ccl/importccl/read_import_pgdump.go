@@ -615,6 +615,23 @@ func readPostgresStmt(
 				if !found {
 					return colinfo.NewUndefinedColumnError(cmd.Column.String())
 				}
+			case *tree.AlterTableSetVisible:
+				found := false
+				for i, def := range create.Defs {
+					def, ok := def.(*tree.ColumnTableDef)
+					// If it's not a column definition, or the column name doesn't match,
+					// we're not interested in this column.
+					if !ok || def.Name != cmd.Column {
+						continue
+					}
+					def.Hidden = !cmd.Visible
+					create.Defs[i] = def
+					found = true
+					break
+				}
+				if !found {
+					return colinfo.NewUndefinedColumnError(cmd.Column.String())
+				}
 			case *tree.AlterTableAddColumn:
 				if cmd.IfNotExists {
 					if ignoreUnsupportedStmts {

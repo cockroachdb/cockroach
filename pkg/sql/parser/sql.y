@@ -961,6 +961,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.SelectStatement> set_operation
 
 %type <tree.Expr> alter_column_default
+%type <tree.Expr> alter_column_visible
 %type <tree.Direction> opt_asc_desc
 %type <tree.NullsOrder> opt_nulls_order
 
@@ -1932,6 +1933,11 @@ alter_table_cmd:
   {
     $$.val = &tree.AlterTableSetDefault{Column: tree.Name($3), Default: $4.expr()}
   }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> SET {VISIBLE|NOT VISIBLE}
+| ALTER opt_column column_name alter_column_visible
+  {
+    $$.val = &tree.AlterTableSetVisible{Column: tree.Name($3), Visible: $4.bool()}
+  }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP NOT NULL
 | ALTER opt_column column_name DROP NOT NULL
   {
@@ -2089,6 +2095,16 @@ alter_column_default:
 | DROP DEFAULT
   {
     $$.val = nil
+  }
+
+alter_column_visible:
+  SET VISIBLE
+  {
+    $$.val = true
+  }
+| SET NOT VISIBLE
+  {
+    $$.val = false
   }
 
 opt_alter_column_using:
