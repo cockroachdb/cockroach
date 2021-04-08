@@ -66,6 +66,7 @@ go_library(
         "multitenant.go",
         "namespace_upgrade.go",
         "network.go",
+        "nodejs_postgres.go",
         "orm_helpers.go",
         "overload_tpcc_olap.go",
         "pebble.go",

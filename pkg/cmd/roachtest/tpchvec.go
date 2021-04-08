@@ -628,7 +628,7 @@ func runTPCHVec(
 	scatterTables(t, conn, tpchTables)
 	t.Status("waiting for full replication")
 	waitForFullReplication(t, conn)
-	versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0])
+	versionString, err := fetchCockroachVersion(ctx, c, c.Node(1)[0], NewDBConnectionParams())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -50,6 +51,33 @@ type blocklistForVersion struct {
 
 type blocklistsForVersion []blocklistForVersion
 
+// DBConnectionParams contains information used to determine whether to create
+// a secure connection should be created and the necessary information to
+// create a secure connection.
+type DBConnectionParams struct {
+	secure   bool
+	username string
+	certsDir string
+	port     int
+}
+
+// NewDBConnectionParams creates a DBConnectionParams struct for creating
+// an insecure connection.
+func NewDBConnectionParams() *DBConnectionParams {
+	return &DBConnectionParams{}
+}
+
+// NewDBConnectionParamsSecure creates a DBConnectionParams struct for creating
+// a secure connection.
+func NewDBConnectionParamsSecure(username string, certsDir string, port int) *DBConnectionParams {
+	return &DBConnectionParams{
+		secure:   true,
+		username: username,
+		certsDir: certsDir,
+		port:     port,
+	}
+}
+
 // getLists returns the appropriate blocklist and ignorelist based on the
 // cockroach version. This check only looks to ensure that the prefix that
 // matches.
@@ -62,10 +90,24 @@ func (b blocklistsForVersion) getLists(version string) (string, blocklist, strin
 	return "", nil, "", nil
 }
 
-func fetchCockroachVersion(ctx context.Context, c *cluster, nodeIndex int) (string, error) {
-	db, err := c.ConnE(ctx, nodeIndex)
-	if err != nil {
-		return "", err
+func fetchCockroachVersion(
+	ctx context.Context, c *cluster, nodeIndex int, dbConnectionParams *DBConnectionParams,
+) (string, error) {
+	var db *gosql.DB
+	var err error
+	if dbConnectionParams.secure {
+		db, err = c.ConnSecure(
+			ctx, nodeIndex, dbConnectionParams.username,
+			dbConnectionParams.certsDir, dbConnectionParams.port,
+		)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		db, err = c.ConnE(ctx, nodeIndex)
+		if err != nil {
+			return "", err
+		}
 	}
 	defer db.Close()
 	var version string

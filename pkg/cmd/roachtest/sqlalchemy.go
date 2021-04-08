@@ -132,12 +132,14 @@ func runSQLAlchemy(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Start(ctx, t, c.All())
 
-	version, err := fetchCockroachVersion(ctx, c, node[0])
+	version, err := fetchCockroachVersion(ctx, c, node[0], NewDBConnectionParams())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := alterZoneConfigAndClusterSettings(ctx, version, c, node[0]); err != nil {
+	if err := alterZoneConfigAndClusterSettings(
+		ctx, version, c, node[0], NewDBConnectionParams(),
+	); err != nil {
 		t.Fatal(err)
 	}
 
