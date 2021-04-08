@@ -94,11 +94,12 @@ func (r *Replica) executeWriteBatch(
 	// We need to start tracking this request before we know the final write
 	// timestamp at which this request will evaluate because we need to atomically
 	// read the closed timestamp and start to be tracked.
-	// TODO(andrei): The timestamp cache might bump us above the timestamp at
-	// which we're registering with the proposalBuf. In that case, this request
-	// will be tracked at an unnecessarily low timestamp. We could invent an
-	// interface through which to communicate the updated timestamp to the
-	// proposalBuf.
+	// TODO(andrei): The timestamp cache (and also the "old closed timestamp
+	// mechanism" in the form of minTS) might bump us above the timestamp at which
+	// we're registering with the proposalBuf. In that case, this request will be
+	// tracked at an unnecessarily low timestamp which can block the closing of
+	// this low timestamp for no reason. We should refactor such that the request
+	// starts being tracked after we apply the timestamp cache.
 	minTS2, tok := r.mu.proposalBuf.TrackEvaluatingRequest(ctx, ba.WriteTimestamp())
 	defer tok.DoneIfNotMoved(ctx)
 	minTS.Forward(minTS2)
