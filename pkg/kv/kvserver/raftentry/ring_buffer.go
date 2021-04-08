@@ -13,6 +13,8 @@ package raftentry
 import (
 	"math/bits"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -82,6 +84,17 @@ func (b *ringBuf) truncateFrom(lo uint64) (removedBytes, removedEntries int32) {
 	b.len -= int(removedEntries)
 	if b.len < (len(b.buf) / shrinkThreshold) {
 		realloc(b, 0, b.len)
+	}
+	if util.RaceEnabled {
+		if b.len > 0 {
+			if lastIdx := last(b).index(b); lastIdx >= lo {
+				err := errors.Errorf(
+					"buffer truncated to [..., %d], but current last index is %d",
+					lo, lastIdx,
+				)
+				panic(err)
+			}
+		}
 	}
 	return
 }
