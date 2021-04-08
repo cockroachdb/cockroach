@@ -494,7 +494,7 @@ func repartitionRegionalByRowTables(
 	}
 
 	b := txn.NewBatch()
-	err = localPlanner.forEachTableInMultiRegionDatabase(ctx, dbDesc,
+	err = localPlanner.forEachMutableTableInDatabase(ctx, dbDesc,
 		func(ctx context.Context, tableDesc *tabledesc.Mutable) error {
 			if !tableDesc.IsLocalityRegionalByRow() || tableDesc.Dropped() {
 				// We only need to re-partition REGIONAL BY ROW tables. Even then, we
