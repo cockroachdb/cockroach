@@ -1751,7 +1751,10 @@ func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
 			return c.CheckReplicaDivergenceOnDB(ctx, db)
 		},
 	); err != nil {
-		t.Fatal(err)
+		// NB: we don't call t.Fatal() here because this method is
+		// for use by the test harness beyond the point at which
+		// it can interpret `t.Fatal`.
+		t.printAndFail(0, err)
 	}
 }
 
@@ -2121,26 +2124,6 @@ func roachprodArgs(opts []option) []string {
 		args = append(args, ([]string)(a)...)
 	}
 	return args
-}
-
-// Restart restarts the specified cockroach node. It takes a test and, on error,
-// calls t.Fatal().
-func (c *cluster) Restart(ctx context.Context, t *test, node nodeListOption) {
-	// We bound the time taken to restart a node through roachprod. Because
-	// roachprod uses SSH, it's particularly vulnerable to network flakiness (as
-	// seen in #35326) and may stall indefinitely. Setting up timeouts better
-	// surfaces this kind of failure.
-	//
-	// TODO(irfansharif): The underlying issue here is the fact that we're running
-	// roachprod commands that may (reasonably) fail due to connection issues, and
-	// we're unable to retry them safely (the underlying commands are
-	// non-idempotent). Presently we simply fail the entire test, when really we
-	// should be able to retry the specific roachprod commands.
-	var cancel func()
-	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
-	c.Stop(ctx, node)
-	c.Start(ctx, t, node)
-	cancel()
 }
 
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
