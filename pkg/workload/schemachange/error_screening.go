@@ -771,16 +771,25 @@ SELECT EXISTS(
        );`, schemaName)
 }
 
-// enumMemberPresent determines whether val is a member of the enum.
-// This includes non-public members.
-func enumMemberPresent(tx *pgx.Tx, enum string, val string) (bool, error) {
-	return scanBool(tx, `
-WITH enum_members AS (
+// enumMemberPresent determines whether val is a member of the enum, independent
+// of `READ_ONLY`/`PUBLIC` capability. The second return value denotes if the
+// member is `PUBLIC` or not. Note that an error is returned if the enum doesn't
+// exist.
+func enumMemberPresent(
+	tx *pgx.Tx, enum string, val string,
+) (enumExists bool, isPublic bool, err error) {
+	query := `WITH enum_members AS (
 	SELECT
 				json_array_elements(
 						crdb_internal.pb_to_json(
 								'cockroach.sql.sqlbase.Descriptor',
 								descriptor
+						)->'type'->'enumMembers'
+				)->>'capability'
+				AS cap,
+				json_array_elements(
+						crdb_internal.pb_to_json(
+								'cockroach.sql.sqlbase.Descriptor', descriptor
 						)->'type'->'enumMembers'
 				)->>'logicalRepresentation'
 				AS v
@@ -788,15 +797,49 @@ WITH enum_members AS (
 				system.descriptor
 		WHERE
 				id = ($1::REGTYPE::INT8 - 100000)
-)
-SELECT
+),
+enum_exists AS (
+	SELECT
 	CASE WHEN EXISTS (
 		SELECT v FROM enum_members WHERE v = $2::string
 	) THEN true
 	ELSE false
 	END AS exists
-`,
-		enum,
-		val,
+),
+is_public AS (
+	SELECT 
+	CASE 
+		WHEN EXISTS (SELECT exists FROM enum_exists WHERE exists = false) THEN false
+		WHEN EXISTS (SELECT cap FROM enum_members WHERE cap = 'ALL' AND v = $2::string) THEN true
+		ELSE false
+	END AS public
+)
+SELECT exists, public FROM enum_exists, is_public`
+	err = errors.Wrapf(
+		tx.QueryRow(query, enum, val).Scan(&enumExists, &isPublic),
+		"enum-member-present args: %q %q", enum, val,
 	)
+	return
+}
+
+func allEnumValues(tx *pgx.Tx, typName *tree.TypeName) ([]string, error) {
+	query := `
+SELECT unnest(values) FROM [SHOW ENUMS]
+WHERE name = $1::string
+AND schema = $2::string
+`
+	rows, err := tx.Query(query, typName.Object(), typName.Schema())
+	if err != nil {
+		return nil, errors.Wrapf(err, "all-enum-values args: %q", typName.String())
+	}
+
+	var enumValues []string
+	for rows.Next() {
+		var enumVal string
+		if err := rows.Scan(&enumVal); err != nil {
+			return nil, err
+		}
+		enumValues = append(enumValues, enumVal)
+	}
+	return enumValues, nil
 }

@@ -61,6 +61,7 @@ func TestWorkload(t *testing.T) {
 	tdb.Exec(t, "CREATE DATABASE schemachange")
 	tdb.Exec(t, "GRANT admin TO testuser")
 	tdb.Exec(t, "SET CLUSTER SETTING sql.trace.log_statement_execute = true")
+	tdb.Exec(t, "SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true")
 
 	// Grab a backup and also print the namespace and descriptor tables upon
 	// failure.

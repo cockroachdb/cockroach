@@ -132,6 +132,8 @@ const (
 	setColumnNotNull // ALTER TABLE <table> ALTER [COLUMN] <column> SET NOT NULL
 	setColumnType    // ALTER TABLE <table> ALTER [COLUMN] <column> [SET DATA] TYPE <type>
 
+	dropEnumValue // ALTER TYPE <type> DROP VALUE <val>
+
 	survive // ALTER DATABASE <db> SURVIVE <failure_mode>
 
 	insertRow // INSERT INTO <table> (<cols>) VALUES (<values>)
@@ -174,6 +176,7 @@ var opFuncs = map[opType]func(*operationGenerator, *pgx.Tx) (string, error){
 	setColumnDefault:        (*operationGenerator).setColumnDefault,
 	setColumnNotNull:        (*operationGenerator).setColumnNotNull,
 	setColumnType:           (*operationGenerator).setColumnType,
+	dropEnumValue:           (*operationGenerator).dropEnumValue,
 	survive:                 (*operationGenerator).survive,
 	insertRow:               (*operationGenerator).insertRow,
 	validate:                (*operationGenerator).validate,
@@ -219,6 +222,7 @@ var opWeights = []int{
 	setColumnDefault:        1,
 	setColumnNotNull:        1,
 	setColumnType:           1,
+	dropEnumValue:           1,
 	survive:                 1,
 	insertRow:               0,
 	validate:                2, // validate twice more often
@@ -540,7 +544,7 @@ func (og *operationGenerator) addRegion(tx *pgx.Tx) (string, error) {
 	// Double check this first.
 	idx := og.params.rng.Intn(len(regionResult.regionNamesNotInDatabase))
 	region := regionResult.regionNamesNotInDatabase[idx]
-	valuePresent, err := enumMemberPresent(tx, tree.RegionEnum, string(region))
+	valuePresent, _, err := enumMemberPresent(tx, tree.RegionEnum, string(region))
 	if err != nil {
 		return "", err
 	}
@@ -914,6 +918,50 @@ func (og *operationGenerator) createTable(tx *pgx.Tx) (string, error) {
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
 	}.add(og.expectedExecErrors)
 
+	return tree.Serialize(stmt), nil
+}
+
+func (og *operationGenerator) dropEnumValue(tx *pgx.Tx) (string, error) {
+	typName, err := og.randEnum(tx, og.pctExisting(true))
+	if err != nil {
+		return "", err
+	}
+	typeExists, err := typeExists(tx, typName)
+	if err != nil {
+		return "", err
+	}
+
+	randLabel := `'inconsequential_value'`
+	isPublic := true
+	var enumLabels []string
+
+	if typeExists {
+		enumLabels, err = allEnumValues(tx, typName)
+		if err != nil {
+			return "", err
+		}
+		// If there are no values in the enum let the garbage label remain.
+		if len(enumLabels) != 0 {
+			randLabel = enumLabels[og.randIntn(len(enumLabels))]
+		}
+
+		_, isPublic, err = enumMemberPresent(tx, typName.Type(), randLabel)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	codesWithConditions{
+		{pgcode.UndefinedObject, !typeExists || len(enumLabels) == 0},
+		{pgcode.ObjectNotInPrerequisiteState, !isPublic},
+	}.add(og.expectedExecErrors)
+
+	stmt := &tree.AlterType{
+		Type: typName.ToUnresolvedObjectName(),
+		Cmd: &tree.AlterTypeDropValue{
+			Val: tree.EnumValue(randLabel),
+		},
+	}
 	return tree.Serialize(stmt), nil
 }
 

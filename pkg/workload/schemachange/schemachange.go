@@ -163,6 +163,12 @@ func (s *schemaChange) Ops(
 		return workload.QueryLoad{}, err
 	}
 
+	// Enable dropping enum values for the workload.
+	_, err = pool.Get().Exec(`SET CLUSTER SETTING sql.defaults.drop_enum_value.enabled = true`)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
 	ops := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), opWeights...)
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 
