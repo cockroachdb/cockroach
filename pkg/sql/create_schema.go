@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -48,7 +48,7 @@ func CreateUserDefinedSchemaDescriptor(
 	n *tree.CreateSchema,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
-	db *dbdesc.Immutable,
+	db catalog.DatabaseDescriptor,
 	allocateID bool,
 ) (*schemadesc.Mutable, *descpb.PrivilegeDescriptor, error) {
 	var schemaName string
@@ -59,7 +59,7 @@ func CreateUserDefinedSchemaDescriptor(
 	}
 
 	// Ensure there aren't any name collisions.
-	exists, schemaID, err := schemaExists(ctx, txn, execCfg.Codec, db.ID, schemaName)
+	exists, schemaID, err := schemaExists(ctx, txn, execCfg.Codec, db.GetID(), schemaName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -129,7 +129,7 @@ func CreateUserDefinedSchemaDescriptor(
 
 	// Create the SchemaDescriptor.
 	desc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
-		ParentID:   db.ID,
+		ParentID:   db.GetID(),
 		Name:       schemaName,
 		ID:         id,
 		Privileges: privs,
@@ -176,7 +176,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	desc, privs, err := CreateUserDefinedSchemaDescriptor(params.ctx, params.SessionData().User(), n,
-		p.Txn(), p.ExecCfg(), &db.Immutable, true /* allocateID */)
+		p.Txn(), p.ExecCfg(), db, true /* allocateID */)
 	if err != nil {
 		return err
 	}

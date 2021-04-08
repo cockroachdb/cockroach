@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -101,7 +102,7 @@ func (p *planner) writeDatabaseChangeToBatch(
 // dropped are skipped.
 func (p *planner) forEachMutableTableInDatabase(
 	ctx context.Context,
-	dbDesc *dbdesc.Immutable,
+	dbDesc catalog.DatabaseDescriptor,
 	fn func(ctx context.Context, tbDesc *tabledesc.Mutable) error,
 ) error {
 	allDescs, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)

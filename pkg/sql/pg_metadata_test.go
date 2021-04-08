@@ -83,7 +83,7 @@ const (
 	virtualTableTemplate     = `var %s = virtualSchemaTable{
 	comment: "%s was created for compatibility and is currently unimplemented",
 	schema:  vtable.%s,
-	populate: func(ctx context.Context, p *planner, _ *dbdesc.Immutable, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
 	unimplemented: true,

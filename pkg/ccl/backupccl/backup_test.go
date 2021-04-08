@@ -1953,7 +1953,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 
 	// Verify that the schema doesn't show up in the database's schema map.
 	dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "restore")
-	require.Empty(t, dbDesc.Schemas, "unexpected schema map entries %v", dbDesc.Schemas)
+	require.Empty(t, dbDesc.DatabaseDesc().Schemas, "unexpected schema map entries %v", dbDesc.DatabaseDesc().Schemas)
 }
 
 // TestRestoreFailDatabaseCleanup tests that a failed RESTORE is cleaned up
@@ -2272,12 +2272,12 @@ INSERT INTO sc4.tb VALUES (4);
 
 		// Verify that the schemas are in the database's schema map.
 		dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
-		require.Contains(t, dbDesc.Schemas, "sc1")
-		require.Contains(t, dbDesc.Schemas, "sc2")
-		require.Contains(t, dbDesc.Schemas, "sc3")
-		require.Contains(t, dbDesc.Schemas, "sc4")
-		require.Contains(t, dbDesc.Schemas, "existingschema")
-		require.Len(t, dbDesc.Schemas, 5)
+		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc1")
+		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc2")
+		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc3")
+		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc4")
+		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "existingschema")
+		require.Len(t, dbDesc.DatabaseDesc().Schemas, 5)
 	})
 	// Test when we remap schemas to existing schemas in the cluster.
 	t.Run("remap", func(t *testing.T) {
@@ -7158,16 +7158,16 @@ ALTER TYPE sc.typ ADD VALUE 'hi';
 	sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://0/test/'`)
 
 	dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
-	require.EqualValues(t, 2, dbDesc.Version)
+	require.EqualValues(t, 2, dbDesc.GetVersion())
 
 	schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
-	require.EqualValues(t, 2, schemaDesc.Version)
+	require.EqualValues(t, 2, schemaDesc.GetVersion())
 
 	tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
 	require.EqualValues(t, 2, tableDesc.GetVersion())
 
 	typeDesc := catalogkv.TestingGetTypeDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "typ")
-	require.EqualValues(t, 2, typeDesc.Version)
+	require.EqualValues(t, 2, typeDesc.GetVersion())
 }
 
 func TestOfflineDescriptorsDuringRestore(t *testing.T) {
@@ -7253,16 +7253,16 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		// Verify that the descriptors are offline.
 
 		dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
-		require.Equal(t, descpb.DescriptorState_OFFLINE, dbDesc.State)
+		require.Equal(t, descpb.DescriptorState_OFFLINE, dbDesc.DatabaseDesc().State)
 
 		schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
-		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.State)
+		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.SchemaDesc().State)
 
 		tableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.GetState())
 
 		typeDesc := catalogkv.TestingGetTypeDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "d", "sc", "typ")
-		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.State)
+		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.TypeDesc().State)
 
 		// Verify that the descriptors are not visible.
 		// TODO (lucy): Arguably there should be a SQL test where we manually create
@@ -7350,7 +7350,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		dbDesc := catalogkv.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
 		schemaDesc := catalogkv.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
-		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.State)
+		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.SchemaDesc().State)
 
 		publicTableDesc := catalogkv.TestingGetTableDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "newdb", "public", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, publicTableDesc.GetState())
@@ -7359,7 +7359,7 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		require.Equal(t, descpb.DescriptorState_OFFLINE, scTableDesc.GetState())
 
 		typeDesc := catalogkv.TestingGetTypeDescriptorFromSchema(kvDB, keys.SystemSQLCodec, "newdb", "sc", "typ")
-		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.State)
+		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.TypeDesc().State)
 
 		// Verify that the descriptors are not visible.
 		// TODO (lucy): Arguably there should be a SQL test where we manually create

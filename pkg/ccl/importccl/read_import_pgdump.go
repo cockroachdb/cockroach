@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -242,7 +241,7 @@ func createPostgresSchemas(
 	execCfg *sql.ExecutorConfig,
 	user security.SQLUsername,
 ) ([]*schemadesc.Mutable, error) {
-	var dbDesc *dbdesc.Immutable
+	var dbDesc catalog.DatabaseDescriptor
 	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		dbDesc, err = catalogkv.MustGetDatabaseDescByID(ctx, txn, execCfg.Codec, parentID)

@@ -40,7 +40,7 @@ func TestSafeMessage(t *testing.T) {
 				State:         descpb.DescriptorState_OFFLINE,
 				OfflineReason: "foo",
 			}).BuildImmutableDatabase(),
-			exp: "dbdesc.Immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", State: OFFLINE, OfflineReason: \"foo\"}",
+			exp: "dbdesc.immutable: {ID: 12, Version: 1, ModificationTime: \"0,0\", State: OFFLINE, OfflineReason: \"foo\"}",
 		},
 		{
 			desc: NewBuilder(&descpb.DatabaseDescriptor{
@@ -233,7 +233,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			},
 		},
 		{ // 8
-			err: `schema mapping entry "schema1" (53): referenced schema ID 53: descriptor is a *typedesc.Immutable: unexpected descriptor type`,
+			err: `schema mapping entry "schema1" (53): referenced schema ID 53: descriptor is a *typedesc.immutable: unexpected descriptor type`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",
@@ -247,7 +247,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 			},
 		},
 		{ // 9
-			err: `multi-region enum: referenced type ID 53: descriptor is a *schemadesc.Immutable: unexpected descriptor type`,
+			err: `multi-region enum: referenced type ID 53: descriptor is a *schemadesc.immutable: unexpected descriptor type`,
 			desc: descpb.DatabaseDescriptor{
 				ID:   51,
 				Name: "db1",

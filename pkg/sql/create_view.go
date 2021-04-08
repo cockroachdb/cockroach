@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -51,7 +51,7 @@ type createViewNode struct {
 	replace      bool
 	persistence  tree.Persistence
 	materialized bool
-	dbDesc       *dbdesc.Immutable
+	dbDesc       catalog.DatabaseDescriptor
 	columns      colinfo.ResultColumns
 
 	// planDeps tracks which tables and views the view being created
@@ -86,7 +86,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	// Check that the view does not contain references to other databases.
 	if !allowCrossDatabaseViews.Get(&params.p.execCfg.Settings.SV) {
 		for _, dep := range n.planDeps {
-			if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.ID && dbID != keys.SystemDatabaseID {
+			if dbID := dep.desc.GetParentID(); dbID != n.dbDesc.GetID() && dbID != keys.SystemDatabaseID {
 				return errors.WithHintf(
 					pgerror.Newf(pgcode.FeatureNotSupported,
 						"the view cannot refer to other databases; (see the '%s' cluster setting)",
@@ -307,7 +307,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	}
 
 	if applyGlobalMultiRegionZoneConfig {
-		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.dbDesc.ID, params.p.Descriptors())
+		regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.dbDesc.GetID(), params.p.Descriptors())
 		if err != nil {
 			return err
 		}

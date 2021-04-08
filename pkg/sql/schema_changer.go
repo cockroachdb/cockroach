@@ -2428,7 +2428,7 @@ func (sc *SchemaChanger) queueCleanupJobs(
 func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 	ctx context.Context,
 	txn *kv.Txn,
-	dbDesc *dbdesc.Immutable,
+	dbDesc catalog.DatabaseDescriptor,
 	tableDesc *tabledesc.Mutable,
 	mutation descpb.DescriptorMutation,
 	isDone bool,
@@ -2500,7 +2500,7 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 				)
 			}
 
-			regionConfig, err := SynthesizeRegionConfig(ctx, txn, dbDesc.ID, descsCol)
+			regionConfig, err := SynthesizeRegionConfig(ctx, txn, dbDesc.GetID(), descsCol)
 			if err != nil {
 				return err
 			}
