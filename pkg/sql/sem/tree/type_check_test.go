@@ -199,6 +199,7 @@ func TestTypeCheck(t *testing.T) {
 
 		{`(('{' || 'a' ||'}')::STRING[])[1]::STRING`, `((('{':::STRING || 'a':::STRING) || '}':::STRING)::STRING[])[1:::INT8]`},
 		{`(('{' || '1' ||'}')::INT[])[1]`, `((('{':::STRING || '1':::STRING) || '}':::STRING)::INT8[])[1:::INT8]`},
+		{`(ARRAY[1, 2, 3]::int[])[2]`, `(ARRAY[1:::INT8, 2:::INT8, 3:::INT8]:::INT8[])[2:::INT8]`},
 	}
 	ctx := context.Background()
 	for _, d := range testData {

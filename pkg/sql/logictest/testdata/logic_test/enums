@@ -1363,3 +1363,25 @@ query T
 SELECT * FROM arr_t3
 ----
 c
+
+statement ok
+CREATE TABLE arr_t4 (i typ DEFAULT ARRAY['a'::typ][1], j typ DEFAULT ARRAY['a'::typ, 'b'::typ, 'c'::typ][2])
+
+statement ok
+INSERT INTO arr_t4 VALUES (default, default)
+
+query TT
+SELECT * from arr_t4
+----
+a  b
+
+statement ok
+CREATE TABLE arr_t5 (i typ[] default ARRAY['a'::typ, 'b'::typ])
+
+statement ok
+INSERT INTO arr_t5 VALUES (default)
+
+query T
+SELECT * from arr_t5
+----
+{a,b}
