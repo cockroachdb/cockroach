@@ -1,0 +1,126 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package issues
+
+import (
+	"fmt"
+	"sort"
+)
+
+// UnitTestFormatter is the standard issue formatter for unit tests.
+var UnitTestFormatter = IssueFormatter{
+	Title: func(data TemplateData) string {
+		return fmt.Sprintf("%s: %s failed", data.PackageNameShort, data.TestName)
+	},
+	Body: func(r *Renderer, data TemplateData) error {
+		r.A(
+			fmt.Sprintf("%s.%s failed", data.PackageNameShort, data.TestName), // title
+			data.URL,
+		)
+		if data.ArtifactsURL != "" {
+			r.Escaped(" with ")
+			r.A(
+				"artifacts",
+				data.ArtifactsURL,
+			)
+		}
+		r.Escaped(" on ")
+		r.A(
+			fmt.Sprintf("%s @ %s", data.Branch, data.Commit), // title
+			data.CommitURL,
+		)
+		r.Escaped(`:
+
+`)
+		if fop := data.CondensedMessage.FatalOrPanic(50); fop != (FatalOrPanic{}) {
+			if fop.Error != "" {
+				r.Escaped("Fatal error:")
+				r.CodeBlock("", fop.Error)
+			}
+			if fop.FirstStack != "" {
+				r.Escaped("Stack: ")
+				r.CodeBlock("", fop.FirstStack)
+			}
+
+			r.Collapsed("Log preceding fatal error", func() {
+				r.CodeBlock("", fop.LastLines)
+			})
+		} else {
+			r.CodeBlock("", data.CondensedMessage.Digest(50))
+		}
+
+		r.Collapsed("Reproduce", func() {
+			// TODO(tbg): this should be generated here.
+			if data.ReproductionCommand != "" {
+				r.P(func() {
+					r.Escaped("To reproduce, try:\n")
+					r.CodeBlock("bash", data.ReproductionCommand)
+				})
+			}
+
+			if len(data.Parameters) != 0 {
+				r.P(func() {
+					r.Escaped("Parameters in this failure:\n")
+					for _, p := range data.Parameters {
+						r.Escaped("\n- ")
+						r.Escaped(p)
+						r.Escaped("\n")
+					}
+				})
+			}
+		})
+
+		if len(data.RelatedIssues) > 0 {
+			r.Collapsed("Same failure on other branches", func() {
+				for _, iss := range data.RelatedIssues {
+					var ls []string
+					for _, l := range iss.Labels {
+						ls = append(ls, l.GetName())
+					}
+					sort.Strings(ls)
+					r.Escaped("\n- ")
+					r.Escaped(fmt.Sprintf("#%d %s %v", iss.GetNumber(), iss.GetTitle(), ls))
+				}
+			})
+		}
+
+		if len(data.Mention) > 0 {
+			r.Escaped("/cc")
+			for _, handle := range data.Mention {
+				r.Escaped(" ")
+				r.Escaped(handle)
+			}
+		}
+
+		if data.InternalLog != "" {
+			r.Collapsed("Internal log", func() {
+				r.CodeBlock("", data.InternalLog)
+			})
+		}
+
+		r.Escaped("\n")
+		r.A(
+			"See this test on roachdash",
+			"https://roachdash.crdb.dev/?filter=status:open%20t:.*"+
+				data.TestName+
+				".*&sort=title+created&display=lastcommented+project",
+		)
+
+		r.Escaped("\n\n")
+
+		r.HTML("sub", func() {
+			r.A("Improve this report!",
+				"https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues",
+			)
+		})
+		return nil
+	},
+}

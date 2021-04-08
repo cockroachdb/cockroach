@@ -42,13 +42,9 @@ const (
 	unknown = "(unknown)"
 )
 
-type formatter func(context.Context, failure) issues.PostRequest
+type formatter func(context.Context, failure) (issues.IssueFormatter, issues.PostRequest)
 
-var formatters = map[string]formatter{
-	"pebble-metamorphic": formatPebbleMetamorphicIssue,
-}
-
-func defaultFormatter(ctx context.Context, f failure) issues.PostRequest {
+func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, issues.PostRequest) {
 	authorEmail, err := getAuthorEmail(ctx, f.packageName, f.testName)
 	if err != nil {
 		log.Printf("unable to determine test author email: %s\n", err)
@@ -56,15 +52,11 @@ func defaultFormatter(ctx context.Context, f failure) issues.PostRequest {
 	repro := fmt.Sprintf("make stressrace TESTS=%s PKG=./pkg/%s TESTTIMEOUT=5m STRESSFLAGS='-timeout 5m' 2>&1",
 		f.testName, trimPkg(f.packageName))
 
-	return issues.PostRequest{
-		// TODO(tbg): actually use this as a template and not a hard-coded
-		// string.
-		TitleTemplate:       f.title,
-		BodyTemplate:        issues.UnitTestFailureBody,
+	return issues.UnitTestFormatter, issues.PostRequest{
 		TestName:            f.testName,
 		PackageName:         f.packageName,
 		Message:             f.testMessage,
-		Artifacts:           "",
+		Artifacts:           "/", // best we can do for unit tests
 		AuthorEmail:         authorEmail,
 		ReproductionCommand: repro,
 	}
@@ -74,24 +66,22 @@ func main() {
 	formatterName := flag.String("formatter", "", "formatter to use to construct GitHub issues")
 	flag.Parse()
 
-	formatter := defaultFormatter
-	if *formatterName != "" {
-		var ok bool
-		formatter, ok = formatters[*formatterName]
-		if !ok {
-			log.Fatalf("Unknown formatter %q", *formatterName)
-		}
+	var reqFromFailure formatter
+	switch *formatterName {
+	case "pebble-metamorphic":
+		reqFromFailure = formatPebbleMetamorphicIssue
+	default:
+		reqFromFailure = defaultFormatter
 	}
 
 	fileIssue := func(ctx context.Context, f failure) error {
-		req := formatter(ctx, f)
-		log.Printf("filing issue with title: %s", req.TitleTemplate)
-		return issues.Post(ctx, req)
+		fmter, req := reqFromFailure(ctx, f)
+		return issues.Post(ctx, fmter, req)
 	}
 
 	ctx := context.Background()
 	if err := listFailures(ctx, os.Stdin, fileIssue); err != nil {
-		log.Fatal(err)
+		log.Println(err) // keep going
 	}
 }
 
@@ -530,45 +520,9 @@ func getAuthorEmail(ctx context.Context, packageName, testName string) (string, 
 	return string(matches[1]), nil
 }
 
-const pebbleBodyTemplate = `Pebble nightly metamorphic test failed on [{{.Commit}}]({{commiturl .Commit}}):
-
-{{ if (.CondensedMessage.FatalOrPanic 50).Error }}{{with $fop := .CondensedMessage.FatalOrPanic 50 -}}
-Fatal error:
-{{threeticks}}
-{{ .Error }}{{threeticks}}
-
-Stack:
-{{threeticks}}
-{{ $fop.FirstStack }}
-{{threeticks}}
-
-<details><summary>Log preceding fatal error</summary><p>
-
-{{threeticks}}
-{{ $fop.LastLines }}
-{{threeticks}}
-
-</p></details>{{end}}{{ else -}}
-{{threeticks}}
-{{ .CondensedMessage.Digest 50 }}
-{{ threeticks }}{{end}}
-
-<details><summary>More</summary><p>
-{{if .Parameters -}}
-Parameters:
-{{range .Parameters }}
-- {{ . }}{{end}}{{end}}
-
-{{if .ArtifactsURL }}Artifacts: [{{.Artifacts}}]({{ .ArtifactsURL }})
-{{end -}}
-{{threeticks}}
-{{.ReproductionCommand}}
-{{threeticks}}
-
-<sub>powered by [pkg/cmd/internal/issues](https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues)</sub>
-</p></details>`
-
-func formatPebbleMetamorphicIssue(ctx context.Context, f failure) issues.PostRequest {
+func formatPebbleMetamorphicIssue(
+	ctx context.Context, f failure,
+) (issues.IssueFormatter, issues.PostRequest) {
 	var repro string
 	{
 		const seedHeader = "===== SEED =====\n"
@@ -582,9 +536,7 @@ func formatPebbleMetamorphicIssue(ctx context.Context, f failure) issues.PostReq
 				"-timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed %s", s)
 		}
 	}
-	return issues.PostRequest{
-		TitleTemplate:       f.title,
-		BodyTemplate:        pebbleBodyTemplate,
+	return issues.UnitTestFormatter, issues.PostRequest{
 		TestName:            f.testName,
 		PackageName:         f.packageName,
 		Message:             f.testMessage,

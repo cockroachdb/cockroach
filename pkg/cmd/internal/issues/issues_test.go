@@ -14,12 +14,9 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -31,26 +28,23 @@ import (
 
 func TestPost(t *testing.T) {
 	const (
-		assignee    = "hodor"
-		milestone   = 2
-		envTags     = "deadlock"
-		envGoFlags  = "race"
-		sha         = "abcd123"
-		branch      = "release-0.1"
-		serverURL   = "https://teamcity.example.com"
-		buildID     = 8008135
-		issueID     = 1337
-		issueNumber = 30
+		assignee    = "hodor" // fake Github handle we're returning as assignee
+		milestone   = 2       // fake milestone we're using here
+		issueID     = 1337    // issue ID returned in select test cases
+		issueNumber = 30      // issue # returned in select test cases
 	)
 
-	unset := setEnv(map[string]string{
-		teamcityVCSNumberEnv: sha,
-		teamcityServerURLEnv: serverURL,
-		teamcityBuildIDEnv:   strconv.Itoa(buildID),
-		tagsEnv:              envTags,
-		goFlagsEnv:           envGoFlags,
-	})
-	defer unset()
+	opts := Options{
+		Token:     "intentionally-unset",
+		Org:       "cockroachdb",
+		Repo:      "cockroach",
+		SHA:       "abcd123",
+		BuildID:   "8008135",
+		ServerURL: "https://teamcity.example.com",
+		Branch:    "release-0.1",
+		Tags:      "deadlock",
+		Goflags:   "race",
+	}
 
 	testCases := []struct {
 		name        string
@@ -156,22 +150,28 @@ goroutine 13:
 	}
 
 	for _, c := range testCases {
-		for _, foundIssue := range []string{
-			foundNoIssue, foundOnlyMatchingIssue, foundMatchingAndRelatedIssue, foundOnlyRelatedIssue,
-		} {
-
-			results := map[string][][]github.Issue{
-				foundNoIssue:                 {{}, {}},
-				foundOnlyMatchingIssue:       {{matchingIssue}, {}},
-				foundMatchingAndRelatedIssue: {{matchingIssue}, {relatedIssue}},
-				foundOnlyRelatedIssue:        {{}, {relatedIssue}},
-			}[foundIssue]
-
-			name := c.name + "-" + foundIssue
-			t.Run(name, func(t *testing.T) {
-				t.Run(c.name, func(t *testing.T) {
+		t.Run(c.name, func(t *testing.T) {
+			for _, foundIssue := range []string{
+				foundNoIssue, foundOnlyMatchingIssue, foundMatchingAndRelatedIssue, foundOnlyRelatedIssue,
+			} {
+				results := map[string][][]github.Issue{
+					foundNoIssue:                 {{}, {}},
+					foundOnlyMatchingIssue:       {{matchingIssue}, {}},
+					foundMatchingAndRelatedIssue: {{matchingIssue}, {relatedIssue}},
+					foundOnlyRelatedIssue:        {{}, {relatedIssue}},
+				}[foundIssue]
+				t.Run(foundIssue, func(t *testing.T) {
 					var buf strings.Builder
-					p := &poster{}
+					opts := opts // play it safe since we're mutating it below
+					opts.getLatestTag = func() (string, error) {
+						const tag = "v3.3.0"
+						_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
+						return tag, nil
+					}
+
+					p := &poster{
+						Options: &opts,
+					}
 
 					createdIssue := false
 					p.createIssue = func(_ context.Context, owner string, repo string,
@@ -236,19 +236,8 @@ goroutine 13:
 						return result, nil, nil
 					}
 
-					p.getLatestTag = func() (string, error) {
-						const tag = "v3.3.0"
-						_, _ = fmt.Fprintf(&buf, "getLatestTag: result %s\n", tag)
-						return tag, nil
-					}
-
-					p.init()
-					p.branch = branch
-
 					ctx := context.Background()
 					req := PostRequest{
-						TitleTemplate:       UnitTestFailureTitle,
-						BodyTemplate:        UnitTestFailureBody,
 						PackageName:         c.packageName,
 						TestName:            c.testName,
 						Message:             c.message,
@@ -257,8 +246,8 @@ goroutine 13:
 						ReproductionCommand: c.reproCmd,
 						ExtraLabels:         []string{"release-blocker"},
 					}
-					require.NoError(t, p.post(ctx, req))
-					path := filepath.Join("testdata", name+".txt")
+					require.NoError(t, p.post(ctx, UnitTestFormatter, req))
+					path := filepath.Join("testdata", "post", c.name+"-"+foundIssue+".txt")
 					b, err := ioutil.ReadFile(path)
 					failed := !assert.NoError(t, err)
 					if !failed {
@@ -282,8 +271,8 @@ goroutine 13:
 						t.Errorf("unhandled: %s", foundIssue)
 					}
 				})
-			})
-		}
+			}
+		})
 	}
 }
 
@@ -291,71 +280,54 @@ func TestPostEndToEnd(t *testing.T) {
 	skip.IgnoreLint(t, "only for manual testing")
 
 	env := map[string]string{
-		// githubAPITokenEnv must be set in your actual env.
-
-		teamcityVCSNumberEnv:   "deadbeef",
-		teamcityServerURLEnv:   "https://teamcity.cockroachdb.com",
-		teamcityBuildIDEnv:     "12345",
-		tagsEnv:                "-endtoendenv",
-		goFlagsEnv:             "-somegoflags",
-		teamcityBuildBranchEnv: "release-19.2",
 		// Adjust to your taste. Your token must have access and you must have a fork
-		// of the cockroachdb/cockroach repo.
-		githubOrgEnv: "tbg",
+		// of the cockroachdb/cockroach repo. Make sure you don't publicize the token
+		// by pushing a branch.
+		"GITHUB_ORG":       "tbg",
+		"GITHUB_API_TOKEN": "",
+
+		// These can be left untouched for a basic test.
+		"GITHUB_REPO":      "cockroach",
+		"BUILD_VCS_NUMBER": "deadbeef",
+		"TC_SERVER_URL":    "https://teamcity.cockroachdb.com",
+		"TC_BUILD_ID":      "12345",
+		"TAGS":             "-endtoendenv",
+		"GOFLAGS":          "-somegoflags",
+		"TC_BUILD_BRANCH":  "release-19.2",
 	}
 	unset := setEnv(env)
 	defer unset()
 
 	req := PostRequest{
-		TitleTemplate: "test issue 2",
-		BodyTemplate:  "test body",
-		PackageName:   "github.com/cockroachdb/cockroach/pkg/foo/bar",
-		TestName:      "TestFooBarBaz",
-		Message:       "I'm a message",
-		AuthorEmail:   "tobias.schottdorf@gmail.com",
-		ExtraLabels:   []string{"release-blocker"},
+		PackageName: "github.com/cockroachdb/cockroach/pkg/foo/bar",
+		TestName:    "TestFooBarBaz",
+		Message:     "I'm a message",
+		AuthorEmail: "tobias.schottdorf@gmail.com",
+		ExtraLabels: []string{"release-blocker"},
 	}
 
-	require.NoError(t, Post(context.Background(), req))
+	require.NoError(t, Post(context.Background(), UnitTestFormatter, req))
 }
 
 func TestGetAssignee(t *testing.T) {
 	p := &poster{
-		org:  "cockroachdb",
-		repo: "cockroach",
+		Options: &Options{
+			Org:  "myorg",
+			Repo: "myrepo",
+		},
 	}
 	listCommits := func(_ context.Context, owner string, repo string,
 		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error) {
+		require.Equal(t, owner, p.Options.Org)
+		require.Equal(t, repo, p.Options.Repo)
 		return []*github.RepositoryCommit{
 			{},
 		}, nil, nil
 	}
-	_, _ = p.getAssignee(context.Background(), "", listCommits)
-}
-
-func TestInvalidAssignee(t *testing.T) {
-	u, err := url.Parse("https://api.github.com/repos/cockroachdb/cockroach/issues")
-	if err != nil {
-		log.Fatal(err)
-	}
-	r := &github.ErrorResponse{
-		Response: &http.Response{
-			StatusCode: 422,
-			Request: &http.Request{
-				Method: "POST",
-				URL:    u,
-			},
-		},
-		Errors: []github.Error{{
-			Resource: "Issue",
-			Field:    "assignee",
-			Code:     "invalid",
-			Message:  "",
-		}},
-	}
-	if !isInvalidAssignee(r) {
-		t.Fatalf("expected invalid assignee")
-	}
+	p.listCommits = listCommits
+	ctx := &postCtx{Context: context.Background()}
+	require.Zero(t, p.getAssignee(ctx, "foo@bar.xy"))
+	require.Equal(t, "no Author found for user email foo@bar.xy\n", ctx.Builder.String())
 }
 
 // setEnv overrides the env variables corresponding to the input map. The
