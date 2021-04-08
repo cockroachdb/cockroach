@@ -716,7 +716,7 @@ vectorized: true
       table: regional_by_row_table@primary
       spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkVFr2zAUhd_3K8R92oaCLWeDIRh4bB4zeElmB1aoTVCsS2rqSK4k04Tg_15iF9KUpJD08Z6rc_QdaQf2oQYO0c0s-RFPyMdfcTbP_iWfSBYl0c85-Ux-p9O_xOCq0krUi-V2YfTjwolljeT_nyiNSHNPvhMGFJSWOBFrtMBvgUFBoTG6RGu12Uu7_kAsN8B9CpVqWreXCwqlNgh8B65yNQKH-T49RSHReD5QkOhEVfexJ0HCxlRrYbZAIWuEspx4OeT55pufg8c8f0SEkoQR7e7QAIVp6zgJGQ0DGo5p-IWGX6HoKOjWHaCsEysEzjp6HTi7Fjx8hr4QNDgLeuBrlTYSDcojtqI7UWWiR7rxguMSSbWuHGFnGfxLHitF22hl8RXLueSCAsoVDoWsbk2JM6PL_pphnPa-XpBo3bANhiFW_ar_zZdm9h5z8KZ5fGT2u6L78BQAAP__zHAczQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkVFr2zAUhd_3K8R92oaGLWeDIRh4bC41uElqB1qoTVCsS2rqSK4k04Tg_15iP6QpSSHp4z1X5-g70hbscw0covtp8jcek6__42yW3SbfSBYl0b8Z-U6u0skNMbistBL1fLGZG_0yd2JRI7m7jtKINE_kD2FAQWmJY7FCC_wBGBQUGqNLtFabnbTtD8RyDdynUKmmdTu5oFBqg8C34CpXI3CY7dJTFBKN5wMFiU5UdR97FCRsTLUSZgMUskYoy4mXQ56vf_s5eMzziVCSMKLdIxqgMGkdJyGjYUDDEQ1_0vAXFB0F3bo9k3ViicBZRy_jZpdyhwPzmZzBSc49Xqu0kWhQHqAV3ZEmY_1DN15w2CGpVpUj7CSDf85bpWgbrSy-YzmVXFBAucShkNWtKXFqdNlfM4yT3tcLEq0btsEwxKpf9Z_51sw-Yw4-NI8OzH5XdF9eAwAA__86rhxz
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
@@ -862,7 +862,7 @@ vectorized: true
               table: child@primary
               spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k2Fr2zwQx98_n-K4N0keVCI7LhRBwWF1mYvndIlhhcUUzzpab4nkyTKkhHz3ETujcVhC2rF31un-vt__dLfG6ucCBQYP99E4jKF_E86S2edoALMgCj4k8D_cTiefIH8uFhK-fAymAfTjSQLBwzYR-t20MjOk7C6vfCwkXEP-uP0YDGAc30A_b4MOHyBDpSXF2ZIqFF_RwZRhaXROVaXNNrRuEkK5QsEZFqqs7TacMsy1IRRrtIVdEApMsm8LmlImyQw5MpRks2LR_LYh90tTLDPzggxnZaYqAcM5zuerKz7HocOH_AIyJcEBbZ_JIMNJbQX4DvNdTDcMdW1fi1c2eyIUzoa9D9A5F9D_DXcekHsU6JWjVtpIMiQ7DOnmD8ixvtDl0O3CRsWysOAcZeBvacqdLtSuJ6NumeSlJAFRcJvAOE5CuJuEMTJsx2uvV5HWP-oSvutCgVYC-v4IrsF3d8Pme3ANq57He0II3-GcX3qD85o5eqcR718Z2S7nqne1b4XBqpd3vJ1pznuLuSlVpVYVHUzMsfdPGZJ8onbsKl2bnO6Nzpsy7XHS6JqApMq2t257CFVz1ezWvtj5G7F7UjzqiPmheHRS7J0WeyfFlwfidPPfrwAAAP__ND-8kw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k2Fr2zwQx98_n-K4N0keNCI7LhRBwGF1mYvndIlhhcUUzzpab4nkyTKkhHz3ETvQOCwh7dg763R_3-9_uttg9WuJAoOH-2gSxtC_CefJ_Es0gHkQBR8T-B9uZ9PPkD8XSwlfPwWzAPrxNIHgYZcI_W5amRlSdp9XPhYSxpA_7j4GA5jEN9DP26DDB8hQaUlxtqIKxTd0MGVYGp1TVWmzC22ahFCuUXCGhSpruwunDHNtCMUGbWGXhAKT7PuSZpRJMkOODCXZrFg2v23I_dIUq8y8IMN5malKwHCBi8X6mi9w6PAhh0xJcEDbZzLIcFpbAb7DfBfTLUNd29falc2eCIWzZe_jcy7l8_dsl_G4J3leMWqljSRDsoOQbv9AHOsPuhy6XdaoWBUWnJMM_C09udOF2rdk1C2TvJQkIApuE5jESQh30zBGhu1wHbQq0vpnXcIPXSjQSkDfH8EYfHc_ar4HY1j3PN4TQvgO5_zKG1zWzNE7jXj_yshuNde960MrDNa9vOPtQnPeW8zNqCq1quhoYk69f8qQ5BO1Y1fp2uR0b3TelGmP00bXBCRVtr1120OomqtmtQ7Fzt-I3bPiUUfMj8Wjs2LvvNg7K746Eqfb_34HAAD__-igvDk=
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
