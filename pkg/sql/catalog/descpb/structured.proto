@@ -1226,7 +1226,7 @@ message DatabaseDescriptor {
 
     reserved 1;
     optional SurvivalGoal survival_goal = 2 [(gogoproto.nullable)=false];
-    optional string primary_region = 3 [(gogoproto.nullable)=false,(gogoproto.casttype)="RegionName"];
+    reserved 3;
 
     // RegionEnumID represents ID of the type descriptor corresponding to the
     // region enum for a multi-region database. If the database is not a

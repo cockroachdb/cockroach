@@ -256,7 +256,6 @@ CREATE TABLE crdb_internal.databases (
 					default:
 						return errors.Newf("unknown survival goal: %d", db.RegionConfig.SurvivalGoal)
 					}
-					primaryRegion = tree.NewDString(string(db.RegionConfig.PrimaryRegion))
 
 					regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, db.ID, p.Descriptors())
 					if err != nil {
@@ -267,6 +266,7 @@ CREATE TABLE crdb_internal.databases (
 							return err
 						}
 					}
+					primaryRegion = tree.NewDString(regionConfig.PrimaryRegionString())
 				}
 
 				return addRow(

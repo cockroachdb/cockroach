@@ -150,15 +150,6 @@ func (desc *Immutable) MultiRegionEnumID() (descpb.ID, error) {
 	return desc.RegionConfig.RegionEnumID, nil
 }
 
-// PrimaryRegionName returns the primary region for a multi-region database.
-func (desc *Immutable) PrimaryRegionName() (descpb.RegionName, error) {
-	if !desc.IsMultiRegion() {
-		return "", errors.AssertionFailedf(
-			"can not get the primary region of a non multi-region database")
-	}
-	return desc.RegionConfig.PrimaryRegion, nil
-}
-
 // SetName sets the name on the descriptor.
 func (desc *Mutable) SetName(name string) {
 	desc.Name = name
@@ -200,9 +191,9 @@ func (desc *Immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 
 // validateMultiRegion performs checks specific to multi-region DBs.
 func (desc *Immutable) validateMultiRegion(vea catalog.ValidationErrorAccumulator) {
-	if desc.RegionConfig.PrimaryRegion == "" {
+	if desc.RegionConfig.RegionEnumID == descpb.InvalidID {
 		vea.Report(errors.AssertionFailedf(
-			"primary region unset on a multi-region db %d", desc.GetID()))
+			"invalid region enum ID on a multi-region db %d", desc.GetID()))
 	}
 }
 
@@ -379,9 +370,8 @@ func (desc *Mutable) SetInitialMultiRegionConfig(config *multiregion.RegionConfi
 		)
 	}
 	desc.RegionConfig = &descpb.DatabaseDescriptor_RegionConfig{
-		SurvivalGoal:  config.SurvivalGoal(),
-		PrimaryRegion: config.PrimaryRegion(),
-		RegionEnumID:  config.RegionEnumID(),
+		SurvivalGoal: config.SurvivalGoal(),
+		RegionEnumID: config.RegionEnumID(),
 	}
 	return nil
 }
