@@ -345,7 +345,7 @@ func (dsp *DistSQLPlanner) Run(
 				}
 			}
 		}
-		log.VEvent(ctx, 1, "creating plan diagram")
+		log.VEvent(ctx, 3, "creating plan diagram")
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt != nil {
 			stmtStr = planCtx.planner.stmt.String()
@@ -361,7 +361,7 @@ func (dsp *DistSQLPlanner) Run(
 	}
 
 	if logPlanDiagram {
-		log.VEvent(ctx, 1, "creating plan diagram for logging")
+		log.VEvent(ctx, 3, "creating plan diagram for logging")
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt != nil {
 			stmtStr = planCtx.planner.stmt.String()
@@ -374,7 +374,7 @@ func (dsp *DistSQLPlanner) Run(
 		}
 	}
 
-	log.VEvent(ctx, 1, "running DistSQL plan")
+	log.VEvent(ctx, 2, "running DistSQL plan")
 
 	dsp.distSQLSrv.ServerConfig.Metrics.QueryStart()
 	defer dsp.distSQLSrv.ServerConfig.Metrics.QueryStop()
@@ -989,7 +989,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	plan planMaybePhysical,
 	recv *DistSQLReceiver,
 ) (cleanup func()) {
-	log.VEventf(ctx, 1, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
+	log.VEventf(ctx, 2, "creating DistSQL plan with isLocal=%v", planCtx.isLocal)
 
 	physPlan, err := dsp.createPhysPlan(planCtx, plan)
 	if err != nil {
@@ -1037,7 +1037,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			continue
 		}
 
-		log.VEventf(ctx, 1, "executing cascade for constraint %s", plan.cascades[i].FKName)
+		log.VEventf(ctx, 3, "executing cascade for constraint %s", plan.cascades[i].FKName)
 
 		// We place a sequence point before every cascade, so
 		// that each subsequent cascade can observe the writes
@@ -1123,7 +1123,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	}
 
 	for i := range plan.checkPlans {
-		log.VEventf(ctx, 1, "executing check query %d out of %d", i+1, len(plan.checkPlans))
+		log.VEventf(ctx, 3, "executing check query %d out of %d", i+1, len(plan.checkPlans))
 		if err := dsp.planAndRunPostquery(
 			ctx,
 			plan.checkPlans[i].plan,
