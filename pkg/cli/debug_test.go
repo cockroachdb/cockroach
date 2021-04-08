@@ -447,3 +447,15 @@ func TestParseGossipValues(t *testing.T) {
 			len(debugLines), len(gossipInfo.Infos), debugOutput, strings.Join(gossipInfoKeys, "\n"))
 	}
 }
+
+func TestParsePositiveDuration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	duration, _ := parsePositiveDuration("1h")
+	if duration != time.Hour {
+		t.Errorf("Expected %v, got %v", time.Hour, duration)
+	}
+	_, err := parsePositiveDuration("-5m")
+	if err == nil {
+		t.Errorf("Expected to fail parsing negative duration -5m")
+	}
+}

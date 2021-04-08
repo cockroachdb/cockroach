@@ -60,6 +60,8 @@ var (
 	}
 )
 
+const intentAgeThreshold = 2 * time.Hour
+
 // TestRunNewVsOld exercises the behavior of Run relative to the old
 // implementation. It runs both the new and old implementation and ensures
 // that they produce exactly the same results on the same set of keys.
@@ -73,10 +75,12 @@ func TestRunNewVsOld(t *testing.T) {
 	for _, tc := range []randomRunGCTestSpec{
 		{
 			ds: someVersionsMidSizeRowsLotsOfIntents,
+			// Current time in the future enough for intents to get resolved
 			now: hlc.Timestamp{
-				WallTime: (IntentAgeThreshold + 100*time.Second).Nanoseconds(),
+				WallTime: (intentAgeThreshold + 100*time.Second).Nanoseconds(),
 			},
-			ttl: int32(IntentAgeThreshold.Seconds()),
+			// GC everything beyond intent resolution threshold
+			ttl: int32(intentAgeThreshold.Seconds()),
 		},
 		{
 			ds: someVersionsMidSizeRows,
@@ -97,7 +101,7 @@ func TestRunNewVsOld(t *testing.T) {
 			policy := zonepb.GCPolicy{TTLSeconds: tc.ttl}
 			newThreshold := CalculateThreshold(tc.now, policy)
 			gcInfoOld, err := runGCOld(ctx, tc.ds.desc(), snap, tc.now,
-				newThreshold, policy,
+				newThreshold, intentAgeThreshold, policy,
 				&oldGCer,
 				oldGCer.resolveIntents,
 				oldGCer.resolveIntentsAsync)
@@ -105,7 +109,7 @@ func TestRunNewVsOld(t *testing.T) {
 
 			newGCer := makeFakeGCer()
 			gcInfoNew, err := Run(ctx, tc.ds.desc(), snap, tc.now,
-				newThreshold, policy,
+				newThreshold, intentAgeThreshold, policy,
 				&newGCer,
 				newGCer.resolveIntents,
 				newGCer.resolveIntentsAsync)
@@ -132,7 +136,7 @@ func BenchmarkRun(b *testing.B) {
 		snap := eng.NewSnapshot()
 		policy := zonepb.GCPolicy{TTLSeconds: spec.ttl}
 		return runGCFunc(ctx, spec.ds.desc(), snap, spec.now,
-			CalculateThreshold(spec.now, policy),
+			CalculateThreshold(spec.now, policy), intentAgeThreshold,
 			policy,
 			NoopGCer{},
 			func(ctx context.Context, intents []roachpb.Intent) error {

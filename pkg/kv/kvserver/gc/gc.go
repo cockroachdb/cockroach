@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -37,15 +38,25 @@ import (
 )
 
 const (
-	// IntentAgeThreshold is the threshold after which an extant intent
-	// will be resolved.
-	IntentAgeThreshold = 2 * time.Hour // 2 hour
-
 	// KeyVersionChunkBytes is the threshold size for splitting
 	// GCRequests into multiple batches. The goal is that the evaluated
 	// Raft command for each GCRequest does not significantly exceed
 	// this threshold.
 	KeyVersionChunkBytes = base.ChunkRaftCommandThresholdBytes
+)
+
+// IntentAgeThreshold is the threshold after which an extant intent
+// will be resolved.
+var IntentAgeThreshold = settings.RegisterValidatedDurationSetting(
+	"kv.gc.intent_age_threshold",
+	"intents older than this threshold will be resolved when encountered by the GC queue",
+	2*time.Hour,
+	func(d time.Duration) error {
+		if d < 2*time.Minute {
+			return errors.New("intent age threshold must be >= 2 minutes")
+		}
+		return nil
+	},
 )
 
 // CalculateThreshold calculates the GC threshold given the policy and the
@@ -159,6 +170,7 @@ func Run(
 	desc *roachpb.RangeDescriptor,
 	snap storage.Reader,
 	now, newThreshold hlc.Timestamp,
+	intentAgeThreshold time.Duration,
 	policy zonepb.GCPolicy,
 	gcer GCer,
 	cleanupIntentsFn CleanupIntentsFunc,
@@ -182,7 +194,8 @@ func Run(
 	// Maps from txn ID to txn and intent key slice.
 	txnMap := map[uuid.UUID]*roachpb.Transaction{}
 	intentKeyMap := map[uuid.UUID][]roachpb.Key{}
-	err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, gcer, txnMap, intentKeyMap, &info)
+	err := processReplicatedKeyRange(ctx, desc, snap, now, newThreshold, intentAgeThreshold, gcer, txnMap, intentKeyMap,
+		&info)
 	if err != nil {
 		return Info{}, err
 	}
@@ -233,6 +246,7 @@ func processReplicatedKeyRange(
 	snap storage.Reader,
 	now hlc.Timestamp,
 	threshold hlc.Timestamp,
+	intentAgeThreshold time.Duration,
 	gcer GCer,
 	txnMap map[uuid.UUID]*roachpb.Transaction,
 	intentKeyMap map[uuid.UUID][]roachpb.Key,
@@ -240,7 +254,7 @@ func processReplicatedKeyRange(
 ) error {
 	var alloc bufalloc.ByteAllocator
 	// Compute intent expiration (intent age at which we attempt to resolve).
-	intentExp := now.Add(-IntentAgeThreshold.Nanoseconds(), 0)
+	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
 	handleIntent := func(md *storage.MVCCKeyValue) {
 		meta := &enginepb.MVCCMetadata{}
 		if err := protoutil.Unmarshal(md.Value, meta); err != nil {
