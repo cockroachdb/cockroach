@@ -216,9 +216,6 @@ func supportedNatively(spec *execinfrapb.ProcessorSpec) error {
 		return nil
 
 	case spec.Core.Values != nil:
-		if spec.Core.Values.NumRows != 0 && len(spec.Core.Values.Columns) != 0 {
-			return errors.Newf("values core is supported only with zero rows or zero columns")
-		}
 		return nil
 
 	case spec.Core.TableReader != nil:
@@ -745,13 +742,13 @@ func NewColOperator(
 			if err := checkNumIn(inputs, 0); err != nil {
 				return r, err
 			}
-			if core.Values.NumRows != 0 && len(core.Values.Columns) != 0 {
-				return r, errors.AssertionFailedf(
-					"values core is supported only with zero rows or zero columns, %d rows, %d columns given",
-					core.Values.NumRows, len(core.Values.Columns),
-				)
+			if core.Values.NumRows == 0 || len(core.Values.Columns) == 0 {
+				// To simplify valuesOp we handle some special cases with
+				// fixedNumTuplesNoInputOp.
+				result.Root = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows), nil /* opToInitialize */)
+			} else {
+				result.Root = colexec.NewValuesOp(streamingAllocator, core.Values)
 			}
-			result.Root = colexecutils.NewFixedNumTuplesNoInputOp(streamingAllocator, int(core.Values.NumRows), nil /* opToInitialize */)
 			result.ColumnTypes = make([]*types.T, len(core.Values.Columns))
 			for i, col := range core.Values.Columns {
 				result.ColumnTypes[i] = col.Type
