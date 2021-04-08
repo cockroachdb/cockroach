@@ -1624,10 +1624,18 @@ type IndirectionExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *IndirectionExpr) Format(ctx *FmtCtx) {
-	// If the subExpr is a CastExpr, we need to wrap it in a ParenExpr,
-	// otherwise the indirection will get interpreted as part of the type.
+	// If the sub expression is a CastExpr or an Array that has a type,
+	// we need to wrap it in a ParenExpr, otherwise the indirection
+	// will get interpreted as part of the type.
 	// Ex. ('{a}'::_typ)[1] vs. '{a}'::_typ[1].
-	if _, isCast := node.Expr.(*CastExpr); isCast {
+	// Ex. (ARRAY['a'::typ]:::typ[])[1] vs. ARRAY['a'::typ]:::typ[][1].
+	var annotateArray bool
+	if arr, ok := node.Expr.(*Array); ctx.HasFlags(FmtParsable) && ok && arr.typ != nil {
+		if arr.typ.ArrayContents().Family() != types.UnknownFamily {
+			annotateArray = true
+		}
+	}
+	if _, isCast := node.Expr.(*CastExpr); isCast || annotateArray {
 		withParens := ParenExpr{Expr: node.Expr}
 		exprFmtWithParen(ctx, &withParens)
 	} else {
