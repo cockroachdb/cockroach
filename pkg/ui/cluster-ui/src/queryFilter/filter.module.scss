@@ -116,35 +116,6 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
   }
 }
 
-.dropdown-select {
-  display: flex;
-  height: 40px;
-  border-radius: 3px;
-  border: 1px solid $colors--neutral-4;
-  fill: $colors--neutral-5;
-
-  :global {
-    .Select-control {
-      width: 100% !important;
-      height: 38px !important;
-      .Select-arrow-zone {
-        padding-right: 14px !important;
-      }
-      div, .Select-multi-value-wrapper {
-        div, .Select-value {
-          span, .Select-value-label {
-            display: flex !important;
-            align-items: center !important;
-            height: 38px !important;
-            margin-left: 12px !important;
-            color: $colors--neutral-5 !important;
-          }
-        }
-      }
-    }
-  }
-}
-
 .caret-down {
   width: 12px;
 }

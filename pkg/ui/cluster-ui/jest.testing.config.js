@@ -6,9 +6,11 @@ module.exports = {
     "\\.(css|scss|less)$": "identity-obj-proxy",
     "\\.(gif|png|svg)$": "<rootDir>/.jest/fileMock.js",
   },
-  "moduleDirectories": [
-    ".",
+  moduleDirectories: [
     "node_modules"
+  ],
+  modulePaths: [
+    "<rootDir>/"
   ],
   roots: ["<rootDir>/src"],
   testEnvironment: "enzyme",
