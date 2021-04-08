@@ -196,7 +196,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 				if sp.spec.ChunkRows > 0 && rows >= sp.spec.ChunkRows {
 					break
 				}
-				row, err := input.NextRow()
+				row, err := input.NextRow(ctx)
 				if err != nil {
 					return err
 				}

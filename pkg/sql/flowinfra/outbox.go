@@ -339,6 +339,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 			drainCh = nil
 			if drainSignal.drainRequested {
 				// Enter draining mode.
+				log.VEvent(ctx, 1, "outbox moved to draining")
 				draining = true
 				m.RowChannel.ConsumerDone()
 			} else {

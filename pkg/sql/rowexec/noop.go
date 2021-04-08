@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -70,11 +71,13 @@ func (n *noopProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadat
 
 		if meta != nil {
 			if meta.Err != nil {
+				log.VEventf(n.Ctx, 1, "noop processor moves to draining because of error: %v", meta.Err)
 				n.MoveToDraining(nil /* err */)
 			}
 			return nil, meta
 		}
 		if row == nil {
+			log.VEvent(n.Ctx, 2, "noop processor is done")
 			n.MoveToDraining(nil /* err */)
 			break
 		}
@@ -84,6 +87,12 @@ func (n *noopProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadat
 		}
 	}
 	return nil, n.DrainHelper()
+}
+
+// ConsumerDone is part of the RowSource interface.
+func (n *noopProcessor) ConsumerDone() {
+	log.VEventf(n.Ctx, 2, "noop processor moves to draining because the consumer is done")
+	n.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

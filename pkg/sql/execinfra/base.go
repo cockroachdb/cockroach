@@ -344,7 +344,7 @@ func MakeNoMetadataRowSource(src RowSource, sink RowReceiver) NoMetadataRowSourc
 // that it's not under the impression that everything is hunky-dory and it can
 // continue consuming rows. So, this interface returns the error. Just like with
 // a raw RowSource, the consumer should generally call ConsumerDone() and drain.
-func (rs *NoMetadataRowSource) NextRow() (rowenc.EncDatumRow, error) {
+func (rs *NoMetadataRowSource) NextRow(ctx context.Context) (rowenc.EncDatumRow, error) {
 	for {
 		row, meta := rs.src.Next()
 		if meta == nil {
@@ -357,6 +357,7 @@ func (rs *NoMetadataRowSource) NextRow() (rowenc.EncDatumRow, error) {
 		// no good way to use that status here; eventually the consumer of this
 		// NoMetadataRowSource will figure out the same status and act on it as soon
 		// as a non-metadata row is received.
+		log.VEventf(ctx, 1, "pushing metadata to sink: %v", meta)
 		_ = rs.metadataSink.Push(nil /* row */, meta)
 	}
 }
@@ -488,6 +489,7 @@ func (rc *RowChannel) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 
 // ConsumerDone is part of the RowSource interface.
 func (rc *RowChannel) ConsumerDone() {
+	log.VEventf(context.Background(), 2, "RowChannel transitions into draining because the consumer is done")
 	rc.consumerDone()
 }
 
