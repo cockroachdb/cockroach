@@ -1,6 +1,6 @@
 {
   "name": "@cockroachlabs/crdb-protobuf-client",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Javascript client for use by CockroachDB UI",
   "main": "./protos.js",
   "types": "./protos.d.ts",
