@@ -24,6 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	// Imported to allow locality-related table mutations
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -35,6 +39,7 @@ import (
 )
 
 var testSinkFlushFrequency = 100 * time.Millisecond
+var testServerRegion = "us-east-1"
 
 func waitForSchemaChange(
 	t testing.TB, sqlDB *sqlutils.SQLRunner, stmt string, arguments ...interface{},
@@ -251,6 +256,12 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) f
 		ctx := context.Background()
 		knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}}}
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{
+					Key:   "region",
+					Value: testServerRegion,
+				}},
+			},
 			Knobs:       knobs,
 			UseDatabase: `d`,
 		})
@@ -272,7 +283,7 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) f
 		// that we'll still use the row-by-row engine, see #55605).
 		sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.vectorize=on`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
-
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER DATABASE d PRIMARY REGION "%s"`, testServerRegion))
 		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 		defer cleanup()
 		f := cdctest.MakeSinklessFeedFactory(s, sink)
@@ -306,6 +317,12 @@ func enterpriseTestWithServerArgs(
 		args := base.TestServerArgs{
 			UseDatabase: "d",
 			Knobs:       knobs,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{
+					Key:   "region",
+					Value: testServerRegion,
+				}},
+			},
 		}
 		if argsFn != nil {
 			argsFn(&args)
@@ -317,6 +334,7 @@ func enterpriseTestWithServerArgs(
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'`)
 		sqlDB.Exec(t, `CREATE DATABASE d`)
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER DATABASE d PRIMARY REGION "%s"`, testServerRegion))
 		sink, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 		defer cleanup()
 		f := cdctest.MakeTableFeedFactory(s, db, flushCh, sink)
