@@ -182,6 +182,22 @@ CREATE TABLE regional_by_row_table (
   FAMILY (pk, pk2, a, b)
 ) LOCALITY REGIONAL BY ROW
 
+query TTB
+SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM regional_by_row_table]
+ORDER BY index_name, seq_in_index
+----
+primary                      crdb_region  true
+primary                      pk           false
+regional_by_row_table_a_idx  crdb_region  true
+regional_by_row_table_a_idx  a            false
+regional_by_row_table_a_idx  pk           true
+regional_by_row_table_b_key  crdb_region  true
+regional_by_row_table_b_key  b            false
+regional_by_row_table_b_key  pk           true
+regional_by_row_table_j_idx  crdb_region  true
+regional_by_row_table_j_idx  j            false
+regional_by_row_table_j_idx  pk           true
+
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
 ----
