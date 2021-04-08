@@ -179,6 +179,15 @@ func (ls *Stores) Send(
 	if err := ba.ValidateForEvaluation(); err != nil {
 		log.Fatalf(ctx, "invalid batch (%s): %s", ba, err)
 	}
+	if ba.Txn != nil && ba.Txn.WriteTooOld && (ba.Txn.ReadTimestamp.Equal(ba.Txn.WriteTimestamp)) {
+		// This is a Fatal in 20.2+, and it used to be a Fatal in 20.1 too until
+		// someone ran into it while upgrading a 19.2 cluster. I'm not sure why it
+		// happens, but I'm not that surprised; the client used to be less
+		// disciplined about this field in 19.2 It's possible that it'd be safe to
+		// let the request go through; I'm not sure. Let's be safe and reject it.
+		return nil, roachpb.NewError(errors.Errorf(
+			"WriteTooOld set but no offset in timestamps. txn: %s (ba: %s)", ba.Txn.String(), ba.String()))
+	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
 	if err != nil {
