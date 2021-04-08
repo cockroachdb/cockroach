@@ -1131,8 +1131,33 @@ func (r *Replica) sendRaftMessages(ctx context.Context, messages []raftpb.Messag
 				// contain fat entries. Since these are the only two sources that
 				// raft.sendAppend gathers entries from to populate MsgApps, we
 				// should never see thin entries here.
+				//
+				// Also assert that the log term only ever increases (most of the
+				// time it stays constant, as term changes are rare), and that
+				// the index increases by exactly one with each entry.
+				//
+				// This assertion came out of #61990.
+				prevTerm := message.LogTerm // term of entry preceding the append
+				prevIndex := message.Index  // index of entry preceding the append
 				for j := range message.Entries {
-					assertSideloadedRaftCommandInlined(ctx, &message.Entries[j])
+					ent := &message.Entries[j]
+					assertSideloadedRaftCommandInlined(ctx, ent)
+
+					if prevIndex+1 != ent.Index {
+						log.Fatalf(ctx,
+							"index gap in outgoing MsgApp: idx %d followed by %d",
+							prevIndex, ent.Index,
+						)
+					}
+					prevIndex = ent.Index
+					if prevTerm > ent.Term {
+						log.Fatalf(ctx,
+							"term regression in outgoing MsgApp: idx %d at term=%d "+
+								"appended with logterm=%d",
+							ent.Index, ent.Term, message.LogTerm,
+						)
+					}
+					prevTerm = ent.Term
 				}
 			}
 
