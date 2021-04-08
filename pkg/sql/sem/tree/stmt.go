@@ -1545,6 +1545,7 @@ func (n *AlterTableDropNotNull) String() string          { return AsString(n) }
 func (n *AlterTableDropStored) String() string           { return AsString(n) }
 func (n *AlterTableLocality) String() string             { return AsString(n) }
 func (n *AlterTableSetDefault) String() string           { return AsString(n) }
+func (n *AlterTableSetVisible) String() string           { return AsString(n) }
 func (n *AlterTableSetNotNull) String() string           { return AsString(n) }
 func (n *AlterTableOwner) String() string                { return AsString(n) }
 func (n *AlterTableSetSchema) String() string            { return AsString(n) }
