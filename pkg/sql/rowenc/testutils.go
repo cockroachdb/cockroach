@@ -1608,7 +1608,17 @@ func randComputedColumnTableDef(
 			}
 		}
 		if len(cols) > 1 {
+			// If any of the columns are nullable, set the computed column to be
+			// nullable.
+			for _, x := range cols {
+				if x.Nullable.Nullability != tree.NotNull {
+					newDef.Nullable.Nullability = x.Nullable.Nullability
+					break
+				}
+			}
+
 			var expr tree.Expr
+
 			expr = tree.NewUnresolvedName(string(cols[0].Name))
 			for _, x := range cols[1:] {
 				expr = &tree.BinaryExpr{
@@ -1633,13 +1643,18 @@ func randComputedColumnTableDef(
 	x := normalColDefs[randutil.RandIntInRange(rng, 0, len(normalColDefs))]
 	xTyp := x.Type.(*types.T)
 
+	// Match the nullability of the computed column with the nullability of the
+	// reference column.
+	newDef.Nullable.Nullability = x.Nullable.Nullability
+	nullOk := newDef.Nullable.Nullability != tree.NotNull
+
 	switch xTyp.Family() {
 	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
 		newDef.Type = xTyp
 		newDef.Computed.Expr = &tree.BinaryExpr{
 			Operator: tree.Plus,
 			Left:     tree.NewUnresolvedName(string(x.Name)),
-			Right:    RandDatum(rng, xTyp, false /* nullOk */),
+			Right:    RandDatum(rng, xTyp, nullOk),
 		}
 
 	case types.StringFamily:
@@ -1673,10 +1688,10 @@ func randComputedColumnTableDef(
 						Cond: &tree.IsNullExpr{
 							Expr: tree.NewUnresolvedName(string(x.Name)),
 						},
-						Val: RandDatum(rng, types.String, true /* nullOK */),
+						Val: RandDatum(rng, types.String, nullOk),
 					},
 				},
-				Else: RandDatum(rng, types.String, true /* nullOK */),
+				Else: RandDatum(rng, types.String, nullOk),
 			}
 		}
 	}
