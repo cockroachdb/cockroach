@@ -49,6 +49,7 @@ interface TState {
 interface TransactionsPageProps {
   data: IStatementsResponse;
   refreshData: () => void;
+  resetSQLStats: () => void;
   error?: Error | null;
   pageSize?: number;
 }
@@ -189,7 +190,7 @@ export class TransactionsPage extends React.Component<
           loading={!this.props?.data}
           error={this.props?.error}
           render={() => {
-            const { data } = this.props;
+            const { data, resetSQLStats } = this.props;
             const { pagination, search, filters } = this.state;
             const { statements, internal_app_name_prefix } = data;
             const appNames = getTrxAppFilterOptions(
@@ -245,6 +246,7 @@ export class TransactionsPage extends React.Component<
                     arrayItemName="transactions"
                     activeFilters={activeFilters}
                     onClearFilters={this.onClearFilters}
+                    resetSQLStats={resetSQLStats}
                   />
                   <TransactionsTable
                     transactions={transactionsToDisplay}
@@ -288,6 +290,7 @@ export class TransactionsPage extends React.Component<
         lastReset={this.lastReset()}
         handleDetails={this.handleDetails}
         error={this.props.error}
+        resetSQLStats={this.props.resetSQLStats}
       />
     );
   }
