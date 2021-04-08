@@ -2533,3 +2533,15 @@ statement ok
 DROP TABLE regional_by_row;
 DROP TABLE regional_by_row_as;
 ALTER DATABASE drop_regions DROP REGION "ca-central-1";
+
+# Regression test for #63109. UPSERT should not cause the error
+# ERROR: missing "crdb_region" primary key column.
+statement ok
+CREATE DATABASE single_region_test_db PRIMARY REGION "ap-southeast-2";
+USE single_region_test_db;
+CREATE TABLE t63109 (a INT, b STRING);
+ALTER TABLE t63109 SET LOCALITY REGIONAL BY ROW;
+INSERT INTO t63109 VALUES (1, 'one');
+UPSERT INTO t63109 VALUES (1, 'two');
+UPSERT INTO t63109 (crdb_region, a, b) VALUES ('ap-southeast-2', 1, 'three');
+UPSERT INTO t63109 (a, b) VALUES (1, 'four');
