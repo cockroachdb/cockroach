@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"go.etcd.io/etcd/raft/v3"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -209,6 +210,11 @@ func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.R
 	rec.GetLease()
 
 	return rec.i.GetRangeInfo(ctx)
+}
+
+// GetProgress is part of the EvalContext interface.
+func (rec SpanSetReplicaEvalContext) RaftStatus() *raft.Status {
+return rec.i.RaftStatus()
 }
 
 // GetCurrentReadSummary is part of the EvalContext interface.
