@@ -279,6 +279,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		evalCtx.ExecCfg.Clock,
 		evalCtx.Tracing,
 		evalCtx.ExecCfg.ContentionRegistry,
+		nil, /* testingPushCallback */
 	)
 	defer recv.Release()
 

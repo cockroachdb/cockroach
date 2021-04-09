@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -985,6 +986,12 @@ type ExecutorTestingKnobs struct {
 	// exact control of the redaction flags (and have each test set it as
 	// necessary).
 	DeterministicExplain bool
+
+	// DistSQLReceiverPushCallbackFactory, if set, will be called every time a
+	// DistSQLReceiver is created for a new query execution, and it should
+	// return, possibly nil, a callback that will be called every time
+	// DistSQLReceiver.Push is called.
+	DistSQLReceiverPushCallbackFactory func(query string) func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
