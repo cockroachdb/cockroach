@@ -36,13 +36,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO(yuzefovich): introduce nicer aliases for the protobuf generated ones for
-// the aggregate functions and use those throughout the codebase.
-
 var (
 	defaultGroupCols = []uint32{0}
 	defaultAggCols   = [][]uint32{{1}}
-	defaultAggFns    = []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM_INT}
+	defaultAggFns    = []execinfrapb.AggregatorSpec_Func{execinfrapb.SumInt}
 	defaultTyps      = []*types.T{types.Int, types.Int}
 )
 
@@ -286,8 +283,8 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_COUNT_ROWS,
+			execinfrapb.AnyNotNull,
+			execinfrapb.CountRows,
 		},
 		aggCols:        [][]uint32{{0}, {}},
 		typs:           []*types.T{types.Int},
@@ -316,7 +313,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		},
 	},
 	{
-		aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM_INT, execinfrapb.AggregatorSpec_SUM_INT},
+		aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.SumInt, execinfrapb.SumInt},
 		aggCols: [][]uint32{
 			{2}, {1},
 		},
@@ -331,7 +328,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		name: "OutputOrder",
 	},
 	{
-		aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT},
+		aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.Sum, execinfrapb.SumInt},
 		aggCols: [][]uint32{
 			{2}, {1},
 		},
@@ -350,7 +347,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 		convToDecimal: true,
 	},
 	{
-		aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_AVG, execinfrapb.AggregatorSpec_SUM},
+		aggFns: []execinfrapb.AggregatorSpec_Func{execinfrapb.Avg, execinfrapb.Sum},
 		aggCols: [][]uint32{
 			{1}, {1},
 		},
@@ -371,8 +368,8 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_BOOL_AND,
-			execinfrapb.AggregatorSpec_BOOL_OR,
+			execinfrapb.BoolAnd,
+			execinfrapb.BoolOr,
 		},
 		aggCols: [][]uint32{
 			{1}, {1},
@@ -412,11 +409,11 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_MIN,
-			execinfrapb.AggregatorSpec_SUM,
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.Min,
+			execinfrapb.Sum,
 		},
 		input: colexectestutils.Tuples{
 			{2, 1.0, "1.0", 2.0},
@@ -436,8 +433,8 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	},
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_SUM_INT,
+			execinfrapb.AnyNotNull,
+			execinfrapb.SumInt,
 		},
 		input: colexectestutils.Tuples{
 			{tree.NewDTimeTZFromOffset(timeofday.FromInt(0), 0), -1},
@@ -476,7 +473,7 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{3.0, 3.0, 3.0, 3.0, 3.0, duration.MakeDuration(3, 3, 3)},
 		},
 		typs:    []*types.T{types.Int, types.Int2, types.Int4, types.Int, types.Decimal, types.Float, types.Interval},
-		aggFns:  []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_AVG, execinfrapb.AggregatorSpec_AVG, execinfrapb.AggregatorSpec_AVG, execinfrapb.AggregatorSpec_AVG, execinfrapb.AggregatorSpec_AVG, execinfrapb.AggregatorSpec_AVG},
+		aggFns:  []execinfrapb.AggregatorSpec_Func{execinfrapb.Avg, execinfrapb.Avg, execinfrapb.Avg, execinfrapb.Avg, execinfrapb.Avg, execinfrapb.Avg},
 		aggCols: [][]uint32{{1}, {2}, {3}, {4}, {5}, {6}},
 		name:    "AVG on all types",
 	},
@@ -501,24 +498,24 @@ var aggregatorsTestCases = []aggregatorTestCase{
 			{nil},
 		},
 		typs:      []*types.T{types.Int, types.Bytes},
-		aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_CONCAT_AGG},
+		aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.ConcatAgg},
 		groupCols: []uint32{0},
 		aggCols:   [][]uint32{{1}},
 	},
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_AVG,
-			execinfrapb.AggregatorSpec_COUNT_ROWS,
-			execinfrapb.AggregatorSpec_COUNT,
-			execinfrapb.AggregatorSpec_SUM,
-			execinfrapb.AggregatorSpec_SUM_INT,
-			execinfrapb.AggregatorSpec_MIN,
-			execinfrapb.AggregatorSpec_MAX,
-			execinfrapb.AggregatorSpec_BOOL_AND,
-			execinfrapb.AggregatorSpec_BOOL_OR,
-			execinfrapb.AggregatorSpec_CONCAT_AGG,
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.Avg,
+			execinfrapb.CountRows,
+			execinfrapb.Count,
+			execinfrapb.Sum,
+			execinfrapb.SumInt,
+			execinfrapb.Min,
+			execinfrapb.Max,
+			execinfrapb.BoolAnd,
+			execinfrapb.BoolOr,
+			execinfrapb.ConcatAgg,
 		},
 		aggCols: [][]uint32{{0}, {4}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {3}, {3}, {4}},
 		typs:    []*types.T{types.Int, types.Decimal, types.Int, types.Bool, types.Bytes},
@@ -543,18 +540,18 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	// Test case for null handling.
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_COUNT_ROWS,
-			execinfrapb.AggregatorSpec_COUNT,
-			execinfrapb.AggregatorSpec_SUM,
-			execinfrapb.AggregatorSpec_SUM_INT,
-			execinfrapb.AggregatorSpec_MIN,
-			execinfrapb.AggregatorSpec_MAX,
-			execinfrapb.AggregatorSpec_AVG,
-			execinfrapb.AggregatorSpec_BOOL_AND,
-			execinfrapb.AggregatorSpec_BOOL_OR,
-			execinfrapb.AggregatorSpec_CONCAT_AGG,
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.CountRows,
+			execinfrapb.Count,
+			execinfrapb.Sum,
+			execinfrapb.SumInt,
+			execinfrapb.Min,
+			execinfrapb.Max,
+			execinfrapb.Avg,
+			execinfrapb.BoolAnd,
+			execinfrapb.BoolOr,
+			execinfrapb.ConcatAgg,
 		},
 		aggCols: [][]uint32{{0}, {1}, {}, {1}, {1}, {2}, {2}, {2}, {1}, {3}, {3}, {4}},
 		typs:    []*types.T{types.Int, types.Decimal, types.Int, types.Bool, types.Bytes},
@@ -576,11 +573,11 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	// Test DISTINCT aggregation.
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_COUNT,
-			execinfrapb.AggregatorSpec_COUNT,
-			execinfrapb.AggregatorSpec_SUM_INT,
-			execinfrapb.AggregatorSpec_SUM_INT,
+			execinfrapb.AnyNotNull,
+			execinfrapb.Count,
+			execinfrapb.Count,
+			execinfrapb.SumInt,
+			execinfrapb.SumInt,
 		},
 		aggCols:     [][]uint32{{0}, {1}, {1}, {1}, {1}},
 		aggDistinct: []bool{false, false, true, false, true},
@@ -605,9 +602,9 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	// Test aggregation with FILTERs.
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_COUNT_ROWS,
-			execinfrapb.AggregatorSpec_SUM_INT,
+			execinfrapb.AnyNotNull,
+			execinfrapb.CountRows,
+			execinfrapb.SumInt,
 		},
 		aggCols:   [][]uint32{{0}, {}, {1}},
 		aggFilter: []int{tree.NoColumnIdx, 2, 2},
@@ -632,9 +629,9 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	// Test aggregation with FILTERs when the whole groups are filtered out.
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_COUNT_ROWS,
-			execinfrapb.AggregatorSpec_SUM_INT,
+			execinfrapb.AnyNotNull,
+			execinfrapb.CountRows,
+			execinfrapb.SumInt,
 		},
 		aggCols:   [][]uint32{{0}, {}, {1}},
 		aggFilter: []int{tree.NoColumnIdx, 2, 2},
@@ -660,13 +657,13 @@ var aggregatorsTestCases = []aggregatorTestCase{
 	// Test aggregation with FILTERs and DISTINCTs intertwined.
 	{
 		aggFns: []execinfrapb.AggregatorSpec_Func{
-			execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-			execinfrapb.AggregatorSpec_COUNT,
-			execinfrapb.AggregatorSpec_COUNT,
-			execinfrapb.AggregatorSpec_COUNT,
-			execinfrapb.AggregatorSpec_SUM_INT,
-			execinfrapb.AggregatorSpec_SUM_INT,
-			execinfrapb.AggregatorSpec_SUM_INT,
+			execinfrapb.AnyNotNull,
+			execinfrapb.Count,
+			execinfrapb.Count,
+			execinfrapb.Count,
+			execinfrapb.SumInt,
+			execinfrapb.SumInt,
+			execinfrapb.SumInt,
 		},
 		aggCols:     [][]uint32{{0}, {1}, {1}, {1}, {1}, {1}, {1}},
 		aggDistinct: []bool{false, false, true, true, false, true, true},
@@ -831,12 +828,12 @@ func TestAggregatorRandom(t *testing.T) {
 					tc := aggregatorTestCase{
 						typs: typs,
 						aggFns: []execinfrapb.AggregatorSpec_Func{
-							execinfrapb.AggregatorSpec_COUNT_ROWS,
-							execinfrapb.AggregatorSpec_COUNT,
-							execinfrapb.AggregatorSpec_SUM,
-							execinfrapb.AggregatorSpec_MIN,
-							execinfrapb.AggregatorSpec_MAX,
-							execinfrapb.AggregatorSpec_AVG,
+							execinfrapb.CountRows,
+							execinfrapb.Count,
+							execinfrapb.Sum,
+							execinfrapb.Min,
+							execinfrapb.Max,
+							execinfrapb.Avg,
 						},
 						groupCols: []uint32{0},
 						aggCols:   [][]uint32{{}, {1}, {1}, {1}, {1}, {1}},
@@ -930,7 +927,7 @@ func benchmarkAggregateFunction(
 			BytesFixedLength: bytesFixedLength,
 		})
 	}
-	if aggFn == execinfrapb.AggregatorSpec_SUM_INT {
+	if aggFn == execinfrapb.SumInt {
 		// Integer summation of random Int64 values can lead
 		// to overflow, and we will panic. To go around it, we
 		// restrict the range of values.
@@ -1036,7 +1033,7 @@ func benchmarkAggregateFunction(
 // benchmark is measuring the performance of the aggregators themselves
 // depending on the parameters of the input.
 func BenchmarkAggregator(b *testing.B) {
-	aggFn := execinfrapb.AggregatorSpec_MIN
+	aggFn := execinfrapb.Min
 	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
 	if testing.Short() {
@@ -1074,11 +1071,11 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 		for _, agg := range aggTypes {
 			var aggInputTypes []*types.T
 			switch aggFn {
-			case execinfrapb.AggregatorSpec_BOOL_AND, execinfrapb.AggregatorSpec_BOOL_OR:
+			case execinfrapb.BoolAnd, execinfrapb.BoolOr:
 				aggInputTypes = []*types.T{types.Bool}
-			case execinfrapb.AggregatorSpec_CONCAT_AGG:
+			case execinfrapb.ConcatAgg:
 				aggInputTypes = []*types.T{types.Bytes}
-			case execinfrapb.AggregatorSpec_COUNT_ROWS:
+			case execinfrapb.CountRows:
 			default:
 				aggInputTypes = []*types.T{types.Int}
 			}
@@ -1093,7 +1090,7 @@ func BenchmarkAllOptimizedAggregateFunctions(b *testing.B) {
 }
 
 func BenchmarkDistinctAggregation(b *testing.B) {
-	aggFn := execinfrapb.AggregatorSpec_COUNT
+	aggFn := execinfrapb.Count
 	for _, agg := range aggTypes {
 		for _, numInputRows := range []int{32, 32 * coldata.BatchSize()} {
 			for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize()} {

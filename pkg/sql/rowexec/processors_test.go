@@ -260,69 +260,69 @@ func TestAggregatorSpecAggregationEquals(t *testing.T) {
 	}{
 		// Func tests.
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull},
 			expected: true,
 		},
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_AVG},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.Avg},
 			expected: false,
 		},
 
 		// ColIdx tests.
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, ColIdx: []uint32{1, 2}},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, ColIdx: []uint32{1, 2}},
 			expected: true,
 		},
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1}},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, ColIdx: []uint32{1}},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 2}},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, ColIdx: []uint32{1, 3}},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, ColIdx: []uint32{1, 2}},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, ColIdx: []uint32{1, 3}},
 			expected: false,
 		},
 
 		// FilterColIdx tests.
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, FilterColIdx: &colIdx1},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, FilterColIdx: &colIdx1},
 			expected: true,
 		},
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, FilterColIdx: &colIdx1},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull},
 			expected: false,
 		},
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx1},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, FilterColIdx: &colIdx2},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, FilterColIdx: &colIdx1},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, FilterColIdx: &colIdx2},
 			expected: false,
 		},
 
 		// Distinct tests.
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, Distinct: true},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, Distinct: true},
 			expected: true,
 		},
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, Distinct: false},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, Distinct: false},
 			expected: true,
 		},
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: false},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, Distinct: false},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull},
 			expected: true,
 		},
 		{
-			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL, Distinct: true},
-			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AggregatorSpec_ANY_NOT_NULL},
+			a:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull, Distinct: true},
+			b:        execinfrapb.AggregatorSpec_Aggregation{Func: execinfrapb.AnyNotNull},
 			expected: false,
 		},
 	} {

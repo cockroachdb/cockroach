@@ -399,16 +399,16 @@ func BenchmarkAggregation(b *testing.B) {
 	const numRows = 1000
 
 	aggFuncs := []execinfrapb.AggregatorSpec_Func{
-		execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-		execinfrapb.AggregatorSpec_AVG,
-		execinfrapb.AggregatorSpec_COUNT,
-		execinfrapb.AggregatorSpec_MAX,
-		execinfrapb.AggregatorSpec_MIN,
-		execinfrapb.AggregatorSpec_STDDEV,
-		execinfrapb.AggregatorSpec_SUM,
-		execinfrapb.AggregatorSpec_SUM_INT,
-		execinfrapb.AggregatorSpec_VARIANCE,
-		execinfrapb.AggregatorSpec_XOR_AGG,
+		execinfrapb.AnyNotNull,
+		execinfrapb.Avg,
+		execinfrapb.Count,
+		execinfrapb.Max,
+		execinfrapb.Min,
+		execinfrapb.Stddev,
+		execinfrapb.Sum,
+		execinfrapb.SumInt,
+		execinfrapb.Variance,
+		execinfrapb.XorAgg,
 	}
 
 	ctx := context.Background()
@@ -454,7 +454,7 @@ func BenchmarkCountRows(b *testing.B) {
 	spec := &execinfrapb.AggregatorSpec{
 		Aggregations: []execinfrapb.AggregatorSpec_Aggregation{
 			{
-				Func: execinfrapb.AggregatorSpec_COUNT_ROWS,
+				Func: execinfrapb.CountRows,
 			},
 		},
 	}
@@ -526,16 +526,16 @@ func benchmarkAggregationWithGrouping(b *testing.B, numOrderedCols int) {
 	var allOrderedGroupCols = [2]uint32{0, 1}
 
 	aggFuncs := []execinfrapb.AggregatorSpec_Func{
-		execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-		execinfrapb.AggregatorSpec_AVG,
-		execinfrapb.AggregatorSpec_COUNT,
-		execinfrapb.AggregatorSpec_MAX,
-		execinfrapb.AggregatorSpec_MIN,
-		execinfrapb.AggregatorSpec_STDDEV,
-		execinfrapb.AggregatorSpec_SUM,
-		execinfrapb.AggregatorSpec_SUM_INT,
-		execinfrapb.AggregatorSpec_VARIANCE,
-		execinfrapb.AggregatorSpec_XOR_AGG,
+		execinfrapb.AnyNotNull,
+		execinfrapb.Avg,
+		execinfrapb.Count,
+		execinfrapb.Max,
+		execinfrapb.Min,
+		execinfrapb.Stddev,
+		execinfrapb.Sum,
+		execinfrapb.SumInt,
+		execinfrapb.Variance,
+		execinfrapb.XorAgg,
 	}
 
 	ctx := context.Background()
