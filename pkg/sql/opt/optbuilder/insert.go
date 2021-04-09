@@ -656,7 +656,7 @@ func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
 	mb.addCheckConstraintCols()
 
 	// Project partial index PUT boolean columns.
-	mb.projectPartialIndexPutCols(mb.outScope)
+	mb.projectPartialIndexPutCols()
 
 	mb.buildUniqueChecksForInsert()
 
@@ -880,9 +880,9 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// mb.fetchScope will be nil. Therefore, we only project partial index
 	// PUT columns.
 	if mb.needExistingRows() {
-		mb.projectPartialIndexPutAndDelCols(mb.outScope, mb.fetchScope)
+		mb.projectPartialIndexPutAndDelCols()
 	} else {
-		mb.projectPartialIndexPutCols(mb.outScope)
+		mb.projectPartialIndexPutCols()
 	}
 
 	mb.buildUniqueChecksForUpsert()
