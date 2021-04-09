@@ -34,8 +34,8 @@ func TestDefaultAggregateFunc(t *testing.T) {
 	testCases := []aggregatorTestCase{
 		{
 			aggFns: []execinfrapb.AggregatorSpec_Func{
-				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-				execinfrapb.AggregatorSpec_STRING_AGG,
+				execinfrapb.AnyNotNull,
+				execinfrapb.StringAgg,
 			},
 			input: colexectestutils.Tuples{
 				{nil, "a", "1"},
@@ -58,8 +58,8 @@ func TestDefaultAggregateFunc(t *testing.T) {
 		},
 		{
 			aggFns: []execinfrapb.AggregatorSpec_Func{
-				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-				execinfrapb.AggregatorSpec_STRING_AGG,
+				execinfrapb.AnyNotNull,
+				execinfrapb.StringAgg,
 			},
 			input: colexectestutils.Tuples{
 				{nil, "a"},
@@ -83,10 +83,10 @@ func TestDefaultAggregateFunc(t *testing.T) {
 		},
 		{
 			aggFns: []execinfrapb.AggregatorSpec_Func{
-				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-				execinfrapb.AggregatorSpec_JSON_AGG,
-				execinfrapb.AggregatorSpec_JSON_AGG,
-				execinfrapb.AggregatorSpec_STRING_AGG,
+				execinfrapb.AnyNotNull,
+				execinfrapb.JSONAgg,
+				execinfrapb.JSONAgg,
+				execinfrapb.StringAgg,
 			},
 			typs: []*types.T{types.Int, types.Jsonb, types.String},
 			input: colexectestutils.Tuples{
@@ -109,8 +109,8 @@ func TestDefaultAggregateFunc(t *testing.T) {
 		},
 		{
 			aggFns: []execinfrapb.AggregatorSpec_Func{
-				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-				execinfrapb.AggregatorSpec_XOR_AGG,
+				execinfrapb.AnyNotNull,
+				execinfrapb.XorAgg,
 			},
 			input: colexectestutils.Tuples{
 				{nil, 3},
@@ -166,7 +166,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 }
 
 func BenchmarkDefaultAggregateFunction(b *testing.B) {
-	aggFn := execinfrapb.AggregatorSpec_STRING_AGG
+	aggFn := execinfrapb.StringAgg
 	for _, agg := range aggTypes {
 		for _, numInputRows := range []int{32, 32 * coldata.BatchSize()} {
 			for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize()} {

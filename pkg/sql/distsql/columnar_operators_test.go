@@ -36,51 +36,51 @@ const nullProbability = 0.2
 const randTypesProbability = 0.5
 
 var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
-	execinfrapb.AggregatorSpec_ANY_NOT_NULL:         1,
-	execinfrapb.AggregatorSpec_AVG:                  1,
-	execinfrapb.AggregatorSpec_BOOL_AND:             1,
-	execinfrapb.AggregatorSpec_BOOL_OR:              1,
-	execinfrapb.AggregatorSpec_CONCAT_AGG:           1,
-	execinfrapb.AggregatorSpec_COUNT:                1,
-	execinfrapb.AggregatorSpec_MAX:                  1,
-	execinfrapb.AggregatorSpec_MIN:                  1,
-	execinfrapb.AggregatorSpec_STDDEV:               1,
-	execinfrapb.AggregatorSpec_SUM:                  1,
-	execinfrapb.AggregatorSpec_SUM_INT:              1,
-	execinfrapb.AggregatorSpec_VARIANCE:             1,
-	execinfrapb.AggregatorSpec_XOR_AGG:              1,
-	execinfrapb.AggregatorSpec_COUNT_ROWS:           0,
-	execinfrapb.AggregatorSpec_SQRDIFF:              1,
-	execinfrapb.AggregatorSpec_FINAL_VARIANCE:       3,
-	execinfrapb.AggregatorSpec_FINAL_STDDEV:         3,
-	execinfrapb.AggregatorSpec_ARRAY_AGG:            1,
-	execinfrapb.AggregatorSpec_JSON_AGG:             1,
-	execinfrapb.AggregatorSpec_JSONB_AGG:            1,
-	execinfrapb.AggregatorSpec_STRING_AGG:           2,
-	execinfrapb.AggregatorSpec_BIT_AND:              1,
-	execinfrapb.AggregatorSpec_BIT_OR:               1,
-	execinfrapb.AggregatorSpec_CORR:                 2,
-	execinfrapb.AggregatorSpec_PERCENTILE_DISC_IMPL: 2,
-	execinfrapb.AggregatorSpec_PERCENTILE_CONT_IMPL: 2,
-	execinfrapb.AggregatorSpec_JSON_OBJECT_AGG:      2,
-	execinfrapb.AggregatorSpec_JSONB_OBJECT_AGG:     2,
-	execinfrapb.AggregatorSpec_VAR_POP:              1,
-	execinfrapb.AggregatorSpec_STDDEV_POP:           1,
-	execinfrapb.AggregatorSpec_ST_MAKELINE:          1,
-	execinfrapb.AggregatorSpec_ST_EXTENT:            1,
-	execinfrapb.AggregatorSpec_ST_UNION:             1,
-	execinfrapb.AggregatorSpec_ST_COLLECT:           1,
-	execinfrapb.AggregatorSpec_COVAR_POP:            2,
-	execinfrapb.AggregatorSpec_COVAR_SAMP:           2,
-	execinfrapb.AggregatorSpec_REGR_INTERCEPT:       2,
-	execinfrapb.AggregatorSpec_REGR_R2:              2,
-	execinfrapb.AggregatorSpec_REGR_SLOPE:           2,
-	execinfrapb.AggregatorSpec_REGR_SXX:             2,
-	execinfrapb.AggregatorSpec_REGR_SXY:             2,
-	execinfrapb.AggregatorSpec_REGR_SYY:             2,
-	execinfrapb.AggregatorSpec_REGR_COUNT:           2,
-	execinfrapb.AggregatorSpec_REGR_AVGX:            2,
-	execinfrapb.AggregatorSpec_REGR_AVGY:            2,
+	execinfrapb.AnyNotNull:         1,
+	execinfrapb.Avg:                1,
+	execinfrapb.BoolAnd:            1,
+	execinfrapb.BoolOr:             1,
+	execinfrapb.ConcatAgg:          1,
+	execinfrapb.Count:              1,
+	execinfrapb.Max:                1,
+	execinfrapb.Min:                1,
+	execinfrapb.Stddev:             1,
+	execinfrapb.Sum:                1,
+	execinfrapb.SumInt:             1,
+	execinfrapb.Variance:           1,
+	execinfrapb.XorAgg:             1,
+	execinfrapb.CountRows:          0,
+	execinfrapb.Sqrdiff:            1,
+	execinfrapb.FinalVariance:      3,
+	execinfrapb.FinalStddev:        3,
+	execinfrapb.ArrayAgg:           1,
+	execinfrapb.JSONAgg:            1,
+	execinfrapb.JSONBAgg:           1,
+	execinfrapb.StringAgg:          2,
+	execinfrapb.BitAnd:             1,
+	execinfrapb.BitOr:              1,
+	execinfrapb.Corr:               2,
+	execinfrapb.PercentileDiscImpl: 2,
+	execinfrapb.PercentileContImpl: 2,
+	execinfrapb.JSONObjectAgg:      2,
+	execinfrapb.JSONBObjectAgg:     2,
+	execinfrapb.VarPop:             1,
+	execinfrapb.StddevPop:          1,
+	execinfrapb.StMakeline:         1,
+	execinfrapb.StExtent:           1,
+	execinfrapb.StUnion:            1,
+	execinfrapb.StCollect:          1,
+	execinfrapb.CovarPop:           2,
+	execinfrapb.CovarSamp:          2,
+	execinfrapb.RegrIntercept:      2,
+	execinfrapb.RegrR2:             2,
+	execinfrapb.RegrSlope:          2,
+	execinfrapb.RegrSxx:            2,
+	execinfrapb.RegrSxy:            2,
+	execinfrapb.RegrSyy:            2,
+	execinfrapb.RegrCount:          2,
+	execinfrapb.RegrAvgx:           2,
+	execinfrapb.RegrAvgy:           2,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
@@ -129,11 +129,11 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 				continue
 			}
 			switch aggFn {
-			case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
+			case execinfrapb.AnyNotNull:
 				// We skip ANY_NOT_NULL aggregate function because it returns
 				// non-deterministic results.
-			case execinfrapb.AggregatorSpec_PERCENTILE_DISC_IMPL,
-				execinfrapb.AggregatorSpec_PERCENTILE_CONT_IMPL:
+			case execinfrapb.PercentileDiscImpl,
+				execinfrapb.PercentileContImpl:
 				// We skip percentile functions because those can only be
 				// planned as window functions.
 			default:
@@ -209,12 +209,12 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 								// checking, so we hard-code an exception here.
 								invalid := false
 								switch aggFn {
-								case execinfrapb.AggregatorSpec_CONCAT_AGG,
-									execinfrapb.AggregatorSpec_STRING_AGG,
-									execinfrapb.AggregatorSpec_ST_MAKELINE,
-									execinfrapb.AggregatorSpec_ST_EXTENT,
-									execinfrapb.AggregatorSpec_ST_UNION,
-									execinfrapb.AggregatorSpec_ST_COLLECT:
+								case execinfrapb.ConcatAgg,
+									execinfrapb.StringAgg,
+									execinfrapb.StMakeline,
+									execinfrapb.StExtent,
+									execinfrapb.StUnion,
+									execinfrapb.StCollect:
 									for _, typ := range aggFnInputTypes {
 										if typ.Family() == types.TupleFamily {
 											invalid = true
