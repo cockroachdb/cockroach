@@ -31,8 +31,7 @@ import (
 // cost.
 func BenchmarkFlowSetup(b *testing.B) {
 	defer leaktest.AfterTest(b)()
-	logScope := log.Scope(b)
-	defer logScope.Close(b)
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	s, conn, _ := serverutils.StartServer(b, base.TestServerArgs{

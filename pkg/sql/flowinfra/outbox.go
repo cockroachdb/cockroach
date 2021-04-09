@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-const outboxBufRows = 16
+// OutboxBufRows is the maximum number of rows that are buffered by the Outbox
+// before flushing.
+const OutboxBufRows = 16
 const outboxFlushPeriod = 100 * time.Microsecond
 
 type flowStream interface {
@@ -38,7 +40,7 @@ type flowStream interface {
 
 // Outbox implements an outgoing mailbox as a RowReceiver that receives rows and
 // sends them to a gRPC stream. Its core logic runs in a goroutine. We send rows
-// when we accumulate outboxBufRows or every outboxFlushPeriod (whichever comes
+// when we accumulate OutboxBufRows or every outboxFlushPeriod (whichever comes
 // first).
 type Outbox struct {
 	// RowChannel implements the RowReceiver interface.
@@ -96,18 +98,6 @@ func NewOutbox(
 	return m
 }
 
-// NewOutboxSyncFlowStream sets up an outbox for the special "sync flow"
-// stream. The flow context should be provided via SetFlowCtx when it is
-// available.
-func NewOutboxSyncFlowStream(stream execinfrapb.DistSQL_RunSyncFlowServer) *Outbox {
-	return &Outbox{stream: stream}
-}
-
-// SetFlowCtx sets the flow context for the Outbox.
-func (m *Outbox) SetFlowCtx(flowCtx *execinfra.FlowCtx) {
-	m.flowCtx = flowCtx
-}
-
 // Init initializes the Outbox.
 func (m *Outbox) Init(typs []*types.T) {
 	if typs == nil {
@@ -119,7 +109,7 @@ func (m *Outbox) Init(typs []*types.T) {
 	m.encoder.Init(typs)
 }
 
-// addRow encodes a row into rowBuf. If enough rows were accumulated, flush() is
+// AddRow encodes a row into rowBuf. If enough rows were accumulated, flush() is
 // called.
 //
 // If an error is returned, the outbox's stream might or might not be usable; if
@@ -127,7 +117,7 @@ func (m *Outbox) Init(typs []*types.T) {
 // communication error, in which case the other side of the stream should get it
 // too, or it might be an encoding error, in which case we've forwarded it on
 // the stream.
-func (m *Outbox) addRow(
+func (m *Outbox) AddRow(
 	ctx context.Context, row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
 ) error {
 	mustFlush := false
@@ -149,7 +139,7 @@ func (m *Outbox) addRow(
 	}
 	m.numRows++
 	var flushErr error
-	if m.numRows >= outboxBufRows || mustFlush {
+	if m.numRows >= OutboxBufRows || mustFlush {
 		flushErr = m.flush(ctx)
 	}
 	if encodingErr != nil {
@@ -199,7 +189,7 @@ func (m *Outbox) flush(ctx context.Context) error {
 }
 
 // mainLoop reads from m.RowChannel and writes to the output stream through
-// addRow()/flush() until the producer doesn't have any more data to send or an
+// AddRow()/flush() until the producer doesn't have any more data to send or an
 // error happened.
 //
 // If the consumer asks the producer to drain, mainLoop() will relay this
@@ -310,7 +300,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 					span.Finish()
 					spanFinished = true
 					if trace := execinfra.GetTraceData(ctx); trace != nil {
-						err := m.addRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
+						err := m.AddRow(ctx, nil, &execinfrapb.ProducerMetadata{TraceData: trace})
 						if err != nil {
 							return err
 						}
@@ -320,7 +310,7 @@ func (m *Outbox) mainLoop(ctx context.Context) error {
 			}
 			if !draining || msg.Meta != nil {
 				// If we're draining, we ignore all the rows and just send metadata.
-				err := m.addRow(ctx, msg.Row, msg.Meta)
+				err := m.AddRow(ctx, msg.Row, msg.Meta)
 				if err != nil {
 					return err
 				}

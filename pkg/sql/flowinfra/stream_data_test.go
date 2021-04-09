@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package flowinfra
+package flowinfra_test
 
 import (
 	"context"
@@ -18,9 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -28,7 +30,7 @@ import (
 // records.
 func testGetDecodedRows(
 	tb testing.TB,
-	sd *StreamDecoder,
+	sd *flowinfra.StreamDecoder,
 	decodedRows rowenc.EncDatumRows,
 	metas []execinfrapb.ProducerMetadata,
 ) (rowenc.EncDatumRows, []execinfrapb.ProducerMetadata) {
@@ -50,8 +52,8 @@ func testGetDecodedRows(
 }
 
 func testRowStream(tb testing.TB, rng *rand.Rand, types []*types.T, records []rowOrMeta) {
-	var se StreamEncoder
-	var sd StreamDecoder
+	var se flowinfra.StreamEncoder
+	var sd flowinfra.StreamDecoder
 
 	var decodedRows rowenc.EncDatumRows
 	var metas []execinfrapb.ProducerMetadata
@@ -102,6 +104,7 @@ type rowOrMeta struct {
 // through a StreamEncoder and a StreamDecoder
 func TestStreamEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 100; test++ {
 		rowLen := rng.Intn(20)
@@ -130,8 +133,9 @@ func TestStreamEncodeDecode(t *testing.T) {
 
 func TestEmptyStreamEncodeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var se StreamEncoder
-	var sd StreamDecoder
+	defer log.Scope(t).Close(t)
+	var se flowinfra.StreamEncoder
+	var sd flowinfra.StreamDecoder
 	msg := se.FormMessage(context.Background())
 	if err := sd.AddMessage(context.Background(), msg); err != nil {
 		t.Fatal(err)
@@ -147,6 +151,7 @@ func TestEmptyStreamEncodeDecode(t *testing.T) {
 }
 
 func BenchmarkStreamEncoder(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	numRows := 1 << 16
 
 	for _, numCols := range []int{1, 4, 16, 64} {
@@ -170,12 +175,12 @@ func BenchmarkStreamEncoder(b *testing.B) {
 						}
 					}
 				}
-				var se StreamEncoder
+				var se flowinfra.StreamEncoder
 				se.Init(cols)
 				b.StartTimer()
 
 				// Add rows to the StreamEncoder until the input source is exhausted.
-				// "Flush" every outboxBufRows.
+				// "Flush" every OutboxBufRows.
 				for j := 0; ; j++ {
 					row, _ := input.Next()
 					if row == nil {
@@ -184,7 +189,7 @@ func BenchmarkStreamEncoder(b *testing.B) {
 					if err := se.AddRow(row); err != nil {
 						b.Fatal(err)
 					}
-					if j%outboxBufRows == 0 {
+					if j%flowinfra.OutboxBufRows == 0 {
 						// ignore output
 						se.FormMessage(ctx)
 					}
@@ -195,16 +200,17 @@ func BenchmarkStreamEncoder(b *testing.B) {
 }
 
 func BenchmarkStreamDecoder(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 
 	for _, numCols := range []int{1, 4, 16, 64} {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
-			b.SetBytes(int64(outboxBufRows * numCols * 8))
-			var se StreamEncoder
+			b.SetBytes(int64(flowinfra.OutboxBufRows * numCols * 8))
+			var se flowinfra.StreamEncoder
 			colTypes := rowenc.MakeIntCols(numCols)
 			se.Init(colTypes)
 			inRow := rowenc.MakeIntRows(1, numCols)[0]
-			for i := 0; i < outboxBufRows; i++ {
+			for i := 0; i < flowinfra.OutboxBufRows; i++ {
 				if err := se.AddRow(inRow); err != nil {
 					b.Fatal(err)
 				}
@@ -212,11 +218,11 @@ func BenchmarkStreamDecoder(b *testing.B) {
 			msg := se.FormMessage(ctx)
 
 			for i := 0; i < b.N; i++ {
-				var sd StreamDecoder
+				var sd flowinfra.StreamDecoder
 				if err := sd.AddMessage(ctx, msg); err != nil {
 					b.Fatal(err)
 				}
-				for j := 0; j < outboxBufRows; j++ {
+				for j := 0; j < flowinfra.OutboxBufRows; j++ {
 					row, meta, err := sd.GetRow(nil)
 					if err != nil {
 						b.Fatal(err)
