@@ -854,9 +854,6 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 		// If we're running chaos in this configuration, modify this config.
 		if b.Chaos {
-			// Increase the load generation duration.
-			loadDur = 10 * time.Minute
-
 			// Kill one node at a time.
 			ch := Chaos{
 				Timer:   Periodic{Period: 90 * time.Second, DownTime: 5 * time.Second},
