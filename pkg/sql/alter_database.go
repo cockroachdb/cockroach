@@ -332,7 +332,11 @@ func (p *planner) AlterDatabaseDropRegion(
 		}
 		if len(regions) != 1 {
 			return nil, errors.WithHintf(
-				errors.Newf("cannot drop region %q", dbDesc.RegionConfig.PrimaryRegion),
+				pgerror.Newf(
+					pgcode.InvalidDatabaseDefinition,
+					"cannot drop region %q",
+					dbDesc.RegionConfig.PrimaryRegion,
+				),
 				"You must designate another region as the primary region using "+
 					"ALTER DATABASE %s PRIMARY REGION <region name> or remove all other regions before "+
 					"attempting to drop region %q", dbDesc.GetName(), n.Region,
@@ -425,7 +429,7 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 func (p *planner) checkPrivilegesForRepartitioningRegionalByRowTables(
 	ctx context.Context, dbDesc *dbdesc.Immutable,
 ) error {
-	return p.forEachTableInMultiRegionDatabase(ctx, dbDesc,
+	return p.forEachMutableTableInDatabase(ctx, dbDesc,
 		func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
 			if tbDesc.IsLocalityRegionalByRow() {
 				err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc)
@@ -455,7 +459,7 @@ func removeLocalityConfigFromAllTablesInDB(
 		)
 	}
 	b := p.Txn().NewBatch()
-	if err := p.forEachTableInMultiRegionDatabase(ctx, desc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+	if err := p.forEachMutableTableInDatabase(ctx, desc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
 		// The user must either be an admin or have the requisite privileges.
 		if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
 			return err
@@ -694,7 +698,7 @@ func addDefaultLocalityConfigToAllTables(
 		)
 	}
 	b := p.Txn().NewBatch()
-	if err := p.forEachTableInMultiRegionDatabase(ctx, dbDesc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
+	if err := p.forEachMutableTableInDatabase(ctx, dbDesc, func(ctx context.Context, tbDesc *tabledesc.Mutable) error {
 		if err := p.checkPrivilegesForMultiRegionOp(ctx, tbDesc); err != nil {
 			return err
 		}
@@ -756,7 +760,6 @@ func checkCanConvertTableToMultiRegion(
 			)
 		}
 	}
-	// TODO(#57668): check zone configurations are not set here
 	return nil
 }
 
@@ -772,6 +775,15 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 		[]tree.Name{n.n.PrimaryRegion},
 	)
 	if err != nil {
+		return err
+	}
+
+	// Check we are writing valid zone configurations.
+	if err := params.p.validateAllMultiRegionZoneConfigsInDatabase(
+		params.ctx,
+		&n.desc.Immutable,
+		&zoneConfigForMultiRegionValidatorSetInitialRegion{},
+	); err != nil {
 		return err
 	}
 

@@ -527,13 +527,13 @@ SET override_multi_region_zone_config = true;
 ALTER index regional_by_row@primary CONFIGURE ZONE USING num_replicas = 10;
 SET override_multi_region_zone_config = false
 
-statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@"primary"
+statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@"primary" with field num_replicas populated
 ALTER TABLE regional_by_row SET LOCALITY GLOBAL
 
-statement error extraneous zone configuration for index regional_by_row@"primary"
+statement error extraneous zone configuration for index regional_by_row@"primary" with field num_replicas populated
 SELECT crdb_internal.validate_multi_region_zone_configs()
 
-statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@"primary"
+statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row@"primary" with field num_replicas populated
 ALTER TABLE regional_by_row SET LOCALITY REGIONAL BY ROW
 
 statement ok
@@ -568,7 +568,7 @@ INDEX regional_by_row_as@primary  ALTER INDEX regional_by_row_as@primary CONFIGU
                                   voter_constraints = '[+region=us-east-1]',
                                   lease_preferences = '[[+region=us-east-1]]'
 
-statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row_as@"primary"
+statement error attempting to update zone config which contains an extra zone configuration for index regional_by_row_as@"primary" with field num_replicas populated
 ALTER TABLE regional_by_row_as SET LOCALITY REGIONAL BY ROW
 
 statement ok
@@ -672,3 +672,79 @@ statement ok
 SET override_multi_region_zone_config = true;
 ALTER PARTITION "ca-central-1" OF INDEX regional_by_row@primary CONFIGURE ZONE DISCARD;
 SET override_multi_region_zone_config = false
+
+# Test validation for initial SET PRIMARY REGION
+statement ok
+CREATE DATABASE initial_multiregion_db;
+USE initial_multiregion_db;
+CREATE TABLE tbl (a INT PRIMARY KEY, INDEX a_idx (a));
+ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING gc.ttlseconds = 5;
+ALTER TABLE tbl CONFIGURE ZONE USING gc.ttlseconds = 5;
+ALTER INDEX tbl@a_idx CONFIGURE ZONE USING gc.ttlseconds = 5
+
+statement ok
+ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE initial_multiregion_db
+----
+DATABASE initial_multiregion_db  ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 5,
+                                 num_replicas = 3,
+                                 num_voters = 3,
+                                 constraints = '{+region=us-east-1: 1}',
+                                 voter_constraints = '[+region=us-east-1]',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE tbl
+----
+TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
+           range_min_bytes = 134217728,
+           range_max_bytes = 536870912,
+           gc.ttlseconds = 5,
+           num_replicas = 3,
+           num_voters = 3,
+           constraints = '{+region=us-east-1: 1}',
+           voter_constraints = '[+region=us-east-1]',
+           lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FOR INDEX tbl@a_idx
+----
+INDEX tbl@a_idx  ALTER INDEX tbl@a_idx CONFIGURE ZONE USING
+                 range_min_bytes = 134217728,
+                 range_max_bytes = 536870912,
+                 gc.ttlseconds = 5,
+                 num_replicas = 3,
+                 num_voters = 3,
+                 constraints = '{+region=us-east-1: 1}',
+                 voter_constraints = '[+region=us-east-1]',
+                 lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+ALTER DATABASE initial_multiregion_db DROP REGION "us-east-1";
+ALTER INDEX tbl@a_idx CONFIGURE ZONE USING num_replicas = 10
+
+statement error zone configuration for index tbl@a_idx has field "num_replicas" set which will be overwritten when setting the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
+ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER INDEX tbl@a_idx CONFIGURE ZONE DISCARD;
+ALTER TABLE tbl CONFIGURE ZONE USING num_replicas = 10
+
+statement error zone configuration for table tbl has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
+ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER TABLE tbl CONFIGURE ZONE DISCARD;
+ALTER DATABASE initial_multiregion_db CONFIGURE ZONE USING num_replicas = 10;
+
+statement error zone configuration for database initial_multiregion_db has field "num_replicas" set which will be overwritten when setting the the initial PRIMARY REGION\nHINT: discard the zone config using CONFIGURE ZONE DISCARD before continuing
+ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
+
+statement ok
+ALTER DATABASE initial_multiregion_db CONFIGURE ZONE DISCARD;
+ALTER DATABASE initial_multiregion_db SET PRIMARY REGION "us-east-1"
