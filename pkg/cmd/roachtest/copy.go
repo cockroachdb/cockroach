@@ -14,7 +14,9 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/errors"
@@ -93,9 +95,12 @@ func registerCopy(r *testRegistry) {
 			// can be replaced by https://github.com/golang/go/issues/14468 if
 			// that is ever resolved.
 			type querier interface {
-				QueryRow(query string, args ...interface{}) *gosql.Row
+				QueryRowContext(ctx context.Context, query string, args ...interface{}) *gosql.Row
 			}
-			runCopy := func(qu querier) error {
+			runCopy := func(ctx context.Context, qu querier) error {
+				ctx, cancel := context.WithTimeout(ctx, 10*time.Minute) // avoid infinite internal retries
+				defer cancel()
+
 				for lastID := -1; lastID+1 < rows; {
 					if lastID > 0 {
 						t.Progress(float64(lastID+1) / float64(rows))
@@ -112,7 +117,7 @@ func registerCopy(r *testRegistry) {
 						ORDER BY id DESC
 						LIMIT 1`,
 						lastID, rowsPerInsert)
-					if err := qu.QueryRow(q).Scan(&lastID); err != nil {
+					if err := qu.QueryRowContext(ctx, q).Scan(&lastID); err != nil {
 						return err
 					}
 				}
@@ -121,9 +126,17 @@ func registerCopy(r *testRegistry) {
 
 			var err error
 			if inTxn {
-				err = crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error { return runCopy(tx) })
+				attempt := 0
+				err = crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+					attempt++
+					if attempt > 5 {
+						return errors.Errorf("aborting after %v failed attempts", attempt-1)
+					}
+					t.Status(fmt.Sprintf("copying (attempt %v)", attempt))
+					return runCopy(ctx, tx)
+				})
 			} else {
-				err = runCopy(db)
+				err = runCopy(ctx, db)
 			}
 			if err != nil {
 				t.Fatalf("failed to copy rows: %s", err)
@@ -134,8 +147,8 @@ func registerCopy(r *testRegistry) {
 			}
 			rc := rangeCount()
 			t.l.Printf("range count after copy = %d\n", rc)
-			highExp := (rows * rowEstimate) / rangeMinBytes
 			lowExp := (rows * rowEstimate) / rangeMaxBytes
+			highExp := int(math.Ceil(float64(rows*rowEstimate) / float64(rangeMinBytes)))
 			if rc > highExp || rc < lowExp {
 				return errors.Errorf("expected range count for table between %d and %d, found %d",
 					lowExp, highExp, rc)
@@ -145,17 +158,31 @@ func registerCopy(r *testRegistry) {
 		m.Wait()
 	}
 
-	const rows = int(1e7)
-	const numNodes = 9
+	// We use a smaller dataset with a txn, to have a very large margin to the
+	// commit deadline (5 minutes). Otherwise, if the txn takes longer than
+	// usual (for whatever reason) and triggers a RETRY_COMMIT_DEADLINE_EXCEEDED
+	// error, the retry is likely to 1) take longer due to e.g. intent handling,
+	// and 2) have a shorter deadline due to existing table descriptor leases.
+	// If the margin is too small, the retries will always exceed the deadline
+	// and keep retrying forever. See:
+	// https://github.com/cockroachdb/cockroach/issues/62470
+	testcases := []struct {
+		rows  int
+		nodes int
+		txn   bool
+	}{
+		{rows: int(1e6), nodes: 9, txn: false},
+		{rows: int(1e5), nodes: 5, txn: true},
+	}
 
-	for _, inTxn := range []bool{true, false} {
-		inTxn := inTxn
+	for _, tc := range testcases {
+		tc := tc
 		r.Add(testSpec{
-			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, numNodes, inTxn),
+			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
 			Owner:   OwnerKV,
-			Cluster: makeClusterSpec(numNodes),
+			Cluster: makeClusterSpec(tc.nodes),
 			Run: func(ctx context.Context, t *test, c *cluster) {
-				runCopy(ctx, t, c, rows, inTxn)
+				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},
 		})
 	}
