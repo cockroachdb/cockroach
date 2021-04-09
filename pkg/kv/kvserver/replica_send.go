@@ -472,7 +472,7 @@ func (r *Replica) handleInvalidLeaseError(
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	var ok bool
-	ok, update = r.canServeFollowerReadRLocked(ctx, ba, pErr.GoError())
+	ok = r.canServeFollowerReadRLocked(ctx, ba, pErr.GoError())
 	if ok {
 		// Follower read possible. Retry command.
 		return nil

@@ -75,7 +75,7 @@ func (u replicaUpdate) apply(ctx context.Context, r *Replica) {
 // accepted as a follower read.
 func (r *Replica) canServeFollowerReadRLocked(
 	ctx context.Context, ba *roachpb.BatchRequest, err error,
-) (bool, replicaUpdate) {
+) bool {
 	var lErr *roachpb.NotLeaseHolderError
 	eligible := errors.As(err, &lErr) &&
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
@@ -84,23 +84,23 @@ func (r *Replica) canServeFollowerReadRLocked(
 
 	if !eligible {
 		// We couldn't do anything with the error, propagate it.
-		return false, replicaUpdate{}
+		return false
 	}
 
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
-		return false, replicaUpdate{}
+		return false
 	}
 
 	switch typ := repDesc.GetType(); typ {
 	case roachpb.VOTER_FULL, roachpb.VOTER_INCOMING, roachpb.NON_VOTER:
 	default:
 		log.Eventf(ctx, "%s replicas cannot serve follower reads", typ)
-		return false, replicaUpdate{}
+		return false
 	}
 
 	requiredFrontier := ba.Txn.RequiredFrontier()
-	maxClosed, _, update := r.maxClosedRLocked(ctx, requiredFrontier /* sufficient */)
+	maxClosed, _ := r.maxClosedRLocked(ctx, requiredFrontier /* sufficient */)
 	canServeFollowerRead := requiredFrontier.LessEq(maxClosed)
 	tsDiff := requiredFrontier.GoTime().Sub(maxClosed.GoTime())
 	if !canServeFollowerRead {
@@ -124,7 +124,7 @@ func (r *Replica) canServeFollowerReadRLocked(
 				r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
 			)
 		}
-		return false, update
+		return false
 	}
 
 	// This replica can serve this read!
@@ -133,7 +133,7 @@ func (r *Replica) canServeFollowerReadRLocked(
 	// serve reads for that and smaller timestamps forever.
 	log.Eventf(ctx, "%s; query timestamp below closed timestamp by %s", kvbase.FollowerReadServingMsg, -tsDiff)
 	r.store.metrics.FollowerReadsCount.Inc(1)
-	return true, update
+	return true
 }
 
 // maxClosed returns the maximum closed timestamp for this range.
@@ -152,9 +152,8 @@ func (r *Replica) canServeFollowerReadRLocked(
 // mechanism.
 func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 	r.mu.RLock()
-	res, ok, update := r.maxClosedRLocked(ctx, hlc.Timestamp{} /* sufficient */)
-	r.mu.RUnlock()
-	update.apply(ctx, r)
+	defer r.mu.RUnlock()
+	res, ok := r.maxClosedRLocked(ctx, hlc.Timestamp{} /* sufficient */)
 	return res, ok
 }
 
@@ -166,33 +165,18 @@ func (r *Replica) maxClosed(ctx context.Context) (_ hlc.Timestamp, ok bool) {
 // we can avoid consulting the ClosedTimestampReceiver.
 func (r *Replica) maxClosedRLocked(
 	ctx context.Context, sufficient hlc.Timestamp,
-) (_ hlc.Timestamp, ok bool, _ replicaUpdate) {
+) (_ hlc.Timestamp, ok bool) {
 	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
 	lease := r.mu.state.Lease
 	initialMaxClosed := r.mu.initialMaxClosed
-	replicaStateClosed := r.mu.state.RaftClosedTimestamp
-	// Consider the timestamp closed through the side-transport. Such a timestamp
-	// can be in two places:
-	// - r.mu.sideTransportClosedTimestamp
-	// - in the sidetransport.Receiver
-	// We check the former here. We check the latter further down, only if we have
-	// to.
-	var sideTransportClosed hlc.Timestamp
-	sideTransportClosedMaybe, minLAI := r.getSideTransportClosedTimestampRLocked()
-	// We can use sideTransportClosedMaybe if we've applied at least up to minLAI.
-	// The replica could in theory maintain more information about what lower
-	// timestamps the side transport had closed with lower LAIs, but we don't
-	// bother.
-	replicationBehind := appliedLAI < minLAI
-	if !replicationBehind {
-		sideTransportClosed = sideTransportClosedMaybe
-	}
+	raftClosed := r.mu.state.RaftClosedTimestamp
+	sideTransportClosed := r.sideTransportClosedTimestamp.get(ctx, lease.Replica.NodeID, appliedLAI, sufficient)
 
 	// TODO(andrei): In 21.1 we added support for closed timestamps on ranges with
 	// expiration-based leases. Once the old closed timestamp transport is gone in
 	// 21.2, this can go away.
 	if lease.Expiration != nil {
-		return hlc.Timestamp{}, false, replicaUpdate{}
+		return hlc.Timestamp{}, false
 	}
 	// Look at the legacy closed timestamp propagation mechanism.
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
@@ -204,45 +188,15 @@ func (r *Replica) maxClosedRLocked(
 	// timestamp. Otherwise, ignore it. We expect to delete this code soon, but
 	// we keep it around for now to avoid a regression in follower read
 	// availability in mixed v20.2/v21.1 clusters.
-	if replicaStateClosed.IsEmpty() {
+	if raftClosed.IsEmpty() {
 		maxClosed.Forward(lease.Start.ToTimestamp())
 	}
 
 	// Look at the "new" closed timestamp propagation mechanism.
-	maxClosed.Forward(replicaStateClosed)
+	maxClosed.Forward(raftClosed)
 	maxClosed.Forward(sideTransportClosed)
 
-	// If the closed timestamp we know so far is sufficient, we return early
-	// without consulting the ClosedTimestampReceiver.
-	if !sufficient.IsEmpty() && sufficient.LessEq(maxClosed) {
-		return maxClosed, true, replicaUpdate{}
-	}
-
-	// We now look at sidetransport.Receiver, unless replicationBehind was set;
-	// the LAIs in the Receiver are >= the one returned by
-	// getSideTransportClosedTimestampRLocked(), so there's no point in even
-	// checking.
-	var update replicaUpdate
-	// In some tests the lease can be empty, or the ClosedTimestampReceiver might
-	// not be set.
-	if !replicationBehind && !lease.Empty() && r.store.cfg.ClosedTimestampReceiver != nil {
-		otherSideTransportClosed, otherSideTransportLAI :=
-			r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(ctx, r.RangeID, lease.Replica.NodeID)
-		if appliedLAI < otherSideTransportLAI {
-			otherSideTransportClosed = hlc.Timestamp{}
-		}
-		// If otherSideTransportClosed ends up winning, we return it in update so
-		// that the caller copies it into the Replica. Hopefully, future calls with
-		// `sufficient` set don't need to go to the Receiver for a while.
-		if maxClosed.Forward(otherSideTransportClosed) {
-			update = replicaUpdate{
-				sideTransportClosedTimestamp: otherSideTransportClosed,
-				sideTransportClosedLAI:       otherSideTransportLAI,
-			}
-		}
-	}
-
-	return maxClosed, true, update
+	return maxClosed, true
 }
 
 // ClosedTimestampV2 returns the closed timestamp. Unlike MaxClosedTimestamp, it
@@ -257,26 +211,8 @@ func (r *Replica) maxClosedRLocked(
 // timestamp mechanism is deleted. At that point, the two should be equivalent.
 func (r *Replica) ClosedTimestampV2(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	appliedLAI := ctpb.LAI(r.mu.state.LeaseAppliedIndex)
-
-	closed := r.mu.state.RaftClosedTimestamp
-	sideTransportClosedMaybe, minLAI := r.getSideTransportClosedTimestampRLocked()
-	replicationBehind := appliedLAI < minLAI
-	if !replicationBehind {
-		closed.Forward(sideTransportClosedMaybe)
-	}
-
-	// Tests might not be configured with a receiver.
-	if receiver := r.store.cfg.ClosedTimestampReceiver; receiver != nil {
-		otherSideTransportClosed, otherSideTransportLAI :=
-			r.store.cfg.ClosedTimestampReceiver.GetClosedTimestamp(ctx, r.RangeID, r.mu.state.Lease.Replica.NodeID)
-		replicationBehind = appliedLAI < otherSideTransportLAI
-		if !replicationBehind {
-			closed.Forward(otherSideTransportClosed)
-		}
-	}
-
-	return closed
+	leaseholder := r.mu.state.Lease.Replica.NodeID
+	r.mu.RUnlock()
+	return r.sideTransportClosedTimestamp.get(ctx, leaseholder, appliedLAI, hlc.Timestamp{} /* sufficient */)
 }

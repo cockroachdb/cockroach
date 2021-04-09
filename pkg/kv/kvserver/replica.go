@@ -262,6 +262,8 @@ type Replica struct {
 	// metrics about it.
 	tenantLimiter tenantrate.Limiter
 
+	sideTransportClosedTimestamp sideTransportClosedTimestamp
+
 	mu struct {
 		// Protects all fields in the mu struct.
 		syncutil.RWMutex
@@ -406,25 +408,6 @@ type Replica struct {
 		// The minimum allowed ID for this replica. Initialized from
 		// RangeTombstone.NextReplicaID.
 		tombstoneMinReplicaID roachpb.ReplicaID
-		// sideTransportClosedTimestamp stores the closed timestamp that was
-		// communicated by the side transport. The replica can use it if it has
-		// applied all the commands with indexes <= sideTransportCloseTimestampLAI.
-		// Note that there's also state.RaftClosedTimestamp, which might be higher
-		// than this closed timestamp. The maximum across the two can be used.
-		//
-		// TODO(andrei): actually implement and reference also the global storage
-		// for side-transport closed timestamps.
-		//
-		// TODO(andrei): document here and probably elsewhere the relationship
-		// between the sideTransportClosedTimestamp and the raftClosedTimestamp.
-		// Specifically that for a given LAI, the side transport closed timestamp
-		// will always lead the raft closed timestamp, but that across LAIs, the
-		// larger LAI will always include the larger closed timestamp, independent
-		// of the source.
-		sideTransportClosedTimestamp hlc.Timestamp
-		// sideTransportCloseTimestampLAI is the lease-applied index associated
-		// with sideTransportClosedTimestamp.
-		sideTransportCloseTimestampLAI ctpb.LAI
 
 		// The ID of the leader replica within the Raft group. Used to determine
 		// when the leadership changes.
@@ -1233,10 +1216,6 @@ func (r *Replica) checkExecutionCanProceed(
 			r.maybeExtendLeaseAsync(ctx, st)
 		}
 	}()
-	var update replicaUpdate
-	// When we're done, apply the update (if any) after releasing r.mu.
-	defer update.apply(ctx, r)
-
 	now := r.Clock().NowAsClockTimestamp()
 	rSpan, err := keys.Range(ba.Requests)
 	if err != nil {
@@ -1293,7 +1272,7 @@ func (r *Replica) checkExecutionCanProceed(
 			// TODO(nvanbenschoten): once we make this check cheaper
 			// than leaseGoodToGoRLocked, invert these checks.
 			var ok bool
-			ok, update = r.canServeFollowerReadRLocked(ctx, ba, err)
+			ok = r.canServeFollowerReadRLocked(ctx, ba, err)
 			if !ok {
 				return st, err
 			}

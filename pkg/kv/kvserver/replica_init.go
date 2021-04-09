@@ -216,6 +216,10 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		return errors.Wrap(err, "while initializing sideloaded storage")
 	}
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
+
+	r.sideTransportClosedTimestamp.receiver = r.store.cfg.ClosedTimestampReceiver
+	r.sideTransportClosedTimestamp.rngID = desc.RangeID
+
 	return nil
 }
 
