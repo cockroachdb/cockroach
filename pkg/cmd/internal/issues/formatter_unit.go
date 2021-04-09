@@ -21,8 +21,9 @@ var UnitTestFormatter = IssueFormatter{
 		return fmt.Sprintf("%s: %s failed", data.PackageNameShort, data.TestName)
 	},
 	Body: func(r *Renderer, data TemplateData) error {
+		r.Escaped(fmt.Sprintf("%s.%s ", data.PackageNameShort, data.TestName))
 		r.A(
-			fmt.Sprintf("%s.%s failed", data.PackageNameShort, data.TestName), // title
+			"failed",
 			data.URL,
 		)
 		if data.ArtifactsURL != "" {
@@ -32,9 +33,9 @@ var UnitTestFormatter = IssueFormatter{
 				data.ArtifactsURL,
 			)
 		}
-		r.Escaped(" on ")
+		r.Escaped(" on " + data.Branch + " @ ")
 		r.A(
-			fmt.Sprintf("%s @ %s", data.Branch, data.Commit), // title
+			data.Commit,
 			data.CommitURL,
 		)
 		r.Escaped(`:
