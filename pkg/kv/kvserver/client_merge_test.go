@@ -4575,7 +4575,9 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable load-based splitting, so that the absence of sufficient QPS
 					// measurements do not prevent ranges from merging.
-					DisableLoadBasedSplitting: true,
+					DisableLoadBasedSplitting:        true,
+					DisableRaftLogQueue:              true,
+					DontIgnoreFailureToTransferLease: true,
 				},
 			},
 		},
@@ -4614,7 +4616,9 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 					// Transfer range lease away from n1,s1 to the first voting replica we
 					// add. Otherwise we will fail when trying to remove the voting
 					// replica from n1,s1 below.
-					require.NoError(t, tc.TransferRangeLease(leftDesc, tc.Target(id)))
+					testutils.SucceedsSoon(t, func() error {
+						return tc.TransferRangeLease(leftDesc, tc.Target(id))
+					})
 					store, err = tc.Server(id).GetStores().(*kvserver.Stores).GetStore(roachpb.StoreID(id + 1))
 					require.NoError(t, err)
 				}
@@ -4625,7 +4629,9 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 					// Transfer range lease away from n1,s1 to the first voting replica we
 					// add. Otherwise we will fail when trying to remove the voting
 					// replica from n1,s1 below.
-					require.NoError(t, tc.TransferRangeLease(rightDesc, tc.Target(id)))
+					testutils.SucceedsSoon(t, func() error {
+						return tc.TransferRangeLease(rightDesc, tc.Target(id))
+					})
 				}
 			}
 			for _, id := range subtest.leftNonVoters {
