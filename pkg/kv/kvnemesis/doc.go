@@ -24,6 +24,7 @@
 //
 // TODO
 // - CPut/InitPut/Increment
+// - DelKey
 // - ClearRange/RevertRange
 // - AdminRelocateRange
 // - AdminUnsplit

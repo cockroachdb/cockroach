@@ -33,6 +33,7 @@ with t=A k=k3
 >> put v=a t=A k=k3
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+99
 >> del t=A k=k3
+del: "k3": found key false
 stats: val_bytes=-8 live_count=-1 live_bytes=-75 gc_bytes_age=+6633 intent_bytes=-6
 >> at end:
 txn: "A" meta={id=00000000 key="k2" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0 isn=1

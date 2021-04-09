@@ -474,24 +474,44 @@ func TestDB_Del(t *testing.T) {
 
 	b := &kv.Batch{}
 	b.Put("aa", "1")
-	b.Put("ab", "2")
 	b.Put("ac", "3")
 	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Del(context.Background(), "ab"); err != nil {
-		t.Fatal(err)
-	}
-	rows, err := db.Scan(context.Background(), "a", "b", 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := map[string][]byte{
-		"aa": []byte("1"),
-		"ac": []byte("3"),
-	}
-	checkRows(t, expected, rows)
-	checkLen(t, len(expected), len(rows))
+
+	testutils.RunTrueAndFalse(t, "useDelKey", func(t *testing.T, useDelKey bool) {
+		if err := db.Put(context.Background(), "ab", "2"); err != nil {
+			t.Fatal(err)
+		}
+		if useDelKey {
+			key, err := db.DelKey(context.Background(), "ab")
+			if err != nil {
+				t.Fatal(err)
+			}
+			checkKeys(t, []string{"ab"}, []roachpb.Key{key})
+			// Also try deleting a non-existent key and verify that no key is
+			// returned.
+			if key, err = db.DelKey(context.Background(), "ad"); err != nil {
+				t.Fatal(err)
+			} else if len(key) > 0 {
+				t.Errorf("expected deleted key to be empty when deleting a non-existent key, got %v", key)
+			}
+		} else {
+			if err := db.Del(context.Background(), "ab"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rows, err := db.Scan(context.Background(), "a", "b", 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := map[string][]byte{
+			"aa": []byte("1"),
+			"ac": []byte("3"),
+		}
+		checkRows(t, expected, rows)
+		checkLen(t, len(expected), len(rows))
+	})
 }
 
 func TestDB_DelRange(t *testing.T) {
