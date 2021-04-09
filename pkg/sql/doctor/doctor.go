@@ -327,9 +327,11 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 		if err != nil {
 			return err
 		}
-		if updatedDescBytes == nil {
-			continue
-		}
+		/*
+			if updatedDescBytes == nil {
+				continue
+			}
+		*/
 		fmt.Fprintf(out,
 			"SELECT crdb_internal.unsafe_upsert_descriptor(%d, decode('%s', 'hex'), true);\n",
 			descRow.ID, hex.EncodeToString(updatedDescBytes))
@@ -361,32 +363,35 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 	return nil
 }
 
-func descriptorModifiedForInsert(r DescriptorTableRow) ([]byte, error) {
-	var descProto descpb.Descriptor
-	if err := protoutil.Unmarshal(r.DescBytes, &descProto); err != nil {
-		return nil, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
-	}
-	b := catalogkv.NewBuilderWithMVCCTimestamp(&descProto, r.ModTime)
-	if b == nil {
-		return nil, nil
-	}
-	mut := b.BuildCreatedMutable()
-	switch d := mut.(type) {
-	case catalog.DatabaseDescriptor:
-		d.DatabaseDesc().ModificationTime = hlc.Timestamp{}
-		d.DatabaseDesc().Version = 1
-	case catalog.SchemaDescriptor:
-		d.SchemaDesc().ModificationTime = hlc.Timestamp{}
-		d.SchemaDesc().Version = 1
-	case catalog.TypeDescriptor:
-		d.TypeDesc().ModificationTime = hlc.Timestamp{}
-		d.TypeDesc().Version = 1
-	case catalog.TableDescriptor:
-		d.TableDesc().ModificationTime = hlc.Timestamp{}
-		d.TableDesc().CreateAsOfTime = hlc.Timestamp{}
-		d.TableDesc().Version = 1
-	default:
-		return nil, nil
-	}
-	return protoutil.Marshal(mut.DescriptorProto())
+func descriptorModifiedForInsert(_ DescriptorTableRow) ([]byte, error) {
+	return nil, nil
+	/*
+		var descProto descpb.Descriptor
+		if err := protoutil.Unmarshal(r.DescBytes, &descProto); err != nil {
+			return nil, errors.Errorf("failed to unmarshal descriptor %d: %v", r.ID, err)
+		}
+		b := catalogkv.NewBuilderWithMVCCTimestamp(&descProto, r.ModTime)
+		if b == nil {
+			return nil, nil
+		}
+		mut := b.BuildCreatedMutable()
+		switch d := mut.(type) {
+		case catalog.DatabaseDescriptor:
+			d.DatabaseDesc().ModificationTime = hlc.Timestamp{}
+			d.DatabaseDesc().Version = 1
+		case catalog.SchemaDescriptor:
+			d.SchemaDesc().ModificationTime = hlc.Timestamp{}
+			d.SchemaDesc().Version = 1
+		case catalog.TypeDescriptor:
+			d.TypeDesc().ModificationTime = hlc.Timestamp{}
+			d.TypeDesc().Version = 1
+		case catalog.TableDescriptor:
+			d.TableDesc().ModificationTime = hlc.Timestamp{}
+			d.TableDesc().CreateAsOfTime = hlc.Timestamp{}
+			d.TableDesc().Version = 1
+		default:
+			return nil, nil
+		}
+		return protoutil.Marshal(mut.DescriptorProto())
+	*/
 }
