@@ -326,6 +326,8 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// Probably should be transparently retried.
 		} else if resultIsErrorStr(t.Result, `merge failed: range missing intent on its local descriptor`) {
 			// Probably should be transparently retried.
+		} else if resultIsErrorStr(t.Result, `merge failed: RHS range bounds do not match`) {
+			// Probably should be transparently retried.
 		} else {
 			v.failIfError(op, t.Result)
 		}
@@ -343,6 +345,10 @@ func (v *validator) processOp(txnID *string, op Operation) {
 			// Only VOTER_FULL replicas can currently hold a range lease.
 			// Attempts to transfer to lease to any other replica type are
 			// rejected.
+		} else if resultIsErrorStr(t.Result, `replica not found in RangeDescriptor`) {
+			// Only replicas that are part of the range can be given
+			// the lease. This case is hit if a TransferLease op races
+			// with a ChangeReplicas op.
 		} else if resultIsErrorStr(t.Result, `unable to find store \d+ in range`) {
 			// A lease transfer that races with a replica removal may find that
 			// the store it was targeting is no longer part of the range.
@@ -352,6 +358,10 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		} else if resultIsError(t.Result, liveness.ErrRecordCacheMiss) {
 			// If the existing leaseholder has not yet heard about the transfer
 			// target's liveness record through gossip, it will return an error.
+		} else if resultIsErrorStr(t.Result, liveness.ErrRecordCacheMiss.Error()) {
+			// Same as above, but matches cases where ErrRecordCacheMiss is
+			// passed through a LeaseRejectedError. This is necessary until
+			// LeaseRejectedErrors works with errors.Cause.
 		} else {
 			v.failIfError(op, t.Result)
 		}
