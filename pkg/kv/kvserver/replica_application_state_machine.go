@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -358,6 +359,7 @@ func (sm *replicaStateMachine) NewBatch(ephemeral bool) apply.Batch {
 	b.state = r.mu.state
 	b.state.Stats = &b.stats
 	*b.state.Stats = *r.mu.state.Stats
+	b.closedTimestampSetter = r.mu.closedTimestampSetter
 	r.mu.RUnlock()
 	b.start = timeutil.Now()
 	return b
@@ -379,7 +381,8 @@ type replicaAppBatch struct {
 	// state is this batch's view of the replica's state. It is copied from
 	// under the Replica.mu when the batch is initialized and is updated in
 	// stageTrivialReplicatedEvalResult.
-	state kvserverpb.ReplicaState
+	state                 kvserverpb.ReplicaState
+	closedTimestampSetter closedTimestampSetterInfo
 	// stats is stored on the application batch to avoid an allocation in
 	// tracking the batch's view of replicaState. All pointer fields in
 	// replicaState other than Stats are overwritten completely rather than
@@ -403,6 +406,11 @@ type replicaAppBatch struct {
 	emptyEntries int
 	mutations    int
 	start        time.Time
+}
+
+type closedTimestampSetterInfo struct {
+	cmd   *replicatedCmd
+	lease *roachpb.Lease
 }
 
 // Stage implements the apply.Batch interface. The method handles the first
@@ -831,6 +839,8 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 			log.Fatal(ctx, err.Error())
 		}
 		b.state.RaftClosedTimestamp = *cts
+		b.closedTimestampSetter.cmd = cmd
+		b.closedTimestampSetter.lease = b.state.Lease
 		if clockTS, ok := cts.TryToClockTimestamp(); ok {
 			b.maxTS.Forward(clockTS)
 		}
@@ -902,6 +912,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 			"raft closed timestamp regression; replica has: %s, new batch has: %s.",
 			existingClosed.String(), newClosed.String())
 	}
+	r.mu.closedTimestampSetter = b.closedTimestampSetter
 
 	closedTimestampUpdated := r.mu.state.RaftClosedTimestamp.Forward(b.state.RaftClosedTimestamp)
 	prevStats := *r.mu.state.Stats
@@ -1037,9 +1048,25 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(cmd *replicatedCm
 		} else {
 			req = "<unknown; not leaseholder>"
 		}
+		var prevReq string
+		var prevLeaseIdx ctpb.LAI
+		prevCmd := b.closedTimestampSetter.cmd
+		if prevCmd != nil {
+			prevLeaseIdx = ctpb.LAI(prevCmd.leaseIndex)
+			if prevCmd.IsLocal() && prevCmd.proposal.Request.IsIntentWrite() {
+				prevReq = prevCmd.proposal.Request.String()
+			} else {
+				prevReq = "<unknown; not leaseholder>"
+			}
+		} else {
+			prevReq = "<unknown>"
+		}
+
 		return errors.AssertionFailedf(
-			"raft closed timestamp regression in cmd: %x; batch state: %s, command: %s, lease: %s, req: %s",
-			cmd.idKey, existingClosed.String(), newClosed.String(), b.state.Lease, req)
+			"raft closed timestamp regression in cmd: %x; batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
+				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.",
+			cmd.idKey, existingClosed.String(), newClosed.String(), b.state.Lease, req, cmd.leaseIndex,
+			prevReq, b.closedTimestampSetter.lease, prevLeaseIdx, b.entries)
 	}
 	return nil
 }
