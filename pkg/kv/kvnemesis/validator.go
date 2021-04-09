@@ -355,6 +355,9 @@ func (v *validator) processOp(txnID *string, op Operation) {
 		} else if resultIsErrorStr(t.Result, `cannot transfer lease while merge in progress`) {
 			// A lease transfer is not permitted while a range merge is in its
 			// critical phase.
+		} else if resultIsErrorStr(t.Result, `cannot transfer lease to replica in need of a snapshot`) {
+			// A lease transfer to a replica that is waiting for a raft snapshot is
+			// not permitted.
 		} else if resultIsError(t.Result, liveness.ErrRecordCacheMiss) {
 			// If the existing leaseholder has not yet heard about the transfer
 			// target's liveness record through gossip, it will return an error.

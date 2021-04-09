@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"go.etcd.io/etcd/raft/v3"
 	"golang.org/x/time/rate"
 )
 
@@ -97,6 +98,12 @@ type EvalContext interface {
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
 	GetLease() (roachpb.Lease, roachpb.Lease)
 	GetRangeInfo(context.Context) roachpb.RangeInfo
+
+	// RaftStatus returns this replica's raft status tracker.
+	//
+	// NB: The `Progress` field in a `*raft.Status` is only populated on the raft
+	// leader.
+	RaftStatus() *raft.Status
 
 	// GetCurrentReadSummary returns a new ReadSummary reflecting all reads
 	// served by the range to this point. The method requires a write latch
@@ -238,6 +245,9 @@ func (m *mockEvalCtxImpl) GetLease() (roachpb.Lease, roachpb.Lease) {
 }
 func (m *mockEvalCtxImpl) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 	return roachpb.RangeInfo{Desc: *m.Desc(), Lease: m.Lease}
+}
+func (m *mockEvalCtxImpl) RaftStatus() *raft.Status {
+	return nil
 }
 func (m *mockEvalCtxImpl) GetCurrentReadSummary(
 	ctx context.Context,

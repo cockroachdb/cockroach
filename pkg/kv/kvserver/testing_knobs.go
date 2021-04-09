@@ -212,7 +212,7 @@ type StoreTestingKnobs struct {
 	ReplicaSkipInitialSnapshot func() bool
 	// RaftSnapshotQueueSkipReplica causes the raft snapshot queue to skip sending
 	// a snapshot to a follower replica.
-	RaftSnapshotQueueSkipReplica func() bool
+	RaftSnapshotQueueSkipReplica func(id roachpb.ReplicaID) bool
 	// VoterAddStopAfterJointConfig causes voter addition to return early if
 	// the func returns true. This happens before transitioning out of a joint
 	// configuration, after the joint configuration has been entered by means

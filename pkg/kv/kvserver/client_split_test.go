@@ -3333,7 +3333,7 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 		ReplicaSkipInitialSnapshot: func() bool {
 			return atomic.LoadInt32(&skipSnaps) != 0
 		},
-		RaftSnapshotQueueSkipReplica: func() bool {
+		RaftSnapshotQueueSkipReplica: func(_ roachpb.ReplicaID) bool {
 			return atomic.LoadInt32(&skipSnaps) != 0
 		},
 		VoterAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
