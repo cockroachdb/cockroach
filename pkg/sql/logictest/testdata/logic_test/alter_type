@@ -570,3 +570,13 @@ ALTER TYPE alphabets_60004 DROP VALUE 'a'
 
 statement ok
 ALTER TYPE alphabets_60004 DROP VALUE 'b'
+
+subtest if_not_exists
+
+statement ok
+CREATE TYPE ifNotExists AS ENUM()
+
+query T noticetrace
+CREATE TYPE IF NOT EXISTS ifNotExists AS ENUM();
+----
+NOTICE: type "ifnotexists" already exists, skipping
