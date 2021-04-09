@@ -127,6 +127,15 @@ func (tc *aggregatorTestCase) init() error {
 		GroupCols:    tc.groupCols,
 		Aggregations: aggregations,
 	}
+	if !tc.unorderedInput {
+		// If we have ordered on grouping columns input, then we'll require the
+		// output to also have the same ordering.
+		outputOrdering := execinfrapb.Ordering{Columns: make([]execinfrapb.Ordering_Column, len(tc.groupCols))}
+		for i, col := range tc.groupCols {
+			outputOrdering.Columns[i].ColIdx = col
+		}
+		tc.spec.OutputOrdering = outputOrdering
+	}
 	return nil
 }
 
@@ -762,7 +771,7 @@ func TestAggregators(t *testing.T) {
 			}
 			log.Infof(ctx, "%s/%s", tc.name, agg.name)
 			verifier := colexectestutils.OrderedVerifier
-			if agg.name == "hash" {
+			if tc.unorderedInput {
 				verifier = colexectestutils.UnorderedVerifier
 			}
 			colexectestutils.RunTestsWithTyps(t, testAllocator, []colexectestutils.Tuples{tc.input}, [][]*types.T{tc.typs}, tc.expected, verifier,

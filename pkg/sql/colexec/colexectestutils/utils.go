@@ -455,6 +455,8 @@ func RunTestsWithoutAllNullsInjection(
 			if err != nil {
 				t.Fatal(err)
 			}
+			// We might short-circuit, so defer the closing of the operator.
+			defer closeIfCloser(ctx, t, op)
 			op.Init()
 			b := op.Next(ctx)
 			if b.Length() == 0 {
@@ -495,7 +497,6 @@ func RunTestsWithoutAllNullsInjection(
 					assert.False(t, maybeHasNulls(b))
 				}
 			}
-			closeIfCloser(ctx, t, op)
 		}
 	}
 
