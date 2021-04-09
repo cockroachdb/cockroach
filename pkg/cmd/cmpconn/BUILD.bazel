@@ -9,7 +9,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/cmpconn",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/mutations",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/util/duration",

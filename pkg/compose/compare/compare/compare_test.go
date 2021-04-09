@@ -25,7 +25,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -70,7 +69,7 @@ func TestCompare(t *testing.T) {
 	configs := map[string]testConfig{
 		"postgres": {
 			setup:           sqlsmith.Setups["rand-tables"],
-			setupMutators:   []randgen.Mutator{mutations.PostgresCreateTableMutator},
+			setupMutators:   []randgen.Mutator{randgen.PostgresCreateTableMutator},
 			opts:            []sqlsmith.SmitherOption{sqlsmith.PostgresMode()},
 			ignoreSQLErrors: true,
 			conns: []testConn{
@@ -80,7 +79,7 @@ func TestCompare(t *testing.T) {
 				},
 				{
 					name:     "postgres",
-					mutators: []randgen.Mutator{mutations.PostgresMutator},
+					mutators: []randgen.Mutator{randgen.PostgresMutator},
 				},
 			},
 		},
@@ -96,12 +95,12 @@ func TestCompare(t *testing.T) {
 				{
 					name: "cockroach2",
 					mutators: []randgen.Mutator{
-						mutations.StatisticsMutator,
-						mutations.ForeignKeyMutator,
-						mutations.ColumnFamilyMutator,
-						mutations.StatisticsMutator,
-						mutations.IndexStoringMutator,
-						mutations.PartialIndexMutator,
+						randgen.StatisticsMutator,
+						randgen.ForeignKeyMutator,
+						randgen.ColumnFamilyMutator,
+						randgen.StatisticsMutator,
+						randgen.IndexStoringMutator,
+						randgen.PartialIndexMutator,
 					},
 				},
 			},
@@ -126,7 +125,7 @@ func TestCompare(t *testing.T) {
 			t.Logf("starting test: %s", confName)
 			rng, _ := randutil.NewPseudoRand()
 			setup := config.setup(rng)
-			setup, _ = mutations.ApplyString(rng, setup, config.setupMutators...)
+			setup, _ = randgen.ApplyString(rng, setup, config.setupMutators...)
 
 			conns := map[string]cmpconn.Conn{}
 			for _, testCn := range config.conns {
@@ -145,7 +144,7 @@ func TestCompare(t *testing.T) {
 						t.Fatalf("%s: %v", testCn.name, err)
 					}
 				}
-				connSetup, _ := mutations.ApplyString(rng, setup, testCn.mutators...)
+				connSetup, _ := randgen.ApplyString(rng, setup, testCn.mutators...)
 				if err := conn.Exec(ctx, connSetup); err != nil {
 					t.Log(connSetup)
 					t.Fatalf("%s: %v", testCn.name, err)

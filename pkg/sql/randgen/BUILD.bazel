@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "randgen",
@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geogen",
+        "//pkg/geo/geoindex",
         "//pkg/geo/geopb",
         "//pkg/keys",
         "//pkg/roachpb",
@@ -24,11 +25,14 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/parser",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/util/bitarray",
         "//pkg/util/duration",
+        "//pkg/util/encoding",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/randutil",
@@ -41,4 +45,11 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
     ],
+)
+
+go_test(
+    name = "randgen_test",
+    srcs = ["mutator_test.go"],
+    embed = [":randgen"],
+    deps = ["//pkg/util/randutil"],
 )
