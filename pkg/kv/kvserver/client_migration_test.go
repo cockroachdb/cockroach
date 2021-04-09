@@ -168,7 +168,7 @@ func TestMigrateWithInflightSnapshot(t *testing.T) {
 		if processErr != nil {
 			return processErr
 		}
-		const msg = `skipping snapshot; replica is likely a learner in the process of being added: (n2,s2):2LEARNER`
+		const msg = `skipping snapshot; replica is likely a LEARNER in the process of being added: (n2,s2):2LEARNER`
 		formattedTrace := trace.String()
 		if !strings.Contains(formattedTrace, msg) {
 			return errors.Errorf(`expected "%s" in trace got:\n%s`, msg, formattedTrace)
