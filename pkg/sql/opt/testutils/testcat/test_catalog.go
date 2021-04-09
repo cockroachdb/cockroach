@@ -230,6 +230,20 @@ func (tc *Catalog) FullyQualifiedName(
 	return ds.(dataSource).fqName(), nil
 }
 
+// GetColumnTypeOfDataSource is part of the cat.Catalog interface.
+func (tc *Catalog) GetColumnTypeOfDataSource(o cat.DataSource, ord int) (*types.T, error) {
+	switch t := o.(type) {
+	case *Table:
+		return t.Column(ord).DatumType(), nil
+	case *View:
+		return nil, nil
+	case *Sequence:
+		return nil, nil
+	default:
+		panic("invalid Object")
+	}
+}
+
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
 	if string(toResolve.CatalogName) != testDB {
 		return nil, cat.SchemaName{}, pgerror.Newf(pgcode.InvalidSchemaName,

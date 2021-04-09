@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -53,6 +54,26 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		// Override the columns.
 		for i := range p {
 			p[i].Alias = string(cv.ColumnNames[i])
+		}
+	}
+
+	// If the type of any column that this views references is user
+	// defined, add a type dependency between this view and the UDT.
+	if b.trackViewDeps {
+		for _, d := range b.viewDeps {
+			if !d.ColumnOrdinals.Empty() {
+				d.ColumnOrdinals.ForEach(func(ord int) {
+					colType, err := b.catalog.GetColumnTypeOfDataSource(d.DataSource, ord)
+					if err != nil {
+						panic(err)
+					}
+					if colType != nil && colType.UserDefined() {
+						for id := range typedesc.GetTypeDescriptorClosure(colType) {
+							b.viewTypeDeps.Add(int(id))
+						}
+					}
+				})
+			}
 		}
 	}
 

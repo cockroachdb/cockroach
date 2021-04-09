@@ -1002,3 +1002,35 @@ ALTER TYPE typ2 RENAME TO typ3
 
 statement error cannot drop type "typ3" because other objects \(\[db2.public.v3\]\) still depend on it
 DROP TYPE typ3
+
+statement ok
+CREATE TYPE typ4 AS ENUM('a')
+
+statement ok
+CREATE TABLE t4 (i INT, j typ4)
+
+statement ok
+CREATE VIEW v4 AS (SELECT i FROM t4)
+
+# Note that v4 does not depend on typ4.
+statement error cannot drop type "typ4" because other objects \(\[db2.public.t4\]\) still depend on it
+DROP TYPE typ4
+
+statement ok
+ALTER TABLE t4 DROP COLUMN j
+
+statement ok
+DROP TYPE typ4
+
+statement ok
+CREATE TYPE typ4 AS ENUM('a')
+
+statement ok
+ALTER TABLE t4 ADD COLUMN j typ4
+
+statement ok
+CREATE VIEW v5 AS (SELECT j FROM t4)
+
+# Now that v5 depends on t4.j which is of type typ4, v5 has a dependency to typ4.
+statement error cannot drop type "typ4" because other objects \(\[db2.public.t4 db2.public.v5\]\) still depend on it
+DROP type typ4

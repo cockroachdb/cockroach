@@ -157,4 +157,8 @@ type Catalog interface {
 	//  - the fully qualified name of a data source object can change without the
 	//    object itself changing (e.g. when a database is renamed).
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
+
+	// GetColumnTypeOfDataSource returns the type of the given column of
+	// the given table.
+	GetColumnTypeOfDataSource(o DataSource, ord int) (*types.T, error)
 }

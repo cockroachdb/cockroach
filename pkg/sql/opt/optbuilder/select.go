@@ -589,6 +589,12 @@ func (b *Builder) buildScan(
 // These expressions are used as "known truths" about table data; as such they
 // can only contain immutable operators.
 func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
+	if b.trackViewDeps {
+		b.trackViewDeps = false
+		defer func() {
+			b.trackViewDeps = true
+		}()
+	}
 	tab := tabMeta.Table
 
 	// Check if we have any validated check constraints. Only validated
