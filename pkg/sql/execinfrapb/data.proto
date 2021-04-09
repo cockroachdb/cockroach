@@ -58,7 +58,7 @@ message Expression {
 }
 
 // Ordering defines an order - specifically a list of column indices and
-// directions. See sqlbase.ColumnOrdering.
+// directions. See colinfo.ColumnOrdering.
 message Ordering {
   option (gogoproto.equal) = true;
 
