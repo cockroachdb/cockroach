@@ -33,6 +33,15 @@ import (
 // scan. A scan and its logical properties are required in order to fully
 // normalize the partial index predicates.
 func (b *Builder) addPartialIndexPredicatesForTable(tabMeta *opt.TableMeta, scan memo.RelExpr) {
+	// We do not want to track view deps here, otherwise a view depending
+	// on a table with a partial index predicate using an UDT will result in a
+	// type dependency being added between the view and the UDT.
+	if b.trackViewDeps {
+		b.trackViewDeps = false
+		defer func() {
+			b.trackViewDeps = true
+		}()
+	}
 	tab := tabMeta.Table
 	numIndexes := tab.DeletableIndexCount()
 
