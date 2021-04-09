@@ -34,7 +34,7 @@ const (
 	OwnerCDC           Owner = `cdc`
 	OwnerKV            Owner = `kv`
 	OwnerPartitioning  Owner = `partitioning`
-	OwnerSQLExec       Owner = `sql-exec`
+	OwnerSQLQueries    Owner = `sql-queries`
 	OwnerSQLSchema     Owner = `sql-schema`
 	OwnerStorage       Owner = `storage`
 )
@@ -81,9 +81,8 @@ var roachtestOwners = map[Owner]OwnerMetadata{
 	OwnerPartitioning: {SlackRoom: `kv`, Mention: []string{`@cockroachdb/kv`},
 		TriageColumnID: 3550674,
 	},
-	// TODO(jordanlewis): that team doesn't exist any more, fix things up.
-	OwnerSQLExec: {SlackRoom: `sql-execution-team`, Mention: []string{`@cockroachdb/sql-queries`},
-		TriageColumnID: 6837155,
+	OwnerSQLQueries: {SlackRoom: `sql-queries`, Mention: []string{`@cockroachdb/sql-queries`},
+		TriageColumnID: 13549252,
 	},
 	OwnerSQLSchema: {SlackRoom: `sql-schema`, Mention: []string{`@cockroachdb/sql-schema`},
 		TriageColumnID: 8946818,
