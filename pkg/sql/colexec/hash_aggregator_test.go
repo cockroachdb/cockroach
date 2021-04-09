@@ -125,7 +125,11 @@ func TestHashAggregator(t *testing.T) {
 			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)
 		require.NoError(t, err)
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
+		verifier := colexectestutils.OrderedVerifier
+		if tc.unorderedInput {
+			verifier = colexectestutils.UnorderedVerifier
+		}
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, verifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 			return NewHashAggregator(&colexecagg.NewAggregatorArgs{
 				Allocator:      testAllocator,
 				MemAccount:     testMemAcc,
