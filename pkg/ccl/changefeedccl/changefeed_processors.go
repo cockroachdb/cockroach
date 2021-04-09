@@ -153,34 +153,11 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	spans, sf := ca.setupSpans()
 	timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf, initialInclusiveLowerBound: ca.spec.Feed.StatementTime}
 	nodeID, err := ca.flowCtx.EvalCtx.NodeID.OptionalNodeIDErr(48274)
+
 	if err != nil {
 		ca.MoveToDraining(err)
 		return ctx
 	}
-
-	if ca.sink, err = getSink(
-		ctx, ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
-		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User,
-	); err != nil {
-		err = MarkRetryableError(err)
-		// Early abort in the case that there is an error creating the sink.
-		ca.MoveToDraining(err)
-		ca.cancel()
-		return ctx
-	}
-
-	// This is the correct point to set up certain hooks depending on the sink
-	// type.
-	if b, ok := ca.sink.(*bufferSink); ok {
-		ca.changedRowBuf = &b.buf
-	}
-
-	// The job registry has a set of metrics used to monitor the various jobs it
-	// runs. They're all stored as the `metric.Struct` interface because of
-	// dependency cycles.
-	metrics := ca.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-	ca.sink = makeMetricsSink(metrics, ca.sink)
-	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
 	var knobs TestingKnobs
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -197,6 +174,31 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", limit, pool)
 	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
 	ca.kvFeedMemMon = kvFeedMemMon
+
+	// TODO(yevgeniy): getSink is getting to be quite a kitchen sink -- refactor.
+	ca.sink, err = getSink(
+		ctx, ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
+		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User,
+		kvFeedMemMon.MakeBoundAccount(),
+	)
+
+	if err != nil {
+		ca.MoveToDraining(err)
+		return ctx
+	}
+
+	// This is the correct point to set up certain hooks depending on the sink
+	// type.
+	if b, ok := ca.sink.(*bufferSink); ok {
+		ca.changedRowBuf = &b.buf
+	}
+
+	// The job registry has a set of metrics used to monitor the various jobs it
+	// runs. They're all stored as the `metric.Struct` interface because of
+	// dependency cycles.
+	metrics := ca.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	ca.sink = makeMetricsSink(metrics, ca.sink)
+	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
 	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)
@@ -550,10 +552,14 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	// Pass a nil oracle because this sink is only used to emit resolved timestamps
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
-	if cf.sink, err = getSink(
+	// TODO(yevgeniy): Evaluate if we should introduce changefeed specific monitor.
+	mm := cf.flowCtx.Cfg.BackfillerMonitor
+	cf.sink, err = getSink(
 		ctx, cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets,
 		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI, cf.spec.User,
-	); err != nil {
+		mm.MakeBoundAccount(),
+	)
+	if err != nil {
 		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)
 		return ctx
