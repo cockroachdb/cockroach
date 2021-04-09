@@ -1572,4 +1572,14 @@ The bytekey format does not require table-key prefix.`,
 		Name:        "max-rows",
 		Description: `Maximum number of rows to return (Default 0 is unlimited).`,
 	}
+
+	ExportRevisions = FlagInfo{
+		Name:        "with-revisions",
+		Description: `Export revisions of data from a backup table since the last schema change.`,
+	}
+
+	ExportRevisionsUpTo = FlagInfo{
+		Name:        "up-to",
+		Description: `Export revisions of data from a backup table up to a specific timestamp.`,
+	}
 )
