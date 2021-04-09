@@ -312,6 +312,7 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 			"FROM system.namespace2 WHERE id >= %d;\n",
 		keys.MinUserDescID)
 	fmt.Fprintln(out, `COMMIT;`)
+	return nil
 	// Print second transaction, which inserts namespace and descriptor entries.
 	fmt.Fprintln(out, `BEGIN;`)
 	for _, descRow := range descTable {
