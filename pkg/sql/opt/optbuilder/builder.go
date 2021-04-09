@@ -426,9 +426,9 @@ func (b *Builder) maybeTrackRegclassDependenciesForViews(texpr tree.TypedExpr) {
 	}
 }
 
-func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
+func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr, inScope *scope) {
 	if b.trackViewDeps {
-		if texpr.ResolvedType().UserDefined() {
+		if texpr.ResolvedType().UserDefined() && inScope != nil && inScope.parent != nil {
 			for id := range typedesc.GetTypeDescriptorClosure(texpr.ResolvedType()) {
 				b.viewTypeDeps.Add(int(id))
 			}

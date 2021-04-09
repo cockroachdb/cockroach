@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -1682,6 +1683,11 @@ func (ef *execFactory) ConstructCreateView(
 		return nil, err
 	}
 
+	typeDepSet := make(typeDependencies)
+	typeDeps.ForEach(func(id int) {
+		typeDepSet[descpb.ID(id)] = struct{}{}
+	})
+
 	planDeps := make(planDependencies, len(deps))
 	for _, d := range deps {
 		desc, err := getDescForDataSource(d.DataSource)
@@ -1697,6 +1703,13 @@ func (ef *execFactory) ConstructCreateView(
 			ref.ColumnIDs = make([]descpb.ColumnID, 0, d.ColumnOrdinals.Len())
 			d.ColumnOrdinals.ForEach(func(ord int) {
 				ref.ColumnIDs = append(ref.ColumnIDs, desc.PublicColumns()[ord].GetID())
+				// If any column is a user-defined type, add a dependency to it.
+				colType := desc.PublicColumns()[ord].GetType()
+				if colType.UserDefined() {
+					for id := range typedesc.GetTypeDescriptorClosure(colType) {
+						typeDepSet[id] = struct{}{}
+					}
+				}
 			})
 		}
 		entry := planDeps[desc.GetID()]
@@ -1704,11 +1717,6 @@ func (ef *execFactory) ConstructCreateView(
 		entry.deps = append(entry.deps, ref)
 		planDeps[desc.GetID()] = entry
 	}
-
-	typeDepSet := make(typeDependencies, typeDeps.Len())
-	typeDeps.ForEach(func(id int) {
-		typeDepSet[descpb.ID(id)] = struct{}{}
-	})
 
 	return &createViewNode{
 		viewName:     viewName,
