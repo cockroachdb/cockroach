@@ -570,6 +570,11 @@ func (tv *View) ColumnName(i int) tree.Name {
 	return tv.ColumnNames[i]
 }
 
+// ColumnType is part of the cat.View interface.
+func (tv *View) ColumnType(ord int) (*types.T, error) {
+	return nil, nil
+}
+
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
 	TabID      cat.StableID
@@ -752,6 +757,11 @@ func (tt *Table) FindOrdinal(name string) int {
 		tree.ErrString((*tree.Name)(&name)),
 		tree.ErrString(&tt.TabName),
 	))
+}
+
+// ColumnType is part of the cat.Table interface.
+func (tt *Table) ColumnType(ord int) (*types.T, error) {
+	return tt.Column(ord).DatumType(), nil
 }
 
 // Index implements the cat.Index interface for testing purposes.
@@ -1227,6 +1237,11 @@ func (ts *Sequence) String() string {
 	tp := treeprinter.New()
 	cat.FormatSequence(ts.Catalog, ts, tp)
 	return tp.String()
+}
+
+// ColumnType is part of the cat.Sequence interface.
+func (ts *Sequence) ColumnType(ord int) (*types.T, error) {
+	return nil, nil
 }
 
 // Family implements the cat.Family interface for testing purposes.
