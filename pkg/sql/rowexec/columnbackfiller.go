@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -29,10 +30,27 @@ type columnBackfiller struct {
 	backfill.ColumnBackfiller
 
 	desc catalog.TableDescriptor
+
+	// commitWaitFns contains a set of functions, each of which was returned
+	// from a call to (*kv.Txn).DeferCommitWait when backfilling a single chunk
+	// of rows. The functions must be called to ensure consistency with any
+	// causally dependent readers.
+	commitWaitFns []func(context.Context)
 }
 
 var _ execinfra.Processor = &columnBackfiller{}
 var _ chunkBackfiller = &columnBackfiller{}
+
+// maxCommitWaitFns is the maximum number of commit-wait functions that the
+// columnBackfiller will accumulate before consuming them to reclaim memory.
+// Each function retains a reference to its corresponding TxnCoordSender, so we
+// need to be careful not to accumulate an unbounded number of these functions.
+var backfillerMaxCommitWaitFns = settings.RegisterIntSetting(
+	"schemachanger.backfiller.max_commit_wait_fns",
+	"the maximum number of commit-wait functions that the columnBackfiller will accumulate before consuming them to reclaim memory",
+	128,
+	settings.PositiveInt,
+)
 
 func newColumnBackfiller(
 	ctx context.Context,
@@ -73,6 +91,7 @@ func (cb *columnBackfiller) prepare(ctx context.Context) error {
 	return nil
 }
 func (cb *columnBackfiller) flush(ctx context.Context) error {
+	cb.runCommitWait(ctx)
 	return nil
 }
 func (cb *columnBackfiller) CurrentBufferFill() float32 {
@@ -84,6 +103,7 @@ func (cb *columnBackfiller) runChunk(
 	ctx context.Context, sp roachpb.Span, chunkSize int64, _ hlc.Timestamp,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
+	var commitWaitFn func(context.Context)
 	err := cb.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		if cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk != nil {
 			if err := cb.flowCtx.Cfg.TestingKnobs.RunBeforeBackfillChunk(sp); err != nil {
@@ -93,6 +113,11 @@ func (cb *columnBackfiller) runChunk(
 		if cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk != nil {
 			defer cb.flowCtx.Cfg.TestingKnobs.RunAfterBackfillChunk()
 		}
+
+		// Defer the commit-wait operation so that we can coalesce this wait
+		// across all batches. This dramatically reduces the total time we spend
+		// waiting for consistency when backfilling a column on GLOBAL tables.
+		commitWaitFn = txn.DeferCommitWait(ctx)
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
@@ -107,5 +132,24 @@ func (cb *columnBackfiller) runChunk(
 		)
 		return err
 	})
+	if err == nil {
+		cb.commitWaitFns = append(cb.commitWaitFns, commitWaitFn)
+		maxCommitWaitFns := int(backfillerMaxCommitWaitFns.Get(&cb.flowCtx.Cfg.Settings.SV))
+		if len(cb.commitWaitFns) >= maxCommitWaitFns {
+			cb.runCommitWait(ctx)
+		}
+	}
 	return key, err
+}
+
+// runCommitWait consumes the commit-wait functions that the columnBackfiller
+// has accumulated across the chunks that it has backfilled. It calls each
+// commit-wait function to ensure that any dependent reads on the rows we just
+// backfilled observe the new column.
+func (cb *columnBackfiller) runCommitWait(ctx context.Context) {
+	for i, fn := range cb.commitWaitFns {
+		fn(ctx)
+		cb.commitWaitFns[i] = nil
+	}
+	cb.commitWaitFns = cb.commitWaitFns[:0]
 }
