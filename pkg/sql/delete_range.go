@@ -177,10 +177,17 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roach
 	ctx := params.ctx
 	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 	for _, span := range spans {
-		if traceKV {
-			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+		if span.EndKey == nil {
+			if traceKV {
+				log.VEventf(ctx, 2, "Del %s", span.Key)
+			}
+			b.DelKey(span.Key, true /* returnKey */)
+		} else {
+			if traceKV {
+				log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+			}
+			b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 		}
-		b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 	}
 }
 

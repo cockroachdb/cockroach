@@ -264,11 +264,17 @@ message IncrementResponse {
 // A DeleteRequest is the argument to the Delete() method.
 message DeleteRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // return the key that is deleted in the response.
+  bool return_key = 3;
 }
 
 // A DeleteResponse is the return value from the Delete() method.
 message DeleteResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // True if return_key was set and there was a key that got deleted.
+  bool found_key = 2;
 }
 
 // A DeleteRangeRequest is the argument to the DeleteRange() method. It

@@ -226,8 +226,13 @@ func (b *Batch) fillResults(ctx context.Context) {
 					}
 				}
 			case *roachpb.DeleteRequest:
-				row := &result.Rows[k]
-				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
+				deleteRequest := args.(*roachpb.DeleteRequest)
+				if deleteRequest.ReturnKey && result.Err == nil {
+					resp := reply.(*roachpb.DeleteResponse)
+					if resp.FoundKey {
+						result.Keys = []roachpb.Key{deleteRequest.Key}
+					}
+				}
 			case *roachpb.DeleteRangeRequest:
 				if result.Err == nil {
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
@@ -612,10 +617,22 @@ func (b *Batch) Del(keys ...interface{}) {
 			b.initResult(0, len(keys), notRaw, err)
 			return
 		}
-		reqs = append(reqs, roachpb.NewDelete(k))
+		reqs = append(reqs, roachpb.NewDelete(k, false /* returnKey */))
 	}
 	b.appendReqs(reqs...)
 	b.initResult(len(reqs), len(reqs), notRaw, nil)
+}
+
+// DelKey is like Del but it takes a single key, and allows choosing whether or
+// not to return whether a key was deleted via the command.
+func (b *Batch) DelKey(key interface{}, returnKey bool) {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 1, notRaw, err)
+		return
+	}
+	b.appendReqs(roachpb.NewDelete(k, returnKey))
+	b.initResult(0, 1, notRaw, err)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).

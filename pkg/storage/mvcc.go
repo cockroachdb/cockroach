@@ -1179,6 +1179,27 @@ func MVCCDelete(
 	return mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, nil /* valueFn */)
 }
 
+// MVCCDeleteReturningExistence is like MVCCDelete, but it returns whether the key
+// that was passed in had a value already in the database.
+func MVCCDeleteReturningExistence(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	txn *roachpb.Transaction,
+) (foundKey bool, err error) {
+	iter := newMVCCIterator(rw, timestamp.IsEmpty(), IterOptions{Prefix: true})
+	defer iter.Close()
+
+	valueFn := func(value optionalValue) ([]byte, error) {
+		foundKey = len(value.RawBytes) > 0
+		return nil, nil
+	}
+	err = mvccPutUsingIter(ctx, rw, iter, ms, key, timestamp, noValue, txn, valueFn)
+	return foundKey, err
+}
+
 var noValue = roachpb.Value{}
 
 // mvccPutUsingIter sets the value for a specified key using the provided
