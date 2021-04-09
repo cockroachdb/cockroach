@@ -3825,3 +3825,18 @@ query FI
 SELECT corr(DISTINCT y, x), count(DISTINCT y) FROM t55776
 ----
 0.522232967867094 3
+
+# Regression test for the vectorized hash aggregator not maintaining the
+# required output ordering when spilling to disk (#63159).
+statement ok
+CREATE TABLE t63159 (a INT, b INT, INDEX(a) STORING (b));
+INSERT INTO t63159 VALUES (1,1), (3,3), (2,2), (5,5), (0,0), (1,1);
+
+query III
+SELECT a, b, count(*) FROM t63159 GROUP BY a,b ORDER BY a
+----
+0  0  1
+1  1  2
+2  2  1
+3  3  1
+5  5  1
