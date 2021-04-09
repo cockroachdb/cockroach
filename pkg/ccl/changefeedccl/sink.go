@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -87,6 +88,7 @@ func getSink(
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user security.SQLUsername,
+	acc mon.BoundAccount,
 ) (Sink, error) {
 	u, err := url.Parse(sinkURI)
 	if err != nil {
@@ -207,7 +209,7 @@ func getSink(
 		}
 
 		makeSink = func() (Sink, error) {
-			return makeKafkaSink(cfg, u.Host, targets, opts)
+			return makeKafkaSink(ctx, cfg, u.Host, targets, opts, acc)
 		}
 	case isCloudStorageSink(u):
 		fileSizeParam := q.Get(changefeedbase.SinkParamFileSize)
@@ -226,7 +228,7 @@ func getSink(
 		makeSink = func() (Sink, error) {
 			return makeCloudStorageSink(
 				ctx, u.String(), srcID, fileSize, settings,
-				opts, timestampOracle, makeExternalStorageFromURI, user,
+				opts, timestampOracle, makeExternalStorageFromURI, user, acc,
 			)
 		}
 	case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
@@ -341,6 +343,7 @@ type kafkaSinkConfig struct {
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
 // calls to Emit and Flush should be from the same goroutine.
 type kafkaSink struct {
+	ctx      context.Context
 	cfg      kafkaSinkConfig
 	client   sarama.Client
 	producer sarama.AsyncProducer
@@ -355,6 +358,7 @@ type kafkaSink struct {
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
 		syncutil.Mutex
+		mem      mon.BoundAccount
 		inflight int64
 		flushErr error
 		flushCh  chan struct{}
@@ -459,13 +463,19 @@ func getSaramaConfig(opts map[string]string) (config *saramaConfig, err error) {
 }
 
 func makeKafkaSink(
+	ctx context.Context,
 	cfg kafkaSinkConfig,
 	bootstrapServers string,
 	targets jobspb.ChangefeedTargets,
 	opts map[string]string,
+	acc mon.BoundAccount,
 ) (Sink, error) {
-	sink := &kafkaSink{cfg: cfg}
+	sink := &kafkaSink{
+		ctx: ctx,
+		cfg: cfg,
+	}
 	sink.setTargets(targets)
+	sink.mu.mem = acc
 
 	config := sarama.NewConfig()
 	config.ClientID = `CockroachDB`
@@ -554,9 +564,14 @@ func (s *kafkaSink) start() {
 
 // Close implements the Sink interface.
 func (s *kafkaSink) Close() error {
+	defer func() {
+		s.mu.Lock()
+		s.mu.mem.Close(s.ctx)
+		s.mu.Unlock()
+	}()
+
 	close(s.stopWorkerCh)
 	s.worker.Wait()
-
 	// If we're shutting down, we don't care what happens to the outstanding
 	// messages, so ignore this error.
 	_ = s.producer.Close()
@@ -670,11 +685,35 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	}
 }
 
-func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
+func kafkaMessageBytes(m *sarama.ProducerMessage) (s int64) {
+	if m.Key != nil {
+		s += int64(m.Key.Length())
+	}
+	if m.Value != nil {
+		s += int64(m.Value.Length())
+	}
+	return
+}
+
+func (s *kafkaSink) startInflightMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.mu.mem.Grow(ctx, kafkaMessageBytes(msg)); err != nil {
+		return err
+	}
+
 	s.mu.inflight++
-	inflight := s.mu.inflight
-	s.mu.Unlock()
+
+	if log.V(2) {
+		log.Infof(ctx, "emitting %d inflight records to kafka", s.mu.inflight)
+	}
+	return nil
+}
+
+func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage) error {
+	if err := s.startInflightMessage(ctx, msg); err != nil {
+		return err
+	}
 
 	select {
 	case <-ctx.Done():
@@ -682,9 +721,6 @@ func (s *kafkaSink) emitMessage(ctx context.Context, msg *sarama.ProducerMessage
 	case s.producer.Input() <- msg:
 	}
 
-	if log.V(2) {
-		log.Infof(ctx, "emitted %d inflight records to kafka", inflight)
-	}
 	return nil
 }
 
@@ -692,20 +728,25 @@ func (s *kafkaSink) workerLoop() {
 	defer s.worker.Done()
 
 	for {
+		var ackMsg *sarama.ProducerMessage
+		var ackError error
+
 		select {
 		case <-s.stopWorkerCh:
 			return
-		case <-s.producer.Successes():
+		case m := <-s.producer.Successes():
+			ackMsg = m
 		case err := <-s.producer.Errors():
-			s.mu.Lock()
-			if s.mu.flushErr == nil {
-				s.mu.flushErr = err
-			}
-			s.mu.Unlock()
+			ackMsg, ackError = err.Msg, err.Err
 		}
 
 		s.mu.Lock()
 		s.mu.inflight--
+		s.mu.mem.Shrink(s.ctx, kafkaMessageBytes(ackMsg))
+		if s.mu.flushErr == nil && ackError != nil {
+			s.mu.flushErr = ackError
+		}
+
 		if s.mu.inflight == 0 && s.mu.flushCh != nil {
 			s.mu.flushCh <- struct{}{}
 			s.mu.flushCh = nil
