@@ -5275,7 +5275,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 					if err != nil {
 						t.Error(err)
 					}
-					if err := db.Del(context.Background(), kv[0].Key); err != nil {
+					if _, err := db.Del(context.Background(), kv[0].Key); err != nil {
 						t.Error(err)
 					}
 				}
@@ -5346,7 +5346,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 					if err != nil {
 						t.Error(err)
 					}
-					if err := db.Del(context.Background(), kv[0].Key); err != nil {
+					if _, err := db.Del(context.Background(), kv[0].Key); err != nil {
 						t.Error(err)
 					}
 				}

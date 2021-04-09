@@ -626,7 +626,7 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"refusing to delete namespace entry for non-dropped descriptor")
 	}
-	if err := p.txn.Del(ctx, key); err != nil {
+	if _, err := p.txn.Del(ctx, key); err != nil {
 		return errors.Wrap(err, "failed to delete entry")
 	}
 
@@ -675,7 +675,7 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 		}
 	}
 	descKey := catalogkeys.MakeDescMetadataKey(p.execCfg.Codec, id)
-	if err := p.txn.Del(ctx, descKey); err != nil {
+	if _, err := p.txn.Del(ctx, descKey); err != nil {
 		return err
 	}
 

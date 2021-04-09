@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -88,8 +89,9 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		return err
 	}
 
-	// Configure the fetcher, which is only used to decode the returned keys from
-	// the DeleteRange, and is never used to actually fetch kvs.
+	// Configure the fetcher, which is only used to decode the returned keys
+	// from the Del and the DelRange operations, and is never used to actually
+	// fetch kvs.
 	var spec descpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&spec, params.ExecCfg().Codec, d.desc, d.desc.GetPrimaryIndex(), nil, /* columnIDs */
@@ -159,15 +161,24 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	return nil
 }
 
-// deleteSpans adds each input span to a DelRange command in the given batch.
+// deleteSpans adds each input span to a Del or a DelRange command in the given
+// batch.
 func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roachpb.Spans) {
 	ctx := params.ctx
 	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
+	canUsePointDelete := params.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.DeleteRequestReturnKey)
 	for _, span := range spans {
-		if traceKV {
-			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+		if span.EndKey == nil && canUsePointDelete {
+			if traceKV {
+				log.VEventf(ctx, 2, "Del %s", span.Key)
+			}
+			b.Del(span.Key)
+		} else {
+			if traceKV {
+				log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+			}
+			b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 		}
-		b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 	}
 }
 

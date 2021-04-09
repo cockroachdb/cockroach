@@ -1911,7 +1911,10 @@ func TestCommitMutatingTransaction(t *testing.T) {
 			pointWrite: true,
 		},
 		{
-			f:          func(ctx context.Context, txn *kv.Txn) error { return txn.Del(ctx, "a") },
+			f: func(ctx context.Context, txn *kv.Txn) error {
+				_, err := txn.Del(ctx, "a")
+				return err
+			},
 			expMethod:  roachpb.Delete,
 			pointWrite: true,
 		},

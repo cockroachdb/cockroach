@@ -46,10 +46,13 @@ with ts=40
   del localTs=50 k=k3
 ----
 >> del localTs=30 k=k1 ts=40
+del: "k1": found key true
 stats: key_bytes=+12 val_count=+1 val_bytes=+13 live_count=-1 live_bytes=-21 gc_bytes_age=+2760
 >> del localTs=40 k=k2 ts=40
+del: "k2": found key true
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+1980
 >> del localTs=50 k=k3 ts=40
+del: "k3": found key true
 stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-34 gc_bytes_age=+2760
 >> at end:
 data: "k1"/40.000000000,0 -> {localTs=30.000000000,0}/<empty>

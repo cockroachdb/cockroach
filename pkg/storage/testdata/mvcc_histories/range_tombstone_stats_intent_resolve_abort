@@ -62,18 +62,22 @@ with t=A
 >> put k=b v=b1 ts=1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=c ts=1
+del: "c": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
 >> put k=e v=e1 ts=1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=f ts=1
+del: "f": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
 >> put k=g v=g1 ts=1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=h ts=1
+del: "h": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
 >> put k=i v=i1 ts=1
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=j ts=1
+del: "j": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
 >> del_range_ts k=g end=s ts=3
 stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-2 live_bytes=-42 gc_bytes_age=+5335
@@ -82,10 +86,12 @@ stats: range_key_bytes=+9 range_val_count=+1 gc_bytes_age=+860
 >> put k=n v=n5 ts=5
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=o ts=5
+del: "o": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1330
 >> put k=q v=q5 ts=5
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del k=r ts=5
+del: "r": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1330
 >> put k=a v=a6 t=A
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
@@ -94,10 +100,13 @@ stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+178
 >> put k=c v=c6 t=A
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-198 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
 >> del k=d t=A
+del: "d": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5828 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> del k=e t=A
+del: "e": found key true
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7614 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> del k=f t=A
+del: "f": found key false
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5630 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> put k=g v=g6 t=A
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-194 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
@@ -106,10 +115,13 @@ stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_
 >> put k=i v=i6 t=A
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-194 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
 >> del k=j t=A
+del: "j": found key false
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5630 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> del k=k t=A
+del: "k": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5828 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> del k=l t=A
+del: "l": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5828 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> put k=m v=m6 t=A
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
@@ -118,10 +130,13 @@ stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+178
 >> put k=o v=o6 t=A
 stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-190 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+94
 >> del k=p t=A
+del: "p": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5828 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> del k=q t=A
+del: "q": found key true
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7614 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> del k=r t=A
+del: "r": found key false
 stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5638 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+94
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
