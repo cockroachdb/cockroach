@@ -1165,8 +1165,9 @@ func TestTxnCommitWait(t *testing.T) {
 	// - commit:       does the transaction commit or rollback?
 	// - readOnly:     does the transaction perform any writes?
 	// - futureTime:   does the transaction commit in the future?
+	// - deferred:     does the caller assume responsibility for commit waiting?
 	//
-	testFn := func(t *testing.T, linearizable, commit, readOnly, futureTime bool) {
+	testFn := func(t *testing.T, linearizable, commit, readOnly, futureTime, deferred bool) {
 		s, metrics, cleanupFn := setupMetricsTest(t)
 		s.DB.GetFactory().(*TxnCoordSenderFactory).linearizable = linearizable
 		defer cleanupFn()
@@ -1194,9 +1195,20 @@ func TestTxnCommitWait(t *testing.T) {
 
 		txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
 		readyC := make(chan struct{})
+		deferredWaitC := make(chan struct{})
 		errC := make(chan error, 1)
 		go func() {
-			errC <- func() error {
+			var commitWaitFn func(context.Context)
+			if deferred {
+				// If the test wants the caller to assume responsibility for commit
+				// waiting, we expect the transaction to return immediately after a
+				// commit. However, the commit-wait function returned here will then
+				// block for the duration of the commit-wait.
+				commitWaitFn = txn.DeferCommitWait(ctx)
+			}
+
+			// Run the transaction.
+			err := func() error {
 				key := roachpb.Key("a")
 
 				// If we want the transaction to commit in the future, we
@@ -1231,10 +1243,24 @@ func TestTxnCommitWait(t *testing.T) {
 				}
 				return txn.Commit(ctx)
 			}()
+
+			if commitWaitFn != nil {
+				close(deferredWaitC)
+				commitWaitFn(ctx) // NOTE: blocks
+			}
+
+			errC <- err
 		}()
 
 		// Wait until the transaction is about to commit / rollback.
 		<-readyC
+
+		// If the test deferred the commit wait, the transaction commit should
+		// return immediately, without waiting. However, the caller will then
+		// wait when it calls the commit-wait function.
+		if deferred {
+			<-deferredWaitC
+		}
 
 		if !commit {
 			// If the transaction rolled back, it should immediately return,
@@ -1285,7 +1311,9 @@ func TestTxnCommitWait(t *testing.T) {
 		testutils.RunTrueAndFalse(t, "commit", func(t *testing.T, commit bool) {
 			testutils.RunTrueAndFalse(t, "readOnly", func(t *testing.T, readOnly bool) {
 				testutils.RunTrueAndFalse(t, "futureTime", func(t *testing.T, futureTime bool) {
-					testFn(t, linearizable, commit, readOnly, futureTime)
+					testutils.RunTrueAndFalse(t, "deferred", func(t *testing.T, deferred bool) {
+						testFn(t, linearizable, commit, readOnly, futureTime, deferred)
+					})
 				})
 			})
 		})
