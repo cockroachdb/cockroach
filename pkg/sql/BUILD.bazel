@@ -107,6 +107,7 @@ go_library(
         "insert_fast_path.go",
         "instrumentation.go",
         "internal.go",
+        "internal_result_channel.go",
         "inverted_filter.go",
         "inverted_join.go",
         "job_exec_context.go",

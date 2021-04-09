@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -130,14 +129,15 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 //
 // If txn is not nil, the statement will be executed in the respective txn.
 //
-// ch is used by the connExecutor goroutine to send the rows and will be closed
-// once the goroutine exits its run() loop.
+// The ieResultWriter coordinates communicating results to the client. It may
+// block execution when rows are being sent in order to prevent hazardous
+// concurrency.
 //
 // sd will constitute the executor's session state.
 func (ie *InternalExecutor) initConnEx(
 	ctx context.Context,
 	txn *kv.Txn,
-	ch chan ieIteratorResult,
+	w ieResultWriter,
 	sd *sessiondata.SessionData,
 	stmtBuf *StmtBuf,
 	wg *sync.WaitGroup,
@@ -145,7 +145,7 @@ func (ie *InternalExecutor) initConnEx(
 	errCallback func(error),
 ) {
 	clientComm := &internalClientComm{
-		ch: ch,
+		w: w,
 		// init lastDelivered below the position of the first result (0).
 		lastDelivered: -1,
 		sync:          syncCallback,
@@ -203,7 +203,7 @@ func (ie *InternalExecutor) initConnEx(
 			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
 			errCallback(err)
 		}
-		close(ch)
+		w.finish()
 		closeMode := normalClose
 		if txn != nil {
 			closeMode = externalTxnClose
@@ -222,14 +222,17 @@ type ieIteratorResult struct {
 }
 
 type rowsIterator struct {
-	// ch is the channel on which the connExecutor goroutine sends the rows (in
-	// streamingCommandResult.AddRow). The iterator goroutine receives rows (or
-	// other metadata) and will block on this channel if it is empty. The
-	// channel will be closed when the connExecutor goroutine exits its run()
-	// loop.
-	ch           chan ieIteratorResult
+	r ieResultReader
+
 	rowsAffected int
 	resultCols   colinfo.ResultColumns
+
+	// first, if non-nil, is the first object read from r. We block the return
+	// of the created rowsIterator in execInternal() until the producer writes
+	// something into the corresponding ieResultWriter because this indicates
+	// that the query planning has been fully performed (we want to prohibit the
+	// concurrent usage of the transactions).
+	first *ieIteratorResult
 
 	lastRow tree.Datums
 	lastErr error
@@ -254,10 +257,6 @@ type rowsIterator struct {
 var _ sqlutil.InternalRows = &rowsIterator{}
 
 func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
-	if r.done {
-		return false, r.lastErr
-	}
-
 	// Due to recursive calls to Next() below, this deferred function might get
 	// executed multiple times, yet it is not a problem because Close() is
 	// idempotent and we're unsetting the error callback.
@@ -276,47 +275,60 @@ func (r *rowsIterator) Next(ctx context.Context) (_ bool, retErr error) {
 		retErr = r.lastErr
 	}()
 
-	select {
-	case next, ok := <-r.ch:
-		if !ok {
-			r.done = true
-			return false, nil
-		}
-		if next.row != nil {
+	if r.done {
+		return false, r.lastErr
+	}
+
+	// handleDataObject processes a single object read from ieResultReader and
+	// returns the result to be returned by Next. It also might call Next
+	// recursively if the object is a piece of metadata.
+	handleDataObject := func(data ieIteratorResult) (bool, error) {
+		if data.row != nil {
 			r.rowsAffected++
 			// No need to make a copy because streamingCommandResult does that
 			// for us.
-			r.lastRow = next.row
+			r.lastRow = data.row
 			return true, nil
 		}
-		if next.rowsAffectedIncrement != nil {
-			r.rowsAffected += *next.rowsAffectedIncrement
+		if data.rowsAffectedIncrement != nil {
+			r.rowsAffected += *data.rowsAffectedIncrement
 			return r.Next(ctx)
 		}
-		if next.cols != nil {
+		if data.cols != nil {
 			// Ignore the result columns if they are already set on the
 			// iterator: it is possible for ROWS statement type to be executed
 			// in a 'rows affected' mode, in such case the correct columns are
-			// set manually when instantiating an iterator, but the result
+			// set manually when instantiating the iterator, but the result
 			// columns of the statement are also sent by SetColumns() (we need
 			// to keep the former).
 			if r.resultCols == nil {
-				r.resultCols = next.cols
+				r.resultCols = data.cols
 			}
 			return r.Next(ctx)
 		}
-		if next.err == nil {
-			next.err = errors.AssertionFailedf("unexpectedly empty ieIteratorResult object")
+		if data.err == nil {
+			data.err = errors.AssertionFailedf("unexpectedly empty ieIteratorResult object")
 		}
-		r.lastErr = next.err
-		r.done = true
-		return false, r.lastErr
-
-	case <-ctx.Done():
-		r.lastErr = ctx.Err()
+		r.lastErr = data.err
 		r.done = true
 		return false, r.lastErr
 	}
+
+	if r.first != nil {
+		// This is the very first call to Next() and we have already buffered
+		// up the first piece of data before returning rowsIterator to the
+		// caller.
+		first := r.first
+		r.first = nil
+		return handleDataObject(*first)
+	}
+
+	var next ieIteratorResult
+	next, r.done, r.lastErr = r.r.nextResult(ctx)
+	if r.done || r.lastErr != nil {
+		return false, r.lastErr
+	}
+	return handleDataObject(next)
 }
 
 func (r *rowsIterator) Cur() tree.Datums {
@@ -336,23 +348,9 @@ func (r *rowsIterator) Close() error {
 			r.sp = nil
 		}
 	}()
-
-	// We also need to exhaust the channel since the connExecutor goroutine
-	// might be blocked on sending the row in AddRow().
-	// TODO(yuzefovich): at the moment, the connExecutor goroutine will not stop
-	// execution of the current command right away when the stmtBuf is closed
-	// (e.g. if it is currently executing ExecStmt command, all rows will still
-	// be pushed into the channel). Improve this.
-	for res := range r.ch {
-		// We are only interested in possible errors if we haven't already seen
-		// one. All other things are simply ignored.
-		if res.err != nil && r.lastErr == nil {
-			r.lastErr = res.err
-			if r.errCallback != nil {
-				r.lastErr = r.errCallback(r.lastErr)
-				r.errCallback = nil
-			}
-		}
+	// Close the ieResultReader to tell the writer that we're done.
+	if err := r.r.close(); err != nil && r.lastErr == nil {
+		r.lastErr = err
 	}
 	return r.lastErr
 }
@@ -405,7 +403,10 @@ func (ie *InternalExecutor) queryInternalBuffered(
 	limit int,
 	qargs ...interface{},
 ) ([]tree.Datums, colinfo.ResultColumns, error) {
-	it, err := ie.execInternal(ctx, opName, txn, sessionDataOverride, stmt, qargs...)
+	// We will run the query to completion, so we can use an async result
+	// channel.
+	rw := newAsyncIEResultChannel()
+	it, err := ie.execInternal(ctx, opName, rw, txn, sessionDataOverride, stmt, qargs...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -504,7 +505,10 @@ func (ie *InternalExecutor) ExecEx(
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
-	it, err := ie.execInternal(ctx, opName, txn, session, stmt, qargs...)
+	// We will run the query to completion, so we can use an async result
+	// channel.
+	rw := newAsyncIEResultChannel()
+	it, err := ie.execInternal(ctx, opName, rw, txn, session, stmt, qargs...)
 	if err != nil {
 		return 0, err
 	}
@@ -542,7 +546,9 @@ func (ie *InternalExecutor) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (sqlutil.InternalRows, error) {
-	return ie.execInternal(ctx, opName, txn, session, stmt, qargs...)
+	return ie.execInternal(
+		ctx, opName, newSyncIEResultChannel(), txn, session, stmt, qargs...,
+	)
 }
 
 // applyOverrides overrides the respective fields from sd for all the fields set on o.
@@ -590,13 +596,6 @@ var rowsAffectedResultColumns = colinfo.ResultColumns{
 	},
 }
 
-var ieIteratorChannelBufferSize = util.ConstantWithMetamorphicTestRange(
-	"iterator-channel-buffer-size",
-	32, /* defaultValue */
-	1,  /* min */
-	32, /* max */
-)
-
 // execInternal executes a statement.
 //
 // sessionDataOverride can be used to control select fields in the executor's
@@ -605,6 +604,7 @@ var ieIteratorChannelBufferSize = util.ConstantWithMetamorphicTestRange(
 func (ie *InternalExecutor) execInternal(
 	ctx context.Context,
 	opName string,
+	rw *ieResultChannel,
 	txn *kv.Txn,
 	sessionDataOverride sessiondata.InternalExecutorOverride,
 	stmt string,
@@ -633,7 +633,6 @@ func (ie *InternalExecutor) execInternal(
 	// the span to the iterator. This is necessary so that the connExecutor
 	// exits before the span is finished.
 	ctx, sp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
-
 	stmtBuf := NewStmtBuf()
 	var wg sync.WaitGroup
 
@@ -682,7 +681,6 @@ func (ie *InternalExecutor) execInternal(
 	// statement we care about before that command is sent for execution.
 	var resPos CmdPos
 
-	ch := make(chan ieIteratorResult, ieIteratorChannelBufferSize)
 	syncCallback := func(results []resWithPos) {
 		// Close the stmtBuf so that the connExecutor exits its run() loop.
 		stmtBuf.Close()
@@ -691,14 +689,18 @@ func (ie *InternalExecutor) execInternal(
 				// If we encounter an error, there's no point in looking
 				// further; the rest of the commands in the batch have been
 				// skipped.
-				ch <- ieIteratorResult{err: res.Err()}
+				_ = rw.addResult(ctx, ieIteratorResult{err: res.Err()})
 				return
 			}
 			if res.pos == resPos {
 				return
 			}
 		}
-		ch <- ieIteratorResult{err: errors.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
+		_ = rw.addResult(ctx, ieIteratorResult{
+			err: errors.AssertionFailedf(
+				"missing result for pos: %d and no previous error", resPos,
+			),
+		})
 	}
 	// errCallback is called if an error is returned from the connExecutor's
 	// run() loop.
@@ -706,9 +708,9 @@ func (ie *InternalExecutor) execInternal(
 		// The connExecutor exited its run() loop, so the stmtBuf must have been
 		// closed. Still, since Close() is idempotent, we'll call it here too.
 		stmtBuf.Close()
-		ch <- ieIteratorResult{err: err}
+		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	ie.initConnEx(ctx, txn, ch, sd, stmtBuf, &wg, syncCallback, errCallback)
+	ie.initConnEx(ctx, txn, rw, sd, stmtBuf, &wg, syncCallback, errCallback)
 
 	typeHints := make(tree.PlaceholderTypes, len(datums))
 	for i, d := range datums {
@@ -752,17 +754,47 @@ func (ie *InternalExecutor) execInternal(
 	if err := stmtBuf.Push(ctx, Sync{}); err != nil {
 		return nil, err
 	}
-
-	var resultColumns colinfo.ResultColumns
-	if parsed.AST.StatementType() != tree.Rows {
-		resultColumns = rowsAffectedResultColumns
+	r = &rowsIterator{
+		r:       rw,
+		stmtBuf: stmtBuf,
+		wg:      &wg,
 	}
-	return &rowsIterator{
-		ch:         ch,
-		resultCols: resultColumns,
-		stmtBuf:    stmtBuf,
-		wg:         &wg,
-	}, nil
+
+	if parsed.AST.StatementType() != tree.Rows {
+		r.resultCols = rowsAffectedResultColumns
+	}
+
+	// Now we need to block the reader goroutine until the query planning has
+	// been performed by the connExecutor goroutine. We do so by waiting until
+	// the first object is sent on the data channel.
+	{
+		var first ieIteratorResult
+		if first, r.done, r.lastErr = rw.firstResult(ctx); !r.done {
+			r.first = &first
+		}
+	}
+	if !r.done && r.first.cols != nil {
+		// If the query is of ROWS statement type, the very first thing sent on
+		// the channel will be the column schema. This will occur before the
+		// query is given to the execution engine, so we actually need to get
+		// the next piece from the data channel.
+		//
+		// Note that only statements of ROWS type should send the cols, but we
+		// choose to be defensive and don't assert that.
+		if r.resultCols == nil {
+			r.resultCols = r.first.cols
+		}
+		var first ieIteratorResult
+		first, r.done, r.lastErr = rw.nextResult(ctx)
+		if !r.done {
+			r.first = &first
+		}
+	}
+
+	// Note that if a context cancellation error has occurred, we still return
+	// the iterator and nil retErr so that the iterator is properly closed by
+	// the caller which will cleanup the connExecutor goroutine.
+	return r, nil
 }
 
 // internalClientComm is an implementation of ClientComm used by the
@@ -772,9 +804,8 @@ type internalClientComm struct {
 	// InternalExecutor.
 	results []resWithPos
 
-	// ch is the channel on which the results of the query execution (ExecStmt
-	// or ExecPortal commands) are propagated to the consumer (the iterator).
-	ch chan ieIteratorResult
+	// The results of the query execution will be written into w.
+	w ieResultWriter
 
 	lastDelivered CmdPos
 
@@ -808,7 +839,7 @@ func (icc *internalClientComm) CreateStatementResult(
 // closed.
 func (icc *internalClientComm) createRes(pos CmdPos, onClose func()) *streamingCommandResult {
 	res := &streamingCommandResult{
-		ch: icc.ch,
+		w: icc.w,
 		closeCallback: func(res *streamingCommandResult, typ resCloseType) {
 			if typ == discarded {
 				return

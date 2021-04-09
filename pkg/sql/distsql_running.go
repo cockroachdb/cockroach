@@ -474,7 +474,7 @@ type rowResultWriter interface {
 	// AddRow writes a result row.
 	// Note that the caller owns the row slice and might reuse it.
 	AddRow(ctx context.Context, row tree.Datums) error
-	IncrementRowsAffected(n int)
+	IncrementRowsAffected(ctx context.Context, n int)
 	SetError(error)
 	Err() error
 }
@@ -525,7 +525,7 @@ func (w *errOnlyResultWriter) Err() error {
 func (w *errOnlyResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	panic("AddRow not supported by errOnlyResultWriter")
 }
-func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
+func (w *errOnlyResultWriter) IncrementRowsAffected(ctx context.Context, n int) {
 	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
 }
 
@@ -717,7 +717,7 @@ func (r *DistSQLReceiver) Push(
 		// We only need the row count. planNodeToRowSource is set up to handle
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
-		r.resultWriter.IncrementRowsAffected(int(tree.MustBeDInt(row[0].Datum)))
+		r.resultWriter.IncrementRowsAffected(r.ctx, int(tree.MustBeDInt(row[0].Datum)))
 		return r.status
 	}
 
@@ -747,10 +747,10 @@ func (r *DistSQLReceiver) Push(
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
 	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
-		if errors.Is(commErr, ErrLimitedResultClosed) {
-			// ErrLimitedResultClosed is not a real error, it is a signal to
-			// stop distsql and return success to the client (that's why we
-			// don't set the error on the resultWriter).
+		if errors.Is(commErr, ErrLimitedResultClosed) || errors.Is(commErr, errIEResultChannelClosed) {
+			// ErrLimitedResultClosed and errIEResultChannelClosed are not real
+			// errors, it is a signal to stop distsql and return success to the
+			// client (that's why we don't set the error on the resultWriter).
 			r.status = execinfra.DrainRequested
 		} else {
 			// Set the error on the resultWriter too, for the convenience of some of the
