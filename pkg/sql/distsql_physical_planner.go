@@ -1593,12 +1593,17 @@ func (dsp *DistSQLPlanner) planAggregators(
 	var finalAggsSpec execinfrapb.AggregatorSpec
 	var finalAggsPost execinfrapb.PostProcessSpec
 
+	// Note that we pass in nil as the second argument because we will have a
+	// simple 1-to-1 PlanToStreamColMap in the end.
+	finalOutputOrdering := dsp.convertOrdering(info.reqOrdering, nil /* planToStreamColMap */)
+
 	if !multiStage {
 		finalAggsSpec = execinfrapb.AggregatorSpec{
 			Type:             aggType,
 			Aggregations:     info.aggregations,
 			GroupCols:        groupCols,
 			OrderedGroupCols: orderedGroupCols,
+			OutputOrdering:   finalOutputOrdering,
 		}
 	} else {
 		// Some aggregations might need multiple aggregation as part of
@@ -1768,7 +1773,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		finalOrderedGroupCols := make([]uint32, 0, len(orderedGroupCols))
 		for i, groupColIdx := range groupCols {
 			agg := execinfrapb.AggregatorSpec_Aggregation{
-				Func:   execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				Func:   execinfrapb.AnyNotNull,
 				ColIdx: []uint32{groupColIdx},
 			}
 			// See if there already is an aggregation like the one
@@ -1820,6 +1825,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 			Aggregations:     localAggs,
 			GroupCols:        groupCols,
 			OrderedGroupCols: orderedGroupCols,
+			OutputOrdering:   execinfrapb.Ordering{Columns: ordCols},
 		}
 
 		p.AddNoGroupingStage(
@@ -1834,6 +1840,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 			Aggregations:     finalAggs,
 			GroupCols:        finalGroupCols,
 			OrderedGroupCols: finalOrderedGroupCols,
+			OutputOrdering:   finalOutputOrdering,
 		}
 
 		if needRender {

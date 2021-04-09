@@ -71,7 +71,7 @@ func NewExternalHashAggregator(
 		}
 		return diskBackedFallbackOp
 	}
-	return newHashBasedPartitioner(
+	eha := newHashBasedPartitioner(
 		newAggArgs.Allocator,
 		flowCtx,
 		args,
@@ -84,6 +84,23 @@ func NewExternalHashAggregator(
 		diskAcc,
 		ehaNumRequiredActivePartitions,
 	)
+	// The last thing we need to do is making sure that the output has the
+	// desired ordering if any is required. Note that since the input is assumed
+	// to be already ordered according to the desired ordering, for the
+	// in-memory hash aggregation we get it for "free" since it doesn't change
+	// the ordering of tuples. However, that is not that the case with the
+	// hash-based partitioner, so we might need to plan an external sort on top
+	// of it.
+	outputOrdering := args.Spec.Core.Aggregator.OutputOrdering
+	if len(outputOrdering.Columns) == 0 {
+		// No particular output ordering is required.
+		return eha
+	}
+	// TODO(yuzefovich): the fact that we're planning an additional external
+	// sort isn't accounted for when considering the number file descriptors to
+	// acquire. Not urgent, but it should be fixed.
+	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, ehaNumRequiredActivePartitions)
+	return createDiskBackedSorter(eha, args.Spec.ResultTypes, outputOrdering.Columns, maxNumberActivePartitions)
 }
 
 // HashAggregationDiskSpillingEnabled is a cluster setting that allows to

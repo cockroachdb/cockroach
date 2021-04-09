@@ -134,6 +134,9 @@ define GroupBy {
     # distinct set of values on the set of columns in the ordering).
     GroupColOrdering colinfo.ColumnOrdering
     Aggregations []exec.AggInfo
+
+    # If set, the output must have this ordering, but it is guaranteed that
+    # ReqOrdering is a prefix of GroupColOrdering.
     ReqOrdering exec.OutputOrdering
 }
 

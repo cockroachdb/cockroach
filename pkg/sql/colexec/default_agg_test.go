@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,10 +34,8 @@ func TestDefaultAggregateFunc(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testCases := []aggregatorTestCase{
 		{
-			aggFns: []execinfrapb.AggregatorSpec_Func{
-				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-				execinfrapb.AggregatorSpec_STRING_AGG,
-			},
+			name: "StringAgg",
+			typs: []*types.T{types.Int, types.String, types.String},
 			input: colexectestutils.Tuples{
 				{nil, "a", "1"},
 				{nil, "b", "2"},
@@ -46,21 +45,21 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				{1, "f", "6"},
 				{1, "g", "7"},
 			},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{0}, {1, 2}},
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AnyNotNull,
+				execinfrapb.StringAgg,
+			},
 			expected: colexectestutils.Tuples{
 				{nil, "a2b"},
 				{0, "c4d5e"},
 				{1, "f7g"},
 			},
-			typs:      []*types.T{types.Int, types.String, types.String},
-			name:      "StringAgg",
-			groupCols: []uint32{0},
-			aggCols:   [][]uint32{{0}, {1, 2}},
 		},
 		{
-			aggFns: []execinfrapb.AggregatorSpec_Func{
-				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-				execinfrapb.AggregatorSpec_STRING_AGG,
-			},
+			name: "StringAggWithConstDelimiter",
+			typs: []*types.T{types.Int, types.String},
 			input: colexectestutils.Tuples{
 				{nil, "a"},
 				{nil, "b"},
@@ -70,24 +69,21 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				{1, "f"},
 				{1, "g"},
 			},
-			constArguments: [][]execinfrapb.Expression{nil, {{Expr: "'_'"}}},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{0}, {1}},
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AnyNotNull,
+				execinfrapb.StringAgg,
+			},
 			expected: colexectestutils.Tuples{
 				{nil, "a_b"},
 				{0, "c_d_e"},
 				{1, "f_g"},
 			},
-			typs:      []*types.T{types.Int, types.String},
-			name:      "StringAggWithConstDelimiter",
-			groupCols: []uint32{0},
-			aggCols:   [][]uint32{{0}, {1}},
+			constArguments: [][]execinfrapb.Expression{nil, {{Expr: "'_'"}}},
 		},
 		{
-			aggFns: []execinfrapb.AggregatorSpec_Func{
-				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-				execinfrapb.AggregatorSpec_JSON_AGG,
-				execinfrapb.AggregatorSpec_JSON_AGG,
-				execinfrapb.AggregatorSpec_STRING_AGG,
-			},
+			name: "JsonAggWithStringAgg",
 			typs: []*types.T{types.Int, types.Jsonb, types.String},
 			input: colexectestutils.Tuples{
 				{nil, `'{"id": 1}'`, "a"},
@@ -97,21 +93,24 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				{0, `'{"id": 2}'`, "e"},
 				{1, `'{"id": 3}'`, "f"},
 			},
-			constArguments: [][]execinfrapb.Expression{nil, nil, nil, {{Expr: "'_'"}}},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{0}, {1}, {2}, {2}},
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AnyNotNull,
+				execinfrapb.JSONAgg,
+				execinfrapb.JSONAgg,
+				execinfrapb.StringAgg,
+			},
 			expected: colexectestutils.Tuples{
 				{nil, `'[{"id": 1}, {"id": 2}]'`, `'["a", "b"]'`, "a_b"},
 				{0, `'[{"id": 1}, {"id": 2}, {"id": 2}]'`, `'["c", "d", "e"]'`, "c_d_e"},
 				{1, `'[{"id": 3}]'`, `'["f"]'`, "f"},
 			},
-			name:      "JsonAggWithStringAgg",
-			groupCols: []uint32{0},
-			aggCols:   [][]uint32{{0}, {1}, {2}, {2}},
+			constArguments: [][]execinfrapb.Expression{nil, nil, nil, {{Expr: "'_'"}}},
 		},
 		{
-			aggFns: []execinfrapb.AggregatorSpec_Func{
-				execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-				execinfrapb.AggregatorSpec_XOR_AGG,
-			},
+			name: "XorAgg",
+			typs: rowenc.TwoIntCols,
 			input: colexectestutils.Tuples{
 				{nil, 3},
 				{nil, 1},
@@ -119,14 +118,16 @@ func TestDefaultAggregateFunc(t *testing.T) {
 				{0, -1},
 				{0, 0},
 			},
+			groupCols: []uint32{0},
+			aggCols:   [][]uint32{{0}, {1}},
+			aggFns: []execinfrapb.AggregatorSpec_Func{
+				execinfrapb.AnyNotNull,
+				execinfrapb.XorAgg,
+			},
 			expected: colexectestutils.Tuples{
 				{nil, 2},
 				{0, 4},
 			},
-			typs:      []*types.T{types.Int, types.Int},
-			name:      "XorAgg",
-			groupCols: []uint32{0},
-			aggCols:   [][]uint32{{0}, {1}},
 		},
 	}
 
@@ -166,7 +167,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 }
 
 func BenchmarkDefaultAggregateFunction(b *testing.B) {
-	aggFn := execinfrapb.AggregatorSpec_STRING_AGG
+	aggFn := execinfrapb.StringAgg
 	for _, agg := range aggTypes {
 		for _, numInputRows := range []int{32, 32 * coldata.BatchSize()} {
 			for _, groupSize := range []int{1, 2, 32, 128, coldata.BatchSize()} {

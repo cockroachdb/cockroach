@@ -844,8 +844,6 @@ message AggregatorSpec {
     reserved 3;
   }
 
-  optional Type type = 5 [(gogoproto.nullable) = false];
-
   // The group key is a subset of the columns in the input stream schema on the
   // basis of which we define our groups.
   repeated uint32 group_cols = 2 [packed = true];
@@ -854,6 +852,13 @@ message AggregatorSpec {
 
   // A subset of the GROUP BY columns which are ordered in the input.
   repeated uint32 ordered_group_cols = 4 [packed = true];
+
+  optional Type type = 5 [(gogoproto.nullable) = false];
+
+  // OutputOrdering specifies the required ordering of the output produced by
+  // the aggregator. The input to the processor *must* already be ordered
+  // according to it.
+  optional Ordering output_ordering = 6 [(gogoproto.nullable) = false];
 }
 
 // ProjectSetSpec is the specification of a processor which applies a set of

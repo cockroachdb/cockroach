@@ -105,9 +105,11 @@ type JSON interface {
 	// comments in the SpanExpression definition for details.
 	//
 	// If isRoot is true, this function is being called at the root level of the
-	// JSON hierarchy.
+	// JSON hierarchy. If isObjectValue is true, the given JSON is the value of a
+	// JSON object key. Note that isRoot and isObjectValue cannot both be true at
+	// the same time.
 	encodeContainedInvertedIndexSpans(
-		b []byte, isRoot bool,
+		b []byte, isRoot, isObjectValue bool,
 	) (invertedExpr inverted.Expression, err error)
 
 	// numInvertedIndexEntries returns the number of entries that will be
@@ -814,7 +816,7 @@ func EncodeContainedInvertedIndexSpans(
 	b []byte, json JSON,
 ) (invertedExpr inverted.Expression, err error) {
 	invertedExpr, err = json.encodeContainedInvertedIndexSpans(
-		encoding.EncodeJSONAscending(b), true, /* isRoot */
+		encoding.EncodeJSONAscending(b), true /* isRoot */, false, /* isObjectValue */
 	)
 	if err != nil {
 		return nil, err
@@ -843,7 +845,7 @@ func (j jsonNull) encodeContainingInvertedIndexSpans(
 }
 
 func (j jsonNull) encodeContainedInvertedIndexSpans(
-	b []byte, isRoot bool,
+	b []byte, isRoot, isObjectValue bool,
 ) (inverted.Expression, error) {
 	invertedExpr, err := encodeContainedInvertedIndexSpansFromLeaf(j, b, isRoot)
 	return invertedExpr, err
@@ -861,7 +863,7 @@ func (j jsonTrue) encodeContainingInvertedIndexSpans(
 }
 
 func (j jsonTrue) encodeContainedInvertedIndexSpans(
-	b []byte, isRoot bool,
+	b []byte, isRoot, isObjectValue bool,
 ) (inverted.Expression, error) {
 	invertedExpr, err := encodeContainedInvertedIndexSpansFromLeaf(j, b, isRoot)
 	return invertedExpr, err
@@ -879,7 +881,7 @@ func (j jsonFalse) encodeContainingInvertedIndexSpans(
 }
 
 func (j jsonFalse) encodeContainedInvertedIndexSpans(
-	b []byte, isRoot bool,
+	b []byte, isRoot, isObjectValue bool,
 ) (inverted.Expression, error) {
 	invertedExpr, err := encodeContainedInvertedIndexSpansFromLeaf(j, b, isRoot)
 	return invertedExpr, err
@@ -897,7 +899,7 @@ func (j jsonString) encodeContainingInvertedIndexSpans(
 }
 
 func (j jsonString) encodeContainedInvertedIndexSpans(
-	b []byte, isRoot bool,
+	b []byte, isRoot, isObjectValue bool,
 ) (inverted.Expression, error) {
 	invertedExpr, err := encodeContainedInvertedIndexSpansFromLeaf(j, b, isRoot)
 	return invertedExpr, err
@@ -916,7 +918,7 @@ func (j jsonNumber) encodeContainingInvertedIndexSpans(
 }
 
 func (j jsonNumber) encodeContainedInvertedIndexSpans(
-	b []byte, isRoot bool,
+	b []byte, isRoot, isObjectValue bool,
 ) (inverted.Expression, error) {
 	invertedExpr, err := encodeContainedInvertedIndexSpansFromLeaf(j, b, isRoot)
 	return invertedExpr, err
@@ -992,29 +994,37 @@ func (j jsonArray) encodeContainingInvertedIndexSpans(
 }
 
 func (j jsonArray) encodeContainedInvertedIndexSpans(
-	b []byte, isRoot bool,
+	b []byte, isRoot, isObjectValue bool,
 ) (invertedExpr inverted.Expression, err error) {
-	// The empty array should always be added to the spans, since it is contained
-	// by everything.
-	emptyArrSpanExpr := inverted.ExprForSpan(
-		inverted.MakeSingleValSpan(encoding.EncodeJSONEmptyArray(b[:len(b):len(b)])), false, /* tight */
-	)
-	emptyArrSpanExpr.Unique = true
-	// If the given jsonArray is empty, we return the SpanExpression.
-	if len(j) == 0 {
-		return emptyArrSpanExpr, nil
+	if !isObjectValue || len(j) == 0 {
+		// The empty array should always be added to the spans, since it is contained
+		// by everything. Empty array values are already accounted for when getting
+		// the spans for a non-empty object value, so they should be excluded.
+		emptyArrSpanExpr := inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(encoding.EncodeJSONEmptyArray(b[:len(b):len(b)])), false, /* tight */
+		)
+		emptyArrSpanExpr.Unique = true
+		invertedExpr = emptyArrSpanExpr
 	}
 
-	invertedExpr = emptyArrSpanExpr
+	// If the given jsonArray is empty, we return the SpanExpression.
+	if len(j) == 0 {
+		return invertedExpr, nil
+	}
+
 	prefix := encoding.EncodeArrayAscending(b[:len(b):len(b)])
 	for i := range j {
 		childWithPrefix, err := j[i].encodeContainedInvertedIndexSpans(
-			prefix[:len(prefix):len(prefix)], false, /* isRoot */
+			prefix[:len(prefix):len(prefix)], false /* isRoot */, false, /* isObjectValue */
 		)
 		if err != nil {
 			return nil, err
 		}
-		invertedExpr = inverted.Or(invertedExpr, childWithPrefix)
+		if invertedExpr == nil {
+			invertedExpr = childWithPrefix
+		} else {
+			invertedExpr = inverted.Or(invertedExpr, childWithPrefix)
+		}
 
 		// Scalars inside the array should also be included in the spans
 		// without the array prefix, since they are contained by the array. This
@@ -1028,7 +1038,7 @@ func (j jsonArray) encodeContainedInvertedIndexSpans(
 		// and empty arrays/objects.
 		if isRoot && isEnd(j[i]) {
 			childWithoutPrefix, err := j[i].encodeContainedInvertedIndexSpans(
-				b[:len(b):len(b)], false, /* isRoot */
+				b[:len(b):len(b)], false /* isRoot */, false, /* isObjectValue */
 			)
 			if err != nil {
 				return nil, err
@@ -1112,34 +1122,41 @@ func (j jsonObject) encodeContainingInvertedIndexSpans(
 }
 
 func (j jsonObject) encodeContainedInvertedIndexSpans(
-	b []byte, isRoot bool,
+	b []byte, isRoot, isObjectValue bool,
 ) (invertedExpr inverted.Expression, err error) {
 	// The empty object should always be added to the spans, since it is contained
-	// by everything.
-	emptyObjSpanExpr := inverted.ExprForSpan(
-		inverted.MakeSingleValSpan(encoding.EncodeJSONEmptyObject(b[:len(b):len(b)])), false, /* tight */
-	)
-	emptyObjSpanExpr.Unique = true
+	// by everything. Empty object values are already accounted for when getting
+	// the spans for a non-empty object value, so they should be excluded.
+	if !isObjectValue || len(j) == 0 {
+		emptyObjSpanExpr := inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(encoding.EncodeJSONEmptyObject(b[:len(b):len(b)])), false, /* tight */
+		)
+		emptyObjSpanExpr.Unique = true
+		invertedExpr = emptyObjSpanExpr
+	}
 	// If the given jsonObject is empty, we return the SpanExpression.
 	if len(j) == 0 {
-		return emptyObjSpanExpr, nil
+		return invertedExpr, nil
 	}
 
-	invertedExpr = emptyObjSpanExpr
 	for i := range j {
 		// We're trying to see if this is the end of the JSON path. If it is, then
 		// we don't want to add an extra separator.
 		end := isEnd(j[i].v)
 
 		prefix := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(j[i].k), end)
-
 		child, err := j[i].v.encodeContainedInvertedIndexSpans(
-			prefix, false, /* isRoot */
+			prefix, false /* isRoot */, true, /* isObjectValue */
 		)
 		if err != nil {
 			return nil, err
 		}
-		invertedExpr = inverted.Or(invertedExpr, child)
+
+		if invertedExpr == nil {
+			invertedExpr = child
+		} else {
+			invertedExpr = inverted.Or(invertedExpr, child)
+		}
 
 		// When we have a nested object or array, we want to include the empty
 		// object or array span with the prefix. For example, '{"a": {"b": "c"}}'
@@ -1150,7 +1167,7 @@ func (j jsonObject) encodeContainedInvertedIndexSpans(
 			if v != nil {
 				prefixWithEnd := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(j[i].k), true)
 				childWithEnd, err := v.encodeContainedInvertedIndexSpans(
-					prefixWithEnd, false, /* isRoot */
+					prefixWithEnd, false /* isRoot */, true, /* isObjectValue */
 				)
 				if err != nil {
 					return nil, err
@@ -1349,9 +1366,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 // array spans are not encoded by this function.
 //
 // If isRoot is true, this function is being called at the root level of the
-// JSON hierarchy. If isObjectValue is true, the given JSON is the value of a
-// JSON object key. Note that isRoot and isObjectValue cannot both be true at
-// the same time.
+// JSON hierarchy.
 func encodeContainedInvertedIndexSpansFromLeaf(
 	j JSON, b []byte, isRoot bool,
 ) (invertedExpr inverted.Expression, err error) {

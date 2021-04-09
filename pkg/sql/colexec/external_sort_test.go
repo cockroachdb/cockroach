@@ -487,9 +487,6 @@ func createDiskBackedSorter(
 		DiskQueueCfg:        diskQueueCfg,
 		FDSemaphore:         testingSemaphore,
 	}
-	// External sorter relies on different memory accounts to
-	// understand when to start a new partition, so we will not use
-	// the streaming memory account.
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	args.TestingKnobs.DelegateFDAcquisitions = delegateFDAcquisitions

@@ -451,12 +451,12 @@ func TestDistAggregationTable(t *testing.T) {
 	desc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	for fn, info := range DistAggregationTable {
-		if fn == execinfrapb.AggregatorSpec_ANY_NOT_NULL {
+		if fn == execinfrapb.AnyNotNull {
 			// ANY_NOT_NULL only has a definite result if all rows have the same value
 			// on the relevant column; skip testing this trivial case.
 			continue
 		}
-		if fn == execinfrapb.AggregatorSpec_COUNT_ROWS {
+		if fn == execinfrapb.CountRows {
 			// COUNT_ROWS takes no arguments; skip it in this test.
 			continue
 		}
@@ -472,7 +472,7 @@ func TestDistAggregationTable(t *testing.T) {
 			if err != nil {
 				continue
 			}
-			if fn == execinfrapb.AggregatorSpec_SUM_INT && col.Ordinal() == 2 {
+			if fn == execinfrapb.SumInt && col.Ordinal() == 2 {
 				// When using sum_int over int2 column we're likely to hit an
 				// integer out of range error since we insert random DInts into
 				// that column, so we'll skip such config.
