@@ -273,6 +273,22 @@ func getDescFromCatalogObjectForPermissions(o cat.Object) (catalog.Descriptor, e
 	}
 }
 
+// GetColumnTypeOfDataSource is part of the cat.Catalog interface.
+func (oc *optCatalog) GetColumnTypeOfDataSource(o cat.DataSource, ord int) (*types.T, error) {
+	switch t := o.(type) {
+	case *optTable:
+		return t.desc.PublicColumns()[ord].GetType(), nil
+	case *optVirtualTable:
+		return t.desc.PublicColumns()[ord].GetType(), nil
+	case *optView:
+		return t.desc.PublicColumns()[ord].GetType(), nil
+	case *optSequence:
+		return t.desc.PublicColumns()[ord].GetType(), nil
+	default:
+		return nil, errors.AssertionFailedf("invalid object type: %T", o)
+	}
+}
+
 func getDescForDataSource(o cat.DataSource) (catalog.TableDescriptor, error) {
 	switch t := o.(type) {
 	case *optTable:
