@@ -69,6 +69,7 @@ var oldFriendsMap = map[string]string{
 	"rohany":       "solongordon",
 	"vivekmenezes": "",
 	"lucy-zhang":   "ajwerner",
+	"mjibson":      "rafiss",
 }
 
 // context augments context.Context with a logger.
