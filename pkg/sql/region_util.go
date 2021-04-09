@@ -506,6 +506,25 @@ var ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes = func(
 	if err != nil {
 		return false, zonepb.ZoneConfig{}, err
 	}
+
+	// Wipe out the subzone multi-region fields before we copy over the
+	// multi-region fields to the zone config down below. We have to do this to
+	// handle the case where users have set a zone config on an index and we're
+	// ALTERing to a table locality that doesn't lay down index zone
+	// configurations (e.g. GLOBAL or REGIONAL BY TABLE). Since the user will
+	// have to override to perform the ALTER, we want to wipe out the index
+	// zone config so that the user won't have to override again the next time
+	// the want to ALTER the table locality.
+	newSubzones := zc.Subzones[:0]
+	for _, sz := range zc.Subzones {
+		sz.Config.CopyFromZone(zonepb.ZoneConfig{}, zonepb.MultiRegionZoneConfigFields)
+		// If we haven't emptied out the subzone, append it to the new slice.
+		if !sz.Config.Equal(zonepb.ZoneConfig{}) && !sz.Config.Equal(zonepb.NewZoneConfig()) {
+			newSubzones = append(newSubzones, sz)
+		}
+	}
+	zc.Subzones = newSubzones
+
 	zc.CopyFromZone(*localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
 
 	hasNewSubzones := table.IsLocalityRegionalByRow()
@@ -616,7 +635,8 @@ func ApplyZoneConfigForMultiRegionTable(
 			return err
 		}
 	} else if deleteZoneConfig {
-		// Delete the zone configuration if it exists but the new zone config is blank.
+		// Delete the zone configuration if it exists but the new zone config is
+		// blank.
 		if _, err = execCfg.InternalExecutor.Exec(
 			ctx,
 			"delete-zone-multiregion-table",
