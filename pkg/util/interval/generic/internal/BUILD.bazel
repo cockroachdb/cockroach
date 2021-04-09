@@ -6,3 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/interval/generic/internal",
     visibility = ["//pkg/util/interval/generic:__subpackages__"],
 )
+
+exports_files(
+		["contract.go", "interval_btree_tmpl_test.go", "interval_btree_tmpl.go"],
+		visibility = ["//visibility:public"],)

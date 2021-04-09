@@ -24,3 +24,9 @@ go_test(
         "@com_github_stretchr_testify//require",
     ],
 )
+
+sh_binary(
+    name = "gen-binary",
+    srcs = ["gen-bazel.sh"],
+    visibility = ["//visibility:public"],
+)

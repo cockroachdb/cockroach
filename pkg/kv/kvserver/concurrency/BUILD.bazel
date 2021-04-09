@@ -1,4 +1,6 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+# load("@go_generics//tools/go_generics:defs.bzl", "go_template_instance", "go_template")
+# load("//build:GO_GENERICS.bzl", "go_template", "go_template_instance")
 
 go_library(
     name = "concurrency",
@@ -79,3 +81,51 @@ go_test(
         "@org_golang_x_sync//errgroup",
     ],
 )
+
+# go_template_instance(
+#     name = "interval_btree",
+#     out = "lockstate_interval_btree.go",
+#     package = "concurrency",
+#     prefix = "deferred",
+#     template = ":generic_list",
+#     types = {
+#         "T": "*lockState",
+#     },
+# )
+
+
+# go_template(
+#     name = "generic_list",
+#     srcs = [
+#         "//pkg/util/interval/generic/internal:contract.go",
+#     ],
+#     opt_types = [
+#         "*lockState",
+#         "T",
+#     ],
+#     visibility = ["//visibility:public"],
+# )
+
+
+genrule(
+    name = "gen-lockstate-go",
+    srcs = [
+        "//pkg/util/interval/generic/internal:contract.go",
+        "//pkg/util/interval/generic/internal:interval_btree_tmpl.go",
+        "//pkg/util/interval/generic/internal:interval_btree_tmpl_test.go",
+        ":lock_table.go"
+    ],
+    outs = ["lockstate_interval_btree.go", "lockstate_interval_btree_test.go"],
+    cmd = """
+      $(location //pkg/util/interval/generic:gen-binary) *lockState concurrency \
+      $(location //pkg/util/interval/generic/internal:contract.go) $(location @com_github_mmatczuk_go_generics//cmd/go_generics)  \
+      $(location //pkg/util/interval/generic/internal:interval_btree_tmpl.go) $(location //pkg/util/interval/generic/internal:interval_btree_tmpl_test.go) \
+      $(location @com_github_cockroachdb_crlfmt//:crlfmt) `dirname $(location :lock_table.go)`
+    """,
+    tools = [
+        "//pkg/util/interval/generic:gen-binary",
+        "@com_github_mmatczuk_go_generics//cmd/go_generics",
+        "@com_github_cockroachdb_crlfmt//:crlfmt",
+    ],
+)
+
