@@ -16,7 +16,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -90,9 +89,9 @@ func randTablesN(r *rand.Rand, n int) string {
 
 	// Create the random tables.
 	stmts := randgen.RandCreateTables(r, "table", n,
-		mutations.StatisticsMutator,
-		mutations.PartialIndexMutator,
-		mutations.ForeignKeyMutator,
+		randgen.StatisticsMutator,
+		randgen.PartialIndexMutator,
+		randgen.ForeignKeyMutator,
 	)
 
 	for _, stmt := range stmts {

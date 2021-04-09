@@ -33,7 +33,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmpconn"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -66,7 +65,7 @@ type options struct {
 	}
 }
 
-var sqlMutators = []randgen.Mutator{mutations.ColumnFamilyMutator}
+var sqlMutators = []randgen.Mutator{randgen.ColumnFamilyMutator}
 
 func enableMutations(shouldEnable bool, mutations []randgen.Mutator) []randgen.Mutator {
 	if shouldEnable {
@@ -105,7 +104,7 @@ func main() {
 		var err error
 		mutators := enableMutations(opts.Databases[name].AllowMutations, sqlMutators)
 		if opts.Postgres {
-			mutators = append(mutators, mutations.PostgresMutator)
+			mutators = append(mutators, randgen.PostgresMutator)
 		}
 		conns[name], err = cmpconn.NewConnWithMutators(
 			db.Addr, rng, mutators, db.InitSQL, opts.InitSQL)

@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
@@ -152,7 +151,7 @@ func NewConnWithMutators(
 			continue
 		}
 
-		mutatedInitSQL[i], _ = mutations.ApplyString(rng, s, sqlMutators...)
+		mutatedInitSQL[i], _ = randgen.ApplyString(rng, s, sqlMutators...)
 	}
 	conn, err := NewConn(uri, mutatedInitSQL...)
 	if err != nil {
@@ -183,7 +182,7 @@ func CompareConns(
 	for name, conn := range conns {
 		connExecs[name] = exec
 		if cwm, withMutators := conn.(*connWithMutators); withMutators {
-			connExecs[name], _ = mutations.ApplyString(cwm.rng, exec, cwm.sqlMutators...)
+			connExecs[name], _ = randgen.ApplyString(cwm.rng, exec, cwm.sqlMutators...)
 		}
 		rows, err := conn.Values(ctx, prep, connExecs[name])
 		if err != nil {
