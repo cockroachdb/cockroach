@@ -170,7 +170,8 @@ func (s *Builder) SpanToPointSpan(span roachpb.Span, family descpb.FamilyID) roa
 func (s *Builder) MaybeSplitSpanIntoSeparateFamilies(
 	appendTo roachpb.Spans, span roachpb.Span, prefixLen int, containsNull bool,
 ) roachpb.Spans {
-	if s.neededFamilies != nil && s.CanSplitSpanIntoFamilySpans(len(s.neededFamilies), prefixLen, containsNull) {
+	if s.neededFamilies != nil && s.CanSplitSpanIntoFamilySpans(len(s.neededFamilies), prefixLen, containsNull,
+		false /*forDelete*/) {
 		return rowenc.SplitSpanIntoFamilySpans(appendTo, span, s.neededFamilies)
 	}
 	return append(appendTo, span)
@@ -179,7 +180,7 @@ func (s *Builder) MaybeSplitSpanIntoSeparateFamilies(
 // CanSplitSpanIntoFamilySpans returns whether a span encoded with prefixLen keys and numNeededFamilies
 // needed families can be safely split into 1 or more family specific spans.
 func (s *Builder) CanSplitSpanIntoFamilySpans(
-	numNeededFamilies, prefixLen int, containsNull bool,
+	numNeededFamilies, prefixLen int, containsNull bool, forDelete bool,
 ) bool {
 	// We can only split a span into separate family specific point lookups if:
 
@@ -227,6 +228,20 @@ func (s *Builder) CanSplitSpanIntoFamilySpans(
 
 		// * The index is a new enough version.
 		if s.index.Version < descpb.SecondaryIndexFamilyFormatVersion {
+			return false
+		}
+	}
+
+	// * If we're performing a delete...
+	if forDelete {
+		// * The table must have just one column family, since we need to delete
+		//   all column families during delete operations.
+		if s.table.NumFamilies() > 1 {
+			return false
+		}
+		// * The table must not be interleaved, since deleting from an interleaved
+		//   table may require a range delete.
+		if s.table.IsInterleaved() {
 			return false
 		}
 	}
@@ -302,13 +317,11 @@ func (s *Builder) appendSpansFromConstraintSpan(
 
 	// Optimization: for single row lookups on a table with one or more column
 	// families, only scan the relevant column families, and use GetRequests
-	// instead of ScanRequests when doing the column family fetches. This is
-	// disabled for deletions on tables with multiple column families to ensure
-	// that the entire row (all of its column families) is deleted.
+	// instead of ScanRequests when doing the column family fetches.
 
-	if needed.Len() > 0 && span.Key.Equal(span.EndKey) && !forDelete {
+	if needed.Len() > 0 && span.Key.Equal(span.EndKey) {
 		neededFamilyIDs := rowenc.NeededColumnFamilyIDs(needed, s.table, s.index)
-		if s.CanSplitSpanIntoFamilySpans(len(neededFamilyIDs), cs.StartKey().Length(), containsNull) {
+		if s.CanSplitSpanIntoFamilySpans(len(neededFamilyIDs), cs.StartKey().Length(), containsNull, forDelete) {
 			return rowenc.SplitSpanIntoFamilySpans(appendTo, span, neededFamilyIDs), nil
 		}
 	}

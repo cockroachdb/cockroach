@@ -495,7 +495,7 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
 ----
 dist sender send  r37: sending batch 1 Scan to (n1,s1):1
 dist sender send  r37: sending batch 2 Put to (n1,s1):1
-dist sender send  r37: sending batch 1 DelRng, 1 EndTxn to (n1,s1):1
+dist sender send  r37: sending batch 1 Del, 1 EndTxn to (n1,s1):1
 
 # Multi-row delete should auto-commit.
 query B
@@ -745,7 +745,7 @@ WHERE message       LIKE '%r$rangeid: sending batch%'
   AND operation NOT LIKE '%async%'
 ----
 dist sender send  r37: sending batch 1 DelRng to (n1,s1):1
-dist sender send  r37: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r37: sending batch 1 Del to (n1,s1):1
 dist sender send  r37: sending batch 1 Scan to (n1,s1):1
 dist sender send  r37: sending batch 1 Del, 1 EndTxn to (n1,s1):1
 
