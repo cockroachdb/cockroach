@@ -36,12 +36,12 @@ type srcInfo struct {
 // srcIdx refers to the index of a source inside a []srcInfo array.
 type srcIdx int
 
-type orderedSynchronizerState int
+type serialSynchronizerState int
 
 const (
 	// notInitialized means that the heap has not yet been constructed. A row
 	// needs to be read from each source to build the heap.
-	notInitialized orderedSynchronizerState = iota
+	notInitialized serialSynchronizerState = iota
 	// returningRows is the regular operation mode of the orderedSynchronizer.
 	// Rows and metadata records are returning to the consumer.
 	returningRows
@@ -56,24 +56,35 @@ const (
 	drainBuffered
 )
 
+// Let setupProcessors peak at sources w/o caring about type of synchronizer.
+type SourceContainer interface {
+	GetSources() []srcInfo
+}
+
+type serialSynchronizer struct {
+	state serialSynchronizerState
+
+	types    []*types.T
+	sources  []srcInfo
+	rowAlloc rowenc.EncDatumRowAlloc
+	ctx      context.Context
+}
+
+func (s *serialSynchronizer) GetSources() []srcInfo {
+	return s.sources
+}
+
 // orderedSynchronizer receives rows from multiple streams and produces a single
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns
 // (intra-stream ordering).
-type orderedSynchronizer struct {
-	// ordering dictates the way in which rows compare. If nil (i.e.
-	// sqlbase.NoOrdering), then rows are not compared and sources are consumed in
-	// index order.
+type serialOrderedSynchronizer struct {
+	serialSynchronizer
+
+	// ordering dictates the way in which rows compare. This can't be nil
 	ordering colinfo.ColumnOrdering
-	evalCtx  *tree.EvalContext
 
-	sources []srcInfo
-
-	types []*types.T
-
-	// state dictates the operation mode.
-	state orderedSynchronizerState
-
+	evalCtx *tree.EvalContext
 	// heap of source indexes. In state notInitialized, heap holds all source
 	// indexes. Once initialized (initHeap is called), heap will be ordered by the
 	// current row from each source and will only contain source indexes of
@@ -89,34 +100,49 @@ type orderedSynchronizer struct {
 	// err can be set by the Less function (used by the heap implementation)
 	err error
 
-	alloc    rowenc.DatumAlloc
-	rowAlloc rowenc.EncDatumRowAlloc
+	alloc rowenc.DatumAlloc
 
 	// metadata is accumulated from all the sources and is passed on as soon as
 	// possible.
 	metadata []*execinfrapb.ProducerMetadata
 }
 
-var _ execinfra.RowSource = &orderedSynchronizer{}
+// Start is part of the RowSource interface.
+func (s *serialSynchronizer) Start(ctx context.Context) {
+	for _, src := range s.sources {
+		src.src.Start(ctx)
+	}
+}
 
 // OutputTypes is part of the RowSource interface.
-func (s *orderedSynchronizer) OutputTypes() []*types.T {
+func (s *serialSynchronizer) OutputTypes() []*types.T {
 	return s.types
 }
 
+func (u *serialSynchronizer) ConsumerDone() {
+	if u.state != draining {
+		for i := range u.sources {
+			u.sources[i].src.ConsumerDone()
+		}
+		u.state = draining
+	}
+}
+
+func (u *serialSynchronizer) ConsumerClosed() {
+	for i := range u.sources {
+		u.sources[i].src.ConsumerClosed()
+	}
+}
+
+var _ execinfra.RowSource = &serialOrderedSynchronizer{}
+
 // Len is part of heap.Interface and is only meant to be used internally.
-func (s *orderedSynchronizer) Len() int {
+func (s *serialOrderedSynchronizer) Len() int {
 	return len(s.heap)
 }
 
 // Less is part of heap.Interface and is only meant to be used internally.
-func (s *orderedSynchronizer) Less(i, j int) bool {
-	// If we're not enforcing any ordering between rows, let's consume sources in
-	// their index order.
-	if s.ordering == nil {
-		return s.heap[i] < s.heap[j]
-	}
-
+func (s *serialOrderedSynchronizer) Less(i, j int) bool {
 	si := &s.sources[s.heap[i]]
 	sj := &s.sources[s.heap[j]]
 	cmp, err := si.row.Compare(s.types, &s.alloc, s.ordering, s.evalCtx, sj.row)
@@ -128,16 +154,16 @@ func (s *orderedSynchronizer) Less(i, j int) bool {
 }
 
 // Swap is part of heap.Interface and is only meant to be used internally.
-func (s *orderedSynchronizer) Swap(i, j int) {
+func (s *serialOrderedSynchronizer) Swap(i, j int) {
 	s.heap[i], s.heap[j] = s.heap[j], s.heap[i]
 }
 
 // Push is part of heap.Interface; it's not used as we never insert elements to
 // the heap (we initialize it with all sources, see initHeap).
-func (s *orderedSynchronizer) Push(x interface{}) { panic("unimplemented") }
+func (s *serialOrderedSynchronizer) Push(x interface{}) { panic("unimplemented") }
 
 // Pop is part of heap.Interface and is only meant to be used internally.
-func (s *orderedSynchronizer) Pop() interface{} {
+func (s *serialOrderedSynchronizer) Pop() interface{} {
 	s.heap = s.heap[:len(s.heap)-1]
 	return nil
 }
@@ -147,7 +173,7 @@ func (s *orderedSynchronizer) Pop() interface{} {
 // from it) unless there are no more rows to read from it.
 // If an error is returned, heap.Init() has not been called, so s.heap is not
 // an actual heap. In this case, all members of the heap need to be drained.
-func (s *orderedSynchronizer) initHeap() error {
+func (s *serialOrderedSynchronizer) initHeap() error {
 	// consumeErr is the last error encountered while consuming metadata.
 	var consumeErr error
 
@@ -201,7 +227,9 @@ const (
 // not consumed and the error is returned. With the drain mode, metadata records
 // with error are accumulated like all the others and this method doesn't return
 // any errors.
-func (s *orderedSynchronizer) consumeMetadata(src *srcInfo, mode consumeMetadataOption) error {
+func (s *serialOrderedSynchronizer) consumeMetadata(
+	src *srcInfo, mode consumeMetadataOption,
+) error {
 	for {
 		row, meta := src.src.Next()
 		if meta != nil {
@@ -233,7 +261,7 @@ func (s *orderedSynchronizer) consumeMetadata(src *srcInfo, mode consumeMetadata
 // been set), or one of the sources is borked. In either case, advanceRoot()
 // should not be called again - the caller should update the
 // orderedSynchronizer.state accordingly.
-func (s *orderedSynchronizer) advanceRoot() error {
+func (s *serialOrderedSynchronizer) advanceRoot() error {
 	if s.state != returningRows {
 		return errors.Errorf("advanceRoot() called in unsupported state: %d", s.state)
 	}
@@ -270,7 +298,7 @@ func (s *orderedSynchronizer) advanceRoot() error {
 
 // drainSources consumes all the rows from the sources. All the data is
 // discarded, except the metadata records which are accumulated in s.metadata.
-func (s *orderedSynchronizer) drainSources() {
+func (s *serialOrderedSynchronizer) drainSources() {
 	for _, srcIdx := range s.heap {
 		if err := s.consumeMetadata(&s.sources[srcIdx], drain); err != nil {
 			log.Fatalf(context.TODO(), "unexpected draining error: %s", err)
@@ -278,15 +306,8 @@ func (s *orderedSynchronizer) drainSources() {
 	}
 }
 
-// Start is part of the RowSource interface.
-func (s *orderedSynchronizer) Start(ctx context.Context) {
-	for _, src := range s.sources {
-		src.src.Start(ctx)
-	}
-}
-
 // Next is part of the RowSource interface.
-func (s *orderedSynchronizer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+func (s *serialOrderedSynchronizer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if s.state == notInitialized {
 		if err := s.initHeap(); err != nil {
 			s.ConsumerDone()
@@ -328,7 +349,7 @@ func (s *orderedSynchronizer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 }
 
 // ConsumerDone is part of the RowSource interface.
-func (s *orderedSynchronizer) ConsumerDone() {
+func (s *serialOrderedSynchronizer) ConsumerDone() {
 	// We're entering draining mode. Only metadata will be forwarded from now on.
 	if s.state != draining {
 		s.consumerStatusChanged(draining, execinfra.RowSource.ConsumerDone)
@@ -336,7 +357,7 @@ func (s *orderedSynchronizer) ConsumerDone() {
 }
 
 // ConsumerClosed is part of the RowSource interface.
-func (s *orderedSynchronizer) ConsumerClosed() {
+func (s *serialOrderedSynchronizer) ConsumerClosed() {
 	// The state shouldn't matter, as no further methods should be called, but
 	// we'll set it to something other than the default.
 	s.consumerStatusChanged(drainBuffered, execinfra.RowSource.ConsumerClosed)
@@ -344,8 +365,8 @@ func (s *orderedSynchronizer) ConsumerClosed() {
 
 // consumerStatusChanged calls a RowSource method on all the non-exhausted
 // sources.
-func (s *orderedSynchronizer) consumerStatusChanged(
-	newState orderedSynchronizerState, f func(execinfra.RowSource),
+func (s *serialOrderedSynchronizer) consumerStatusChanged(
+	newState serialSynchronizerState, f func(execinfra.RowSource),
 ) {
 	if s.state == notInitialized {
 		for i := range s.sources {
@@ -363,28 +384,87 @@ func (s *orderedSynchronizer) consumerStatusChanged(
 	s.state = newState
 }
 
-// makeOrderedSync creates an orderedSynchronizer. ordering dictates how rows
-// are to be compared. Use sqlbase.NoOrdering to indicate that the row ordering
+type serialUnorderedSynchronizer struct {
+	serialSynchronizer
+
+	srcIndex int
+}
+
+var _ execinfra.RowSource = &serialUnorderedSynchronizer{}
+
+func (s *serialUnorderedSynchronizer) Start(ctx context.Context) {
+	s.ctx = ctx
+	for _, src := range s.sources {
+		src.src.Start(ctx)
+	}
+}
+
+func (u *serialUnorderedSynchronizer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	for u.srcIndex < len(u.sources) {
+		row, metadata := u.sources[u.srcIndex%len(u.sources)].src.Next()
+
+		// If we're draining only return metadata.
+		if u.state == draining && row != nil {
+			continue
+		}
+
+		// If we see nil,nil go to next source.
+		if row == nil && metadata == nil {
+			u.srcIndex++
+			continue
+		}
+
+		if row != nil {
+			row = u.rowAlloc.CopyRow(row)
+		}
+
+		return row, metadata
+	}
+
+	return nil, nil
+}
+
+// makeSerialSync creates a serialOrderedSynchronizer or a serialUnorderedSynchronizer. ordering
+// dictates how rows are to be compared. Use colinfo.NoOrdering to indicate that the row ordering
 // doesn't matter and sources should be consumed in index order (which is useful
 // when you intend to fuse the synchronizer and its inputs later; see
-// FuseAggresively).
-func makeOrderedSync(
+// FuseAggressively).
+func makeSerialSync(
 	ordering colinfo.ColumnOrdering, evalCtx *tree.EvalContext, sources []execinfra.RowSource,
 ) (execinfra.RowSource, error) {
 	if len(sources) < 2 {
-		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))
+		return nil, errors.Errorf("only %d sources for serial synchronizer", len(sources))
 	}
-	s := &orderedSynchronizer{
-		state:    notInitialized,
-		sources:  make([]srcInfo, len(sources)),
-		types:    sources[0].OutputTypes(),
-		heap:     make([]srcIdx, 0, len(sources)),
-		ordering: ordering,
-		evalCtx:  evalCtx,
+
+	if len(ordering) > 0 {
+		os := &serialOrderedSynchronizer{
+			serialSynchronizer: serialSynchronizer{
+				state:   notInitialized,
+				sources: make([]srcInfo, len(sources)),
+				types:   sources[0].OutputTypes(),
+			},
+			heap:     make([]srcIdx, 0, len(sources)),
+			ordering: ordering,
+			evalCtx:  evalCtx,
+		}
+		for i := range os.sources {
+			os.sources[i].src = sources[i]
+			os.heap = append(os.heap, srcIdx(i))
+		}
+
+		return os, nil
+	} else {
+		us := &serialUnorderedSynchronizer{
+			serialSynchronizer: serialSynchronizer{
+				state:   returningRows,
+				sources: make([]srcInfo, len(sources)),
+				types:   sources[0].OutputTypes(),
+			},
+		}
+		for i := range us.sources {
+			us.sources[i].src = sources[i]
+		}
+
+		return us, nil
 	}
-	for i := range s.sources {
-		s.sources[i].src = sources[i]
-		s.heap = append(s.heap, srcIdx(i))
-	}
-	return s, nil
 }

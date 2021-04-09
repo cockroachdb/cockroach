@@ -1,0 +1,166 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+CREATE TABLE regional_by_row_table (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  a int NOT NULL,
+  b int NOT NULL,
+  j JSON,
+  INDEX (a),
+  UNIQUE (b),
+  INVERTED INDEX (j),
+  FAMILY (pk, pk2, a, b)
+) LOCALITY REGIONAL BY ROW
+
+# Insert some rows into the regional_by_row_table.
+query TI
+INSERT INTO regional_by_row_table (pk, pk2, a, b, j) VALUES
+(1, 1, 2, 3, '{"a": "b"}'), (4, 4, 5, 6, '{"c": "d"}')
+RETURNING crdb_region, pk
+----
+ap-southeast-2  1
+ap-southeast-2  4
+
+statement ok
+SET locality_optimized_partitioned_index_scan = false
+
+# Query with locality optimized search disabled.
+query T
+EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: regional_by_row_table@primary
+  spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
+
+# All rows are scanned at once without the optimization.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/56/1/"@"/1{-/#}, /Table/56/1/"\x80"/1{-/#}, /Table/56/1/"\xc0"/1{-/#}
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+
+statement ok
+SET locality_optimized_partitioned_index_scan = true
+
+# Same query with locality optimized search enabled.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+distribution: local
+vectorized: true
+·
+• union all
+│ limit: 1
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkWHL0zAQx9_7KcL5RiWjTacgASGiFQt1m-1AwZaRNccsdklNUtwY_e6yFtkmm_LseXl3-V9-v-QA7mcDHOKvi_RtMiPP3if5Mv-cPid5nMbvluQF-ZDNPxGLm9po2azW-5U1v1ZerhskXz7GWUzaH-QNYUBBG4UzuUUH_BswKCm01lTonLHH1mE4kKgd8JBCrdvOH9slhcpYBH4AX_sGgcPyuD1DqdAGIVBQ6GXdDGuvgojW1ltp90Ahb6V2nAQFFMXudVhAwCbnRfCUSK0II8Z_RwsU5p3nRDAqIiqmVLyk4hVQSOtt7QmDsqdgOn9CdV5uEDjr6X067F4d8UdFjBp3o0c30U_EnTZWoUV1QVv2V-RmZmLaILrU-h9D-JDny9C1Rjv8i-XW5pICqg2OQs50tsKFNdVwzVjOh9zQUOj8OI3GItHDaPjf8zB7TDj6Z3h6EQ77sn_yOwAA__8usich
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
+
+# If the row is found in the local region, the other regions are not searched.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/56/1/"@"/1{-/#}
+fetched: /regional_by_row_table/primary/'ap-southeast-2'/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
+output row: [1 1 2 3 '{"a": "b"}']
+
+query TI nodeidx=3
+USE multi_region_test_db; INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES
+(10, 10, 11, 12)
+RETURNING crdb_region, pk
+----
+ca-central-1  10
+
+statement ok
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 10; SET tracing = off
+
+# If the row is not found in the local region, the other regions are searched
+# in parallel.
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
+----
+Scan /Table/56/1/"@"/10{-/#}
+Scan /Table/56/1/"\x80"/10{-/#}, /Table/56/1/"\xc0"/10{-/#}
+fetched: /regional_by_row_table/primary/'ca-central-1'/10/pk2/a/b -> /10/11/12
+output row: [10 10 11 12 NULL]
+
+# The local region for this query is ca-central-1, so that span should be
+# scanned in the first child of the limited union all.
+query T nodeidx=3
+USE multi_region_test_db; SET locality_optimized_partitioned_index_scan = true;
+EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1
+----
+distribution: local
+vectorized: true
+·
+• union all
+│ limit: 1
+│
+├── • scan
+│     missing stats
+│     table: regional_by_row_table@primary
+│     spans: [/'ca-central-1'/1 - /'ca-central-1'/1]
+│
+└── • scan
+      missing stats
+      table: regional_by_row_table@primary
+      spans: [/'ap-southeast-2'/1 - /'ap-southeast-2'/1] [/'us-east-1'/1 - /'us-east-1'/1]
+
+# Tests using locality optimized search for lookup anti joins (including foreign
+# key checks).
+statement ok
+CREATE TABLE parent (
+  p_id INT PRIMARY KEY,
+  FAMILY (p_id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE child (
+  c_id INT PRIMARY KEY,
+  c_p_id INT REFERENCES parent (p_id),
+  INDEX (c_p_id),
+  FAMILY (c_id, c_p_id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO parent (crdb_region, p_id)
+VALUES ('ap-southeast-2', 10), ('ca-central-1', 20), ('us-east-1', 30)
+
+statement ok
+INSERT INTO child (crdb_region, c_id, c_p_id)
+VALUES ('ap-southeast-2', 10, 10), ('ca-central-1', 20, 20), ('us-east-1', 30, 30)

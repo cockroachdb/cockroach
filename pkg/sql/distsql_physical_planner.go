@@ -3246,6 +3246,17 @@ func (dsp *DistSQLPlanner) isOnlyOnGateway(plan *PhysicalPlan) bool {
 func (dsp *DistSQLPlanner) createPlanForSetOp(
 	planCtx *PlanningCtx, n *unionNode,
 ) (*PhysicalPlan, error) {
+	if n.hardLimit > 0 {
+		// RFC: should I check that left/right have localityOptimized set to true?
+		scan, ok := n.left.(*scanNode)
+		if ok {
+			scan.hardLimit = int64(n.hardLimit)
+		}
+		scan, ok = n.right.(*scanNode)
+		if ok {
+			scan.hardLimit = int64(n.hardLimit)
+		}
+	}
 	leftLogicalPlan := n.left
 	leftPlan, err := dsp.createPhysPlanForPlanNode(planCtx, n.left)
 	if err != nil {
@@ -3409,9 +3420,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				// result, the plan will end up with a serial unordered synchronizer,
 				// which has exactly the behavior that we want (in particular, it won't
 				// execute the right child if the limit is reached by the left child).
-				// TODO(rytaft,yuzefovich): This currently only works with the
-				// vectorized engine. We should consider adding support for the serial
-				// unordered synchronizer in the row-based engine (see #61081).
 				p.EnsureSingleStreamPerNode(
 					false, /* forceSerialization */
 					execinfrapb.PostProcessSpec{Limit: n.hardLimit},
