@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -84,14 +85,19 @@ func (n *createTypeNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	// If we found a descriptor and have IfNotExists = true, then exit without
-	// doing anything. Ideally, we would do this below by inspecting the type
-	// of error returned by getCreateTypeParams, but it doesn't return enough
-	// information for us to do so. For comparison, we handle this case in
-	// CREATE TABLE IF NOT EXISTS by checking the return code
+
+	// If we found a descriptor and have IfNotExists = true, then buffer a notice
+	// and exit without doing anything. Ideally, we would do this below by
+	// inspecting the type of error returned by getCreateTypeParams, but it
+	// doesn't return enough information for us to do so. For comparison, we
+	// handle this case in CREATE TABLE IF NOT EXISTS by checking the return code
 	// (pgcode.DuplicateRelation) of getCreateTableParams. However, there isn't
 	// a pgcode for duplicate types, only the more general pgcode.DuplicateObject.
 	if found && n.n.IfNotExists {
+		params.p.BufferClientNotice(
+			params.ctx,
+			pgnotice.Newf("type %q already exists, skipping", n.typeName),
+		)
 		return nil
 	}
 
