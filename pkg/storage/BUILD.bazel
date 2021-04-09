@@ -35,7 +35,6 @@ go_library(
         "stacks.go",
         "temp_dir.go",
         "temp_engine.go",
-        "version.go",
     ],
     # List out all the c-dependencies pkg/storage depends on.
     cdeps = [
@@ -139,7 +138,6 @@ go_test(
         "sst_writer_test.go",
         "temp_dir_test.go",
         "temp_engine_test.go",
-        "version_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":storage"],
