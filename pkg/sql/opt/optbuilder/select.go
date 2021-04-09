@@ -589,6 +589,17 @@ func (b *Builder) buildScan(
 // These expressions are used as "known truths" about table data; as such they
 // can only contain immutable operators.
 func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
+	// Columns of a user defined type have a constraint to ensure
+	// enum values for that column belong to the UDT. We do not want to
+	// track view deps here, or else a view depending on a table with a
+	// column that is a UDT will result in a type dependency being added
+	// between the view and the UDT, even if the view does not use that column.
+	if b.trackViewDeps {
+		b.trackViewDeps = false
+		defer func() {
+			b.trackViewDeps = true
+		}()
+	}
 	tab := tabMeta.Table
 
 	// Check if we have any validated check constraints. Only validated
@@ -658,6 +669,16 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 // are used as "known truths" about table data. Any columns for which the
 // expression contains non-immutable operators are omitted.
 func (b *Builder) addComputedColsForTable(tabMeta *opt.TableMeta) {
+	// We do not want to track view deps here, otherwise a view depending
+	// on a table with a computed column of a UDT will result in a
+	// type dependency being added between the view and the UDT,
+	// even if the view does not use that column.
+	if b.trackViewDeps {
+		b.trackViewDeps = false
+		defer func() {
+			b.trackViewDeps = true
+		}()
+	}
 	var tableScope *scope
 	tab := tabMeta.Table
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {

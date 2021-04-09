@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -531,6 +533,12 @@ func (ov *optView) ColumnName(i int) tree.Name {
 	return ov.desc.PublicColumns()[i].ColName()
 }
 
+// CollectTypes is part of the cat.DataSource interface.
+func (ov *optView) CollectTypes(ord int) (descpb.IDs, error) {
+	col := ov.desc.AllColumns()[ord]
+	return collectTypes(col)
+}
+
 // optSequence is a wrapper around catalog.TableDescriptor that
 // implements the cat.Object and cat.DataSource interfaces.
 type optSequence struct {
@@ -570,6 +578,12 @@ func (os *optSequence) Name() tree.Name {
 
 // SequenceMarker is part of the cat.Sequence interface.
 func (os *optSequence) SequenceMarker() {}
+
+// CollectTypes is part of the cat.DataSource interface.
+func (os *optSequence) CollectTypes(ord int) (descpb.IDs, error) {
+	col := os.desc.AllColumns()[ord]
+	return collectTypes(col)
+}
 
 // optTable is a wrapper around catalog.TableDescriptor that caches
 // index wrappers and maintains a ColumnID => Column mapping for fast lookup.
@@ -1116,6 +1130,12 @@ func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
 	}
 	return col, pgerror.Newf(pgcode.UndefinedColumn,
 		"column [%d] does not exist", colID)
+}
+
+// CollectTypes is part of the cat.DataSource interface.
+func (ot *optTable) CollectTypes(ord int) (descpb.IDs, error) {
+	col := ot.desc.AllColumns()[ord]
+	return collectTypes(col)
 }
 
 // optIndex is a wrapper around descpb.IndexDescriptor that caches some
@@ -1983,6 +2003,12 @@ func (ot *optVirtualTable) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 	panic(errors.AssertionFailedf("no unique constraints"))
 }
 
+// CollectTypes is part of the cat.DataSource interface.
+func (ot *optVirtualTable) CollectTypes(ord int) (descpb.IDs, error) {
+	col := ot.desc.AllColumns()[ord]
+	return collectTypes(col)
+}
+
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy
 // PK column.
@@ -2201,3 +2227,41 @@ type optCatalogTableInterface interface {
 
 var _ optCatalogTableInterface = &optTable{}
 var _ optCatalogTableInterface = &optVirtualTable{}
+
+// collectTypes walks the given column's default and computed expression,
+// and collects any user defined types it finds. If the column itself is of
+// a user defined type, it will also be added to the set of user defined types.
+func collectTypes(col catalog.Column) (descpb.IDs, error) {
+	visitor := &tree.TypeCollectorVisitor{
+		OIDs: make(map[oid.Oid]struct{}),
+	}
+	addOIDsInExpr := func(exprStr string) error {
+		expr, err := parser.ParseExpr(exprStr)
+		if err != nil {
+			return err
+		}
+		tree.WalkExpr(visitor, expr)
+		return nil
+	}
+
+	// Collect UDTs in default expression, computed column and the column type itself.
+	if col.HasDefault() {
+		if err := addOIDsInExpr(col.GetDefaultExpr()); err != nil {
+			return nil, err
+		}
+	}
+	if col.IsComputed() {
+		if err := addOIDsInExpr(col.GetComputeExpr()); err != nil {
+			return nil, err
+		}
+	}
+	if typ := col.GetType(); typ != nil && typ.UserDefined() {
+		visitor.OIDs[typ.Oid()] = struct{}{}
+	}
+
+	ids := make(descpb.IDs, 0, len(visitor.OIDs))
+	for collectedOid := range visitor.OIDs {
+		ids = append(ids, typedesc.UserDefinedTypeOIDToID(collectedOid))
+	}
+	return ids, nil
+}

@@ -1527,3 +1527,17 @@ ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
 statement ok
 DROP TYPE db_enum_name_clash.crdb_internal_region;
 ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
+
+
+# Verify we can create a view off of a regional by row table.
+# Regression for #63191.
+subtest regional_by_row_view
+
+statement ok
+CREATE DATABASE db;
+USE db;
+ALTER DATABASE db PRIMARY REGION "us-east-1";
+CREATE TABLE kv (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE VIEW v AS SELECT v FROM kv
