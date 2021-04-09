@@ -46,11 +46,13 @@ const (
 	// Allow a limited number of Raft log truncations to be processed
 	// concurrently.
 	raftLogQueueConcurrency = 4
-	// While a snapshot is in flight, we won't truncate past the snapshot's log
-	// index. This behavior is extended to a grace period after the snapshot is
-	// marked as completed as it is applied at the receiver only a little later,
-	// leaving a window for a truncation that requires another snapshot.
-	raftLogQueuePendingSnapshotGracePeriod = 3 * time.Second
+	// RaftLogQueuePendingSnapshotGracePeriod indicates the grace period after an
+	// in-flight snapshot is marked completed. While a snapshot is in-flight we
+	// will not truncate past the snapshot's log index but we also don't want to
+	// do so the moment the in-flight snapshot completes, since it is only applied
+	// at the receiver a little later. This grace period reduces the probability
+	// of an ill-timed log truncation that would necessitate another snapshot.
+	RaftLogQueuePendingSnapshotGracePeriod = 3 * time.Second
 )
 
 // raftLogQueue manages a queue of replicas slated to have their raft logs

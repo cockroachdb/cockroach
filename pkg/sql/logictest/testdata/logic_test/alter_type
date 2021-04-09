@@ -374,22 +374,20 @@ statement ok
 INSERT INTO uses_alphabets_2 VALUES(1);
 
 # e was inserted as the default value, so we shouldn't be able to remove it.
-statement error pq: could not remove enum value "e" as it is being used by "uses_alphabets_2"
+statement error pq: could not remove enum value "e" as it is being used in a default expresion of "uses_alphabets_2"
 ALTER TYPE alphabets DROP VALUE 'e'
 
 statement ok
 TRUNCATE uses_alphabets_2
 
-statement ok
+statement error pq: could not remove enum value "e" as it is being used in a default expresion of "uses_alphabets_2"
 ALTER TYPE alphabets DROP VALUE 'e'
 
-statement error pq: could not find \[160\] in enum "public.alphabets"
+statement ok
 INSERT INTO uses_alphabets_2 VALUES(1);
 
-# Even though the default expr no longer works, we should be able to explicitly
-# insert a value.
 statement ok
-INSERT INTO uses_alphabets_2 VALUES (1, 'f')
+INSERT INTO uses_alphabets_2 VALUES (2, 'f')
 
 # Dropping the column should work.
 statement ok
