@@ -66,7 +66,7 @@ func TestWindowerAccountingForResults(t *testing.T) {
 
 	post := &execinfrapb.PostProcessSpec{}
 	input := execinfra.NewRepeatableRowSource(rowenc.OneIntCol, rowenc.MakeIntRows(1000, 1))
-	aggSpec := execinfrapb.AggregatorSpec_ARRAY_AGG
+	aggSpec := execinfrapb.ArrayAgg
 	spec := execinfrapb.WindowerSpec{
 		PartitionBy: []uint32{},
 		WindowFns: []execinfrapb.WindowerSpec_WindowFn{{

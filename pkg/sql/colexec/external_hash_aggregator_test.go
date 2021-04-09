@@ -85,6 +85,25 @@ func TestExternalHashAggregator(t *testing.T) {
 					&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 				)
 				require.NoError(t, err)
+				verifier := colexectestutils.OrderedVerifier
+				if tc.unorderedInput {
+					verifier = colexectestutils.UnorderedVerifier
+				}
+				var numExpectedClosers int
+				if diskSpillingEnabled {
+					// The external sorter and the disk spiller should be added
+					// as Closers (the latter is responsible for closing the
+					// in-memory hash aggregator as well as the external one).
+					numExpectedClosers = 2
+					if len(tc.spec.OutputOrdering.Columns) > 0 {
+						// When the output ordering is required, we also plan
+						// another external sort.
+						numExpectedClosers++
+					}
+				} else {
+					// Only the in-memory hash aggregator should be added.
+					numExpectedClosers = 1
+				}
 				var semsToCheck []semaphore.Semaphore
 				colexectestutils.RunTestsWithTyps(
 					t,
@@ -92,7 +111,7 @@ func TestExternalHashAggregator(t *testing.T) {
 					[]colexectestutils.Tuples{tc.input},
 					[][]*types.T{tc.typs},
 					tc.expected,
-					colexectestutils.UnorderedVerifier,
+					verifier,
 					func(input []colexecop.Operator) (colexecop.Operator, error) {
 						sem := colexecop.NewTestingSemaphore(ehaNumRequiredFDs)
 						semsToCheck = append(semsToCheck, sem)
@@ -112,16 +131,8 @@ func TestExternalHashAggregator(t *testing.T) {
 						)
 						accounts = append(accounts, accs...)
 						monitors = append(monitors, mons...)
-						if diskSpillingEnabled {
-							// Check that the external sorter and the disk
-							// spiller were added as Closers (the latter is
-							// responsible for closing the in-memory hash
-							// aggregator as well as the external one).
-							require.Equal(t, 2, len(closers))
-						} else {
-							// Only the in-memory hash aggregator has been
-							// created.
-							require.Equal(t, 1, len(closers))
+						require.Equal(t, numExpectedClosers, len(closers))
+						if !diskSpillingEnabled {
 							// Sanity check that indeed only the in-memory hash
 							// aggregator was created.
 							_, isHashAgg := op.(*hashAggregator)
@@ -166,7 +177,7 @@ func BenchmarkExternalHashAggregator(b *testing.B) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 
-	aggFn := execinfrapb.AggregatorSpec_MIN
+	aggFn := execinfrapb.Min
 	numRows := []int{coldata.BatchSize(), 64 * coldata.BatchSize(), 4096 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
 	if testing.Short() {
