@@ -164,7 +164,7 @@ func (d ReplicaSet) VoterDescriptors() []ReplicaDescriptor {
 //
 // At the time of writing, learners are used in CockroachDB as an interim state
 // while adding a replica. A learner replica is added to the range via raft
-// ConfChange, a raft snapshot (of type LEARNER_INITIAL) is sent to catch it up, and
+// ConfChange, a raft snapshot (of type INITIAL) is sent to catch it up, and
 // then a second ConfChange promotes it to a full replica.
 //
 // This means that learners are currently always expected to have a short
@@ -240,28 +240,12 @@ func (d ReplicaSet) LearnerDescriptors() []ReplicaDescriptor {
 }
 
 // NonVoters returns a ReplicaSet containing only the non-voters in `d`.
-// Non-voting replicas are treated differently from learner replicas.
-// Learners are a temporary internal state used to make atomic
-// replication changes less disruptive to the system. Even though learners and
-// non-voting replicas are both etcd/raft LearnerNodes under the hood,
-// non-voting replicas are meant to be a user-visible state and are explicitly
-// chosen to be placed inside certain localities via zone configs.
-//
-// Key differences between how we treat (ephemeral) learners and (persistent)
-// non-voting replicas: - Non-voting replicas rely on the raft snapshot queue in
-// order to upreplicate. This is different from the way learner replicas
-// upreplicate (see comment above) because of the various (necessary)
-// complexities / race-conditions we've discovered between the raft snapshot
-// queue and the separately-issued initial LEARNER_INITIAL snapshot (see the two
-// paragraphs above [*]). This complexity was necessary in case of learner
-// replicas because we _need to know_ when they finish upreplication so that we
-// can initiate their promotion into full voters. We don't have a similar
-// requirement for non-voting replicas and we're choosing to avoid all the
-// complexity.
-//
-// TODO(aayush): Expand this documentation once `AdminRelocateRange` knows how
-// to deal with such replicas & range merges no longer block due to the presence
-// of non-voting replicas.
+// Non-voting replicas are treated differently from learner replicas. Learners
+// are a temporary internal state used to make atomic replication changes less
+// disruptive to the system. Even though learners and non-voting replicas are
+// both etcd/raft LearnerNodes under the hood, non-voting replicas are meant to
+// be a user-visible state and are explicitly chosen to be placed inside certain
+// localities via zone configs.
 func (d ReplicaSet) NonVoters() ReplicaSet {
 	return d.Filter(predNonVoter)
 }

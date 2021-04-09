@@ -683,17 +683,17 @@ func TestSnapshotLogTruncationConstraints(t *testing.T) {
 	r.completeSnapshotLogTruncationConstraint(ctx, id1, now)
 	// The index should show up when its deadline isn't hit.
 	assertMin(index1, now)
-	assertMin(index1, now.Add(raftLogQueuePendingSnapshotGracePeriod))
-	assertMin(index1, now.Add(raftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index1, now.Add(RaftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index1, now.Add(RaftLogQueuePendingSnapshotGracePeriod))
 	// Once we're over deadline, the index returned so far disappears.
-	assertMin(index2, now.Add(raftLogQueuePendingSnapshotGracePeriod+1))
+	assertMin(index2, now.Add(RaftLogQueuePendingSnapshotGracePeriod+1))
 	assertMin(index2, time.Time{})
-	assertMin(index2, now.Add(10*raftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index2, now.Add(10*RaftLogQueuePendingSnapshotGracePeriod))
 
 	r.completeSnapshotLogTruncationConstraint(ctx, id2, now)
 	assertMin(index2, now)
-	assertMin(index2, now.Add(raftLogQueuePendingSnapshotGracePeriod))
-	assertMin(0, now.Add(2*raftLogQueuePendingSnapshotGracePeriod))
+	assertMin(index2, now.Add(RaftLogQueuePendingSnapshotGracePeriod))
+	assertMin(0, now.Add(2*RaftLogQueuePendingSnapshotGracePeriod))
 
 	assert.Equal(t, r.mu.snapshotLogTruncationConstraints, map[uuid.UUID]snapTruncationInfo(nil))
 }

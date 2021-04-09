@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -700,6 +701,92 @@ func convertToSQLStringRepresentation(bytes []byte) (string, error) {
 	return byteRep.String(), nil
 }
 
+// doesArrayContainEnumValues takes an array of enum values represented
+// as a string, along with an EnumMember, and checks if the
+// array contains the given EnumMember. Only works for arrays in the form
+// of something like {a, b, c}. Used to capture dependencies in
+// expressions in the form of something like '{a, b, c}'::typ[]
+func doesArrayContainEnumValues(s string, member *descpb.TypeDescriptor_EnumMember) bool {
+	enumValues := strings.Split(s[1:len(s)-1], ",")
+	for _, val := range enumValues {
+		if strings.TrimSpace(val) == member.LogicalRepresentation {
+			return true
+		}
+	}
+	return false
+}
+
+// findUsagesOfEnumValue takes an expr, type ID and a enum member of that type,
+// and checks if the expr uses that enum member.
+func findUsagesOfEnumValue(
+	exprStr string, member *descpb.TypeDescriptor_EnumMember, typeID descpb.ID,
+) (bool, error) {
+	expr, err := parser.ParseExpr(exprStr)
+	if err != nil {
+		return false, err
+	}
+	var foundUsage bool
+
+	visitFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		switch t := expr.(type) {
+		// Case for types being used regularly, which are serialized like '\x80':::@100053.
+		case *tree.AnnotateTypeExpr:
+			// Check if this expr's type is the one we're dropping the enum value from.
+			typeOid, ok := t.Type.(*tree.OIDTypeReference)
+			if !ok {
+				return true, expr, nil
+			}
+			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID)
+			if id != typeID {
+				return true, expr, nil
+			}
+
+			// Check if this expr uses the enum value we're dropping.
+			strVal, ok := t.Expr.(*tree.StrVal)
+			if !ok {
+				return true, expr, nil
+			}
+			physicalRep := []byte(strVal.RawString())
+			if bytes.Equal(physicalRep, member.PhysicalRepresentation) {
+				foundUsage = true
+			}
+			return false, expr, nil
+
+		// Case for types used in string arrays, serialized like '{a, b, c}':::STRING::@100053.
+		case *tree.CastExpr:
+			typeOid, ok := t.Type.(*tree.OIDTypeReference)
+			if !ok {
+				return true, expr, nil
+			}
+			// -1 since the type of this CastExpr is the array type.
+			id := typedesc.UserDefinedTypeOIDToID(typeOid.OID) - 1
+			if id != typeID {
+				return true, expr, nil
+			}
+
+			// Extract the array and check if it contains the enum member.
+			annotateType, ok := t.Expr.(*tree.AnnotateTypeExpr)
+			if !ok {
+				return true, expr, nil
+			}
+			strVal, ok := annotateType.Expr.(*tree.StrVal)
+			if !ok {
+				return true, expr, nil
+			}
+			foundUsage = doesArrayContainEnumValues(strVal.RawString(), member)
+			return false, expr, nil
+		default:
+			return true, expr, nil
+		}
+	}
+
+	_, err = tree.SimpleVisit(expr, visitFunc)
+	if err != nil {
+		return false, err
+	}
+	return foundUsage, nil
+}
+
 // canRemoveEnumValue returns an error if the enum value is in use and therefore
 // can't be removed.
 func (t *typeSchemaChanger) canRemoveEnumValue(
@@ -722,6 +809,32 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 		firstClause := true
 		validationQueryConstructed := false
 		for _, col := range desc.PublicColumns() {
+			// If this column has a default expression, check if it uses the enum member being dropped.
+			if col.HasDefault() {
+				foundUsage, err := findUsagesOfEnumValue(col.GetDefaultExpr(), member, typeDesc.ID)
+				if err != nil {
+					return err
+				}
+				if foundUsage {
+					return pgerror.Newf(pgcode.DependentObjectsStillExist,
+						"could not remove enum value %q as it is being used in a default expresion of %q",
+						member.LogicalRepresentation, desc.GetName())
+				}
+			}
+
+			// If this column is computed, check if it uses the enum member being dropped.
+			if col.IsComputed() {
+				foundUsage, err := findUsagesOfEnumValue(col.GetComputeExpr(), member, typeDesc.ID)
+				if err != nil {
+					return err
+				}
+				if foundUsage {
+					return pgerror.Newf(pgcode.DependentObjectsStillExist,
+						"could not remove enum value %q as it is being used in a computed column of %q",
+						member.LogicalRepresentation, desc.GetName())
+				}
+			}
+
 			if typeDesc.ID == typedesc.GetTypeDescID(col.GetType()) {
 				if !firstClause {
 					query.WriteString(" OR")

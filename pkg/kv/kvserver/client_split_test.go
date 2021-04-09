@@ -3323,18 +3323,21 @@ func TestSplitTriggerMeetsUnexpectedReplicaID(t *testing.T) {
 	ctx := context.Background()
 
 	blockPromoteCh := make(chan struct{})
-	var skipLearnerSnaps int32
+	var skipSnaps int32
 	withoutLearnerSnap := func(fn func()) {
-		atomic.StoreInt32(&skipLearnerSnaps, 1)
+		atomic.StoreInt32(&skipSnaps, 1)
 		fn()
-		atomic.StoreInt32(&skipLearnerSnaps, 0)
+		atomic.StoreInt32(&skipSnaps, 0)
 	}
 	knobs := base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-		ReplicaSkipLearnerSnapshot: func() bool {
-			return atomic.LoadInt32(&skipLearnerSnaps) != 0
+		ReplicaSkipInitialSnapshot: func() bool {
+			return atomic.LoadInt32(&skipSnaps) != 0
 		},
-		ReplicaAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
-			if atomic.LoadInt32(&skipLearnerSnaps) != 0 {
+		RaftSnapshotQueueSkipReplica: func() bool {
+			return atomic.LoadInt32(&skipSnaps) != 0
+		},
+		VoterAddStopAfterLearnerSnapshot: func(targets []roachpb.ReplicationTarget) bool {
+			if atomic.LoadInt32(&skipSnaps) != 0 {
 				return false
 			}
 			if len(targets) > 0 && targets[0].StoreID == 2 {

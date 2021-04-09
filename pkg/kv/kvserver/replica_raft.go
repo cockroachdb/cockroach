@@ -1327,7 +1327,7 @@ func (r *Replica) completeSnapshotLogTruncationConstraint(
 		return
 	}
 
-	deadline := now.Add(raftLogQueuePendingSnapshotGracePeriod)
+	deadline := now.Add(RaftLogQueuePendingSnapshotGracePeriod)
 	item.deadline = deadline
 	r.mu.snapshotLogTruncationConstraints[snapUUID] = item
 }
