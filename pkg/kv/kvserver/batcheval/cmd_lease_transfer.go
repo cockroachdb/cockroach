@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 func init() {
@@ -50,6 +52,8 @@ func declareKeysTransferLease(
 	declareAllKeys(latchSpans)
 }
 
+var errTransferLeaseToStateSnapshot = errors.Errorf("cannot transfer lease to replica in need of a snapshot")
+
 // TransferLease sets the lease holder for the range.
 // Unlike with RequestLease(), the new lease is allowed to overlap the old one,
 // the contract being that the transfer must have been initiated by the (soon
@@ -77,10 +81,16 @@ func TransferLease(
 	newLease.Start.Forward(cArgs.EvalCtx.Clock().NowAsClockTimestamp())
 	args.Lease = roachpb.Lease{} // prevent accidental use below
 
-	// If this check is removed at some point, the filtering of learners on the
-	// sending side would have to be removed as well.
+	// If this check is removed at some point, the filtering of
+	// learners/non-voters on the sending side would have to be removed as well.
 	if err := roachpb.CheckCanReceiveLease(newLease.Replica, cArgs.EvalCtx.Desc()); err != nil {
 		return newFailedLeaseTrigger(true /* isTransfer */), err
+	}
+
+	if raftProgressTracker := cArgs.EvalCtx.GetProgress(); raftProgressTracker != nil {
+		if progress := raftProgressTracker[uint64(newLease.Replica.ReplicaID)]; progress.State == tracker.StateSnapshot {
+			return newFailedLeaseTrigger(true /* isTransfer */), errTransferLeaseToStateSnapshot
+		}
 	}
 
 	// Stop using the current lease. All future calls to leaseStatus on this

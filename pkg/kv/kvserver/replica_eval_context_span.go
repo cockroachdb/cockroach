@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 // SpanSetReplicaEvalContext is a testing-only implementation of
@@ -209,6 +210,11 @@ func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.R
 	rec.GetLease()
 
 	return rec.i.GetRangeInfo(ctx)
+}
+
+// GetProgress is part of the EvalContext interface.
+func (rec SpanSetReplicaEvalContext) GetProgress() map[uint64]tracker.Progress {
+	return rec.i.GetProgress()
 }
 
 // GetCurrentReadSummary is part of the EvalContext interface.

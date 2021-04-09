@@ -37,6 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/v3/tracker"
+	"golang.org/x/sync/errgroup"
 )
 
 // TestStoreRangeLease verifies that regular ranges (not some special ones at
@@ -262,6 +264,99 @@ func TestGossipNodeLivenessOnLeaseChange(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestCannotTransferLeaseToStateSnapshot ensures that the evaluation of
+// TransferLeaseRequests to replicas that are known by the leader to be in
+// `StateSnapshot` will fail.
+func TestCannotTransferLeaseToStateSnapshot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	knobs, ltk := makeReplicationTestKnobs()
+	var skipSnaps int32
+
+	ltk.storeKnobs.ReplicaSkipInitialSnapshot = func() bool {
+		return atomic.LoadInt32(&skipSnaps) == 1
+	}
+	ltk.storeKnobs.RaftSnapshotQueueSkipReplica = func() bool {
+		return atomic.LoadInt32(&skipSnaps) == 1
+	}
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			// Encourage very aggressive log truncations.
+			RaftConfig: base.RaftConfig{
+				RaftLogTruncationThreshold: 1,
+				RaftProposalQuota:          10000,
+			},
+			Knobs: knobs,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	scratchKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(1))
+
+	// Add a third voter, but don't initialize it.
+	g, _ := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		// Skip the initial learner snapshot sent during `AdminChangeReplicas` so
+		// that the newly added follower stays uninitialized and in `StateSnapshot`.
+		atomic.StoreInt32(&skipSnaps, 1)
+		_, err := tc.AddVoters(scratchKey, tc.Target(2))
+		return err
+	})
+
+	var scratchDesc roachpb.RangeDescriptor
+	var uninitializedReplID roachpb.ReplicaID
+	testutils.SucceedsSoon(t, func() error {
+		scratchDesc = tc.LookupRangeOrFatal(t, scratchKey)
+		voters := scratchDesc.Replicas().VoterDescriptors()
+		if len(voters) != 3 {
+			return errors.Errorf("expected 3 voters found: %+v", voters)
+		}
+		for _, repl := range voters {
+			if repl.NodeID == tc.Server(2).NodeID() {
+				uninitializedReplID = repl.ReplicaID
+				break
+			}
+		}
+		return nil
+	})
+
+	leaseholderStore := tc.GetFirstStoreFromServer(t, 0)
+	testutils.SucceedsSoon(t, func() error {
+		// Try to cause a log truncation.
+		leaseholderStore.MustForceRaftLogScanAndProcess()
+		progress := leaseholderStore.RaftStatus(scratchDesc.RangeID).Progress
+		if progress == nil {
+			return errors.Errorf("expected leaseholder to be collocated with the leader")
+		}
+		status, ok := progress[uint64(uninitializedReplID)]
+		if !ok {
+			return errors.Errorf("newly added voter not found in the leaseholders progress tracker")
+		}
+		if status.State != tracker.StateSnapshot {
+			return errors.Errorf(
+				"expected uninitialized voter to be in StateSnapshot, but it is in %s",
+				status.State,
+			)
+		}
+		return nil
+	})
+
+	// Attempt to transfer the lease to the uninitialized voter we just added.
+	// This should fail during the evaluation of the TransferLeaseRequest because
+	// the leaseholder (also the leader in this test) must know that the target of
+	// the lease transfer is in `StateSnapshot`.
+	err := tc.TransferRangeLease(scratchDesc, tc.Target(2))
+	require.Regexp(t, "cannot transfer lease to replica in need of a snapshot", err)
+
+	// Let the new voter finally upreplicate.
+	atomic.StoreInt32(&skipSnaps, 0)
+	require.NoError(t, leaseholderStore.ForceRaftSnapshotQueueProcess())
+	require.NoError(t, g.Wait())
 }
 
 // TestCannotTransferLeaseToVoterOutgoing ensures that the evaluation of lease

@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
 const (
@@ -899,6 +900,14 @@ func (r *Replica) GetRangeInfo(ctx context.Context) roachpb.RangeInfo {
 		Lease:                 l,
 		ClosedTimestampPolicy: closedts,
 	}
+}
+
+// GetProgress returns this replica's raft progress tracker.
+func (r *Replica) GetProgress() map[uint64]tracker.Progress {
+	if status := r.RaftStatus(); status != nil {
+		return status.Progress
+	}
+	return nil
 }
 
 // getImpliedGCThresholdRLocked returns the gc threshold of the replica which
