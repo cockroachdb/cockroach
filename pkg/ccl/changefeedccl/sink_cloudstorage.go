@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 )
@@ -270,8 +271,8 @@ type cloudStorageSink struct {
 	settings          *cluster.Settings
 	partitionFormat   string
 
-	ext           string
-	recordDelimFn func(io.Writer) error
+	ext          string
+	rowDelimiter []byte
 
 	compression string
 
@@ -290,6 +291,9 @@ type cloudStorageSink struct {
 	dataFileTs        string
 	dataFilePartition string
 	prevFilename      string
+
+	// Memory used by this sink
+	mem mon.BoundAccount
 }
 
 const sinkCompressionGzip = "gzip"
@@ -306,6 +310,7 @@ func makeCloudStorageSink(
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user security.SQLUsername,
+	acc mon.BoundAccount,
 ) (Sink, error) {
 	// Date partitioning is pretty standard, so no override for now, but we could
 	// plumb one down if someone needs it.
@@ -322,6 +327,7 @@ func makeCloudStorageSink(
 		timestampOracle:   timestampOracle,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID: generateChangefeedSessionID(),
+		mem:          acc,
 	}
 	if timestampOracle != nil {
 		s.dataFileTs = cloudStorageFormatTime(timestampOracle.inclusiveLowerBoundTS())
@@ -333,10 +339,7 @@ func makeCloudStorageSink(
 		// TODO(dan): It seems like these should be on the encoder, but that
 		// would require a bit of refactoring.
 		s.ext = `.ndjson`
-		s.recordDelimFn = func(w io.Writer) error {
-			_, err := w.Write([]byte{'\n'})
-			return err
-		}
+		s.rowDelimiter = []byte{'\n'}
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, opts[changefeedbase.OptFormat])
@@ -396,11 +399,17 @@ func (s *cloudStorageSink) EmitRow(
 
 	file := s.getOrCreateFile(topic)
 
-	// TODO(dan): Memory monitoring for this
+	oldCap := file.buf.Cap()
 	if _, err := file.Write(value); err != nil {
 		return err
 	}
-	if err := s.recordDelimFn(file); err != nil {
+	if _, err := file.Write(s.rowDelimiter); err != nil {
+		return err
+	}
+
+	// Grow buffered memory.  It's okay that we do it after the fact
+	// (and if not, we're in a deeper problem and probably OOMed by now).
+	if err := s.mem.Grow(ctx, int64(file.buf.Cap()-oldCap)); err != nil {
 		return err
 	}
 
@@ -526,12 +535,17 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 			"precedes a file emitted before: %s", filename, s.prevFilename)
 	}
 	s.prevFilename = filename
-	return s.es.WriteFile(ctx, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes()))
+	if err := s.es.WriteFile(ctx, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes())); err != nil {
+		return err
+	}
+	s.mem.Shrink(ctx, int64(file.buf.Cap()))
+	return nil
 }
 
 // Close implements the Sink interface.
 func (s *cloudStorageSink) Close() error {
 	s.files = nil
+	s.mem.Close(context.Background())
 	return s.es.Close()
 }
 
