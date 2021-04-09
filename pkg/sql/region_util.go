@@ -1463,26 +1463,65 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		return err
 	}
 
-	// Some inactive subzones may remain on the zone configuration until it is cleaned up
-	// at a later step. Keep track of all non-drop indexes from the descriptor.
-	activeSubzoneIndexIDs := make(map[uint32]tree.Name, len(desc.NonDropIndexes()))
-	for _, idx := range desc.NonDropIndexes() {
-		activeSubzoneIndexIDs[uint32(idx.GetID())] = tree.Name(idx.GetName())
-	}
-
-	// Remove inactive subzones from the comparison.
-	filteredSubzones := currentZoneConfig.Subzones[:0]
-	for _, c := range currentZoneConfig.Subzones {
-		if _, ok := activeSubzoneIndexIDs[c.IndexID]; ok {
-			filteredSubzones = append(filteredSubzones, c)
+	// When there is a transition to/from REGIONAL BY ROW, the new indexes
+	// being set up will have zone configs which mismatch with the old
+	// table locality config. As we validate against the old table locality
+	// config (as the new indexes are not swapped in yet), exclude these
+	// indexes from any zone configuration validation.
+	regionalByRowNewIndexes := make(map[uint32]struct{})
+	for _, mut := range desc.AllMutations() {
+		if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
+			swapDesc := pkSwap.PrimaryKeySwapDesc()
+			if swapDesc.LocalityConfigSwap != nil {
+				for _, id := range swapDesc.NewIndexes {
+					regionalByRowNewIndexes[uint32(id)] = struct{}{}
+				}
+				regionalByRowNewIndexes[uint32(swapDesc.NewPrimaryIndexId)] = struct{}{}
+			}
+			// There can only be one pkSwap at a time, so break now.
+			break
 		}
 	}
-	currentZoneConfig.Subzones = filteredSubzones
+
+	// Some inactive subzones may remain on the zone configuration until it is cleaned up
+	// at a later step. Remove these as well as the regional by row new indexes.
+	subzoneIndexIDsToDiff := make(map[uint32]tree.Name, len(desc.NonDropIndexes()))
+	for _, idx := range desc.NonDropIndexes() {
+		if _, ok := regionalByRowNewIndexes[uint32(idx.GetID())]; !ok {
+			subzoneIndexIDsToDiff[uint32(idx.GetID())] = tree.Name(idx.GetName())
+		}
+	}
+
+	// We only want to compare against the list of subzones on active indexes,
+	// so filter the subzone list based on the subzoneIndexIDsToDiff computed above.
+	filteredCurrentZoneConfigSubzones := currentZoneConfig.Subzones[:0]
+	for _, c := range currentZoneConfig.Subzones {
+		if _, ok := subzoneIndexIDsToDiff[c.IndexID]; ok {
+			filteredCurrentZoneConfigSubzones = append(filteredCurrentZoneConfigSubzones, c)
+		}
+	}
+	currentZoneConfig.Subzones = filteredCurrentZoneConfigSubzones
 	// Strip the placeholder status if there are no active subzones on the current
 	// zone config.
-	if len(filteredSubzones) == 0 && currentZoneConfig.IsSubzonePlaceholder() {
+	if len(filteredCurrentZoneConfigSubzones) == 0 && currentZoneConfig.IsSubzonePlaceholder() {
 		currentZoneConfig.NumReplicas = nil
 	}
+
+	// Remove regional by row new indexes from the expected zone config.
+	// These will be incorrect as ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes
+	// will apply the existing locality config on them instead of the
+	// new locality config.
+	filteredExpectedZoneConfigSubzones := expectedZoneConfig.Subzones[:0]
+	for _, c := range expectedZoneConfig.Subzones {
+		if _, ok := regionalByRowNewIndexes[c.IndexID]; !ok {
+			filteredExpectedZoneConfigSubzones = append(
+				filteredExpectedZoneConfigSubzones,
+				c,
+			)
+		}
+	}
+	expectedZoneConfig.Subzones = filteredExpectedZoneConfigSubzones
+
 	// Mark the expected NumReplicas as 0 if we have a placeholder
 	// and the current zone config is also a placeholder.
 	// The latter check is required as in cases where non-multiregion fields
@@ -1509,7 +1548,7 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		descType := "table"
 		name := tableName.String()
 		if mismatch.IndexID != 0 {
-			indexName, ok := activeSubzoneIndexIDs[mismatch.IndexID]
+			indexName, ok := subzoneIndexIDsToDiff[mismatch.IndexID]
 			if !ok {
 				return errors.AssertionFailedf(
 					"unexpected unknown index id %d on table %s (mismatch %#v)",
