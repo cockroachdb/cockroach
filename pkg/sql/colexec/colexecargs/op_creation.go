@@ -16,11 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 	"github.com/marusama/semaphore"
 )
 
@@ -106,6 +108,21 @@ type NewColOperatorResult struct {
 }
 
 var _ execinfra.Releasable = &NewColOperatorResult{}
+
+// AssertInvariants confirms that all invariants are maintained by
+// NewColOperatorResult.
+func (r *NewColOperatorResult) AssertInvariants() {
+	// Check that all memory monitor names are unique (colexec.diskSpillerBase
+	// relies on this in order to catch "memory budget exceeded" errors only
+	// from "its own" component).
+	names := make(map[string]struct{}, len(r.OpMonitors))
+	for _, m := range r.OpMonitors {
+		if _, seen := names[m.Name()]; seen {
+			colexecerror.InternalError(errors.AssertionFailedf("monitor named %q encountered twice", m.Name()))
+		}
+		names[m.Name()] = struct{}{}
+	}
+}
 
 var newColOperatorResultPool = sync.Pool{
 	New: func() interface{} {

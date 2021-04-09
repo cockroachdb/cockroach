@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/colcontainerutils"
@@ -35,7 +36,8 @@ import (
 
 var hashAggregatorTestCases = []aggregatorTestCase{
 	{
-		// Test carry between output batches.
+		name: "carryBetweenBatches",
+		typs: rowenc.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 1},
 			{1, 5},
@@ -45,35 +47,22 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 			{0, 3},
 			{0, 7},
 		},
-		typs:      []*types.T{types.Int, types.Int},
 		groupCols: []uint32{0},
-		aggCols:   [][]uint32{{1}},
-
-		expected: colexectestutils.Tuples{
-			{5},
-			{6},
-			{17},
+		aggCols:   [][]uint32{{0}, {1}},
+		aggFns: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AnyNotNull,
+			execinfrapb.SumInt,
 		},
-
-		name: "carryBetweenBatches",
+		expected: colexectestutils.Tuples{
+			{1, 5},
+			{2, 6},
+			{0, 17},
+		},
+		unorderedInput: true,
 	},
 	{
-		// Test a single row input source.
-		input: colexectestutils.Tuples{
-			{5},
-		},
-		typs:      []*types.T{types.Int},
-		groupCols: []uint32{0},
-		aggCols:   [][]uint32{{0}},
-
-		expected: colexectestutils.Tuples{
-			{5},
-		},
-
-		name: "singleRowInput",
-	},
-	{
-		// Test bucket collisions.
+		name: "bucketCollision",
+		typs: rowenc.TwoIntCols,
 		input: colexectestutils.Tuples{
 			{0, 3},
 			{0, 4},
@@ -81,61 +70,39 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 			{0, 5},
 			{coldata.BatchSize(), 7},
 		},
-		typs:      []*types.T{types.Int, types.Int},
 		groupCols: []uint32{0},
-		aggCols:   [][]uint32{{1}},
-
-		expected: colexectestutils.Tuples{
-			{12},
-			{13},
+		aggCols:   [][]uint32{{0}, {1}},
+		aggFns: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AnyNotNull,
+			execinfrapb.SumInt,
 		},
-
-		name: "bucketCollision",
+		expected: colexectestutils.Tuples{
+			{0, 12},
+			{coldata.BatchSize(), 13},
+		},
 	},
 	{
+		name: "decimalSums",
+		typs: []*types.T{types.Int, types.Int, types.Decimal},
 		input: colexectestutils.Tuples{
 			{0, 1, 1.3},
 			{0, 1, 1.6},
 			{0, 1, 0.5},
 			{1, 1, 1.2},
 		},
-		typs:          []*types.T{types.Int, types.Int, types.Decimal},
+		groupCols: []uint32{0, 1},
+		aggCols:   [][]uint32{{0}, {1}, {2}, {1}},
+		aggFns: []execinfrapb.AggregatorSpec_Func{
+			execinfrapb.AnyNotNull,
+			execinfrapb.AnyNotNull,
+			execinfrapb.Sum,
+			execinfrapb.SumInt,
+		},
+		expected: colexectestutils.Tuples{
+			{0, 1, 3.4, 3},
+			{1, 1, 1.2, 1},
+		},
 		convToDecimal: true,
-
-		aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT},
-		groupCols: []uint32{0, 1},
-		aggCols: [][]uint32{
-			{2}, {1},
-		},
-
-		expected: colexectestutils.Tuples{
-			{3.4, 3},
-			{1.2, 1},
-		},
-
-		name: "decimalSums",
-	},
-	{
-		// Test unused input columns.
-		input: colexectestutils.Tuples{
-			{0, 1, 2, 3},
-			{0, 1, 4, 5},
-			{1, 1, 3, 7},
-			{1, 2, 4, 9},
-			{0, 1, 6, 11},
-			{1, 2, 6, 13},
-		},
-		typs:      []*types.T{types.Int, types.Int, types.Int, types.Int},
-		groupCols: []uint32{0, 1},
-		aggCols:   [][]uint32{{3}},
-
-		expected: colexectestutils.Tuples{
-			{7},
-			{19},
-			{22},
-		},
-
-		name: "unusedInputCol",
 	},
 }
 
@@ -158,7 +125,11 @@ func TestHashAggregator(t *testing.T) {
 			&evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)
 		require.NoError(t, err)
-		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
+		verifier := colexectestutils.OrderedVerifier
+		if tc.unorderedInput {
+			verifier = colexectestutils.UnorderedVerifier
+		}
+		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.input}, tc.expected, verifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 			return NewHashAggregator(&colexecagg.NewAggregatorArgs{
 				Allocator:      testAllocator,
 				MemAccount:     testMemAcc,
@@ -189,7 +160,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
 	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 
-	aggFn := execinfrapb.AggregatorSpec_MIN
+	aggFn := execinfrapb.Min
 	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
 	if testing.Short() {
