@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
@@ -343,12 +344,19 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							params.Locality.Tiers = []roachpb.Tier{
 								{Key: "region", Value: "ajstorm-1"},
 							}
+							var sqlDB *gosql.DB
 							params.Knobs = base.TestingKnobs{
 								SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 									BackfillChunkSize: chunkSize,
 								},
 								DistSQL: &execinfra.TestingKnobs{
 									RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+										// Run a validate query on each chunk.
+										_, err := sqlDB.Exec(`SELECT crdb_internal.validate_multi_region_zone_configs()`)
+										if err != nil {
+											return errors.Wrap(err, "error validating zone configs during an in progress backfill")
+										}
+
 										currentBackfillChunk += 1
 										if currentBackfillChunk != alterState.cancelOnBackfillChunk {
 											return nil
@@ -357,7 +365,9 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 									},
 								},
 							}
-							s, sqlDB, kvDB := serverutils.StartServer(t, params)
+							var s serverutils.TestServerInterface
+							var kvDB *kv.DB
+							s, sqlDB, kvDB = serverutils.StartServer(t, params)
 							db = sqlDB
 							defer s.Stopper().Stop(ctx)
 
