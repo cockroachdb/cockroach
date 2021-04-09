@@ -136,12 +136,22 @@ func (f *rowBasedFlow) setupProcessors(
 					// then its inputs run in parallel, so there's no fusing with them.
 					// If it's an orderedSynchronizer, then we look inside it to see if
 					// the processor we're trying to fuse feeds into it.
-					orderedSync, ok := inputSyncs[pIdx][inIdx].(*orderedSynchronizer)
-					if !ok {
-						continue
+
+					var sources []srcInfo
+					os, ok := inputSyncs[pIdx][inIdx].(*orderedSynchronizer)
+
+					// RFC: how do I clean this up?  want to use synchronizer type
+					if ok {
+						sources = os.sources
+					} else {
+						us, ok := inputSyncs[pIdx][inIdx].(*unorderedSynchronizer)
+						if ok {
+							sources = us.sources
+						} else {
+							continue
+						}
 					}
-					// See if we can find a stream attached to the processor we're
-					// trying to fuse.
+
 					for sIdx, sspec := range in.Streams {
 						input := findProcByOutputStreamID(spec, sspec.StreamID)
 						if input == nil {
@@ -151,7 +161,7 @@ func (f *rowBasedFlow) setupProcessors(
 							continue
 						}
 						// Fuse the processor with this orderedSynchronizer.
-						orderedSync.sources[sIdx].src = source
+						sources[sIdx].src = source
 						return true
 					}
 				}
@@ -320,7 +330,7 @@ func (f *rowBasedFlow) setupInputSyncs(
 				if is.Type == execinfrapb.InputSyncSpec_ORDERED {
 					ordering = execinfrapb.ConvertToColumnOrdering(is.Ordering)
 				}
-				sync, err = makeOrderedSync(ordering, f.EvalCtx, streams)
+				sync, err = makeInputSync(ordering, f.EvalCtx, streams)
 				if err != nil {
 					return nil, err
 				}

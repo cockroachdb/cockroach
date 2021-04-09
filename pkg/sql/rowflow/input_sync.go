@@ -56,11 +56,17 @@ const (
 	drainBuffered
 )
 
+// RFC: couldn't figure out how to get this to work generically in setupInputSyncs
+//type synchronizer struct {
+//	sources []srcInfo
+//}
+
 // orderedSynchronizer receives rows from multiple streams and produces a single
 // stream of rows, ordered according to a set of columns. The rows in each input
 // stream are assumed to be ordered according to the same set of columns
 // (intra-stream ordering).
 type orderedSynchronizer struct {
+	//synchronizer
 	// ordering dictates the way in which rows compare. If nil (i.e.
 	// sqlbase.NoOrdering), then rows are not compared and sources are consumed in
 	// index order.
@@ -111,12 +117,6 @@ func (s *orderedSynchronizer) Len() int {
 
 // Less is part of heap.Interface and is only meant to be used internally.
 func (s *orderedSynchronizer) Less(i, j int) bool {
-	// If we're not enforcing any ordering between rows, let's consume sources in
-	// their index order.
-	if s.ordering == nil {
-		return s.heap[i] < s.heap[j]
-	}
-
 	si := &s.sources[s.heap[i]]
 	sj := &s.sources[s.heap[j]]
 	cmp, err := si.row.Compare(s.types, &s.alloc, s.ordering, s.evalCtx, sj.row)
@@ -363,28 +363,113 @@ func (s *orderedSynchronizer) consumerStatusChanged(
 	s.state = newState
 }
 
-// makeOrderedSync creates an orderedSynchronizer. ordering dictates how rows
-// are to be compared. Use sqlbase.NoOrdering to indicate that the row ordering
+type unorderedSynchronizer struct {
+	//synchronizer
+	// round robin source index
+	srcIndex int
+
+	state orderedSynchronizerState // Reuse okay?  Maybe rename type?
+
+	types   []*types.T
+	sources []srcInfo
+	ctx     context.Context
+
+	rowAlloc rowenc.EncDatumRowAlloc
+}
+
+var _ execinfra.RowSource = &unorderedSynchronizer{}
+
+func (u *unorderedSynchronizer) OutputTypes() []*types.T {
+	return u.types
+}
+
+func (u *unorderedSynchronizer) Start(ctx context.Context) {
+	u.ctx = ctx
+	for _, src := range u.sources {
+		src.src.Start(ctx)
+	}
+}
+
+func (u *unorderedSynchronizer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	emptyCount := 0
+	for {
+		row, metadata := u.sources[u.srcIndex%len(u.sources)].src.Next()
+		u.srcIndex++
+
+		// If we're draining only return metadata
+		if u.state == draining && row != nil {
+			continue
+		}
+
+		// Don't return nil,nil until we exhaust all sources
+		if row == nil && metadata == nil && emptyCount < len(u.sources) {
+			emptyCount++
+			continue
+		}
+
+		if row != nil {
+			//TODO: understand this, why copy?  so much for garbage collection!
+			row = u.rowAlloc.CopyRow(row)
+		}
+
+		return row, metadata
+	}
+}
+
+func (u *unorderedSynchronizer) ConsumerDone() {
+	if u.state != draining {
+		for i := range u.sources {
+			u.sources[i].src.ConsumerDone()
+		}
+		u.state = draining
+	}
+}
+
+func (u *unorderedSynchronizer) ConsumerClosed() {
+	for i := range u.sources {
+		u.sources[i].src.ConsumerClosed()
+	}
+}
+
+// makeInputSync creates an orderedSynchronizer or an unorderedSynchronized. ordering
+// dictates how rows are to be compared. Use colinfo.NoOrdering to indicate that the row ordering
 // doesn't matter and sources should be consumed in index order (which is useful
 // when you intend to fuse the synchronizer and its inputs later; see
 // FuseAggresively).
-func makeOrderedSync(
+func makeInputSync(
 	ordering colinfo.ColumnOrdering, evalCtx *tree.EvalContext, sources []execinfra.RowSource,
 ) (execinfra.RowSource, error) {
 	if len(sources) < 2 {
 		return nil, errors.Errorf("only %d sources for ordered synchronizer", len(sources))
 	}
-	s := &orderedSynchronizer{
-		state:    notInitialized,
-		sources:  make([]srcInfo, len(sources)),
-		types:    sources[0].OutputTypes(),
-		heap:     make([]srcIdx, 0, len(sources)),
-		ordering: ordering,
-		evalCtx:  evalCtx,
+
+	var s execinfra.RowSource
+
+	if ordering != nil { // RFC: why can't I compare with NoOrdering?
+		os := &orderedSynchronizer{
+			state:    notInitialized,
+			sources:  make([]srcInfo, len(sources)),
+			types:    sources[0].OutputTypes(),
+			heap:     make([]srcIdx, 0, len(sources)),
+			ordering: ordering,
+			evalCtx:  evalCtx,
+		}
+		for i := range os.sources {
+			os.sources[i].src = sources[i]
+			os.heap = append(os.heap, srcIdx(i))
+		}
+		s = os
+	} else {
+		us := &unorderedSynchronizer{
+			state:   notInitialized,
+			sources: make([]srcInfo, len(sources)),
+			types:   sources[0].OutputTypes(),
+		}
+		for i := range us.sources {
+			us.sources[i].src = sources[i]
+		}
+		s = us
 	}
-	for i := range s.sources {
-		s.sources[i].src = sources[i]
-		s.heap = append(s.heap, srcIdx(i))
-	}
+
 	return s, nil
 }

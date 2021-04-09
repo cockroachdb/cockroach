@@ -25,7 +25,7 @@ import (
 )
 
 // ConvertToColumnOrdering converts an Ordering type (as defined in data.proto)
-// to a sqlbase.ColumnOrdering type.
+// to a ColumnOrdering type.
 func ConvertToColumnOrdering(specOrdering Ordering) colinfo.ColumnOrdering {
 	ordering := make(colinfo.ColumnOrdering, len(specOrdering.Columns))
 	for i, c := range specOrdering.Columns {
@@ -39,7 +39,7 @@ func ConvertToColumnOrdering(specOrdering Ordering) colinfo.ColumnOrdering {
 	return ordering
 }
 
-// ConvertToSpecOrdering converts a sqlbase.ColumnOrdering type
+// ConvertToSpecOrdering converts a ColumnOrdering type
 // to an Ordering type (as defined in data.proto).
 func ConvertToSpecOrdering(columnOrdering colinfo.ColumnOrdering) Ordering {
 	return ConvertToMappedSpecOrdering(columnOrdering, nil)
