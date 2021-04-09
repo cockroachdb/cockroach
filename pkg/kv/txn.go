@@ -1318,3 +1318,18 @@ func (txn *Txn) ManualRefresh(ctx context.Context) error {
 	txn.mu.Unlock()
 	return sender.ManualRefresh(ctx)
 }
+
+// DeferCommitWait defers the transaction's commit-wait operation, passing
+// responsibility of commit-waiting from the Txn to the caller of this
+// method. The method returns a function which the caller must eventually
+// run if the transaction completes without error. This function is safe to
+// call multiple times.
+//
+// WARNING: failure to run the returned function could lead to consistency
+// violations where a future, causally dependent transaction may fail to
+// observe the writes performed by this transaction.
+func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.DeferCommitWait(ctx)
+}
