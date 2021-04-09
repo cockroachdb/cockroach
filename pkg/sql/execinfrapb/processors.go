@@ -45,7 +45,7 @@ type AggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFun
 func GetAggregateInfo(
 	fn AggregatorSpec_Func, inputTypes ...*types.T,
 ) (aggregateConstructor AggregateConstructor, returnType *types.T, err error) {
-	if fn == AggregatorSpec_ANY_NOT_NULL {
+	if fn == AnyNotNull {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
@@ -165,7 +165,7 @@ func (spec *AggregatorSpec) IsScalar() bool {
 func (spec *AggregatorSpec) IsRowCount() bool {
 	return len(spec.Aggregations) == 1 &&
 		spec.Aggregations[0].FilterColIdx == nil &&
-		spec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
+		spec.Aggregations[0].Func == CountRows &&
 		!spec.Aggregations[0].Distinct &&
 		spec.IsScalar()
 }
@@ -186,7 +186,7 @@ func GetWindowFuncIdx(funcName string) (int32, error) {
 func GetWindowFunctionInfo(
 	fn WindowerSpec_Func, inputTypes ...*types.T,
 ) (windowConstructor func(*tree.EvalContext) tree.WindowFunc, returnType *types.T, err error) {
-	if fn.AggregateFunc != nil && *fn.AggregateFunc == AggregatorSpec_ANY_NOT_NULL {
+	if fn.AggregateFunc != nil && *fn.AggregateFunc == AnyNotNull {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {

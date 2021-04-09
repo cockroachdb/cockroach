@@ -1768,7 +1768,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		finalOrderedGroupCols := make([]uint32, 0, len(orderedGroupCols))
 		for i, groupColIdx := range groupCols {
 			agg := execinfrapb.AggregatorSpec_Aggregation{
-				Func:   execinfrapb.AggregatorSpec_ANY_NOT_NULL,
+				Func:   execinfrapb.AnyNotNull,
 				ColIdx: []uint32{groupColIdx},
 			}
 			// See if there already is an aggregation like the one
