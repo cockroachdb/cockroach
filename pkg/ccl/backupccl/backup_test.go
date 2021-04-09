@@ -7062,6 +7062,45 @@ func TestClientDisconnect(t *testing.T) {
 	}
 }
 
+func TestBackupExportRequestTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	allowRequest := make(chan struct{})
+	defer close(allowRequest)
+	params := base.TestClusterArgs{}
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	params.ServerArgs.ExternalIODir = dir
+	const numAccounts = 10
+	ctx, tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 2 /* nodes */, numAccounts,
+		InitManualReplication, params)
+	defer cleanupFn()
+
+	sqlSessions := []*sqlutils.SQLRunner{}
+	for i := 0; i < 2; i++ {
+		newConn, err := tc.ServerConn(i).Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlSessions = append(sqlSessions, sqlutils.MakeSQLRunner(newConn))
+	}
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.read_timeout = '3s'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.read_with_priority_after = '100ms'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.read_retry_delay = '10ms'")
+
+	// Start a high priority txn that lays down an intent.
+	sqlSessions[0].Exec(t, `BEGIN PRIORITY HIGH; UPDATE data.bank SET balance = 0 WHERE id = 5 OR id = 8;`)
+
+	// Backup should go through the motions of attempting to run a high priority
+	// export request but since the intent was laid by a high priority txn it
+	// should hang. The timeout should save us in this case.
+	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
+	require.True(t, testutils.IsError(err,
+		"\"ExportRequest for span /Table/53/{1-2}\" timed out after 3s: context deadline exceeded"))
+}
+
 func TestBackupDoesNotHangOnIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
