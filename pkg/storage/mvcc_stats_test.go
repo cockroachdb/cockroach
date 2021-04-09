@@ -135,7 +135,7 @@ func TestMVCCStatsDeleteCommitMovesTimestamp(t *testing.T) {
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts3},
 				ReadTimestamp: ts3,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -467,7 +467,7 @@ func TestMVCCStatsDeleteMovesTimestamp(t *testing.T) {
 			}
 			require.EqualValues(t, m2ValSize, expM2ValSize)
 
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -525,7 +525,7 @@ func TestMVCCStatsPutMovesDeletionTimestamp(t *testing.T) {
 			}
 
 			// Write a deletion tombstone intent.
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -650,7 +650,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 			ts3 := hlc.Timestamp{WallTime: 3e9}
 
 			// Write a non-transactional tombstone at t=1s.
-			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
+			if _, err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -679,7 +679,7 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
 				ReadTimestamp: ts2,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -839,7 +839,7 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
 				ReadTimestamp: ts2,
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+			if _, err := MVCCDelete(ctx, engine, aggMS, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -993,10 +993,10 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 			ts2 := hlc.Timestamp{WallTime: 2e9}
 
 			// Write tombstones at ts1 and ts2.
-			if err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
+			if _, err := MVCCDelete(ctx, engine, aggMS, key, ts1, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
-			if err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
+			if _, err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1207,7 +1207,7 @@ func TestMVCCStatsPutWaitDeleteGC(t *testing.T) {
 
 			// Delete the value at ts5.
 
-			if err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
+			if _, err := MVCCDelete(ctx, engine, aggMS, key, ts2, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1659,7 +1659,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		return desc
 	}
 	actions["Del"] = func(s *state) string {
-		if err := MVCCDelete(ctx, s.eng, s.MS, s.key, s.TS, hlc.ClockTimestamp{}, s.Txn); err != nil {
+		if _, err := MVCCDelete(ctx, s.eng, s.MS, s.key, s.TS, hlc.ClockTimestamp{}, s.Txn); err != nil {
 			return err.Error()
 		}
 		return ""

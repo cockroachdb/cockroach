@@ -241,8 +241,14 @@ func (b *Batch) fillResults(ctx context.Context) {
 					}
 				}
 			case *roachpb.DeleteRequest:
-				row := &result.Rows[k]
-				row.Key = []byte(args.(*roachpb.DeleteRequest).Key)
+				if result.Err == nil {
+					resp := reply.(*roachpb.DeleteResponse)
+					if resp.FoundKey {
+						// Accumulate all keys that were deleted as part of a
+						// single Del() operation.
+						result.Keys = append(result.Keys, args.(*roachpb.DeleteRequest).Key)
+					}
+				}
 			case *roachpb.DeleteRangeRequest:
 				if result.Err == nil {
 					result.Keys = reply.(*roachpb.DeleteRangeResponse).Keys
@@ -609,8 +615,9 @@ func (b *Batch) ReverseScanForUpdate(s, e interface{}) {
 
 // Del deletes one or more keys.
 //
-// A new result will be appended to the batch and each key will have a
-// corresponding row in the returned Result.
+// A new result will be appended to the batch which will contain 0 rows and
+// Result.Err will indicate success or failure. Each key will be included in
+// Result.Keys if it was actually deleted.
 //
 // key can be either a byte slice or a string.
 func (b *Batch) Del(keys ...interface{}) {
@@ -618,14 +625,14 @@ func (b *Batch) Del(keys ...interface{}) {
 	for _, key := range keys {
 		k, err := marshalKey(key)
 		if err != nil {
-			b.initResult(0, len(keys), notRaw, err)
+			b.initResult(len(keys), 0, notRaw, err)
 			return
 		}
 		reqs = append(reqs, roachpb.NewDelete(k))
 		b.approxMutationReqBytes += len(k)
 	}
 	b.appendReqs(reqs...)
-	b.initResult(len(reqs), len(reqs), notRaw, nil)
+	b.initResult(len(reqs), 0, notRaw, nil)
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).

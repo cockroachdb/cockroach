@@ -4119,10 +4119,10 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	// Simulate a merge transaction by launching a transaction that lays down
 	// intents on the two copies of the RHS range descriptor.
 	txn := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
-	if err := txn.Del(ctx, keys.RangeDescriptorKey(rhsDesc.StartKey)); err != nil {
+	if _, err := txn.Del(ctx, keys.RangeDescriptorKey(rhsDesc.StartKey)); err != nil {
 		t.Fatal(err)
 	}
-	if err := txn.Del(ctx, keys.RangeMetaKey(rhsDesc.StartKey)); err != nil {
+	if _, err := txn.Del(ctx, keys.RangeMetaKey(rhsDesc.StartKey)); err != nil {
 		t.Fatal(err)
 	}
 

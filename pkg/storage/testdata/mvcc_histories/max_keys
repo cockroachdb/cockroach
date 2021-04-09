@@ -15,6 +15,7 @@ with ts=1,0
   put      k=/row3/1 v=r3b
 del        k=aa ts=2,0
 ----
+del: "aa": found key true
 >> at end:
 data: "a"/1.000000000,0 -> /BYTES/val-a
 data: "aa"/2.000000000,0 -> /<empty>

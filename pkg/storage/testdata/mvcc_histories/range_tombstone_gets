@@ -28,6 +28,8 @@ with t=A
   txn_begin k=e ts=6
   put k=e v=e6
 ----
+del: "b": found key false
+del: "a": found key false
 >> at end:
 txn: "A" meta={id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=6.000000000,0 wto=false gul=0,0
 rangekey: {a-c}/[2.000000000,0=/<empty>]
