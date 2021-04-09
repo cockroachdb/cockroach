@@ -86,7 +86,6 @@ func (ctx *postCtx) Printf(format string, args ...interface{}) {
 
 func (p *poster) getAssignee(ctx *postCtx, authorEmail string) string {
 	if authorEmail == "" {
-		ctx.Printf("no author provided")
 		return ""
 	}
 	commits, _, err := p.listCommits(ctx, p.Org, p.Repo, &github.CommitsListOptions{
