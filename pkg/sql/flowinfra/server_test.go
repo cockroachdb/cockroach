@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package flowinfra
+package flowinfra_test
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -22,17 +21,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func TestServer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
@@ -59,7 +64,7 @@ func TestServer(t *testing.T) {
 	}
 	post := execinfrapb.PostProcessSpec{
 		Projection:    true,
-		OutputColumns: []uint32{0, 1}, // a
+		OutputColumns: []uint32{0, 1}, // a b
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, s.NodeID())
@@ -77,40 +82,13 @@ func TestServer(t *testing.T) {
 				Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
 				Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
 			}},
+			ResultTypes: rowenc.TwoIntCols,
 		}},
 	}
 
-	distSQLClient := execinfrapb.NewDistSQLClient(conn)
-	stream, err := distSQLClient.RunSyncFlow(ctx)
+	rows, err := runLocalFlow(ctx, s, req)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if err := stream.Send(&execinfrapb.ConsumerSignal{SetupFlowRequest: req}); err != nil {
-		t.Fatal(err)
-	}
-
-	var decoder StreamDecoder
-	var rows rowenc.EncDatumRows
-	var metas []execinfrapb.ProducerMetadata
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Fatal(err)
-		}
-		err = decoder.AddMessage(context.Background(), msg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
-	}
-	metas = ignoreLeafTxnState(metas)
-	metas = ignoreMetricsMeta(metas)
-	metas = ignoreTraceData(metas)
-	if len(metas) != 0 {
-		t.Errorf("unexpected metadata: %v", metas)
 	}
 	str := rows.String(rowenc.TwoIntCols)
 	expected := "[[1 10] [2 20] [3 30]]"
@@ -132,28 +110,28 @@ func TestServer(t *testing.T) {
 				version:     execinfra.MinAcceptedVersion - 1,
 				expectedErr: "version mismatch",
 			},
-			{
-				version:     execinfra.MinAcceptedVersion,
-				expectedErr: "",
-			},
+			// TODO(yuzefovich): figure out what setup to perform to simulate
+			// running a flow with acceptable version on a remote node.
+			// Currently, the flow is scheduled correctly, but then encounters a
+			// panic in a separate goroutine because there is no RowReceiver set
+			// up for the table reader.
+			//{
+			//	version:     execinfra.MinAcceptedVersion,
+			//	expectedErr: "",
+			//},
 		}
 		for _, tc := range testCases {
 			t.Run(fmt.Sprintf("%d", tc.version), func(t *testing.T) {
-				distSQLClient := execinfrapb.NewDistSQLClient(conn)
-				stream, err := distSQLClient.RunSyncFlow(context.Background())
-				if err != nil {
-					t.Fatal(err)
-				}
+				req := *req
 				req.Version = tc.version
-				if err := stream.Send(&execinfrapb.ConsumerSignal{SetupFlowRequest: req}); err != nil {
-					t.Fatal(err)
+				distSQLClient := execinfrapb.NewDistSQLClient(conn)
+				resp, err := distSQLClient.SetupFlow(ctx, &req)
+				if err == nil && resp.Error != nil {
+					err = resp.Error.ErrorDetail(ctx)
 				}
-				_, err = stream.Recv()
 				if !testutils.IsError(err, tc.expectedErr) {
 					t.Errorf("expected error '%s', got %v", tc.expectedErr, err)
 				}
-				// In the expectedErr == nil case, we leave a flow hanging; we're not
-				// consuming it. It will get canceled by the draining process.
 			})
 		}
 	})
@@ -162,6 +140,7 @@ func TestServer(t *testing.T) {
 // Test that a node gossips its DistSQL version information.
 func TestDistSQLServerGossipsVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
@@ -177,4 +156,43 @@ func TestDistSQLServerGossipsVersion(t *testing.T) {
 		t.Fatalf("node is gossipping the wrong version. Expected: [%d-%d], got [%d-%d",
 			execinfra.Version, execinfra.MinAcceptedVersion, v.Version, v.MinAcceptedVersion)
 	}
+}
+
+// runLocalFlow takes in a SetupFlowRequest to setup a local sync flow that is
+// then run to completion. The result rows are returned. All metadata except for
+// errors is ignored.
+func runLocalFlow(
+	ctx context.Context, s serverutils.TestServerInterface, req *execinfrapb.SetupFlowRequest,
+) (rowenc.EncDatumRows, error) {
+	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
+	defer evalCtx.Stop(ctx)
+	var rowBuf distsqlutils.RowBuffer
+	flowCtx, flow, err := s.DistSQLServer().(*distsql.ServerImpl).SetupLocalSyncFlow(ctx, evalCtx.Mon, req, &rowBuf, distsql.LocalState{})
+	if err != nil {
+		return nil, err
+	}
+	if err = flow.Run(flowCtx, func() {}); err != nil {
+		return nil, err
+	}
+	flow.Cleanup(flowCtx)
+
+	if !rowBuf.ProducerClosed() {
+		return nil, errors.New("output not closed")
+	}
+
+	var rows rowenc.EncDatumRows
+	for {
+		row, meta := rowBuf.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return nil, meta.Err
+			}
+			continue
+		}
+		if row == nil {
+			break
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
 }

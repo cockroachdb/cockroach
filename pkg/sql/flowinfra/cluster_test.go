@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package flowinfra
+package flowinfra_test
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,6 +46,7 @@ import (
 
 func TestClusterFlow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	const numRows = 100
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
@@ -240,39 +241,10 @@ func TestClusterFlow(t *testing.T) {
 		t.Fatal(resp.Error)
 	}
 
-	log.Infof(ctx, "Running flow on 2")
-	stream, err := clients[2].RunSyncFlow(ctx)
+	log.Infof(ctx, "Running local sync flow on 2")
+	rows, err := runLocalFlow(ctx, tc.Server(2), req3)
 	if err != nil {
 		t.Fatal(err)
-	}
-	err = stream.Send(&execinfrapb.ConsumerSignal{SetupFlowRequest: req3})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var decoder StreamDecoder
-	var rows rowenc.EncDatumRows
-	var metas []execinfrapb.ProducerMetadata
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Fatal(err)
-		}
-		err = decoder.AddMessage(ctx, msg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
-	}
-	metas = ignoreMisplannedRanges(metas)
-	metas = ignoreLeafTxnState(metas)
-	metas = ignoreMetricsMeta(metas)
-	metas = ignoreTraceData(metas)
-	if len(metas) != 0 {
-		t.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 	}
 	// The result should be all the numbers in string form, ordered by the
 	// digit sum (and then by number).
@@ -291,58 +263,11 @@ func TestClusterFlow(t *testing.T) {
 	}
 }
 
-// ignoreMisplannedRanges takes a slice of metadata and returns the entries that
-// are not about range info from misplanned ranges.
-func ignoreMisplannedRanges(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
-	res := make([]execinfrapb.ProducerMetadata, 0)
-	for _, m := range metas {
-		if len(m.Ranges) == 0 {
-			res = append(res, m)
-		}
-	}
-	return res
-}
-
-// ignoreLeafTxnState takes a slice of metadata and returns the
-// entries excluding the leaf txn state.
-func ignoreLeafTxnState(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
-	res := make([]execinfrapb.ProducerMetadata, 0)
-	for _, m := range metas {
-		if m.LeafTxnFinalState == nil {
-			res = append(res, m)
-		}
-	}
-	return res
-}
-
-// ignoreMetricsMeta takes a slice of metadata and returns the entries
-// excluding the metrics about node's goodput.
-func ignoreMetricsMeta(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
-	res := make([]execinfrapb.ProducerMetadata, 0)
-	for _, m := range metas {
-		if m.Metrics == nil {
-			res = append(res, m)
-		}
-	}
-	return res
-}
-
-// ignoreTraceData takes a slice of metadata and returns the entries
-// excluding the ones with trace data.
-func ignoreTraceData(metas []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
-	res := make([]execinfrapb.ProducerMetadata, 0)
-	for _, m := range metas {
-		if m.TraceData == nil {
-			res = append(res, m)
-		}
-	}
-	return res
-}
-
 // TestLimitedBufferingDeadlock sets up a scenario which leads to deadlock if
 // a single consumer can block the entire router (#17097).
 func TestLimitedBufferingDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
@@ -405,7 +330,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	// The right values rows have groups of identical values (ensuring that large
 	// groups of rows go to the same hash bucket).
 	rightRows := make(rowenc.EncDatumRows, 0)
-	for i := 1; i <= 20; i++ {
+	for i := 0; i < 20; i++ {
 		for j := 1; j <= 4*execinfra.RowChannelBufSize; j++ {
 			rightRows = append(rightRows, rowenc.EncDatumRow{
 				rowenc.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
@@ -521,47 +446,9 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 			},
 		},
 	}
-	s := tc.Server(0)
-	conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
-		rpc.DefaultClass).Connect(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	stream, err := execinfrapb.NewDistSQLClient(conn).RunSyncFlow(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = stream.Send(&execinfrapb.ConsumerSignal{SetupFlowRequest: &req})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var decoder StreamDecoder
-	var rows rowenc.EncDatumRows
-	var metas []execinfrapb.ProducerMetadata
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Fatal(err)
-		}
-		err = decoder.AddMessage(context.Background(), msg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rows, metas = testGetDecodedRows(t, &decoder, rows, metas)
-	}
-	metas = ignoreMisplannedRanges(metas)
-	metas = ignoreLeafTxnState(metas)
-	metas = ignoreMetricsMeta(metas)
-	metas = ignoreTraceData(metas)
-	if len(metas) != 0 {
-		t.Errorf("unexpected metadata (%d): %+v", len(metas), metas)
-	}
-	// TODO(radu): verify the results (should be the same with rightRows)
+	rows, err := runLocalFlow(context.Background(), tc.Server(0), &req)
+	require.NoError(t, err)
+	require.Equal(t, rightRows.String(typs), rows.String(typs))
 }
 
 // Test that DistSQL reads fill the BatchRequest.Header.GatewayNodeID field with
@@ -569,6 +456,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 // batch). Important to lease follow-the-workload transfers.
 func TestDistSQLReadsFillGatewayID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// We're going to distribute a table and then read it, and we'll expect all
 	// the ScanRequests (produced by the different nodes) to identify the one and
@@ -634,6 +522,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 // on the gateway.
 func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
@@ -690,6 +579,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 // repeatedly. The intention is to profile the distsql infrastructure itself.
 func BenchmarkInfrastructure(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
 	tc := serverutils.StartNewTestCluster(b, 3, args)
@@ -705,7 +595,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 					lastVal := 1
 					valSpecs := make([]execinfrapb.ValuesCoreSpec, numNodes)
 					for i := range valSpecs {
-						se := StreamEncoder{}
+						se := flowinfra.StreamEncoder{}
 						se.Init(rowenc.ThreeIntCols)
 						for j := 0; j < numRows; j++ {
 							row := make(rowenc.EncDatumRow, 3)
@@ -838,38 +728,9 @@ func BenchmarkInfrastructure(b *testing.B) {
 								b.Fatal(resp.Error)
 							}
 						}
-						stream, err := clients[0].RunSyncFlow(context.Background())
+						rows, err := runLocalFlow(context.Background(), tc.Server(0), &reqs[0])
 						if err != nil {
 							b.Fatal(err)
-						}
-						err = stream.Send(&execinfrapb.ConsumerSignal{SetupFlowRequest: &reqs[0]})
-						if err != nil {
-							b.Fatal(err)
-						}
-
-						var decoder StreamDecoder
-						var rows rowenc.EncDatumRows
-						var metas []execinfrapb.ProducerMetadata
-						for {
-							msg, err := stream.Recv()
-							if err != nil {
-								if err == io.EOF {
-									break
-								}
-								b.Fatal(err)
-							}
-							err = decoder.AddMessage(context.Background(), msg)
-							if err != nil {
-								b.Fatal(err)
-							}
-							rows, metas = testGetDecodedRows(b, &decoder, rows, metas)
-						}
-						metas = ignoreMisplannedRanges(metas)
-						metas = ignoreLeafTxnState(metas)
-						metas = ignoreMetricsMeta(metas)
-						metas = ignoreTraceData(metas)
-						if len(metas) != 0 {
-							b.Fatalf("unexpected metadata (%d): %+v", len(metas), metas)
 						}
 						if len(rows) != numNodes*numRows {
 							b.Errorf("got %d rows, expected %d", len(rows), numNodes*numRows)

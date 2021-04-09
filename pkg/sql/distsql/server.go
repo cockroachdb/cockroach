@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -501,42 +500,6 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 		return nil, nil, err
 	}
 	return ctx, f, err
-}
-
-// RunSyncFlow is part of the DistSQLServer interface.
-func (ds *ServerImpl) RunSyncFlow(stream execinfrapb.DistSQL_RunSyncFlowServer) error {
-	// Set up the outgoing mailbox for the stream.
-	mbox := flowinfra.NewOutboxSyncFlowStream(stream)
-
-	firstMsg, err := stream.Recv()
-	if err != nil {
-		return err
-	}
-	if firstMsg.SetupFlowRequest == nil {
-		return errors.AssertionFailedf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
-	}
-	req := firstMsg.SetupFlowRequest
-	ctx, f, err := ds.SetupSyncFlow(stream.Context(), ds.memMonitor, req, mbox)
-	if err != nil {
-		return err
-	}
-	mbox.SetFlowCtx(f.GetFlowCtx())
-
-	if err := ds.Stopper.RunTask(ctx, "distsql.ServerImpl: sync flow", func(ctx context.Context) {
-		ctx, ctxCancel := contextutil.WithCancel(ctx)
-		defer ctxCancel()
-		f.AddStartable(mbox)
-		ds.Metrics.FlowStart()
-		if err := f.Run(ctx, func() {}); err != nil {
-			log.Fatalf(ctx, "unexpected error from syncFlow.Start(): %s "+
-				"The error should have gone to the consumer.", err)
-		}
-		f.Cleanup(ctx)
-		ds.Metrics.FlowStop()
-	}); err != nil {
-		return err
-	}
-	return mbox.Err()
 }
 
 // SetupFlow is part of the DistSQLServer interface.
