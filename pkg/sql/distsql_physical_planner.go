@@ -1074,6 +1074,7 @@ func initTableReaderSpec(
 	} else if n.softLimit != 0 {
 		s.LimitHint = n.softLimit
 	}
+
 	return s, post, nil
 }
 
@@ -3409,9 +3410,6 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				// result, the plan will end up with a serial unordered synchronizer,
 				// which has exactly the behavior that we want (in particular, it won't
 				// execute the right child if the limit is reached by the left child).
-				// TODO(rytaft,yuzefovich): This currently only works with the
-				// vectorized engine. We should consider adding support for the serial
-				// unordered synchronizer in the row-based engine (see #61081).
 				p.EnsureSingleStreamPerNode(
 					false, /* forceSerialization */
 					execinfrapb.PostProcessSpec{Limit: n.hardLimit},

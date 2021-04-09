@@ -289,7 +289,7 @@ func (m *Expression) XXX_DiscardUnknown() {
 var xxx_messageInfo_Expression proto.InternalMessageInfo
 
 // Ordering defines an order - specifically a list of column indices and
-// directions. See sqlbase.ColumnOrdering.
+// directions. See colinfo.ColumnOrdering.
 type Ordering struct {
 	Columns []Ordering_Column `protobuf:"bytes,1,rep,name=columns" json:"columns"`
 }
