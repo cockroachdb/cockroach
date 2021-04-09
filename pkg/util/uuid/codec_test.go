@@ -129,6 +129,10 @@ var fromStringTests = []fromStringTest{
 		input:   "urn:uuid:6ba7b8109dad11d180b400c04fd430c8",
 		variant: "URNHashlike",
 	},
+	{
+		input: "6ba7-b810-9dad-11d1-80b4-00c0-4fd4-30c8",
+		variant: "ExtraHyphens",
+	},
 }
 
 var invalidFromStringInputs = []string{
