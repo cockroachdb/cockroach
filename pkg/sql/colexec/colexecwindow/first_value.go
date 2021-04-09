@@ -12,6 +12,7 @@ package colexecwindow
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
