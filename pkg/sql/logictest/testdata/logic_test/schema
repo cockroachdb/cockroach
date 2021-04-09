@@ -835,3 +835,36 @@ CREATE SCHEMA IF NOT EXISTS sc2
 
 statement ok
 END
+
+# Regression test for #62920. The bug that motivated this test would populate
+# the schema entry in the database with the database's name rather than the
+# schemas.
+subtest schema_and_database_with_same_name
+
+statement ok
+CREATE DATABASE samename
+
+statement ok
+USE samename
+
+statement ok
+CREATE SCHEMA foo;
+CREATE SCHEMA bar
+
+statement ok
+DROP SCHEMA foo
+
+statement ok
+CREATE SCHEMA samename
+
+statement ok
+DROP SCHEMA bar
+
+statement ok
+CREATE TABLE samename.samename.t (i INT PRIMARY KEY)
+
+statement ok
+SHOW TABLES
+
+statement ok
+DROP DATABASE samename CASCADE;
