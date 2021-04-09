@@ -90,7 +90,15 @@ var UnitTestFormatter = IssueFormatter{
 					r.Escaped("\n- ")
 					r.Escaped(fmt.Sprintf("#%d %s %v", iss.GetNumber(), iss.GetTitle(), ls))
 				}
+				r.Escaped("\n")
 			})
+		}
+
+		if data.InternalLog != "" {
+			r.Collapsed("Internal log", func() {
+				r.CodeBlock("", data.InternalLog)
+			})
+			r.Escaped("\n")
 		}
 
 		if len(data.Mention) > 0 {
@@ -99,28 +107,22 @@ var UnitTestFormatter = IssueFormatter{
 				r.Escaped(" ")
 				r.Escaped(handle)
 			}
+			r.Escaped("\n")
 		}
-
-		if data.InternalLog != "" {
-			r.Collapsed("Internal log", func() {
-				r.CodeBlock("", data.InternalLog)
-			})
-		}
-
-		r.Escaped("\n")
-		r.A(
-			"See this test on roachdash",
-			"https://roachdash.crdb.dev/?filter=status:open%20t:.*"+
-				data.TestName+
-				".*&sort=title+created&display=lastcommented+project",
-		)
-
-		r.Escaped("\n\n")
 
 		r.HTML("sub", func() {
+			r.Escaped("\n\n") // need blank like to <sub> tag for whatever reason
+			r.A(
+				"This test on roachdash",
+				"https://roachdash.crdb.dev/?filter=status:open%20t:.*"+
+					data.TestName+
+					".*&sort=title+created&display=lastcommented+project",
+			)
+			r.Escaped(" | ")
 			r.A("Improve this report!",
 				"https://github.com/cockroachdb/cockroach/tree/master/pkg/cmd/internal/issues",
 			)
+			r.Escaped("\n")
 		})
 		return nil
 	},
