@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"go.etcd.io/etcd/raft/v3"
 )
 
 // SpanSetReplicaEvalContext is a testing-only implementation of
@@ -205,6 +206,11 @@ func (rec SpanSetReplicaEvalContext) GetRangeInfo(ctx context.Context) roachpb.R
 	rec.GetLease()
 
 	return rec.i.GetRangeInfo(ctx)
+}
+
+// RaftStatus is part of the EvalContext interface.
+func (rec SpanSetReplicaEvalContext) RaftStatus() *raft.Status {
+	return rec.i.RaftStatus()
 }
 
 // GetCurrentReadSummary is part of the EvalContext interface.

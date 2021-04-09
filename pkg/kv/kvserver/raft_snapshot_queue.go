@@ -108,7 +108,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
-	if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
+	if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn(id) {
 		return nil
 	}
 	snapType := SnapshotRequest_VIA_SNAPSHOT_QUEUE
