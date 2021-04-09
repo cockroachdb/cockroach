@@ -6395,10 +6395,10 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		sqlDB.ExpectErr(t, `target database or schema does not exist`, `SHOW TABLES FROM d`)
 		sqlDB.ExpectErr(t, `target database or schema does not exist`, `SHOW TABLES FROM d.sc`)
 
-		sqlDB.ExpectErr(t, `relation "d.sc.tb" does not exist`, `SELECT * FROM d.sc.tb`)
-		sqlDB.ExpectErr(t, `relation "d.sc.tb" does not exist`, `ALTER TABLE d.sc.tb ADD COLUMN b INT`)
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `SELECT * FROM d.sc.tb`)
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `ALTER TABLE d.sc.tb ADD COLUMN b INT`)
 
-		sqlDB.ExpectErr(t, `type "d.sc.typ" does not exist`, `ALTER TYPE d.sc.typ RENAME TO typ2`)
+		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `ALTER TYPE d.sc.typ RENAME TO typ2`)
 
 		sqlDB.ExpectErr(t, `cannot create "d.sc.other" because the target database or schema does not exist`, `CREATE TABLE d.sc.other()`)
 

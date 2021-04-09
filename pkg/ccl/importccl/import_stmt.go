@@ -1407,9 +1407,16 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
+	}
+
+	// Wait for the table to be public before completing.
+	for _, tbl := range details.Tables {
+		_, err := lm.WaitForOneVersion(ctx, tbl.Desc.ID, retry.Options{})
+		if err != nil {
+			return errors.Wrap(err, "publishing tables waiting for one version")
+		}
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
@@ -1431,14 +1438,26 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, phs interface{}) err
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
 	cfg := phs.(sql.PlanHookState).ExecCfg()
 	lm, ie, db := cfg.LeaseManager, cfg.InternalExecutor, cfg.DB
-	return descs.Txn(ctx, cfg.Settings, lm, ie, db, func(
+	if err := descs.Txn(ctx, cfg.Settings, lm, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		if err := r.dropTables(ctx, txn, descsCol, cfg); err != nil {
 			return err
 		}
 		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
-	})
+	}); err != nil {
+		return err
+	}
+	// Wait for the tables to become public before completing.
+	if details.PrepareComplete {
+		for _, tableDesc := range details.Tables {
+			_, err := cfg.LeaseManager.WaitForOneVersion(ctx, tableDesc.Desc.ID, retry.Options{})
+			if err != nil {
+				return errors.Wrap(err, "rolling back tables waiting for them to be public")
+			}
+		}
+	}
+	return nil
 }
 
 func (r *importResumer) releaseProtectedTimestamp(
