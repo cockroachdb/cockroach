@@ -161,7 +161,8 @@ func readCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
 
 // deleteCmd deletes the value at the given key from the db.
 func deleteCmd(ctx context.Context, c *cmd, txn *kv.Txn) error {
-	return txn.Del(ctx, c.getKey())
+	_, err := txn.Del(ctx, c.getKey())
+	return err
 }
 
 // deleteRngCmd deletes the range of values from the db from [key, endKey).

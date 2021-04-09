@@ -141,7 +141,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 			// The public schema and temporary schemas are cleaned up by just removing
 			// the existing namespace entries.
 			key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, n.dbDesc.GetID(), schemaToDelete.GetName())
-			if err := p.txn.Del(ctx, key); err != nil {
+			if _, err := p.txn.Del(ctx, key); err != nil {
 				return err
 			}
 		case catalog.SchemaUserDefined:

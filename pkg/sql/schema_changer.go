@@ -699,7 +699,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		switch desc.(type) {
 		case catalog.SchemaDescriptor, catalog.DatabaseDescriptor:
 			if desc.Dropped() {
-				if err := sc.execCfg.DB.Del(ctx, catalogkeys.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
+				if _, err := sc.execCfg.DB.Del(ctx, catalogkeys.MakeDescMetadataKey(sc.execCfg.Codec, desc.GetID())); err != nil {
 					return err
 				}
 			}

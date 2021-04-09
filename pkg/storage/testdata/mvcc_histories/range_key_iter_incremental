@@ -43,6 +43,9 @@ with t=B
   put k=d v=d8
   put k=m v=m8
 ----
+del: "a": found key true
+del: "b": found key false
+del: "h": found key true
 >> at end:
 txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=8.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[1.000000000,0=/<empty>]

@@ -323,7 +323,7 @@ func TestMVCCGetAndDelete(t *testing.T) {
 				t.Fatal("the value should not be empty")
 			}
 
-			err = MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, nil)
+			_, err = MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -372,7 +372,7 @@ func TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey(t *testing.T) 
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			if err := MVCCDelete(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, nil); err != nil {
+			if _, err := MVCCDelete(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -463,7 +463,7 @@ func TestMVCCDeleteMissingKey(t *testing.T) {
 			engine := engineImpl.create()
 			defer engine.Close()
 
-			if err := MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, nil); err != nil {
+			if _, err := MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
 			// Verify nothing is written to the engine.
@@ -501,7 +501,7 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 
 			txn.Sequence++
 			txn.WriteTimestamp = hlc.Timestamp{WallTime: 3}
-			if err := MVCCDelete(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+			if _, err := MVCCDelete(ctx, engine, nil, testKey1, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1742,7 +1742,7 @@ func TestMVCCUncommittedDeleteRangeVisible(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := MVCCDelete(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: 2, Logical: 1}, hlc.ClockTimestamp{}, nil); err != nil {
+			if _, err := MVCCDelete(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: 2, Logical: 1}, hlc.ClockTimestamp{}, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -1782,7 +1782,7 @@ func TestMVCCDeleteRangeOldTimestamp(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = MVCCDelete(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: 5}, hlc.ClockTimestamp{}, nil)
+			_, err = MVCCDelete(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: 5}, hlc.ClockTimestamp{}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2245,7 +2245,8 @@ func TestMVCCClearTimeRangeOnRandomData(t *testing.T) {
 
 		key := roachpb.Key(fmt.Sprintf("%05d", k))
 		if rand.Float64() > 0.8 {
-			require.NoError(t, MVCCDelete(ctx, e, &ms, key, hlc.Timestamp{WallTime: ts}, hlc.ClockTimestamp{}, nil))
+			_, err := MVCCDelete(ctx, e, &ms, key, hlc.Timestamp{WallTime: ts}, hlc.ClockTimestamp{}, nil)
+			require.NoError(t, err)
 		} else {
 			v := roachpb.MakeValueFromString(fmt.Sprintf("v-%d", i))
 			require.NoError(t, MVCCPut(ctx, e, &ms, key, hlc.Timestamp{WallTime: ts}, hlc.ClockTimestamp{}, v, nil))
@@ -2337,7 +2338,7 @@ func TestMVCCInitPut(t *testing.T) {
 			}
 
 			// Delete.
-			err = MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 3}, hlc.ClockTimestamp{}, nil)
+			_, err = MVCCDelete(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 3}, hlc.ClockTimestamp{}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -4794,7 +4795,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 					}
 					for _, val := range test.vals[i : i+1] {
 						if i == len(test.vals)-1 && test.isDeleted {
-							if err := MVCCDelete(ctx, engine, ms, test.key, val.Timestamp, hlc.ClockTimestamp{},
+							if _, err := MVCCDelete(ctx, engine, ms, test.key, val.Timestamp, hlc.ClockTimestamp{},
 								nil); err != nil {
 								t.Fatal(err)
 							}
@@ -4987,7 +4988,7 @@ func TestMVCCGarbageCollectIntent(t *testing.T) {
 				TxnMeta:       enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts2},
 				ReadTimestamp: ts2,
 			}
-			if err := MVCCDelete(ctx, engine, nil, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
+			if _, err := MVCCDelete(ctx, engine, nil, key, txn.ReadTimestamp, hlc.ClockTimestamp{}, txn); err != nil {
 				t.Fatal(err)
 			}
 			keys := []roachpb.GCRequest_GCKey{
@@ -5244,9 +5245,8 @@ func (d rangeTestData) populateEngine(
 					hlc.ClockTimestamp{}, roachpb.MakeValueFromBytes(v.point.Value), v.txn),
 					"failed to insert test value into engine (%s)", v.point.Key.String())
 			} else {
-				require.NoError(t, MVCCDelete(ctx, engine, ms, v.point.Key.Key, v.point.Key.Timestamp,
-					hlc.ClockTimestamp{}, v.txn),
-					"failed to insert tombstone value into engine (%s)", v.point.Key.String())
+				_, err := MVCCDelete(ctx, engine, ms, v.point.Key.Key, v.point.Key.Timestamp, hlc.ClockTimestamp{}, v.txn)
+				require.NoError(t, err, "failed to insert tombstone value into engine (%s)", v.point.Key.String())
 			}
 			ts = v.point.Key.Timestamp
 		} else {

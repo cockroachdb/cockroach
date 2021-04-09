@@ -628,11 +628,14 @@ func (txn *Txn) Iterate(
 
 // Del deletes one or more keys.
 //
+// The returned []roachpb.Key will contain the keys that were actually deleted.
+//
 // key can be either a byte slice or a string.
-func (txn *Txn) Del(ctx context.Context, keys ...interface{}) error {
+func (txn *Txn) Del(ctx context.Context, keys ...interface{}) ([]roachpb.Key, error) {
 	b := txn.NewBatch()
 	b.Del(keys...)
-	return getOneErr(txn.Run(ctx, b), b)
+	r, err := getOneResult(txn.Run(ctx, b), b)
+	return r.Keys, err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).

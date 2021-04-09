@@ -343,6 +343,9 @@ const (
 	// SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
 	// statement.
 	SchemaChangeSupportsCreateFunction
+	// DeleteRequestReturnKey is the version where the DeleteRequest began
+	// populating the FoundKey value in the response.
+	DeleteRequestReturnKey
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -603,6 +606,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SchemaChangeSupportsCreateFunction,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 44},
+	},
+	{
+		Key:     DeleteRequestReturnKey,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 46},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

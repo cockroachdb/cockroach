@@ -2603,7 +2603,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		{
 			name: "write too old with initput failing on tombstone before",
 			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Del(ctx, "iput")
+				_, err := db.Del(ctx, "iput")
+				return err
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
 				return db.Put(ctx, "iput", "put2")
@@ -2619,7 +2620,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "iput", "put")
 			},
 			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Del(ctx, "iput")
+				_, err := db.Del(ctx, "iput")
+				return err
 			},
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.InitPut(ctx, "iput", "put", true)

@@ -232,7 +232,7 @@ func (s *Storage) getAllInstanceRows(
 func (s *Storage) ReleaseInstanceID(ctx context.Context, id base.SQLInstanceID) error {
 	key := makeInstanceKey(s.codec, s.tableID, id)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	if err := s.db.Del(ctx, key); err != nil {
+	if _, err := s.db.Del(ctx, key); err != nil {
 		return errors.Wrapf(err, "could not delete instance %d", id)
 	}
 	return nil

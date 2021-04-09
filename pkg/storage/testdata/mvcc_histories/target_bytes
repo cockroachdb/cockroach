@@ -8,6 +8,7 @@ with ts=1,0
   put      k=aa v=willbetombstoned
 del        k=aa ts=250,1
 ----
+del: "aa": found key true
 >> at end:
 data: "a"/1.000000000,0 -> /BYTES/nevergoingtobeseen
 data: "aa"/250.000000000,1 -> /<empty>

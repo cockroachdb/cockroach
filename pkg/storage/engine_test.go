@@ -187,7 +187,7 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 
 				// Seek the iterator to `key` and clear the value (but without
 				// telling the iterator about that).
-				if err := MVCCDelete(context.Background(), batch, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
+				if _, err := MVCCDelete(context.Background(), batch, nil, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
 					t.Fatal(err)
 				}
 
