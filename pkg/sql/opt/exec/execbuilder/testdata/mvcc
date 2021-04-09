@@ -62,3 +62,12 @@ vectorized: true
   missing stats
   table: t@primary
   spans: FULL SCAN
+
+# Regression test for #62798. Using crdb_internal_mvcc_timestamp shouldn't cause
+# an index out of range error.
+
+statement error column name \"crdb_internal_mvcc_timestamp\" conflicts with a system column name
+CREATE VIEW v AS SELECT crdb_internal_mvcc_timestamp FROM t
+
+statement ok
+CREATE VIEW v AS SELECT crdb_internal_mvcc_timestamp AS ts FROM t
