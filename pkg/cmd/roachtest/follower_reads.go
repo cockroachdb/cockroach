@@ -164,7 +164,9 @@ func runFollowerReadsTest(
 	// Wait until the table has completed up-replication.
 	t.l.Printf("waiting for up-replication...")
 	require.NoError(t, retry.ForDuration(5*time.Minute, func() error {
-		const q = `
+		// Check that the table has the expected number of voting and non-voting
+		// replicas.
+		const q1 = `
 			SELECT
 				coalesce(array_length(voting_replicas, 1), 0),
 				coalesce(array_length(non_voting_replicas, 1), 0)
@@ -173,7 +175,7 @@ func runFollowerReadsTest(
 			WHERE
 				table_name = 'test'`
 		var voters, nonVoters int
-		if err := db.QueryRowContext(ctx, q).Scan(&voters, &nonVoters); err != nil {
+		if err := db.QueryRowContext(ctx, q1).Scan(&voters, &nonVoters); err != nil {
 			t.l.Printf("retrying: %v\n", err)
 			return err
 		}
@@ -187,7 +189,26 @@ func runFollowerReadsTest(
 			ok = voters == 5 && nonVoters == 0
 		}
 		if !ok {
-			return errors.Newf("rebalancing not complete")
+			return errors.Newf("up-replication not complete, found %d voters and %d non_voters", voters, nonVoters)
+		}
+
+		// Check that one of these replicas exists in each region. Do so by
+		// parsing the replica_localities array using the same pattern as the
+		// one used by SHOW REGIONS.
+		const q2 = `
+			SELECT
+				count(distinct substring(unnest(replica_localities), 'region=([^,]*)'))
+			FROM
+				crdb_internal.ranges_no_leases
+			WHERE
+				table_name = 'test'`
+		var distinctRegions int
+		if err := db.QueryRowContext(ctx, q2).Scan(&distinctRegions); err != nil {
+			t.l.Printf("retrying: %v\n", err)
+			return err
+		}
+		if distinctRegions != 3 {
+			return errors.Newf("rebalancing not complete, table in %d regions", distinctRegions)
 		}
 		return nil
 	}))
@@ -286,7 +307,7 @@ func runFollowerReadsTest(
 	// latency threshold of 50ms, which should be well below the latency of a
 	// cross-region hop to read from the leaseholder but well above the latency
 	// of a follower read.
-	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '50ms'")
+	_, err = db.ExecContext(ctx, "SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '50ms'")
 	require.NoError(t, err)
 
 	// Read the follower read counts before issuing the follower reads to observe
