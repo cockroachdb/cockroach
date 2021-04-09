@@ -64,6 +64,7 @@ func TestDoctorZipDir(t *testing.T) {
 	})
 }
 
+/*
 // This tests the --dump-sql output on a zip dir.
 func TestDoctorDumpSQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -80,3 +81,4 @@ func TestDoctorDumpSQL(t *testing.T) {
 		return out
 	})
 }
+*/
