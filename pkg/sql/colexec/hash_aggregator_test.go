@@ -102,7 +102,7 @@ var hashAggregatorTestCases = []aggregatorTestCase{
 		typs:          []*types.T{types.Int, types.Int, types.Decimal},
 		convToDecimal: true,
 
-		aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.AggregatorSpec_SUM, execinfrapb.AggregatorSpec_SUM_INT},
+		aggFns:    []execinfrapb.AggregatorSpec_Func{execinfrapb.Sum, execinfrapb.SumInt},
 		groupCols: []uint32{0, 1},
 		aggCols: [][]uint32{
 			{2}, {1},
@@ -189,7 +189,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 	queueCfg.CacheMode = colcontainer.DiskQueueCacheModeReuseCache
 	queueCfg.SetDefaultBufferSizeBytesForCacheMode()
 
-	aggFn := execinfrapb.AggregatorSpec_MIN
+	aggFn := execinfrapb.Min
 	numRows := []int{1, 32, coldata.BatchSize(), 32 * coldata.BatchSize(), 1024 * coldata.BatchSize()}
 	groupSizes := []int{1, 2, 32, 128, coldata.BatchSize()}
 	if testing.Short() {

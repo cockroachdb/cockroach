@@ -164,7 +164,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 						Type: execinfrapb.AggregatorSpec_SCALAR,
 						Aggregations: []execinfrapb.AggregatorSpec_Aggregation{
 							{
-								Func:   execinfrapb.AggregatorSpec_MAX,
+								Func:   execinfrapb.Max,
 								ColIdx: []uint32{0},
 							},
 						},

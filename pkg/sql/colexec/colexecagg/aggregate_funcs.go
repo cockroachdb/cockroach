@@ -29,17 +29,17 @@ import (
 // IsAggOptimized returns whether aggFn has an optimized implementation.
 func IsAggOptimized(aggFn execinfrapb.AggregatorSpec_Func) bool {
 	switch aggFn {
-	case execinfrapb.AggregatorSpec_ANY_NOT_NULL,
-		execinfrapb.AggregatorSpec_AVG,
-		execinfrapb.AggregatorSpec_SUM,
-		execinfrapb.AggregatorSpec_SUM_INT,
-		execinfrapb.AggregatorSpec_CONCAT_AGG,
-		execinfrapb.AggregatorSpec_COUNT_ROWS,
-		execinfrapb.AggregatorSpec_COUNT,
-		execinfrapb.AggregatorSpec_MIN,
-		execinfrapb.AggregatorSpec_MAX,
-		execinfrapb.AggregatorSpec_BOOL_AND,
-		execinfrapb.AggregatorSpec_BOOL_OR:
+	case execinfrapb.AnyNotNull,
+		execinfrapb.Avg,
+		execinfrapb.Sum,
+		execinfrapb.SumInt,
+		execinfrapb.ConcatAgg,
+		execinfrapb.CountRows,
+		execinfrapb.Count,
+		execinfrapb.Min,
+		execinfrapb.Max,
+		execinfrapb.BoolAnd,
+		execinfrapb.BoolOr:
 		return true
 	default:
 		return false
@@ -225,67 +225,67 @@ func NewAggregateFuncsAlloc(
 	for i, aggFn := range args.Spec.Aggregations {
 		var err error
 		switch aggFn.Func {
-		case execinfrapb.AggregatorSpec_ANY_NOT_NULL:
+		case execinfrapb.AnyNotNull:
 			if isHashAgg {
 				funcAllocs[i], err = newAnyNotNullHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
 				funcAllocs[i], err = newAnyNotNullOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
-		case execinfrapb.AggregatorSpec_AVG:
+		case execinfrapb.Avg:
 			if isHashAgg {
 				funcAllocs[i], err = newAvgHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
 				funcAllocs[i], err = newAvgOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
-		case execinfrapb.AggregatorSpec_SUM:
+		case execinfrapb.Sum:
 			if isHashAgg {
 				funcAllocs[i], err = newSumHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
 				funcAllocs[i], err = newSumOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
-		case execinfrapb.AggregatorSpec_SUM_INT:
+		case execinfrapb.SumInt:
 			if isHashAgg {
 				funcAllocs[i], err = newSumIntHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
 				funcAllocs[i], err = newSumIntOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
-		case execinfrapb.AggregatorSpec_CONCAT_AGG:
+		case execinfrapb.ConcatAgg:
 			if isHashAgg {
 				funcAllocs[i] = newConcatHashAggAlloc(args.Allocator, allocSize)
 			} else {
 				funcAllocs[i] = newConcatOrderedAggAlloc(args.Allocator, allocSize)
 			}
-		case execinfrapb.AggregatorSpec_COUNT_ROWS:
+		case execinfrapb.CountRows:
 			if isHashAgg {
 				funcAllocs[i] = newCountRowsHashAggAlloc(args.Allocator, allocSize)
 			} else {
 				funcAllocs[i] = newCountRowsOrderedAggAlloc(args.Allocator, allocSize)
 			}
-		case execinfrapb.AggregatorSpec_COUNT:
+		case execinfrapb.Count:
 			if isHashAgg {
 				funcAllocs[i] = newCountHashAggAlloc(args.Allocator, allocSize)
 			} else {
 				funcAllocs[i] = newCountOrderedAggAlloc(args.Allocator, allocSize)
 			}
-		case execinfrapb.AggregatorSpec_MIN:
+		case execinfrapb.Min:
 			if isHashAgg {
 				funcAllocs[i] = newMinHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
 				funcAllocs[i] = newMinOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
-		case execinfrapb.AggregatorSpec_MAX:
+		case execinfrapb.Max:
 			if isHashAgg {
 				funcAllocs[i] = newMaxHashAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			} else {
 				funcAllocs[i] = newMaxOrderedAggAlloc(args.Allocator, args.InputTypes[aggFn.ColIdx[0]], allocSize)
 			}
-		case execinfrapb.AggregatorSpec_BOOL_AND:
+		case execinfrapb.BoolAnd:
 			if isHashAgg {
 				funcAllocs[i] = newBoolAndHashAggAlloc(args.Allocator, allocSize)
 			} else {
 				funcAllocs[i] = newBoolAndOrderedAggAlloc(args.Allocator, allocSize)
 			}
-		case execinfrapb.AggregatorSpec_BOOL_OR:
+		case execinfrapb.BoolOr:
 			if isHashAgg {
 				funcAllocs[i] = newBoolOrHashAggAlloc(args.Allocator, allocSize)
 			} else {
