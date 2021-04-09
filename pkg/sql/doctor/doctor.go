@@ -341,10 +341,16 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 	}
 	// Handle dangling namespace entries.
 	for _, namespaceRow := range namespaceTable {
-		if namespaceRow.ID < keys.MinUserDescID {
+		if namespaceRow.ParentID == descpb.InvalidID && namespaceRow.ID < keys.MinUserDescID {
+			// Skip system database entries.
+			continue
+		}
+		if namespaceRow.ParentID != descpb.InvalidID && namespaceRow.ParentID < keys.MinUserDescID {
+			// Skip non-database entries with system parent database.
 			continue
 		}
 		if _, found := reverseNamespace[namespaceRow.ID]; found {
+			// Skip entries for existing descriptors.
 			continue
 		}
 		fmt.Fprintf(out,
