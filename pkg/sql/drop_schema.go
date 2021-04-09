@@ -174,8 +174,8 @@ func (p *planner) dropSchemaImpl(
 	if parentDB.Schemas == nil {
 		parentDB.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 	}
-	parentDB.Schemas[parentDB.Name] = descpb.DatabaseDescriptor_SchemaInfo{
-		ID:      parentDB.ID,
+	parentDB.Schemas[sc.GetName()] = descpb.DatabaseDescriptor_SchemaInfo{
+		ID:      sc.GetID(),
 		Dropped: true,
 	}
 	// Mark the descriptor as dropped.
