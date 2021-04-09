@@ -1,4 +1,4 @@
-# LogicTest: multiregion-9node-3region-3azs
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off
 
 statement ok
 CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
@@ -674,10 +674,8 @@ SET locality_optimized_partitioned_index_scan = false
 
 # Query with locality optimized search disabled.
 query T
-EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -703,10 +701,8 @@ SET locality_optimized_partitioned_index_scan = true
 
 # Same query with locality optimized search enabled.
 query T
-EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • union all
 │ limit: 1
@@ -721,7 +717,7 @@ vectorized: true
       table: regional_by_row_table@primary
       spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkVFr2zAUhd_3K8R92oaGLWeDIRh4bC41uElqB1qoTVCsS2rqSK4k04Tg_15iP6QpSSHp4z1X5-g70hbscw0covtp8jcek6__42yW3SbfSBYl0b8Z-U6u0skNMbistBL1fLGZG_0yd2JRI7m7jtKINE_kD2FAQWmJY7FCC_wBGBQUGqNLtFabnbTtD8RyDdynUKmmdTu5oFBqg8C34CpXI3CY7dJTFBKN5wMFiU5UdR97FCRsTLUSZgMUskYoy4mXQ56vf_s5eMzziVCSMKLdIxqgMGkdJyGjYUDDEQ1_0vAXFB0F3bo9k3ViicBZRy_jZpdyhwPzmZzBSc49Xqu0kWhQHqAV3ZEmY_1DN15w2CGpVpUj7CSDf85bpWgbrSy-YzmVXFBAucShkNWtKXFqdNlfM4yT3tcLEq0btsEwxKpf9Z_51sw-Yw4-NI8OzH5XdF9eAwAA__86rhxz
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkdGL1DAQxt_9K4Z5Uom06SlIQKhoFwt1e7YFhWtZcs2wFrtJTVK8Y-n_Lts-nJVb4dbH-Wa-md-XHNH97FFgmWTJhwpewqbIP8NN8u06e59u4fnHtKzKL9kLWA9Y2ndGy353e7-z5tfOy9ue4OunpEhg-AHvgDeQbzZlUkGEDLVRtJUHcihukGPDcLCmJeeMPUnHeSBVdyhChp0eRn-SG4atsYTiiL7zPaHA6nSnIKnIBiEyVORl189rH0WKB9sdpL1HhuUgtRMQ1FjXd2_DGgMehCC1Ag7GfyeLDPPRC4g5iyMWX7H4NYvfYDMxNKN_YHJe7gkFn9hl3PxS7nhhfiJndJbzAW_UxiqypFZozfRIkq15ZYYgWmfIukPngZ9lCJ_yVgW5wWhHf7Gc29wwJLWnJZAzo23p2pp2PrOU-eybBUXOL91oKVI9t-bP_NPM_8cc_dN8tTKHUzM9-x0AAP__wyAi4g==
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
@@ -757,10 +753,8 @@ output row: [10 10 11 12 NULL]
 # scanned in the first child of the limited union all.
 query T nodeidx=3
 USE multi_region_test_db; SET locality_optimized_partitioned_index_scan = true;
-EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • union all
 │ limit: 1
@@ -804,10 +798,8 @@ SET locality_optimized_partitioned_index_scan = false
 
 # Query with locality optimized search disabled.
 query T
-EXPLAIN SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+SELECT * FROM [EXPLAIN SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
-distribution: full
-vectorized: true
 ·
 • lookup join (anti)
 │ table: parent@primary
@@ -839,10 +831,8 @@ SET locality_optimized_partitioned_index_scan = true
 
 # Same query with locality optimized search enabled.
 query T
-EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • lookup join (anti)
 │ table: parent@primary
@@ -867,7 +857,7 @@ vectorized: true
               table: child@primary
               spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k2Fr2zwQx98_n-K4N0keNCI7LhRBwGF1mYvndIlhhcUUzzpab4nkyTKkhHz3ETvQOCwh7dg763R_3-9_uttg9WuJAoOH-2gSxtC_CefJ_Es0gHkQBR8T-B9uZ9PPkD8XSwlfPwWzAPrxNIHgYZcI_W5amRlSdp9XPhYSxpA_7j4GA5jEN9DP26DDB8hQaUlxtqIKxTd0MGVYGp1TVWmzC22ahFCuUXCGhSpruwunDHNtCMUGbWGXhAKT7PuSZpRJMkOODCXZrFg2v23I_dIUq8y8IMN5malKwHCBi8X6mi9w6PAhh0xJcEDbZzLIcFpbAb7DfBfTLUNd29falc2eCIWzZe_jcy7l8_dsl_G4J3leMWqljSRDsoOQbv9AHOsPuhy6XdaoWBUWnJMM_C09udOF2rdk1C2TvJQkIApuE5jESQh30zBGhu1wHbQq0vpnXcIPXSjQSkDfH8EYfHc_ar4HY1j3PN4TQvgO5_zKG1zWzNE7jXj_yshuNde960MrDNa9vOPtQnPeW8zNqCq1quhoYk69f8qQ5BO1Y1fp2uR0b3TelGmP00bXBCRVtr1120OomqtmtQ7Fzt-I3bPiUUfMj8Wjs2LvvNg7K746Eqfb_34HAAD__-igvDk=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k9GL2kAQxt_7VwzzopYtbmIOjgUh0os0R5pcNdCDMxxpMtyl1d10swEP8X8vJsIZqeJd6Zs7-33O75vMbrD6vUSBcy_wPsfwEaaz6Cs8ePd3wcQPoX_jz-P5t2AAXUH2XCxz-P7Fm3nQD6MYvPudEPpdWZlqkmavKx-LHMaQPe5-DAYwCW-gn7VFiw8SiKbTuReDjQylyilMV1SheEALE4alVhlVldK70qYR-PkaBWdYyLI2u3LCMFOaUGzQFGZJKDBOfyxpRmlOesiRYU4mLZbN3zYZ3FIXq1S_IMN5mcpKwHCBi8X6mi9waPEhh1TmYIEyz6SRYVQbAa7FXBuTLUNVm9felUmfCIW1Ze_jsy7lc_dsl_HYJ3leMWqpdE6a8g5Csv0Lcag-qXJod1mDYlUYsE4y8LfM5FYVcj-SUbdN_FKSgMCbxjAJYx9uIz9Ehu2aHYwqUOpXXcJPVUhQUkDfHcEYXHu_dK4DY1j3HN4TQrgW5_zKGVw2zNE7gzj_K8juka5714dRGKx7WSfbheGct4SbUVUqWdHRxpz6_glDyp-oXbtK1TqjO62ypk17jBpfU8ipMu2t3R582Vw1T-vQbP2L2T5rHnXM_Ng8Omt2zpuds-arI3Oy_fAnAAD__xkswqg=
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
@@ -903,10 +893,8 @@ Scan /Table/74/1/"\x80"/20/0, /Table/74/1/"\xc0"/20/0
 fetched: /parent/primary/'ca-central-1'/20 -> NULL
 
 query T
-EXPLAIN INSERT INTO child VALUES (1, 1)
+SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • root
 │
@@ -956,10 +944,8 @@ vectorized: true
                       label: buffer 1
 
 query T
-EXPLAIN UPSERT INTO child VALUES (1, 1)
+SELECT * FROM [EXPLAIN UPSERT INTO child VALUES (1, 1)] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1009,10 +995,8 @@ vectorized: true
 
 # We don't yet support locality optimized search for semi join.
 query T
-EXPLAIN DELETE FROM parent WHERE p_id = 1
+SELECT * FROM [EXPLAIN DELETE FROM parent WHERE p_id = 1] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1061,10 +1045,8 @@ ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 # We should plan uniqueness checks for all unique indexes in
 # REGIONAL BY ROW tables.
 query T
-EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1162,10 +1144,8 @@ INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-
 # The conflict columns in an upsert should only include the primary key,
 # not the region column.
 query T
-EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1253,11 +1233,9 @@ vectorized: true
                       label: buffer 1
 
 query T
-EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
-VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
+VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1600,10 +1578,8 @@ ALTER TABLE regional_by_row_table_as DROP COLUMN crdb_region_col
 # We do not need uniqueness checks on pk since uniqueness can be inferred
 # through the functional dependency between pk and the computed region column.
 query T
-EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • root
 │
@@ -1646,10 +1622,8 @@ INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (2, 1, 1)
 
 # Verify that we plan single-region scans for REGIONAL BY ROW tables with a computed region.
 query T
-EXPLAIN SELECT * FROM regional_by_row_table_as WHERE pk = 10
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as WHERE pk = 10] OFFSET 2
 ----
-distribution: local
-vectorized: true
 ·
 • scan
   missing stats
