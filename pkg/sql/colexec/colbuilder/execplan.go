@@ -1253,6 +1253,8 @@ func NewColOperator(
 					if c, ok := result.Op.(colexecop.Closer); ok {
 						result.ToClose = append(result.ToClose, c)
 					}
+				case execinfrapb.WindowerSpec_FIRST_VALUE:
+					result.Op = colexecwindow.NewFirstValueOperator(streamingAllocator, input, outputIdx, partitionColIdx)
 				default:
 					return r, errors.AssertionFailedf("window function %s is not supported", wf.String())
 				}
