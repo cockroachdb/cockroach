@@ -507,6 +507,13 @@ func (c ReplicaChangeType) IsRemoval() bool {
 
 var errReplicaNotFound = errors.Errorf(`replica not found in RangeDescriptor`)
 var errReplicaCannotHoldLease = errors.Errorf("replica cannot hold lease")
+var ErrTransferLeaseToNonReadyFollower = errors.Errorf("cannot transfer lease to replica not in StateReplicate")
+
+// IsRetriableLeaseTransferError detects whether the lease transfer failed due
+// to a transient error that could possibly succeed when retried.
+func IsRetriableLeaseTransferError(err error) bool {
+	return errors.Is(err, ErrTransferLeaseToNonReadyFollower)
+}
 
 // CheckCanReceiveLease checks whether `wouldbeLeaseholder` can receive a lease.
 // Returns an error if the respective replica is not eligible.

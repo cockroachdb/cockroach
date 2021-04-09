@@ -2734,19 +2734,28 @@ func (s *Store) relocateReplicas(
 ) (roachpb.RangeDescriptor, error) {
 	startKey := rangeDesc.StartKey.AsRawKey()
 	transferLease := func(target roachpb.ReplicationTarget) error {
-		// TODO(tbg): we ignore errors here, but it seems that in practice these
-		// transfers "always work". Some of them are essential (we can't remove
-		// the leaseholder so we'll fail there later if this fails), so it
-		// seems like a good idea to return any errors here to the caller (or
-		// to retry some errors appropriately).
-		if err := s.DB().AdminTransferLease(
-			ctx, startKey, target.StoreID,
-		); err != nil {
-			log.Warningf(ctx, "while transferring lease: %+v", err)
-			if s.TestingKnobs().DontIgnoreFailureToTransferLease {
-				return err
-			}
+		retryOpts := retry.Options{
+			InitialBackoff: s.cfg.RaftTickInterval,
+			Multiplier:     1,
+			MaxRetries:     3,
 		}
+
+		var leaseTransferErr error
+		for r := retry.Start(retryOpts); r.Next(); {
+			if err := s.DB().AdminTransferLease(ctx, startKey, target.StoreID); err != nil {
+				leaseTransferErr = err
+				log.Warningf(ctx, "while transferring lease: %+v", err)
+				if roachpb.IsRetriableLeaseTransferError(err) {
+					continue
+				}
+				break
+			}
+			return nil
+		}
+		if s.TestingKnobs().DontIgnoreFailureToTransferLease {
+			return leaseTransferErr
+		}
+
 		return nil
 	}
 

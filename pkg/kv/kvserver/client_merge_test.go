@@ -4575,7 +4575,9 @@ func TestMergeQueueSeesNonVoters(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable load-based splitting, so that the absence of sufficient QPS
 					// measurements do not prevent ranges from merging.
-					DisableLoadBasedSplitting: true,
+					DisableLoadBasedSplitting:        true,
+					DisableRaftLogQueue:              true,
+					DontIgnoreFailureToTransferLease: true,
 				},
 			},
 		},
