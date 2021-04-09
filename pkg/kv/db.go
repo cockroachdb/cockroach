@@ -126,13 +126,13 @@ type Result struct {
 	// Err contains any error encountered when performing the operation.
 	Err error
 	// Rows contains the key/value pairs for the operation. The number of rows
-	// returned varies by operation. For Get, Put, CPut, Inc and Del the number
+	// returned varies by operation. For Get, Put, CPut, and Inc the number
 	// of rows returned is the number of keys operated on. For Scan the number of
 	// rows returned is the number or rows matching the scan capped by the
-	// maxRows parameter and other options. For DelRange Rows is nil.
+	// maxRows parameter and other options. For Del and DelRange Rows is nil.
 	Rows []KeyValue
 
-	// Keys is set by some operations instead of returning the rows themselves.
+	// Keys is set by Del and DelRange instead of returning the rows themselves.
 	Keys []roachpb.Key
 
 	// ResumeSpan is the span to be used on the next operation in a
@@ -526,11 +526,14 @@ func (db *DB) ReverseScanForUpdate(
 
 // Del deletes one or more keys.
 //
+// The returned []roachpb.Key will contain the keys that were actually deleted.
+//
 // key can be either a byte slice or a string.
-func (db *DB) Del(ctx context.Context, keys ...interface{}) error {
+func (db *DB) Del(ctx context.Context, keys ...interface{}) ([]roachpb.Key, error) {
 	b := &Batch{}
 	b.Del(keys...)
-	return getOneErr(db.Run(ctx, b), b)
+	r, err := getOneResult(db.Run(ctx, b), b)
+	return r.Keys, err
 }
 
 // DelRange deletes the rows between begin (inclusive) and end (exclusive).

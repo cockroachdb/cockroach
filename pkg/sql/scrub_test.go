@@ -247,7 +247,8 @@ func removeIndexEntryForDatums(
 	if err != nil {
 		return err
 	}
-	return kvDB.Del(context.Background(), entry.Key)
+	_, err = kvDB.Del(context.Background(), entry.Key)
+	return err
 }
 
 // addIndexEntryForDatums adds an index entry for the given datums. It assumes the datums are in the

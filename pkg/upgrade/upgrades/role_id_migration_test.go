@@ -70,9 +70,9 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 	tdb.Exec(t, `DROP SEQUENCE system.role_id_seq`)
 	tdb.Exec(t, `REVOKE node FROM root`)
 
-	err := tc.Servers[0].DB().Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.RoleIDSequenceID))
+	_, err := tc.Servers[0].DB().Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, keys.RoleIDSequenceID))
 	require.NoError(t, err)
-	err = tc.Servers[0].DB().Del(ctx, keys.SystemSQLCodec.SequenceKey(uint32(keys.RoleIDSequenceID)))
+	_, err = tc.Servers[0].DB().Del(ctx, keys.SystemSQLCodec.SequenceKey(uint32(keys.RoleIDSequenceID)))
 	require.NoError(t, err)
 
 	// Remove entries from system.users.
