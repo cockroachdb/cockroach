@@ -896,47 +896,23 @@ func (mb *mutationBuilder) mutationColumnIDs() opt.ColSet {
 // projectPartialIndexPutCols builds a Project that synthesizes boolean PUT
 // columns for each partial index defined on the target table. See
 // partialIndexPutColIDs for more info on these columns.
-//
-// putScope must contain the columns representing the values of each mutated row
-// AFTER the mutation is applied.
-func (mb *mutationBuilder) projectPartialIndexPutCols(putScope *scope) {
-	if putScope == nil {
-		panic(errors.AssertionFailedf("cannot project partial index PUT columns with nil scope"))
-	}
-	mb.projectPartialIndexColsImpl(putScope, nil /* delScope */)
+func (mb *mutationBuilder) projectPartialIndexPutCols() {
+	mb.projectPartialIndexColsImpl(mb.outScope, nil /* delScope */)
 }
 
 // projectPartialIndexDelCols builds a Project that synthesizes boolean PUT
 // columns for each partial index defined on the target table. See
 // partialIndexDelColIDs for more info on these columns.
-//
-// delScope must contain the columns representing the values of each mutated row
-// BEFORE the mutation is applied.
-func (mb *mutationBuilder) projectPartialIndexDelCols(delScope *scope) {
-	if delScope == nil {
-		panic(errors.AssertionFailedf("cannot project partial index DEL columns with nil scope"))
-	}
-	mb.projectPartialIndexColsImpl(nil /* putScope */, delScope)
+func (mb *mutationBuilder) projectPartialIndexDelCols() {
+	mb.projectPartialIndexColsImpl(nil /* putScope */, mb.fetchScope)
 }
 
-// projectPartialIndexPutAndDelCols builds a Project that synthesizes boolean PUT and
-// DEL columns for each partial index defined on the target table. See
+// projectPartialIndexPutAndDelCols builds a Project that synthesizes boolean
+// PUT and DEL columns for each partial index defined on the target table. See
 // partialIndexPutColIDs and partialIndexDelColIDs for more info on these
 // columns.
-//
-// putScope must contain the columns representing the values of each mutated row
-// AFTER the mutation is applied.
-//
-// delScope must contain the columns representing the values of each mutated row
-// BEFORE the mutation is applied.
-func (mb *mutationBuilder) projectPartialIndexPutAndDelCols(putScope, delScope *scope) {
-	if putScope == nil {
-		panic(errors.AssertionFailedf("cannot project partial index PUT columns with nil scope"))
-	}
-	if delScope == nil {
-		panic(errors.AssertionFailedf("cannot project partial index DEL columns with nil scope"))
-	}
-	mb.projectPartialIndexColsImpl(putScope, delScope)
+func (mb *mutationBuilder) projectPartialIndexPutAndDelCols() {
+	mb.projectPartialIndexColsImpl(mb.outScope, mb.fetchScope)
 }
 
 // projectPartialIndexColsImpl builds a Project that synthesizes boolean PUT and
