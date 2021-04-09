@@ -56,7 +56,9 @@ import (
 )
 
 const (
-	backupOptRevisionHistory    = "revision_history"
+	// BackupOptRevisionHistory is the option name for backup with revision history
+	// exported to cliccl for backup revision inspection
+	BackupOptRevisionHistory    = "revision_history"
 	backupOptIncludeInterleaves = "include_deprecated_interleaves"
 	backupOptEncPassphrase      = "encryption_passphrase"
 	backupOptEncKMS             = "kms"

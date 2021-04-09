@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -451,9 +452,10 @@ type EntryFiles []roachpb.ImportRequest_File
 // from backup manifests.
 // exported to cliccl for exporting data directly from backup sst.
 type BackupTableEntry struct {
-	Desc  catalog.TableDescriptor
-	Span  roachpb.Span
-	Files []EntryFiles
+	Desc                 catalog.TableDescriptor
+	Span                 roachpb.Span
+	Files                []EntryFiles
+	LastSchemaChangeTime hlc.Timestamp
 }
 
 // MakeBackupTableEntry looks up the descriptor of fullyQualifiedTableName
@@ -481,7 +483,7 @@ func MakeBackupTableEntry(
 						" or should specify the time to be an exact backup time, nearest backup time is %s"
 					return BackupTableEntry{}, errors.WithHintf(
 						errors.Newf("unknown read time: %s", timeutil.Unix(0, endTime.WallTime).UTC()),
-						errorHints, backupOptRevisionHistory, timeutil.Unix(0, b.EndTime.WallTime).UTC(),
+						errorHints, BackupOptRevisionHistory, timeutil.Unix(0, b.EndTime.WallTime).UTC(),
 					)
 				}
 				ind = i
@@ -528,10 +530,33 @@ func MakeBackupTableEntry(
 		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
 	}
 
+	lastSchemaChangeTime := endTime
+	for i := len(backupManifests) - 1; i >= 0; i-- {
+		manifest := backupManifests[i]
+		for j := len(manifest.DescriptorChanges) - 1; j >= 0; j-- {
+			rev := manifest.DescriptorChanges[j]
+
+			if endTime.LessEq(rev.Time) {
+				continue
+			}
+
+			if rev.ID == tbDesc.GetID() {
+				d := catalogkv.NewBuilder(rev.Desc).BuildExistingMutable()
+				revDesc, _ := catalog.AsTableDescriptor(d)
+				if !reflect.DeepEqual(revDesc.PublicColumns(), tbDesc.PublicColumns()) {
+					goto EXIT
+				}
+				lastSchemaChangeTime = rev.Time
+			}
+		}
+	}
+EXIT:
+
 	backupTableEntry := BackupTableEntry{
 		tbDesc,
 		tablePrimaryIndexSpan,
 		make([]EntryFiles, 0),
+		lastSchemaChangeTime,
 	}
 
 	for _, e := range entry {

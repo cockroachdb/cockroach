@@ -783,13 +783,13 @@ func resolveBackupManifests(
 						const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with '%s' option."
 						if i == 0 {
 							return nil, nil, nil, errors.Errorf(
-								errPrefix+" nearest backup time is %s", backupOptRevisionHistory,
+								errPrefix+" nearest backup time is %s", BackupOptRevisionHistory,
 								timeutil.Unix(0, b.EndTime.WallTime).UTC(),
 							)
 						}
 						return nil, nil, nil, errors.Errorf(
 							errPrefix+" nearest BACKUP times are %s or %s",
-							backupOptRevisionHistory,
+							BackupOptRevisionHistory,
 							timeutil.Unix(0, mainBackupManifests[i-1].EndTime.WallTime).UTC(),
 							timeutil.Unix(0, b.EndTime.WallTime).UTC(),
 						)

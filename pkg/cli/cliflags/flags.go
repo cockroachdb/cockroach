@@ -1568,4 +1568,14 @@ Only csv is supported at the moment.
 		Name:        "max-rows",
 		Description: `Maximum number of rows to return. `,
 	}
+
+	ExportRevisions = FlagInfo{
+		Name:        "with-revisions",
+		Description: `Export revisions of data from a backup table since the last schema change. `,
+	}
+
+	ExportRevisionsUpTo = FlagInfo{
+		Name:        "up-to",
+		Description: `Export revisions of data from a backup table up to a specific timestamp. `,
+	}
 )

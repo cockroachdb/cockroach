@@ -679,6 +679,125 @@ func TestExportDataAOST(t *testing.T) {
 	}
 }
 
+func TestExportDataWithRevisions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := cli.NewCLITest(cli.TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
+
+	ctx := context.Background()
+	dir, cleanFn := testutils.TempDir(t)
+	defer cleanFn()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir, Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE testDB`)
+	sqlDB.Exec(t, `USE testDB`)
+	sqlDB.Exec(t, `CREATE TABLE fooTable (id INT PRIMARY KEY, value INT, tag STRING)`)
+
+	const backupPath = "nodelocal://0/fooFolder"
+	const backupPathWithRev = "nodelocal://0/fooFolderRev"
+
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (1, 123, 'cat')`)
+	var tsInsert time.Time
+	sqlDB.QueryRow(t, `SELECT crdb_internal.approximate_timestamp(crdb_internal_mvcc_timestamp) from fooTable where id=1`).Scan(&tsInsert)
+
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (2, 223, 'dog')`)
+	var tsInsert2 time.Time
+	sqlDB.QueryRow(t, `SELECT crdb_internal.approximate_timestamp(crdb_internal_mvcc_timestamp) from fooTable where id=2`).Scan(&tsInsert2)
+
+	ts1 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO $1 AS OF SYSTEM TIME '%s'`, ts1.AsOfSystemTime()), backupPath)
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO $1 AS OF SYSTEM TIME '%s' WITH revision_history`, ts1.AsOfSystemTime()), backupPathWithRev)
+
+	sqlDB.Exec(t, `ALTER TABLE fooTable ADD COLUMN active BOOL`)
+	sqlDB.Exec(t, `INSERT INTO fooTable VALUES (3, 323, 'mickey mouse', true)`)
+	var tsInsert3 time.Time
+	sqlDB.QueryRow(t, `SELECT crdb_internal.approximate_timestamp(crdb_internal_mvcc_timestamp) from fooTable where id=3`).Scan(&tsInsert3)
+	ts2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO $1 AS OF SYSTEM TIME '%s' WITH revision_history`, ts2.AsOfSystemTime()), backupPathWithRev)
+
+	sqlDB.Exec(t, `SET sql_safe_updates=false`)
+	sqlDB.Exec(t, `ALTER TABLE fooTable DROP COLUMN value`)
+	var tsDropColumn time.Time
+	sqlDB.QueryRow(t, `SELECT crdb_internal.approximate_timestamp(crdb_internal_mvcc_timestamp) from fooTable where id=3`).Scan(&tsDropColumn)
+
+	sqlDB.Exec(t, `UPDATE fooTable SET tag=('lion') WHERE id = 1`)
+	var tsUpdate time.Time
+	sqlDB.QueryRow(t, `SELECT crdb_internal.approximate_timestamp(crdb_internal_mvcc_timestamp) from fooTable where id=1`).Scan(&tsUpdate)
+
+	ts3 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO $1 AS OF SYSTEM TIME '%s' WITH revision_history`, ts3.AsOfSystemTime()), backupPathWithRev)
+
+	t.Run("show-data-revisions-of-backup-without-revision-history", func(t *testing.T) {
+		setDebugContextDefault()
+		out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s  --with-revisions --external-io-dir=%s",
+			backupPath,
+			"testDB.public.fooTable",
+			dir))
+		require.NoError(t, err)
+		expectedError := "ERROR: invalid flag: with-revisions\nHINT: requires backup created with \"revision_history\"\n"
+		checkExpectedOutput(t, expectedError, out)
+	})
+
+	testCases := []struct {
+		name          string
+		tableName     string
+		backupPaths   []string
+		expectedData  string
+		upToTimestamp string
+	}{
+		{
+			"show-data-revisions-of-a-single-full-backup",
+			"testDB.public.fooTable",
+			[]string{
+				backupPathWithRev,
+			},
+			fmt.Sprintf("1,123,'cat',%s\n2,223,'dog',%s\n", tsInsert.UTC(), tsInsert2.UTC()),
+			"",
+		},
+		{
+			"show-data-revisions-after-adding-an-colum",
+			"testDB.public.fooTable",
+			[]string{
+				backupPathWithRev,
+				backupPathWithRev + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			fmt.Sprintf("3,323,'mickey mouse',true,%s\n", tsInsert3.UTC()),
+			ts2.AsOfSystemTime(),
+		},
+		{
+			"show-data-revisions-after-dropping-an-colum-and-update-value",
+			"testDB.public.fooTable",
+			[]string{
+				backupPathWithRev,
+				backupPathWithRev + ts2.GoTime().Format(backupccl.DateBasedIncFolderName),
+				backupPathWithRev + ts3.GoTime().Format(backupccl.DateBasedIncFolderName),
+			},
+			fmt.Sprintf("1,'lion',null,%s\n1,'cat',null,%s\n2,'dog',null,%s\n3,'mickey mouse',true,%s\n",
+				tsUpdate.UTC(), tsDropColumn.UTC(), tsDropColumn.UTC(), tsDropColumn.UTC()),
+			ts3.AsOfSystemTime(),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setDebugContextDefault()
+			out, err := c.RunWithCapture(fmt.Sprintf("debug backup export %s --table=%s --with-revisions --up-to=%s --external-io-dir=%s",
+				strings.Join(tc.backupPaths, " "),
+				tc.tableName,
+				tc.upToTimestamp,
+				dir))
+			require.NoError(t, err)
+			trimmedOut := out[strings.Index(out, "\n")+1:]
+			checkExpectedOutput(t, tc.expectedData, trimmedOut)
+		})
+	}
+}
+
 func checkExpectedOutput(t *testing.T, expected string, out string) {
 	endOfCmd := strings.Index(out, "\n")
 	output := out[endOfCmd+1:]

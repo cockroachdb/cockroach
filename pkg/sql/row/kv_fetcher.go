@@ -169,22 +169,30 @@ func (f *SpanKVFetcher) nextBatch(
 func (f *SpanKVFetcher) close(context.Context) {}
 
 // BackupSSTKVFetcher is a kvBatchFetcher that wraps storage.SimpleMVCCIterator
-// and returns a single kv from backupSST.
+// and returns a batch of kv from backupSST.
 type BackupSSTKVFetcher struct {
-	iter       storage.SimpleMVCCIterator
-	endKeyMVCC storage.MVCCKey
-	endTime    hlc.Timestamp
+	iter          storage.SimpleMVCCIterator
+	endKeyMVCC    storage.MVCCKey
+	startTime     hlc.Timestamp
+	endTime       hlc.Timestamp
+	withRevisions bool
 }
 
 // MakeBackupSSTKVFetcher creates a BackupSSTKVFetcher and
 // advances the iter to the first key >= startKeyMVCC
 func MakeBackupSSTKVFetcher(
-	startKeyMVCC, endKeyMVCC storage.MVCCKey, iter storage.SimpleMVCCIterator, endTime hlc.Timestamp,
+	startKeyMVCC, endKeyMVCC storage.MVCCKey,
+	iter storage.SimpleMVCCIterator,
+	startTime hlc.Timestamp,
+	endTime hlc.Timestamp,
+	withRev bool,
 ) BackupSSTKVFetcher {
 	res := BackupSSTKVFetcher{
 		iter,
 		endKeyMVCC,
+		startTime,
 		endTime,
+		withRev,
 	}
 	res.iter.SeekGE(startKeyMVCC)
 	return res
@@ -193,6 +201,18 @@ func MakeBackupSSTKVFetcher(
 func (f *BackupSSTKVFetcher) nextBatch(
 	_ context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, span roachpb.Span, err error) {
+	res := make([]roachpb.KeyValue, 0)
+
+	fn := func(key roachpb.Key, value []byte) roachpb.KeyValue {
+		keyCopy := make([]byte, len(key))
+		copy(keyCopy, key)
+		valueCopy := make([]byte, len(value))
+		copy(valueCopy, value)
+		return roachpb.KeyValue{
+			Key:   keyCopy,
+			Value: roachpb.Value{RawBytes: valueCopy, Timestamp: f.iter.UnsafeKey().Timestamp},
+		}
+	}
 
 	for {
 		valid, err := f.iter.Valid()
@@ -200,46 +220,49 @@ func (f *BackupSSTKVFetcher) nextBatch(
 			err = errors.Wrapf(err, "iter key value of table data")
 			return false, nil, nil, roachpb.Span{}, err
 		}
+
 		if !valid || !f.iter.UnsafeKey().Less(f.endKeyMVCC) {
-			return false, nil, nil, roachpb.Span{}, nil
+			break
 		}
+
 		if !f.endTime.IsEmpty() {
 			if f.endTime.Less(f.iter.UnsafeKey().Timestamp) {
 				f.iter.Next()
 				continue
 			}
 		}
-		if len(f.iter.UnsafeValue()) == 0 {
-			if f.endTime.IsEmpty() || f.iter.UnsafeKey().Timestamp.Less(f.endTime) {
-				// Value is deleted at endTime.
+
+		if f.withRevisions {
+			if f.iter.UnsafeKey().Timestamp.Less(f.startTime) {
 				f.iter.NextKey()
 				continue
-			} else {
-				// Otherwise we call Next to trace back the correct revision.
-				f.iter.Next()
-				continue
+			}
+		} else {
+			if len(f.iter.UnsafeValue()) == 0 {
+				if f.endTime.IsEmpty() || f.iter.UnsafeKey().Timestamp.Less(f.endTime) {
+					// Value is deleted at endTime.
+					f.iter.NextKey()
+					continue
+				} else {
+					// Otherwise we call Next to trace back the correct revision.
+					f.iter.Next()
+					continue
+				}
 			}
 		}
-		break
+
+		res = append(res, fn(f.iter.UnsafeKey().Key, f.iter.UnsafeValue()))
+
+		if f.withRevisions {
+			f.iter.Next()
+		} else {
+			f.iter.NextKey()
+		}
+
 	}
-
-	keyScratch := f.iter.UnsafeKey().Key
-	keyCopy := make([]byte, len(keyScratch))
-	copy(keyCopy, keyScratch)
-
-	valueScratch := f.iter.UnsafeValue()
-	valueCopy := make([]byte, len(valueScratch))
-	copy(valueCopy, valueScratch)
-
-	value := roachpb.Value{RawBytes: valueCopy, Timestamp: f.iter.UnsafeKey().Timestamp}
-
-	res := []roachpb.KeyValue{{
-		Key:   keyCopy,
-		Value: value,
-	}}
-
-	f.iter.NextKey()
-
+	if len(res) == 0 {
+		return false, nil, nil, roachpb.Span{}, err
+	}
 	return true, res, nil, roachpb.Span{}, nil
 }
 
