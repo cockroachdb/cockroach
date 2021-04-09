@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/cloudimpl"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -317,9 +318,11 @@ func changefeedPlanHook(
 		// which will be immediately closed, only to check for errors.
 		{
 			var nilOracle timestampLowerBoundOracle
+			acc := mon.BoundAccount{}
 			canarySink, err := getSink(
 				ctx, details.SinkURI, p.ExecCfg().NodeID.SQLInstanceID(), details.Opts, details.Targets,
-				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User(),
+				settings, nilOracle, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+				p.User(), &acc,
 			)
 			if err != nil {
 				return MaybeStripRetryableErrorMarker(err)
