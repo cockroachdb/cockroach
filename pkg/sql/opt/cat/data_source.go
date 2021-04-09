@@ -10,7 +10,10 @@
 
 package cat
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+)
 
 // DataSourceName is an alias for tree.TableName, and is used for views and
 // sequences as well as tables.
@@ -23,4 +26,7 @@ type DataSource interface {
 
 	// Name returns the unqualified name of the object.
 	Name() tree.Name
+
+	// ColumnType returns the type of the given column.
+	ColumnType(ord int) (*types.T, error)
 }

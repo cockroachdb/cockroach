@@ -529,6 +529,11 @@ func (ov *optView) ColumnName(i int) tree.Name {
 	return ov.desc.PublicColumns()[i].ColName()
 }
 
+// ColumnType is part of the cat.Table interface.
+func (ot *optView) ColumnType(ord int) (*types.T, error) {
+	return ot.desc.AllColumns()[ord].GetType(), nil
+}
+
 // optSequence is a wrapper around catalog.TableDescriptor that
 // implements the cat.Object and cat.DataSource interfaces.
 type optSequence struct {
@@ -568,6 +573,11 @@ func (os *optSequence) Name() tree.Name {
 
 // SequenceMarker is part of the cat.Sequence interface.
 func (os *optSequence) SequenceMarker() {}
+
+// ColumnType is part of the cat.Table interface.
+func (ot *optSequence) ColumnType(ord int) (*types.T, error) {
+	return ot.desc.AllColumns()[ord].GetType(), nil
+}
 
 // optTable is a wrapper around catalog.TableDescriptor that caches
 // index wrappers and maintains a ColumnID => Column mapping for fast lookup.
@@ -1114,6 +1124,11 @@ func (ot *optTable) lookupColumnOrdinal(colID descpb.ColumnID) (int, error) {
 	}
 	return col, pgerror.Newf(pgcode.UndefinedColumn,
 		"column [%d] does not exist", colID)
+}
+
+// ColumnType is part of the cat.Table interface.
+func (ot *optTable) ColumnType(ord int) (*types.T, error) {
+	return ot.desc.AllColumns()[ord].GetType(), nil
 }
 
 // optIndex is a wrapper around descpb.IndexDescriptor that caches some
@@ -1979,6 +1994,11 @@ func (ot *optVirtualTable) UniqueCount() int {
 // Unique is part of the cat.Table interface.
 func (ot *optVirtualTable) Unique(i cat.UniqueOrdinal) cat.UniqueConstraint {
 	panic(errors.AssertionFailedf("no unique constraints"))
+}
+
+// ColumnType is part of the cat.Table interface.
+func (ot *optVirtualTable) ColumnType(ord int) (*types.T, error) {
+	return ot.desc.AllColumns()[ord].GetType(), nil
 }
 
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
