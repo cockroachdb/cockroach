@@ -337,6 +337,9 @@ const (
 	UsersHaveIDs
 	// SetUserIDNotNull sets the user_id column in system.users to not null.
 	SetUserIDNotNull
+	// DeleteRequestReturnKey is the version where the ReturnKey argument of the
+	// DeleteRequest is introduced.
+	DeleteRequestReturnKey
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -589,6 +592,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SetUserIDNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
+	},
+	{
+		Key:     DeleteRequestReturnKey,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

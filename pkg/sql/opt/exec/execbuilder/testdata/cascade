@@ -71,7 +71,7 @@ query T rowsort
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
-DelRange /Table/106/1/"a-pk1" - /Table/106/1/"a-pk1"/PrefixEnd
+Del /Table/106/1/"a-pk1"/0
 executing cascade for constraint b1_delete_cascade_fkey
 Del /Table/107/1/"b1-pk1"/0
 Del /Table/107/1/"b1-pk2"/0
@@ -315,7 +315,7 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
-DelRange /Table/123/1/"a-pk1" - /Table/123/1/"a-pk1"/PrefixEnd
+Del /Table/123/1/"a-pk1"/0
 executing cascade for constraint b1_delete_cascade_fkey
 Del /Table/124/1/"b1-pk1"/0
 Del /Table/124/1/"b1-pk2"/0
@@ -603,7 +603,7 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
-DelRange /Table/145/1/"a-pk1" - /Table/145/1/"a-pk1"/PrefixEnd
+Del /Table/145/1/"a-pk1"/0
 executing cascade for constraint b1_delete_cascade_fkey
 Del /Table/146/1/"b1-pk1"/0
 Del /Table/146/1/"b1-pk2"/0
@@ -798,7 +798,8 @@ subtest DelRange
 statement ok
 CREATE TABLE delrng1 (
   p INT PRIMARY KEY,
-  data INT
+  data INT,
+  FAMILY (p, data)
 );
 CREATE TABLE delrng2 (
   p INT,
@@ -841,10 +842,10 @@ vectorized: true
 └── • fk-cascade
       fk: delrng2a_p_fkey
 
-query T kvtrace(DelRange)
+query T kvtrace(Del,DelRange)
 DELETE FROM delrng1 WHERE p = 1
 ----
-DelRange /Table/165/1/1 - /Table/165/1/2
+Del /Table/165/1/1/0
 DelRange /Table/166/1/1 - /Table/166/1/2
 DelRange /Table/167/1/1 - /Table/167/1/2
 DelRange /Table/168/1/1 - /Table/168/1/2

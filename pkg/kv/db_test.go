@@ -474,24 +474,54 @@ func TestDB_Del(t *testing.T) {
 
 	b := &kv.Batch{}
 	b.Put("aa", "1")
-	b.Put("ab", "2")
 	b.Put("ac", "3")
 	if err := db.Run(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Del(context.Background(), "ab"); err != nil {
-		t.Fatal(err)
+
+	for _, useDelKey := range []bool{false, true} {
+		for _, returnKey := range []bool{false, true} {
+			if !useDelKey && returnKey {
+				// Del doesn't have a returnKey argument.
+				continue
+			}
+			if err := db.Put(context.Background(), "ab", "2"); err != nil {
+				t.Fatal(err)
+			}
+			if useDelKey {
+				if key, err := db.DelKey(context.Background(), "ab", returnKey); err != nil {
+					t.Fatal(err)
+				} else if returnKey {
+					checkKeys(t, []string{"ab"}, []roachpb.Key{key})
+					// Also try deleting a non-existent key and verify that no
+					// key is returned.
+					if key, err = db.DelKey(context.Background(), "ad", returnKey); err != nil {
+						t.Fatal(err)
+					} else if len(key) > 0 {
+						t.Errorf("expected deleted key to be empty when deleting a non-existent key, got %v", key)
+					}
+				} else {
+					if len(key) > 0 {
+						t.Errorf("expected deleted key to be empty when returnKeys set to false, got %v", key)
+					}
+				}
+			} else {
+				if err := db.Del(context.Background(), "ab"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rows, err := db.Scan(context.Background(), "a", "b", 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := map[string][]byte{
+				"aa": []byte("1"),
+				"ac": []byte("3"),
+			}
+			checkRows(t, expected, rows)
+			checkLen(t, len(expected), len(rows))
+		}
 	}
-	rows, err := db.Scan(context.Background(), "a", "b", 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := map[string][]byte{
-		"aa": []byte("1"),
-		"ac": []byte("3"),
-	}
-	checkRows(t, expected, rows)
-	checkLen(t, len(expected), len(rows))
 }
 
 func TestDB_DelRange(t *testing.T) {
