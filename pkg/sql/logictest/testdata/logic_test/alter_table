@@ -1794,3 +1794,13 @@ visible_table  CREATE TABLE public.visible_table (
                CONSTRAINT "primary" PRIMARY KEY (a ASC),
                FAMILY "primary" (a)
 )
+
+subtest if_table_exists_already
+
+statement ok
+CREATE TABLE new_table()
+
+query T noticetrace
+CREATE TABLE IF NOT EXISTS new_table();
+----
+NOTICE: relation "new_table" already exists, skipping
