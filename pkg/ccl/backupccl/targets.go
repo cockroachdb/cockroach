@@ -514,7 +514,6 @@ func MakeBackupTableEntry(
 		backupManifests,
 		nil,           /*backupLocalityInfo*/
 		roachpb.Key{}, /*lowWaterMark*/
-		user,
 		errOnMissingRange)
 	if err != nil {
 		return BackupTableEntry{}, errors.Wrapf(err, "making spans for table %s", fullyQualifiedTableName)
