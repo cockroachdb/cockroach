@@ -38,6 +38,10 @@ type tableReader struct {
 	limitHint   int64
 	parallelize bool
 
+	// lazyScanStart means we delay calling StartScan to Next.
+	lazyScanStart bool
+	scanStarted   bool
+
 	// See TableReaderSpec.MaxTimestampAgeNanos.
 	maxTimestampAge time.Duration
 
@@ -79,7 +83,8 @@ func newTableReader(
 	}
 
 	tr := trPool.Get().(*tableReader)
-
+	// RFC: is there a better way?   See comments in initTableReaderSpec
+	tr.lazyScanStart = post.Limit == 1
 	tr.limitHint = execinfra.LimitHint(spec.LimitHint, post)
 	// Parallelize shouldn't be set when there's a limit hint, but double-check
 	// just in case.
@@ -183,6 +188,18 @@ func (tr *tableReader) Start(ctx context.Context) {
 
 	ctx = tr.StartInternal(ctx, tableReaderProcName)
 
+	if !tr.lazyScanStart {
+		err := tr.startScan(ctx)
+		if err != nil {
+			tr.MoveToDraining(err)
+		}
+	}
+}
+
+func (tr *tableReader) startScan(ctx context.Context) error {
+	if tr.scanStarted {
+		return nil
+	}
 	limitBatches := !tr.parallelize
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
@@ -200,10 +217,8 @@ func (tr *tableReader) Start(ctx context.Context) {
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 		)
 	}
-
-	if err != nil {
-		tr.MoveToDraining(err)
-	}
+	tr.scanStarted = true
+	return err
 }
 
 // Release releases this tableReader back to the pool.
@@ -232,6 +247,13 @@ func TestingSetScannedRowProgressFrequency(val int64) func() {
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for tr.State == execinfra.StateRunning {
+		if tr.lazyScanStart {
+			err := tr.startScan(tr.Ctx)
+			if err != nil {
+				tr.MoveToDraining(err)
+				break
+			}
+		}
 		// Check if it is time to emit a progress update.
 		if tr.rowsRead >= tableReaderProgressFrequency {
 			meta := execinfrapb.GetProducerMeta()
