@@ -34,7 +34,7 @@ const (
 	OwnerCDC           Owner = `cdc`
 	OwnerKV            Owner = `kv`
 	OwnerPartitioning  Owner = `partitioning`
-	OwnerSQLExec       Owner = `sql-exec`
+	OwnerSQLQueries    Owner = `sql-queries`
 	OwnerSQLSchema     Owner = `sql-schema`
 	OwnerStorage       Owner = `storage`
 )
@@ -79,8 +79,8 @@ var roachtestOwners = map[Owner]OwnerMetadata{
 		// Partitioning issues get sent to the KV triage column for now.
 		TriageColumnID: 3550674,
 	},
-	OwnerSQLExec: {SlackRoom: `sql-execution-team`, ContactEmail: `alfonso@cockroachlabs.com`,
-		TriageColumnID: 6837155,
+	OwnerSQLQueries: {SlackRoom: `sql-queries`, ContactEmail: `yahor@cockroachlabs.com`,
+		TriageColumnID: 13549252,
 	},
 	OwnerSQLSchema: {SlackRoom: `sql-schema`, ContactEmail: `lucy@cockroachlabs.com`,
 		TriageColumnID: 8946818,

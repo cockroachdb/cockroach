@@ -379,7 +379,7 @@ func registerTPCC(r *testRegistry) {
 	})
 	r.Add(testSpec{
 		Name:       "tpcc/interleaved/nodes=3/cpu=16/w=500",
-		Owner:      OwnerSQLExec,
+		Owner:      OwnerSQLQueries,
 		MinVersion: "v20.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Timeout:    6 * time.Hour,
