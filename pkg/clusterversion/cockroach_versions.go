@@ -340,6 +340,9 @@ const (
 	// SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
 	SQLSchemaTelemetryScheduledJobs
+	// DeleteRequestReturnKey is the version where the ReturnKey argument of the
+	// DeleteRequest is introduced.
+	DeleteRequestReturnKey
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -596,6 +599,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     SQLSchemaTelemetryScheduledJobs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
+	},
+	{
+		Key:     DeleteRequestReturnKey,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 44},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

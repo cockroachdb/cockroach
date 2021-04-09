@@ -24,6 +24,7 @@
 //
 // TODO
 // - CPut/InitPut/Increment
+// - Delete (with and without ReturnKey)
 // - ClearRange/RevertRange
 // - AdminRelocateRange
 // - AdminUnsplit
