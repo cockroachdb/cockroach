@@ -145,17 +145,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 	return nil
 }
 
-func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToGlobal(
-	params runParams,
-) error {
-	const operation string = "alter table locality REGIONAL BY TABLE to GLOBAL"
-	if !n.tableDesc.IsLocalityRegionalByTable() {
-		return errors.AssertionFailedf(
-			"invalid call %q on incorrect table locality. %v",
-			operation,
-			n.tableDesc.LocalityConfig,
-		)
-	}
+func (n *alterTableSetLocalityNode) alterTableLocalityToGlobal(params runParams) error {
 	regionEnumID, err := n.dbDesc.MultiRegionEnumID()
 	if err != nil {
 		return err
@@ -487,7 +477,9 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	case *descpb.TableDescriptor_LocalityConfig_Global_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			return nil
+			if err := n.alterTableLocalityToGlobal(params); err != nil {
+				return err
+			}
 		case tree.LocalityLevelRow:
 			if err := n.alterTableLocalityToRegionalByRow(
 				params,
@@ -505,7 +497,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	case *descpb.TableDescriptor_LocalityConfig_RegionalByTable_:
 		switch newLocality.LocalityLevel {
 		case tree.LocalityLevelGlobal:
-			if err := n.alterTableLocalityRegionalByTableToGlobal(params); err != nil {
+			if err := n.alterTableLocalityToGlobal(params); err != nil {
 				return err
 			}
 		case tree.LocalityLevelRow:
