@@ -494,6 +494,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 		return err
 	}
 
+	if indexDesc.Type == descpb.IndexDescriptor_INVERTED && indexDesc.Partitioning.NumColumns != 0 {
+		telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+	}
+
 	mutationIdx := len(n.tableDesc.Mutations)
 	if err := n.tableDesc.AddIndexMutation(indexDesc, descpb.DescriptorMutation_ADD); err != nil {
 		return err

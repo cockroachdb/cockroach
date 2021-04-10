@@ -9,6 +9,7 @@ sql.schema.geography_inverted_index
 sql.schema.geometry_inverted_index
 sql.schema.partial_index
 sql.schema.partial_inverted_index
+sql.schema.partitioned_inverted_index
 ----
 
 #### CREATE TABLE tests.
