@@ -3840,3 +3840,9 @@ SELECT a, b, count(*) FROM t63159 GROUP BY a,b ORDER BY a
 2  2  1
 3  3  1
 5  5  1
+
+# Regression test for the vectorized hash aggregator using incorrect type schema
+# when planning an external sort to maintain the required ordering.
+statement ok
+CREATE TABLE t63436 (a INT, b FLOAT, c DECIMAL, INDEX(a));
+SELECT count(*) FROM t63436@t63436_a_idx GROUP BY b, c ORDER BY c;
