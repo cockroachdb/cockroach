@@ -2379,6 +2379,9 @@ func NewTableDesc(
 			if idx.NumColumns() > 1 {
 				telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
 			}
+			if idx.GetPartitioning().NumColumns != 0 {
+				telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+			}
 		}
 		if idx.IsPartial() {
 			telemetry.Inc(sqltelemetry.PartialIndexCounter)
