@@ -100,7 +100,7 @@ func NewExternalHashAggregator(
 	// sort isn't accounted for when considering the number file descriptors to
 	// acquire. Not urgent, but it should be fixed.
 	maxNumberActivePartitions := calculateMaxNumberActivePartitions(flowCtx, args, ehaNumRequiredActivePartitions)
-	return createDiskBackedSorter(eha, args.Spec.ResultTypes, outputOrdering.Columns, maxNumberActivePartitions)
+	return createDiskBackedSorter(eha, newAggArgs.OutputTypes, outputOrdering.Columns, maxNumberActivePartitions)
 }
 
 // HashAggregationDiskSpillingEnabled is a cluster setting that allows to
