@@ -93,7 +93,22 @@ func wrapExamine(
 	jobsTable doctor.JobsTable,
 	out io.Writer,
 ) error {
-	asCliError := func(err error) error {
+	if doctorOptions.DumpSQL {
+		err := doctor.DumpSQL(out, descTable, namespaceTable)
+		if err != nil {
+			return &cliError{
+				// Note: we are using "unspecified" here because the error
+				// return does not distinguish errors like connection errors
+				// etc, from errors during extraction.
+				exitCode: exit.UnspecifiedError(),
+				cause:    errors.Wrap(err, "SQL dump failed"),
+			}
+		}
+		return nil
+	}
+	valid, err := doctor.Examine(
+		context.Background(), descTable, namespaceTable, jobsTable, doctorOptions.Verbose, out)
+	if err != nil {
 		return &cliError{
 			// Note: we are using "unspecified" here because the error
 			// return does not distinguish errors like connection errors
@@ -101,18 +116,6 @@ func wrapExamine(
 			exitCode: exit.UnspecifiedError(),
 			cause:    errors.Wrap(err, "examine failed"),
 		}
-	}
-	if doctorOptions.DumpSQL {
-		err := doctor.DumpSQL(out, descTable, namespaceTable)
-		if err != nil {
-			return asCliError(err)
-		}
-		return nil
-	}
-	valid, err := doctor.Examine(
-		context.Background(), descTable, namespaceTable, jobsTable, doctorOptions.Verbose, out)
-	if err != nil {
-		return asCliError(err)
 	}
 	if !valid {
 		return &cliError{

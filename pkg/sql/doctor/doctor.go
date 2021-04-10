@@ -291,10 +291,6 @@ func descReport(stdout io.Writer, desc catalog.Descriptor, format string, args .
 // with the possible exception of the version counter and the modification time
 // timestamp.
 func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceTable) error {
-	reverseNamespace := make(map[int64][]NamespaceTableRow, len(descTable))
-	for _, row := range namespaceTable {
-		reverseNamespace[row.ID] = append(reverseNamespace[row.ID], row)
-	}
 	// Print first transaction, which removes all predefined user descriptors.
 	fmt.Fprintln(out, `BEGIN;`)
 	// Add a query which triggers a divide-by-zero error when the txn runs on a
@@ -314,6 +310,10 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 	fmt.Fprintln(out, `COMMIT;`)
 	// Print second transaction, which inserts namespace and descriptor entries.
 	fmt.Fprintln(out, `BEGIN;`)
+	reverseNamespace := make(map[int64][]NamespaceTableRow, len(descTable))
+	for _, row := range namespaceTable {
+		reverseNamespace[row.ID] = append(reverseNamespace[row.ID], row)
+	}
 	for _, descRow := range descTable {
 		if descRow.ID < keys.MinUserDescID {
 			// Skip system descriptors.
