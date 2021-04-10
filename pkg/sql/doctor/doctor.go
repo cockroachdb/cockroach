@@ -293,6 +293,7 @@ func descReport(stdout io.Writer, desc catalog.Descriptor, format string, args .
 func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceTable) error {
 	// Print first transaction, which removes all predefined user descriptors.
 	fmt.Fprintln(out, `BEGIN;`)
+	return nil
 	// Add a query which triggers a divide-by-zero error when the txn runs on a
 	// non-empty cluster (excluding predefined user descriptors).
 	fmt.Fprintf(out,
