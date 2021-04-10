@@ -91,3 +91,20 @@ func TestDoctorZipDir(t *testing.T) {
 		})
 	})
 }
+
+// This test the operation of zip over secure clusters.
+func TestDoctorZipDir2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	c := NewCLITest(TestCLIParams{T: t, NoServer: true})
+	defer c.Cleanup()
+
+	out, err := c.RunWithCapture("debug doctor zipdir testdata/doctor/debugzip")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Using datadriven allows TESTFLAGS=-rewrite.
+	datadriven.RunTest(t, "testdata/doctor/testzipdir", func(t *testing.T, td *datadriven.TestData) string {
+		return out
+	})
+}
