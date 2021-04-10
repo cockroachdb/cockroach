@@ -80,6 +80,10 @@ var (
 	// PartialInvertedIndexCounter is to be incremented every time a partial
 	// inverted index is created.
 	PartialInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.partial_inverted_index")
+
+	// PartitionedInvertedIndexCounter is to be incremented every time a
+	// partitioned inverted index is created.
+	PartitionedInvertedIndexCounter = telemetry.GetCounterOnce("sql.schema.partitioned_inverted_index")
 )
 
 var (
