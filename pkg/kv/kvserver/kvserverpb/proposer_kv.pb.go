@@ -269,9 +269,9 @@ func (m *SuggestedCompaction) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SuggestedCompaction proto.InternalMessageInfo
 
-// ReplicatedEvalResult is the structured information which together with
-// a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
-// KV. For the majority of proposals, we expect ReplicatedEvalResult to be
+// ReplicatedEvalResult is the structured information which together with a
+// RocksDB WriteBatch constitutes the proposal payload.
+// For the majority of proposals, we expect ReplicatedEvalResult to be
 // trivial; only changes to the metadata state (splits, merges, rebalances,
 // leases, log truncation, ...) of the Replica or certain special commands must
 // sideline information here based on which all Replicas must take action.
@@ -478,10 +478,8 @@ func (m *LogicalOpLog) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_LogicalOpLog proto.InternalMessageInfo
 
-// RaftCommand is the message written to the raft log. It contains
-// some metadata about the proposal itself, then either a BatchRequest
-// (legacy mode) or a ReplicatedEvalResult + WriteBatch
-// (proposer-evaluated KV mode).
+// RaftCommand is the message written to the raft log. It contains some metadata
+// about the proposal itself and a ReplicatedEvalResult + WriteBatch
 type RaftCommand struct {
 	// proposer_lease_seq is provided to verify at raft command apply-time
 	// that the lease under which the command was proposed remains in effect.
