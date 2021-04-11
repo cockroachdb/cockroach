@@ -626,6 +626,7 @@ type DiffWithZoneMismatch struct {
 func (z *ZoneConfig) DiffWithZone(
 	other ZoneConfig, fieldList []tree.Name,
 ) (bool, DiffWithZoneMismatch, error) {
+	mismatchingNumReplicas := false
 	for _, fieldName := range fieldList {
 		switch fieldName {
 		case "num_replicas":
@@ -634,6 +635,13 @@ func (z *ZoneConfig) DiffWithZone(
 			}
 			if z.NumReplicas == nil || other.NumReplicas == nil ||
 				*z.NumReplicas != *other.NumReplicas {
+				// In cases where one of the zone configs are placeholders,
+				// defer the error reporting to below so that we can correctly
+				// report on a subzone difference, should one exist.
+				if z.IsSubzonePlaceholder() || other.IsSubzonePlaceholder() {
+					mismatchingNumReplicas = true
+					continue
+				}
 				return false, DiffWithZoneMismatch{
 					Field: "num_replicas",
 				}, nil
@@ -824,6 +832,13 @@ func (z *ZoneConfig) DiffWithZone(
 				Field:            subzoneMismatch.Field,
 			}, nil
 		}
+	}
+	// If we've got a mismatch in the num_replicas field and we haven't found
+	// any other mismatch, report on num_replicas.
+	if mismatchingNumReplicas {
+		return false, DiffWithZoneMismatch{
+			Field: "num_replicas",
+		}, nil
 	}
 	return true, DiffWithZoneMismatch{}, nil
 }
