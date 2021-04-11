@@ -109,9 +109,9 @@ message SuggestedCompaction {
   Compaction compaction = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// ReplicatedEvalResult is the structured information which together with
-// a RocksDB WriteBatch constitutes the proposal payload in proposer-evaluated
-// KV. For the majority of proposals, we expect ReplicatedEvalResult to be
+// ReplicatedEvalResult is the structured information which together with a
+// RocksDB WriteBatch constitutes the proposal payload.
+// For the majority of proposals, we expect ReplicatedEvalResult to be
 // trivial; only changes to the metadata state (splits, merges, rebalances,
 // leases, log truncation, ...) of the Replica or certain special commands must
 // sideline information here based on which all Replicas must take action.
@@ -206,10 +206,8 @@ message LogicalOpLog {
   repeated storage.enginepb.MVCCLogicalOp ops = 1 [(gogoproto.nullable) = false];
 }
 
-// RaftCommand is the message written to the raft log. It contains
-// some metadata about the proposal itself, then either a BatchRequest
-// (legacy mode) or a ReplicatedEvalResult + WriteBatch
-// (proposer-evaluated KV mode).
+// RaftCommand is the message written to the raft log. It contains some metadata
+// about the proposal itself and a ReplicatedEvalResult + WriteBatch
 message RaftCommand {
   // Metadata about the proposal itself. These fields exist at
   // top-level instead of being grouped in a sub-message for
@@ -295,8 +293,6 @@ message RaftCommand {
   util.hlc.Timestamp closed_timestamp = 17;
 
   reserved 3;
-
-  // Proposer-evaluated KV mode.
 
   // replicated_eval_result is a set of structured information that instructs
   // replicated state changes to the part of a Range's replicated state machine
