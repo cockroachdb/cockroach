@@ -730,7 +730,7 @@ SET override_multi_region_zone_config = true;
 ALTER INDEX tbl1@tbl1_i_idx CONFIGURE ZONE USING num_replicas=10;
 SET override_multi_region_zone_config = false;
 
-statement error attempting to update zone configuration for table tbl1 which contains modified field "num_replicas"
+statement error attempting to update zone config which contains an extra zone configuration for index tbl1@tbl1_i_idx with field num_replicas populated
 ALTER TABLE tbl1 SET LOCALITY GLOBAL;
 
 # This statement should wipe out the zone configuration we applied on the

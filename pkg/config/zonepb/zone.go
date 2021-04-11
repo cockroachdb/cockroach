@@ -634,6 +634,12 @@ func (z *ZoneConfig) DiffWithZone(
 			}
 			if z.NumReplicas == nil || other.NumReplicas == nil ||
 				*z.NumReplicas != *other.NumReplicas {
+				// In cases where the receiver zone config is a placeholder,
+				// (and other isn't) continue here so that we can report the
+				// difference at the subzone level below.
+				if z.IsSubzonePlaceholder() {
+					continue
+				}
 				return false, DiffWithZoneMismatch{
 					Field: "num_replicas",
 				}, nil
