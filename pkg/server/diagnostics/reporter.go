@@ -374,6 +374,20 @@ func anonymizeZoneConfig(dst *zonepb.ZoneConfig, src zonepb.ZoneConfig, secret s
 			}
 		}
 	}
+	dst.VoterConstraints = make([]zonepb.ConstraintsConjunction, len(src.VoterConstraints))
+	for i := range src.VoterConstraints {
+		dst.VoterConstraints[i].NumReplicas = src.VoterConstraints[i].NumReplicas
+		dst.VoterConstraints[i].Constraints = make([]zonepb.Constraint, len(src.VoterConstraints[i].Constraints))
+		for j := range src.VoterConstraints[i].Constraints {
+			dst.VoterConstraints[i].Constraints[j].Type = src.VoterConstraints[i].Constraints[j].Type
+			if key := src.VoterConstraints[i].Constraints[j].Key; key != "" {
+				dst.VoterConstraints[i].Constraints[j].Key = sql.HashForReporting(secret, key)
+			}
+			if val := src.VoterConstraints[i].Constraints[j].Value; val != "" {
+				dst.VoterConstraints[i].Constraints[j].Value = sql.HashForReporting(secret, val)
+			}
+		}
+	}
 	dst.LeasePreferences = make([]zonepb.LeasePreference, len(src.LeasePreferences))
 	for i := range src.LeasePreferences {
 		dst.LeasePreferences[i].Constraints = make([]zonepb.Constraint, len(src.LeasePreferences[i].Constraints))
