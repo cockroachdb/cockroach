@@ -1459,10 +1459,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 // the user about that before it occurs (and require the
 // override_multi_region_zone_config session variable to be set).
 func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
-	ctx context.Context,
-	dbDesc catalog.DatabaseDescriptor,
-	desc *tabledesc.Mutable,
-	checkIndexZoneConfigs bool,
+	ctx context.Context, dbDesc catalog.DatabaseDescriptor, desc *tabledesc.Mutable,
 ) error {
 	// If the user is overriding, or this is not a multi-region table our work here
 	// is done.
