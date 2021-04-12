@@ -697,7 +697,9 @@ func newFileTableReader(
 			return nil, 0, errors.Wrap(err, "failed to read returned file metadata")
 		}
 		fileID = vals[0].([]byte)
-		sz = vals[1].(int64)
+		if vals[1] != nil {
+			sz = vals[1].(int64)
+		}
 	default:
 		panic("unknown executor")
 	}
