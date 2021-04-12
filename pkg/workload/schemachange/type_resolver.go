@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx"
 	"github.com/lib/pq/oid"
 )
@@ -93,13 +94,21 @@ ORDER BY enumsortorder`, name.Object(), name.Schema())
    WHERE typname = $1
   `, name.Object(),
 	).Scan(&objectID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = errors.Errorf("failed to resolve primitive type %s", name)
+		}
 		return nil, err
 	}
 
 	if _, exists := types.OidToType[objectID]; !exists {
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "type %s with oid %s does not exist", name.Object(), objectID)
 	}
-
+	// Special case CHAR to have the right width.
+	if objectID == oid.T_char || objectID == oid.T_bpchar {
+		t := *types.OidToType[objectID]
+		t.InternalType.Width = 1
+		return &t, nil
+	}
 	return types.OidToType[objectID], nil
 }
 
