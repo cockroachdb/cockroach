@@ -15,14 +15,13 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
-
-const dummyJoinTokenID = "c72fbec2-2bc2-4491-8b21-a847dc3b7746"
-const dummyJoinTokenSharedSecret = "sEcr3t!"
 
 // ErrInvalidAddJoinToken is an error to signal server rejected Add/Join token as invalid.
 var ErrInvalidAddJoinToken = errors.New("invalid add/join token received")
@@ -33,67 +32,66 @@ var ErrAddJoinTokenConsumed = errors.New("add/join token consumed but then anoth
 
 // RequestCA makes it possible for a node to request the node-to-node CA certificate.
 func (s *adminServer) RequestCA(
-	ctx context.Context, req *serverpb.CaRequest,
-) (*serverpb.CaResponse, error) {
-	cl := security.MakeCertsLocator(s.server.cfg.SSLCertsDir)
-	caCert, err := loadCertificateFile(cl.CACertPath())
+	ctx context.Context, req *serverpb.CARequest,
+) (*serverpb.CAResponse, error) {
+	cm, err := s.server.rpcContext.GetCertificateManager()
 	if err != nil {
-		return nil, errors.Wrapf(
-			err,
-			"failed to read inter-node cert from disk at %q ",
-			cl.CACertPath(),
-		)
+		return nil, errors.Wrap(err, "failed to get certificate manager")
 	}
+	caCert := cm.CACert().FileContents
 
-	res := &serverpb.CaResponse{
+	res := &serverpb.CAResponse{
 		CaCert: caCert,
 	}
 	return res, nil
 }
 
-// GenerateJoinToken creates a joinToken that includes the fingerprint of
-// caCert signed with a randomly generated sharedSecret.
-// TODO(aaron-crl): Implement this.
-func GenerateJoinToken(caCert []byte) ([]byte, error) {
-	var j joinToken
-	var err error
-	j.tokenID, err = uuid.FromString(dummyJoinTokenID)
-	if err != nil {
-		return nil, err
-	}
-	j.sharedSecret = []byte(dummyJoinTokenSharedSecret)
-	j.sign(caCert)
-	return j.MarshalText()
-}
+func (s *adminServer) consumeJoinToken(ctx context.Context, clientToken security.JoinToken) error {
+	return s.server.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		row, err := s.ie.QueryRow(
+			ctx, "select-consume-join-token", txn,
+			"SELECT id, secret FROM system.join_tokens WHERE id = $1 AND now() < expiration",
+			clientToken.TokenID.String())
+		if err != nil {
+			return err
+		} else if row == nil {
+			return ErrInvalidAddJoinToken
+		}
 
-// TODO(aarcon-crl): Implement this.
-func (j joinToken) consumeJoinToken() error {
-	dummyUUID, _ := uuid.FromString(dummyJoinTokenID)
-	if j.tokenID != dummyUUID {
-		return ErrInvalidAddJoinToken
-	}
-	if bytes.Equal(j.sharedSecret, []byte(dummyJoinTokenSharedSecret)) {
-		return ErrInvalidAddJoinToken
-	}
-	return nil
+		secret := *row[1].(*tree.DBytes)
+		if !bytes.Equal([]byte(secret), clientToken.SharedSecret) {
+			return errors.New("invalid shared secret")
+		}
+
+		i, err := s.ie.Exec(ctx, "delete-consume-join-token", txn,
+			"DELETE FROM system.join_tokens WHERE id = $1",
+			clientToken.TokenID.String())
+		if err != nil {
+			return err
+		} else if i == 0 {
+			return errors.New("error when consuming join token: no token found")
+		}
+
+		return nil
+	})
 }
 
 // RequestCertBundle makes it possible for a node to request its TLS certs from
 // another node. It will validate and attempt to consume a token with the uuid
 // and shared secret provided.
 func (s *adminServer) RequestCertBundle(
-	ctx context.Context, req *serverpb.BundleRequest,
-) (*serverpb.BundleResponse, error) {
+	ctx context.Context, req *serverpb.CertBundleRequest,
+) (*serverpb.CertBundleResponse, error) {
 	var err error
-	var clientToken joinToken
-	clientToken.sharedSecret = []byte(req.SharedSecret)
-	clientToken.tokenID, err = uuid.FromString(req.TokenID)
+	var clientToken security.JoinToken
+	clientToken.SharedSecret = req.SharedSecret
+	clientToken.TokenID, err = uuid.FromString(req.TokenID)
 	if err != nil {
 		return nil, ErrInvalidAddJoinToken
 	}
 
 	// Attempt to consume clientToken, error if unsuccessful.
-	if err := clientToken.consumeJoinToken(); err != nil {
+	if err := s.consumeJoinToken(ctx, clientToken); err != nil {
 		return nil, err
 	}
 
@@ -114,7 +112,7 @@ func (s *adminServer) RequestCertBundle(
 		return nil, ErrAddJoinTokenConsumed
 	}
 
-	res := &serverpb.BundleResponse{
+	res := &serverpb.CertBundleResponse{
 		Bundle: bundleBytes,
 	}
 	return res, nil

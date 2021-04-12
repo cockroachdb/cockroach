@@ -241,6 +241,7 @@ go_library(
 go_test(
     name = "server_test",
     srcs = [
+        "addjoin_test.go",
         "admin_cluster_test.go",
         "admin_test.go",
         "api_v2_ranges_test.go",

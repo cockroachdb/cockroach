@@ -211,10 +211,7 @@ func (sb *ServiceCertificateBundle) loadOrCreateServiceCertificates(
 // createServiceCA builds CA cert and key and populates them to
 // ServiceCertificateBundle.
 func (sb *ServiceCertificateBundle) createServiceCA(
-	ctx context.Context,
-	caCertPath string,
-	caKeyPath string,
-	initLifespan time.Duration,
+	ctx context.Context, caCertPath string, caKeyPath string, initLifespan time.Duration,
 ) error {
 	ctx = logtags.AddTag(ctx, "auto-create-ca", nil)
 
