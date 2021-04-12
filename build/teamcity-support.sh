@@ -113,6 +113,8 @@ function run_json_test() {
 }
 
 function maybe_stress() {
+  # HACK
+  exit 0
   # Don't stressrace on the release branches; we only want that to happen on the
   # PRs. There's no need in making master flakier than it needs to be; nightly
   # stress will weed out the flaky tests.
