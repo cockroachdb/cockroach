@@ -113,12 +113,15 @@ func TestExtractSentinels(t *testing.T) {
 
 func TestExtractInvalidJulianDate(t *testing.T) {
 	now := timeutil.Unix(42, 56)
-	fe := fieldExtract{currentTime: now}
-	err := fe.Extract("j69001")
+	fe := fieldExtract{
+		currentTime: now,
+		wanted:      timeFields, // Not expecting a year.
+	}
+	err := fe.Extract("j69001") // "JNNNN" is a Julian date.
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if exp := "field Year is not wanted in 0"; err.Error() != exp {
+	if exp := "field Year is not wanted in [ Hour Minute Second Nanos Meridian TZHour TZMinute TZSecond ]"; err.Error() != exp {
 		t.Fatalf("expected different error message:\ngot: %v\nexpected: %v", err.Error(), exp)
 	}
 }
