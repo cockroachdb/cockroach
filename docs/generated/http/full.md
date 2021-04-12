@@ -2887,7 +2887,7 @@ Support status: [reserved](#support-status)
 
 
 
-CaRequest requests the CA cert anchoring this service.
+CARequest requests the CA cert anchoring this service.
 
 No information needed.
 
@@ -2903,12 +2903,12 @@ No information needed.
 
 
 
-CaResponse contains a PEM encoded copy of the CA cert for this service.
+CAResponse contains a PEM encoded copy of the CA cert for this service.
 
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| ca_cert | [bytes](#cockroach.server.serverpb.CaResponse-bytes) |  | query is the SQL query string. | [reserved](#support-status) |
+| ca_cert | [bytes](#cockroach.server.serverpb.CAResponse-bytes) |  |  | [reserved](#support-status) |
 
 
 
@@ -2929,15 +2929,15 @@ Support status: [reserved](#support-status)
 
 
 
-BundleRequest requests the bundle of initialization CAs for a new node.
+CertBundleRequest requests the bundle of initialization CAs for a new node.
 It provides authentication in the form of a joinToken containing a
 sharedSecret.
 
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| token_id | [string](#cockroach.server.serverpb.BundleRequest-string) |  | sharedSecret | [reserved](#support-status) |
-| shared_secret | [string](#cockroach.server.serverpb.BundleRequest-string) |  |  | [reserved](#support-status) |
+| token_id | [string](#cockroach.server.serverpb.CertBundleRequest-string) |  |  | [reserved](#support-status) |
+| shared_secret | [bytes](#cockroach.server.serverpb.CertBundleRequest-bytes) |  |  | [reserved](#support-status) |
 
 
 
@@ -2950,13 +2950,13 @@ sharedSecret.
 
 
 
-BundleResponse contains a copy of all CAs needed to intialize TLS for
+CertBundleResponse contains a copy of all CAs needed to intialize TLS for
 a new node.
 
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| bundle | [bytes](#cockroach.server.serverpb.BundleResponse-bytes) |  | query is the SQL query string. | [reserved](#support-status) |
+| bundle | [bytes](#cockroach.server.serverpb.CertBundleResponse-bytes) |  |  | [reserved](#support-status) |
 
 
 

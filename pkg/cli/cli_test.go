@@ -1094,6 +1094,7 @@ Available Commands:
   connect           auto-build TLS certificates for use with the start command
   init              initialize a cluster
   cert              create ca, node, and client certs
+  node-join         request the TLS certs for a new node from an existing node
   sql               open a sql shell
   statement-diag    commands for managing statement diagnostics bundles
   auth-session      log in and out of HTTP sessions

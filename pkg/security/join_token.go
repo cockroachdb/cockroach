@@ -70,20 +70,7 @@ func (j *JoinToken) sign(caCert []byte) {
 func (j *JoinToken) VerifySignature(caCert []byte) bool {
 	signer := hmac.New(sha256.New, j.SharedSecret)
 	_, _ = signer.Write(caCert)
-	// TODO(aaron-crl): Avoid timing attacks here.
-	return bytes.Equal(signer.Sum(nil), j.fingerprint)
-}
-
-// IsCATrustedByJoinToken will return true if the fingerprint matches provided
-// bundle, false if the signature fails to match, and error if the token fails
-// to parse.
-func IsCATrustedByJoinToken(caCert []byte, rawJoinToken string) (bool, error) {
-	j := joinToken{}
-	err := j.UnmarshalText([]byte(rawJoinToken))
-	if err != nil {
-		return false, errors.Wrap(err, "failed to unpack joinToken")
-	}
-	return j.verifySignature(caCert), nil
+	return hmac.Equal(signer.Sum(nil), j.fingerprint)
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.

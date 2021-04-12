@@ -263,8 +263,6 @@ func init() {
 		connectCmd,
 		initCmd,
 		certCmd,
-		// TODO(bilal): Uncomment this when the connect command does something useful.
-		// connectCmd,
 		nodeJoinCmd,
 		quitCmd,
 

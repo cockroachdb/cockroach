@@ -713,44 +713,40 @@ message ChartCatalogResponse {
   repeated cockroach.ts.catalog.ChartSection catalog = 1 [(gogoproto.nullable) = false];
 }
 
-// CaRequest requests the CA cert anchoring this service.
-message CaRequest {
+// CARequest requests the CA cert anchoring this service.
+message CARequest {
   // No information needed.
 }
 
-// CaResponse contains a PEM encoded copy of the CA cert for this service.
-message CaResponse {
-  // query is the SQL query string.
+// CAResponse contains a PEM encoded copy of the CA cert for this service.
+message CAResponse {
   bytes ca_cert = 1;
 }
 
-// BundleRequest requests the bundle of initialization CAs for a new node.
+// CertBundleRequest requests the bundle of initialization CAs for a new node.
 // It provides authentication in the form of a joinToken containing a
 // sharedSecret.
-message BundleRequest {
-    // sharedSecret
+message CertBundleRequest {
     string token_id = 1 [(gogoproto.customname) = "TokenID"];
-    string shared_secret = 2;
+    bytes shared_secret = 2;
  }
 
-// BundleResponse contains a copy of all CAs needed to intialize TLS for
+// CertBundleResponse contains a copy of all CAs needed to intialize TLS for
 // a new node.
-message BundleResponse {
-  // query is the SQL query string.
+message CertBundleResponse {
   bytes bundle = 1;
 }
-
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
-  rpc RequestCA(CaRequest) returns (CaResponse) {
+  rpc RequestCA(CARequest) returns (CAResponse) {
     option (google.api.http) = {
       get : "/_join/v1/ca"
     };
   }
 
-  rpc RequestCertBundle(BundleRequest) returns (BundleResponse) {
+  rpc RequestCertBundle(CertBundleRequest) returns (CertBundleResponse) {
     option (google.api.http) = {
       get : "/_join/v1/requestbundle"
     };
