@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-// SQLDeps are the dependencies of migrations which perform actions at the
+// TenantDeps are the dependencies of migrations which perform actions at the
 // SQL layer.
-type SQLDeps struct {
+type TenantDeps struct {
 	DB               *kv.DB
 	Codec            keys.SQLCodec
 	Settings         *cluster.Settings
@@ -33,21 +33,23 @@ type SQLDeps struct {
 	InternalExecutor sqlutil.InternalExecutor
 }
 
-// SQLMigrationFn is used to perform sql-level migrations. It may be run from
+// TenantMigrationFunc is used to perform sql-level migrations. It may be run from
 // any tenant.
-type SQLMigrationFn func(context.Context, clusterversion.ClusterVersion, SQLDeps) error
+type TenantMigrationFunc func(context.Context, clusterversion.ClusterVersion, TenantDeps) error
 
-// SQLMigration is an implementation of Migration for SQL-level migrations.
-type SQLMigration struct {
+// TenantMigration is an implementation of Migration for tenant-level
+// migrations. This is used for all migration which might affect the state of
+// sql. It includes the system tenant.
+type TenantMigration struct {
 	migration
-	fn SQLMigrationFn
+	fn TenantMigrationFunc
 }
 
-// NewSQLMigration constructs a SQLMigration.
-func NewSQLMigration(
-	description string, cv clusterversion.ClusterVersion, fn SQLMigrationFn,
-) *SQLMigration {
-	return &SQLMigration{
+// NewTenantMigration constructs a TenantMigration.
+func NewTenantMigration(
+	description string, cv clusterversion.ClusterVersion, fn TenantMigrationFunc,
+) *TenantMigration {
+	return &TenantMigration{
 		migration: migration{
 			description: description,
 			cv:          cv,
@@ -56,9 +58,9 @@ func NewSQLMigration(
 	}
 }
 
-// Run kickstarts the actual migration process for SQL-level migrations.
-func (m *SQLMigration) Run(
-	ctx context.Context, cv clusterversion.ClusterVersion, d SQLDeps,
+// Run kickstarts the actual migration process for tenant-level migrations.
+func (m *TenantMigration) Run(
+	ctx context.Context, cv clusterversion.ClusterVersion, d TenantDeps,
 ) (err error) {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", cv), nil)
 	return m.fn(ctx, cv, d)
