@@ -8007,7 +8007,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		sqlDB.Exec(t, `DROP DATABASE restoredb CASCADE;`)
 	}
 
-	// Restore to a time aftere the index was dropped and double check that we
+	// Restore to a time after the index was dropped and double check that we
 	// didn't bring back any keys from the dropped index.
 	{
 		blockBackfills = make(chan struct{}) // block the synthesized schema change job
