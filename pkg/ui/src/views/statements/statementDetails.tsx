@@ -28,9 +28,15 @@ import {
   combineStatementStats,
   ExecutionStatistics,
   flattenStatementStats,
+  statementKey,
   StatementStatistics,
 } from "src/util/appStats";
-import { appAttr, implicitTxnAttr, statementAttr } from "src/util/constants";
+import {
+  appAttr,
+  databaseAttr,
+  implicitTxnAttr,
+  statementAttr,
+} from "src/util/constants";
 import { FixLong } from "src/util/fixLong";
 import { getMatchParamByName } from "src/util/query";
 import { selectDiagnosticsReportsByStatementFingerprint } from "src/redux/statements/statementsSelectors";
@@ -57,37 +63,36 @@ interface StatementDetailsData {
   nodeId: number;
   implicitTxn: boolean;
   fullScan: boolean;
+  database: string;
   stats: StatementStatistics[];
-}
-
-function keyByNodeAndImplicitTxn(stmt: ExecutionStatistics): string {
-  return stmt.node_id.toString() + stmt.implicit_txn;
 }
 
 function coalesceNodeStats(
   stats: ExecutionStatistics[],
 ): AggregateStatistics[] {
-  const byNodeAndImplicitTxn: { [nodeId: string]: StatementDetailsData } = {};
+  const statsKey: { [nodeId: string]: StatementDetailsData } = {};
 
   stats.forEach((stmt) => {
-    const key = keyByNodeAndImplicitTxn(stmt);
-    if (!(key in byNodeAndImplicitTxn)) {
-      byNodeAndImplicitTxn[key] = {
+    const key = statementKey(stmt);
+    if (!(key in statsKey)) {
+      statsKey[key] = {
         nodeId: stmt.node_id,
         implicitTxn: stmt.implicit_txn,
         fullScan: stmt.full_scan,
+        database: stmt.database,
         stats: [],
       };
     }
-    byNodeAndImplicitTxn[key].stats.push(stmt.stats);
+    statsKey[key].stats.push(stmt.stats);
   });
 
-  return Object.keys(byNodeAndImplicitTxn).map((key) => {
-    const stmt = byNodeAndImplicitTxn[key];
+  return Object.keys(statsKey).map((key) => {
+    const stmt = statsKey[key];
     return {
       label: stmt.nodeId.toString(),
       implicitTxn: stmt.implicitTxn,
       fullScan: stmt.fullScan,
+      database: stmt.database,
       stats: combineStatementStats(stmt.stats),
     };
   });
@@ -117,13 +122,16 @@ function filterByRouterParamsPredicate(
 ): (stat: ExecutionStatistics) => boolean {
   const statement = getMatchParamByName(match, statementAttr);
   const implicitTxn = getMatchParamByName(match, implicitTxnAttr) === "true";
+  const database = getMatchParamByName(match, databaseAttr);
   let app = getMatchParamByName(match, appAttr);
 
-  const filterByStatementAndImplicitTxn = (stmt: ExecutionStatistics) =>
-    stmt.statement === statement && stmt.implicit_txn === implicitTxn;
+  const filterByKeys = (stmt: ExecutionStatistics) =>
+    stmt.statement === statement &&
+    stmt.implicit_txn === implicitTxn &&
+    (stmt.database === database || database === null);
 
   if (!app) {
-    return filterByStatementAndImplicitTxn;
+    return filterByKeys;
   }
 
   if (app === "(unset)") {
@@ -132,12 +140,10 @@ function filterByRouterParamsPredicate(
 
   if (app === "(internal)") {
     return (stmt: ExecutionStatistics) =>
-      filterByStatementAndImplicitTxn(stmt) &&
-      stmt.app.startsWith(internalAppNamePrefix);
+      filterByKeys(stmt) && stmt.app.startsWith(internalAppNamePrefix);
   }
 
-  return (stmt: ExecutionStatistics) =>
-    filterByStatementAndImplicitTxn(stmt) && stmt.app === app;
+  return (stmt: ExecutionStatistics) => filterByKeys(stmt) && stmt.app === app;
 }
 
 export const selectStatement = createSelector(
@@ -162,6 +168,7 @@ export const selectStatement = createSelector(
       stats: combineStatementStats(results.map((s) => s.stats)),
       byNode: coalesceNodeStats(results),
       app: _.uniq(results.map((s) => s.app)),
+      database: getMatchParamByName(props.match, databaseAttr),
       distSQL: fractionMatching(results, (s) => s.distSQL),
       vec: fractionMatching(results, (s) => s.vec),
       opt: fractionMatching(results, (s) => s.opt),

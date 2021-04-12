@@ -184,6 +184,7 @@ function randomStats(sensitiveInfo?: ISensitiveInfo): StatementStatistics {
       seconds: Long.fromInt(1599670292),
       nanos: 111613000,
     },
+    database: "default",
   };
 }
 
