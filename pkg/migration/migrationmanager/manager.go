@@ -157,7 +157,7 @@ func (m *Manager) Migrate(
 		// [1]: See ReplicaState.Version.
 		// [2]: See Replica.executeWriteBatch, specifically how proposals with the
 		//      Migrate request are handled downstream of raft.
-		// [3]: See PurgeOutdatedReplicas from the KVMigration service.
+		// [3]: See PurgeOutdatedReplicas from the SystemMigration service.
 
 		{
 			// The migrations infrastructure makes use of internal fence
@@ -250,7 +250,7 @@ func (m *Manager) runMigration(
 	//
 	// TODO(ajwerner): Remove in 21.2.
 	if version.Version == clusterversion.ByKey(clusterversion.LongRunningMigrations) {
-		return mig.(*migration.SQLMigration).Run(ctx, version, migration.SQLDeps{
+		return mig.(*migration.TenantMigration).Run(ctx, version, migration.TenantDeps{
 			DB:       m.c.DB(),
 			Codec:    m.codec,
 			Settings: m.settings,

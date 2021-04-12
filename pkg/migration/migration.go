@@ -44,8 +44,9 @@ import "github.com/cockroachdb/cockroach/pkg/clusterversion"
 // migration before letting the upgrade finalize.
 //
 // If the migration requires below-Raft level changes ([3] is one example),
-// you'll need to add a version switch and the relevant KV-level migration in
-// [4]. See IterateRangeDescriptors and the Migrate KV request for more details.
+// you'll need to add a version switch and the relevant system-level migration
+// in [4]. See IterateRangeDescriptors and the Migrate KV request for more
+// details.
 //
 // [1]: `(*Manager).Migrate`
 // [2]: pkg/clusterversion/cockroach_versions.go
@@ -75,7 +76,7 @@ type migration struct {
 	cv          clusterversion.ClusterVersion
 }
 
-// ClusterVersion makes KVMigration a Migration.
+// ClusterVersion makes SystemMigration a Migration.
 func (m *migration) ClusterVersion() clusterversion.ClusterVersion {
 	return m.cv
 }
