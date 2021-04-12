@@ -123,21 +123,23 @@ type Cluster interface {
 	) error
 }
 
-// KVMigration is an implementation of Migration for KV-level migrations.
-type KVMigration struct {
+// SystemMigration is an implementation of Migration for system-level
+// migrations. It is only to be run on the system tenant. These migrations
+// tend to touch the kv layer.
+type SystemMigration struct {
 	migration
-	fn KVMigrationFn
+	fn SystemMigrationFunc
 }
 
-// KVMigrationFn is used to perform kv-level migrations. It should only be
+// SystemMigrationFunc is used to perform kv-level migrations. It should only be
 // run from the system tenant.
-type KVMigrationFn func(context.Context, clusterversion.ClusterVersion, Cluster) error
+type SystemMigrationFunc func(context.Context, clusterversion.ClusterVersion, Cluster) error
 
-// NewKVMigration constructs a KVMigration.
-func NewKVMigration(
-	description string, cv clusterversion.ClusterVersion, fn KVMigrationFn,
-) *KVMigration {
-	return &KVMigration{
+// NewSystemMigration constructs a SystemMigration.
+func NewSystemMigration(
+	description string, cv clusterversion.ClusterVersion, fn SystemMigrationFunc,
+) *SystemMigration {
+	return &SystemMigration{
 		migration: migration{
 			description: description,
 			cv:          cv,
@@ -146,8 +148,10 @@ func NewKVMigration(
 	}
 }
 
-// Run kickstarts the actual migration process for KV-level migrations.
-func (m *KVMigration) Run(ctx context.Context, cv clusterversion.ClusterVersion, h Cluster) error {
+// Run kickstarts the actual migration process for system-level migrations.
+func (m *SystemMigration) Run(
+	ctx context.Context, cv clusterversion.ClusterVersion, h Cluster,
+) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("migration=%s", cv), nil)
 	return m.fn(ctx, cv, h)
 }
