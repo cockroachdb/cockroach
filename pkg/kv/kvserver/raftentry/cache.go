@@ -180,16 +180,19 @@ func (c *Cache) Add(id roachpb.RangeID, ents []raftpb.Entry, truncate bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var bytesAdded, entriesAdded, bytesRemoved, entriesRemoved int32
+	// We truncate (if requested) before adding. This can lead to "wasted"
+	// work where we're zeroing out entries we would repopulate anyway, but
+	// past experience shows that it's best to keep this code as simple as
+	// possible (see #61990).
+	if truncate {
+		// Note that ents[0].Index may not even be in the cache
+		// at this point. `truncateFrom` will still remove any entries
+		// it may have at indexes >= truncIdx, as instructed.
+		truncIdx := ents[0].Index
+		bytesRemoved, entriesRemoved = p.truncateFrom(truncIdx)
+	}
 	if add {
 		bytesAdded, entriesAdded = p.add(ents)
-	}
-	if truncate {
-		truncIdx := ents[0].Index
-		if add {
-			// Some entries were already overwritten.
-			truncIdx = ents[len(ents)-1].Index + 1
-		}
-		bytesRemoved, entriesRemoved = p.truncateFrom(truncIdx)
 	}
 	c.recordUpdate(p, bytesAdded-bytesRemoved, bytesGuessed, entriesAdded-entriesRemoved)
 }
@@ -369,11 +372,17 @@ func (p *partition) setSize(orig, new cacheSize) bool {
 // entries in ents have contiguous indices.
 func analyzeEntries(ents []raftpb.Entry) (size int32) {
 	var prevIndex uint64
+	var prevTerm uint64
 	for i, e := range ents {
 		if i != 0 && e.Index != prevIndex+1 {
-			panic(errors.Errorf("invalid non-contiguous set of entries %d and %d", prevIndex, e.Index))
+			panic(errors.AssertionFailedf("invalid non-contiguous set of entries %d and %d", prevIndex, e.Index))
+		}
+		if i != 0 && e.Term < prevTerm {
+			err := errors.AssertionFailedf("term regression idx %d: %d -> %d", prevIndex, prevTerm, e.Term)
+			panic(err)
 		}
 		prevIndex = e.Index
+		prevTerm = e.Term
 		size += int32(e.Size())
 	}
 	return
