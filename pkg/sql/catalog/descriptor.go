@@ -360,6 +360,8 @@ type TypeDescriptor interface {
 	PrimaryRegionName() (descpb.RegionName, error)
 	RegionNames() (descpb.RegionNames, error)
 	RegionNamesIncludingTransitioning() (descpb.RegionNames, error)
+	RegionNamesForValidation() (descpb.RegionNames, error)
+	TransitioningRegionNames() (descpb.RegionNames, error)
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type
