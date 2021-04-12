@@ -32,37 +32,37 @@ func GetMigration(key clusterversion.ClusterVersion) (migration.Migration, bool)
 var registry = make(map[clusterversion.ClusterVersion]migration.Migration)
 
 var migrations = []migration.Migration{
-	migration.NewSQLMigration(
+	migration.NewTenantMigration(
 		"add the system.migrations table",
 		toCV(clusterversion.LongRunningMigrations),
 		migrationsTableMigration,
 	),
-	migration.NewKVMigration(
+	migration.NewSystemMigration(
 		"use unreplicated TruncatedState and RangeAppliedState for all ranges",
 		toCV(clusterversion.TruncatedAndRangeAppliedStateMigration),
 		truncatedStateMigration,
 	),
-	migration.NewKVMigration(
+	migration.NewSystemMigration(
 		"purge all replicas using the replicated TruncatedState",
 		toCV(clusterversion.PostTruncatedAndRangeAppliedStateMigration),
 		postTruncatedStateMigration,
 	),
-	migration.NewSQLMigration(
+	migration.NewTenantMigration(
 		"copy all namespace entries to new namespace table",
 		toCV(clusterversion.NamespaceTableWithSchemasMigration),
 		namespaceMigration,
 	),
-	migration.NewSQLMigration(
+	migration.NewTenantMigration(
 		"upgrade old foreign key representation",
 		toCV(clusterversion.ForeignKeyRepresentationMigration),
 		foreignKeyRepresentationUpgrade,
 	),
-	migration.NewSQLMigration(
+	migration.NewTenantMigration(
 		"fix system.protected_ts_meta privileges",
 		toCV(clusterversion.ProtectedTsMetaPrivilegesMigration),
 		protectedTsMetaPrivilegesMigration,
 	),
-	migration.NewSQLMigration(
+	migration.NewTenantMigration(
 		"add the systems.join_tokens table",
 		toCV(clusterversion.JoinTokensTable),
 		joinTokensTableMigration,
