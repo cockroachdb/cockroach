@@ -190,8 +190,8 @@ func CreateServiceCertAndKey(
 			CommonName:         caCommonName,
 		},
 		Subject: pkix.Name{
-			Organization:       []string{crlOrg},
-			CommonName:         commonName,
+			Organization: []string{crlOrg},
+			CommonName:   commonName,
 		},
 		NotBefore:   notBefore,
 		NotAfter:    notAfter,

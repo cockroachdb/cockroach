@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-
 	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"       // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bulkingest" // registers workloads
