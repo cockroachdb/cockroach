@@ -251,7 +251,7 @@ func init() {
 	// multi-tenancy related commands that start long-running servers.
 	// Also for `connect` which does not really start a server but uses
 	// all the networking flags.
-	for _, cmd := range append(serverCmds, connectCmd) {
+	for _, cmd := range append(serverCmds, connectCmd, nodeJoinCmd) {
 		AddPersistentPreRunE(cmd, func(cmd *cobra.Command, _ []string) error {
 			// Finalize the configuration of network settings.
 			return extraServerFlagInit(cmd)
@@ -340,8 +340,9 @@ func init() {
 	// avoid printing some messages to standard output in that case.
 	_, startCtx.inBackground = envutil.EnvString(backgroundEnvVar, 1)
 
-	// Flags common to the start commands and the connect command.
-	for _, cmd := range append(StartCmds, connectCmd) {
+	// Flags common to the start commands, the connect command, and the node join
+	// command.
+	for _, cmd := range append(StartCmds, connectCmd, nodeJoinCmd) {
 		f := cmd.Flags()
 
 		varFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
@@ -360,6 +361,11 @@ func init() {
 		// 'start' will check that the flag is properly defined.
 		varFlag(f, &serverCfg.JoinList, cliflags.Join)
 		boolFlag(f, &serverCfg.JoinPreferSRVRecords, cliflags.JoinPreferSRVRecords)
+	}
+
+	// Flags common to the start commands and the connect command.
+	for _, cmd := range append(StartCmds, connectCmd) {
+		f := cmd.Flags()
 
 		// The initialization token and expected peers. For 'start' commands this is optional.
 		stringFlag(f, &startCtx.initToken, cliflags.InitToken)

@@ -32,7 +32,7 @@ var _ = utilities.NewDoubleArray
 var _ = descriptor.ForMessage
 
 func request_Admin_RequestCA_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq CaRequest
+	var protoReq CARequest
 	var metadata runtime.ServerMetadata
 
 	msg, err := client.RequestCA(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
@@ -41,7 +41,7 @@ func request_Admin_RequestCA_0(ctx context.Context, marshaler runtime.Marshaler,
 }
 
 func local_request_Admin_RequestCA_0(ctx context.Context, marshaler runtime.Marshaler, server AdminServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq CaRequest
+	var protoReq CARequest
 	var metadata runtime.ServerMetadata
 
 	msg, err := server.RequestCA(ctx, &protoReq)
@@ -54,7 +54,7 @@ var (
 )
 
 func request_Admin_RequestCertBundle_0(ctx context.Context, marshaler runtime.Marshaler, client AdminClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq BundleRequest
+	var protoReq CertBundleRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {
@@ -70,7 +70,7 @@ func request_Admin_RequestCertBundle_0(ctx context.Context, marshaler runtime.Ma
 }
 
 func local_request_Admin_RequestCertBundle_0(ctx context.Context, marshaler runtime.Marshaler, server AdminServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq BundleRequest
+	var protoReq CertBundleRequest
 	var metadata runtime.ServerMetadata
 
 	if err := req.ParseForm(); err != nil {

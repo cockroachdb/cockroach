@@ -16,6 +16,9 @@ import (
 	"encoding/json"
 	"encoding/pem"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -26,13 +29,13 @@ import (
 )
 
 var nodeJoinCmd = &cobra.Command{
-	Use:   "node-join <remote-addr>",
+	Use:   "node-join <join-token>",
 	Short: "request the TLS certs for a new node from an existing node",
 	Args:  cobra.MinimumNArgs(1),
 	RunE:  MaybeDecorateGRPCError(runNodeJoin),
 }
 
-func requestPeerCA(ctx context.Context, peer string, joinToken string) (*x509.CertPool, error) {
+func requestPeerCA(ctx context.Context, peer string, jt security.JoinToken) (*x509.CertPool, error) {
 	var dialOpts []grpc.DialOption
 
 	dialOpts = rpc.GetAddJoinDialOptions(nil)
@@ -44,19 +47,14 @@ func requestPeerCA(ctx context.Context, peer string, joinToken string) (*x509.Ce
 
 	s := serverpb.NewAdminClient(conn)
 
-	req := serverpb.CaRequest{}
+	req := serverpb.CARequest{}
 	resp, err := s.RequestCA(ctx, &req)
 	if err != nil {
 		return nil, errors.Wrap(
 			err, "failed grpc call to request CA from peer")
 	}
 
-	// Verify that the received bytes match our expected MAC.
-	isTrustedCA, err := server.IsCATrustedByJoinToken(resp.CaCert, joinToken)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to validate remote CA")
-	}
-	if !isTrustedCA {
+	if !jt.VerifySignature(resp.CaCert) {
 		return nil, errors.New("resp.CaCert failed cryptologic validation")
 	}
 
@@ -75,50 +73,9 @@ func requestPeerCA(ctx context.Context, peer string, joinToken string) (*x509.Ce
 	return certPool, nil
 }
 
-// runNodeJoin will attempt to connect to peers from the list provided and
-// request a certificate initialization bundle if it is able to validate a
-// peer.
-// TODO(aaron-crl): Parallelize this and handle errors.
-func runNodeJoin(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// TODO(aaron-crl) plumb this into the connect or start commands or both.
-	var err error
-	peerAddr := args[0]
-	jt := args[1]
-
-	// TODO(aaron-crl): loop over peers here.
-	// For each peer, attempt to validate it's CA, then request a bundle with
-	// the supplied join-token. For now loop this to reduce complexity.
-	certPool, err := requestPeerCA(ctx, peerAddr, jt)
-	if err != nil {
-		return errors.Wrapf(
-			err, "failed requesting peer CA from %q", peerAddr)
-	}
-
-	// TODO(aaron-crl): Update add/join to signal to client when a token IS
-	// consumed.
-	certBundle, err := requestCertBundle(ctx, peerAddr, certPool)
-	if err != nil {
-		return errors.Wrapf(
-			err, "failed requesting certBundle from peer %q, token may have been consumed", peerAddr)
-	}
-
-	// Use the bundle to initialize the node.
-	err = certBundle.InitializeNodeFromBundle(ctx, *baseCfg)
-	if err != nil {
-		return errors.Wrap(
-			err,
-			"failed to initialize node after consuming join-token",
-		)
-	}
-
-	return nil
-}
-
 func requestCertBundle(
 	ctx context.Context, peerAddr string, certPool *x509.CertPool,
+	jt security.JoinToken,
 ) (*server.CertificateBundle, error) {
 	var dialOpts []grpc.DialOption
 	dialOpts = rpc.GetAddJoinDialOptions(certPool)
@@ -129,7 +86,10 @@ func requestCertBundle(
 	}
 
 	s := serverpb.NewAdminClient(conn)
-	req := serverpb.BundleRequest{}
+	req := serverpb.CertBundleRequest{
+		TokenID:      jt.TokenID.String(),
+		SharedSecret: jt.SharedSecret,
+	}
 	resp, err := s.RequestCertBundle(ctx, &req)
 	if err != nil {
 		return nil, errors.Wrapf(
@@ -150,4 +110,60 @@ func requestCertBundle(
 	}
 
 	return &certBundle, nil
+}
+
+// runNodeJoin will attempt to connect to peers from the join list provided and
+// request a certificate initialization bundle if it is able to validate a
+// peer.
+// TODO(aaron-crl): Parallelize this and handle errors.
+func runNodeJoin(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := validateNodeJoinFlags(cmd); err != nil {
+		return err
+	}
+
+	joinTokenArg := args[0]
+	var jt security.JoinToken
+	if err := jt.UnmarshalText([]byte(joinTokenArg)); err != nil {
+		return errors.Wrap(err, "failed to parse join token")
+	}
+
+	for _, peer := range serverCfg.JoinList {
+		certPool, err := requestPeerCA(ctx, peer, jt)
+		if err != nil {
+			// Try a different peer.
+			log.Errorf(ctx, "failed requesting peer CA from %s: %s", peer, err)
+			continue
+		}
+
+		// TODO(aaron-crl): Update add/join to signal to client when a token IS
+		// consumed.
+		certBundle, err := requestCertBundle(ctx, peer, certPool, jt)
+		if err != nil {
+			return errors.Wrapf(err,
+				"failed requesting certBundle from peer %q, token may have been consumed", peer)
+		}
+
+		// Use the bundle to initialize the node.
+		err = certBundle.InitializeNodeFromBundle(ctx, *baseCfg)
+		if err != nil {
+			return errors.Wrap(
+				err,
+				"failed to initialize node after consuming join-token",
+			)
+		}
+		return nil
+	}
+
+	return errors.New("could not successfully authenticate with any listed nodes")
+}
+
+func validateNodeJoinFlags(_ *cobra.Command) error {
+	if len(serverCfg.JoinList) == 0 {
+		return errors.Newf("flag --%s must specify address of at least one node to join",
+			cliflags.Join.Name)
+	}
+	return nil
 }

@@ -4,6 +4,7 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "cli",
     srcs = [
+        "addjoin.go",
         "auth.go",
         "cert.go",
         "cli.go",
@@ -262,6 +263,7 @@ go_test(
     name = "cli_test",
     size = "large",
     srcs = [
+        "addjoin_test.go",
         "cli_debug_test.go",
         "cli_test.go",
         "debug_check_store_test.go",
@@ -310,6 +312,7 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/server/status",
         "//pkg/server/status/statuspb:statuspb_go_proto",
+        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/lex",
