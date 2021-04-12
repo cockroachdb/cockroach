@@ -2736,7 +2736,11 @@ func (d *DInterval) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	d.Duration.Format(&ctx.Buffer)
+	if ctx.intervalStyleFormatter != nil {
+		ctx.intervalStyleFormatter(ctx, &d.Duration)
+	} else {
+		d.Duration.Format(&ctx.Buffer)
+	}
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}

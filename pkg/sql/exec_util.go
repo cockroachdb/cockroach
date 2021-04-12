@@ -460,6 +460,18 @@ var disallowFullTableScans = settings.RegisterBoolSetting(
 	false,
 ).WithPublic()
 
+// intervalStyle controls intervals representation.
+var intervalStyle = settings.RegisterEnumSetting(
+	"sql.defaults.intervalstyle",
+	"default value for intervalstyle session setting",
+	"postgres",
+	map[int64]string{
+		int64(sessiondata.Postgres):    "postgres",
+		int64(sessiondata.ISO8601):     "iso_8601",
+		int64(sessiondata.SQLStandard): "sql_standard",
+	},
+).WithPublic()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
@@ -2380,6 +2392,14 @@ func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {
 // SetNoticeDisplaySeverity sets the NoticeDisplaySeverity for the given session.
 func (m *sessionDataMutator) SetNoticeDisplaySeverity(severity pgnotice.DisplaySeverity) {
 	m.data.NoticeDisplaySeverity = severity
+}
+
+// SetIntervalStyle sets the IntervalStyle for the given session.
+func (m *sessionDataMutator) SetIntervalStyle(style sessiondata.IntervalStyle) {
+	// reformatFn := func(ctx *tree.FmtCtx, d *duration.Duration) {
+	// 	d.FormatWithStyle(&ctx.Buffer, style.String())
+	// }
+	// todo(mneverov): pass reformat func to fmt context.
 }
 
 // initSequenceCache creates an empty sequence cache instance for the session.

@@ -776,7 +776,22 @@ var varGen = map[string]sessionVar{
 	`integer_datetimes`: makeReadOnlyVar("on"),
 
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-INTERVALSTYLE
-	`intervalstyle`: makeCompatStringVar(`IntervalStyle`, "postgres"),
+	`intervalstyle`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			style, ok := sessiondata.IntervalStyleFromString(s)
+			if !ok {
+				return newVarValueError(`IntervalStyle`, s, "postgres", "iso_8601", "sql_standard")
+			}
+			m.SetIntervalStyle(style)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.IntervalStyle.String()
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondata.IntervalStyle(intervalStyle.Get(sv)).String()
+		},
+	},
 
 	// CockroachDB extension.
 	`locality`: {
