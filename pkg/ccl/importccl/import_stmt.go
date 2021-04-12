@@ -1900,9 +1900,12 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
 			var schemaMetadata *preparedSchemaMetadata
-			err := descs.Txn(ctx, p.ExecCfg().Settings, p.ExecCfg().LeaseManager,
-				p.ExecCfg().InternalExecutor, p.ExecCfg().DB, func(ctx context.Context, txn *kv.Txn,
-					descsCol *descs.Collection) error {
+			if err := descs.Txn(
+				ctx, p.ExecCfg().Settings, p.ExecCfg().LeaseManager,
+				p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
+				func(
+					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+				) error {
 					var preparedDetails jobspb.ImportDetails
 					schemaMetadata = &preparedSchemaMetadata{
 						newSchemaIDToName: make(map[descpb.ID]string),
@@ -1938,38 +1941,29 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 					// Update the job details now that the schemas and table descs have
 					// been "prepared".
-					err = r.job.SetDetails(ctx, txn, preparedDetails)
-					if err != nil {
-						return err
-					}
+					return r.job.Update(ctx, txn, func(
+						txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+					) error {
+						pl := md.Payload
+						*pl.GetImport() = preparedDetails
 
-					// Update the job record with the schema and table IDs we will be
-					// ingesting into.
-					err = r.job.SetDescriptorIDs(ctx, txn, func(ctx context.Context,
-						descIDs []descpb.ID) ([]descpb.ID, error) {
-						var descriptorIDs []descpb.ID
-						if descIDs == nil {
+						// Update the set of descriptors for later observability.
+						// TODO(ajwerner): Do we need this idempotence test?
+						prev := md.Payload.DescriptorIDs
+						if prev == nil {
+							var descriptorIDs []descpb.ID
 							for _, schema := range preparedDetails.Schemas {
 								descriptorIDs = append(descriptorIDs, schema.Desc.GetID())
 							}
 							for _, table := range preparedDetails.Tables {
 								descriptorIDs = append(descriptorIDs, table.Desc.GetID())
 							}
-							return descriptorIDs, nil
+							pl.DescriptorIDs = descriptorIDs
 						}
-						log.Warningf(ctx, "unexpected descriptor IDs %+v set in import job %d", descIDs,
-							r.job.ID())
-						return nil, nil
+						ju.UpdatePayload(pl)
+						return nil
 					})
-					if err != nil {
-						// We don't want to fail the import if we fail to update the
-						// descriptor IDs as this is only for observability.
-						log.Warningf(ctx, "failed to update import job %d with target descriptor IDs",
-							r.job.ID())
-					}
-					return nil
-				})
-			if err != nil {
+				}); err != nil {
 				return err
 			}
 
