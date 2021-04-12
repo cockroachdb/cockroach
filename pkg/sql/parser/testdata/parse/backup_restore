@@ -313,13 +313,13 @@ BACKUP TABLE _ TO 'bar' WITH revision_history, encryption_passphrase = '*****' -
 BACKUP TABLE foo TO 'bar' WITH revision_history, encryption_passphrase = 'secret' -- passwords exposed
 
 parse
-BACKUP foo TO 'bar' WITH KMS = 'foo', revision_history
+BACKUP foo TO 'bar' WITH KMS = 'foo', revision_history, include_deprecated_interleaves
 ----
-BACKUP TABLE foo TO 'bar' WITH revision_history, kms = 'foo' -- normalized!
-BACKUP TABLE (foo) TO ('bar') WITH revision_history, kms = ('foo') -- fully parenthetized
-BACKUP TABLE foo TO _ WITH revision_history, kms = _ -- literals removed
-BACKUP TABLE foo TO '_' WITH revision_history, kms = '_' -- UNEXPECTED REPARSED AST WITHOUT LITERALS
-BACKUP TABLE _ TO 'bar' WITH revision_history, kms = 'foo' -- identifiers removed
+BACKUP TABLE foo TO 'bar' WITH revision_history, kms = 'foo', include_deprecated_interleaves -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH revision_history, kms = ('foo'), include_deprecated_interleaves -- fully parenthetized
+BACKUP TABLE foo TO _ WITH revision_history, kms = _, include_deprecated_interleaves -- literals removed
+BACKUP TABLE foo TO '_' WITH revision_history, kms = '_', include_deprecated_interleaves -- UNEXPECTED REPARSED AST WITHOUT LITERALS
+BACKUP TABLE _ TO 'bar' WITH revision_history, kms = 'foo', include_deprecated_interleaves -- identifiers removed
 
 parse
 BACKUP foo TO 'bar' WITH KMS = ('foo', 'bar'), revision_history
