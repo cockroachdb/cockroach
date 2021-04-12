@@ -159,6 +159,107 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 	)
 }
 
+func TestRegionChangeDuringAlterTableRegionalByRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	interruptStartCh := make(chan struct{})
+	interruptEndCh := make(chan struct{})
+	performInterrupt := false
+
+	regionalByRowChanges := []struct {
+		setup    string
+		alterCmd string
+	}{
+		{
+			setup:    `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY GLOBAL`,
+			alterCmd: `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
+		},
+		{
+			setup:    `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
+			alterCmd: `ALTER TABLE t.test SET LOCALITY GLOBAL`,
+		},
+	}
+
+	regionChanges := []string{
+		`ALTER DATABASE t ADD REGION "us-east3"`,
+		`ALTER DATABASE t DROP REGION "us-east2"`,
+	}
+
+	setupDB := func(sqlDB *gosql.DB, setupSQL string) {
+		// Drop the closed timestamp target lead for GLOBAL tables for speed-up improvements.
+		// TODO(nvanbenschoten): We can remove this when that issue
+		// is addressed.
+		_, err := sqlDB.Exec(`SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_override = '5ms'`)
+		require.NoError(t, err)
+
+		_, err = sqlDB.Exec(fmt.Sprintf(`
+CREATE DATABASE t PRIMARY REGION "us-east1" REGION "us-east2";
+USE t;
+%s;
+`, setupSQL))
+		require.NoError(t, err)
+
+		require.NoError(
+			t,
+			sqltestutils.BulkInsertIntoTable(sqlDB, 5000),
+		)
+	}
+
+	// Tests (ADD/DROP/SET PRIMARY) REGION during a REGIONAL BY ROW transition.
+	for _, rbrChange := range regionalByRowChanges {
+		for _, regionChange := range append(
+			regionChanges,
+			`ALTER DATABASE t SET PRIMARY REGION "us-east2"`,
+		) {
+			t.Run(fmt.Sprintf("from %s to %s with racing %s", rbrChange.setup, rbrChange.alterCmd, regionChange), func(t *testing.T) {
+				_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+					t,
+					3, /* numServers */
+					base.TestingKnobs{
+						DistSQL: &execinfra.TestingKnobs{
+							RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+								if performInterrupt {
+									performInterrupt = false
+									interruptStartCh <- struct{}{}
+									<-interruptEndCh
+								}
+								return nil
+							},
+						},
+					},
+					nil, /* baseDir */
+				)
+				defer cleanup()
+				setupDB(sqlDB, rbrChange.setup)
+				performInterrupt = true
+
+				// Perform the alter table command asynchronously; this will be interrupted by the region change.
+				rbrErrCh := make(chan error)
+				go func() {
+					_, err := sqlDB.Exec(rbrChange.alterCmd)
+					rbrErrCh <- err
+				}()
+
+				// Wait for the backfill to start.
+				<-interruptStartCh
+
+				// Now run the alter command on the database.
+				_, err := sqlDB.Exec(regionChange)
+				require.Error(t, err)
+				require.EqualError(t, err, "pq: cannot perform database region changes whilst a REGIONAL BY ROW transition is underway")
+
+				// Now finish up and ensure no errors.
+				interruptEndCh <- struct{}{}
+				require.NoError(t, <-rbrErrCh)
+
+				// Validate the zone configuration.
+				_, err = sqlDB.Exec(`SELECT crdb_internal.validate_multi_region_zone_configs()`)
+				require.NoError(t, err)
+			})
+		}
+	}
+}
+
 // TestAlterTableLocalityRegionalByRowError tests an alteration involving
 // REGIONAL BY ROW which gets its async job interrupted by some sort of
 // error or cancellation. After this, we expect the table to retain

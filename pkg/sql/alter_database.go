@@ -158,6 +158,14 @@ func (p *planner) AlterDatabaseAddRegion(
 		return nil, err
 	}
 
+	if err := checkRegionalByRowTransitionIsNotUnderway(
+		ctx,
+		p,
+		dbDesc,
+	); err != nil {
+		return nil, err
+	}
+
 	// Adding a region also involves repartitioning all REGIONAL BY ROW tables
 	// underneath the hood, so we must ensure the user has the requisite
 	// privileges.
@@ -290,6 +298,15 @@ func (p *planner) AlterDatabaseDropRegion(
 	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
 		return nil, err
 	}
+
+	if err := checkRegionalByRowTransitionIsNotUnderway(
+		ctx,
+		p,
+		dbDesc,
+	); err != nil {
+		return nil, err
+	}
+
 	// Dropping a region also involves repartitioning all REGIONAL BY ROW tables
 	// underneath the hood, so we must ensure the user has the requisite
 	// privileges.
@@ -600,6 +617,14 @@ func (p *planner) AlterDatabasePrimaryRegion(
 	}
 
 	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	if err := checkRegionalByRowTransitionIsNotUnderway(
+		ctx,
+		p,
+		dbDesc,
+	); err != nil {
 		return nil, err
 	}
 

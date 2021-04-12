@@ -1596,3 +1596,34 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 
 	return nil
 }
+
+// checkRegionalByRowTransitionIsNotUnderway checks no REGIONAL BY ROW activity
+// is occuring on any table on a given database.
+func checkRegionalByRowTransitionIsNotUnderway(
+	ctx context.Context, p *planner, dbDesc catalog.DatabaseDescriptor,
+) error {
+	return forEachTableDesc(
+		ctx,
+		p,
+		dbDesc,
+		hideVirtual,
+		func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			for _, mut := range table.AllMutations() {
+				if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
+					if lcSwap := pkSwap.PrimaryKeySwapDesc().LocalityConfigSwap; lcSwap != nil {
+						return errors.WithDetailf(
+							pgerror.Newf(
+								pgcode.ObjectNotInPrerequisiteState,
+								"cannot perform database region changes whilst a REGIONAL BY ROW transition is underway",
+							),
+							"table %s.%s is currently transitioning",
+							tree.Name(scName),
+							tree.Name(table.GetName()),
+						)
+					}
+				}
+			}
+			return nil
+		},
+	)
+}
