@@ -235,6 +235,23 @@ func (desc *immutable) RegionNamesIncludingTransitioning() (descpb.RegionNames, 
 	return regions, nil
 }
 
+// TransitioningRegionNames returns all the regions which are in
+// the process of transitioning.
+func (desc *immutable) TransitioningRegionNames() (descpb.RegionNames, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+	var regions descpb.RegionNames
+	for _, member := range desc.EnumMembers {
+		if member.Direction != descpb.TypeDescriptor_EnumMember_NONE {
+			regions = append(regions, descpb.RegionName(member.LogicalRepresentation))
+		}
+	}
+	return regions, nil
+}
+
 // SetDrainingNames implements the MutableDescriptor interface.
 func (desc *Mutable) SetDrainingNames(names []descpb.NameInfo) {
 	desc.DrainingNames = names

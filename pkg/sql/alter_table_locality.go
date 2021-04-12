@@ -33,9 +33,11 @@ import (
 )
 
 type alterTableSetLocalityNode struct {
-	n         tree.AlterTableLocality
-	tableDesc *tabledesc.Mutable
-	dbDesc    catalog.DatabaseDescriptor
+	n            tree.AlterTableLocality
+	tableDesc    *tabledesc.Mutable
+	dbDesc       catalog.DatabaseDescriptor
+	regionEnumID descpb.ID
+	regionEnum   catalog.TypeDescriptor
 }
 
 // AlterTableLocality transforms a tree.AlterTableLocality into a plan node.
@@ -85,10 +87,32 @@ func (p *planner) AlterTableLocality(
 		)
 	}
 
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return nil, err
+	}
+
+	regionEnum, err := p.Descriptors().GetImmutableTypeByID(
+		ctx,
+		p.txn,
+		regionEnumID,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidCached: true,
+				Required:    true,
+			},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return &alterTableSetLocalityNode{
-		n:         *n,
-		tableDesc: tableDesc,
-		dbDesc:    dbDesc,
+		n:            *n,
+		tableDesc:    tableDesc,
+		dbDesc:       dbDesc,
+		regionEnum:   regionEnum,
+		regionEnumID: regionEnumID,
 	}, nil
 }
 
@@ -115,20 +139,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, n.tableDesc.ParentID,
-		tree.DatabaseLookupFlags{Required: true})
-	if err != nil {
-		return err
-	}
-
-	regionEnumID, err := dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return err
-	}
-
 	if err := params.p.alterTableDescLocalityToRegionalByTable(
-		params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
+		params.ctx, n.n.Locality.TableRegion, n.tableDesc, n.regionEnumID,
 	); err != nil {
 		return err
 	}
@@ -137,7 +149,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 	// configuration.
 	if err := n.writeNewTableLocalityAndZoneConfig(
 		params,
-		n.dbDesc,
 	); err != nil {
 		return err
 	}
@@ -146,12 +157,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 }
 
 func (n *alterTableSetLocalityNode) alterTableLocalityToGlobal(params runParams) error {
-	regionEnumID, err := n.dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return err
-	}
-	err = params.p.alterTableDescLocalityToGlobal(params.ctx, n.tableDesc, regionEnumID)
-	if err != nil {
+	if err := params.p.alterTableDescLocalityToGlobal(params.ctx, n.tableDesc, n.regionEnumID); err != nil {
 		return err
 	}
 
@@ -159,7 +165,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToGlobal(params runParams)
 	// configuration.
 	if err := n.writeNewTableLocalityAndZoneConfig(
 		params,
-		n.dbDesc,
 	); err != nil {
 		return err
 	}
@@ -179,20 +184,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, n.tableDesc.ParentID,
-		tree.DatabaseLookupFlags{Required: true})
-	if err != nil {
-		return err
-	}
-
-	regionEnumID, err := dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return err
-	}
-
 	if err := params.p.alterTableDescLocalityToRegionalByTable(
-		params.ctx, n.n.Locality.TableRegion, n.tableDesc, regionEnumID,
+		params.ctx, n.n.Locality.TableRegion, n.tableDesc, n.regionEnumID,
 	); err != nil {
 		return err
 	}
@@ -200,7 +193,6 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 	// Finalize the alter by writing a new table descriptor and updating the zone configuration.
 	if err := n.writeNewTableLocalityAndZoneConfig(
 		params,
-		n.dbDesc,
 	); err != nil {
 		return err
 	}
@@ -392,6 +384,18 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	pkColumnNames []string,
 	pkColumnDirections []descpb.IndexDescriptor_Direction,
 ) error {
+	// Disallow transitions if ADD REGION or DROP REGION is not finalized.
+	transitioningRegionNames, err := n.regionEnum.TransitioningRegionNames()
+	if err != nil {
+		return err
+	}
+	if len(transitioningRegionNames) > 0 {
+		return pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			"cannot transition to or from REGIONAL BY ROW whilst a region is being added or dropped",
+		)
+	}
+
 	// Preserve the same PK columns - implicit partitioning will be added in
 	// AlterPrimaryKey.
 	cols := make([]tree.IndexElem, len(pkColumnNames))
@@ -461,12 +465,10 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	)
 
 	// We should check index zone configs if moving to REGIONAL BY ROW.
-	checkIndexZoneConfigs := newLocality.LocalityLevel == tree.LocalityLevelRow
 	if err := params.p.validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		params.ctx,
 		n.dbDesc,
 		n.tableDesc,
-		checkIndexZoneConfigs,
 	); err != nil {
 		return err
 	}
@@ -565,9 +567,7 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 
 // writeNewTableLocalityAndZoneConfig writes the table descriptor with the newly
 // updated LocalityConfig and writes a new zone configuration for the table.
-func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
-	params runParams, dbDesc catalog.DatabaseDescriptor,
-) error {
+func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(params runParams) error {
 	// Write out the table descriptor update.
 	if err := params.p.writeSchemaChange(
 		params.ctx,
@@ -578,7 +578,7 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 		return err
 	}
 
-	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, dbDesc.GetID(), params.p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.dbDesc.GetID(), params.p.Descriptors())
 	if err != nil {
 		return err
 	}

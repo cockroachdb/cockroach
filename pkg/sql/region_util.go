@@ -1412,10 +1412,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabase(
 // the user about that before it occurs (and require the
 // override_multi_region_zone_config session variable to be set).
 func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
-	ctx context.Context,
-	dbDesc catalog.DatabaseDescriptor,
-	desc *tabledesc.Mutable,
-	checkIndexZoneConfigs bool,
+	ctx context.Context, dbDesc catalog.DatabaseDescriptor, desc *tabledesc.Mutable,
 ) error {
 	// If the user is overriding, or this is not a multi-region table our work here
 	// is done.
@@ -1426,7 +1423,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	if err != nil {
 		return err
 	}
-	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
+	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
 	if err != nil {
 		return err
 	}
@@ -1598,7 +1595,7 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 }
 
 // checkRegionalByRowTransitionIsNotUnderway checks no REGIONAL BY ROW activity
-// is occuring on any table on a given database.
+// is occurring on any table on a given database.
 func checkRegionalByRowTransitionIsNotUnderway(
 	ctx context.Context, p *planner, dbDesc catalog.DatabaseDescriptor,
 ) error {
