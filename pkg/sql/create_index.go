@@ -193,12 +193,9 @@ func MakeIndexDescriptor(
 				return nil, err
 			}
 			indexDesc.GeoConfig = *config
-			telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
 		case types.GeographyFamily:
 			indexDesc.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
-			telemetry.Inc(sqltelemetry.GeographyInvertedIndexCounter)
 		}
-		telemetry.Inc(sqltelemetry.InvertedIndexCounter)
 	}
 	columns := n.Columns
 	if n.Sharded != nil {
@@ -231,7 +228,6 @@ func MakeIndexDescriptor(
 				return nil, err
 			}
 		}
-		telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 	}
 
 	if n.Predicate != nil {
@@ -241,7 +237,6 @@ func MakeIndexDescriptor(
 			return nil, err
 		}
 		indexDesc.Predicate = expr
-		telemetry.Inc(sqltelemetry.PartialIndexCounter)
 	}
 
 	if err := indexDesc.FillColumns(columns); err != nil {
@@ -257,6 +252,30 @@ func MakeIndexDescriptor(
 	); err != nil {
 		return nil, err
 	}
+
+	// Increment telemetry once a descriptor has been successfully created.
+	if indexDesc.Type == descpb.IndexDescriptor_INVERTED {
+		telemetry.Inc(sqltelemetry.InvertedIndexCounter)
+		if geoindex.IsGeometryConfig(&indexDesc.GeoConfig) {
+			telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
+		}
+		if geoindex.IsGeographyConfig(&indexDesc.GeoConfig) {
+			telemetry.Inc(sqltelemetry.GeographyInvertedIndexCounter)
+		}
+		if indexDesc.IsPartial() {
+			telemetry.Inc(sqltelemetry.PartialInvertedIndexCounter)
+		}
+		if len(indexDesc.ColumnNames) > 1 {
+			telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
+		}
+	}
+	if indexDesc.IsSharded() {
+		telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
+	}
+	if indexDesc.IsPartial() {
+		telemetry.Inc(sqltelemetry.PartialIndexCounter)
+	}
+
 	return &indexDesc, nil
 }
 
@@ -473,6 +492,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 	)
 	if err != nil {
 		return err
+	}
+
+	if indexDesc.Type == descpb.IndexDescriptor_INVERTED && indexDesc.Partitioning.NumColumns != 0 {
+		telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
