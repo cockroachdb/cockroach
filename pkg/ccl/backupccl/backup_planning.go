@@ -100,7 +100,10 @@ func spansForAllTableIndexes(
 	added := make(map[tableAndIndex]bool, len(tables))
 	sstIntervalTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for _, table := range tables {
-		for _, index := range table.AllNonDropIndexes() {
+		if !table.IsPhysicalTable() {
+			continue
+		}
+		for _, index := range append(table.Indexes, table.PrimaryIndex) {
 			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(index.ID)), false); err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
@@ -115,10 +118,11 @@ func spansForAllTableIndexes(
 		// at least 2 revisions, and the first one should have the table in a PUBLIC
 		// state. We want (and do) ignore tables that have been dropped for the
 		// entire interval. DROPPED tables should never later become PUBLIC.
-		// TODO(pbardea): Consider and test the interaction between revision_history
-		// backups and OFFLINE tables.
-		if tbl := rev.Desc.Table(hlc.Timestamp{}); tbl != nil && tbl.State != sqlbase.TableDescriptor_DROP {
-			for _, idx := range tbl.AllNonDropIndexes() {
+		if tbl := rev.Desc.Table(hlc.Timestamp{}); tbl != nil && tbl.State == sqlbase.TableDescriptor_PUBLIC {
+			if !tbl.IsPhysicalTable() {
+				continue
+			}
+			for _, idx := range append(tbl.Indexes, tbl.PrimaryIndex) {
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {
 					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(idx.ID)), false); err != nil {
