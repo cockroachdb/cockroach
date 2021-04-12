@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -293,7 +294,7 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
-	typName, err := og.randType(tx, og.pctExisting(true))
+	typName, typ, err := og.randType(tx, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
@@ -312,10 +313,6 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	typeExists, err := typeExists(tx, typName)
-	if err != nil {
-		return "", err
-	}
 	var hasRows bool
 	if tableExists {
 		hasRows, err = tableHasRows(tx, tableName)
@@ -326,8 +323,13 @@ func (og *operationGenerator) addColumn(tx *pgx.Tx) (string, error) {
 
 	codesWithConditions{
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
-		{code: pgcode.UndefinedObject, condition: !typeExists},
+		{code: pgcode.UndefinedObject, condition: typ == nil},
 		{code: pgcode.NotNullViolation, condition: hasRows && def.Nullable.Nullability == tree.NotNull},
+		// UNIQUE is only supported for indexable types.
+		{
+			code:      pgcode.FeatureNotSupported,
+			condition: def.Unique.IsUnique && typ != nil && !colinfo.ColumnTypeIsIndexable(typ),
+		},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s`, tableName, tree.Serialize(def)), nil
@@ -600,13 +602,12 @@ func (og *operationGenerator) addForeignKeyConstraint(tx *pgx.Tx) (string, error
 	// Potentially create an error by choosing the wrong type for the child column.
 	childType := parentColumn.typ
 	if fetchInvalidChild {
-		typeName, err := og.randType(tx, og.pctExisting(true))
+		_, typ, err := og.randType(tx, og.pctExisting(true))
 		if err != nil {
 			return "", err
 		}
-		childType, err = og.typeFromTypeName(tx, typeName.String())
-		if err != nil {
-			return "", err
+		if typ != nil {
+			childType = typ
 		}
 	}
 
@@ -918,15 +919,11 @@ func (og *operationGenerator) createTable(tx *pgx.Tx) (string, error) {
 }
 
 func (og *operationGenerator) createEnum(tx *pgx.Tx) (string, error) {
-	typName, err := og.randEnum(tx, og.pctExisting(false))
+	typName, typeExists, err := og.randEnum(tx, og.pctExisting(false))
 	if err != nil {
 		return "", err
 	}
 	schemaExists, err := schemaExists(tx, typName.Schema())
-	if err != nil {
-		return "", err
-	}
-	typeExists, err := typeExists(tx, typName)
 	if err != nil {
 		return "", err
 	}
@@ -1754,24 +1751,15 @@ func (og *operationGenerator) setColumnDefault(tx *pgx.Tx) (string, error) {
 	datumTyp := columnForDefault.typ
 	// Optionally change the incorrect type to potentially create errors.
 	if og.produceError() {
-		newTypeName, err := og.randType(tx, og.pctExisting(true))
+		newTypeName, newTyp, err := og.randType(tx, og.pctExisting(true))
 		if err != nil {
 			return "", err
 		}
-
-		typeExists, err := typeExists(tx, newTypeName)
-		if err != nil {
-			return "", err
-		}
-		if !typeExists {
+		if newTyp == nil {
 			og.expectedExecErrors.add(pgcode.UndefinedObject)
 			return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT 'IrrelevantValue':::%s`, tableName, columnForDefault.name, newTypeName.SQLString()), nil
 		}
-
-		datumTyp, err = og.typeFromTypeName(tx, newTypeName.String())
-		if err != nil {
-			return "", err
-		}
+		datumTyp = newTyp
 	}
 
 	defaultDatum := rowenc.RandDatum(og.params.rng, datumTyp, columnForDefault.nullable)
@@ -1860,15 +1848,7 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 			tableName, columnForTypeChange.name), nil
 	}
 
-	newTypeName, err := og.randType(tx, og.pctExisting(true))
-	if err != nil {
-		return "", err
-	}
-	typeExists, err := typeExists(tx, newTypeName)
-	if err != nil {
-		return "", err
-	}
-	newType, err := og.typeFromTypeName(tx, newTypeName.String())
+	newTypeName, newType, err := og.randType(tx, og.pctExisting(true))
 	if err != nil {
 		return "", err
 	}
@@ -1878,17 +1858,17 @@ func (og *operationGenerator) setColumnType(tx *pgx.Tx) (string, error) {
 		return "", err
 	}
 
+	if newType != nil {
+		kind, _ := schemachange.ClassifyConversion(context.Background(), columnForTypeChange.typ, newType)
+		codesWithConditions{
+			{code: pgcode.CannotCoerce, condition: kind == schemachange.ColumnConversionImpossible},
+			{code: pgcode.FeatureNotSupported, condition: kind != schemachange.ColumnConversionTrivial},
+		}.add(og.expectedExecErrors)
+	}
+
 	codesWithConditions{
-		{code: pgcode.UndefinedObject, condition: !typeExists},
+		{code: pgcode.UndefinedObject, condition: newType == nil},
 		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies},
-		// If the type of the column is not equivalent to the new type, then
-		// it is possible to see either a pgcode.CannotCoerce error or a pgcode.FeatureNotSupported
-		// error.
-		// pgcode.CannotCoerce represents an invalid type conversion (eg. array to enum),
-		// and pgcode.FeatureNotSupported represents a conversion which is only supported
-		// experimentally (eg.string to enum).
-		{code: pgcode.CannotCoerce, condition: !columnForTypeChange.typ.Equivalent(newType)},
-		{code: pgcode.FeatureNotSupported, condition: !columnForTypeChange.typ.Equivalent(newType)},
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
@@ -2390,16 +2370,18 @@ func (og *operationGenerator) randSequence(
 
 }
 
-func (og *operationGenerator) randEnum(tx *pgx.Tx, pctExisting int) (*tree.TypeName, error) {
+func (og *operationGenerator) randEnum(
+	tx *pgx.Tx, pctExisting int,
+) (name *tree.TypeName, exists bool, _ error) {
 	if og.randIntn(100) >= pctExisting {
 		// Most of the time, this case is for creating enums, so it
 		// is preferable that the schema exists
 		randSchema, err := og.randSchema(tx, og.pctExisting(true))
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		typeName := tree.MakeSchemaQualifiedTypeName(randSchema, fmt.Sprintf("enum%d", og.newUniqueSeqNum()))
-		return &typeName, nil
+		return &typeName, false, nil
 	}
 	const q = `
   SELECT schema, name
@@ -2411,10 +2393,10 @@ ORDER BY random()
 	var schemaName string
 	var typName string
 	if err := tx.QueryRow(q).Scan(&schemaName, &typName); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	typeName := tree.MakeSchemaQualifiedTypeName(schemaName, typName)
-	return &typeName, nil
+	return &typeName, true, nil
 }
 
 // randTable returns a schema name along with a table name
@@ -2592,18 +2574,27 @@ FROM [SHOW COLUMNS FROM %s];
 	return columnNames, nil
 }
 
-func (og *operationGenerator) randType(tx *pgx.Tx, enumPctExisting int) (*tree.TypeName, error) {
+func (og *operationGenerator) randType(
+	tx *pgx.Tx, enumPctExisting int,
+) (*tree.TypeName, *types.T, error) {
 	if og.randIntn(100) <= og.params.enumPct {
 		// TODO(ajwerner): Support arrays of enums.
-		typName, err := og.randEnum(tx, enumPctExisting)
+		typName, exists, err := og.randEnum(tx, enumPctExisting)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return typName, err
+		if !exists {
+			return typName, nil, nil
+		}
+		typ, err := og.typeFromTypeName(tx, typName.String())
+		if err != nil {
+			return nil, nil, err
+		}
+		return typName, typ, nil
 	}
 	typ := rowenc.RandSortingType(og.params.rng)
 	typeName := tree.MakeUnqualifiedTypeName(tree.Name(typ.SQLString()))
-	return &typeName, nil
+	return &typeName, typ, nil
 }
 
 func (og *operationGenerator) createSchema(tx *pgx.Tx) (string, error) {
