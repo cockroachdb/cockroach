@@ -664,34 +664,9 @@ func (r *testRunner) runTest(
 					Message:         msg,
 					Artifacts:       artifacts,
 					ExtraLabels:     labels,
-					ReproductionCommand: fmt.Sprintf(`#!/usr/bin/env bash
-#!/bin/bash
-set -euxo pipefail
-
-# NB: invoke this script with "caffeinate" on OSX and/or linux to
-# prevent runs failing due to standby.
-
-sha=$(git rev-parse HEAD)
-
-if [ ! -f roachtest.$sha ]; then
-	./build/builder.sh mkrelease amd64-linux-gnu bin/{roach{prod,test},workload}
-	mv -f bin.docker_amd64/roachprod roachprod.$sha
-	mv -f bin.docker_amd64/workload workload.$sha
-	mv -f bin.docker_amd64/roachtest roachtest.$sha
-fi
-
-if [ ! -f cockroach.$sha ]; then
-	./build/builder.sh mkrelease amd64-linux-gnu
-	mv cockroach-linux-2.6.32-gnu-amd64 cockroach.$sha
-fi
-
-# NB: consider adding --debug if it is useful to let the clusters
-# for failed tests survive.
-./roachtest.$sha run "%s" \
-  --port 8080 --count 10 --cpu-quota 500 \
-  --roachprod roachprod.${sha} --workload workload.${sha} \
-  --cockroach ./cockroach.$sha \
-  --artifacts artifacts.$sha | tee roachtest-stress.${sha}
+					ReproductionCommand: fmt.Sprintf(
+						`# From https://go.crdb.dev/p/roachstress, perhaps edited lightly.
+caffeinate ./roachstress.sh %s
 `, t.Name()),
 				}
 				if err := issues.Post(

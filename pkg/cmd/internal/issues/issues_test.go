@@ -326,7 +326,7 @@ func TestGetAssignee(t *testing.T) {
 	}
 	p.listCommits = listCommits
 	ctx := &postCtx{Context: context.Background()}
-	require.Zero(t, p.getAssignee(ctx, "foo@bar.xy"))
+	require.Zero(t, p.getAuthorGithubHandle(ctx, "foo@bar.xy"))
 	require.Equal(t, "no Author found for user email foo@bar.xy\n", ctx.Builder.String())
 }
 
