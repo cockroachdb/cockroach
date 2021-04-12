@@ -533,6 +533,11 @@ func (r *Replica) leasePostApplyLocked(
 	}
 }
 
+var addSSTPreApplyWarn = struct {
+	threshold time.Duration
+	log.EveryN
+}{30 * time.Second, log.Every(5 * time.Second)}
+
 func addSSTablePreApply(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -557,7 +562,18 @@ func addSSTablePreApply(
 		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
 	}
 
+	tBegin := timeutil.Now()
+	var tEndDelayed time.Time
+	defer func() {
+		if dur := timeutil.Since(tBegin); dur > addSSTPreApplyWarn.threshold && addSSTPreApplyWarn.ShouldLog() {
+			log.Infof(ctx,
+				"ingesting SST at index %d took %.2fs (%.2fs on which in PreIngestDelay)",
+				dur.Seconds(), tEndDelayed.Sub(tBegin).Seconds())
+		}
+	}()
+
 	eng.PreIngestDelay(ctx)
+	tEndDelayed = timeutil.Now()
 
 	copied := false
 	if eng.InMem() {
