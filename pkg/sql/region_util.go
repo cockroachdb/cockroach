@@ -814,7 +814,10 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 	if !dbDesc.IsMultiRegion() {
 		return nil
 	}
-	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
+
+	validatorObj, err := makeZoneConfigForMultiRegionValidatorExistingMultiRegionObject(
+		ctx, p.txn, dbDesc, p.Descriptors(),
+	)
 	if err != nil {
 		return err
 	}
@@ -822,11 +825,44 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 		ctx,
 		dbDesc,
 		&zoneConfigForMultiRegionValidatorValidation{
-			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
-				regionConfig: regionConfig,
+			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: validatorObj,
+		},
+	)
+}
+
+func makeZoneConfigForMultiRegionValidatorExistingMultiRegionObject(
+	ctx context.Context, txn *kv.Txn, dbDesc catalog.DatabaseDescriptor, descsCol *descs.Collection,
+) (zoneConfigForMultiRegionValidatorExistingMultiRegionObject, error) {
+	ret := zoneConfigForMultiRegionValidatorExistingMultiRegionObject{}
+	enumID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return ret, err
+	}
+	regionEnum, err := descsCol.GetImmutableTypeByID(
+		ctx,
+		txn,
+		enumID,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidCached: true,
+				Required:    true,
 			},
 		},
 	)
+	if err != nil {
+		return ret, err
+	}
+
+	ret.regionConfig, err = SynthesizeRegionConfigForZoneConfigValidation(ctx, txn, dbDesc.GetID(), descsCol)
+	if err != nil {
+		return ret, err
+	}
+
+	ret.transitioningRegionNames, err = regionEnum.TransitioningRegionNames()
+	if err != nil {
+		return ret, err
+	}
+	return ret, nil
 }
 
 func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
@@ -1130,6 +1166,7 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 type zoneConfigForMultiRegionValidator interface {
 	getExpectedDatabaseZoneConfig() (zonepb.ZoneConfig, error)
 	getExpectedTableZoneConfig(desc catalog.TableDescriptor) (zonepb.ZoneConfig, error)
+	inactiveRegions() descpb.RegionNames
 
 	newMismatchFieldError(descType string, descName string, field string) error
 	newMissingSubzoneError(descType string, descName string, field string) error
@@ -1155,6 +1192,11 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) getExpectedTableZone
 ) (zonepb.ZoneConfig, error) {
 	// For set initial region, we want no multi-region fields to be set.
 	return *zonepb.NewZoneConfig(), nil
+}
+
+func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) inactiveRegions() descpb.RegionNames {
+	// There are no inactive regions at setup time.
+	return nil
 }
 
 func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) wrapErr(err error) error {
@@ -1212,7 +1254,8 @@ func (v *zoneConfigForMultiRegionValidatorSetInitialRegion) newExtraSubzoneError
 // zoneConfigForMultiRegionValidatorExistingMultiRegionObject partially implements
 // the zoneConfigForMultiRegionValidator interface.
 type zoneConfigForMultiRegionValidatorExistingMultiRegionObject struct {
-	regionConfig multiregion.RegionConfig
+	regionConfig             multiregion.RegionConfig
+	transitioningRegionNames descpb.RegionNames
 }
 
 func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) getExpectedDatabaseZoneConfig() (
@@ -1234,6 +1277,10 @@ func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) getExpected
 		return zonepb.ZoneConfig{}, err
 	}
 	return expectedZoneConfig, err
+}
+
+func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) inactiveRegions() descpb.RegionNames {
+	return v.transitioningRegionNames
 }
 
 // zoneConfigForMultiRegionValidatorModifiedByUser implements
@@ -1356,7 +1403,9 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 	if err != nil {
 		return err
 	}
-	regionConfig, err := SynthesizeRegionConfigForZoneConfigValidation(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
+	validatorObj, err := makeZoneConfigForMultiRegionValidatorExistingMultiRegionObject(
+		ctx, p.txn, dbDesc, p.Descriptors(),
+	)
 	if err != nil {
 		return err
 	}
@@ -1364,9 +1413,7 @@ func (p *planner) validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
 		dbDesc,
 		currentZoneConfig,
 		&zoneConfigForMultiRegionValidatorModifiedByUser{
-			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
-				regionConfig: regionConfig,
-			},
+			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: validatorObj,
 		},
 	)
 }
@@ -1426,7 +1473,9 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 	if err != nil {
 		return err
 	}
-	regionConfig, err := SynthesizeRegionConfig(ctx, p.txn, dbDesc.GetID(), p.Descriptors())
+	validatorObj, err := makeZoneConfigForMultiRegionValidatorExistingMultiRegionObject(
+		ctx, p.txn, dbDesc, p.Descriptors(),
+	)
 	if err != nil {
 		return err
 	}
@@ -1435,9 +1484,7 @@ func (p *planner) validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		desc,
 		currentZoneConfig,
 		&zoneConfigForMultiRegionValidatorModifiedByUser{
-			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
-				regionConfig: regionConfig,
-			},
+			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: validatorObj,
 		},
 	)
 }
@@ -1492,13 +1539,24 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		}
 	}
 
-	// We only want to compare against the list of subzones on active indexes,
+	inactiveRegions := make(map[string]struct{}, len(zoneConfigForMultiRegionValidator.inactiveRegions()))
+	for _, inactiveRegion := range zoneConfigForMultiRegionValidator.inactiveRegions() {
+		inactiveRegions[string(inactiveRegion)] = struct{}{}
+	}
+
+	// We only want to compare against the list of subzones on active indexes and parititons,
 	// so filter the subzone list based on the subzoneIndexIDsToDiff computed above.
 	filteredCurrentZoneConfigSubzones := currentZoneConfig.Subzones[:0]
 	for _, c := range currentZoneConfig.Subzones {
-		if _, ok := subzoneIndexIDsToDiff[c.IndexID]; ok {
-			filteredCurrentZoneConfigSubzones = append(filteredCurrentZoneConfigSubzones, c)
+		if c.PartitionName != "" {
+			if _, ok := inactiveRegions[c.PartitionName]; ok {
+				continue
+			}
 		}
+		if _, ok := subzoneIndexIDsToDiff[c.IndexID]; !ok {
+			continue
+		}
+		filteredCurrentZoneConfigSubzones = append(filteredCurrentZoneConfigSubzones, c)
 	}
 	currentZoneConfig.Subzones = filteredCurrentZoneConfigSubzones
 	// Strip the placeholder status if there are no active subzones on the current
@@ -1507,18 +1565,24 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 		currentZoneConfig.NumReplicas = nil
 	}
 
-	// Remove regional by row new indexes from the expected zone config.
+	// Remove regional by row new indexes and inactive regions from the expected zone config.
 	// These will be incorrect as ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes
 	// will apply the existing locality config on them instead of the
 	// new locality config.
 	filteredExpectedZoneConfigSubzones := expectedZoneConfig.Subzones[:0]
 	for _, c := range expectedZoneConfig.Subzones {
-		if _, ok := regionalByRowNewIndexes[c.IndexID]; !ok {
-			filteredExpectedZoneConfigSubzones = append(
-				filteredExpectedZoneConfigSubzones,
-				c,
-			)
+		if c.PartitionName != "" {
+			if _, ok := inactiveRegions[c.PartitionName]; ok {
+				continue
+			}
 		}
+		if _, ok := regionalByRowNewIndexes[c.IndexID]; ok {
+			continue
+		}
+		filteredExpectedZoneConfigSubzones = append(
+			filteredExpectedZoneConfigSubzones,
+			c,
+		)
 	}
 	expectedZoneConfig.Subzones = filteredExpectedZoneConfigSubzones
 
