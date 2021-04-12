@@ -344,7 +344,7 @@ func TestFullClusterBackupDroppedTables(t *testing.T) {
 
 	_, tablesToCheck := generateInterleavedData(sqlDB, t, numAccounts)
 
-	sqlDB.Exec(t, `BACKUP TO $1`, LocalFoo)
+	sqlDB.Exec(t, `BACKUP TO $1 WITH include_deprecated_interleaves`, LocalFoo)
 	sqlDBRestore.Exec(t, `RESTORE FROM $1`, LocalFoo)
 
 	for _, table := range tablesToCheck {

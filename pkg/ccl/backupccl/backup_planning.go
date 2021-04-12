@@ -56,12 +56,13 @@ import (
 )
 
 const (
-	backupOptRevisionHistory = "revision_history"
-	backupOptEncPassphrase   = "encryption_passphrase"
-	backupOptEncKMS          = "kms"
-	backupOptWithPrivileges  = "privileges"
-	localityURLParam         = "COCKROACH_LOCALITY"
-	defaultLocalityValue     = "default"
+	backupOptRevisionHistory    = "revision_history"
+	backupOptEncPassphrase      = "encryption_passphrase"
+	backupOptIncludeInterleaves = "include_deprecated_interleaves"
+	backupOptEncKMS             = "kms"
+	backupOptWithPrivileges     = "privileges"
+	localityURLParam            = "COCKROACH_LOCALITY"
+	defaultLocalityValue        = "default"
 )
 
 type encryptionMode int
@@ -851,6 +852,16 @@ func backupPlanHook(
 			}
 		default:
 			return errors.AssertionFailedf("unexpected descriptor coverage %v", backupStmt.Coverage())
+		}
+
+		if !backupStmt.Options.IncludeDeprecatedInterleaves {
+			for _, desc := range targetDescs {
+				if table, ok := desc.(catalog.TableDescriptor); ok {
+					if table.IsInterleaved() {
+						return errors.Errorf("interleaved tables are deprecated and backups containing interleaved tables will not be able to be RESTORE'd by future versions -- use option %q to backup interleaved tables anyway %q", backupOptIncludeInterleaves, table.TableDesc().Name)
+					}
+				}
+			}
 		}
 
 		// Check BACKUP privileges.
