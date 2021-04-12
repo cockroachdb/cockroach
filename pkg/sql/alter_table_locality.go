@@ -461,12 +461,10 @@ func (n *alterTableSetLocalityNode) startExec(params runParams) error {
 	)
 
 	// We should check index zone configs if moving to REGIONAL BY ROW.
-	checkIndexZoneConfigs := newLocality.LocalityLevel == tree.LocalityLevelRow
 	if err := params.p.validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
 		params.ctx,
 		n.dbDesc,
 		n.tableDesc,
-		checkIndexZoneConfigs,
 	); err != nil {
 		return err
 	}
