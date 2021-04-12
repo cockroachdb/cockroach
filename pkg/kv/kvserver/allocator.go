@@ -1245,30 +1245,7 @@ func (a *Allocator) TransferLeaseTarget(
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
-	sl = sl.filter(zone.Constraints)
-
-	// Filter stores that are on nodes containing existing replicas, but leave
-	// the stores containing the existing replicas in place. This excludes stores
-	// that we can't rebalance to, avoiding an issue in a 3-node cluster where
-	// there are multiple stores per node.
-	//
-	// TODO(peter,bram): This will need adjustment with the new allocator. `sl`
-	// needs to contain only the possible rebalance candidates + the existing
-	// stores the replicas are on.
-	filteredDescs := make([]roachpb.StoreDescriptor, 0, len(sl.stores))
-	for _, s := range sl.stores {
-		var exclude bool
-		for _, r := range existing {
-			if r.NodeID == s.Node.NodeID && r.StoreID != s.StoreID {
-				exclude = true
-				break
-			}
-		}
-		if !exclude {
-			filteredDescs = append(filteredDescs, s)
-		}
-	}
-	sl = makeStoreList(filteredDescs)
+	sl = sl.filter(zone.VoterConstraints)
 
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
 	if !ok {
