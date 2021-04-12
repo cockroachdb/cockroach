@@ -15,8 +15,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 364,
-  "iteration": 1617893093983,
+  "id": 382,
+  "iteration": 1617887986182,
   "links": [],
   "panels": [
     {
@@ -24,7 +24,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -40,7 +40,7 @@
         "y": 0
       },
       "hiddenSeries": false,
-      "id": 14,
+      "id": 10,
       "legend": {
         "avg": false,
         "current": false,
@@ -51,8 +51,8 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "linewidth": 1,
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
@@ -67,10 +67,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "clock_offset_meannanos{job=\"crdb\",instance=~\"$node\",cluster=~\"$cluster\"}",
+          "expr": "sum(rate(changefeed_emitted_bytes{job=\"crdb\",cluster=~\"cluster\"}[$__rate_interval]))",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
+          "legendFormat": "Emitted Bytes",
           "refId": "A"
         }
       ],
@@ -78,7 +78,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Clock Offset",
+      "title": "sink Byte Traffic",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -94,11 +94,11 @@
       },
       "yaxes": [
         {
-          "format": "µs",
-          "label": "offset (us)",
+          "format": "short",
+          "label": "Bytes(B)",
           "logBase": 1,
-          "max": null,
-          "min": null,
+          "max": "1",
+          "min": "0",
           "show": true
         },
         {
@@ -136,7 +136,7 @@
         "y": 8
       },
       "hiddenSeries": false,
-      "id": 12,
+      "id": 8,
       "legend": {
         "avg": false,
         "current": false,
@@ -147,8 +147,8 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "linewidth": 1,
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
@@ -163,10 +163,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sys_gc_pause_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
+          "expr": "sum(jobs_changefeed_resume_retry_error{job=\"crdb\",cluster=\"$cluster\"})",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "GC pause Time",
+          "legendFormat": "Retryable Errors",
           "refId": "A"
         }
       ],
@@ -174,7 +173,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "GC pauses",
+      "title": "Changefeed Restarts",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -190,8 +189,8 @@
       },
       "yaxes": [
         {
-          "format": "ns",
-          "label": "Puase time (ms)",
+          "format": "short",
+          "label": "actions",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -216,7 +215,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": null,
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -232,7 +231,7 @@
         "y": 16
       },
       "hiddenSeries": false,
-      "id": 10,
+      "id": 6,
       "legend": {
         "avg": false,
         "current": false,
@@ -244,7 +243,7 @@
       },
       "lines": true,
       "linewidth": 1,
-      "nullPointMode": "null as zero",
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
@@ -259,18 +258,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sys_goroutines{job=\"crdb\",cluster=\"$cluster\"})",
+          "expr": "sum(changefeed_flush_nanos{job=\"crdb\",cluster=\"$cluster\"})",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Goroutines",
+          "legendFormat": "Flush Time",
           "refId": "A"
+        },
+        {
+          "expr": "sum(changefeed_emitted_messages{job=\"crdb\",cluster=\"$cluster\"})",
+          "interval": "",
+          "legendFormat": "Message Emit time",
+          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Go routines count",
+      "title": "Sink Timings",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -286,8 +290,8 @@
       },
       "yaxes": [
         {
-          "format": "short",
-          "label": "goroutine",
+          "format": "ns",
+          "label": "time (ns)",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -328,7 +332,7 @@
         "y": 24
       },
       "hiddenSeries": false,
-      "id": 8,
+      "id": 4,
       "legend": {
         "avg": false,
         "current": false,
@@ -355,18 +359,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sys_gc_count{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$rate_interval]))",
+          "expr": "sum(rate(changefeed_flushes{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "GC Runs",
+          "legendFormat": "Flushes",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(changefeed_emitted_messages{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "interval": "",
+          "legendFormat": "Messages",
+          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "GC runs",
+      "title": "Sink Count",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -383,7 +392,7 @@
       "yaxes": [
         {
           "format": "short",
-          "label": "runs",
+          "label": "actions",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -408,7 +417,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+       "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -424,7 +433,7 @@
         "y": 32
       },
       "hiddenSeries": false,
-      "id": 6,
+      "id": 2,
       "legend": {
         "avg": false,
         "current": false,
@@ -435,8 +444,8 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
+      "linewidth": 1,
+      "nullPointMode": "null",
       "options": {
         "alertThreshold": true
       },
@@ -451,27 +460,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(sys_cpu_user_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "instant": false,
+          "expr": "changefeed_max_behind_nanos{jobs=\"crdb\",cluster=\"$cluster\"}",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "User CPU time",
+          "legendFormat": "Max Changefeed Latency",
           "refId": "A"
-        },
-        {
-          "expr": "sum(rate(sys_cpu_sys_ns{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Sys CPU time",
-          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "CPU time",
+      "title": "Max Changefeed latency",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -488,227 +487,7 @@
       "yaxes": [
         {
           "format": "ns",
-          "label": "cpu time (s)",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 40
-      },
-      "hiddenSeries": false,
-      "id": 4,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "sum(sys_rss{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "RSS",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(sys_cgo_allocbytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Go Allocated",
-          "refId": "B"
-        },
-        {
-          "expr": "sum(sys_go_allocbytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "CGo Allocated",
-          "refId": "C"
-        },
-        {
-          "expr": "sum(sys_go_totalbytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Go Total",
-          "refId": "D"
-        },
-        {
-          "expr": "sum(sys_cgo_totalbytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "CGo Total",
-          "refId": "E"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Memory Usage",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "bytes",
-          "label": "memory Usage (TiB)",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "bytes",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 48
-      },
-      "hiddenSeries": false,
-      "id": 2,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "min(liveness_livenodes{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"})",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Live nodes (node liveness heartbeats)",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Live Node Count",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "short",
-          "label": "nodes",
+          "label": "time (ns)",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -737,12 +516,12 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_PROMETHEUS}",
+         "datasource": "${DS_PROMETHEUS}",
         "definition": "sys_uptime{job=\"crdb\"}",
         "error": null,
         "hide": 0,
         "includeAll": false,
-        "label": "Cluster Filter",
+        "label": "Cluster Name",
         "multi": false,
         "name": "cluster",
         "options": [],
@@ -759,12 +538,8 @@
       },
       {
         "allValue": ".*",
-        "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": "${DS_PROMETHEUS}",
+        "current": {},
+         "datasource": "${DS_PROMETHEUS}",
         "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
         "error": null,
         "hide": 0,
@@ -788,11 +563,7 @@
         "auto": false,
         "auto_count": 30,
         "auto_min": "10s",
-        "current": {
-          "selected": false,
-          "text": "30s",
-          "value": "30s"
-        },
+        "current": {},
         "error": null,
         "hide": 0,
         "label": "Rate Interval",
@@ -848,29 +619,6 @@
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
-      },
-      {
-        "allValue": ".*",
-        "current": {},
-        "datasource": "${DS_PROMETHEUS}",
-        "definition": "raftlog_behind{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}",
-        "error": null,
-        "hide": 0,
-        "includeAll": true,
-        "label": "crdb_node",
-        "multi": false,
-        "name": "crdb_node",
-        "options": [],
-        "query": "raftlog_behind{cluster=\"$cluster\",job=\"crdb\",instance=~\"$node\"}",
-        "refresh": 1,
-        "regex": "/store=\"([^\"]+)\"/",
-        "skipUrlSync": false,
-        "sort": 3,
-        "tagValuesQuery": "",
-        "tags": [],
-        "tagsQuery": "",
-        "type": "query",
-        "useTags": false
       }
     ]
   },
@@ -879,8 +627,8 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "utc",
-  "title": "CRDB Console: Runtime",
-  "uid": "crdb-console-runtime",
-  "version": 16
+  "timezone": "browser",
+  "title": "CRDB Console: Changefeeds",
+  "uid": "crdb-console-changefeeds",
+  "version": 7
 }

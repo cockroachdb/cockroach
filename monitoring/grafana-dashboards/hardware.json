@@ -15,8 +15,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 368,
-  "iteration": 1617896248971,
+  "id": 361,
+  "iteration": 1617891048811,
   "links": [],
   "panels": [
     {
@@ -40,7 +40,7 @@
         "y": 0
       },
       "hiddenSeries": false,
-      "id": 24,
+      "id": 18,
       "legend": {
         "avg": false,
         "current": false,
@@ -67,23 +67,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(timeseries_write_samples{job=\"crdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
+          "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$__rate_interval])",
           "interval": "",
-          "legendFormat": "Samples",
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum(rate(timeseries_write_errors{job=\"crdb\",cluster=~\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "",
-          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Time Series Write",
+      "title": "Network Bytes Sent",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -99,11 +93,11 @@
       },
       "yaxes": [
         {
-          "format": "short",
-          "label": null,
+          "format": "bytes",
+          "label": "bytes (MiB)",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -141,7 +135,7 @@
         "y": 8
       },
       "hiddenSeries": false,
-      "id": 22,
+      "id": 16,
       "legend": {
         "avg": false,
         "current": false,
@@ -168,9 +162,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "count(timeseries_write_bytes{job=\"crdb\",cluster=~\"$cluster\",instance=~\"$node\"})",
+          "expr": "rate(sys_host_net_recv_bytes{job=\"crdb\",cluster=~\"$clusterfilter\",instance=~\"$node\"}[$__rate_interval])",
           "interval": "",
-          "legendFormat": "Bytes Written",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -178,7 +172,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Time Series Bytes Written",
+      "title": "Network Bytes Received",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -194,8 +188,8 @@
       },
       "yaxes": [
         {
-          "format": "kbytes",
-          "label": null,
+          "format": "bytes",
+          "label": "bytes (MiB)",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -236,7 +230,7 @@
         "y": 16
       },
       "hiddenSeries": false,
-      "id": 20,
+      "id": 14,
       "legend": {
         "avg": false,
         "current": false,
@@ -263,9 +257,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "avg(avg(rocksdb_read_amplification{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "expr": "rate(sys_host_disk_iopsinprogress{job=\"crdb\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
           "interval": "",
-          "legendFormat": "Read Amplification",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -273,7 +267,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Read Amplification",
+      "title": "Disk OPS in Progress",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -290,7 +284,7 @@
       "yaxes": [
         {
           "format": "short",
-          "label": null,
+          "label": "IOPS",
           "logBase": 1,
           "max": null,
           "min": null,
@@ -331,7 +325,7 @@
         "y": 24
       },
       "hiddenSeries": false,
-      "id": 18,
+      "id": 12,
       "legend": {
         "avg": false,
         "current": false,
@@ -358,23 +352,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(rocksdb_compactions{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
+          "expr": "rate(sys_host_disk_write_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$__rate_interval])",
           "interval": "",
-          "legendFormat": "Compactions",
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum(rate(rocksdb_flushes{job=\"crdb\",cluster=\"$cluster\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "Flushes",
-          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Compactions/Flushes",
+      "title": "Disk Write Ops",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -391,7 +379,7 @@
       "yaxes": [
         {
           "format": "short",
-          "label": null,
+          "label": "Write Ops",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -432,7 +420,7 @@
         "y": 32
       },
       "hiddenSeries": false,
-      "id": 16,
+      "id": 10,
       "legend": {
         "avg": false,
         "current": false,
@@ -459,9 +447,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rocksdb_num_sstables{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"})",
+          "expr": "rate(sys_host_disk_read_count{job=\"crdb\",cluster=~\"$clusterfilter\",instacne=~\"$node\"}[$__rate_interval])",
           "interval": "",
-          "legendFormat": "SS tables",
+          "intervalFactor": 2,
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -469,7 +458,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "SStables",
+      "title": "Disk Read Ops",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -486,7 +475,7 @@
       "yaxes": [
         {
           "format": "short",
-          "label": null,
+          "label": "Read Ops",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -527,7 +516,7 @@
         "y": 40
       },
       "hiddenSeries": false,
-      "id": 14,
+      "id": 8,
       "legend": {
         "avg": false,
         "current": false,
@@ -554,25 +543,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sum(sys_fd_open{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "expr": "rate(sys_host_disk_write_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Open",
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum(sum(sys_fd_softlimit{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Limit",
-          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "File Descriptors",
+      "title": "Disk Writes Bytes",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -588,11 +569,11 @@
       },
       "yaxes": [
         {
-          "format": "short",
-          "label": null,
+          "format": "bytes",
+          "label": "bytes(MiB)",
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {
@@ -630,293 +611,6 @@
         "y": 48
       },
       "hiddenSeries": false,
-      "id": 12,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
-      "nullPointMode": "null",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50,rate(raft_process_commandcommit_latency_bucket{job=\"crdb\", instance=~\"$node\", cluster=~\"$cluster\"}[$__rate_interval]))",
-          "interval": "",
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Command Commit Latency: 50th percentile ",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "µs",
-          "label": "Latency (us)",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_Prometheus}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 9,
-        "w": 24,
-        "x": 0,
-        "y": 56
-      },
-      "hiddenSeries": false,
-      "id": 10,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99,rate(raft_process_commandcommit_latency_bucket{job=\"crdb\", instance=~\"$node\", cluster=~\"$cluster\"}[$__rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Command Commit Latency: 99th percentile ",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "ns",
-          "label": "Latency (ms)",
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_Prometheus}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 65
-      },
-      "hiddenSeries": false,
-      "id": 8,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.50,rate(raft_process_logcommit_latency_bucket{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Log Commit Latency: 50th Percentile",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "µs",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": "${DS_Prometheus}",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 71
-      },
-      "hiddenSeries": false,
       "id": 6,
       "legend": {
         "avg": false,
@@ -929,102 +623,6 @@
       },
       "lines": true,
       "linewidth": 1,
-      "nullPointMode": "null as zero",
-      "options": {
-        "alertThreshold": true
-      },
-      "percentage": false,
-      "pluginVersion": "7.3.7",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99,rate(raft_process_logcommit_latency_bucket{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}[$__rate_interval]))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "{{instance}}",
-          "refId": "A"
-        }
-      ],
-      "thresholds": [],
-      "timeFrom": null,
-      "timeRegions": [],
-      "timeShift": null,
-      "title": "Log Commit LATENCY: 99th Percentile",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "buckets": null,
-        "mode": "time",
-        "name": null,
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "format": "µs",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": "0",
-          "show": true
-        },
-        {
-          "format": "short",
-          "label": null,
-          "logBase": 1,
-          "max": null,
-          "min": null,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false,
-        "alignLevel": null
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": null,
-      "fieldConfig": {
-        "defaults": {
-          "custom": {}
-        },
-        "overrides": []
-      },
-      "fill": 1,
-      "fillGradient": 0,
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 79
-      },
-      "hiddenSeries": false,
-      "id": 4,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": true,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 2,
       "nullPointMode": "null",
       "options": {
         "alertThreshold": true
@@ -1040,25 +638,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sum(livebytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "expr": "rate(sys_host_disk_read_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[$__rate_interval])",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Live",
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum(sum(sysbytes{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "System",
-          "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Live Bytes",
+      "title": "Disk Reads by Bytes",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1075,6 +665,114 @@
       "yaxes": [
         {
           "format": "bytes",
+          "label": "Bytes (MiB)",
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+       "datasource": "${DS_PROMETHEUS}",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      },
+      "hiddenSeries": false,
+      "id": 4,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.3.7",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "rate(container_memory_usage_bytes{job=\"crdb\",clusterfilter=~\"$clusterfilter\", instance=~\"$node\"}[5m])",
+          "interval": "",
+          "legendFormat": "{{instance}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(sys_host_memory_bytes{job=\"crdb\",instance=~\"$node\",cluster=~\"$clusterfilter\"}[5m])",
+          "interval": "",
+          "legendFormat": "",
+          "refId": "B"
+        },
+        {
+          "expr": "",
+          "interval": "",
+          "legendFormat": "",
+          "refId": "C"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Memory Usage",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -1100,7 +798,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": null,
+       "datasource": "${DS_PROMETHEUS}",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -1113,7 +811,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 87
+        "y": 64
       },
       "hiddenSeries": false,
       "id": 2,
@@ -1143,31 +841,18 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(sum(capacity{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance)) - sum(sum(capacity_available{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
+          "expr": "sum(sys_cpu_combined_percent_normalized{job='crdb',cluster=~\"$clusterfilter\",instance=~\"$node\"}) by (instance)",
           "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Used",
+          "intervalFactor": 1,
+          "legendFormat": "{{instance}}",
           "refId": "A"
-        },
-        {
-          "expr": "sum(sum(capacity{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "intervalFactor": 2,
-          "legendFormat": "Capacity",
-          "refId": "B"
-        },
-        {
-          "expr": " sum(sum(capacity_available{job=\"crdb\",cluster=\"$cluster\",instance=~\"$node\"}) by (instance))",
-          "interval": "",
-          "legendFormat": "Available",
-          "refId": "C"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Capacity",
+      "title": "CPU % by Node",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1183,8 +868,8 @@
       },
       "yaxes": [
         {
-          "format": "bytes",
-          "label": "",
+          "format": "percentunit",
+          "label": "CPU (percentage)",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -1213,14 +898,14 @@
       {
         "allValue": null,
         "current": {},
-        "datasource": "${DS_Prometheus}",
+         "datasource": "${DS_PROMETHEUS}",
         "definition": "sys_uptime{job=\"crdb\"}",
         "error": null,
         "hide": 0,
-        "includeAll": false,
-        "label": "Cluster Name",
-        "multi": false,
-        "name": "cluster",
+        "includeAll": true,
+        "label": "Cluster",
+        "multi": true,
+        "name": "clusterfilter",
         "options": [],
         "query": "sys_uptime{job=\"crdb\"}",
         "refresh": 1,
@@ -1235,12 +920,9 @@
       },
       {
         "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": "${DS_Prometheus}",
-        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "current": {},
+         "datasource": "${DS_PROMETHEUS}",
+        "definition": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
         "error": null,
         "hide": 0,
         "includeAll": true,
@@ -1248,7 +930,7 @@
         "multi": false,
         "name": "node",
         "options": [],
-        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$cluster\"},instance)",
+        "query": "label_values(sys_uptime{job=\"crdb\",cluster=\"$clusterfilter\"},instance)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -1263,10 +945,7 @@
         "auto": false,
         "auto_count": 30,
         "auto_min": "10s",
-        "current": {
-          "text": "30s",
-          "value": "30s"
-        },
+        "current": {},
         "error": null,
         "hide": 0,
         "label": "Rate Interval",
@@ -1319,7 +998,6 @@
           }
         ],
         "query": "30s,1m,5m,10m,30m,1h,6h,12h,1d",
-        "queryValue": "",
         "refresh": 2,
         "skipUrlSync": false,
         "type": "interval"
@@ -1332,7 +1010,7 @@
   },
   "timepicker": {},
   "timezone": "utc",
-  "title": "CBDB Console: Storage",
-  "uid": "cbdb-console-storage",
-  "version": 17
+  "title": "CRDB Console: Hardware",
+  "uid": "crdb-console-hardware",
+  "version": 18
 }
