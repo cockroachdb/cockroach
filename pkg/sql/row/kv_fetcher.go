@@ -210,9 +210,15 @@ func (f *BackupSSTKVFetcher) nextBatch(
 			}
 		}
 		if len(f.iter.UnsafeValue()) == 0 {
-			// Value is deleted.
-			f.iter.NextKey()
-			continue
+			if f.endTime.IsEmpty() || f.iter.UnsafeKey().Timestamp.Less(f.endTime) {
+				// Value is deleted at endTime.
+				f.iter.NextKey()
+				continue
+			} else {
+				// Otherwise we call Next to trace back the correct revision.
+				f.iter.Next()
+				continue
+			}
 		}
 		break
 	}
@@ -233,6 +239,7 @@ func (f *BackupSSTKVFetcher) nextBatch(
 	}}
 
 	f.iter.NextKey()
+
 	return true, res, nil, roachpb.Span{}, nil
 }
 

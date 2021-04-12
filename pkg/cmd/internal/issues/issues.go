@@ -57,10 +57,9 @@ var (
 	searchLabel = issueLabels[1]
 )
 
-// If the assignee would be the key in this map, assign to the value instead.
-// Helpful to avoid pinging former employees.
-// An "" value means that issues that would have gone to the key are left
-// unassigned.
+// Replace resolved AuthorGithubHandles according to this map.
+// Helpful to avoid pinging former employees. The zero value
+// pings nobody.
 var oldFriendsMap = map[string]string{
 	"a-robinson":   "andreimatei",
 	"benesch":      "nvanbenschoten",
@@ -69,6 +68,7 @@ var oldFriendsMap = map[string]string{
 	"rohany":       "solongordon",
 	"vivekmenezes": "",
 	"lucy-zhang":   "ajwerner",
+	"mjibson":      "rafiss",
 }
 
 // context augments context.Context with a logger.
@@ -84,9 +84,8 @@ func (ctx *postCtx) Printf(format string, args ...interface{}) {
 	fmt.Fprintf(&ctx.Builder, format, args...)
 }
 
-func (p *poster) getAssignee(ctx *postCtx, authorEmail string) string {
+func (p *poster) getAuthorGithubHandle(ctx *postCtx, authorEmail string) string {
 	if authorEmail == "" {
-		ctx.Printf("no author provided")
 		return ""
 	}
 	commits, _, err := p.listCommits(ctx, p.Org, p.Repo, &github.CommitsListOptions{
@@ -108,17 +107,17 @@ func (p *poster) getAssignee(ctx *postCtx, authorEmail string) string {
 		ctx.Printf("no Author found for user email %s", authorEmail)
 		return ""
 	}
-	assignee := *commits[0].Author.Login
+	authorHandle := *commits[0].Author.Login
 
-	if newAssignee, ok := oldFriendsMap[assignee]; ok {
-		if newAssignee == "" {
-			ctx.Printf("%s marked as alumn{us,a}; leaving issue unassigned", assignee)
+	if newAuthorHandle, ok := oldFriendsMap[authorHandle]; ok {
+		if newAuthorHandle == "" {
+			ctx.Printf("%s marked as alumn{us,a}; ignoring", authorHandle)
 			return ""
 		}
-		ctx.Printf("%s marked as alumn{us/a}; assigning to %s instead", assignee, newAssignee)
-		return newAssignee
+		ctx.Printf("%s marked as alumn{us/a}; resolving to %s instead", authorHandle, newAuthorHandle)
+		return newAuthorHandle
 	}
-	return assignee
+	return authorHandle
 }
 
 func getLatestTag() (string, error) {
@@ -275,19 +274,15 @@ type TemplateData struct {
 	ArtifactsURL string
 	// URL is the link to the failing build.
 	URL string
-	// Assignee is the Github handle, resolved from PostRequest.AuthorEmail.
-	Assignee string
 	// Issues that match this one, except they're on other branches.
 	RelatedIssues []github.Issue
 	// InternalLog contains information about non-critical issues encountered
-	// while forming the issue. For example, a failure to retrieve an assignee
-	// would post an unassigned issue and InternalLog would provide a hint as
-	// to why the assignment failed.
+	// while forming the issue.
 	InternalLog string
 }
 
 func (p *poster) templateData(
-	ctx context.Context, req PostRequest, assignee string, relatedIssues []github.Issue,
+	ctx context.Context, req PostRequest, relatedIssues []github.Issue,
 ) TemplateData {
 	var artifactsURL string
 	if req.Artifacts != "" {
@@ -301,7 +296,6 @@ func (p *poster) templateData(
 		Commit:           p.SHA,
 		ArtifactsURL:     artifactsURL,
 		URL:              p.teamcityBuildLogURL().String(),
-		Assignee:         assignee,
 		RelatedIssues:    relatedIssues,
 		PackageNameShort: strings.TrimPrefix(req.PackageName, CockroachPkgPrefix),
 		CommitURL:        fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA),
@@ -311,12 +305,14 @@ func (p *poster) templateData(
 func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req PostRequest) error {
 	ctx := &postCtx{Context: origCtx}
 
-	assignee := p.getAssignee(ctx, req.AuthorEmail)
+	authorHandle := p.getAuthorGithubHandle(ctx, req.AuthorEmail)
+	if authorHandle != "" {
+		req.Mention = append(req.Mention, "@"+authorHandle)
+	}
 
 	data := p.templateData(
 		ctx,
 		req,
-		assignee,
 		nil, // relatedIssues
 	)
 
@@ -386,7 +382,6 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 			Title:     &title,
 			Body:      github.String(body),
 			Labels:    &createLabels,
-			Assignee:  &assignee,
 			Milestone: p.getProbableMilestone(ctx),
 		}
 		issue, _, err := p.createIssue(ctx, p.Org, p.Repo, &issueRequest)
@@ -468,13 +463,8 @@ type PostRequest struct {
 	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts string
 	// The email of the author. It will be translated into a Github handle and
-	// mentioned in the comment. This increases the chances of the "right person"
-	// seeing the failure early.
-	//
-	// TODO(tbg): remove this. It is already unused in roachtest, and in the unit
-	// tests we can replace it via the `codeowners` package, which allows us to
-	// mention a team via the `Mention` field below (and we should ultimately
-	// spruce things up so that we can assign a ProjectColumnID as well).
+	// appended to the Mention slice below. This increases the chances of the
+	// "right person" seeing the failure early.
 	AuthorEmail string
 	// Mention is a slice of Github handles (@foo, @cockroachdb/some-team, etc)
 	// that should be mentioned in the message.
