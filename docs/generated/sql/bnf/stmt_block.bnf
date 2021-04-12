@@ -2389,7 +2389,7 @@ constraint_name ::=
 
 constraint_elem ::=
 	'CHECK' '(' a_expr ')'
-	| 'UNIQUE' opt_without_index '(' index_params ')' opt_storing opt_interleave opt_partition_by_index opt_where_clause
+	| 'UNIQUE' '(' index_params ')' opt_storing opt_interleave opt_partition_by_index opt_where_clause
 	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded opt_interleave
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 
@@ -2682,10 +2682,6 @@ col_qualification ::=
 	| 'CREATE' 'FAMILY'
 	| 'CREATE' 'IF' 'NOT' 'EXISTS' 'FAMILY' family_name
 
-opt_without_index ::=
-	'WITHOUT' 'INDEX'
-	| 
-
 key_match ::=
 	'MATCH' 'SIMPLE'
 	| 'MATCH' 'FULL'
@@ -2934,7 +2930,7 @@ col_qualification_elem ::=
 	'NOT' 'NULL'
 	| 'NULL'
 	| 'NOT' 'VISIBLE'
-	| 'UNIQUE' opt_without_index
+	| 'UNIQUE'
 	| 'PRIMARY' 'KEY'
 	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
 	| 'CHECK' '(' a_expr ')'
