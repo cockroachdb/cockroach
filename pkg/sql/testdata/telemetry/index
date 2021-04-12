@@ -1,0 +1,122 @@
+# This file contains telemetry tests for sql.schema partial index creation
+# counters.
+
+feature-allowlist
+sql.schema.hash_sharded_index
+sql.schema.inverted_index
+sql.schema.multi_column_inverted_index
+sql.schema.geography_inverted_index
+sql.schema.geometry_inverted_index
+sql.schema.partial_index
+sql.schema.partial_inverted_index
+sql.schema.partitioned_inverted_index
+----
+
+#### CREATE TABLE tests.
+
+feature-usage
+CREATE TABLE a (i INT, INDEX (i) WHERE i > 0)
+----
+sql.schema.partial_index
+
+feature-usage
+CREATE TABLE b (i INT, UNIQUE INDEX (i) WHERE i > 0)
+----
+sql.schema.partial_index
+
+feature-usage
+CREATE TABLE c (i INT, j JSON, INVERTED INDEX (j) WHERE i > 0)
+----
+sql.schema.inverted_index
+sql.schema.partial_index
+sql.schema.partial_inverted_index
+
+feature-usage
+CREATE TABLE d (i INT, j JSON, INVERTED INDEX (i, j))
+----
+sql.schema.inverted_index
+sql.schema.multi_column_inverted_index
+
+feature-usage
+CREATE TABLE g (i INT, geog GEOGRAPHY, INVERTED INDEX (geog))
+----
+sql.schema.geography_inverted_index
+sql.schema.inverted_index
+
+feature-usage
+CREATE TABLE g2 (i INT, geom GEOMETRY, INVERTED INDEX (geom))
+----
+sql.schema.geometry_inverted_index
+sql.schema.inverted_index
+
+feature-usage
+CREATE TABLE g3 (i INT, geom GEOMETRY, INVERTED INDEX (i, geom) WHERE i > 1)
+----
+sql.schema.geometry_inverted_index
+sql.schema.inverted_index
+sql.schema.multi_column_inverted_index
+sql.schema.partial_index
+sql.schema.partial_inverted_index
+
+# Do not increment any index telemetry when the partial index predicate is
+# invalid.
+feature-usage
+CREATE TABLE err (i INT, j JSON, INVERTED INDEX (i, j) WHERE i);
+CREATE TABLE err (i INT, geom GEOMETRY, INVERTED INDEX (i, geom) WHERE i);
+----
+error: pq: expected index predicate expression to have type bool, but 'i' has type int
+
+#### CREATE INDEX tests.
+
+feature-usage
+CREATE INDEX i ON b (i) WHERE i < 0
+----
+sql.schema.partial_index
+
+#### CREATE INVERTED INDEX tests.
+
+exec
+CREATE TABLE g4 (i INT, geog GEOGRAPHY, geom GEOMETRY)
+----
+
+feature-usage
+CREATE INVERTED INDEX i ON d (j) WHERE i > 0
+----
+sql.schema.inverted_index
+sql.schema.partial_index
+sql.schema.partial_inverted_index
+
+feature-usage
+CREATE INVERTED INDEX i2 ON d (i, j)
+----
+sql.schema.inverted_index
+sql.schema.multi_column_inverted_index
+
+feature-usage
+CREATE INVERTED INDEX i ON g4 (geog)
+----
+sql.schema.geography_inverted_index
+sql.schema.inverted_index
+
+feature-usage
+CREATE INVERTED INDEX i2 ON g4 (geom)
+----
+sql.schema.geometry_inverted_index
+sql.schema.inverted_index
+
+feature-usage
+CREATE INVERTED INDEX i3 ON g4 (i, geom) WHERE i > 1
+----
+sql.schema.geometry_inverted_index
+sql.schema.inverted_index
+sql.schema.multi_column_inverted_index
+sql.schema.partial_index
+sql.schema.partial_inverted_index
+
+# Do not increment any index telemetry when the partial index predicate is
+# invalid.
+feature-usage
+CREATE INVERTED INDEX err ON d (i, j) WHERE i;
+CREATE INVERTED INDEX err ON g4 (i, geom) WHERE i
+----
+error: pq: expected index predicate expression to have type bool, but 'i' has type int

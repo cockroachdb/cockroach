@@ -1967,7 +1967,6 @@ func NewTableDesc(
 					return nil, err
 				}
 				idx.Predicate = expr
-				telemetry.Inc(sqltelemetry.PartialIndexCounter)
 			}
 			if err := paramparse.ApplyStorageParameters(
 				ctx,
@@ -2059,7 +2058,6 @@ func NewTableDesc(
 					return nil, err
 				}
 				idx.Predicate = expr
-				telemetry.Inc(sqltelemetry.PartialIndexCounter)
 			}
 			if err := desc.AddIndex(idx, d.PrimaryKey); err != nil {
 				return nil, err
@@ -2323,6 +2321,18 @@ func NewTableDesc(
 					telemetry.Inc(sqltelemetry.GeometryInvertedIndexCounter)
 				}
 			}
+			if idx.IsPartial() {
+				telemetry.Inc(sqltelemetry.PartialInvertedIndexCounter)
+			}
+			if idx.NumColumns() > 1 {
+				telemetry.Inc(sqltelemetry.MultiColumnInvertedIndexCounter)
+			}
+			if idx.GetPartitioning().NumColumns != 0 {
+				telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
+			}
+		}
+		if idx.IsPartial() {
+			telemetry.Inc(sqltelemetry.PartialIndexCounter)
 		}
 		return nil
 	}); err != nil {
