@@ -241,6 +241,10 @@ func (n *createTableNode) startExec(params runParams) error {
 		tree.ResolveRequireTableDesc, n.n.IfNotExists)
 	if err != nil {
 		if sqlerrors.IsRelationAlreadyExistsError(err) && n.n.IfNotExists {
+			params.p.BufferClientNotice(
+				params.ctx,
+				pgnotice.Newf("relation %q already exists, skipping", n.n.Table.Table()),
+			)
 			return nil
 		}
 		return err
