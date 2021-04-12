@@ -118,8 +118,8 @@ func TestExtractInvalidJulianDate(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if err.Error() != "field Year is not wanted in 0" {
-		t.Fatal("expected different error message")
+	if exp := "field Year is not wanted in 0"; err.Error() != exp {
+		t.Fatalf("expected different error message:\ngot: %v\nexpected: %v", err.Error(), exp)
 	}
 }
 

@@ -11,7 +11,6 @@
 package pgdate
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // numberChunk associates a value with a leading separator,
@@ -31,11 +31,15 @@ type numberChunk struct {
 	magnitude int
 }
 
-func (n numberChunk) String() string {
+func (n numberChunk) String() string { return redact.StringWithoutMarkers(n) }
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (n numberChunk) SafeFormat(w redact.SafePrinter, _ rune) {
 	if n.separator == utf8.RuneError {
-		return fmt.Sprintf("%d", n.v)
+		w.Print(n.v)
+		return
 	}
-	return fmt.Sprintf("%v%d", n.separator, n.v)
+	w.Printf("%c%d", n.separator, n.v)
 }
 
 // fieldExtract manages the state of a date/time parsing operation.
@@ -755,7 +759,7 @@ func (fe *fieldExtract) matchedSentinel(value time.Time, match string) error {
 // Reset replaces a value of an already-set field.
 func (fe *fieldExtract) Reset(field field, v int) error {
 	if !fe.has.Has(field) {
-		return errors.AssertionFailedf("field %s is not already set", errors.Safe(field.Pretty()))
+		return errors.AssertionFailedf("field %s is not already set", field.SafePretty())
 	}
 	fe.data[field] = v
 	return nil
@@ -765,7 +769,7 @@ func (fe *fieldExtract) Reset(field field, v int) error {
 // the field has already been set.
 func (fe *fieldExtract) Set(field field, v int) error {
 	if !fe.wanted.Has(field) {
-		return inputErrorf("field %s is not wanted in %v", errors.Safe(field.Pretty()), errors.Safe(fe.wanted))
+		return inputErrorf("field %s is not wanted in %v", field.SafePretty(), &fe.wanted)
 	}
 	fe.data[field] = v
 	fe.has = fe.has.Add(field)
@@ -856,16 +860,18 @@ func (fe *fieldExtract) SetDayOfYear(chunk numberChunk) error {
 	return fe.Set(fieldDay, d)
 }
 
-func (fe *fieldExtract) String() string {
-	ret := "[ "
+// SafeFormat implements the redact.SafeFormatter interface.
+func (fe *fieldExtract) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.SafeString("[ ")
 	for f := fieldMinimum; f <= fieldMaximum; f++ {
 		if v, ok := fe.Get(f); ok {
-			ret += fmt.Sprintf("%s: %d ", f.Pretty(), v)
+			w.Printf("%s: %d ", f.SafePretty(), v)
 		}
 	}
-	ret += "]"
-	return ret
+	w.SafeRune(']')
 }
+
+func (fe *fieldExtract) String() string { return redact.StringWithoutMarkers(fe) }
 
 // validate ensures that the data in the extract is reasonable. It also
 // performs some field fixups, such as converting two-digit years
