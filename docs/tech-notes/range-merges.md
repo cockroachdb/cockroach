@@ -828,8 +828,8 @@ fact that it requires unanimous consent from all replicas, instead of a majority
 quorum, like everything else in Raft. Further confusing matters, only the RHS
 needs unanimous consent; a merge can proceed with only majority consent from the
 LHS. In fact, it's even a bit more subtle: while only a majority of the LHS
-replicas need to vote on the merge command, all LHS replicas need to confirm
-that they are initialized for the merge to start.
+replicas need to vote on the merge command, all LHS and RHS replicas need to
+confirm that they are initialized for the merge to start.
 
 There is no theoretical reason that merges need unanimous consent, but the
 complexity of the implementation quickly skyrockets without it. For example,
@@ -837,11 +837,12 @@ suppose you adjusted the transfer of power so that only a majority of replicas
 on the RHS need to be fully up to date before the merge commits. Now, when
 applying the merge trigger, the LHS needs to check to see if its copy of the RHS
 is up to date; if it's not, the LHS needs to throw away its entire Raft state
-and demand a snapshot from the leader. This is both unsightly—our code is worse
-off every time we reach into Raft—and less efficient than the existing
-implementation, as it requires sending a potentially multi-megabyte snapshot if
-one replica of the RHS is just a little bit behind in applying the latest
-commands.
+and demand a snapshot from the leader because its copy of the RHS may never
+catch up (its Raft group may have already been destroyed by this point). This is
+both unsightly—our code is worse off every time we reach into Raft—and less
+efficient than the existing implementation, as it requires sending a potentially
+multi-megabyte snapshot if one replica of the RHS is just a little bit behind in
+applying the latest commands.
 
 It's possible that these problems could be mitigated while retaining the ability
 to merge with a minority of replicas offline, but an obvious solution did not
