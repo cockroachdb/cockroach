@@ -1,0 +1,108 @@
+# NB: extension names do not get anonymized.
+# Refer to (*CreateExtension).Format() for details.
+
+parse
+CREATE EXTENSION bob
+----
+CREATE EXTENSION bob
+CREATE EXTENSION bob -- fully parenthetized
+CREATE EXTENSION bob -- literals removed
+CREATE EXTENSION bob -- identifiers removed
+
+parse
+CREATE EXTENSION IF NOT EXISTS bob
+----
+CREATE EXTENSION IF NOT EXISTS bob
+CREATE EXTENSION IF NOT EXISTS bob -- fully parenthetized
+CREATE EXTENSION IF NOT EXISTS bob -- literals removed
+CREATE EXTENSION IF NOT EXISTS bob -- identifiers removed
+
+parse
+CREATE STATISTICS a ON col1 FROM t
+----
+CREATE STATISTICS a ON col1 FROM t
+CREATE STATISTICS a ON col1 FROM t -- fully parenthetized
+CREATE STATISTICS a ON col1 FROM t -- literals removed
+CREATE STATISTICS _ ON _ FROM _ -- identifiers removed
+
+parse
+EXPLAIN CREATE STATISTICS a ON col1 FROM t
+----
+EXPLAIN CREATE STATISTICS a ON col1 FROM t
+EXPLAIN CREATE STATISTICS a ON col1 FROM t -- fully parenthetized
+EXPLAIN CREATE STATISTICS a ON col1 FROM t -- literals removed
+EXPLAIN CREATE STATISTICS _ ON _ FROM _ -- identifiers removed
+
+parse
+CREATE STATISTICS a FROM t
+----
+CREATE STATISTICS a FROM t
+CREATE STATISTICS a FROM t -- fully parenthetized
+CREATE STATISTICS a FROM t -- literals removed
+CREATE STATISTICS _ FROM _ -- identifiers removed
+
+parse
+CREATE STATISTICS a FROM [53]
+----
+CREATE STATISTICS a FROM [53]
+CREATE STATISTICS a FROM [53] -- fully parenthetized
+CREATE STATISTICS a FROM [53] -- literals removed
+CREATE STATISTICS _ FROM [53] -- identifiers removed
+
+parse
+CREATE STATISTICS a ON col1, col2 FROM t
+----
+CREATE STATISTICS a ON col1, col2 FROM t
+CREATE STATISTICS a ON col1, col2 FROM t -- fully parenthetized
+CREATE STATISTICS a ON col1, col2 FROM t -- literals removed
+CREATE STATISTICS _ ON _, _ FROM _ -- identifiers removed
+
+parse
+CREATE STATISTICS a ON col1 FROM d.t
+----
+CREATE STATISTICS a ON col1 FROM d.t
+CREATE STATISTICS a ON col1 FROM d.t -- fully parenthetized
+CREATE STATISTICS a ON col1 FROM d.t -- literals removed
+CREATE STATISTICS _ ON _ FROM _._ -- identifiers removed
+
+parse
+CREATE STATISTICS a ON col1 FROM t
+----
+CREATE STATISTICS a ON col1 FROM t
+CREATE STATISTICS a ON col1 FROM t -- fully parenthetized
+CREATE STATISTICS a ON col1 FROM t -- literals removed
+CREATE STATISTICS _ ON _ FROM _ -- identifiers removed
+
+parse
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.9
+----
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.9
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.9 -- fully parenthetized
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE STATISTICS _ ON _ FROM _ WITH OPTIONS THROTTLING 0.9 -- identifiers removed
+
+parse
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'
+----
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME ('2016-01-01') -- fully parenthetized
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME _ -- literals removed
+CREATE STATISTICS _ ON _ FROM _ WITH OPTIONS AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
+
+parse
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 AS OF SYSTEM TIME '2016-01-01'
+----
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 AS OF SYSTEM TIME '2016-01-01'
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 AS OF SYSTEM TIME ('2016-01-01') -- fully parenthetized
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING _ AS OF SYSTEM TIME _ -- literals removed
+REPARSE WITHOUT LITERALS FAILS: at or near "_": syntax error
+CREATE STATISTICS _ ON _ FROM _ WITH OPTIONS THROTTLING 0.1 AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
+
+parse
+CREATE STATISTICS a ON col1 FROM t AS OF SYSTEM TIME '2016-01-01'
+----
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01' -- normalized!
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME ('2016-01-01') -- fully parenthetized
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME _ -- literals removed
+CREATE STATISTICS _ ON _ FROM _ WITH OPTIONS AS OF SYSTEM TIME '2016-01-01' -- identifiers removed
