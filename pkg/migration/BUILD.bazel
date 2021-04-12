@@ -4,9 +4,9 @@ go_library(
     name = "migration",
     srcs = [
         "helpers.go",
-        "kv_migration.go",
         "migration.go",
-        "sql_migration.go",
+        "system_migration.go",
+        "tenant_migration.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/migration",
     visibility = ["//visibility:public"],
