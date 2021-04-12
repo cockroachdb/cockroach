@@ -18,7 +18,7 @@ import (
 )
 
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
-var supportedTypeORMRelease = "0.2.24"
+var supportedTypeORMRelease = "0.2.32"
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r *testRegistry) {

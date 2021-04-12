@@ -21,7 +21,7 @@ import (
 var activerecordResultRegex = regexp.MustCompile(`^(?P<test>[^\s]+#[^\s]+) = (?P<timing>\d+\.\d+ s) = (?P<result>.)$`)
 var railsReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)\.?(?P<subpoint>\d*)$`)
 var supportedRailsVersion = "6.1"
-var adapterVersion = "v6.1.0-beta.2"
+var activerecordAdapterVersion = "v6.1.0-beta.3"
 
 // This test runs activerecord's full test suite against a single cockroach node.
 
@@ -81,7 +81,7 @@ func registerActiveRecord(r *testRegistry) {
 		}
 		c.l.Printf("Latest rails release is %s.", latestTag)
 		c.l.Printf("Supported rails release is %s.", supportedRailsVersion)
-		c.l.Printf("Supported adapter version is %s.", adapterVersion)
+		c.l.Printf("Supported adapter version is %s.", activerecordAdapterVersion)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -125,7 +125,7 @@ func registerActiveRecord(r *testRegistry) {
 			c,
 			"https://github.com/cockroachdb/activerecord-cockroachdb-adapter.git",
 			"/mnt/data1/activerecord-cockroachdb-adapter",
-			adapterVersion,
+			activerecordAdapterVersion,
 			node,
 		); err != nil {
 			t.Fatal(err)

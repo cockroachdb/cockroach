@@ -24,7 +24,7 @@ import (
 
 // Currently, we're running a version like 'v9.0.1'.
 var gopgReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)(?:\.(?P<minor>\d+)(?:\.(?P<point>\d+))?)?$`)
-var gopgSupportedTag = "v10.0.1"
+var gopgSupportedTag = "v10.9.0"
 
 // This test runs gopg full test suite against a single cockroach node.
 func registerGopg(r *testRegistry) {
