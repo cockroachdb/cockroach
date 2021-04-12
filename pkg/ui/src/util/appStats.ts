@@ -180,6 +180,7 @@ export function aggregateStatementStats(
 export interface ExecutionStatistics {
   statement: string;
   app: string;
+  database: string;
   distSQL: boolean;
   vec: boolean;
   opt: boolean;
@@ -196,6 +197,7 @@ export function flattenStatementStats(
   return statementStats.map((stmt) => ({
     statement: stmt.key.key_data.query,
     app: stmt.key.key_data.app,
+    database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
     vec: stmt.key.key_data.vec,
     opt: stmt.key.key_data.opt,
@@ -211,4 +213,11 @@ export function combineStatementStats(
   statementStats: StatementStatistics[],
 ): StatementStatistics {
   return _.reduce(statementStats, addStatementStats);
+}
+
+// This function returns a key based on all parameters
+// that should be used to group statements.
+// Parameters being used: node_id, implicit_txn and database.
+export function statementKey(stmt: ExecutionStatistics): string {
+  return stmt.statement + stmt.implicit_txn + stmt.database;
 }

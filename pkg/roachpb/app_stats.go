@@ -19,13 +19,18 @@ import (
 // StmtID is the type of a Statement ID.
 type StmtID uint64
 
-// ConstructStatementID constructs an ID by hashing an anonymized query, it's
-// failure status, and if it was part of an implicit txn. At the time of writing,
+// ConstructStatementID constructs an ID by hashing an anonymized query, its database
+// and failure status, and if it was part of an implicit txn. At the time of writing,
 // these are the axis' we use to bucket queries for stats collection
 // (see stmtKey).
-func ConstructStatementID(anonymizedStmt string, failed bool, implicitTxn bool) StmtID {
+func ConstructStatementID(
+	anonymizedStmt string, failed bool, implicitTxn bool, database string,
+) StmtID {
 	fnv := util.MakeFNV64()
 	for _, c := range anonymizedStmt {
+		fnv.Add(uint64(c))
+	}
+	for _, c := range database {
 		fnv.Add(uint64(c))
 	}
 	if failed {
