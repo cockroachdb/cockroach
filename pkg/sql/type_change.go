@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -356,6 +357,23 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				return err
 			}
 
+			// Initialize the regional by row repartitioner before the type changes are written.
+			var r regionalByRowRepartitioner
+			if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+				var deferFunc func()
+				r, deferFunc, err = initRegionalByRowRepartitioner(
+					ctx,
+					typeDesc,
+					txn,
+					t.execCfg,
+					descsCol,
+				)
+				if err != nil {
+					return err
+				}
+				defer deferFunc()
+			}
+
 			if err := txn.Run(ctx, b); err != nil {
 				return err
 			}
@@ -365,19 +383,16 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			// REGIONAL BY ROW tables must be updated to reflect the new region values
 			// available.
 			if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
-				immut, err := descsCol.GetImmutableTypeByID(ctx, txn, t.typeID, tree.ObjectLookupFlags{})
-				if err != nil {
-					return err
-				}
 				if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeMultiRegionUpdates; fn != nil {
 					return fn()
 				}
 				repartitionedTables, err = performMultiRegionFinalization(
 					ctx,
-					immut,
 					txn,
 					t.execCfg,
 					descsCol,
+					r,
+					typeDesc.GetParentID(),
 				)
 				if err != nil {
 					return err
@@ -434,12 +449,13 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 // has completed. A list of re-partitioned tables, if any, is returned.
 func performMultiRegionFinalization(
 	ctx context.Context,
-	typeDesc catalog.TypeDescriptor,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	descsCol *descs.Collection,
+	r regionalByRowRepartitioner,
+	databaseID descpb.ID,
 ) ([]descpb.ID, error) {
-	regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.GetParentID(), descsCol)
+	regionConfig, err := SynthesizeRegionConfig(ctx, txn, databaseID, descsCol)
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +463,7 @@ func performMultiRegionFinalization(
 	// zone configuration on the database.
 	if err := ApplyZoneConfigFromDatabaseRegionConfig(
 		ctx,
-		typeDesc.GetParentID(),
+		databaseID,
 		regionConfig,
 		txn,
 		execCfg,
@@ -455,28 +471,54 @@ func performMultiRegionFinalization(
 		return nil, err
 	}
 
-	return repartitionRegionalByRowTables(ctx, typeDesc, txn, execCfg, descsCol, regionConfig)
+	return r.repartition(ctx, regionConfig)
 }
 
-// repartitionRegionalByRowTables takes a multi-region enum and re-partitions
+// regionalByRowRepartioner takes a multi-region enum and re-partitions
 // all REGIONAL BY ROW tables in the enclosing database such that there is a
 // partition and corresponding zone configuration for all PUBLIC enum members
-// (regions).
-func repartitionRegionalByRowTables(
+// (regions). This must be done in two stages:
+// - Stage one to grab all table descriptors before the ENUM changes are written
+//   (otherwise, fetching the tables  after the ENUM is written will result in a
+//    validation error where the REGIONAL BY ROW tables do not match the partitions).
+// - Stage two will execute after the regions are finalized on the type descriptor.
+//   We need to re-hydrate the enums on the table descriptor, then execute the
+//   repartition. Re-hydration is necessary to mark the region in transition
+//   as public.
+type regionalByRowRepartitioner struct {
+	localPlanner        *planner
+	regionalByRowTables []*tabledesc.Mutable
+	txn                 *kv.Txn
+	databaseID          descpb.ID
+	typeID              descpb.ID
+	descsCol            *descs.Collection
+}
+
+// initRegionalByRowRepartitioner starts stage one of the repartition regional by row
+// process, returning a regionalByRowRepartitioner struct, and a function to defer
+// if no error is returned from this function.
+func initRegionalByRowRepartitioner(
 	ctx context.Context,
 	typeDesc catalog.TypeDescriptor,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
 	descsCol *descs.Collection,
-	regionConfig multiregion.RegionConfig,
-) ([]descpb.ID, error) {
-	var repartitionedTableIDs []descpb.ID
+) (regionalByRowRepartitioner, func(), error) {
 	if typeDesc.GetKind() != descpb.TypeDescriptor_MULTIREGION_ENUM {
-		return repartitionedTableIDs, errors.AssertionFailedf(
+		return regionalByRowRepartitioner{}, nil, errors.AssertionFailedf(
 			"expected multi-region enum, but found type descriptor of kind: %v", typeDesc.GetKind(),
 		)
 	}
-	p, cleanup := NewInternalPlanner(
+
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
+		ctx, txn, typeDesc.GetParentID(), tree.DatabaseLookupFlags{
+			Required: true,
+		})
+	if err != nil {
+		return regionalByRowRepartitioner{}, nil, err
+	}
+
+	p, deferFunc := NewInternalPlanner(
 		"repartition-regional-by-row-tables",
 		txn,
 		security.RootUserName(),
@@ -485,19 +527,18 @@ func repartitionRegionalByRowTables(
 		sessiondatapb.SessionData{},
 		WithDescCollection(descsCol),
 	)
-	defer cleanup()
 	localPlanner := p.(*planner)
-
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-		ctx, txn, typeDesc.GetParentID(), tree.DatabaseLookupFlags{
-			Required: true,
-		})
-	if err != nil {
-		return nil, err
+	ret := regionalByRowRepartitioner{
+		localPlanner: localPlanner,
+		txn:          txn,
+		databaseID:   typeDesc.GetParentID(),
+		typeID:       typeDesc.GetID(),
+		descsCol:     descsCol,
 	}
 
-	b := txn.NewBatch()
-	err = localPlanner.forEachMutableTableInDatabase(ctx, dbDesc,
+	if err = localPlanner.forEachMutableTableInDatabase(
+		ctx,
+		dbDesc,
 		func(ctx context.Context, tableDesc *tabledesc.Mutable) error {
 			if !tableDesc.IsLocalityRegionalByRow() || tableDesc.Dropped() {
 				// We only need to re-partition REGIONAL BY ROW tables. Even then, we
@@ -505,96 +546,134 @@ func repartitionRegionalByRowTables(
 				// been dropped.
 				return nil
 			}
-
-			colName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
-			if err != nil {
-				return err
-			}
-			partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
-
-			// oldPartitioningDescs saves the old partitioning descriptors for each
-			// index that is repartitioned. This is later used to remove zone
-			// configurations from any partitions that are removed.
-			oldPartitioningDescs := make(map[descpb.IndexID]descpb.PartitioningDescriptor)
-
-			// Update the partitioning on all indexes of the table that aren't being
-			// dropped.
-			for _, index := range tableDesc.NonDropIndexes() {
-				newIdx, err := CreatePartitioning(
-					ctx,
-					localPlanner.extendedEvalCtx.Settings,
-					localPlanner.EvalContext(),
-					tableDesc,
-					*index.IndexDesc(),
-					partitionAllBy,
-					nil,  /* allowedNewColumnName*/
-					true, /* allowImplicitPartitioning */
-				)
-				if err != nil {
-					return err
-				}
-
-				oldPartitioningDescs[index.GetID()] = index.IndexDesc().Partitioning
-
-				// Update the index descriptor proto's partitioning.
-				index.IndexDesc().Partitioning = newIdx.Partitioning
-			}
-
-			// Remove zone configurations that applied to partitions that were removed
-			// in the previous step. This requires all indexes to have been
-			// repartitioned such that there is no partitioning on the removed enum
-			// value. This is because `deleteRemovedPartitionZoneConfigs` generates
-			// subzone spans for the entire table (all indexes) downstream for each
-			// index. Spans can only be generated if partitioning values are present on
-			// the type descriptor (removed enum values obviously aren't), so we must
-			// remove the partition from all indexes before trying to delete zone
-			// configurations.
-			for _, index := range tableDesc.NonDropIndexes() {
-				oldPartitioning := oldPartitioningDescs[index.GetID()]
-
-				// Remove zone configurations that reference partition values we removed
-				// in the previous step.
-				if err = deleteRemovedPartitionZoneConfigs(
-					ctx,
-					txn,
-					tableDesc,
-					index.IndexDesc(),
-					&oldPartitioning,
-					&index.IndexDesc().Partitioning,
-					execCfg,
-				); err != nil {
-					return err
-				}
-			}
-
-			// Update the zone configurations now that the partition's been added.
-			regionConfig, err := SynthesizeRegionConfig(ctx, txn, typeDesc.GetParentID(), descsCol)
-			if err != nil {
-				return err
-			}
-			if err := ApplyZoneConfigForMultiRegionTable(
-				ctx,
-				txn,
-				localPlanner.ExecCfg(),
-				regionConfig,
+			ret.regionalByRowTables = append(
+				ret.regionalByRowTables,
 				tableDesc,
-				ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
-			); err != nil {
-				return err
-			}
-
-			if err := localPlanner.Descriptors().WriteDescToBatch(ctx, false /* kvTrace */, tableDesc, b); err != nil {
-				return err
-			}
-
-			repartitionedTableIDs = append(repartitionedTableIDs, tableDesc.GetID())
+			)
 			return nil
-		})
-	if err != nil {
-		return nil, err
+		},
+	); err != nil {
+		deferFunc()
+		return regionalByRowRepartitioner{}, nil, err
+	}
+	return ret, deferFunc, nil
+}
+
+// repartition performs stage two of the regional by row repartitioning, returning
+// the list of IDs of tables that were repartitioned.
+func (r *regionalByRowRepartitioner) repartition(
+	ctx context.Context, regionConfig multiregion.RegionConfig,
+) ([]descpb.ID, error) {
+	if len(r.regionalByRowTables) == 0 {
+		return nil, nil
 	}
 
-	if err := txn.Run(ctx, b); err != nil {
+	var repartitionedTableIDs []descpb.ID
+
+	b := r.txn.NewBatch()
+	for _, tableDesc := range r.regionalByRowTables {
+		// This is the fun part! Since we hydrated the columns with the old enum,
+		// and now that the enum has moved all read-only members away, we have to
+		// re-hydrate all the enums.
+		for i := range tableDesc.Columns {
+			col := &tableDesc.Columns[i]
+			if col.Type.UserDefined() && typedesc.UserDefinedTypeOIDToID(col.Type.Oid()) == r.typeID {
+				col.Type.TypeMeta = types.UserDefinedTypeMetadata{}
+			}
+		}
+		if err := typedesc.HydrateTypesInTableDescriptor(
+			ctx,
+			tableDesc.TableDesc(),
+			r.localPlanner,
+		); err != nil {
+			return nil, err
+		}
+
+		colName, err := tableDesc.GetRegionalByRowTableRegionColumnName()
+		if err != nil {
+			return nil, err
+		}
+		partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
+
+		// oldPartitioningDescs saves the old partitioning descriptors for each
+		// index that is repartitioned. This is later used to remove zone
+		// configurations from any partitions that are removed.
+		oldPartitioningDescs := make(map[descpb.IndexID]descpb.PartitioningDescriptor)
+
+		// Update the partitioning on all indexes of the table that aren't being
+		// dropped.
+		for _, index := range tableDesc.NonDropIndexes() {
+			newIdx, err := CreatePartitioning(
+				ctx,
+				r.localPlanner.extendedEvalCtx.Settings,
+				r.localPlanner.EvalContext(),
+				tableDesc,
+				*index.IndexDesc(),
+				partitionAllBy,
+				nil,  /* allowedNewColumnName*/
+				true, /* allowImplicitPartitioning */
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			oldPartitioningDescs[index.GetID()] = index.IndexDesc().Partitioning
+
+			// Update the index descriptor proto's partitioning.
+			index.IndexDesc().Partitioning = newIdx.Partitioning
+		}
+
+		// Remove zone configurations that applied to partitions that were removed
+		// in the previous step. This requires all indexes to have been
+		// repartitioned such that there is no partitioning on the removed enum
+		// value. This is because `deleteRemovedPartitionZoneConfigs` generates
+		// subzone spans for the entire table (all indexes) downstream for each
+		// index. Spans can only be generated if partitioning values are present on
+		// the type descriptor (removed enum values obviously aren't), so we must
+		// remove the partition from all indexes before trying to delete zone
+		// configurations.
+		for _, index := range tableDesc.NonDropIndexes() {
+			oldPartitioning := oldPartitioningDescs[index.GetID()]
+
+			// Remove zone configurations that reference partition values we removed
+			// in the previous step.
+			if err = deleteRemovedPartitionZoneConfigs(
+				ctx,
+				r.txn,
+				tableDesc,
+				index.IndexDesc(),
+				&oldPartitioning,
+				&index.IndexDesc().Partitioning,
+				r.localPlanner.ExecCfg(),
+			); err != nil {
+				return nil, err
+			}
+		}
+
+		// Update the zone configurations now that the partitions have been added.
+		regionConfig, err := SynthesizeRegionConfig(ctx, r.txn, r.databaseID, r.descsCol)
+		if err != nil {
+			return nil, err
+		}
+		if err := ApplyZoneConfigForMultiRegionTable(
+			ctx,
+			r.txn,
+			r.localPlanner.ExecCfg(),
+			regionConfig,
+			tableDesc,
+			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+		); err != nil {
+			return nil, err
+		}
+
+		if err := r.localPlanner.Descriptors().WriteDescToBatch(ctx, false /* kvTrace */, tableDesc, b); err != nil {
+			return nil, err
+		}
+
+		repartitionedTableIDs = append(repartitionedTableIDs, tableDesc.GetID())
+	}
+
+	if err := r.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
 

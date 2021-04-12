@@ -345,7 +345,7 @@ type TypeDescriptor interface {
 	PrimaryRegionName() (descpb.RegionName, error)
 	RegionNames() (descpb.RegionNames, error)
 	RegionNamesIncludingTransitioning() (descpb.RegionNames, error)
-	RegionNamesForZoneConfigValidation() (descpb.RegionNames, error)
+	RegionNamesForValidation() (descpb.RegionNames, error)
 	GetArrayTypeID() descpb.ID
 	GetKind() descpb.TypeDescriptor_Kind
 

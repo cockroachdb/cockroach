@@ -196,14 +196,14 @@ func (desc *immutable) RegionNames() (descpb.RegionNames, error) {
 	return regions, nil
 }
 
-// RegionNamesForZoneConfigValidation returns all regions on the multi-region
-// enum to make validation with the public zone configs possible. Since the zone
-// configs are only updated when a transaction commits, this must ignore all
-// regions being added (since they will not be reflected in the zone
-// configuration yet), but it must include all region being dropped (since they
-// will not be dropped from the zone configuration until they are fully removed
-// from the type descriptor, again, at the end of the transaction).
-func (desc *immutable) RegionNamesForZoneConfigValidation() (descpb.RegionNames, error) {
+// RegionNamesForValidation returns all regions on the multi-region
+// enum to make validation with zone configs and table descriptors possible.
+// Since the zone configs and table descriptor are only updated when a transaction
+// commits, this must ignore all regions being added (since they will not be
+// reflected in the zone configuration yet), but it must include all region being
+// dropped (since they will not be dropped from the zone configuration until they
+// are fully removed from the type descriptor, again, at the end of the transaction).
+func (desc *immutable) RegionNamesForValidation() (descpb.RegionNames, error) {
 	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
 		return nil, errors.AssertionFailedf(
 			"can not get regions of a non multi-region enum %d", desc.ID,

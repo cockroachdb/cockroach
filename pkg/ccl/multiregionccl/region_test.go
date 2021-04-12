@@ -141,7 +141,7 @@ func TestConcurrentAddDropRegions(t *testing.T) {
 			// Create a multi-region database with a REGIONAL BY ROW table inside of it
 			// which needs to be re-partitioned on add/drop operations.
 			_, err := sqlDB.Exec(`
-CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"; 
+CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
 CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 			require.NoError(t, err)
 
@@ -157,12 +157,12 @@ CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 
 			// Start the second operation.
 			_, err = sqlDB.Exec(tc.secondOp)
+			close(secondOpFinished)
 			if tc.secondOpErr == "" {
 				require.NoError(t, err)
 			} else {
 				require.True(t, testutils.IsError(err, tc.secondOpErr))
 			}
-			close(secondOpFinished)
 
 			<-firstOpFinished
 
