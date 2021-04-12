@@ -231,7 +231,11 @@ func verifyClusterName(clusterName string) (string, error) {
 		for _, account := range active {
 			if !seenAccounts[account] {
 				seenAccounts[account] = true
-				accounts = append(accounts, account)
+				cleanAccount := vm.DNSSafeAccount(account)
+				if cleanAccount != account {
+					log.Printf("WARN: using `%s' as username instead of `%s'", cleanAccount, account)
+				}
+				accounts = append(accounts, cleanAccount)
 			}
 		}
 	}
