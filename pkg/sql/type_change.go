@@ -360,7 +360,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			// available.
 			if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
 				if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeMultiRegionUpdates; fn != nil {
-					return fn()
+					if err := fn(); err != nil {
+						return err
+					}
 				}
 				regionChangeFinalizer = newDatabaseRegionChangeFinalizer(typeDesc.GetParentID(), typeDesc.GetID())
 				if err := regionChangeFinalizer.finalize(ctx, txn, descsCol, t.execCfg); err != nil {
