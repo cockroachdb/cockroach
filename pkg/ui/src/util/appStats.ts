@@ -180,6 +180,7 @@ export function aggregateStatementStats(
 export interface ExecutionStatistics {
   statement: string;
   app: string;
+  database: string;
   distSQL: boolean;
   vec: boolean;
   opt: boolean;
@@ -196,6 +197,7 @@ export function flattenStatementStats(
   return statementStats.map((stmt) => ({
     statement: stmt.key.key_data.query,
     app: stmt.key.key_data.app,
+    database: stmt.key.key_data.database,
     distSQL: stmt.key.key_data.distSQL,
     vec: stmt.key.key_data.vec,
     opt: stmt.key.key_data.opt,
