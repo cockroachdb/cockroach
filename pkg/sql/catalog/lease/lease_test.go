@@ -2624,7 +2624,10 @@ func TestDropDescriptorRacesWithAcquisition(t *testing.T) {
 	testingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			TestingDescriptorUpdateEvent: func(descriptor *descpb.Descriptor) error {
-				_, version, name, _ := descpb.GetDescriptorMetadata(descriptor)
+				_, version, name, _, _, err := descpb.GetDescriptorMetadata(descriptor)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if name != tableName {
 					return nil
 				}
@@ -2638,7 +2641,10 @@ func TestDropDescriptorRacesWithAcquisition(t *testing.T) {
 				return nil
 			},
 			TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
-				_, version, name, _ := descpb.GetDescriptorMetadata(descriptor)
+				_, version, name, _, _, err := descpb.GetDescriptorMetadata(descriptor)
+				if err != nil {
+					t.Fatal(err)
+				}
 				if name != tableName || version != 2 {
 					return
 				}
