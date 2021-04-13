@@ -1796,3 +1796,9 @@ func printlnUnlessEmbedded(args ...interface{}) {
 		fmt.Println(args...)
 	}
 }
+
+func printfUnlessEmbedded(f string, args ...interface{}) {
+	if !sqlCtx.embeddedMode {
+		fmt.Printf(f, args...)
+	}
+}
