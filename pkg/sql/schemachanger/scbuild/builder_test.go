@@ -151,5 +151,5 @@ func newTestingBuilder(s serverutils.TestServerInterface) (*scbuild.Builder, fun
 		SemaCtx() *tree.SemaContext
 		EvalContext() *tree.EvalContext
 	})
-	return scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext()), cleanup
+	return scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext(), nil), cleanup
 }

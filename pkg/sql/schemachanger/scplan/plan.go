@@ -173,7 +173,7 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
 			for _, e := range edges {
 				if e.From() == ts {
 					next[i] = e.To()
-					ops = append(ops, e.Op())
+					ops = append(ops, e.Op()...)
 					break
 				}
 			}
@@ -207,7 +207,9 @@ func buildStages(init []*scpb.Node, g *scgraph.Graph) []Stage {
 		// Group the op edges a per-type basis.
 		opTypes := make(map[scop.Type][]*scgraph.OpEdge)
 		for _, oe := range opEdges {
-			opTypes[oe.Op().Type()] = append(opTypes[oe.Op().Type()], oe)
+			for _, op := range oe.Op() {
+				opTypes[op.Type()] = append(opTypes[op.Type()], oe)
+			}
 		}
 
 		// Greedily attempt to find a stage which can be executed. This is sane

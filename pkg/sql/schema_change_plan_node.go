@@ -29,7 +29,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		(mode == sessiondata.UseNewSchemaChangerOn && !p.extendedEvalCtx.TxnImplicit) {
 		return nil, false, nil
 	}
-	b := scbuild.NewBuilder(p, p.SemaCtx(), p.EvalContext())
+	b := scbuild.NewBuilder(p, p.SemaCtx(), p.EvalContext(), p.Descriptors())
 	updated, err := b.Build(ctx, p.extendedEvalCtx.SchemaChangerState.nodes, stmt)
 	if scbuild.HasNotImplemented(err) && mode == sessiondata.UseNewSchemaChangerOn {
 		return nil, false, nil
@@ -55,7 +55,7 @@ type schemaChangePlanNode struct {
 
 func (s *schemaChangePlanNode) startExec(params runParams) error {
 	executor := scexec.NewExecutor(params.p.txn, params.p.Descriptors(), params.p.EvalContext().Codec,
-		nil /* backfiller */, nil /* jobTracker */)
+		nil /* backfiller */, nil /* jobTracker */, params.extendedEvalCtx.ExecCfg.JobRegistry)
 	after, err := runNewSchemaChanger(
 		params.ctx, scplan.StatementPhase, s.plannedState, executor,
 	)

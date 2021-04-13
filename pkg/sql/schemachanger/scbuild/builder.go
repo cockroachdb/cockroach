@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -51,6 +52,7 @@ type Builder struct {
 	res     resolver.SchemaResolver
 	semaCtx *tree.SemaContext
 	evalCtx *tree.EvalContext
+	descs   *descs.Collection
 
 	// nodes contains the internal state when building targets for an individual
 	// statement.
@@ -83,12 +85,16 @@ func (e *notImplementedError) Error() string {
 
 // NewBuilder creates a new Builder.
 func NewBuilder(
-	res resolver.SchemaResolver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+	res resolver.SchemaResolver,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	descs *descs.Collection,
 ) *Builder {
 	return &Builder{
 		res:     res,
 		semaCtx: semaCtx,
 		evalCtx: evalCtx,
+		descs:   descs,
 	}
 }
 
@@ -103,11 +109,83 @@ func (b *Builder) Build(
 	ctx context.Context, nodes []*scpb.Node, n tree.Statement,
 ) ([]*scpb.Node, error) {
 	switch n := n.(type) {
+	case *tree.DropSequence:
+		return b.DropSequence(ctx, nodes, n)
 	case *tree.AlterTable:
 		return b.AlterTable(ctx, nodes, n)
 	default:
 		return nil, &notImplementedError{n: n}
 	}
+}
+
+// DropSequence builds targets and transforms the provided schema change nodes
+// accordingly, given an DROP SEQUENCE statement.
+func (b *Builder) DropSequence(
+	ctx context.Context, nodes []*scpb.Node, n *tree.DropSequence,
+) ([]*scpb.Node, error) {
+
+	// TODO (lucy): Clean this up.
+	b.nodes = nodes
+	defer func() {
+		b.nodes = nil
+	}()
+	// Find the sequence first
+	for _, name := range n.Names {
+		table, err := resolver.ResolveExistingTableObject(ctx, b.res, &name,
+			tree.ObjectLookupFlagsWithRequired())
+		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) && n.IfExists {
+				return nodes, nil
+			}
+			return nil, err
+		}
+		if table == nil {
+			continue
+		}
+
+		// Check if there are dependencies.
+		err = table.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+			if n.DropBehavior != tree.DropCascade {
+				return pgerror.Newf(
+					pgcode.DependentObjectsStillExist,
+					"cannot drop sequence %s because other objects depend on it",
+					table.GetName(),
+				)
+			}
+			desc, err := b.descs.GetImmutableTableByID(ctx, b.evalCtx.Txn, dep.ID, tree.ObjectLookupFlagsWithRequired())
+			if err != nil {
+				return err
+			}
+			for _, col := range desc.PublicColumns() {
+				for _, id := range dep.ColumnIDs {
+					if col.GetID() != id {
+						continue
+					}
+					b.addNode(scpb.Target_DROP, &scpb.DefaultExpression{
+						TableID:     dep.ID,
+						Column:      *col.ColumnDesc(),
+						DefaultExpr: "",
+					})
+				}
+			}
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// Add a node to drop the sequence
+		b.addNode(scpb.Target_DROP,
+			&scpb.Table{TableID: table.GetID()})
+	}
+	result := make([]*scpb.Node, len(b.nodes))
+	for i := range b.nodes {
+		result[i] = b.nodes[i]
+	}
+	return result, nil
 }
 
 // AlterTable builds targets and transforms the provided schema change nodes

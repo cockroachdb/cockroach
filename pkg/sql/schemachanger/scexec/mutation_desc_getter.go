@@ -22,9 +22,10 @@ import (
 )
 
 type mutationDescGetter struct {
-	descs     *descs.Collection
-	txn       *kv.Txn
-	retrieved catalog.DescriptorIDSet
+	descs              *descs.Collection
+	txn                *kv.Txn
+	retrieved          catalog.DescriptorIDSet
+	droppedDescriptors catalog.DescriptorIDSet
 }
 
 func (m *mutationDescGetter) GetMutableTableByID(
@@ -37,6 +38,14 @@ func (m *mutationDescGetter) GetMutableTableByID(
 	table.MaybeIncrementVersion()
 	m.retrieved.Add(table.GetID())
 	return table, nil
+}
+
+func (m *mutationDescGetter) AddDroppedDescriptor(_ context.Context, id descpb.ID) {
+	m.droppedDescriptors.Add(id)
+}
+
+func (m *mutationDescGetter) GetDroppedDescriptor() []descpb.ID {
+	return m.droppedDescriptors.Ordered()
 }
 
 var _ scmutationexec.MutableDescGetter = (*mutationDescGetter)(nil)

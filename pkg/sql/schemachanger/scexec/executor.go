@@ -14,10 +14,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
@@ -36,6 +38,8 @@ type Executor struct {
 	codec           keys.SQLCodec
 	indexBackfiller IndexBackfiller
 	jobTracker      JobProgressTracker
+	jobRegistry     *jobs.Registry
+	droppedDescs    []descpb.ID
 }
 
 // NewExecutor creates a new Executor.
@@ -45,6 +49,7 @@ func NewExecutor(
 	codec keys.SQLCodec,
 	backfiller IndexBackfiller,
 	tracker JobProgressTracker,
+	jobRegistry *jobs.Registry,
 ) *Executor {
 	return &Executor{
 		txn:             txn,
@@ -52,7 +57,13 @@ func NewExecutor(
 		codec:           codec,
 		indexBackfiller: backfiller,
 		jobTracker:      tracker,
+		jobRegistry:     jobRegistry,
 	}
+}
+
+// GetDroppedDescs returns descriptors that have been dropped.
+func (ex *Executor) GetDroppedDescs() []descpb.ID {
+	return ex.droppedDescs
 }
 
 // ExecuteOps executes the provided ops. The ops must all be of the same type.
@@ -178,7 +189,8 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, ops []scop
 		descs: ex.descsCollection,
 		txn:   ex.txn,
 	}
-	v := scmutationexec.NewMutationVisitor(dg)
+	mj := &mutationJobs{jobRegistry: ex.jobRegistry}
+	v := scmutationexec.NewMutationVisitor(dg, mj)
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return err
@@ -190,12 +202,29 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, ops []scop
 		if err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err, "failed to retrieve modified descriptor")
 		}
+		// If needed reclaim the names in the batch
+		namesToReclaim := desc.GetDrainingNames()
+		desc.SetDrainingNames(nil)
+		// Reclaim all old names.
+		for _, drain := range namesToReclaim {
+			catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
+				ctx, ba, ex.codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false, /* KVTrace */
+			)
+		}
 		if err := ex.descsCollection.WriteDescToBatch(ctx, false, desc, ba); err != nil {
 			return err
 		}
 	}
+	_, err := mj.SubmitAllJobs(ctx, ex.txn)
+	if err != nil {
+		return err
+	}
 	if err := ex.txn.Run(ctx, ba); err != nil {
 		return errors.Wrap(err, "writing descriptors")
+	}
+
+	for _, id := range dg.GetDroppedDescriptor() {
+		ex.droppedDescs = append(ex.droppedDescs, id)
 	}
 	return nil
 }

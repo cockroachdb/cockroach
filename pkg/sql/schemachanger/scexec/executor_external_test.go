@@ -382,7 +382,7 @@ func TestSchemaChanger(t *testing.T) {
 				EvalContext() *tree.EvalContext
 			})
 			defer cleanup()
-			b := scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext())
+			b := scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext(), descriptors)
 			parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 			require.NoError(t, err)
 			require.Len(t, parsed, 1)

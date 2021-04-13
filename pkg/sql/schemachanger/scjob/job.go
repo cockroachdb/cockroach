@@ -111,10 +111,24 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 				descriptors: descriptors,
 				codec:       execCtx.ExecCfg().Codec,
 			}
-			if err := scexec.NewExecutor(txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller, jt).ExecuteOps(ctx, s.Ops); err != nil {
+			executor := scexec.NewExecutor(txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller, jt, execCtx.ExecCfg().JobRegistry)
+			if err := executor.ExecuteOps(ctx, s.Ops); err != nil {
 				return err
 			}
-			descriptorsWithUpdatedVersions = descriptors.GetDescriptorsWithNewVersion()
+			descriptorsWithUpdatedVersionsTmp := descriptors.GetDescriptorsWithNewVersion()
+			descriptorsWithUpdatedVersions := make([]lease.IDVersion, len(descriptorsWithUpdatedVersionsTmp))
+			for _, l := range descriptorsWithUpdatedVersionsTmp {
+				skip := false
+				for _, id := range executor.GetDroppedDescs() {
+					if l.ID == id {
+						skip = true
+						break
+					}
+				}
+				if !skip {
+					descriptorsWithUpdatedVersions = append(descriptorsWithUpdatedVersions, l)
+				}
+			}
 			return n.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				pg := md.Progress.GetNewSchemaChange()
 				pg.States = makeStates(s.After)
@@ -133,6 +147,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		); err != nil {
 			return err
 		}
+		execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
 	}
 	return nil
 }

@@ -57,6 +57,37 @@ type MakeDroppedPrimaryIndexDeleteAndWriteOnly struct {
 	Index descpb.IndexDescriptor
 }
 
+// CreateGcJobForDescriptor creates a GC job for a given descriptor.
+type CreateGcJobForDescriptor struct {
+	mutationOp
+	DescID descpb.ID
+}
+
+// MarkDescriptorAsDropped marks a descriptor as dropped.
+type MarkDescriptorAsDropped struct {
+	mutationOp
+	TableID descpb.ID
+}
+
+// RemoveDescriptorName removes the name of a given descriptor.
+type RemoveDescriptorName struct {
+	mutationOp
+	TableID descpb.ID
+}
+
+// UpdateRelationDeps updates dependencies for a relation.
+type UpdateRelationDeps struct {
+	mutationOp
+	TableID descpb.ID
+}
+
+// RemoveColumnDefaultExpression removes the default expression on a given table column.
+type RemoveColumnDefaultExpression struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
 // MakeAddedColumnDeleteAndWriteOnly transitions a column addition mutation from
 // DELETE_ONLY to DELETE_AND_WRITE_ONLY.
 type MakeAddedColumnDeleteAndWriteOnly struct {

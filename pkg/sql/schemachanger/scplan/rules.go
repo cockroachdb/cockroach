@@ -36,6 +36,15 @@ func primaryIndexesReferenceEachOther(this, that *scpb.PrimaryIndex) bool {
 		this.OtherPrimaryIndexID == that.Index.ID
 }
 
+func defaultExprReferencesColumn(this *scpb.Table, that *scpb.DefaultExpression) bool {
+	for _, seq := range that.Column.UsesSequenceIds {
+		if seq == this.TableID {
+			return true
+		}
+	}
+	return false
+}
+
 func sameDirection(a, b scpb.Target_Direction) bool {
 	return a == b
 }
@@ -58,6 +67,87 @@ func directionsMatch(thisDir, thatDir scpb.Target_Direction) func(a, b scpb.Targ
 }
 
 var rules = map[scpb.Element]targetRules{
+	(*scpb.DefaultExpression)(nil): {
+		deps: targetDepRules{},
+		backwards: targetOpRules{
+			scpb.State_PUBLIC: {
+				{
+					predicate: func(this *scpb.DefaultExpression, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextState: scpb.State_ABSENT,
+					op: func(this *scpb.DefaultExpression) []scop.Op {
+						return []scop.Op{
+							scop.RemoveColumnDefaultExpression{
+								TableID:  this.TableID,
+								ColumnID: this.Column.ID,
+							},
+							scop.UpdateRelationDeps{
+								TableID: this.TableID,
+							},
+						}
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
+	(*scpb.Table)(nil): {
+		deps: targetDepRules{
+			scpb.State_DELETE_ONLY: {
+				{
+					dirPredicate: sameDirection,
+					thatState:    scpb.State_ABSENT,
+					predicate:    defaultExprReferencesColumn,
+				},
+			},
+		},
+
+		backwards: targetOpRules{
+			scpb.State_PUBLIC: {
+				{
+					predicate: func(this *scpb.Table, flags Params) bool {
+						return flags.ExecutionPhase == StatementPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextState: scpb.State_DELETE_ONLY,
+					op: func(this *scpb.Table) []scop.Op {
+						ops := []scop.Op{
+							scop.MarkDescriptorAsDropped{
+								TableID: this.TableID,
+							},
+							scop.CreateGcJobForDescriptor{
+								DescID: this.TableID,
+							},
+						}
+						return ops
+					},
+				},
+			},
+			scpb.State_DELETE_ONLY: {
+				{
+					predicate: func(this *scpb.Table, flags Params) bool {
+						return flags.ExecutionPhase == PreCommitPhase &&
+							!flags.CreatedDescriptorIDs.Contains(this.TableID)
+					},
+				},
+				{
+					nextState: scpb.State_ABSENT,
+					op: func(this *scpb.Table) scop.Op {
+						return scop.RemoveDescriptorName{
+							TableID: this.TableID,
+						}
+					},
+				},
+			},
+		},
+		forward: nil,
+	},
 	(*scpb.Column)(nil): {
 		deps: targetDepRules{
 			scpb.State_DELETE_AND_WRITE_ONLY: {
