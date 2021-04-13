@@ -114,6 +114,8 @@ func TestCloudStorageSink(t *testing.T) {
 	}
 
 	user := security.RootUserName()
+	memAcc, release := getBoundAccountWithBudget(memoryUnlimited)
+	defer release()
 
 	t.Run(`golden`, func(t *testing.T) {
 		t1 := makeTopic(`t1`)
@@ -123,13 +125,15 @@ func TestCloudStorageSink(t *testing.T) {
 		sinkDir := `golden`
 		s, err := makeCloudStorageSink(
 			ctx, `nodelocal://0/`+sinkDir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
 		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
 		require.NoError(t, s.Flush(ctx))
+		require.EqualValues(t, 0, memAcc.Used())
 
 		require.Equal(t, []string{
 			"v1\n",
@@ -160,9 +164,10 @@ func TestCloudStorageSink(t *testing.T) {
 				dir := `single-node` + compression
 				s, err := makeCloudStorageSink(
 					ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-					settings, opts, timestampOracle, externalStorageFromURI, user,
+					settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 				)
 				require.NoError(t, err)
+				defer func() { require.NoError(t, s.Close()) }()
 				s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 				// Empty flush emits no files.
@@ -235,13 +240,15 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `multi-node`
 		s1, err := makeCloudStorageSink(
 			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s1.Close()) }()
 		s2, err := makeCloudStorageSink(
 			ctx, `nodelocal://0/`+dir, 2, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
+		defer func() { require.NoError(t, s2.Close()) }()
 		require.NoError(t, err)
 		// Hack into the sinks to pretend each is the first sink created on two
 		// different nodes, which is the worst case for them conflicting.
@@ -269,14 +276,16 @@ func TestCloudStorageSink(t *testing.T) {
 		// this is unavoidable.
 		s1R, err := makeCloudStorageSink(
 			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s1R.Close()) }()
 		s2R, err := makeCloudStorageSink(
 			ctx, `nodelocal://0/`+dir, 2, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s2R.Close()) }()
 		// Nodes restart. s1 gets the same sink id it had last time but s2
 		// doesn't.
 		s1R.(*cloudStorageSink).sinkID = 0
@@ -315,16 +324,18 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `zombie`
 		s1, err := makeCloudStorageSink(
 			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s1.Close()) }()
 		s1.(*cloudStorageSink).sinkID = 7         // Force a deterministic sinkID.
 		s1.(*cloudStorageSink).jobSessionID = "a" // Force deterministic job session ID.
 		s2, err := makeCloudStorageSink(
 			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s2.Close()) }()
 		s2.(*cloudStorageSink).sinkID = 8         // Force a deterministic sinkID.
 		s2.(*cloudStorageSink).jobSessionID = "b" // Force deterministic job session ID.
 
@@ -357,9 +368,10 @@ func TestCloudStorageSink(t *testing.T) {
 		const targetMaxFileSize = 6
 		s, err := makeCloudStorageSink(
 			ctx, `nodelocal://0/`+dir, 1, targetMaxFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
 		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		// Writing more than the max file size chunks the file up and flushes it
@@ -444,10 +456,10 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `file-ordering`
 		s, err := makeCloudStorageSink(
 			ctx, `nodelocal://0/`+dir, 1, unlimitedFileSize,
-			settings, opts, timestampOracle, externalStorageFromURI, user,
+			settings, opts, timestampOracle, externalStorageFromURI, user, memAcc,
 		)
-
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
 		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		// Simulate initial scan, which emits data at a timestamp, then an equal
@@ -503,8 +515,9 @@ func TestCloudStorageSink(t *testing.T) {
 		dir := `ordering-among-schema-versions`
 		var targetMaxFileSize int64 = 10
 		s, err := makeCloudStorageSink(ctx, `nodelocal://0/`+dir, 1, targetMaxFileSize, settings,
-			opts, timestampOracle, externalStorageFromURI, user)
+			opts, timestampOracle, externalStorageFromURI, user, memAcc)
 		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
 
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
 		t1.TableDesc().Version = 1
@@ -540,5 +553,26 @@ func TestCloudStorageSink(t *testing.T) {
 			"x1\n",
 			"w1\n",
 		}, slurpDir(t, dir))
+	})
+	t.Run(`memory-limit`, func(t *testing.T) {
+		t1 := makeTopic(`t1`)
+		testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+		sf := span.MakeFrontier(testSpan)
+		timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
+		sinkDir := `memory-limit`
+		limitedMem, release := getBoundAccountWithBudget(100)
+		defer release()
+		s, err := makeCloudStorageSink(
+			ctx, `nodelocal://0/`+sinkDir, 1, 101,
+			settings, opts, timestampOracle, externalStorageFromURI, user, limitedMem,
+		)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, s.Close()) }()
+		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
+
+		for err == nil {
+			err = s.EmitRow(ctx, t1, noKey, []byte("hello"), ts(1))
+		}
+		require.Regexp(t, "memory budget exceeded", err)
 	})
 }
