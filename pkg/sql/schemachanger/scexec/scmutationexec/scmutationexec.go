@@ -12,13 +12,20 @@ package scmutationexec
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/descriptorutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sequence"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,15 +33,25 @@ import (
 // All retrieved descriptors are modified.
 type MutableDescGetter interface {
 	GetMutableTableByID(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error)
+	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
+	SubmitDrainedNames(ctx context.Context, codec keys.SQLCodec, ba *kv.Batch) error
+}
+
+// MutationJobs encapsulates the logic to create different types
+// of jobs.
+type MutationJobs interface {
+	AddNewGCJob(job jobspb.SchemaChangeGCDetails, description string)
+	SubmitAllJobs(ctx context.Context, txn *kv.Txn) (bool, error)
 }
 
 // NewMutationVisitor creates a new scop.MutationVisitor.
-func NewMutationVisitor(descs MutableDescGetter) scop.MutationVisitor {
-	return &visitor{descs: descs}
+func NewMutationVisitor(descs MutableDescGetter, jobs MutationJobs) scop.MutationVisitor {
+	return &visitor{descs: descs, jobs: jobs}
 }
 
 type visitor struct {
 	descs MutableDescGetter
+	jobs  MutationJobs
 }
 
 func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
@@ -51,6 +68,113 @@ func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 		descpb.DescriptorMutation_DELETE_ONLY,
 		descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
 	)
+}
+
+func (m *visitor) UpdateRelationDeps(ctx context.Context, op scop.UpdateRelationDeps) error {
+	// TODO(fqazi): Only implemented for sequences.
+	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	// Determine all the dependencies for this descriptor.
+	dependedOnBy := make([]descpb.TableDescriptor_Reference, len(tableDesc.DependedOnBy))
+	addDependency := func(dep descpb.TableDescriptor_Reference) {
+		for _, existingDep := range dependedOnBy {
+			if dep.Equal(existingDep) {
+				return
+			}
+			dependedOnBy = append(dependedOnBy, dep)
+		}
+	}
+	for _, col := range tableDesc.Columns {
+		sequenceRefByID := true
+		// Parse the default expression to determine
+		// if all references are by ID.
+		if col.DefaultExpr != nil && len(col.UsesSequenceIds) > 0 {
+			expr, err := parser.ParseExpr(*col.DefaultExpr)
+			if err != nil {
+				return err
+			}
+			usedSequences, err := sequence.GetUsedSequences(expr)
+			if err != nil {
+				return err
+			}
+			if len(usedSequences) > 0 {
+				sequenceRefByID = usedSequences[0].IsByID()
+			}
+		}
+		for _, seqID := range col.UsesSequenceIds {
+			addDependency(descpb.TableDescriptor_Reference{
+				ID:        seqID,
+				ColumnIDs: []descpb.ColumnID{col.ID},
+				ByID:      sequenceRefByID,
+			})
+		}
+	}
+	tableDesc.DependedOnBy = dependedOnBy
+	return nil
+}
+
+func (m *visitor) RemoveColumnDefaultExpression(
+	ctx context.Context, op scop.RemoveColumnDefaultExpression,
+) error {
+	// Remove the descriptors namespaces as the last stage
+	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	column, err := tableDesc.FindColumnWithID(op.ColumnID)
+	if err != nil {
+		return err
+	}
+
+	// Clean up the default expression and the sequence ID's
+	column.ColumnDesc().DefaultExpr = nil
+	column.ColumnDesc().UsesSequenceIds = nil
+	return nil
+}
+
+func (m *visitor) CreateGcJobForDescriptor(
+	ctx context.Context, op scop.CreateGcJobForDescriptor,
+) error {
+	// Setup a GC job for this object
+	tablesToDrop := []jobspb.SchemaChangeGCDetails_DroppedID{{
+		ID:       op.DescID,
+		DropTime: timeutil.Now().UnixNano(),
+	},
+	}
+	job := jobspb.SchemaChangeGCDetails{
+		Tables: tablesToDrop,
+	}
+	m.jobs.AddNewGCJob(job, fmt.Sprintf("DROP %s %d", "TABLE", op.DescID))
+	return nil
+}
+
+func (m *visitor) MarkDescriptorAsDropped(
+	ctx context.Context, op scop.MarkDescriptorAsDropped,
+) error {
+	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	// Mark table as dropped
+	tableDesc.SetDropped()
+	return nil
+}
+
+func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescriptorName) error {
+	tableDesc, err := m.descs.GetMutableTableByID(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	// Queue up name for draining.
+	parentSchemaID := tableDesc.GetParentSchemaID()
+	nameDetails := descpb.NameInfo{
+		ParentID:       tableDesc.ParentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           tableDesc.Name}
+	m.descs.AddDrainedName(tableDesc.GetID(), nameDetails)
+	return nil
 }
 
 func (m *visitor) MakeColumnPublic(ctx context.Context, op scop.MakeColumnPublic) error {
