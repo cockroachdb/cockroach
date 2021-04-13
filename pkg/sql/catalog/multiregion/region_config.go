@@ -80,11 +80,9 @@ func (r *RegionConfig) RegionEnumID() descpb.ID {
 // MakeRegionConfigOption is an option for MakeRegionConfig
 type MakeRegionConfigOption func(r *RegionConfig)
 
-// MakeRegionConfigOptionTransitioningRegions is an option to include transitioning
+// WithTransitioningRegions is an option to include transitioning
 // regions into MakeRegionConfig.
-func MakeRegionConfigOptionTransitioningRegions(
-	transitioningRegions descpb.RegionNames,
-) MakeRegionConfigOption {
+func WithTransitioningRegions(transitioningRegions descpb.RegionNames) MakeRegionConfigOption {
 	return func(r *RegionConfig) {
 		r.transitioningRegions = transitioningRegions
 	}
