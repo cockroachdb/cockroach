@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -117,16 +118,33 @@ func clearIndex(
 
 	sp := tableDesc.IndexSpan(execCfg.Codec, index.ID)
 
-	// ClearRange cannot be run in a transaction, so create a
-	// non-transactional batch to send the request.
-	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.ClearRangeRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    sp.Key,
-			EndKey: sp.EndKey,
-		},
-	})
-	return execCfg.DB.Run(ctx, b)
+	// Use a retry loop to deal with the case where the GC TTL is extremely
+	// short and the current timestamp at which the batch is constructed hits
+	// an issue with the GC threshold. This retry loop in part exists to deal
+	// with tests which set a very short GC TTL.
+	//
+	// TODO(ajwerner): Unify the logic here with the ClearRange sending logic
+	// used to drop a table.
+	retryOpts := retry.Options{} // retry forever using default options
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		// ClearRange cannot be run in a transaction, so create a
+		// non-transactional batch to send the request.
+		b := &kv.Batch{}
+		b.AddRawRequest(&roachpb.ClearRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    sp.Key,
+				EndKey: sp.EndKey,
+			},
+		})
+		// TODO(ajwerner): Are there other transient errors which we want to retry?
+		err := execCfg.DB.Run(ctx, b)
+		if errors.HasType(err, (*roachpb.BatchTimestampBeforeGCError)(nil)) {
+			log.Infof(ctx, "failed to clear range due to GC threshold: %v", err)
+		} else {
+			return err
+		}
+	}
+	return ctx.Err()
 }
 
 // completeDroppedIndexes updates the mutations of the table descriptor to
