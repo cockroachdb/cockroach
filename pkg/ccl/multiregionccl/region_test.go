@@ -141,7 +141,7 @@ func TestConcurrentAddDropRegions(t *testing.T) {
 			// Create a multi-region database with a REGIONAL BY ROW table inside of it
 			// which needs to be re-partitioned on add/drop operations.
 			_, err := sqlDB.Exec(`
-CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"; 
+CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
 CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 			require.NoError(t, err)
 
@@ -172,6 +172,7 @@ CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 			for {
 				done := rows.Next()
 				if !done {
+					require.NoError(t, rows.Err())
 					break
 				}
 				var region string
@@ -268,7 +269,12 @@ ALTER DATABASE db PRIMARY REGION "us-east2";
 
 		const expectedRegion = "us-east1"
 		var region string
-		rows.Next()
+		if !rows.Next() {
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			return errors.New("no rows returned")
+		}
 		if err := rows.Scan(&region); err != nil {
 			return err
 		}
@@ -327,7 +333,7 @@ func TestDroppingPrimaryRegionAsyncJobFailure(t *testing.T) {
 
 	// Setup the test.
 	_, err := sqlDB.Exec(`
-CREATE DATABASE db WITH PRIMARY REGION "us-east1"; 
+CREATE DATABASE db WITH PRIMARY REGION "us-east1";
 CREATE TABLE db.t(k INT) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 `)
 	require.NoError(t, err)
