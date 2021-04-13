@@ -14,7 +14,6 @@ import (
 	"context"
 	"net/url"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -528,40 +527,28 @@ func setSqlfmtContextDefaults() {
 // demoCtx captures the command-line parameters of the `demo` command.
 // See below for defaults.
 var demoCtx struct {
-	nodes                     int
-	sqlPoolMemorySize         int64
-	cacheSize                 int64
+	transientClusterConfig
+
 	disableTelemetry          bool
 	disableLicenseAcquisition bool
 	noExampleDatabase         bool
 	runWorkload               bool
-	localities                demoLocalityList
 	geoPartitionedReplicas    bool
-	simulateLatency           bool
 	transientCluster          *transientCluster
-	insecure                  bool
-	sqlPort                   int
-	httpPort                  int
 }
 
 // setDemoContextDefaults set the default values in demoCtx.  This
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
 func setDemoContextDefaults() {
-	demoCtx.nodes = 1
-	demoCtx.sqlPoolMemorySize = 128 << 20 // 128MB, chosen to fit 9 nodes on 2GB machine.
-	demoCtx.cacheSize = 64 << 20          // 64MB, chosen to fit 9 nodes on 2GB machine.
+	demoCtx.transientClusterConfig = defaultTransientClusterConfig()
+
 	demoCtx.noExampleDatabase = false
-	demoCtx.simulateLatency = false
 	demoCtx.runWorkload = false
-	demoCtx.localities = nil
 	demoCtx.geoPartitionedReplicas = false
 	demoCtx.disableTelemetry = false
 	demoCtx.disableLicenseAcquisition = false
 	demoCtx.transientCluster = nil
-	demoCtx.insecure = false
-	demoCtx.sqlPort, _ = strconv.Atoi(base.DefaultPort)
-	demoCtx.httpPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'

@@ -195,8 +195,8 @@ func checkDemoConfiguration(
 	}
 
 	// Make sure the number of nodes is valid.
-	if demoCtx.nodes <= 0 {
-		return nil, errors.Newf("--nodes has invalid value (expected positive, got %d)", demoCtx.nodes)
+	if demoCtx.numNodes <= 0 {
+		return nil, errors.Newf("--nodes has invalid value (expected positive, got %d)", demoCtx.numNodes)
 	}
 
 	// If artificial latencies were requested, then the user cannot supply their own localities.
@@ -234,11 +234,11 @@ func checkDemoConfiguration(
 
 		// If the geo-partitioned replicas flag was given and the nodes have changed, throw an error.
 		if flagSetForCmd(cmd).Lookup(cliflags.DemoNodes.Name).Changed {
-			if demoCtx.nodes != 9 {
+			if demoCtx.numNodes != 9 {
 				return nil, errors.Newf("--nodes with a value different from 9 cannot be used with %s", geoFlag)
 			}
 		} else {
-			demoCtx.nodes = 9
+			demoCtx.numNodes = 9
 			printlnUnlessEmbedded(
 				// Only explain how the configuration was interpreted if the
 				// user has control over it.
@@ -278,14 +278,14 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	ctx := context.Background()
 
 	var c transientCluster
-	if err := c.checkConfigAndSetupLogging(ctx, cmd); err != nil {
+	if err := c.checkAndApplyConfigAndSetupLogging(ctx, cmd, demoCtx.transientClusterConfig); err != nil {
 		return err
 	}
 	defer c.cleanup(ctx)
 
 	initGEOS(ctx)
 
-	if err := c.start(ctx, cmd, gen); err != nil {
+	if err := c.start(ctx, cmd, gen, !demoCtx.disableTelemetry /* enableTelemetry */); err != nil {
 		return checkAndMaybeShout(err)
 	}
 	demoCtx.transientCluster = &c
@@ -297,7 +297,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 # Welcome to the CockroachDB demo database!
 #
 # You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
-`, demoCtx.nodes, util.Pluralize(int64(demoCtx.nodes)))
+`, c.numNodes, util.Pluralize(int64(c.numNodes)))
 
 		// Only print details about the telemetry configuration if the
 		// user has control over it.
@@ -313,14 +313,28 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 		}
 	}
 
-	// Start license acquisition in the background.
-	licenseDone, err := c.acquireDemoLicense(ctx)
-	if err != nil {
-		return checkAndMaybeShout(err)
+	var licenseDone chan error
+	if demoCtx.disableLicenseAcquisition {
+		licenseDone := make(chan error)
+		close(licenseDone)
+	} else {
+		// Start license acquisition in the background.
+		licenseDone, err = c.acquireDemoLicense(
+			ctx,
+			demoCtx.geoPartitionedReplicas,           /* licenseRequired */
+			cliflags.DemoGeoPartitionedReplicas.Name, /* requirementFlagName */
+		)
+		if err != nil {
+			return checkAndMaybeShout(err)
+		}
 	}
 
 	// Initialize the workload, if requested.
-	if err := c.setupWorkload(ctx, gen, licenseDone); err != nil {
+	if err := c.setupWorkload(
+		ctx, gen, licenseDone,
+		demoCtx.geoPartitionedReplicas, /* partitionWorkload */
+		demoCtx.runWorkload,            /* runWorkload */
+	); err != nil {
 		return checkAndMaybeShout(err)
 	}
 
