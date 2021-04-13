@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -486,7 +487,7 @@ func selectTargets(
 }
 
 // EntryFiles is a group of sst files of a backup table range
-type EntryFiles []roachpb.ImportRequest_File
+type EntryFiles []execinfrapb.RestoreFileSpec
 
 // BackupTableEntry wraps information of a table retrieved
 // from backup manifests.

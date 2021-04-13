@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -60,12 +59,12 @@ func (n noopSplitAndScatterer) scatter(
 // layer.
 type dbSplitAndScatterer struct {
 	db *kv.DB
-	kr *storageccl.KeyRewriter
+	kr *KeyRewriter
 }
 
 var _ splitAndScatterer = dbSplitAndScatterer{}
 
-func makeSplitAndScatterer(db *kv.DB, kr *storageccl.KeyRewriter) splitAndScatterer {
+func makeSplitAndScatterer(db *kv.DB, kr *KeyRewriter) splitAndScatterer {
 	return dbSplitAndScatterer{db: db, kr: kr}
 }
 
@@ -201,7 +200,7 @@ func newSplitAndScatterProcessor(
 	}
 
 	db := flowCtx.Cfg.DB
-	kr, err := storageccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(), spec.Rekeys)
+	kr, err := makeKeyRewriterFromRekeys(flowCtx.Codec(), spec.Rekeys)
 	if err != nil {
 		return nil, err
 	}
