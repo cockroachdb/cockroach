@@ -24,6 +24,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -39,6 +40,7 @@ go_test(
     embed = [":pgdate"],
     deps = [
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//:pq",
     ],
 )
