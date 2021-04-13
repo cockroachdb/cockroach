@@ -2655,7 +2655,6 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				a.storePool.getLocalitiesByStore(existingRepls),
 				a.storePool.isNodeReadyForRoutineReplicaTransfer,
 				a.scorerOptions(),
-				voterTarget,
 			)
 
 			for i := range results {
@@ -4223,7 +4222,6 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			a.storePool.getLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.NodeID) bool { return true },
 			a.scorerOptions(),
-			voterTarget,
 		)
 		match := true
 		if len(tc.expected) != len(results) {
