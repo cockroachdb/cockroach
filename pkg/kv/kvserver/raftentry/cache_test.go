@@ -20,19 +20,35 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 const noLimit = math.MaxUint64
 
 func newEntry(index, size uint64) raftpb.Entry {
+	r := rand.New(rand.NewSource(int64(index * size)))
 	data := make([]byte, size)
-	if _, err := rand.Read(data); err != nil {
+	if _, err := r.Read(data); err != nil {
 		panic(err)
 	}
-	return raftpb.Entry{
+	ent := raftpb.Entry{
 		Index: index,
 		Data:  data,
+	}
+	for {
+		entSize := uint64(ent.Size())
+		if entSize == size {
+			return ent
+		}
+		if entSize < size {
+			panic("size undershot")
+		}
+		delta := entSize - size
+		if uint64(len(ent.Data)) < delta {
+			panic("can't shorten ent.Data to target size")
+		}
+		ent.Data = ent.Data[delta:]
 	}
 }
 
@@ -45,7 +61,7 @@ func newEntries(lo, hi, size uint64) []raftpb.Entry {
 }
 
 func addEntries(c *Cache, rangeID roachpb.RangeID, lo, hi uint64) []raftpb.Entry {
-	ents := newEntries(lo, hi, 1)
+	ents := newEntries(lo, hi, 9)
 	c.Add(rangeID, ents, false)
 	return ents
 }
@@ -82,6 +98,26 @@ func verifyGet(
 			t.Fatalf("expected entry %v, but got %v", e, found)
 		}
 	}
+}
+
+func requireEqual(t *testing.T, c *Cache, rangeID roachpb.RangeID, idxs ...uint64) {
+	t.Helper()
+	p := c.getPartLocked(rangeID, false /* create */, false /* recordUse */)
+	if p == nil {
+		if len(idxs) > 0 {
+			t.Fatalf("expected idxs=%v but got empty cache", idxs)
+		}
+		return
+	}
+	b := &p.ringBuf
+	it := first(b)
+	var act []uint64
+	ok := it.valid(b)
+	for ok {
+		act = append(act, it.index(b))
+		it, ok = it.next(b)
+	}
+	require.Equal(t, idxs, act)
 }
 
 func TestEntryCache(t *testing.T) {
@@ -166,15 +202,94 @@ func TestIgnoredAdd(t *testing.T) {
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(100 + uint64(partitionSize))
 	// Show that adding entries which are larger than maxBytes is ignored.
-	_ = addEntries(c, rangeID, 1, 41)
+	{
+		ignoredEnts := addEntries(c, rangeID, 1, 41)
+		require.True(t, 42*ignoredEnts[0].Size() > int(c.maxBytes)) // sanity check
+	}
 	verifyGet(t, c, rangeID, 1, 41, nil, 1, false)
+	requireEqual(t, c, rangeID)
 	verifyMetrics(t, c, 0, 0)
 	// Add some entries so we can show that a non-overlapping add is ignored.
 	ents := addEntries(c, rangeID, 4, 7)
 	verifyGet(t, c, rangeID, 4, 7, ents, 7, false)
+	requireEqual(t, c, rangeID, 4, 5, 6)
 	verifyMetrics(t, c, 3, 27+int64(partitionSize))
-	addEntries(c, rangeID, 1, 3)
+	addEntries(c, rangeID, 1, 3) // no-op because [1,2] does not overlap [4,5,6]
+	requireEqual(t, c, rangeID, 4, 5, 6)
 	verifyMetrics(t, c, 3, 27+int64(partitionSize))
+
+	// Cache has entries 4, 5, 6. Offer an oversize entry at index 7 (which is
+	// notably after 6) and request truncation. This should be a no-op.
+	c.Add(rangeID, []raftpb.Entry{newEntry(7, uint64(c.maxBytes+1))}, true /* truncate */)
+	requireEqual(t, c, rangeID, 4, 5, 6)
+	verifyGet(t, c, rangeID, 4, 7, ents, 7, false)
+
+	// Cache has entries 4, 5, 6. Offer an oversize entry at index 6 and request
+	// truncation. This should remove index 6 (as requested due to the truncation)
+	// without replacing it with the input entry.
+	c.Add(rangeID, []raftpb.Entry{newEntry(6, uint64(c.maxBytes+1))}, true /* truncate */)
+	requireEqual(t, c, rangeID, 4, 5)
+	verifyGet(t, c, rangeID, 4, 7, ents[:len(ents)-1], 6, false)
+
+	// Cache has entries 4, 5. Offer an oversize entry at index 3 (which is
+	// notably before 4) and request truncation. This should clear all entries
+	// >= 3, i.e. everything.
+	c.Add(rangeID, []raftpb.Entry{newEntry(3, uint64(c.maxBytes+1))}, true /* truncate */)
+	// And it did.
+	requireEqual(t, c, rangeID)
+	verifyGet(t, c, rangeID, 0, 0, nil, 0, false)
+	verifyMetrics(t, c, 0, int64(partitionSize))
+
+	addEntries(c, rangeID, 10, 13)
+	// Now, cache = [10, 11, 12].
+	requireEqual(t, c, rangeID, 10, 11, 12)
+	verifyMetrics(t, c, 3, 3*9+int64(partitionSize))
+
+	c.Add(rangeID, newEntries(3, 4, 9), true /* truncate */)
+	requireEqual(t, c, rangeID, 3)
+	verifyMetrics(t, c, 1, 1*9+int64(partitionSize))
+}
+
+func TestRingBuffer_truncateFrom(t *testing.T) {
+	// NB: this is also exercised through the truncate=true test cases in
+	// TestIgnoredAdd, but this tests it more directly.
+	rangeID := roachpb.RangeID(1)
+	const maxBytes = 100
+	c := NewCache(maxBytes)
+	// Add one entry.
+	c.Add(rangeID, newEntries(100, 101, 9), false /* truncate */)
+	ents, _, _, _ := c.Scan(nil, rangeID, 100, 101, noLimit)
+	// Entry is actually there.
+	require.Len(t, ents, 1)
+	p := c.getPartLocked(rangeID, false /* create */, false /* recordUse */)
+	require.NotNil(t, p)
+	// Truncate range [99, infinity], which should work even though
+	// 99 isn't itself in `p`.
+	_, numRemovedEntries := p.truncateFrom(99)
+	require.EqualValues(t, 1, numRemovedEntries)
+	require.Zero(t, p.len)
+	ents, _, _, _ = c.Scan(nil, rangeID, 100, 101, noLimit)
+	require.Empty(t, ents)
+}
+
+func TestRingBuffer_clearTo(t *testing.T) {
+	// Ensure that clearTo isn't sensitive to whether its argument actually
+	// refers to a cached index.
+	rangeID := roachpb.RangeID(1)
+	const maxBytes = 100
+	c := NewCache(maxBytes)
+	// Add one entry.
+	c.Add(rangeID, newEntries(100, 101, 9), false /* truncate */)
+	ents, _, _, _ := c.Scan(nil, rangeID, 100, 101, noLimit)
+	// Entry is actually there.
+	require.Len(t, ents, 1)
+	p := c.getPartLocked(rangeID, false /* create */, false /* recordUse */)
+	require.NotNil(t, p)
+	_, numRemovedEntries := p.clearTo(101)
+	require.EqualValues(t, 1, numRemovedEntries)
+	require.Zero(t, p.len)
+	ents, _, _, _ = c.Scan(nil, rangeID, 100, 101, noLimit)
+	require.Empty(t, ents)
 }
 
 func TestAddAndTruncate(t *testing.T) {
@@ -191,7 +306,7 @@ func TestAddAndTruncate(t *testing.T) {
 	verifyMetrics(t, c, 6, 54+int64(partitionSize))
 	// Show that even if the addition is ignored due to size, entries
 	// with an equal or larger index are truncated.
-	largeEnts := newEntries(5, 6, 300)
+	largeEnts := newEntries(5, 6, 900)
 	c.Add(rangeID, largeEnts, true /* truncate */)
 	verifyGet(t, c, rangeID, 1, 10, ents[:4], 5, false)
 	verifyMetrics(t, c, 4, 36+int64(partitionSize))
@@ -204,8 +319,8 @@ func TestDrop(t *testing.T) {
 		r2 roachpb.RangeID = 2
 
 		sizeOf9Entries = 81
-		partitionSize  = int64(sizeOf9Entries + partitionSize)
 	)
+	partitionSize := int64(sizeOf9Entries + partitionSize)
 	c := NewCache(1 << 10)
 	ents1 := addEntries(c, r1, 1, 10)
 	verifyGet(t, c, r1, 1, 10, ents1, 10, false)
@@ -249,7 +364,7 @@ func TestEntryCacheClearTo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(100)
-	c.Add(rangeID, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)}, true)
+	c.Add(rangeID, []raftpb.Entry{newEntry(20, 9), newEntry(21, 9)}, true)
 	c.Clear(rangeID, 21)
 	c.Clear(rangeID, 18)
 	if ents, _, _, _ := c.Scan(nil, rangeID, 2, 21, noLimit); len(ents) != 0 {
@@ -324,12 +439,12 @@ func TestConcurrentEvictions(t *testing.T) {
 		if offset >= 0 && offset < len(ents) {
 			lo := ents[offset].Index
 			hi := lo + uint64(length)
-			toAdd = newEntries(lo, hi, 1)
+			toAdd = newEntries(lo, hi, 9)
 			ents = append(ents[:offset], toAdd...)
 		} else {
 			lo := uint64(offset + 2)
 			hi := lo + uint64(length)
-			toAdd = newEntries(lo, hi, 1)
+			toAdd = newEntries(lo, hi, 9)
 			ents = toAdd
 		}
 		rangeData[r] = ents
@@ -418,7 +533,7 @@ func TestEntryCacheEviction(t *testing.T) {
 	}
 	// Add another entry to the same range. This will exceed the size limit and
 	// lead to eviction.
-	c.Add(rangeID, []raftpb.Entry{newEntry(3, 40)}, true)
+	c.Add(rangeID, []raftpb.Entry{newEntry(3, 80)}, true)
 	ents, _, hi, _ = c.Scan(nil, rangeID, 1, 4, noLimit)
 	if len(ents) != 0 || hi != 1 {
 		t.Errorf("expected no entries; got %+v, %d", ents, hi)
@@ -433,9 +548,9 @@ func TestEntryCacheEviction(t *testing.T) {
 	if len(ents) != 1 || hi != 4 {
 		t.Errorf("expected the new entry; got %+v, %d", ents, hi)
 	}
-	c.Add(rangeID, []raftpb.Entry{newEntry(3, 1)}, true)
+	c.Add(rangeID, []raftpb.Entry{newEntry(3, 9)}, true)
 	verifyMetrics(t, c, 1, c.Metrics().Bytes.Value())
-	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)}, true)
+	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 9), newEntry(21, 9)}, true)
 	ents, _, hi, _ = c.Scan(nil, rangeID2, 20, 22, noLimit)
 	if len(ents) != 2 || hi != 22 {
 		t.Errorf("expected both entries; got %+v, %d", ents, hi)
@@ -547,7 +662,7 @@ func BenchmarkEntryCache(b *testing.B) {
 	rangeID := roachpb.RangeID(1)
 	ents := make([]raftpb.Entry, 1000)
 	for i := range ents {
-		ents[i] = newEntry(uint64(i+1), 8)
+		ents[i] = newEntry(uint64(i+1), 9)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -569,7 +684,7 @@ func BenchmarkEntryCacheClearTo(b *testing.B) {
 	rangeID := roachpb.RangeID(1)
 	ents := make([]raftpb.Entry, 1000)
 	for i := range ents {
-		ents[i] = newEntry(uint64(i+1), 8)
+		ents[i] = newEntry(uint64(i+1), 9)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
