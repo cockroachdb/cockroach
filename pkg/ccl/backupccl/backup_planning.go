@@ -576,8 +576,8 @@ func backupPlanHook(
 			_, coveredTime, err := makeImportSpans(
 				spans,
 				prevBackups,
-				nil, /*backupLocalityInfo*/
-				keys.MinKey,
+				nil,         /*backupLocalityMaps*/
+				keys.MinKey, /* lowWatermark */
 				func(span covering.Range, start, end hlc.Timestamp) error {
 					if (start == hlc.Timestamp{}) {
 						newSpans = append(newSpans, roachpb.Span{Key: span.Start, EndKey: span.End})
@@ -589,6 +589,13 @@ func backupPlanHook(
 			if err != nil {
 				return errors.Wrapf(err, "invalid previous backups (a new full backup may be required if a table has been created, dropped or truncated)")
 			}
+
+			tableSpans, err := getReintroducedSpans(ctx, p, prevBackups, tables, revs, endTime)
+			if err != nil {
+				return err
+			}
+			newSpans = append(newSpans, tableSpans...)
+
 			if coveredTime != startTime {
 				return errors.Wrapf(err, "expected previous backups to cover until time %v, got %v", startTime, coveredTime)
 			}
@@ -744,6 +751,73 @@ func backupPlanHook(
 		return sj.Run(ctx)
 	}
 	return fn, header, nil, false, nil
+}
+
+// getReintroducedSpans checks to see if any spans need to be re-backed up from
+// ts = 0. This may be the case if a span was OFFLINE in the previous backup and
+// has come back online since. The entire span needs to be re-backed up because
+// we may otherwise miss AddSSTable requests which write to a timestamp older
+// than the last incremental.
+func getReintroducedSpans(
+	ctx context.Context,
+	p sql.PlanHookState,
+	prevBackups []BackupManifest,
+	tables []*sqlbase.TableDescriptor,
+	revs []BackupManifest_DescriptorRevision,
+	endTime hlc.Timestamp,
+) ([]roachpb.Span, error) {
+	reintroducedTables := make(map[sqlbase.ID]struct{})
+
+	offlineInLastBackup := make(map[sqlbase.ID]struct{})
+	lastBackup := prevBackups[len(prevBackups)-1]
+	for _, desc := range lastBackup.Descriptors {
+		// TODO(pbardea): Also check that lastWriteTime is set once those are
+		// populated on the table descriptor.
+		if table := desc.Table(hlc.Timestamp{}); table != nil && table.State == sqlbase.TableDescriptor_OFFLINE {
+			offlineInLastBackup[table.GetID()] = struct{}{}
+		}
+	}
+
+	// If the table was offline in the last backup, but becomes PUBLIC, then it
+	// needs to be re-included since we may have missed non-transactional writes.
+	tablesToReinclude := make([]*sqlbase.TableDescriptor, 0)
+	for _, desc := range tables {
+		if _, wasOffline := offlineInLastBackup[desc.GetID()]; wasOffline && desc.State == sqlbase.TableDescriptor_PUBLIC {
+			tablesToReinclude = append(tablesToReinclude, desc)
+			reintroducedTables[desc.GetID()] = struct{}{}
+		}
+	}
+
+	// Tables should be re-introduced if any revision of the table was PUBLIC. A
+	// table may have been OFFLINE at the time of the last backup, and OFFLINE at
+	// the time of the current backup, but may have been PUBLIC at some time in
+	// between.
+	for _, rev := range revs {
+		rawTable := rev.Desc.Table(hlc.Timestamp{})
+		if rawTable == nil {
+			continue
+		}
+		if _, wasOffline := offlineInLastBackup[rawTable.ID]; wasOffline && rawTable.State == sqlbase.TableDescriptor_PUBLIC {
+			tablesToReinclude = append(tablesToReinclude, rawTable)
+			reintroducedTables[rawTable.GetID()] = struct{}{}
+		}
+	}
+
+	// All revisions of the table that we're re-introducing must also be
+	// considered.
+	allRevs := make([]BackupManifest_DescriptorRevision, 0, len(revs))
+	for _, rev := range revs {
+		rawTable := rev.Desc.Table(hlc.Timestamp{})
+		if rawTable == nil {
+			continue
+		}
+		if _, ok := reintroducedTables[rawTable.GetID()]; ok {
+			allRevs = append(allRevs, rev)
+		}
+	}
+
+	tableSpans := spansForAllTableIndexes(tablesToReinclude, allRevs)
+	return tableSpans, nil
 }
 
 // checkForNewTables returns an error if any new tables were introduced with the

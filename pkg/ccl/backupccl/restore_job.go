@@ -118,7 +118,7 @@ type importEntry struct {
 func makeImportSpans(
 	tableSpans []roachpb.Span,
 	backups []BackupManifest,
-	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	backupLocalityMap map[int]storeByLocalityKV,
 	lowWaterMark roachpb.Key,
 	onMissing func(span covering.Range, start, end hlc.Timestamp) error,
 ) ([]importEntry, hlc.Timestamp, error) {
@@ -185,16 +185,10 @@ func makeImportSpans(
 		var backupFileCovering covering.Covering
 
 		var storesByLocalityKV map[string]roachpb.ExternalStorage
-		if backupLocalityInfo != nil && backupLocalityInfo[i].URIsByOriginalLocalityKV != nil {
-			storesByLocalityKV = make(map[string]roachpb.ExternalStorage)
-			for kv, uri := range backupLocalityInfo[i].URIsByOriginalLocalityKV {
-				conf, err := cloud.ExternalStorageConfFromURI(uri)
-				if err != nil {
-					return nil, hlc.Timestamp{}, err
-				}
-				storesByLocalityKV[kv] = conf
-			}
+		if storesByLocalityKVMap, ok := backupLocalityMap[i]; ok {
+			storesByLocalityKV = storesByLocalityKVMap
 		}
+
 		for _, f := range b.Files {
 			dir := b.Dir
 			if storesByLocalityKV != nil {
@@ -226,7 +220,7 @@ func makeImportSpans(
 rangeLoop:
 	for _, importRange := range importRanges {
 		needed := false
-		var ts hlc.Timestamp
+		var latestCoveredTime hlc.Timestamp
 		var files []roachpb.ImportRequest_File
 		payloads := importRange.Payload.([]interface{})
 		for _, p := range payloads {
@@ -237,13 +231,21 @@ rangeLoop:
 			case tableSpan:
 				needed = true
 			case backupSpan:
-				if ts != ie.start {
+				// The latest time we've backed up this span may be ahead of the start
+				// time of this entry. This is because some spans can be
+				// "re-introduced", meaning that they were previously backed up but
+				// still appear in introducedSpans. Spans are re-introduced when they
+				// were taken OFFLINE (and therefore processed non-transactional writes)
+				// and brought back online (PUBLIC). For more information see #62564.
+				if latestCoveredTime.Less(ie.start) {
 					return nil, hlc.Timestamp{}, errors.Errorf(
 						"no backup covers time [%s,%s) for range [%s,%s) or backups listed out of order (mismatched start time)",
-						ts, ie.start,
+						latestCoveredTime, ie.start,
 						roachpb.Key(importRange.Start), roachpb.Key(importRange.End))
 				}
-				ts = ie.end
+				if !ie.end.Less(latestCoveredTime) {
+					latestCoveredTime = ie.end
+				}
 			case backupFile:
 				if len(ie.file.Path) > 0 {
 					files = append(files, roachpb.ImportRequest_File{
@@ -255,8 +257,8 @@ rangeLoop:
 			}
 		}
 		if needed {
-			if ts != maxEndTime {
-				if err := onMissing(importRange, ts, maxEndTime); err != nil {
+			if latestCoveredTime != maxEndTime {
+				if err := onMissing(importRange, latestCoveredTime, maxEndTime); err != nil {
 					return nil, hlc.Timestamp{}, err
 				}
 			}
@@ -555,6 +557,31 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 	return newKey, nil
 }
 
+type storeByLocalityKV map[string]roachpb.ExternalStorage
+
+func makeBackupLocalityMap(
+	backupLocalityInfos []jobspb.RestoreDetails_BackupLocalityInfo,
+) (map[int]storeByLocalityKV, error) {
+
+	backupLocalityMap := make(map[int]storeByLocalityKV)
+	for i, localityInfo := range backupLocalityInfos {
+		storesByLocalityKV := make(storeByLocalityKV)
+		if localityInfo.URIsByOriginalLocalityKV != nil {
+			for kv, uri := range localityInfo.URIsByOriginalLocalityKV {
+				conf, err := cloud.ExternalStorageConfFromURI(uri)
+				if err != nil {
+					return nil, errors.Wrap(err,
+						"creating locality external storage configuration")
+				}
+				storesByLocalityKV[kv] = conf
+			}
+		}
+		backupLocalityMap[i] = storesByLocalityKV
+	}
+
+	return backupLocalityMap, nil
+}
+
 // restore imports a SQL table (or tables) from sets of non-overlapping sstable
 // files.
 func restore(
@@ -603,10 +630,16 @@ func restore(
 		return mu.res, err
 	}
 
+	backupLocalityMap, err := makeBackupLocalityMap(backupLocalityInfo)
+	if err != nil {
+		return mu.res, errors.Wrap(err, "resolving locality locations")
+	}
+
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
-	importSpans, _, err := makeImportSpans(spans, backupManifests, backupLocalityInfo, highWaterMark, errOnMissingRange)
+	importSpans, _, err := makeImportSpans(spans, backupManifests, backupLocalityMap,
+		highWaterMark, errOnMissingRange)
 	if err != nil {
 		return mu.res, errors.Wrapf(err, "making import requests for %d backups", len(backupManifests))
 	}
