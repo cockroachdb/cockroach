@@ -136,6 +136,7 @@ func buildSchemaChangeDepGenFunc(e scpb.Element, deps targetDepRules) depGenFunc
 var (
 	compileFlagsTyp      = reflect.TypeOf((*Params)(nil)).Elem()
 	opsType              = reflect.TypeOf((*scop.Op)(nil)).Elem()
+	opsSliceType         = reflect.TypeOf(([]scop.Op)(nil)).Elem()
 	boolType             = reflect.TypeOf((*bool)(nil)).Elem()
 	elementInterfaceType = reflect.TypeOf((*scpb.Element)(nil)).Elem()
 )
@@ -152,6 +153,11 @@ func buildSchemaChangeOpGenFunc(e scpb.Element, forward, backwards targetOpRules
 	opType := reflect.FuncOf(
 		[]reflect.Type{tTyp},
 		[]reflect.Type{opsType},
+		false, /* variadic */
+	)
+	opSliceType := reflect.FuncOf(
+		[]reflect.Type{tTyp},
+		[]reflect.Type{opsSliceType},
 		false, /* variadic */
 	)
 	for s, rules := range forward {
@@ -173,8 +179,8 @@ func buildSchemaChangeOpGenFunc(e scpb.Element, forward, backwards targetOpRules
 			if rule.nextState != scpb.State_UNKNOWN && rule.op == nil {
 				panic(errors.Errorf("invalid nil op with next state %s for %T[%d]", rule.nextState, e, i))
 			}
-			if ot := reflect.TypeOf(rule.op); ot != opType {
-				panic(errors.Errorf("invalid ops with signature %v != %v %p %p for (%T, %s)[%d]", ot, opType, ot, opsType, e, s, i))
+			if ot := reflect.TypeOf(rule.op); ot != opType || ot != opSliceType {
+				panic(errors.Errorf("invalid ops with signature %v != (%v || %v) %p %p for (%T, %s)[%d]", ot, opType, opSliceType, ot, opsType, e, s, i))
 			}
 		}
 	}
@@ -205,7 +211,12 @@ func buildSchemaChangeOpGenFunc(e scpb.Element, forward, backwards targetOpRules
 					return
 				}
 				out := reflect.ValueOf(rule.op).Call(opsArgs)
-				builder.AddOpEdge(t, cur, rule.nextState, out[0].Interface().(scop.Op))
+				if op, ok := out[0].Interface().(scop.Op); ok {
+					builder.AddOpEdges(t, cur, rule.nextState, op)
+				} else if opArray, ok := out[0].Interface().([]scop.Op); ok {
+					builder.AddOpEdges(t, cur, rule.nextState, opArray...)
+				}
+
 				cur = rule.nextState
 				continue outer
 			}
