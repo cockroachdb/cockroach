@@ -54,6 +54,7 @@ go_library(
         "create_view.go",
         "data_source.go",
         "database.go",
+        "database_region_change_finalizer.go",
         "deallocate.go",
         "delayed.go",
         "delete.go",
