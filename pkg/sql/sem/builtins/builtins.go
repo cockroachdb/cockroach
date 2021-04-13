@@ -73,6 +73,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -606,6 +607,65 @@ var builtins = map[string]builtinDefinition{
 			},
 			Info: "Converts the byte string representation of a UUID to its character string " +
 				"representation.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"gen_random_ulid": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryIDGeneration,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				entropy := ulid.Monotonic(rand.New(rand.NewSource(timeutil.Now().UnixNano())), 0)
+				uv := ulid.MustNew(ulid.Now(), entropy)
+				return tree.NewDUuid(tree.DUuid{UUID: uuid.UUID(uv)}), nil
+			},
+			Info:       "Generates a random ULID and returns it as a value of UUID type.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"uuid_to_ulid": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.Uuid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				b := (*args[0].(*tree.DUuid)).GetBytes()
+				var ul ulid.ULID
+				if err := ul.UnmarshalBinary(b); err != nil {
+					return nil, err
+				}
+				return tree.NewDString(ul.String()), nil
+			},
+			Info:       "Converts a UUID-encoded ULID to its string representation.",
+			Volatility: tree.VolatilityImmutable,
+		},
+	),
+
+	"ulid_to_uuid": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{{"val", types.String}},
+			ReturnType: tree.FixedReturnType(types.Uuid),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				s := tree.MustBeDString(args[0])
+				u, err := ulid.Parse(string(s))
+				if err != nil {
+					return nil, err
+				}
+				b, err := u.MarshalBinary()
+				if err != nil {
+					return nil, err
+				}
+				uv, err := uuid.FromBytes(b)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
+			},
+			Info:       "Converts a ULID string to its UUID-encoded representation.",
 			Volatility: tree.VolatilityImmutable,
 		},
 	),
