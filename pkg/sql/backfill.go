@@ -713,7 +713,7 @@ func (sc *SchemaChanger) validateConstraints(
 			// (the validation can take many minutes). So we pretend that the schema
 			// has been updated and actually update it in a separate transaction that
 			// follows this one.
-			descI, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
+			descI, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
 			if err != nil {
 				return err
 			}
@@ -1677,7 +1677,7 @@ func ValidateForwardIndexes(
 				// add it to the Collection's synthetic descriptors, so that we can use
 				// SQL below to perform the validation.
 				var err error
-				desc, err = tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
+				desc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
 				if err != nil {
 					return err
 				}
@@ -1769,7 +1769,7 @@ func ValidateForwardIndexes(
 			// added earlier in the same mutation. Make the mutations public in an
 			// in-memory copy of the descriptor and add it to the Collection's synthetic
 			// descriptors, so that we can use SQL below to perform the validation.
-			descI, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
+			descI, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraintsAndPKSwaps)
 			if err != nil {
 				return err
 			}
