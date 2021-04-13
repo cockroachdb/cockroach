@@ -2372,10 +2372,6 @@ func (r *restoreResumer) restoreSystemTables(
 	tables []catalog.TableDescriptor,
 ) error {
 	tempSystemDBID := getTempSystemDBID(restoreDetails)
-	details := r.job.Details().(jobspb.RestoreDetails)
-	if details.SystemTablesRestored == nil {
-		details.SystemTablesRestored = make(map[string]bool)
-	}
 
 	// Iterate through all the tables that we're restoring, and if it was restored
 	// to the temporary system DB then copy it's data over to the real system
@@ -2385,10 +2381,6 @@ func (r *restoreResumer) restoreSystemTables(
 			continue
 		}
 		systemTableName := table.GetName()
-		if details.SystemTablesRestored[systemTableName] {
-			// We've already restored this table.
-			continue
-		}
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetDebugName("system-restore-txn")
@@ -2409,11 +2401,7 @@ func (r *restoreResumer) restoreSystemTables(
 			if err != nil {
 				return errors.Wrapf(err, "restoring system table %s", systemTableName)
 			}
-
-			// System table restoration may not be idempotent, so we need to keep
-			// track of what we've restored.
-			details.SystemTablesRestored[systemTableName] = true
-			return r.job.SetDetails(ctx, txn, details)
+			return nil
 		}); err != nil {
 			return err
 		}

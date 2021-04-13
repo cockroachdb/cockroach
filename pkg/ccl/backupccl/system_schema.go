@@ -105,7 +105,7 @@ func jobsRestoreFunc(
 
 	// When restoring jobs, don't clear the existing table.
 
-	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s);",
+	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s) ON CONFLICT DO NOTHING;",
 		systemTableName, tempTableName)
 	opName := systemTableName + "-data-insert"
 	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
