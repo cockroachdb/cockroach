@@ -215,14 +215,21 @@ func expectResolvedTimestampAvro(
 	return parseTimeToHLC(t, resolved.(map[string]interface{})[`string`].(string))
 }
 
-func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
+func sinlesttTestWithServerArgs(
+	argsFn func(args *base.TestServerArgs),
+	testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory),
+) func(*testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
 		knobs := base.TestingKnobs{DistSQL: &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}}}
-		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		args := base.TestServerArgs{
 			Knobs:       knobs,
 			UseDatabase: `d`,
-		})
+		}
+		if argsFn != nil {
+			argsFn(&args)
+		}
+		s, db, _ := serverutils.StartServer(t, args)
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
@@ -248,6 +255,10 @@ func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) f
 		f := cdctest.MakeSinklessFeedFactory(s, sink)
 		testFn(t, db, f)
 	}
+}
+
+func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
+	return sinlesttTestWithServerArgs(nil, testFn)
 }
 
 func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
