@@ -25,12 +25,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
 	"github.com/jordanlewis/gcassert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -428,7 +430,7 @@ func TestLint(t *testing.T) {
 					":!ccl/backupccl/backup_test.go",
 					":!storage/cloudimpl",
 					":!ccl/workloadccl/fixture_test.go",
-					":!internal/gopath/gopath.go",
+					":!internal/reporoot/reporoot.go",
 					":!cmd",
 					":!util/cgroups/cgroups.go",
 					":!nightly",
@@ -2072,5 +2074,13 @@ func TestLint(t *testing.T) {
 			[]string{"vet", "-vettool", vetToolPath, "-all", "-printf.funcs", printfuncs, pkgScope},
 			filters)
 
+	})
+
+	t.Run("CODEOWNERS", func(t *testing.T) {
+		co, err := codeowners.DefaultLoadCodeOwners()
+		require.NoError(t, err)
+		const verbose = false
+		repoRoot := filepath.Join("../../../")
+		codeowners.LintEverythingIsOwned(t, verbose, co, repoRoot, "pkg")
 	})
 }

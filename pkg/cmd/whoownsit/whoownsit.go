@@ -18,9 +18,16 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
+	"github.com/cockroachdb/cockroach/pkg/internal/reporoot"
 )
+
+var walk = flag.Bool("walk", false, "recursively print ownership")
+var dirsOnly = flag.Bool("dirs-only", false, "print ownership only for directories")
 
 func main() {
 	flag.Parse()
@@ -31,23 +38,36 @@ func main() {
 	}
 
 	for _, path := range flag.Args() {
-		owners, err := codeOwners.Match(path)
-		if err != nil {
-			log.Fatalf("failed finding owner for %q: %v", path, err)
-		}
-		if len(flag.Args()) > 1 {
-			fmt.Printf("%s: ", path)
-		}
-		if len(owners) == 0 {
-			fmt.Printf("no owners")
-		} else {
-			for i, owner := range owners {
-				if i > 0 {
-					fmt.Printf(", ")
-				}
-				fmt.Print(owner.Alias)
+		if filepath.IsAbs(path) {
+			var err error
+			path, err = filepath.Rel(reporoot.Get(), path)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
 			}
 		}
-		fmt.Printf("\n")
+		if err := filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !*dirsOnly || info.IsDir() {
+				matches := codeOwners.Match(path)
+				var aliases []string
+				for _, match := range matches {
+					aliases = append(aliases, string(match.Name()))
+				}
+				if len(aliases) == 0 {
+					aliases = append(aliases, "-")
+				}
+				fmt.Println(strings.Join(aliases, ","), " ", path)
+			}
+			if !*walk {
+				return filepath.SkipDir
+			}
+			return nil
+		}); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
 	}
 }
