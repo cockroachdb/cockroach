@@ -37,6 +37,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *TransferLeaseOperation:
 		return &o.Result
+	case *ChangeZoneOperation:
+		return &o.Result
 	case *BatchOperation:
 		return &o.Result
 	case *ClosureTxnOperation:
@@ -109,6 +111,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *ChangeReplicasOperation:
 		o.format(w, fctx)
 	case *TransferLeaseOperation:
+		o.format(w, fctx)
+	case *ChangeZoneOperation:
 		o.format(w, fctx)
 	case *BatchOperation:
 		newFctx := fctx
@@ -243,6 +247,11 @@ func (op ChangeReplicasOperation) format(w *strings.Builder, fctx formatCtx) {
 
 func (op TransferLeaseOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.TransferLeaseOperation(ctx, %s, %d)`, fctx.receiver, roachpb.Key(op.Key), op.Target)
+	op.Result.format(w)
+}
+
+func (op ChangeZoneOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `env.UpdateZoneConfig(ctx, %s)`, op.Type)
 	op.Result.format(w)
 }
 

@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -21,10 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 // Applier executes Steps.
 type Applier struct {
+	env *Env
 	dbs []*kv.DB
 	mu  struct {
 		dbIdx int
@@ -34,8 +37,9 @@ type Applier struct {
 }
 
 // MakeApplier constructs an Applier that executes against the given DBs.
-func MakeApplier(dbs ...*kv.DB) *Applier {
+func MakeApplier(env *Env, dbs ...*kv.DB) *Applier {
 	a := &Applier{
+		env: env,
 		dbs: dbs,
 	}
 	a.mu.txns = make(map[string]*kv.Txn)
@@ -56,7 +60,7 @@ func (a *Applier) Apply(ctx context.Context, step *Step) (retErr error) {
 			retErr = errors.Errorf(`panic applying step %s: %v`, step, p)
 		}
 	}()
-	applyOp(ctx, db, &step.Op)
+	applyOp(ctx, a.env, db, &step.Op)
 	return nil
 }
 
@@ -68,7 +72,7 @@ func (a *Applier) getNextDBRoundRobin() (*kv.DB, int32) {
 	return a.dbs[dbIdx], int32(dbIdx)
 }
 
-func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
+func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation, *PutOperation, *ScanOperation, *BatchOperation:
 		applyClientOp(ctx, db, op)
@@ -85,6 +89,9 @@ func applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		o.Result = resultError(ctx, err)
 	case *TransferLeaseOperation:
 		err := db.AdminTransferLease(ctx, o.Key, o.Target)
+		o.Result = resultError(ctx, err)
+	case *ChangeZoneOperation:
+		err := updateZoneConfigInEnv(ctx, env, o.Type)
 		o.Result = resultError(ctx, err)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
@@ -293,4 +300,20 @@ func newGetReplicasFn(dbs ...*kv.DB) GetReplicasFn {
 		}
 		return targets
 	}
+}
+
+func updateZoneConfig(zone *zonepb.ZoneConfig, change ChangeZoneType) {
+	switch change {
+	case ChangeZoneType_ToggleGlobalReads:
+		cur := zone.GlobalReads != nil && *zone.GlobalReads
+		zone.GlobalReads = proto.Bool(!cur)
+	default:
+		panic(errors.AssertionFailedf(`unknown ChangeZoneType: %v`, change))
+	}
+}
+
+func updateZoneConfigInEnv(ctx context.Context, env *Env, change ChangeZoneType) error {
+	return env.UpdateZoneConfig(ctx, GeneratorDataTableID, func(zone *zonepb.ZoneConfig) {
+		updateZoneConfig(zone, change)
+	})
 }
