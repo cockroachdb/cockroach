@@ -18,91 +18,44 @@
 #
 #   TODO(otan): make this a tool.
 
-cockroachdb/sql-features:
-  email: sql-features-team@cockroachlabs.com
-  slack: sql-features
-  triage_column_id: 9056630
-cockroachdb/sql-syntax-prs: # TODO: remove
-  email: sql-features-team@cockroachlabs.com
-  slack: sql-features
-  triage_column_id: 9056630
-cockroachdb/sql-api-prs: # TODO: remove
-  email: sql-features-team@cockroachlabs.com
-  slack: sql-features
+cockroachdb/docs:
+  triage_column_id: 0 # TODO
+cockroachdb/sql-experience:
   triage_column_id: 9056630
 cockroachdb/sql-schema:
-  email: sql-schema-team@cockroachlabs.com
-  slack: sql-schema
   triage_column_id: 8946818
-cockroachdb/sql-execution:
-  email: vectorized-execution-team@cockroachlabs.com
-  slack: sql-execution
+cockroachdb/sql-queries:
+  aliases: [cockroachdb/sql-syntax-prs, cockroachdb/sql-optimizer, cockroachdb/sql-opt-prs, cockroachdb/sqlproxy-prs]
   triage_column_id: 6837155
-cockroachdb/sql-optimizer:
-  email: optimizer-team@cockroachlabs.com
-  slack: sql-optimizer
-  triage_column_id: 3281044
-cockroachdb/sql-opt-prs: # TODO: remove
-  email: optimizer-team@cockroachlabs.com
-  slack: sql-optimizer
-  triage_column_id: 3281044
+cockroachdb/sql-observability:
+  aliases: [cockroachdb/sql-api-prs]
+  triage_column_id: 0 # TODO
 cockroachdb/kv:
-  email: kv@cockroachlabs.com
-  slack: kv
   triage_column_id: 3550674
 cockroachdb/geospatial:
-  email: geospatial-team@cockroachlabs.com
-  slack: geospatial
   triage_column_id: 9487269
 cockroachdb/dev-inf:
-  email: dev-inf@cockroachlabs.com
-  slack: dev-inf
   triage_column_id: 10210759
 cockroachdb/storage:
-  email: storage-team@cockroachlabs.com
-  slack: storage
   triage_column_id: 6668367
-cockroachdb/appdev:
-  email: app-dev-team@cockroachlabs.com
-  slack: app-dev
-  triage_column_id: 8532151
+cockroachdb/test-eng:
+  triage_column_id: 0 # TODO
 cockroachdb/security:
-  email: security@cockroachlabs.com
-  slack: security
   triage_column_id: 0 # TODO
-cockroachdb/bulk-prs: # TODO: remove
-  email: bulk-io@cockroachlabs.com
-  slack: bulk-io
-  triage_column_id: 3097123
 cockroachdb/bulk-io:
-  email: bulk-io@cockroachlabs.com
-  slack: bulk-io
+  aliases: [cockroachdb/bulk-prs]
   triage_column_id: 3097123
-cockroachdb/cdc-prs: # TODO: remove
-  email: cdc@cockroachlabs.com
-  slack: cdc
+cockroachdb/cdc:
+  aliases: [cockroachdb/cdc-prs]
   triage_column_id: 3570120
-cockroachdb/cdc-io:
-  email: cdc@cockroachlabs.com
-  slack: cdc
-  triage_column_id: 3570120
-cockroachdb/cli-prs:
-  email: TODO@cockroachlabs.com
-  slack: cli
+cockroachdb/server:
+  aliases: [cockroachdb/cli-prs, cockroachdb/server-prs, cockroachdb/http-api-prs]
   triage_column_id: 0 # TODO
-cockroachdb/rfc-prs:
-  email: TODO@cockroachlabs.com
-  slack: TODO
-  triage_column_id: 0 # TODO
-cockroachdb/http-api-prs:
-  email: TODO@cockroachlabs.com
-  slack: TODO
-  triage_column_id: 0 # TODO
-cockroachdb/sqlproxy-prs:
-  email: TODO@cockroachlabs.com
-  slack: cc-intrusion-team
-  triage_column_id: 0 # TODO
-cockroachdb/cluster-ui-prs:
-  email: observability@cockroachlabs.com
-  slack: _cc-observability
+cockroachdb/cluster-ui:
+  aliases: [cockroachdb/cluster-ui-prs]
   triage_column_id: 6598672
+cockroachdb/obs-infra:
+  triage_column_id: 0 # TODO
+cockroachdb/unowned:
+  aliases: [cockroachdb/rfc-prs]
+  triage_column_id: 0 # TODO

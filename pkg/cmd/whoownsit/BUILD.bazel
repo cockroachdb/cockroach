@@ -5,7 +5,10 @@ go_library(
     srcs = ["whoownsit.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/whoownsit",
     visibility = ["//visibility:private"],
-    deps = ["//pkg/internal/codeowners"],
+    deps = [
+        "//pkg/internal/codeowners",
+        "//pkg/internal/reporoot",
+    ],
 )
 
 go_binary(
