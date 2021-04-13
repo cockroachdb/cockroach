@@ -459,8 +459,10 @@ func (b *replicaAppBatch) Stage(cmdI apply.Command) (apply.CheckedCommand, error
 		if cmd.IsLocal() && cmd.proposal.Request.IsIntentWrite() {
 			wts := cmd.proposal.Request.WriteTimestamp()
 			if wts.LessEq(b.state.RaftClosedTimestamp) {
-				return nil, makeNonDeterministicFailure("writing at %s below closed ts: %s (%s)",
+				err := makeNonDeterministicFailure("writing at %s below closed ts: %s (%s)",
 					wts, b.state.RaftClosedTimestamp.String(), cmd.proposal.Request.String())
+				log.CrashWithCore(ctx, err, b, b.r, b.r.store.raftEntryCache)
+				return nil, err
 			}
 		}
 		log.Event(ctx, "applying command")

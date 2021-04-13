@@ -37,6 +37,7 @@ func logfDepth(
 	ctx context.Context, depth int, sev Severity, ch Channel, format string, args ...interface{},
 ) {
 	if sev == severity.FATAL {
+		CrashWithCore(context.Background(), errors.Errorf(format, args...), args...)
 		if MaybeSendCrashReport != nil {
 			err := errors.NewWithDepthf(depth+1, "log.Fatal: "+format, args...)
 			MaybeSendCrashReport(ctx, err)

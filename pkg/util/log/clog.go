@@ -33,8 +33,8 @@ import (
 )
 
 // CrashWithCore .
-func CrashWithCore(ctx context.Context, err error) {
-	err = errors.Wrapf(err, "TBG CRASH DETECTED GOID=%d", goid.Get())
+func CrashWithCore(ctx context.Context, err error, stuff ...interface{}) {
+	err = errors.Wrapf(err, "TBG CRASH DETECTED GOID=%d stuff=%v", goid.Get(), stuff)
 	// Try hard to get the message logged.
 	// See https://github.com/cockroachdb/cockroach/pull/62763.
 	fmt.Fprintln(os.Stderr, err)
@@ -47,6 +47,11 @@ func CrashWithCore(ctx context.Context, err error) {
 		runtimepprof.WithLabels(ctx, runtimepprof.Labels("TBG", "TBG")),
 	)
 	go func() {
+		// I don't know if this helps but I want to be able to reference these from
+		// the goroutine in the dump and it hasn't always worked in the past.
+		_ = err
+		_ = stuff
+		_ = ctx
 		panic(err)
 	}()
 	time.Sleep(time.Hour)
