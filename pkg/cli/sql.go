@@ -564,11 +564,6 @@ func (c *cliState) handleDemoAddNode(cmd []string, nextState, errState cliStateE
 		return c.internalServerError(errState, fmt.Errorf("bad call to handleDemoAddNode"))
 	}
 
-	if demoCtx.simulateLatency {
-		fmt.Printf("add command is not supported in --global configurations\n")
-		return nextState
-	}
-
 	if err := demoCtx.transientCluster.AddNode(context.Background(), cmd[1]); err != nil {
 		return c.internalServerError(errState, err)
 	}
@@ -1799,5 +1794,11 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 func printlnUnlessEmbedded(args ...interface{}) {
 	if !sqlCtx.embeddedMode {
 		fmt.Println(args...)
+	}
+}
+
+func printfUnlessEmbedded(f string, args ...interface{}) {
+	if !sqlCtx.embeddedMode {
+		fmt.Printf(f, args...)
 	}
 }
