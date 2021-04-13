@@ -251,6 +251,7 @@ PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',
 ]
 TEST_RUNNER = '.cockroach_settings.NonDescribingDiscoverRunner'
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 
 class NonDescribingDiscoverRunner(DiscoverRunner):
     def get_test_runner_kwargs(self):
