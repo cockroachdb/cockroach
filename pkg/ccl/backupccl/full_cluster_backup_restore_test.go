@@ -596,8 +596,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	// This test retries the job (by injected a retry error) after restoring a
 	// every system table that has a custom restore function. This tried to tease
 	// out any errors that may occur if some of the system table restoration
-	// functions are not idempotent (e.g. jobs table), but are retried by the
-	// restore anyway.
+	// functions are not idempotent.
 	t.Run("retry-during-custom-system-table-restore", func(t *testing.T) {
 		defer jobs.TestingSetAdoptAndCancelIntervals(100*time.Millisecond, 100*time.Millisecond)()
 
@@ -612,14 +611,16 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				_, tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 				defer cleanupEmptyCluster()
 
-				// Inject a retry error
+				// Inject a retry error, that returns once.
+				alreadyErrored := false
 				for _, server := range tcRestore.Servers {
 					registry := server.JobRegistry().(*jobs.Registry)
 					registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 						jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 							r := raw.(*restoreResumer)
 							r.testingKnobs.duringSystemTableRestoration = func(systemTableName string) error {
-								if systemTableName == customRestoreSystemTable {
+								if !alreadyErrored && systemTableName == customRestoreSystemTable {
+									alreadyErrored = true
 									return jobs.NewRetryJobError("injected error")
 								}
 								return nil
