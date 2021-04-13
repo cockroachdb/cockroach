@@ -1043,7 +1043,6 @@ func (a Allocator) rebalanceTarget(
 		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
 		a.storePool.isNodeReadyForRoutineReplicaTransfer,
 		options,
-		targetType,
 	)
 
 	if len(results) == 0 {
