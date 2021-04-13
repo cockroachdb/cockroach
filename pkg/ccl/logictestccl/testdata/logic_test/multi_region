@@ -1512,3 +1512,20 @@ vectorized: true
                   spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk19v2jwUxu_fT2GdXvRdZZq_BRqpkquNbVQMOqi0STNCaXzSegM7c5wtU8XVPtu-15SEtgMN1LILSHx8fjnPeexzB_nXOUTQ-3g5OO8Pyf-v-pOryfvBCzLpDXovr4g2As1MCkoyoxc6P64fq4BMkJxPmpfZd2lvdWFndcL97hERMk90oex6YpNFXo9H75oSObkY9YerImR0_3YsVaoJ44XrBrjKbGIf3vbGvQd55IwcnoYYXnfDTqub-mkrjJOTVjdIvVY79EQbA5F2_M4hUFBa4DBeYA7RJwhhSiEzOsE816YK3dUJfVFC5FKQKitsFZ5SSLRBiO7ASjtHiOAqvp7jGGOBxnGBgkAby3n92UYpy4xcxOYHUJhkscoj4nBgHBwOnJenIeclVn_X3Tecl93Uufj1k_My9QTnpSfUWbXoHHJo7ck5ByRWgnhE21s0QGFU2IgwjzKfshCmSwq6sI8d5ja-QYi8Jd3PBe_JLlS63T2d2Jd1Dp7sgL_VgcfGC1X3h2Kt6enyLx4NdUtnjr_uzkAupCXeVg3uc06hr76hsSgutFRonGC9VDNMrHnMqvmZSVECfcB6ZWYIaz9MGgs2rAp2uRU8R2mlcHVdwi0q76_LQOsvRUY-a6mIVhFhFTAaEtZZFzpGJdDUWgk7oYT51e-ItbcqDp-jeIx5plWOG-e87dSmFFDcYHNZcl2YBC-NTuoyzXJUc3VAYG6bXb9Z9FW9VY_gn7D3L7C_Ew7WYHcTDnbC4W443AmfbMDT5X-_AwAA___uBSO6
+
+subtest enum_name_clash
+
+statement ok
+CREATE DATABASE db_enum_name_clash;
+CREATE TYPE db_enum_name_clash.crdb_internal_region AS ENUM ();
+
+statement error pq: type "db_enum_name_clash.public.crdb_internal_region" already exists\nHINT: object "crdb_internal_regions" must be renamed or dropped before adding the primary region\nDETAIL: multi-region databases employ an internal enum called crdb_internal_region to manage regions which conflicts with the existing object
+ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
+
+# Once the offending table is dropped, we should be able to add a region to the
+# database.
+statement ok
+DROP TYPE db_enum_name_clash.crdb_internal_region;
+ALTER DATABASE db_enum_name_clash SET PRIMARY REGION "us-east-1"
+
+

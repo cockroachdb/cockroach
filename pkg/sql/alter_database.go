@@ -812,7 +812,20 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 
 	// Initialize that multi-region database by creating the multi-region enum
 	// and the database-level zone configuration.
-	return params.p.maybeInitializeMultiRegionDatabase(params.ctx, n.desc, regionConfig)
+	err = params.p.maybeInitializeMultiRegionDatabase(params.ctx, n.desc, regionConfig)
+	if err != nil {
+		// Hijack the error if an object called `crdb_internal_regions` already
+		// exists in the database and return a suitable hint.
+		if pgerror.GetPGCode(err) == pgcode.DuplicateObject {
+			return errors.WithHint(
+				errors.WithDetail(err,
+					"multi-region databases employ an internal enum called crdb_internal_region to "+
+						"manage regions which conflicts with the existing object"),
+				`object "crdb_internal_regions" must be renamed or dropped before adding the primary region`)
+		}
+		return err
+	}
+	return nil
 }
 
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
