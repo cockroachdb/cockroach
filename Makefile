@@ -382,6 +382,7 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 		github.com/cockroachdb/crlfmt \
 		github.com/cockroachdb/gostdlib/cmd/gofmt \
 		github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
+		github.com/golang/mock/mockgen \
 		github.com/cockroachdb/stress \
 		github.com/goware/modvendor \
 		github.com/go-swagger/go-swagger/cmd/swagger \

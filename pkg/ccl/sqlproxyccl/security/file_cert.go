@@ -1,0 +1,93 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Licensed as a CockroachDB Enterprise file under the Cockroach Community
+// License (the "License"); you may not use this file except in compliance with
+// the License. You may obtain a copy of the License at
+//
+//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+
+package security
+
+import (
+	"context"
+	"crypto/tls"
+	"io/ioutil"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
+
+// Ensure that FileCert implements Cert.
+var _ Cert = (*FileCert)(nil)
+
+// FileCert represents a single cert loaded from cert/key file pair.
+type FileCert struct {
+	syncutil.Mutex
+	certFile string
+	keyFile  string
+	err      error
+	cert     *tls.Certificate
+}
+
+// NewFileCert will construct a new file cert but it will not try to load it.
+// A follow up Reload is needed to read, parse and verify the actual cert/key files.
+func NewFileCert(certFile, keyFile string) *FileCert {
+	return &FileCert{
+		certFile: certFile,
+		keyFile:  keyFile,
+	}
+}
+
+// Reload the certificate from files.
+func (fc *FileCert) Reload(ctx context.Context) {
+	fc.Lock()
+	defer fc.Unlock()
+
+	// There was a previous error that is not yet retrieved.
+	if fc.err != nil {
+		return
+	}
+
+	certBytes, err := ioutil.ReadFile(fc.certFile)
+	if err != nil {
+		log.Ops.Warningf(ctx, "could not reload cert file %s: %v", fc.certFile, err)
+		fc.err = err
+		return
+	}
+
+	keyBytes, err := ioutil.ReadFile(fc.keyFile)
+	if err != nil {
+		log.Ops.Warningf(ctx, "could not reload cert key file %s: %v", fc.keyFile, err)
+		fc.err = err
+		return
+	}
+
+	cert, err := tls.X509KeyPair(certBytes, keyBytes)
+	if err != nil {
+		log.Ops.Warningf(ctx, "could not construct cert from cert %s and key %s: %v", fc.certFile, fc.keyFile, err)
+		fc.err = err
+		return
+	}
+
+	fc.cert = &cert
+}
+
+// Err will return the last error that occurred during reload or nil if the
+// last reload was successful.
+func (fc *FileCert) Err() error {
+	fc.Lock()
+	defer fc.Unlock()
+	return fc.err
+}
+
+// ClearErr will clear the last err so the follow up Reload can execute.
+func (fc *FileCert) ClearErr() {
+	fc.Lock()
+	defer fc.Unlock()
+	fc.err = nil
+}
+
+// TLSCert returns the tls certificate if the load was successful.
+func (fc *FileCert) TLSCert() *tls.Certificate {
+	return fc.cert
+}
