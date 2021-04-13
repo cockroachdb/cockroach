@@ -34,7 +34,7 @@ import (
 const maxWaitForQueryTxn = 50 * time.Millisecond
 
 // TxnLivenessHeartbeatMultiplier specifies what multiple the transaction
-// liveness threshold should be of the transaction heartbeat internval.
+// liveness threshold should be of the transaction heartbeat interval.
 var TxnLivenessHeartbeatMultiplier = envutil.EnvOrDefaultInt(
 	"COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER", 5)
 
