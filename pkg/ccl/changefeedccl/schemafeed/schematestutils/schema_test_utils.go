@@ -49,6 +49,17 @@ func MakeColumnDesc(id descpb.ColumnID) *descpb.ColumnDescriptor {
 	}
 }
 
+// SetLocalityRegionalByRow sets the LocalityConfig of the table
+// descriptor such that desc.IsLocalityRegionalByRow will return true.
+func SetLocalityRegionalByRow(desc catalog.TableDescriptor) catalog.TableDescriptor {
+	desc.TableDesc().LocalityConfig = &descpb.TableDescriptor_LocalityConfig{
+		Locality: &descpb.TableDescriptor_LocalityConfig_RegionalByRow_{
+			RegionalByRow: &descpb.TableDescriptor_LocalityConfig_RegionalByRow{},
+		},
+	}
+	return tabledesc.NewBuilder(desc.TableDesc()).BuildImmutableTable()
+}
+
 // AddColumnDropBackfillMutation adds a mutation to desc to drop a column.
 // Yes, this does modify an immutable.
 func AddColumnDropBackfillMutation(desc catalog.TableDescriptor) catalog.TableDescriptor {

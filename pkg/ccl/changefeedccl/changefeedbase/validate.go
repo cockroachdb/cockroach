@@ -40,6 +40,9 @@ func ValidateTable(targets jobspb.ChangefeedTargets, tableDesc catalog.TableDesc
 	if tableDesc.IsSequence() {
 		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
 	}
+	if tableDesc.IsLocalityRegionalByRow() {
+		return errors.Errorf(`CHANGEFEED cannot target REGIONAL BY ROW tables: %s`, tableDesc.GetName())
+	}
 	if len(tableDesc.GetFamilies()) != 1 {
 		return errors.Errorf(
 			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,

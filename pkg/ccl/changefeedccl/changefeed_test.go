@@ -27,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	// Imported to allow locality-related table mutations
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -66,6 +69,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var testServerRegion = "us-east-1"
 
 func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1175,6 +1180,55 @@ func TestChangefeedAuthorization(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestChangefeedFailOnRBRChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rbrErrorRegex := regexp.MustCompile(`CHANGEFEED cannot target REGIONAL BY ROW tables: rbr`)
+	assertRBRError := func(ctx context.Context, f cdctest.TestFeed) {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		done := make(chan struct{})
+		go func() {
+			if _, err := f.Next(); err != nil {
+				assert.Regexp(t, rbrErrorRegex, err)
+				done <- struct{}{}
+			}
+		}()
+		select {
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for changefeed to fail")
+		case <-done:
+		}
+	}
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
+		t.Run("regional by row", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY, b INT)`)
+			defer sqlDB.Exec(t, `DROP TABLE rbr`)
+			sqlDB.Exec(t, `INSERT INTO rbr VALUES (0, NULL)`)
+			rbr := feed(t, f, `CREATE CHANGEFEED FOR rbr `)
+			defer closeFeed(t, rbr)
+			sqlDB.Exec(t, `INSERT INTO rbr VALUES (1, 2)`)
+			assertPayloads(t, rbr, []string{
+				`rbr: [0]->{"after": {"a": 0, "b": null}}`,
+				`rbr: [1]->{"after": {"a": 1, "b": 2}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
+			assertRBRError(context.Background(), rbr)
+		})
+	}
+	withTestServerRegion := func(args *base.TestServerArgs) {
+		args.Locality.Tiers = append(args.Locality.Tiers, roachpb.Tier{
+			Key:   "region",
+			Value: testServerRegion,
+		})
+	}
+	t.Run(`sinkless`, sinklessTestWithServerArgs(withTestServerRegion, testFn))
+	t.Run("enterprise", enterpriseTestWithServerArgs(withTestServerRegion, testFn))
+}
+
 func TestChangefeedStopOnSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1963,7 +2017,14 @@ func TestChangefeedErrors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{{
+				Key:   "region",
+				Value: testServerRegion,
+			}},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
@@ -2043,6 +2104,16 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `CHANGEFEED cannot target views: vw`,
 		`EXPERIMENTAL CHANGEFEED FOR vw`,
 	)
+
+	// Regional by row tables are not currently supported
+	sqlDB.Exec(t, fmt.Sprintf(`ALTER DATABASE defaultdb PRIMARY REGION "%s"`, testServerRegion))
+	sqlDB.Exec(t, `CREATE TABLE test_cdc_rbr_fails (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `ALTER TABLE test_cdc_rbr_fails SET LOCALITY REGIONAL BY ROW`)
+	sqlDB.ExpectErr(
+		t, `CHANGEFEED cannot target REGIONAL BY ROW tables: test_cdc_rbr_fails`,
+		`CREATE CHANGEFEED FOR test_cdc_rbr_fails`,
+	)
+
 	// Backup has the same bad error message #28170.
 	sqlDB.ExpectErr(
 		t, `"information_schema.tables" does not exist`,
