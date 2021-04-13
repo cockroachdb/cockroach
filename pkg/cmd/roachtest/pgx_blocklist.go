@@ -20,42 +20,7 @@ var pgxBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var pgxBlocklist21_1 = blocklist{
-	"v4.Example_CustomType":                                        "27796",
-	"v4.TestConnBeginBatchDeferredError":                           "31632",
-	"v4.TestConnCopyFromLarge":                                     "52722",
-	"v4.TestConnQueryDeferredError":                                "31632",
-	"v4.TestConnQueryErrorWhileReturningRows":                      "26925",
-	"v4.TestConnQueryReadRowMultipleTimes":                         "26925",
-	"v4.TestConnQueryValues":                                       "26925",
-	"v4.TestConnSendBatch":                                         "44712",
-	"v4.TestConnSimpleProtocol":                                    "21286",
-	"v4.TestConnSimpleProtocolRefusesNonStandardConformingStrings": "36215",
-	"v4.TestConnSimpleProtocolRefusesNonUTF8ClientEncoding":        "37129",
-	"v4.TestDomainType":                                            "27796",
-	"v4.TestFatalRxError":                                          "35897",
-	"v4.TestFatalTxError":                                          "35897",
-	"v4.TestInetCIDRArrayTranscodeIP":                              "18846",
-	"v4.TestInetCIDRArrayTranscodeIPNet":                           "18846",
-	"v4.TestInetCIDRTranscodeIP":                                   "18846",
-	"v4.TestInetCIDRTranscodeIPNet":                                "18846",
-	"v4.TestInetCIDRTranscodeWithJustIP":                           "18846",
-	"v4.TestLargeObjects":                                          "26725",
-	"v4.TestLargeObjectsMultipleTransactions":                      "26725",
-	"v4.TestLargeObjectsPreferSimpleProtocol":                      "26725",
-	"v4.TestListenNotify":                                          "41522",
-	"v4.TestListenNotifySelfNotification":                          "41522",
-	"v4.TestListenNotifyWhileBusyIsSafe":                           "41522",
-	"v4.TestQueryContextErrorWhileReceivingRows":                   "26925",
-	"v4.TestRowDecode":                                             "26925",
-	"v4.TestTransactionSuccessfulCommit":                           "31632",
-	"v4.TestTransactionSuccessfulRollback":                         "31632",
-	"v4.TestTxCommitSerializationFailure":                          "12701",
-	"v4.TestTxCommitWhenTxBroken":                                  "31632",
-	"v4.TestTxNestedTransactionCommit":                             "31632",
-	"v4.TestTxNestedTransactionRollback":                           "31632",
-	"v4.TestUnregisteredTypeUsableAsStringArgumentAndBaseResult":   "27796",
-}
+var pgxBlocklist21_1 = blocklist{}
 
 var pgxBlocklist20_2 = blocklist{
 	"v4.Example_CustomType":                                        "27796",

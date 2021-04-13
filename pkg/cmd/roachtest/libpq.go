@@ -45,7 +45,7 @@ func registerLibPQ(r *testRegistry) {
 		c.l.Printf("Latest lib/pq release is %s.", latestTag)
 		c.l.Printf("Supported lib/pq release is %s.", libPQSupportedTag)
 
-		installLatestGolang(ctx, t, c, node)
+		installGolang(ctx, t, c, node)
 
 		const (
 			libPQRepo   = "github.com/lib/pq"
