@@ -10,6 +10,7 @@ package backupccl
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -24,12 +25,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 )
 
 // Progress is streamed to the coordinator through metadata.
 var restoreDataOutputTypes = []*types.T{}
+
+// A temporary prefix used to grep for in logspy.
+const perfKey = "debug_perf_testing "
 
 type restoreDataProcessor struct {
 	execinfra.ProcessorBase
@@ -41,6 +46,15 @@ type restoreDataProcessor struct {
 
 	alloc rowenc.DatumAlloc
 	kr    *storageccl.KeyRewriter
+
+	// totalIterators tracks the total time spent opening iterators.
+	totalIterators time.Duration
+	// totalProducing tracks the total time spent producing keys for the sst batcher.
+	totalProducing time.Duration
+	// The amount of time spent adding keys to the sst batcher.
+	totalAdding time.Duration
+	// totalFlushing tracks the total time spent flushing SSTs.
+	totalFlushing time.Duration
 }
 
 var _ execinfra.Processor = &restoreDataProcessor{}
@@ -159,6 +173,7 @@ func init() {
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	entry execinfrapb.RestoreSpanEntry, newSpanKey roachpb.Key,
 ) (roachpb.BulkOpSummary, error) {
+	startTime := timeutil.Now()
 	db := rd.flowCtx.Cfg.DB
 	ctx := rd.Ctx
 	evalCtx := rd.EvalCtx
@@ -188,6 +203,9 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		iters = append(iters, iter)
 	}
 
+	timeOpeningIters := timeutil.Since(startTime)
+	rd.totalIterators += timeOpeningIters
+
 	batcher, err := bulk.MakeSSTBatcher(ctx, db, evalCtx.Settings,
 		func() int64 { return storageccl.MaxImportBatchSize(evalCtx.Settings) })
 	if err != nil {
@@ -201,6 +219,13 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	defer iter.Close()
 	var keyScratch, valueScratch []byte
 
+	// lastTime keeps track of the last time that we added a key to the
+	// sst batcher. This is so that we can keep track of how much time it
+	// takes to produce the SSTs vs the time it takes to add it to the
+	// batcher.
+	lastAdd := timeutil.Now()
+	var timeProducing time.Duration
+	var timeAdding time.Duration
 	for iter.SeekGE(startKeyMVCC); ; {
 		ok, err := iter.Valid()
 		if err != nil {
@@ -251,18 +276,34 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		value.ClearChecksum()
 		value.InitChecksum(key.Key)
 
-		if log.V(3) {
+		if log.V(5) {
 			log.Infof(ctx, "Put %s -> %s", key.Key, value.PrettyPrint())
 		}
+		timeProducing += time.Since(lastAdd)
+		beforeAdd := timeutil.Now()
 		if err := batcher.AddMVCCKey(ctx, key, value.RawBytes); err != nil {
 			return summary, errors.Wrapf(err, "adding to batch: %s -> %s", key, value.PrettyPrint())
 		}
+		timeAdding += timeutil.Since(beforeAdd)
+		lastAdd = timeutil.Now()
 	}
+	rd.totalProducing += timeProducing
+	rd.totalAdding += timeAdding
+
 	// Flush out the last batch.
+	beforeFlush := timeutil.Now()
 	if err := batcher.Flush(ctx); err != nil {
 		return summary, err
 	}
+	timeFlushing := timeutil.Since(beforeFlush)
+	rd.totalFlushing += timeFlushing
 	log.Event(ctx, "done")
+
+	if log.V(4) {
+		log.Infof(ctx, perfKey+"added %+v bytes over %+v keys", batcher.GetSummary().DataSize, batcher.GetSummary().EntryCounts)
+		log.Infof(ctx, perfKey+"spent %v opening iterators, %v producing the kvs, %v adding to batcher, and %v flushing", timeOpeningIters, timeProducing, timeAdding, timeFlushing)
+		log.Infof(ctx, perfKey+"Processor spent %v time opening iterators, %v producing SSTs, %v adding to batcher, and %v flushing", rd.totalIterators, rd.totalProducing, rd.totalAdding, rd.totalFlushing)
+	}
 
 	if restoreKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
 		if restoreKnobs.RunAfterProcessingRestoreSpanEntry != nil {
