@@ -201,10 +201,27 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	spans := ca.setupSpansAndFrontier()
 	timestampOracle := &changeAggregatorLowerBoundOracle{sf: ca.spanFrontier, initialInclusiveLowerBound: ca.spec.Feed.StatementTime}
 
+	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+		ca.knobs = *cfKnobs
+	}
+
+	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
+	// for all changefeeds to control memory allocated to all changefeeds.
+	pool := ca.flowCtx.Cfg.BackfillerMonitor
+	if ca.knobs.MemMonitor != nil {
+		pool = ca.knobs.MemMonitor
+	}
+	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", limit, pool)
+	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
+	ca.kvFeedMemMon = kvFeedMemMon
+
 	var err error
+	// TODO(yevgeniy): getSink is getting to be quite a kitchen sink -- refactor.
 	ca.sink, err = getSink(
 		ctx, ca.spec.Feed.SinkURI, ca.flowCtx.EvalCtx.NodeID.SQLInstanceID(), ca.spec.Feed.Opts, ca.spec.Feed.Targets,
 		ca.flowCtx.Cfg.Settings, timestampOracle, ca.flowCtx.Cfg.ExternalStorageFromURI, ca.spec.User(),
+		kvFeedMemMon.MakeBoundAccount(),
 	)
 	if err != nil {
 		err = MarkRetryableError(err)
@@ -226,21 +243,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.metrics = ca.flowCtx.Cfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	ca.sink = makeMetricsSink(ca.metrics, ca.sink)
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
-
-	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
-		ca.knobs = *cfKnobs
-	}
-
-	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
-	// for all changefeeds to control memory allocated to all changefeeds.
-	pool := ca.flowCtx.Cfg.BackfillerMonitor
-	if ca.knobs.MemMonitor != nil {
-		pool = ca.knobs.MemMonitor
-	}
-	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", limit, pool)
-	kvFeedMemMon.Start(ctx, pool, mon.BoundAccount{})
-	ca.kvFeedMemMon = kvFeedMemMon
 
 	buf := kvfeed.MakeChanBuffer()
 	leaseMgr := ca.flowCtx.Cfg.LeaseManager.(*lease.Manager)
@@ -421,6 +423,10 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 // kvFeed, sends off this event to the event consumer, and flushes the sink
 // if necessary.
 func (ca *changeAggregator) tick() error {
+	// TODO(yevgeniy): Getting an event from producer decreases the amount of
+	//  memory tracked by kvFeedMonitor.  We should "transfer" that memory
+	//  to the consumer below, and keep track of changes to the memory usage when
+	//  we convert feed event to datums; and then when we encode those datums.
 	event, err := ca.eventProducer.GetEvent(ca.Ctx)
 	if err != nil {
 		return err
@@ -924,9 +930,12 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	// but the oracle is only used when emitting row updates.
 	var nilOracle timestampLowerBoundOracle
 	var err error
+	// TODO(yevgeniy): Evaluate if we should introduce changefeed specific monitor.
+	mm := cf.flowCtx.Cfg.BackfillerMonitor
 	cf.sink, err = getSink(
 		ctx, cf.spec.Feed.SinkURI, cf.flowCtx.EvalCtx.NodeID.SQLInstanceID(), cf.spec.Feed.Opts, cf.spec.Feed.Targets,
 		cf.flowCtx.Cfg.Settings, nilOracle, cf.flowCtx.Cfg.ExternalStorageFromURI, cf.spec.User(),
+		mm.MakeBoundAccount(),
 	)
 	if err != nil {
 		err = MarkRetryableError(err)
