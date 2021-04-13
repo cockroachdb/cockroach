@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -46,6 +47,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type cliTest struct {
@@ -2114,4 +2116,12 @@ func Example_includes() {
 	// sql -f testdata/i_maxrecursion.sql
 	// \i: too many recursion levels (max 10)
 	// ERROR: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: \i: too many recursion levels (max 10)
+}
+
+func TestFoo(t *testing.T) {
+	rawBytes := []byte{151, 107, 190, 198, 3, 10, 12, 10, 10, 8, 176, 200, 233, 249, 146, 172, 216, 186, 22, 18, 12, 10, 10, 8, 176, 200, 233, 249, 146, 172, 216, 186, 22}
+	v := roachpb.Value{RawBytes: rawBytes}
+	s := rspb.ReadSummary{}
+	require.NoError(t, v.GetProto(&s))
+	t.Errorf("%+v", s)
 }
