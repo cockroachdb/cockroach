@@ -2039,7 +2039,7 @@ func (desc *wrapper) MakeFirstMutationPublic(
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		if includeConstraints || mutation.GetConstraint() == nil {
+		if includeConstraints || (mutation.GetConstraint() == nil && mutation.GetPrimaryKeySwap() == nil) {
 			if err := table.MakeMutationComplete(mutation); err != nil {
 				return nil, err
 			}
