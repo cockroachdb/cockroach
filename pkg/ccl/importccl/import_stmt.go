@@ -2226,9 +2226,16 @@ func (r *importResumer) publishTables(ctx context.Context, execCfg *sql.Executor
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
+	}
+
+	// Wait for the table to be public before completing.
+	for _, tbl := range details.Tables {
+		_, err := lm.WaitForOneVersion(ctx, tbl.Desc.ID, retry.Options{})
+		if err != nil {
+			return errors.Wrap(err, "publishing tables waiting for one version")
+		}
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
@@ -2277,6 +2284,15 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{})
 		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
 	}); err != nil {
 		return err
+	}
+	// Wait for the tables to become public before completing.
+	if details.PrepareComplete {
+		for _, tableDesc := range details.Tables {
+			_, err := cfg.LeaseManager.WaitForOneVersion(ctx, tableDesc.Desc.ID, retry.Options{})
+			if err != nil {
+				return errors.Wrap(err, "rolling back tables waiting for them to be public")
+			}
+		}
 	}
 
 	// Run any jobs which might have been queued when dropping the schemas.
