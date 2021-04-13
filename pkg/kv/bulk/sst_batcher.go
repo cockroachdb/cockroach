@@ -350,6 +350,19 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int, nextKey roachpb.Ke
 	return nil
 }
 
+func (b *SSTBatcher) LogSummary(ctx context.Context) {
+	log.Infof(ctx,
+		"bulk adder ingested %s. Flushed chunked as %d files (%d after split-retries), %d due to ranges, %d due to sst size.",
+		sz(b.totalRows.DataSize),
+		b.flushCounts.total, b.flushCounts.files,
+		b.flushCounts.split, b.flushCounts.sstSize,
+	)
+	log.Infof(ctx,
+		"spent %v sending AddSSTable requests and %v splitting",
+		b.flushCounts.sendWait, b.flushCounts.splitWait,
+	)
+}
+
 // Close closes the underlying SST builder.
 func (b *SSTBatcher) Close() {
 	b.sstWriter.Close()

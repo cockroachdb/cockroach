@@ -92,6 +92,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/interval",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
