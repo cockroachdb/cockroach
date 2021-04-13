@@ -65,6 +65,8 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
