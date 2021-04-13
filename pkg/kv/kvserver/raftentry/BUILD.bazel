@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",
+        "//pkg/util",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -21,11 +22,15 @@ go_library(
 go_test(
     name = "raftentry_test",
     size = "small",
-    srcs = ["cache_test.go"],
+    srcs = [
+        "cache_test.go",
+        "ring_buffer_test.go",
+    ],
     embed = [":raftentry"],
     deps = [
         "//pkg/roachpb",
         "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
