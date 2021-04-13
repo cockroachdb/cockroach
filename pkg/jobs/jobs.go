@@ -288,22 +288,6 @@ func (j *Job) SetDescription(ctx context.Context, txn *kv.Txn, updateFn Descript
 	})
 }
 
-// SetDescriptorIDs updates the description of a created job.
-func (j *Job) SetDescriptorIDs(
-	ctx context.Context, txn *kv.Txn, updateFn DescriptorIdsUpdateFn,
-) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		prev := md.Payload.DescriptorIDs
-		descIDs, err := updateFn(ctx, prev)
-		if err != nil {
-			return err
-		}
-		md.Payload.DescriptorIDs = descIDs
-		ju.UpdatePayload(md.Payload)
-		return nil
-	})
-}
-
 // SetNonCancelable updates the NonCancelable field of a created job.
 func (j *Job) SetNonCancelable(
 	ctx context.Context, txn *kv.Txn, updateFn NonCancelableUpdateFn,
@@ -327,10 +311,6 @@ type RunningStatusFn func(ctx context.Context, details jobspb.Details) (RunningS
 // DescriptionUpdateFn is a callback that computes a job's description
 // given its current one.
 type DescriptionUpdateFn func(ctx context.Context, description string) (string, error)
-
-// DescriptorIdsUpdateFn is a callback that computes a job's descriptor IDs given
-// its current one.
-type DescriptorIdsUpdateFn func(ctx context.Context, descIDs []descpb.ID) ([]descpb.ID, error)
 
 // NonCancelableUpdateFn is a callback that computes a job's non-cancelable
 // status given its current one.
