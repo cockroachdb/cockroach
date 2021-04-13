@@ -108,12 +108,11 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
+	if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
+		return nil
+	}
 	snapType := SnapshotRequest_VIA_SNAPSHOT_QUEUE
-
 	if typ := repDesc.GetType(); typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
-		if fn := repl.store.cfg.TestingKnobs.RaftSnapshotQueueSkipReplica; fn != nil && fn() {
-			return nil
-		}
 		if index := repl.getAndGCSnapshotLogTruncationConstraints(
 			timeutil.Now(), repDesc.StoreID,
 		); index > 0 {
