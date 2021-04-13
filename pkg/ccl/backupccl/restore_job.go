@@ -1163,7 +1163,7 @@ func (r *restoreResumer) Resume(
 		// the first place, as a special case.
 		var newDescriptorChangeJobs []*jobs.StartableJob
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-			newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol, details)
+			newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol, details, nil)
 			return err
 		}
 		if err := descs.Txn(
@@ -1216,8 +1216,23 @@ func (r *restoreResumer) Resume(
 		return errors.Wrap(err, "inserting table statistics")
 	}
 	var newDescriptorChangeJobs []*jobs.StartableJob
+
+	var devalidateIndexes map[descpb.ID][]descpb.IndexID
+	if toValidate := len(details.RevalidateIndexes); toValidate > 0 {
+		if err := r.job.RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			return jobs.RunningStatus(fmt.Sprintf("re-validating %d indexes", toValidate)), nil
+		}); err != nil {
+			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		}
+		bad, err := revalidateIndexes(ctx, p.ExecCfg(), r.job, details.TableDescs, details.RevalidateIndexes)
+		if err != nil {
+			return err
+		}
+		devalidateIndexes = bad
+	}
+
 	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
-		newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol, details)
+		newDescriptorChangeJobs, err = r.publishDescriptors(ctx, txn, descsCol, details, devalidateIndexes)
 		return err
 	}
 	if err := descs.Txn(
@@ -1281,6 +1296,73 @@ func (r *restoreResumer) Resume(
 	return nil
 }
 
+func revalidateIndexes(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	job *jobs.Job,
+	tables []*descpb.TableDescriptor,
+	indexIDs []jobspb.RestoreDetails_RevalidateIndex,
+) (map[descpb.ID][]descpb.IndexID, error) {
+	indexIDsByTable := make(map[descpb.ID]map[descpb.IndexID]struct{})
+	for _, idx := range indexIDs {
+		if indexIDsByTable[idx.TableID] == nil {
+			indexIDsByTable[idx.TableID] = make(map[descpb.IndexID]struct{})
+		}
+		indexIDsByTable[idx.TableID][idx.IndexID] = struct{}{}
+	}
+
+	// We don't actually need the 'historical' read the way the schema change does
+	// since our table is offline.
+	var runner sql.HistoricalInternalExecTxnRunner = func(ctx context.Context, fn sql.InternalExecFn) error {
+		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			ie := job.MakeSessionBoundInternalExecutor(ctx, sql.NewFakeSessionData()).(*sql.InternalExecutor)
+			return fn(ctx, txn, ie)
+		})
+	}
+
+	invalidIndexes := make(map[descpb.ID][]descpb.IndexID)
+
+	for _, tbl := range tables {
+		indexes := indexIDsByTable[tbl.ID]
+		if len(indexes) == 0 {
+			continue
+		}
+		tableDesc := tabledesc.NewImmutable(*tbl)
+
+		var forward, inverted []*descpb.IndexDescriptor
+		for _, idx := range tableDesc.GetIndexes() {
+			i := idx
+			if _, ok := indexes[idx.ID]; ok {
+				switch idx.Type {
+				case descpb.IndexDescriptor_FORWARD:
+					forward = append(forward, &i)
+				case descpb.IndexDescriptor_INVERTED:
+					inverted = append(inverted, &i)
+				}
+			}
+		}
+		if len(forward) > 0 {
+			if err := sql.ValidateForwardIndexes(ctx, tableDesc, forward, runner, execCfg.Settings, execCfg.LeaseManager, false, true); err != nil {
+				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
+					invalidIndexes[tableDesc.ID] = invalid.Indexes
+				} else {
+					return nil, err
+				}
+			}
+		}
+		if len(inverted) > 0 {
+			if err := sql.ValidateInvertedIndexes(ctx, execCfg.Codec, tableDesc, inverted, runner, execCfg.Settings, execCfg.LeaseManager, true, true); err != nil {
+				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
+					invalidIndexes[tableDesc.ID] = append(invalidIndexes[tableDesc.ID], invalid.Indexes...)
+				} else {
+					return nil, err
+				}
+			}
+		}
+	}
+	return invalidIndexes, nil
+}
+
 // Initiate a run of CREATE STATISTICS. We don't know the actual number of
 // rows affected per table, so we use a large number because we want to make
 // sure that stats always get created/refreshed here.
@@ -1325,7 +1407,11 @@ func insertStats(
 // from r.job as the call to r.job.SetDetails will overwrite the job details
 // with a new value even if this transaction does not commit.
 func (r *restoreResumer) publishDescriptors(
-	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, details jobspb.RestoreDetails,
+	ctx context.Context,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	details jobspb.RestoreDetails,
+	devalidateIndexes map[descpb.ID][]descpb.IndexID,
 ) (newDescriptorChangeJobs []*jobs.StartableJob, err error) {
 	defer func() {
 		if err == nil {
@@ -1364,7 +1450,6 @@ func (r *restoreResumer) publishDescriptors(
 		return errors.Errorf("version mismatch for descriptor %d, expected version %d, got %v",
 			read.GetID(), read.GetVersion(), exp)
 	}
-
 	// Write the new TableDescriptors and flip state over to public so they can be
 	// accessed.
 	for _, tbl := range details.TableDescs {
@@ -1375,12 +1460,30 @@ func (r *restoreResumer) publishDescriptors(
 		if err := checkVersion(mutTable, tbl.Version); err != nil {
 			return newDescriptorChangeJobs, err
 		}
+		badIndexes := devalidateIndexes[mutTable.ID]
+		for _, badIdx := range badIndexes {
+			found := false
+			for i := range mutTable.Indexes {
+				if mutTable.Indexes[i].ID == badIdx {
+					copied := mutTable.Indexes[i]
+					if err := mutTable.AddIndexMutation(&copied, descpb.DescriptorMutation_ADD); err != nil {
+						return newDescriptorChangeJobs, err
+					}
+					mutTable.Indexes = append(mutTable.Indexes[:i], mutTable.Indexes[i+1:]...)
+					found = true
+					break
+				}
+			}
+			if !found {
+				return newDescriptorChangeJobs, errors.Errorf("did not find invalid index %d in table %d (%q) to drop and re-add", badIdx, mutTable.ID, mutTable.Name)
+			}
+		}
 		allMutDescs = append(allMutDescs, mutTable)
 		newTables = append(newTables, mutTable.TableDesc())
 		// For cluster restores, all the jobs are restored directly from the jobs
 		// table, so there is no need to re-create ongoing schema change jobs,
 		// otherwise we'll create duplicate jobs.
-		if details.DescriptorCoverage != tree.AllDescriptors {
+		if details.DescriptorCoverage != tree.AllDescriptors || len(badIndexes) > 0 {
 			// Convert any mutations that were in progress on the table descriptor
 			// when the backup was taken, and convert them to schema change jobs.
 			newJobs, err := createSchemaChangeJobsFromMutations(ctx,
