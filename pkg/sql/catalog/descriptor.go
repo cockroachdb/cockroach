@@ -34,6 +34,24 @@ type IndexOpts struct {
 	AddMutations bool
 }
 
+// MutationPublicationFilter is used by MakeFirstMutationPublic to filter the
+// mutation types published.
+type MutationPublicationFilter int
+
+const (
+	// IgnoreConstraints is used in MakeFirstMutationPublic to indicate that the
+	// table descriptor returned should not include newly added constraints, which
+	// is useful when passing the returned table descriptor to be used in
+	// validating constraints to be added.
+	IgnoreConstraints MutationPublicationFilter = 1
+	// IgnoreConstraintsAndPKSwaps is used in MakeFirstMutationPublic to indicate that the
+	// table descriptor returned should include newly added constraints.
+	IgnoreConstraintsAndPKSwaps = 2
+	// IncludeConstraints is used in MakeFirstMutationPublic to indicate that the
+	// table descriptor returned should include newly added constraints.
+	IncludeConstraints = 0
+)
+
 // Descriptor is an interface to be shared by individual descriptor
 // types.
 type Descriptor interface {
