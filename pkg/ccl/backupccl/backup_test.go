@@ -2739,7 +2739,7 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
 						SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
-							RunBeforeEnumMemberPromotion: func() {
+							RunBeforeEnumMemberPromotion: func() error {
 								mu.Lock()
 								if numTypeChangesStarted < len(tc.queries) {
 									numTypeChangesStarted++
@@ -2751,6 +2751,7 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 								} else {
 									mu.Unlock()
 								}
+								return nil
 							},
 						},
 					},

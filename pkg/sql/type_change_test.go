@@ -528,9 +528,10 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 			finishedSchemaChange.Add(1)
 
 			params.Knobs.SQLTypeSchemaChanger = &sql.TypeSchemaChangerTestingKnobs{
-				RunBeforeEnumMemberPromotion: func() {
+				RunBeforeEnumMemberPromotion: func() error {
 					typeSchemaChangeStarted.Done()
 					blockTypeSchemaChange.Wait()
+					return nil
 				},
 			}
 
