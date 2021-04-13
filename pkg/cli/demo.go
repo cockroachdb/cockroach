@@ -293,7 +293,7 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	checkInteractive(cmdIn)
 
 	if cliCtx.isInteractive {
-		fmt.Printf(`#
+		printfUnlessEmbedded(`#
 # Welcome to the CockroachDB demo database!
 #
 # You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
