@@ -3,16 +3,17 @@
 
 package systembench
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
 import (
 	context "context"
+	fmt "fmt"
+	proto "github.com/gogo/protobuf/proto"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
-
-import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -23,7 +24,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type PingRequest struct {
 	Payload []byte `protobuf:"bytes,1,opt,name=payload" json:"payload,omitempty"`
@@ -33,21 +34,21 @@ func (m *PingRequest) Reset()         { *m = PingRequest{} }
 func (m *PingRequest) String() string { return proto.CompactTextString(m) }
 func (*PingRequest) ProtoMessage()    {}
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ping_3cfa0224b0cfaca1, []int{0}
+	return fileDescriptor_c2f84874614811be, []int{0}
 }
 func (m *PingRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *PingRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *PingRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PingRequest.Merge(dst, src)
+func (m *PingRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PingRequest.Merge(m, src)
 }
 func (m *PingRequest) XXX_Size() int {
 	return m.Size()
@@ -66,21 +67,21 @@ func (m *PingResponse) Reset()         { *m = PingResponse{} }
 func (m *PingResponse) String() string { return proto.CompactTextString(m) }
 func (*PingResponse) ProtoMessage()    {}
 func (*PingResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_ping_3cfa0224b0cfaca1, []int{1}
+	return fileDescriptor_c2f84874614811be, []int{1}
 }
 func (m *PingResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *PingResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *PingResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PingResponse.Merge(dst, src)
+func (m *PingResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PingResponse.Merge(m, src)
 }
 func (m *PingResponse) XXX_Size() int {
 	return m.Size()
@@ -94,6 +95,25 @@ var xxx_messageInfo_PingResponse proto.InternalMessageInfo
 func init() {
 	proto.RegisterType((*PingRequest)(nil), "systembench.PingRequest")
 	proto.RegisterType((*PingResponse)(nil), "systembench.PingResponse")
+}
+
+func init() {
+	proto.RegisterFile("cli/systembench/systembenchpb/ping.proto", fileDescriptor_c2f84874614811be)
+}
+
+var fileDescriptor_c2f84874614811be = []byte{
+	// 175 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xd2, 0x48, 0xce, 0xc9, 0xd4,
+	0x2f, 0xae, 0x2c, 0x2e, 0x49, 0xcd, 0x4d, 0x4a, 0xcd, 0x4b, 0xce, 0x40, 0x66, 0x17, 0x24, 0xe9,
+	0x17, 0x64, 0xe6, 0xa5, 0xeb, 0x15, 0x14, 0xe5, 0x97, 0xe4, 0x0b, 0x71, 0x23, 0xc9, 0x28, 0xa9,
+	0x73, 0x71, 0x07, 0x64, 0xe6, 0xa5, 0x07, 0xa5, 0x16, 0x96, 0xa6, 0x16, 0x97, 0x08, 0x49, 0x70,
+	0xb1, 0x17, 0x24, 0x56, 0xe6, 0xe4, 0x27, 0xa6, 0x48, 0x30, 0x2a, 0x30, 0x6a, 0xf0, 0x04, 0xc1,
+	0xb8, 0x4a, 0x1a, 0x5c, 0x3c, 0x10, 0x85, 0xc5, 0x05, 0xf9, 0x79, 0xc5, 0xa9, 0xb8, 0x55, 0x1a,
+	0xb9, 0x73, 0xb1, 0x81, 0x54, 0xa6, 0x16, 0x09, 0xd9, 0x72, 0xb1, 0x80, 0x58, 0x42, 0x12, 0x7a,
+	0x48, 0x56, 0xea, 0x21, 0xd9, 0x27, 0x25, 0x89, 0x45, 0x06, 0x62, 0x81, 0x12, 0x83, 0x93, 0xc2,
+	0x89, 0x87, 0x72, 0x0c, 0x27, 0x1e, 0xc9, 0x31, 0x5e, 0x78, 0x24, 0xc7, 0x78, 0xe3, 0x91, 0x1c,
+	0xe3, 0x83, 0x47, 0x72, 0x8c, 0x13, 0x1e, 0xcb, 0x31, 0x5c, 0x78, 0x2c, 0xc7, 0x70, 0xe3, 0xb1,
+	0x1c, 0x03, 0x20, 0x00, 0x00, 0xff, 0xff, 0x97, 0x2b, 0x64, 0x57, 0xf5, 0x00, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -131,6 +151,14 @@ func (c *pingerClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.C
 // PingerServer is the server API for Pinger service.
 type PingerServer interface {
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
+}
+
+// UnimplementedPingerServer can be embedded to have forward compatible implementations.
+type UnimplementedPingerServer struct {
+}
+
+func (*UnimplementedPingerServer) Ping(ctx context.Context, req *PingRequest) (*PingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")
 }
 
 func RegisterPingerServer(s *grpc.Server, srv PingerServer) {
@@ -171,7 +199,7 @@ var _Pinger_serviceDesc = grpc.ServiceDesc{
 func (m *PingRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -179,23 +207,29 @@ func (m *PingRequest) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PingRequest) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PingRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.Payload != nil {
-		dAtA[i] = 0xa
-		i++
+		i -= len(m.Payload)
+		copy(dAtA[i:], m.Payload)
 		i = encodeVarintPing(dAtA, i, uint64(len(m.Payload)))
-		i += copy(dAtA[i:], m.Payload)
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *PingResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -203,27 +237,35 @@ func (m *PingResponse) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *PingResponse) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PingResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.Payload != nil {
-		dAtA[i] = 0xa
-		i++
+		i -= len(m.Payload)
+		copy(dAtA[i:], m.Payload)
 		i = encodeVarintPing(dAtA, i, uint64(len(m.Payload)))
-		i += copy(dAtA[i:], m.Payload)
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintPing(dAtA []byte, offset int, v uint64) int {
+	offset -= sovPing(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *PingRequest) Size() (n int) {
 	if m == nil {
@@ -252,14 +294,7 @@ func (m *PingResponse) Size() (n int) {
 }
 
 func sovPing(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozPing(x uint64) (n int) {
 	return sovPing(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -279,7 +314,7 @@ func (m *PingRequest) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -307,7 +342,7 @@ func (m *PingRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -316,6 +351,9 @@ func (m *PingRequest) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPing
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPing
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -360,7 +398,7 @@ func (m *PingResponse) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -388,7 +426,7 @@ func (m *PingResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -397,6 +435,9 @@ func (m *PingResponse) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthPing
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthPing
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -429,6 +470,7 @@ func (m *PingResponse) Unmarshal(dAtA []byte) error {
 func skipPing(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -460,10 +502,8 @@ func skipPing(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -480,72 +520,34 @@ func skipPing(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthPing
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowPing
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipPing(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupPing
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthPing
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthPing = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowPing   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthPing        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowPing          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupPing = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("cli/systembench/systembenchpb/ping.proto", fileDescriptor_ping_3cfa0224b0cfaca1)
-}
-
-var fileDescriptor_ping_3cfa0224b0cfaca1 = []byte{
-	// 175 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xd2, 0x48, 0xce, 0xc9, 0xd4,
-	0x2f, 0xae, 0x2c, 0x2e, 0x49, 0xcd, 0x4d, 0x4a, 0xcd, 0x4b, 0xce, 0x40, 0x66, 0x17, 0x24, 0xe9,
-	0x17, 0x64, 0xe6, 0xa5, 0xeb, 0x15, 0x14, 0xe5, 0x97, 0xe4, 0x0b, 0x71, 0x23, 0xc9, 0x28, 0xa9,
-	0x73, 0x71, 0x07, 0x64, 0xe6, 0xa5, 0x07, 0xa5, 0x16, 0x96, 0xa6, 0x16, 0x97, 0x08, 0x49, 0x70,
-	0xb1, 0x17, 0x24, 0x56, 0xe6, 0xe4, 0x27, 0xa6, 0x48, 0x30, 0x2a, 0x30, 0x6a, 0xf0, 0x04, 0xc1,
-	0xb8, 0x4a, 0x1a, 0x5c, 0x3c, 0x10, 0x85, 0xc5, 0x05, 0xf9, 0x79, 0xc5, 0xa9, 0xb8, 0x55, 0x1a,
-	0xb9, 0x73, 0xb1, 0x81, 0x54, 0xa6, 0x16, 0x09, 0xd9, 0x72, 0xb1, 0x80, 0x58, 0x42, 0x12, 0x7a,
-	0x48, 0x56, 0xea, 0x21, 0xd9, 0x27, 0x25, 0x89, 0x45, 0x06, 0x62, 0x81, 0x12, 0x83, 0x93, 0xc2,
-	0x89, 0x87, 0x72, 0x0c, 0x27, 0x1e, 0xc9, 0x31, 0x5e, 0x78, 0x24, 0xc7, 0x78, 0xe3, 0x91, 0x1c,
-	0xe3, 0x83, 0x47, 0x72, 0x8c, 0x13, 0x1e, 0xcb, 0x31, 0x5c, 0x78, 0x2c, 0xc7, 0x70, 0xe3, 0xb1,
-	0x1c, 0x03, 0x20, 0x00, 0x00, 0xff, 0xff, 0x97, 0x2b, 0x64, 0x57, 0xf5, 0x00, 0x00, 0x00,
-}

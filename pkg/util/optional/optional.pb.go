@@ -3,15 +3,17 @@
 
 package optional
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import time "time"
-
-import github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-
-import io "io"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/gogo/protobuf/types"
+	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+	time "time"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -23,7 +25,7 @@ var _ = time.Kitchen
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // Uint stores an optional unsigned integer value. Optional means that it may
 // not be set, and one can differentiate between being unset and having a value
@@ -37,21 +39,21 @@ type Uint struct {
 func (m *Uint) Reset()      { *m = Uint{} }
 func (*Uint) ProtoMessage() {}
 func (*Uint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_optional_54aad6c1a90b0a1e, []int{0}
+	return fileDescriptor_3091079db926b5ad, []int{0}
 }
 func (m *Uint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *Uint) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *Uint) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Uint.Merge(dst, src)
+func (m *Uint) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Uint.Merge(m, src)
 }
 func (m *Uint) XXX_Size() int {
 	return m.Size()
@@ -75,21 +77,21 @@ type Duration struct {
 func (m *Duration) Reset()      { *m = Duration{} }
 func (*Duration) ProtoMessage() {}
 func (*Duration) Descriptor() ([]byte, []int) {
-	return fileDescriptor_optional_54aad6c1a90b0a1e, []int{1}
+	return fileDescriptor_3091079db926b5ad, []int{1}
 }
 func (m *Duration) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *Duration) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *Duration) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Duration.Merge(dst, src)
+func (m *Duration) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Duration.Merge(m, src)
 }
 func (m *Duration) XXX_Size() int {
 	return m.Size()
@@ -104,10 +106,32 @@ func init() {
 	proto.RegisterType((*Uint)(nil), "cockroach.util.optional.Uint")
 	proto.RegisterType((*Duration)(nil), "cockroach.util.optional.Duration")
 }
+
+func init() { proto.RegisterFile("util/optional/optional.proto", fileDescriptor_3091079db926b5ad) }
+
+var fileDescriptor_3091079db926b5ad = []byte{
+	// 229 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x29, 0x2d, 0xc9, 0xcc,
+	0xd1, 0xcf, 0x2f, 0x28, 0xc9, 0xcc, 0xcf, 0x4b, 0x44, 0x30, 0xf4, 0x0a, 0x8a, 0xf2, 0x4b, 0xf2,
+	0x85, 0xc4, 0x93, 0xf3, 0x93, 0xb3, 0x8b, 0xf2, 0x13, 0x93, 0x33, 0xf4, 0x40, 0xea, 0xf4, 0x60,
+	0xd2, 0x52, 0x22, 0xe9, 0xf9, 0xe9, 0xf9, 0x60, 0x35, 0xfa, 0x20, 0x16, 0x44, 0xb9, 0x94, 0x5c,
+	0x7a, 0x7e, 0x7e, 0x7a, 0x4e, 0xaa, 0x3e, 0x98, 0x97, 0x54, 0x9a, 0xa6, 0x9f, 0x52, 0x5a, 0x94,
+	0x08, 0xd2, 0x01, 0x91, 0x57, 0x32, 0xe2, 0x62, 0x09, 0xcd, 0xcc, 0x2b, 0x11, 0x52, 0xe1, 0xe2,
+	0x2b, 0x4b, 0xcc, 0x29, 0x4d, 0x8d, 0x2f, 0xc8, 0x29, 0x2d, 0x8e, 0xcf, 0xcf, 0x4b, 0x95, 0x60,
+	0x54, 0x60, 0xd4, 0x60, 0x09, 0xe2, 0x01, 0x8b, 0x06, 0xe4, 0x94, 0x16, 0xfb, 0xe7, 0xa5, 0x5a,
+	0xb1, 0xcc, 0x58, 0x20, 0xcf, 0xa0, 0x14, 0xcd, 0xc5, 0xe1, 0x02, 0x35, 0x45, 0xc8, 0x13, 0xab,
+	0x3e, 0x6e, 0x23, 0x49, 0x3d, 0x88, 0xc5, 0x7a, 0x30, 0x8b, 0xf5, 0x60, 0x5a, 0x9c, 0x38, 0x4e,
+	0xdc, 0x93, 0x67, 0x98, 0x71, 0x5f, 0x9e, 0x11, 0x9b, 0xe1, 0x4e, 0x5a, 0x27, 0x1e, 0xca, 0x31,
+	0x9c, 0x78, 0x24, 0xc7, 0x78, 0xe1, 0x91, 0x1c, 0xe3, 0x8d, 0x47, 0x72, 0x8c, 0x0f, 0x1e, 0xc9,
+	0x31, 0x4e, 0x78, 0x2c, 0xc7, 0x70, 0xe1, 0xb1, 0x1c, 0xc3, 0x8d, 0xc7, 0x72, 0x0c, 0x51, 0x1c,
+	0x30, 0x2f, 0x27, 0xb1, 0x81, 0x0d, 0x37, 0x06, 0x04, 0x00, 0x00, 0xff, 0xff, 0x72, 0x3d, 0x4b,
+	0xc8, 0x32, 0x01, 0x00, 0x00,
+}
+
 func (m *Uint) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -115,22 +139,27 @@ func (m *Uint) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Uint) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Uint) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if m.ValuePlusOne != 0 {
-		dAtA[i] = 0x8
-		i++
 		i = encodeVarintOptional(dAtA, i, uint64(m.ValuePlusOne))
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *Duration) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -138,29 +167,36 @@ func (m *Duration) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Duration) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Duration) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintOptional(dAtA, i, uint64(github_com_gogo_protobuf_types.SizeOfStdDuration(m.ValuePlusOne)))
-	n1, err := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.ValuePlusOne, dAtA[i:])
-	if err != nil {
-		return 0, err
+	n1, err1 := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.ValuePlusOne, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(m.ValuePlusOne):])
+	if err1 != nil {
+		return 0, err1
 	}
-	i += n1
-	return i, nil
+	i -= n1
+	i = encodeVarintOptional(dAtA, i, uint64(n1))
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintOptional(dAtA []byte, offset int, v uint64) int {
+	offset -= sovOptional(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *Uint) Size() (n int) {
 	if m == nil {
@@ -186,14 +222,7 @@ func (m *Duration) Size() (n int) {
 }
 
 func sovOptional(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozOptional(x uint64) (n int) {
 	return sovOptional(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -213,7 +242,7 @@ func (m *Uint) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -241,7 +270,7 @@ func (m *Uint) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ValuePlusOne |= (uint64(b) & 0x7F) << shift
+				m.ValuePlusOne |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -282,7 +311,7 @@ func (m *Duration) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -310,7 +339,7 @@ func (m *Duration) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -319,6 +348,9 @@ func (m *Duration) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthOptional
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthOptional
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -350,6 +382,7 @@ func (m *Duration) Unmarshal(dAtA []byte) error {
 func skipOptional(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -381,10 +414,8 @@ func skipOptional(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -401,76 +432,34 @@ func skipOptional(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthOptional
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowOptional
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipOptional(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupOptional
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthOptional
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthOptional = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowOptional   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthOptional        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowOptional          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupOptional = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("util/optional/optional.proto", fileDescriptor_optional_54aad6c1a90b0a1e)
-}
-
-var fileDescriptor_optional_54aad6c1a90b0a1e = []byte{
-	// 229 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x29, 0x2d, 0xc9, 0xcc,
-	0xd1, 0xcf, 0x2f, 0x28, 0xc9, 0xcc, 0xcf, 0x4b, 0x44, 0x30, 0xf4, 0x0a, 0x8a, 0xf2, 0x4b, 0xf2,
-	0x85, 0xc4, 0x93, 0xf3, 0x93, 0xb3, 0x8b, 0xf2, 0x13, 0x93, 0x33, 0xf4, 0x40, 0xea, 0xf4, 0x60,
-	0xd2, 0x52, 0x22, 0xe9, 0xf9, 0xe9, 0xf9, 0x60, 0x35, 0xfa, 0x20, 0x16, 0x44, 0xb9, 0x94, 0x5c,
-	0x7a, 0x7e, 0x7e, 0x7a, 0x4e, 0xaa, 0x3e, 0x98, 0x97, 0x54, 0x9a, 0xa6, 0x9f, 0x52, 0x5a, 0x94,
-	0x08, 0xd2, 0x01, 0x91, 0x57, 0x32, 0xe2, 0x62, 0x09, 0xcd, 0xcc, 0x2b, 0x11, 0x52, 0xe1, 0xe2,
-	0x2b, 0x4b, 0xcc, 0x29, 0x4d, 0x8d, 0x2f, 0xc8, 0x29, 0x2d, 0x8e, 0xcf, 0xcf, 0x4b, 0x95, 0x60,
-	0x54, 0x60, 0xd4, 0x60, 0x09, 0xe2, 0x01, 0x8b, 0x06, 0xe4, 0x94, 0x16, 0xfb, 0xe7, 0xa5, 0x5a,
-	0xb1, 0xcc, 0x58, 0x20, 0xcf, 0xa0, 0x14, 0xcd, 0xc5, 0xe1, 0x02, 0x35, 0x45, 0xc8, 0x13, 0xab,
-	0x3e, 0x6e, 0x23, 0x49, 0x3d, 0x88, 0xc5, 0x7a, 0x30, 0x8b, 0xf5, 0x60, 0x5a, 0x9c, 0x38, 0x4e,
-	0xdc, 0x93, 0x67, 0x98, 0x71, 0x5f, 0x9e, 0x11, 0x9b, 0xe1, 0x4e, 0x5a, 0x27, 0x1e, 0xca, 0x31,
-	0x9c, 0x78, 0x24, 0xc7, 0x78, 0xe1, 0x91, 0x1c, 0xe3, 0x8d, 0x47, 0x72, 0x8c, 0x0f, 0x1e, 0xc9,
-	0x31, 0x4e, 0x78, 0x2c, 0xc7, 0x70, 0xe1, 0xb1, 0x1c, 0xc3, 0x8d, 0xc7, 0x72, 0x0c, 0x51, 0x1c,
-	0x30, 0x2f, 0x27, 0xb1, 0x81, 0x0d, 0x37, 0x06, 0x04, 0x00, 0x00, 0xff, 0xff, 0x72, 0x3d, 0x4b,
-	0xc8, 0x32, 0x01, 0x00, 0x00,
-}

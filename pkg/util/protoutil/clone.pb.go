@@ -3,13 +3,15 @@
 
 package protoutil
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
-
-import io "io"
+import (
+	fmt "fmt"
+	github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -20,7 +22,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type RecursiveAndUncloneable struct {
 	R    *RecursiveAndUncloneable                            `protobuf:"bytes,1,opt,name=r,proto3" json:"r,omitempty"`
@@ -31,21 +33,21 @@ func (m *RecursiveAndUncloneable) Reset()         { *m = RecursiveAndUncloneable
 func (m *RecursiveAndUncloneable) String() string { return proto.CompactTextString(m) }
 func (*RecursiveAndUncloneable) ProtoMessage()    {}
 func (*RecursiveAndUncloneable) Descriptor() ([]byte, []int) {
-	return fileDescriptor_clone_e4042f116845b24f, []int{0}
+	return fileDescriptor_70112f44abab2f11, []int{0}
 }
 func (m *RecursiveAndUncloneable) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *RecursiveAndUncloneable) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *RecursiveAndUncloneable) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_RecursiveAndUncloneable.Merge(dst, src)
+func (m *RecursiveAndUncloneable) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RecursiveAndUncloneable.Merge(m, src)
 }
 func (m *RecursiveAndUncloneable) XXX_Size() int {
 	return m.Size()
@@ -59,10 +61,32 @@ var xxx_messageInfo_RecursiveAndUncloneable proto.InternalMessageInfo
 func init() {
 	proto.RegisterType((*RecursiveAndUncloneable)(nil), "cockroach.util.protoutil.RecursiveAndUncloneable")
 }
+
+func init() { proto.RegisterFile("util/protoutil/clone.proto", fileDescriptor_70112f44abab2f11) }
+
+var fileDescriptor_70112f44abab2f11 = []byte{
+	// 226 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x2d, 0xc9, 0xcc,
+	0xd1, 0x2f, 0x28, 0xca, 0x2f, 0xc9, 0x07, 0xb3, 0x92, 0x73, 0xf2, 0xf3, 0x52, 0xf5, 0xc0, 0x7c,
+	0x21, 0x89, 0xe4, 0xfc, 0xe4, 0xec, 0xa2, 0xfc, 0xc4, 0xe4, 0x0c, 0x3d, 0x90, 0x9c, 0x1e, 0x5c,
+	0x95, 0x94, 0x48, 0x7a, 0x7e, 0x7a, 0x3e, 0x98, 0xab, 0x0f, 0x62, 0x41, 0x64, 0x94, 0x56, 0x33,
+	0x72, 0x89, 0x07, 0xa5, 0x26, 0x97, 0x16, 0x15, 0x67, 0x96, 0xa5, 0x3a, 0xe6, 0xa5, 0x84, 0xe6,
+	0x81, 0x4d, 0x4b, 0x4c, 0xca, 0x49, 0x15, 0xb2, 0xe7, 0x62, 0x2c, 0x92, 0x60, 0x54, 0x60, 0xd4,
+	0xe0, 0x36, 0x32, 0xd4, 0xc3, 0x65, 0xae, 0x1e, 0x0e, 0xdd, 0x41, 0x8c, 0x45, 0x42, 0xfe, 0x5c,
+	0x2c, 0xa5, 0xa5, 0x99, 0x29, 0x12, 0x4c, 0x0a, 0x8c, 0x1a, 0x3c, 0x4e, 0xd6, 0x27, 0xee, 0xc9,
+	0x33, 0xdc, 0xba, 0x27, 0x6f, 0x9c, 0x9e, 0x59, 0x92, 0x51, 0x9a, 0xa4, 0x97, 0x9c, 0x9f, 0xab,
+	0x0f, 0x37, 0x35, 0x25, 0x09, 0xc1, 0xd6, 0x2f, 0xc8, 0x4e, 0xd7, 0x07, 0xfb, 0x0c, 0xa4, 0x5b,
+	0x2f, 0x34, 0xd4, 0xd3, 0x25, 0x08, 0x6c, 0x90, 0x93, 0xf6, 0x89, 0x87, 0x72, 0x0c, 0x27, 0x1e,
+	0xc9, 0x31, 0x5e, 0x78, 0x24, 0xc7, 0x78, 0xe3, 0x91, 0x1c, 0xe3, 0x83, 0x47, 0x72, 0x8c, 0x13,
+	0x1e, 0xcb, 0x31, 0x5c, 0x78, 0x2c, 0xc7, 0x70, 0xe3, 0xb1, 0x1c, 0x43, 0x14, 0x27, 0xdc, 0x61,
+	0x49, 0x6c, 0x60, 0xa6, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0x4f, 0x54, 0x1c, 0xcf, 0x2f, 0x01,
+	0x00, 0x00,
+}
+
 func (m *RecursiveAndUncloneable) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -70,39 +94,50 @@ func (m *RecursiveAndUncloneable) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *RecursiveAndUncloneable) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RecursiveAndUncloneable) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.R != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintClone(dAtA, i, uint64(m.R.Size()))
-		n1, err := m.R.MarshalTo(dAtA[i:])
-		if err != nil {
+	{
+		size := m.Uuid.Size()
+		i -= size
+		if _, err := m.Uuid.MarshalTo(dAtA[i:]); err != nil {
 			return 0, err
 		}
-		i += n1
+		i = encodeVarintClone(dAtA, i, uint64(size))
 	}
+	i--
 	dAtA[i] = 0x12
-	i++
-	i = encodeVarintClone(dAtA, i, uint64(m.Uuid.Size()))
-	n2, err := m.Uuid.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	if m.R != nil {
+		{
+			size, err := m.R.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintClone(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
 	}
-	i += n2
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintClone(dAtA []byte, offset int, v uint64) int {
+	offset -= sovClone(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *RecursiveAndUncloneable) Size() (n int) {
 	if m == nil {
@@ -120,14 +155,7 @@ func (m *RecursiveAndUncloneable) Size() (n int) {
 }
 
 func sovClone(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozClone(x uint64) (n int) {
 	return sovClone(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -147,7 +175,7 @@ func (m *RecursiveAndUncloneable) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -175,7 +203,7 @@ func (m *RecursiveAndUncloneable) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -184,6 +212,9 @@ func (m *RecursiveAndUncloneable) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthClone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthClone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -208,7 +239,7 @@ func (m *RecursiveAndUncloneable) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -217,6 +248,9 @@ func (m *RecursiveAndUncloneable) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthClone
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthClone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -248,6 +282,7 @@ func (m *RecursiveAndUncloneable) Unmarshal(dAtA []byte) error {
 func skipClone(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -279,10 +314,8 @@ func skipClone(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -299,74 +332,34 @@ func skipClone(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthClone
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowClone
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipClone(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupClone
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthClone
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthClone = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowClone   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthClone        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowClone          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupClone = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() { proto.RegisterFile("util/protoutil/clone.proto", fileDescriptor_clone_e4042f116845b24f) }
-
-var fileDescriptor_clone_e4042f116845b24f = []byte{
-	// 226 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x2d, 0xc9, 0xcc,
-	0xd1, 0x2f, 0x28, 0xca, 0x2f, 0xc9, 0x07, 0xb3, 0x92, 0x73, 0xf2, 0xf3, 0x52, 0xf5, 0xc0, 0x7c,
-	0x21, 0x89, 0xe4, 0xfc, 0xe4, 0xec, 0xa2, 0xfc, 0xc4, 0xe4, 0x0c, 0x3d, 0x90, 0x9c, 0x1e, 0x5c,
-	0x95, 0x94, 0x48, 0x7a, 0x7e, 0x7a, 0x3e, 0x98, 0xab, 0x0f, 0x62, 0x41, 0x64, 0x94, 0x56, 0x33,
-	0x72, 0x89, 0x07, 0xa5, 0x26, 0x97, 0x16, 0x15, 0x67, 0x96, 0xa5, 0x3a, 0xe6, 0xa5, 0x84, 0xe6,
-	0x81, 0x4d, 0x4b, 0x4c, 0xca, 0x49, 0x15, 0xb2, 0xe7, 0x62, 0x2c, 0x92, 0x60, 0x54, 0x60, 0xd4,
-	0xe0, 0x36, 0x32, 0xd4, 0xc3, 0x65, 0xae, 0x1e, 0x0e, 0xdd, 0x41, 0x8c, 0x45, 0x42, 0xfe, 0x5c,
-	0x2c, 0xa5, 0xa5, 0x99, 0x29, 0x12, 0x4c, 0x0a, 0x8c, 0x1a, 0x3c, 0x4e, 0xd6, 0x27, 0xee, 0xc9,
-	0x33, 0xdc, 0xba, 0x27, 0x6f, 0x9c, 0x9e, 0x59, 0x92, 0x51, 0x9a, 0xa4, 0x97, 0x9c, 0x9f, 0xab,
-	0x0f, 0x37, 0x35, 0x25, 0x09, 0xc1, 0xd6, 0x2f, 0xc8, 0x4e, 0xd7, 0x07, 0xfb, 0x0c, 0xa4, 0x5b,
-	0x2f, 0x34, 0xd4, 0xd3, 0x25, 0x08, 0x6c, 0x90, 0x93, 0xf6, 0x89, 0x87, 0x72, 0x0c, 0x27, 0x1e,
-	0xc9, 0x31, 0x5e, 0x78, 0x24, 0xc7, 0x78, 0xe3, 0x91, 0x1c, 0xe3, 0x83, 0x47, 0x72, 0x8c, 0x13,
-	0x1e, 0xcb, 0x31, 0x5c, 0x78, 0x2c, 0xc7, 0x70, 0xe3, 0xb1, 0x1c, 0x43, 0x14, 0x27, 0xdc, 0x61,
-	0x49, 0x6c, 0x60, 0xa6, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0x4f, 0x54, 0x1c, 0xcf, 0x2f, 0x01,
-	0x00, 0x00,
-}

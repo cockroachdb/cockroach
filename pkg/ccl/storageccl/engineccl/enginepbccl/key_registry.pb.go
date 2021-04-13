@@ -3,13 +3,15 @@
 
 package enginepbccl
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
-
-import io "io"
+import (
+	fmt "fmt"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -20,7 +22,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type EncryptionType int32
 
@@ -39,6 +41,7 @@ var EncryptionType_name = map[int32]string{
 	2: "AES192_CTR",
 	3: "AES256_CTR",
 }
+
 var EncryptionType_value = map[string]int32{
 	"Plaintext":  0,
 	"AES128_CTR": 1,
@@ -49,8 +52,9 @@ var EncryptionType_value = map[string]int32{
 func (x EncryptionType) String() string {
 	return proto.EnumName(EncryptionType_name, int32(x))
 }
+
 func (EncryptionType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_160983c0db19b441, []int{0}
+	return fileDescriptor_01bd752e29eacba4, []int{0}
 }
 
 // DataKeysRegistry contains all data keys (including the raw key) as well
@@ -70,21 +74,21 @@ func (m *DataKeysRegistry) Reset()         { *m = DataKeysRegistry{} }
 func (m *DataKeysRegistry) String() string { return proto.CompactTextString(m) }
 func (*DataKeysRegistry) ProtoMessage()    {}
 func (*DataKeysRegistry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_160983c0db19b441, []int{0}
+	return fileDescriptor_01bd752e29eacba4, []int{0}
 }
 func (m *DataKeysRegistry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *DataKeysRegistry) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *DataKeysRegistry) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DataKeysRegistry.Merge(dst, src)
+func (m *DataKeysRegistry) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DataKeysRegistry.Merge(m, src)
 }
 func (m *DataKeysRegistry) XXX_Size() int {
 	return m.Size()
@@ -118,21 +122,21 @@ func (m *KeyInfo) Reset()         { *m = KeyInfo{} }
 func (m *KeyInfo) String() string { return proto.CompactTextString(m) }
 func (*KeyInfo) ProtoMessage()    {}
 func (*KeyInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_160983c0db19b441, []int{1}
+	return fileDescriptor_01bd752e29eacba4, []int{1}
 }
 func (m *KeyInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *KeyInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *KeyInfo) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_KeyInfo.Merge(dst, src)
+func (m *KeyInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_KeyInfo.Merge(m, src)
 }
 func (m *KeyInfo) XXX_Size() int {
 	return m.Size()
@@ -156,21 +160,21 @@ func (m *SecretKey) Reset()         { *m = SecretKey{} }
 func (m *SecretKey) String() string { return proto.CompactTextString(m) }
 func (*SecretKey) ProtoMessage()    {}
 func (*SecretKey) Descriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_160983c0db19b441, []int{2}
+	return fileDescriptor_01bd752e29eacba4, []int{2}
 }
 func (m *SecretKey) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *SecretKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *SecretKey) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SecretKey.Merge(dst, src)
+func (m *SecretKey) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SecretKey.Merge(m, src)
 }
 func (m *SecretKey) XXX_Size() int {
 	return m.Size()
@@ -197,21 +201,21 @@ func (m *EncryptionSettings) Reset()         { *m = EncryptionSettings{} }
 func (m *EncryptionSettings) String() string { return proto.CompactTextString(m) }
 func (*EncryptionSettings) ProtoMessage()    {}
 func (*EncryptionSettings) Descriptor() ([]byte, []int) {
-	return fileDescriptor_key_registry_160983c0db19b441, []int{3}
+	return fileDescriptor_01bd752e29eacba4, []int{3}
 }
 func (m *EncryptionSettings) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *EncryptionSettings) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *EncryptionSettings) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_EncryptionSettings.Merge(dst, src)
+func (m *EncryptionSettings) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_EncryptionSettings.Merge(m, src)
 }
 func (m *EncryptionSettings) XXX_Size() int {
 	return m.Size()
@@ -223,18 +227,65 @@ func (m *EncryptionSettings) XXX_DiscardUnknown() {
 var xxx_messageInfo_EncryptionSettings proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterEnum("cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType", EncryptionType_name, EncryptionType_value)
 	proto.RegisterType((*DataKeysRegistry)(nil), "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry")
 	proto.RegisterMapType((map[string]*SecretKey)(nil), "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.DataKeysEntry")
 	proto.RegisterMapType((map[string]*KeyInfo)(nil), "cockroach.ccl.storageccl.engineccl.enginepbccl.DataKeysRegistry.StoreKeysEntry")
 	proto.RegisterType((*KeyInfo)(nil), "cockroach.ccl.storageccl.engineccl.enginepbccl.KeyInfo")
 	proto.RegisterType((*SecretKey)(nil), "cockroach.ccl.storageccl.engineccl.enginepbccl.SecretKey")
 	proto.RegisterType((*EncryptionSettings)(nil), "cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionSettings")
-	proto.RegisterEnum("cockroach.ccl.storageccl.engineccl.enginepbccl.EncryptionType", EncryptionType_name, EncryptionType_value)
 }
+
+func init() {
+	proto.RegisterFile("ccl/storageccl/engineccl/enginepbccl/key_registry.proto", fileDescriptor_01bd752e29eacba4)
+}
+
+var fileDescriptor_01bd752e29eacba4 = []byte{
+	// 594 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x94, 0x4f, 0x6f, 0xd3, 0x4c,
+	0x10, 0xc6, 0xb3, 0x49, 0x93, 0x36, 0x93, 0x26, 0x8d, 0xf6, 0xed, 0x8b, 0xa2, 0x1e, 0x4c, 0x14,
+	0x2e, 0x11, 0xa8, 0xae, 0x08, 0x82, 0xb6, 0x1c, 0x90, 0xf8, 0x93, 0x43, 0x55, 0x41, 0x91, 0xd3,
+	0x13, 0x17, 0x6b, 0xbb, 0x9e, 0x1a, 0xe3, 0x74, 0xd7, 0x5a, 0x6f, 0xda, 0xfa, 0x33, 0x70, 0xe1,
+	0xf3, 0x70, 0xe6, 0xd0, 0x63, 0x8f, 0x3d, 0x42, 0xfa, 0x45, 0x90, 0xd7, 0x76, 0x9a, 0x20, 0x2e,
+	0x51, 0x0f, 0xdc, 0xe6, 0x19, 0xef, 0x3e, 0xbf, 0x9d, 0x79, 0xa2, 0xc0, 0x2e, 0xe7, 0xe3, 0x9d,
+	0x58, 0x4b, 0xc5, 0x7c, 0x4c, 0x4b, 0x14, 0x7e, 0x20, 0xe6, 0xaa, 0xe8, 0x24, 0xad, 0x43, 0x4c,
+	0x5c, 0x85, 0x7e, 0x10, 0x6b, 0x95, 0xd8, 0x91, 0x92, 0x5a, 0x52, 0x9b, 0x4b, 0x1e, 0x2a, 0xc9,
+	0xf8, 0x67, 0x9b, 0xf3, 0xb1, 0x7d, 0x67, 0x61, 0xcf, 0x2c, 0xec, 0x39, 0x8b, 0xad, 0x4d, 0x5f,
+	0xfa, 0xd2, 0x5c, 0xdd, 0x49, 0xab, 0xcc, 0xa5, 0xf7, 0x7d, 0x05, 0xda, 0xef, 0x98, 0x66, 0x87,
+	0x98, 0xc4, 0x4e, 0x0e, 0xa0, 0x02, 0x20, 0xb5, 0x43, 0x37, 0xc4, 0x24, 0xee, 0x90, 0x6e, 0xa5,
+	0xdf, 0x18, 0x1c, 0x2d, 0xc9, 0xb3, 0xff, 0x74, 0xb5, 0x47, 0xa9, 0x65, 0xda, 0x19, 0x0a, 0xad,
+	0x12, 0xa7, 0x1e, 0x17, 0x9a, 0x86, 0x50, 0xf7, 0x98, 0x66, 0x19, 0xae, 0x6c, 0x70, 0x1f, 0xee,
+	0x8d, 0x2b, 0x1a, 0x19, 0x6d, 0xcd, 0xcb, 0x25, 0xdd, 0x86, 0xff, 0x18, 0xd7, 0xc1, 0x39, 0xba,
+	0xb3, 0x19, 0xdd, 0xc0, 0xeb, 0x54, 0xba, 0xa4, 0x5f, 0x77, 0xda, 0xd9, 0xa7, 0xe2, 0xa9, 0x07,
+	0x1e, 0x7d, 0x02, 0x34, 0x3f, 0x5e, 0x3c, 0x31, 0x3d, 0xbd, 0x62, 0x4e, 0x6f, 0x64, 0x5f, 0x72,
+	0xd2, 0x81, 0xb7, 0x35, 0x81, 0xd6, 0xe2, 0x94, 0xb4, 0x0d, 0x95, 0x10, 0x93, 0x0e, 0x31, 0xe7,
+	0xd3, 0x92, 0xbe, 0x87, 0xea, 0x39, 0x1b, 0x4f, 0xb0, 0x53, 0xee, 0x92, 0x7e, 0x63, 0xb0, 0xbb,
+	0xec, 0xa0, 0x29, 0x49, 0x9c, 0x4a, 0x27, 0x73, 0x79, 0x59, 0xde, 0x23, 0x5b, 0xe7, 0xd0, 0x5c,
+	0x98, 0xf6, 0x2f, 0xd4, 0xa3, 0x45, 0xea, 0xfe, 0xb2, 0xd4, 0x11, 0x72, 0x85, 0xfa, 0x10, 0x93,
+	0x39, 0x6e, 0xef, 0x6b, 0x19, 0x56, 0xf3, 0xe7, 0x50, 0x1f, 0x36, 0x50, 0x70, 0x95, 0x44, 0x3a,
+	0x90, 0xc2, 0xd5, 0x49, 0x84, 0x06, 0xdf, 0x1a, 0xbc, 0x5a, 0x16, 0x35, 0x9c, 0xd9, 0x1c, 0x27,
+	0x11, 0x3a, 0x2d, 0x5c, 0xd0, 0xf4, 0x7f, 0xa8, 0xe5, 0x21, 0x94, 0xcd, 0x78, 0xd5, 0xd0, 0xe4,
+	0xf4, 0x08, 0x9a, 0x5c, 0x21, 0xcb, 0xe8, 0xc1, 0x19, 0x9a, 0x40, 0x2b, 0xce, 0x7a, 0xd1, 0x3c,
+	0x0e, 0xce, 0x90, 0x3e, 0x80, 0x5a, 0x2c, 0x27, 0x8a, 0x63, 0x1e, 0x60, 0xae, 0xe8, 0x43, 0x68,
+	0x5c, 0xb0, 0xd8, 0xc5, 0xcb, 0x48, 0xc6, 0xe8, 0x75, 0xaa, 0x5d, 0xd2, 0x5f, 0x73, 0xe0, 0x82,
+	0xc5, 0xc3, 0xac, 0x43, 0x7b, 0xd0, 0x8c, 0x98, 0x42, 0xa1, 0x8b, 0x1f, 0x40, 0xcd, 0xdc, 0x6f,
+	0x64, 0x4d, 0x13, 0x7e, 0xef, 0x0b, 0xd4, 0x67, 0x5b, 0xa2, 0x87, 0xb0, 0x12, 0x88, 0x53, 0x69,
+	0x76, 0x70, 0x8f, 0x90, 0x8d, 0x49, 0x11, 0x67, 0x3a, 0xef, 0xba, 0x89, 0xb3, 0xf7, 0x83, 0x00,
+	0xbd, 0xdb, 0xd3, 0x08, 0xb5, 0x0e, 0x84, 0x1f, 0xff, 0xf3, 0x10, 0x36, 0xa1, 0x2a, 0xa4, 0xe0,
+	0xd9, 0xf2, 0xd7, 0x9d, 0x4c, 0xd0, 0x0e, 0xac, 0x72, 0x39, 0x11, 0x1a, 0x95, 0x59, 0x7b, 0xd3,
+	0x29, 0xe4, 0xe3, 0x23, 0x68, 0x2d, 0x82, 0x68, 0x13, 0xea, 0x1f, 0xc7, 0x2c, 0x10, 0x1a, 0x2f,
+	0x75, 0xbb, 0x44, 0x5b, 0x00, 0xaf, 0x87, 0xa3, 0xa7, 0x83, 0x3d, 0xf7, 0xed, 0xb1, 0xd3, 0x26,
+	0x85, 0xde, 0x1f, 0x18, 0x5d, 0xce, 0xf5, 0xe0, 0xf9, 0x0b, 0xa3, 0x2b, 0x6f, 0xb6, 0xaf, 0x7e,
+	0x59, 0xa5, 0xab, 0xa9, 0x45, 0xae, 0xa7, 0x16, 0xb9, 0x99, 0x5a, 0xe4, 0xe7, 0xd4, 0x22, 0xdf,
+	0x6e, 0xad, 0xd2, 0xf5, 0xad, 0x55, 0xba, 0xb9, 0xb5, 0x4a, 0x9f, 0x1a, 0x73, 0x53, 0x9e, 0xd4,
+	0xcc, 0x9f, 0xe0, 0xb3, 0xdf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xb6, 0x4a, 0xe4, 0x4b, 0x85, 0x05,
+	0x00, 0x00,
+}
+
 func (m *DataKeysRegistry) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -242,42 +293,28 @@ func (m *DataKeysRegistry) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *DataKeysRegistry) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DataKeysRegistry) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.StoreKeys) > 0 {
-		keysForStoreKeys := make([]string, 0, len(m.StoreKeys))
-		for k := range m.StoreKeys {
-			keysForStoreKeys = append(keysForStoreKeys, string(k))
-		}
-		github_com_gogo_protobuf_sortkeys.Strings(keysForStoreKeys)
-		for _, k := range keysForStoreKeys {
-			dAtA[i] = 0xa
-			i++
-			v := m.StoreKeys[string(k)]
-			msgSize := 0
-			if v != nil {
-				msgSize = v.Size()
-				msgSize += 1 + sovKeyRegistry(uint64(msgSize))
-			}
-			mapSize := 1 + len(k) + sovKeyRegistry(uint64(len(k))) + msgSize
-			i = encodeVarintKeyRegistry(dAtA, i, uint64(mapSize))
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintKeyRegistry(dAtA, i, uint64(len(k)))
-			i += copy(dAtA[i:], k)
-			if v != nil {
-				dAtA[i] = 0x12
-				i++
-				i = encodeVarintKeyRegistry(dAtA, i, uint64(v.Size()))
-				n1, err := v.MarshalTo(dAtA[i:])
-				if err != nil {
-					return 0, err
-				}
-				i += n1
-			}
-		}
+	if len(m.ActiveDataKeyId) > 0 {
+		i -= len(m.ActiveDataKeyId)
+		copy(dAtA[i:], m.ActiveDataKeyId)
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.ActiveDataKeyId)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.ActiveStoreKeyId) > 0 {
+		i -= len(m.ActiveStoreKeyId)
+		copy(dAtA[i:], m.ActiveStoreKeyId)
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.ActiveStoreKeyId)))
+		i--
+		dAtA[i] = 0x1a
 	}
 	if len(m.DataKeys) > 0 {
 		keysForDataKeys := make([]string, 0, len(m.DataKeys))
@@ -285,52 +322,69 @@ func (m *DataKeysRegistry) MarshalTo(dAtA []byte) (int, error) {
 			keysForDataKeys = append(keysForDataKeys, string(k))
 		}
 		github_com_gogo_protobuf_sortkeys.Strings(keysForDataKeys)
-		for _, k := range keysForDataKeys {
-			dAtA[i] = 0x12
-			i++
-			v := m.DataKeys[string(k)]
-			msgSize := 0
+		for iNdEx := len(keysForDataKeys) - 1; iNdEx >= 0; iNdEx-- {
+			v := m.DataKeys[string(keysForDataKeys[iNdEx])]
+			baseI := i
 			if v != nil {
-				msgSize = v.Size()
-				msgSize += 1 + sovKeyRegistry(uint64(msgSize))
-			}
-			mapSize := 1 + len(k) + sovKeyRegistry(uint64(len(k))) + msgSize
-			i = encodeVarintKeyRegistry(dAtA, i, uint64(mapSize))
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintKeyRegistry(dAtA, i, uint64(len(k)))
-			i += copy(dAtA[i:], k)
-			if v != nil {
-				dAtA[i] = 0x12
-				i++
-				i = encodeVarintKeyRegistry(dAtA, i, uint64(v.Size()))
-				n2, err := v.MarshalTo(dAtA[i:])
-				if err != nil {
-					return 0, err
+				{
+					size, err := v.MarshalToSizedBuffer(dAtA[:i])
+					if err != nil {
+						return 0, err
+					}
+					i -= size
+					i = encodeVarintKeyRegistry(dAtA, i, uint64(size))
 				}
-				i += n2
+				i--
+				dAtA[i] = 0x12
 			}
+			i -= len(keysForDataKeys[iNdEx])
+			copy(dAtA[i:], keysForDataKeys[iNdEx])
+			i = encodeVarintKeyRegistry(dAtA, i, uint64(len(keysForDataKeys[iNdEx])))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintKeyRegistry(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
 		}
 	}
-	if len(m.ActiveStoreKeyId) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.ActiveStoreKeyId)))
-		i += copy(dAtA[i:], m.ActiveStoreKeyId)
+	if len(m.StoreKeys) > 0 {
+		keysForStoreKeys := make([]string, 0, len(m.StoreKeys))
+		for k := range m.StoreKeys {
+			keysForStoreKeys = append(keysForStoreKeys, string(k))
+		}
+		github_com_gogo_protobuf_sortkeys.Strings(keysForStoreKeys)
+		for iNdEx := len(keysForStoreKeys) - 1; iNdEx >= 0; iNdEx-- {
+			v := m.StoreKeys[string(keysForStoreKeys[iNdEx])]
+			baseI := i
+			if v != nil {
+				{
+					size, err := v.MarshalToSizedBuffer(dAtA[:i])
+					if err != nil {
+						return 0, err
+					}
+					i -= size
+					i = encodeVarintKeyRegistry(dAtA, i, uint64(size))
+				}
+				i--
+				dAtA[i] = 0x12
+			}
+			i -= len(keysForStoreKeys[iNdEx])
+			copy(dAtA[i:], keysForStoreKeys[iNdEx])
+			i = encodeVarintKeyRegistry(dAtA, i, uint64(len(keysForStoreKeys[iNdEx])))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintKeyRegistry(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0xa
+		}
 	}
-	if len(m.ActiveDataKeyId) > 0 {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.ActiveDataKeyId)))
-		i += copy(dAtA[i:], m.ActiveDataKeyId)
-	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *KeyInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -338,55 +392,63 @@ func (m *KeyInfo) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *KeyInfo) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *KeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.EncryptionType != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(m.EncryptionType))
-	}
-	if len(m.KeyId) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.KeyId)))
-		i += copy(dAtA[i:], m.KeyId)
-	}
-	if m.CreationTime != 0 {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(m.CreationTime))
-	}
-	if len(m.Source) > 0 {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.Source)))
-		i += copy(dAtA[i:], m.Source)
+	if len(m.ParentKeyId) > 0 {
+		i -= len(m.ParentKeyId)
+		copy(dAtA[i:], m.ParentKeyId)
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.ParentKeyId)))
+		i--
+		dAtA[i] = 0x32
 	}
 	if m.WasExposed {
-		dAtA[i] = 0x28
-		i++
+		i--
 		if m.WasExposed {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
 		}
-		i++
+		i--
+		dAtA[i] = 0x28
 	}
-	if len(m.ParentKeyId) > 0 {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.ParentKeyId)))
-		i += copy(dAtA[i:], m.ParentKeyId)
+	if len(m.Source) > 0 {
+		i -= len(m.Source)
+		copy(dAtA[i:], m.Source)
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.Source)))
+		i--
+		dAtA[i] = 0x22
 	}
-	return i, nil
+	if m.CreationTime != 0 {
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(m.CreationTime))
+		i--
+		dAtA[i] = 0x18
+	}
+	if len(m.KeyId) > 0 {
+		i -= len(m.KeyId)
+		copy(dAtA[i:], m.KeyId)
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.KeyId)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.EncryptionType != 0 {
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(m.EncryptionType))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *SecretKey) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -394,33 +456,41 @@ func (m *SecretKey) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SecretKey) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SecretKey) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Info != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(m.Info.Size()))
-		n3, err := m.Info.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
 	if len(m.Key) > 0 {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.Key)
+		copy(dAtA[i:], m.Key)
 		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.Key)))
-		i += copy(dAtA[i:], m.Key)
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if m.Info != nil {
+		{
+			size, err := m.Info.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintKeyRegistry(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *EncryptionSettings) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -428,43 +498,52 @@ func (m *EncryptionSettings) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *EncryptionSettings) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *EncryptionSettings) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.EncryptionType != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(m.EncryptionType))
-	}
-	if len(m.KeyId) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.KeyId)))
-		i += copy(dAtA[i:], m.KeyId)
+	if m.Counter != 0 {
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(m.Counter))
+		i--
+		dAtA[i] = 0x20
 	}
 	if len(m.Nonce) > 0 {
-		dAtA[i] = 0x1a
-		i++
+		i -= len(m.Nonce)
+		copy(dAtA[i:], m.Nonce)
 		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.Nonce)))
-		i += copy(dAtA[i:], m.Nonce)
+		i--
+		dAtA[i] = 0x1a
 	}
-	if m.Counter != 0 {
-		dAtA[i] = 0x20
-		i++
-		i = encodeVarintKeyRegistry(dAtA, i, uint64(m.Counter))
+	if len(m.KeyId) > 0 {
+		i -= len(m.KeyId)
+		copy(dAtA[i:], m.KeyId)
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(len(m.KeyId)))
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if m.EncryptionType != 0 {
+		i = encodeVarintKeyRegistry(dAtA, i, uint64(m.EncryptionType))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintKeyRegistry(dAtA []byte, offset int, v uint64) int {
+	offset -= sovKeyRegistry(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *DataKeysRegistry) Size() (n int) {
 	if m == nil {
@@ -580,14 +659,7 @@ func (m *EncryptionSettings) Size() (n int) {
 }
 
 func sovKeyRegistry(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozKeyRegistry(x uint64) (n int) {
 	return sovKeyRegistry(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -607,7 +679,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -635,7 +707,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -644,6 +716,9 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -664,7 +739,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					wire |= (uint64(b) & 0x7F) << shift
+					wire |= uint64(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -681,7 +756,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						stringLenmapkey |= (uint64(b) & 0x7F) << shift
+						stringLenmapkey |= uint64(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -691,6 +766,9 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 						return ErrInvalidLengthKeyRegistry
 					}
 					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthKeyRegistry
+					}
 					if postStringIndexmapkey > l {
 						return io.ErrUnexpectedEOF
 					}
@@ -707,7 +785,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						mapmsglen |= (int(b) & 0x7F) << shift
+						mapmsglen |= int(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -716,7 +794,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 						return ErrInvalidLengthKeyRegistry
 					}
 					postmsgIndex := iNdEx + mapmsglen
-					if mapmsglen < 0 {
+					if postmsgIndex < 0 {
 						return ErrInvalidLengthKeyRegistry
 					}
 					if postmsgIndex > l {
@@ -758,7 +836,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -767,6 +845,9 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -787,7 +868,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 					}
 					b := dAtA[iNdEx]
 					iNdEx++
-					wire |= (uint64(b) & 0x7F) << shift
+					wire |= uint64(b&0x7F) << shift
 					if b < 0x80 {
 						break
 					}
@@ -804,7 +885,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						stringLenmapkey |= (uint64(b) & 0x7F) << shift
+						stringLenmapkey |= uint64(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -814,6 +895,9 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 						return ErrInvalidLengthKeyRegistry
 					}
 					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthKeyRegistry
+					}
 					if postStringIndexmapkey > l {
 						return io.ErrUnexpectedEOF
 					}
@@ -830,7 +914,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 						}
 						b := dAtA[iNdEx]
 						iNdEx++
-						mapmsglen |= (int(b) & 0x7F) << shift
+						mapmsglen |= int(b&0x7F) << shift
 						if b < 0x80 {
 							break
 						}
@@ -839,7 +923,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 						return ErrInvalidLengthKeyRegistry
 					}
 					postmsgIndex := iNdEx + mapmsglen
-					if mapmsglen < 0 {
+					if postmsgIndex < 0 {
 						return ErrInvalidLengthKeyRegistry
 					}
 					if postmsgIndex > l {
@@ -881,7 +965,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -891,6 +975,9 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -910,7 +997,7 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -920,6 +1007,9 @@ func (m *DataKeysRegistry) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -961,7 +1051,7 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -989,7 +1079,7 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.EncryptionType |= (EncryptionType(b) & 0x7F) << shift
+				m.EncryptionType |= EncryptionType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1008,7 +1098,7 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1018,6 +1108,9 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1037,7 +1130,7 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.CreationTime |= (int64(b) & 0x7F) << shift
+				m.CreationTime |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1056,7 +1149,7 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1066,6 +1159,9 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1085,7 +1181,7 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1105,7 +1201,7 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1115,6 +1211,9 @@ func (m *KeyInfo) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1156,7 +1255,7 @@ func (m *SecretKey) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1184,7 +1283,7 @@ func (m *SecretKey) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1193,6 +1292,9 @@ func (m *SecretKey) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1217,7 +1319,7 @@ func (m *SecretKey) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1226,6 +1328,9 @@ func (m *SecretKey) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1270,7 +1375,7 @@ func (m *EncryptionSettings) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1298,7 +1403,7 @@ func (m *EncryptionSettings) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.EncryptionType |= (EncryptionType(b) & 0x7F) << shift
+				m.EncryptionType |= EncryptionType(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1317,7 +1422,7 @@ func (m *EncryptionSettings) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1327,6 +1432,9 @@ func (m *EncryptionSettings) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1346,7 +1454,7 @@ func (m *EncryptionSettings) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1355,6 +1463,9 @@ func (m *EncryptionSettings) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthKeyRegistry
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthKeyRegistry
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1377,7 +1488,7 @@ func (m *EncryptionSettings) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Counter |= (uint32(b) & 0x7F) << shift
+				m.Counter |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1406,6 +1517,7 @@ func (m *EncryptionSettings) Unmarshal(dAtA []byte) error {
 func skipKeyRegistry(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -1437,10 +1549,8 @@ func skipKeyRegistry(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -1457,99 +1567,34 @@ func skipKeyRegistry(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthKeyRegistry
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowKeyRegistry
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipKeyRegistry(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupKeyRegistry
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthKeyRegistry
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthKeyRegistry = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowKeyRegistry   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthKeyRegistry        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowKeyRegistry          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupKeyRegistry = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("ccl/storageccl/engineccl/enginepbccl/key_registry.proto", fileDescriptor_key_registry_160983c0db19b441)
-}
-
-var fileDescriptor_key_registry_160983c0db19b441 = []byte{
-	// 594 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x94, 0x4f, 0x6f, 0xd3, 0x4c,
-	0x10, 0xc6, 0xb3, 0x49, 0x93, 0x36, 0x93, 0x26, 0x8d, 0xf6, 0xed, 0x8b, 0xa2, 0x1e, 0x4c, 0x14,
-	0x2e, 0x11, 0xa8, 0xae, 0x08, 0x82, 0xb6, 0x1c, 0x90, 0xf8, 0x93, 0x43, 0x55, 0x41, 0x91, 0xd3,
-	0x13, 0x17, 0x6b, 0xbb, 0x9e, 0x1a, 0xe3, 0x74, 0xd7, 0x5a, 0x6f, 0xda, 0xfa, 0x33, 0x70, 0xe1,
-	0xf3, 0x70, 0xe6, 0xd0, 0x63, 0x8f, 0x3d, 0x42, 0xfa, 0x45, 0x90, 0xd7, 0x76, 0x9a, 0x20, 0x2e,
-	0x51, 0x0f, 0xdc, 0xe6, 0x19, 0xef, 0x3e, 0xbf, 0x9d, 0x79, 0xa2, 0xc0, 0x2e, 0xe7, 0xe3, 0x9d,
-	0x58, 0x4b, 0xc5, 0x7c, 0x4c, 0x4b, 0x14, 0x7e, 0x20, 0xe6, 0xaa, 0xe8, 0x24, 0xad, 0x43, 0x4c,
-	0x5c, 0x85, 0x7e, 0x10, 0x6b, 0x95, 0xd8, 0x91, 0x92, 0x5a, 0x52, 0x9b, 0x4b, 0x1e, 0x2a, 0xc9,
-	0xf8, 0x67, 0x9b, 0xf3, 0xb1, 0x7d, 0x67, 0x61, 0xcf, 0x2c, 0xec, 0x39, 0x8b, 0xad, 0x4d, 0x5f,
-	0xfa, 0xd2, 0x5c, 0xdd, 0x49, 0xab, 0xcc, 0xa5, 0xf7, 0x7d, 0x05, 0xda, 0xef, 0x98, 0x66, 0x87,
-	0x98, 0xc4, 0x4e, 0x0e, 0xa0, 0x02, 0x20, 0xb5, 0x43, 0x37, 0xc4, 0x24, 0xee, 0x90, 0x6e, 0xa5,
-	0xdf, 0x18, 0x1c, 0x2d, 0xc9, 0xb3, 0xff, 0x74, 0xb5, 0x47, 0xa9, 0x65, 0xda, 0x19, 0x0a, 0xad,
-	0x12, 0xa7, 0x1e, 0x17, 0x9a, 0x86, 0x50, 0xf7, 0x98, 0x66, 0x19, 0xae, 0x6c, 0x70, 0x1f, 0xee,
-	0x8d, 0x2b, 0x1a, 0x19, 0x6d, 0xcd, 0xcb, 0x25, 0xdd, 0x86, 0xff, 0x18, 0xd7, 0xc1, 0x39, 0xba,
-	0xb3, 0x19, 0xdd, 0xc0, 0xeb, 0x54, 0xba, 0xa4, 0x5f, 0x77, 0xda, 0xd9, 0xa7, 0xe2, 0xa9, 0x07,
-	0x1e, 0x7d, 0x02, 0x34, 0x3f, 0x5e, 0x3c, 0x31, 0x3d, 0xbd, 0x62, 0x4e, 0x6f, 0x64, 0x5f, 0x72,
-	0xd2, 0x81, 0xb7, 0x35, 0x81, 0xd6, 0xe2, 0x94, 0xb4, 0x0d, 0x95, 0x10, 0x93, 0x0e, 0x31, 0xe7,
-	0xd3, 0x92, 0xbe, 0x87, 0xea, 0x39, 0x1b, 0x4f, 0xb0, 0x53, 0xee, 0x92, 0x7e, 0x63, 0xb0, 0xbb,
-	0xec, 0xa0, 0x29, 0x49, 0x9c, 0x4a, 0x27, 0x73, 0x79, 0x59, 0xde, 0x23, 0x5b, 0xe7, 0xd0, 0x5c,
-	0x98, 0xf6, 0x2f, 0xd4, 0xa3, 0x45, 0xea, 0xfe, 0xb2, 0xd4, 0x11, 0x72, 0x85, 0xfa, 0x10, 0x93,
-	0x39, 0x6e, 0xef, 0x6b, 0x19, 0x56, 0xf3, 0xe7, 0x50, 0x1f, 0x36, 0x50, 0x70, 0x95, 0x44, 0x3a,
-	0x90, 0xc2, 0xd5, 0x49, 0x84, 0x06, 0xdf, 0x1a, 0xbc, 0x5a, 0x16, 0x35, 0x9c, 0xd9, 0x1c, 0x27,
-	0x11, 0x3a, 0x2d, 0x5c, 0xd0, 0xf4, 0x7f, 0xa8, 0xe5, 0x21, 0x94, 0xcd, 0x78, 0xd5, 0xd0, 0xe4,
-	0xf4, 0x08, 0x9a, 0x5c, 0x21, 0xcb, 0xe8, 0xc1, 0x19, 0x9a, 0x40, 0x2b, 0xce, 0x7a, 0xd1, 0x3c,
-	0x0e, 0xce, 0x90, 0x3e, 0x80, 0x5a, 0x2c, 0x27, 0x8a, 0x63, 0x1e, 0x60, 0xae, 0xe8, 0x43, 0x68,
-	0x5c, 0xb0, 0xd8, 0xc5, 0xcb, 0x48, 0xc6, 0xe8, 0x75, 0xaa, 0x5d, 0xd2, 0x5f, 0x73, 0xe0, 0x82,
-	0xc5, 0xc3, 0xac, 0x43, 0x7b, 0xd0, 0x8c, 0x98, 0x42, 0xa1, 0x8b, 0x1f, 0x40, 0xcd, 0xdc, 0x6f,
-	0x64, 0x4d, 0x13, 0x7e, 0xef, 0x0b, 0xd4, 0x67, 0x5b, 0xa2, 0x87, 0xb0, 0x12, 0x88, 0x53, 0x69,
-	0x76, 0x70, 0x8f, 0x90, 0x8d, 0x49, 0x11, 0x67, 0x3a, 0xef, 0xba, 0x89, 0xb3, 0xf7, 0x83, 0x00,
-	0xbd, 0xdb, 0xd3, 0x08, 0xb5, 0x0e, 0x84, 0x1f, 0xff, 0xf3, 0x10, 0x36, 0xa1, 0x2a, 0xa4, 0xe0,
-	0xd9, 0xf2, 0xd7, 0x9d, 0x4c, 0xd0, 0x0e, 0xac, 0x72, 0x39, 0x11, 0x1a, 0x95, 0x59, 0x7b, 0xd3,
-	0x29, 0xe4, 0xe3, 0x23, 0x68, 0x2d, 0x82, 0x68, 0x13, 0xea, 0x1f, 0xc7, 0x2c, 0x10, 0x1a, 0x2f,
-	0x75, 0xbb, 0x44, 0x5b, 0x00, 0xaf, 0x87, 0xa3, 0xa7, 0x83, 0x3d, 0xf7, 0xed, 0xb1, 0xd3, 0x26,
-	0x85, 0xde, 0x1f, 0x18, 0x5d, 0xce, 0xf5, 0xe0, 0xf9, 0x0b, 0xa3, 0x2b, 0x6f, 0xb6, 0xaf, 0x7e,
-	0x59, 0xa5, 0xab, 0xa9, 0x45, 0xae, 0xa7, 0x16, 0xb9, 0x99, 0x5a, 0xe4, 0xe7, 0xd4, 0x22, 0xdf,
-	0x6e, 0xad, 0xd2, 0xf5, 0xad, 0x55, 0xba, 0xb9, 0xb5, 0x4a, 0x9f, 0x1a, 0x73, 0x53, 0x9e, 0xd4,
-	0xcc, 0x9f, 0xe0, 0xb3, 0xdf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xb6, 0x4a, 0xe4, 0x4b, 0x85, 0x05,
-	0x00, 0x00,
-}

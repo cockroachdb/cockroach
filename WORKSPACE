@@ -48,8 +48,8 @@ go_repository(
     name = "org_golang_x_sys",
     build_file_proto_mode = "disable_global",
     importpath = "golang.org/x/sys",
-    sum = "h1:2/QtM1mL37YmcsT8HaDNHDgTqqFVw+zr8UzMiBVLzYU=",
-    version = "v0.0.0-20210217105451-b926d437f341",
+    sum = "h1:ZBu6861dZq7xBnG1bn5SRU0vA8nx42at4+kP07FMTog=",
+    version = "v0.0.0-20210412220455-f1c623a9e750",
 )
 
 go_repository(
@@ -68,9 +68,8 @@ go_repository(
     patches = [
         "@cockroach//build/patches:com_github_gogo_protobuf.patch",
     ],
-    replace = "github.com/cockroachdb/gogoproto",
-    sum = "h1:yrdrJWJpn0+1BmXaRzurDIZz3uHmSs/wnwWbC4arWlQ=",
-    version = "v1.2.1-0.20210111172841-8b6737fea948",
+    sum = "h1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=",
+    version = "v1.3.2",
 )
 
 go_repository(
@@ -81,8 +80,8 @@ go_repository(
     patches = [
         "@cockroach//build/patches:com_github_golang_protobuf.patch",
     ],
-    sum = "h1:+Z5KGCizgyZCbGh1KZqA0fcLLkwbsjIzS4aV2v7wJX0=",
-    version = "v1.4.2",
+    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
+    version = "v1.5.2",
 )
 
 go_repository(
