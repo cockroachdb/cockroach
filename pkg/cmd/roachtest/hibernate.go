@@ -60,6 +60,7 @@ func registerHibernate(r *testRegistry) {
 			t.Fatal(err)
 		}
 
+		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := repeatRunE(
 			ctx,
 			c,

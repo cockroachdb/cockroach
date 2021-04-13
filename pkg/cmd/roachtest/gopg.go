@@ -63,7 +63,7 @@ func registerGopg(r *testRegistry) {
 		c.l.Printf("Latest gopg release is %s.", gopgLatestTag)
 		c.l.Printf("Supported gopg release is %s.", gopgSupportedTag)
 
-		installLatestGolang(ctx, t, c, node)
+		installGolang(ctx, t, c, node)
 
 		if err := repeatRunE(
 			ctx,
