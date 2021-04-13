@@ -78,14 +78,12 @@ func TestBuilderAlterTable(t *testing.T) {
 				stmts, err := parser.Parse(d.Input)
 				require.NoError(t, err)
 
-				var ts []*scpb.Node
 				for i := range stmts {
-					next, err := b.Build(ctx, ts, stmts[i].AST)
+					err := b.Build(ctx, stmts[i].AST)
 					require.NoError(t, err)
-					ts = next
 				}
 
-				return marshalNodes(t, ts)
+				return marshalNodes(t, b.GetOutputNodes())
 			case "unimplemented":
 				b, cleanup := newTestingBuilder(s)
 				defer cleanup()
@@ -97,7 +95,7 @@ func TestBuilderAlterTable(t *testing.T) {
 				stmt := stmts[0]
 				alter, ok := stmt.AST.(*tree.AlterTable)
 				require.Truef(t, ok, "not an ALTER TABLE statement: %s", stmt.SQL)
-				_, err = b.AlterTable(ctx, nil, alter)
+				err = b.Build(ctx, alter)
 				require.Truef(t, scbuild.HasNotImplemented(err), "expected unimplemented, got %v", err)
 				return ""
 
@@ -134,7 +132,7 @@ func marshalNodes(t *testing.T, nodes []*scpb.Node) string {
 	return string(out)
 }
 
-func newTestingBuilder(s serverutils.TestServerInterface) (*scbuild.Builder, func()) {
+func newTestingBuilder(s serverutils.TestServerInterface) (*scbuild.BuildContext, func()) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	ip, cleanup := sql.NewInternalPlanner(
 		"test",
@@ -151,5 +149,5 @@ func newTestingBuilder(s serverutils.TestServerInterface) (*scbuild.Builder, fun
 		SemaCtx() *tree.SemaContext
 		EvalContext() *tree.EvalContext
 	})
-	return scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext()), cleanup
+	return scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext(), nil, nil), cleanup
 }

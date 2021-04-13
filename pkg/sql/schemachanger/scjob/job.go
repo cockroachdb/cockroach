@@ -113,7 +113,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 			}
 			if err := scexec.NewExecutor(
 				txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller,
-				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs,
+				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs, execCtx.ExecCfg().JobRegistry,
 			).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
 				Statements: n.job.Payload().Statement,
 				Phase:      scplan.PostCommitPhase,
@@ -148,6 +148,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		); err != nil {
 			return err
 		}
+		execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
 	}
 	return nil
 }

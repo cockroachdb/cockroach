@@ -39,8 +39,8 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	}
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
-	b := scbuild.NewBuilder(p, p.SemaCtx(), p.EvalContext())
-	updated, err := b.Build(ctx, scs.nodes, stmt)
+	b := scbuild.NewBuilder(p, p.SemaCtx(), p.EvalContext(), p.Descriptors(), p.extendedEvalCtx.SchemaChangerState.nodes)
+	err := b.Build(ctx, stmt)
 	if scbuild.HasNotImplemented(err) && mode == sessiondata.UseNewSchemaChangerOn {
 		return nil, false, nil
 	}
@@ -53,7 +53,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		return nil, false, err
 	}
 	return &schemaChangePlanNode{
-		plannedState: updated,
+		plannedState: b.GetOutputNodes(),
 	}, true, nil
 }
 
@@ -117,7 +117,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.extendedEvalCtx.SchemaChangerState
 	executor := scexec.NewExecutor(p.txn, p.Descriptors(), p.EvalContext().Codec,
-		nil /* backfiller */, nil /* jobTracker */, p.ExecCfg().NewSchemaChangerTestingKnobs)
+		nil /* backfiller */, nil /* jobTracker */, p.ExecCfg().NewSchemaChangerTestingKnobs, params.extendedEvalCtx.ExecCfg.JobRegistry)
 	after, err := runNewSchemaChanger(
 		params.ctx, scplan.StatementPhase, s.plannedState, executor, scs.stmts,
 	)
