@@ -880,8 +880,7 @@ table’s zone configuration this will return NULL.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.validate_multi_region_zone_configs"></a><code>crdb_internal.validate_multi_region_zone_configs() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Validates all multi-region zone configurations are correctly setup
 for the current database, including all tables, indexes and partitions underneath.
-Returns an error if validation fails. This builtin uses un-leased versions of the
-each descriptor, requiring extra round trips.</p>
+Returns an error if validation fails.</p>
 </span></td></tr>
 <tr><td><a name="default_to_database_primary_region"></a><code>default_to_database_primary_region(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the given region if the region has been added to the current database.
 Otherwise, this will return the primary region of the current database.

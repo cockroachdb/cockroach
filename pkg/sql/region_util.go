@@ -814,22 +814,22 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 	if !dbDesc.IsMultiRegion() {
 		return nil
 	}
-	regionConfig, err := SynthesizeRegionConfig(
+	regionConfig, err := p.currentDatabaseRegionConfig(
 		ctx,
-		p.txn,
-		dbDesc.GetID(),
-		p.Descriptors(),
-		SynthesizeRegionConfigOptionForValidation,
+		true, /* forValidation */
 	)
 	if err != nil {
 		return err
+	}
+	if regionConfig == nil {
+		return errors.AssertionFailedf("expected region config for multi-region database on db %d", dbDesc.GetName())
 	}
 	return p.validateAllMultiRegionZoneConfigsInDatabase(
 		ctx,
 		dbDesc,
 		&zoneConfigForMultiRegionValidatorValidation{
 			zoneConfigForMultiRegionValidatorExistingMultiRegionObject: zoneConfigForMultiRegionValidatorExistingMultiRegionObject{
-				regionConfig: regionConfig,
+				regionConfig: *regionConfig,
 			},
 		},
 	)
@@ -885,12 +885,18 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 }
 
 // CurrentDatabaseRegionConfig is part of the tree.EvalDatabase interface.
-// CurrentDatabaseRegionConfig uses the cache to synthesize the RegionConfig
-// and as such is intended for DML use. It returns an empty DatabaseRegionConfig
-// if the current database is not multi-region enabled.
 func (p *planner) CurrentDatabaseRegionConfig(
 	ctx context.Context,
 ) (tree.DatabaseRegionConfig, error) {
+	return p.currentDatabaseRegionConfig(ctx, false /* forValidation */)
+}
+
+// currentDatabaseRegionConfig uses the cache to synthesize the RegionConfig
+// and as such is intended for DML use. It returns an nil
+// if the current database is not multi-region enabled.
+func (p *planner) currentDatabaseRegionConfig(
+	ctx context.Context, forValidation bool,
+) (*multiregion.RegionConfig, error) {
 	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 		p.EvalContext().Ctx(),
 		p.txn,
@@ -922,17 +928,32 @@ func (p *planner) CurrentDatabaseRegionConfig(
 	if err != nil {
 		return nil, err
 	}
-	regionNames, err := regionEnum.RegionNames()
+
+	var regionNames descpb.RegionNames
+	if forValidation {
+		regionNames, err = regionEnum.RegionNamesForValidation()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		regionNames, err = regionEnum.RegionNames()
+		if err != nil {
+			return nil, err
+		}
+	}
+	transitioningRegionNames, err := regionEnum.TransitioningRegionNames()
 	if err != nil {
 		return nil, err
 	}
 
-	return multiregion.MakeRegionConfig(
+	ret := multiregion.MakeRegionConfig(
 		regionNames,
 		dbDesc.GetRegionConfig().PrimaryRegion,
 		dbDesc.GetRegionConfig().SurvivalGoal,
 		regionEnumID,
-	), nil
+		multiregion.MakeRegionConfigOptionTransitioningRegions(transitioningRegionNames),
+	)
+	return &ret, nil
 }
 
 type synthesizeRegionConfigOptions struct {

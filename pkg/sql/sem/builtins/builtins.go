@@ -5085,8 +5085,7 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			},
 			Info: `Validates all multi-region zone configurations are correctly setup
 			for the current database, including all tables, indexes and partitions underneath.
-			Returns an error if validation fails. This builtin uses un-leased versions of the
-			each descriptor, requiring extra round trips.`,
+			Returns an error if validation fails.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
