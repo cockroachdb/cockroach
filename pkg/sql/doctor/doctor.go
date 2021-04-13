@@ -277,7 +277,7 @@ func descReport(stdout io.Writer, desc catalog.Descriptor, format string, args .
 	// Add descriptor-identifying prefix if it isn't there already.
 	// The prefix has the same format as the validation error wrapper.
 	msgPrefix := fmt.Sprintf("%s %q (%d): ", desc.DescriptorType(), desc.GetName(), desc.GetID())
-	if msg[:len(msgPrefix)] == msgPrefix {
+	if strings.HasPrefix(msg, msgPrefix) {
 		msgPrefix = ""
 	}
 	_, _ = fmt.Fprintf(stdout, "  ParentID %3d, ParentSchemaID %2d: %s%s\n",
