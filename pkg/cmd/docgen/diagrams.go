@@ -517,6 +517,11 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'COMMIT'|'END'")},
 	},
 	{
+		name:    "copy_from_stmt",
+		inline:  []string{"opt_with_copy_options", "copy_options_list", "opt_with", "opt_where_clause", "where_clause"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'WHERE'")},
+	},
+	{
 		name:    "cancel_job",
 		stmt:    "cancel_jobs_stmt",
 		replace: map[string]string{"a_expr": "job_id"},

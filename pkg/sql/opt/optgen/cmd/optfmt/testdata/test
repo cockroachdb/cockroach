@@ -71,6 +71,23 @@ define FiltersItem {
 )
 =>
 (False)
+
+[TestLet]
+(Select
+	$input:*
+	$filters:* &
+	    (Let ($a):(Foo $input) $a) &
+	    (Let ($a $b $c $ok):(SplitFilters $input $filters) $ok) &
+	    (Let ($filtersA $filtersB $filtersC $filtersD $filtersE $filtersF $filtersG $ok):(SplitFilters $input $filters) $ok) &
+	    (Let ($a $b $c $ok):(SplitFilters $input $filters $long $arg $list) $ok) &
+	    (Let ($filtersA $filtersB $filtersC $filtersD $ok):(SplitFilters $input $filters $long $arg $list $longer) $ok) &
+	    (IsValid (Let ($filtersX $filtersY):(SplitFilters $input $filters) $filtersX)) &
+	    (OuterFunc (InnerFunc (Let ($foo $bar):(SplitFilters $input $filters) $foo))) &
+	    (Let ($foo $bar $baz):(Split (Let ($foo $bar $baz):(SplitAgain $a $b $c) $a)) $foo)
+)
+=>
+(False)
+
 ----
 ----
 #
@@ -149,6 +166,56 @@ define FiltersItem {
         ) &
         (IsUnorderedGrouping $groupingPrivate)
     $left:* & (Blah)
+)
+=>
+(False)
+
+[TestLet]
+(Select
+    $input:*
+    $filters:* &
+        (Let ($a):(Foo $input) $a) &
+        (Let ($a $b $c $ok):(SplitFilters $input $filters) $ok) &
+        (Let ($filtersA $filtersB $filtersC $filtersD $filtersE
+            $filtersF $filtersG $ok):
+            (SplitFilters $input $filters)
+            $ok
+        ) &
+        (Let ($a $b $c $ok):
+            (SplitFilters $input $filters $long $arg $list)
+            $ok
+        ) &
+        (Let ($filtersA $filtersB $filtersC $filtersD $ok):
+            (SplitFilters
+                $input
+                $filters
+                $long
+                $arg
+                $list
+                $longer
+            )
+            $ok
+        ) &
+        (IsValid
+            (Let ($filtersX $filtersY):
+                (SplitFilters $input $filters)
+                $filtersX
+            )
+        ) &
+        (OuterFunc
+            (InnerFunc
+                (Let ($foo $bar):
+                    (SplitFilters $input $filters)
+                    $foo
+                )
+            )
+        ) &
+        (Let ($foo $bar $baz):
+            (Split
+                (Let ($foo $bar $baz):(SplitAgain $a $b $c) $a)
+            )
+            $foo
+        )
 )
 =>
 (False)
