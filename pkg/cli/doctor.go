@@ -49,6 +49,10 @@ a live cluster or a unzipped debug zip.
 `,
 }
 
+var doctorOptions = struct {
+	Verbose bool
+}{}
+
 var debugDoctorCmds = []*cobra.Command{
 	doctorZipDirCmd,
 	doctorClusterCmd,
@@ -88,9 +92,8 @@ func wrapExamine(
 	jobsTable doctor.JobsTable,
 	out io.Writer,
 ) error {
-	// TODO(spaskob): add --verbose flag.
 	valid, err := doctor.Examine(
-		context.Background(), descTable, namespaceTable, jobsTable, false, out)
+		context.Background(), descTable, namespaceTable, jobsTable, doctorOptions.Verbose, out)
 	if err != nil {
 		return &cliError{
 			// Note: we are using "unspecified" here because the error
