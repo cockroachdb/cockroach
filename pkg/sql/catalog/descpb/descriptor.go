@@ -12,7 +12,6 @@ package descpb
 
 import (
 	"context"
-	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -89,7 +88,6 @@ func GetDescriptorModificationTime(desc *Descriptor) hlc.Timestamp {
 	case *Descriptor_Schema:
 		return t.Schema.ModificationTime
 	default:
-		debug.PrintStack()
 		panic(errors.AssertionFailedf("GetDescriptorModificationTime: unknown Descriptor type %T", t))
 	}
 }
@@ -106,7 +104,6 @@ func GetDescriptorState(desc *Descriptor) DescriptorState {
 	case *Descriptor_Schema:
 		return t.Schema.State
 	default:
-		debug.PrintStack()
 		panic(errors.AssertionFailedf("GetDescriptorState: unknown Descriptor type %T", t))
 	}
 }
