@@ -1521,7 +1521,7 @@ func ValidateForwardIndexes(
 			// added earlier in the same mutation. Here we make those mutations
 			// pubic so that the query can reference those columns.
 			var err error
-			desc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
+			desc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraintsAndPKSwaps)
 			if err != nil {
 				return err
 			}
