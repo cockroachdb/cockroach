@@ -1,0 +1,49 @@
+create-sequence
+CREATE SEQUENCE defaultdb.SQ1
+----
+
+build
+DROP SEQUENCE defaultdb.SQ1 CASCADE
+----
+- target:
+    direction: DROP
+    elementProto:
+      table:
+        tableId: 52
+  state: PUBLIC
+
+create-table
+CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
+----
+
+create-table
+CREATE TABLE defaultdb.blog_posts2 (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
+----
+
+build
+DROP SEQUENCE defaultdb.SQ1 CASCADE
+----
+- target:
+    direction: DROP
+    elementProto:
+      defaultExpression:
+        columnId: 2
+        tableId: 53
+        usesSequenceIDs:
+        - 52
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      defaultExpression:
+        columnId: 2
+        tableId: 54
+        usesSequenceIDs:
+        - 52
+  state: PUBLIC
+- target:
+    direction: DROP
+    elementProto:
+      table:
+        tableId: 52
+  state: PUBLIC

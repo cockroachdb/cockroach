@@ -127,7 +127,7 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			ex := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), nil, nil, nil)
+			ex := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), nil, nil, nil, nil)
 			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig(), orig)
@@ -167,7 +167,7 @@ CREATE TABLE db.t (
 			}),
 			ops: func() scop.Ops {
 				return scop.MakeOps(
-					scop.MakeAddedIndexDeleteOnly{
+					&scop.MakeAddedIndexDeleteOnly{
 						TableID: table.ID,
 						Index:   indexToAdd,
 					},
@@ -190,7 +190,7 @@ CREATE TABLE db.t (
 			}),
 			ops: func() scop.Ops {
 				return scop.MakeOps(
-					scop.AddCheckConstraint{
+					&scop.AddCheckConstraint{
 						TableID:     table.GetID(),
 						Name:        "check_foo",
 						Expr:        "i > 1",
@@ -312,6 +312,7 @@ func TestSchemaChanger(t *testing.T) {
 						noopBackfiller{},
 						nil,
 						nil,
+						nil,
 					)
 					require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 					ts = s.After
@@ -328,7 +329,7 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil)
+				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil)
 				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 				after = s.After
 			}
@@ -383,23 +384,23 @@ func TestSchemaChanger(t *testing.T) {
 				EvalContext() *tree.EvalContext
 			})
 			defer cleanup()
-			b := scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext())
+			b := scbuild.NewBuilder(planner, planner.SemaCtx(), planner.EvalContext(), descriptors, nil)
 			parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 			require.NoError(t, err)
 			require.Len(t, parsed, 1)
-			targetStates, err := b.AlterTable(ctx, nil, parsed[0].AST.(*tree.AlterTable))
+			err, outputNodes := b.Build(ctx, parsed[0].AST.(*tree.AlterTable))
 			require.NoError(t, err)
 
 			for _, phase := range []scplan.Phase{
 				scplan.StatementPhase,
 				scplan.PreCommitPhase,
 			} {
-				sc, err := scplan.MakePlan(targetStates, scplan.Params{
+				sc, err := scplan.MakePlan(outputNodes, scplan.Params{
 					ExecutionPhase: phase,
 				})
 				require.NoError(t, err)
 				for _, s := range sc.Stages {
-					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil).
+					require.NoError(t, scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil).
 						ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 					ts = s.After
 				}
@@ -414,7 +415,7 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			require.NoError(t, err)
 			for _, s := range sc.Stages {
-				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil)
+				exec := scexec.NewExecutor(txn, descriptors, ti.lm.Codec(), noopBackfiller{}, nil, nil, nil)
 				require.NoError(t, exec.ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{}))
 			}
 			return nil

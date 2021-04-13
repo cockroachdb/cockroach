@@ -13,8 +13,10 @@ package scexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -22,9 +24,18 @@ import (
 )
 
 type mutationDescGetter struct {
-	descs     *descs.Collection
-	txn       *kv.Txn
-	retrieved catalog.DescriptorIDSet
+	descs        *descs.Collection
+	txn          *kv.Txn
+	retrieved    catalog.DescriptorIDSet
+	drainedNames map[descpb.ID][]descpb.NameInfo
+}
+
+func newMutationDescGetter(descs *descs.Collection, txn *kv.Txn) *mutationDescGetter {
+	return &mutationDescGetter{
+		descs:        descs,
+		txn:          txn,
+		drainedNames: make(map[descpb.ID][]descpb.NameInfo),
+	}
 }
 
 func (m *mutationDescGetter) GetMutableTableByID(
@@ -37,6 +48,26 @@ func (m *mutationDescGetter) GetMutableTableByID(
 	table.MaybeIncrementVersion()
 	m.retrieved.Add(table.GetID())
 	return table, nil
+}
+
+func (m *mutationDescGetter) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {
+	if _, ok := m.drainedNames[id]; !ok {
+		m.drainedNames[id] = []descpb.NameInfo{nameInfo}
+	} else {
+		m.drainedNames[id] = append(m.drainedNames[id], nameInfo)
+	}
+}
+
+func (m *mutationDescGetter) SubmitDrainedNames(
+	ctx context.Context, codec keys.SQLCodec, ba *kv.Batch,
+) error {
+	for _, drainedNames := range m.drainedNames {
+		for _, drain := range drainedNames {
+			catalogkv.WriteObjectNamespaceEntryRemovalToBatch(
+				ctx, ba, codec, drain.ParentID, drain.ParentSchemaID, drain.Name, false /* KVTrace */)
+		}
+	}
+	return nil
 }
 
 var _ scmutationexec.MutableDescGetter = (*mutationDescGetter)(nil)

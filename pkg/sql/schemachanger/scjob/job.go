@@ -102,6 +102,11 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 	if err != nil {
 		return err
 	}
+	restoreTableIDs := func(txn *kv.Txn, descriptors *descs.Collection) error {
+		return scexec.UpdateDescriptorJobIDs(
+			ctx, txn, descriptors, n.job.Payload().DescriptorIDs, n.job.ID(), jobspb.InvalidJobID,
+		)
+	}
 
 	for i, s := range sc.Stages {
 		var descriptorsWithUpdatedVersions []lease.IDVersion
@@ -113,7 +118,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 			}
 			if err := scexec.NewExecutor(
 				txn, descriptors, execCtx.ExecCfg().Codec, execCtx.ExecCfg().IndexBackfiller,
-				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs,
+				jt, execCtx.ExecCfg().NewSchemaChangerTestingKnobs, execCtx.ExecCfg().JobRegistry,
 			).ExecuteOps(ctx, s.Ops, scexec.TestingKnobMetadata{
 				Statements: n.job.Payload().Statement,
 				Phase:      scplan.PostCommitPhase,
@@ -123,9 +128,7 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 			// If this is the last stage, also update all the table descriptors to
 			// remove the job ID.
 			if i == len(sc.Stages)-1 {
-				if err := scexec.UpdateDescriptorJobIDs(
-					ctx, txn, descriptors, n.job.Payload().DescriptorIDs, n.job.ID(), jobspb.InvalidJobID,
-				); err != nil {
+				if err := restoreTableIDs(txn, descriptors); err != nil {
 					return err
 				}
 			}
@@ -148,6 +151,29 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 		); err != nil {
 			return err
 		}
+		execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
+	}
+
+	// If no stages exist, then execute a singe transaction
+	// within this job to allow schema changes again.
+	if len(sc.Stages) == 0 {
+		descs.Txn(ctx, settings, lm, ie, db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			err := restoreTableIDs(txn, descriptors)
+			if err != nil {
+				return err
+			}
+			descriptorsWithUpdatedVersions := descriptors.GetDescriptorsWithNewVersion()
+			// Wait for new versions.
+			if err := sql.WaitToUpdateLeasesMultiple(
+				ctx,
+				lm,
+				descriptorsWithUpdatedVersions,
+			); err != nil {
+				return err
+			}
+			execCtx.ExecCfg().JobRegistry.NotifyToAdoptJobs(ctx)
+			return nil
+		})
 	}
 	return nil
 }
