@@ -304,6 +304,18 @@ func (cl CertsLocator) ClientCAKeyPath() string {
 	return filepath.Join(cl.certsDir, "ca-client"+keyExtension)
 }
 
+// ClientNodeCertPath returns the expected file path for the certificate used
+// by other nodes to verify outgoing RPCs from this node.
+func (cl CertsLocator) ClientNodeCertPath() string {
+	return filepath.Join(cl.certsDir, "client.node"+certExtension)
+}
+
+// ClientNodeCertPath returns the expected file path for the key used
+// to sign outgoing RPCs.
+func (cl CertsLocator) ClientNodeKeyPath() string {
+	return filepath.Join(cl.certsDir, "client.node"+keyExtension)
+}
+
 // UICACertPath returns the expected file path for the CA certificate
 // used to verify Admin UI certificates.
 func (cl CertsLocator) UICACertPath() string {

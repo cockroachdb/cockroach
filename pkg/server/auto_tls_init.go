@@ -373,12 +373,18 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 	}
 
 	// Initialize User auth certificates.
-	if err := b.UserAuth.loadOrCreateUserAuthCACertAndKey(
+	if err := b.UserAuth.loadOrCreateServiceCertificates(
 		ctx,
+		cl.ClientNodeCertPath(),
+		cl.ClientNodeKeyPath(),
 		cl.ClientCACertPath(),
 		cl.ClientCAKeyPath(),
+		defaultCertLifetime,
 		defaultCALifetime,
+		security.NodeUser,
 		serviceNameUserAuth,
+		nil,
+		true, /* serviceCertIsAlsoValidAsClient */
 	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create User auth certificate(s)")
@@ -494,22 +500,22 @@ func (b *CertificateBundle) InitializeNodeFromBundle(ctx context.Context, c base
 	}
 
 	// Attempt to write ClientCA to disk.
-	if err := b.InterNode.writeCAOrFail(cl.ClientCACertPath(), cl.ClientCAKeyPath()); err != nil {
+	if err := b.UserAuth.writeCAOrFail(cl.ClientCACertPath(), cl.ClientCAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write ClientCA to disk")
 	}
 
 	// Attempt to write SQLServiceCA to disk.
-	if err := b.InterNode.writeCAOrFail(cl.SQLServiceCACertPath(), cl.SQLServiceCAKeyPath()); err != nil {
+	if err := b.SQLService.writeCAOrFail(cl.SQLServiceCACertPath(), cl.SQLServiceCAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write SQLServiceCA to disk")
 	}
 
 	// Attempt to write RPCServiceCA to disk.
-	if err := b.InterNode.writeCAOrFail(cl.RPCServiceCACertPath(), cl.RPCServiceCAKeyPath()); err != nil {
+	if err := b.RPCService.writeCAOrFail(cl.RPCServiceCACertPath(), cl.RPCServiceCAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write RPCServiceCA to disk")
 	}
 
 	// Attempt to write AdminUIServiceCA to disk.
-	if err := b.InterNode.writeCAOrFail(cl.UICACertPath(), cl.UICAKeyPath()); err != nil {
+	if err := b.AdminUIService.writeCAOrFail(cl.UICACertPath(), cl.UICAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write AdminUIServiceCA to disk")
 	}
 
