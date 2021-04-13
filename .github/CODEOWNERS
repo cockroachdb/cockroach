@@ -36,6 +36,10 @@
 
 /pkg/geo                     @cockroachdb/geospatial
 
+/pkg/kv                      @cockroachdb/kv
+
+/pkg/storage                 @cockroachdb/storage
+
 /pkg/ui/                     @cockroachdb/cluster-ui-prs
 /pkg/ui/embedded.go          @cockroachdb/cluster-ui-prs
 /pkg/ui/src/js/protos.d.ts   @cockroachdb/cluster-ui-prs

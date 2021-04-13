@@ -11,7 +11,11 @@
 package codeowners
 
 import (
+	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -73,7 +77,121 @@ func TestMatch(t *testing.T) {
 	}
 }
 
-func TestCodeOwnersValid(t *testing.T) {
-	_, err := DefaultLoadCodeOwners()
+func TestEverythingHasOwners(t *testing.T) {
+	co, err := DefaultLoadCodeOwners()
 	require.NoError(t, err)
+	root, err := filepath.Abs("../../") // pkg
+	require.NoError(t, err)
+
+	skip := map[string]struct{}{
+		filepath.Join("ccl", "ccl_init.go"): {},
+		filepath.Join("ui", "node_modules"): {},
+		filepath.Join("ui", "yarn-vendor"):  {},
+		"Makefile":                          {},
+		"BUILD.bazel":                       {},
+		".gitignore":                        {},
+		"README.md":                         {},
+	}
+
+	unowned := map[string]string{} // unowned dir relative to root -> triggering file
+
+	require.NoError(t, filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		path, err = filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if _, ok := skip[path]; ok {
+			t.Logf("skipping %s", path)
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		fname := filepath.Base(path)
+		if _, ok := skip[fname]; ok {
+			t.Logf("skipping %s", path)
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		teams, err := co.Match(filepath.Join(root, path))
+		if err != nil {
+			return err
+		}
+		if len(teams) > 0 {
+			t.Logf("%s <- has team(s) %v", path, teams)
+			return nil
+		}
+		if !info.IsDir() {
+			// Let's say `path = ./pkg/foo/bar/baz.go`.
+			// If ./pkg, ./pkg/foo, or ./pkg/foo/bar are already
+			// marked as "unowned", avoid emitting a spurious failure.
+			// If neither are, we mark ./pkg/foo/bar as unowned as a
+			// result of containing an unowned file. We could also mark
+			// the file itself as unowned, but most of the time we have
+			// one owner for the directory and also the failures get less
+			// noisy by tracking per-directory.
+			parts := strings.Split(path, string(filepath.Separator))
+			var ok bool
+			for i := range parts {
+				prefix := filepath.Join(parts[:i+1]...)
+				_, ok = unowned[prefix]
+				if ok {
+					t.Logf("pruning %s; %s is already unowned", path, prefix)
+					break
+				}
+			}
+			if !ok {
+				unowned[filepath.Dir(path)] = path
+			}
+		}
+		return nil
+	}))
+	var sl []string
+	for path := range unowned {
+		sl = append(sl, path)
+	}
+	sort.Strings(sl)
+
+	isPrefix := func(s, prefix string) bool {
+		sl, pl := strings.Split(s, string(filepath.Separator)), strings.Split(prefix, string(filepath.Separator))
+		if len(sl) <= len(pl) {
+			// [foo, bar] can't have [x, y] or [x, y, z] as prefix.
+			return false
+		}
+		for i := range pl {
+			if sl[i] != pl[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	var i int
+	for {
+		if i >= len(sl) {
+			break
+		}
+		if i > 0 && isPrefix(sl[i], sl[i-1]) {
+			t.Logf("dropping %s; already have %s", sl[i], sl[i-1])
+			copy(sl[i:], sl[i+1:])
+			sl = sl[:len(sl)-1]
+			continue // don't increment i
+		}
+		i++
+	}
+	var buf strings.Builder
+	pkg := string(filepath.Separator) + filepath.Base(root)
+	for _, s := range sl {
+		fmt.Fprintf(&buf, "%-28s @cockroachdb/<TODO>\n", filepath.Join(pkg, s))
+	}
+	if buf.Len() > 0 {
+		t.Errorf("unowned packages found, please fill out the below and augment .github/CODEOWNERS:\n\n%s", buf.String())
+	}
 }
