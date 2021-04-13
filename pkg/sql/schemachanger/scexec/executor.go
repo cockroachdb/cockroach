@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -39,6 +40,7 @@ type Executor struct {
 	indexBackfiller IndexBackfiller
 	jobTracker      JobProgressTracker
 	testingKnobs    *NewSchemaChangerTestingKnobs
+	jobRegistry     *jobs.Registry
 }
 
 // NewExecutor creates a new Executor.
@@ -49,6 +51,7 @@ func NewExecutor(
 	backfiller IndexBackfiller,
 	tracker JobProgressTracker,
 	testingKnobs *NewSchemaChangerTestingKnobs,
+	jobRegistry *jobs.Registry,
 ) *Executor {
 	return &Executor{
 		txn:             txn,
@@ -57,6 +60,7 @@ func NewExecutor(
 		indexBackfiller: backfiller,
 		jobTracker:      tracker,
 		testingKnobs:    testingKnobs,
+		jobRegistry:     jobRegistry,
 	}
 }
 
@@ -208,11 +212,9 @@ func (ex *Executor) maybeSplitIndexSpans(ctx context.Context, span roachpb.Span)
 }
 
 func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, ops []scop.Op) error {
-	dg := &mutationDescGetter{
-		descs: ex.descsCollection,
-		txn:   ex.txn,
-	}
-	v := scmutationexec.NewMutationVisitor(dg)
+	dg := newMutationDescGetter(ex.descsCollection, ex.txn)
+	mj := &mutationJobs{jobRegistry: ex.jobRegistry}
+	v := scmutationexec.NewMutationVisitor(dg, mj)
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return err
@@ -227,6 +229,15 @@ func (ex *Executor) executeDescriptorMutationOps(ctx context.Context, ops []scop
 		if err := ex.descsCollection.WriteDescToBatch(ctx, false, desc, ba); err != nil {
 			return err
 		}
+	}
+	err := dg.SubmitDrainedNames(ctx, ex.codec, ba)
+	_, err = mj.SubmitAllJobs(ctx, ex.txn)
+	if err != nil {
+		return err
+	}
+	err = ex.descsCollection.ValidateUncommittedDescriptors(ctx, ex.txn)
+	if err != nil {
+		return err
 	}
 	if err := ex.txn.Run(ctx, ba); err != nil {
 		return errors.Wrap(err, "writing descriptors")
@@ -248,7 +259,12 @@ func UpdateDescriptorJobIDs(
 	for _, id := range descIDs {
 		// Currently all "locking" schema changes are on tables. This will probably
 		// need to be expanded at least to types.
-		table, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+		table, err := descriptors.GetMutableTableByID(ctx, txn, id,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       true,
+					IncludeDropped: true},
+			})
 		if err != nil {
 			return err
 		}
