@@ -445,7 +445,9 @@ func applyFilterOnEnumMembers(
 // 2. If an enum value was being removed as part of this txn, we promote
 // it back to writable.
 func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
+	var multiRegionFinalizer *multiRegionFinalizer
 	// Cleanup:
+
 	cleanup := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
 		if err != nil {
@@ -477,7 +479,20 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
-		return txn.Run(ctx, b)
+
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+
+		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+			multiRegionFinalizer = NewMultiRegionFinalizer(t.typeID)
+
+			if err := multiRegionFinalizer.finalize(ctx, txn, descsCol, t.execCfg); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 	if err := descs.Txn(ctx, t.execCfg.Settings, t.execCfg.LeaseManager, t.execCfg.InternalExecutor,
 		t.execCfg.DB, cleanup); err != nil {
@@ -491,6 +506,13 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 		}
 		return err
 	}
+
+	if multiRegionFinalizer != nil {
+		if err := multiRegionFinalizer.waitToUpdateLeases(ctx, t.execCfg.LeaseManager); err != nil {
+			return nil
+		}
+	}
+
 	return nil
 }
 

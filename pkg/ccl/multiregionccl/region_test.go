@@ -200,6 +200,139 @@ CREATE TABLE db.rbr () LOCALITY REGIONAL BY ROW`)
 	}
 }
 
+// TestRegionAddDropEnclosingRegionalByRowAlters tests adding/dropping regions
+// (expected to fail) with a concurrent alter to a regional by row table. The
+// sketch of the test is as follows:
+// - Client 1 performs an ALTER ADD / DROP REGION. Let the user txn commit.
+// - Block in the type schema changer.
+// - Client 2 alters a REGIONAL / GLOBAL table to a REGIONAL BY ROW table. Let
+// this operation finish.
+// - Force a rollback on the REGION ADD / DROP by injecting an error.
+// - Ensure the partitions on the REGIONAL BY ROW table are sane.
+func TestRegionAddDropFailureEnclosingRegionalByRowAlters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "times out under race")
+
+	// Decrease the adopt loop interval so that retries happen quickly.
+	defer sqltestutils.SetTestJobsAdoptInterval()()
+
+	testCases := []struct {
+		name           string
+		setup          string
+		regionAlterCmd string
+	}{
+		{
+			"region-drop-alter-from-global",
+			`CREATE TABLE db.t () LOCALITY GLOBAL`,
+			`ALTER DATABASE db DROP REGION "us-east3"`,
+		},
+		{
+			"region-drop-alter-from-regional",
+			`CREATE TABLE db.t () LOCALITY REGIONAL`,
+			`ALTER DATABASE db DROP REGION "us-east3"`,
+		},
+		{
+			"region-add-alter-from-global",
+			`CREATE TABLE db.t () LOCALITY GLOBAL`,
+			`ALTER DATABASE db ADD REGION "us-east4"`,
+		},
+		{
+			"region-add-alter-from-regional",
+			`CREATE TABLE db.t () LOCALITY REGIONAL`,
+			`ALTER DATABASE db ADD REGION "us-east4"`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var mu syncutil.Mutex
+			typeChangeStarted := make(chan struct{})
+			typeChangeFinished := make(chan struct{})
+			rbrOpFinished := make(chan struct{})
+
+			knobs := base.TestingKnobs{
+				SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
+					RunBeforeExec: func() error {
+						mu.Lock()
+						defer mu.Unlock()
+						close(typeChangeStarted)
+						<-rbrOpFinished
+						// Trigger a roll-back.
+						return errors.New("boom")
+					},
+				},
+			}
+
+			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+				t, 4 /* numServers */, knobs, nil, /* baseDir */
+			)
+			defer cleanup()
+
+			_, err := sqlDB.Exec(`
+CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+`)
+			require.NoError(t, err)
+
+			_, err = sqlDB.Exec(tc.setup)
+			require.NoError(t, err)
+
+			go func() {
+				_, err := sqlDB.Exec(tc.regionAlterCmd)
+				if !testutils.IsError(err, "boom") {
+					t.Errorf("expected error boom, found %v", err)
+				}
+				close(typeChangeFinished)
+			}()
+
+			<-typeChangeStarted
+
+			_, err = sqlDB.Exec(`ALTER TABLE db.t SET LOCALITY REGIONAL BY ROW`)
+			close(rbrOpFinished)
+			require.NoError(t, err)
+
+			testutils.SucceedsSoon(t, func() error {
+				rows, err := sqlDB.Query("SELECT partition_name FROM [SHOW PARTITIONS FROM TABLE db.t] ORDER BY partition_name")
+				if err != nil {
+					return err
+				}
+				defer rows.Close()
+
+				var partitionNames []string
+				for rows.Next() {
+					var partitionName string
+					if err := rows.Scan(&partitionName); err != nil {
+						return err
+					}
+
+					partitionNames = append(partitionNames, partitionName)
+				}
+
+				expectedPartitions := []string{"us-east1", "us-east2", "us-east3"}
+				if len(partitionNames) != len(expectedPartitions) {
+					return errors.AssertionFailedf(
+						"unexpected number of partitions; expected %d, found %d",
+						len(expectedPartitions),
+						len(partitionNames),
+					)
+				}
+				for i := range expectedPartitions {
+					if expectedPartitions[i] != partitionNames[i] {
+						return errors.AssertionFailedf(
+							"unexpected partitions; expected %v, found %v",
+							expectedPartitions,
+							partitionNames,
+						)
+					}
+				}
+				return nil
+			})
+			<-typeChangeFinished
+		})
+	}
+}
+
 func TestSettingPrimaryRegionAmidstDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
