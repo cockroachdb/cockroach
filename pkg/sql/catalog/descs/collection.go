@@ -541,7 +541,8 @@ func (tc *Collection) getObjectByName(
 	// should be able to lease most of them.
 	isAllowedSystemTable := objectName == systemschema.RoleMembersTable.GetName() ||
 		objectName == systemschema.RoleOptionsTable.GetName() ||
-		objectName == systemschema.UsersTable.GetName()
+		objectName == systemschema.UsersTable.GetName() ||
+		objectName == systemschema.JobsTable.GetName()
 	avoidCache := flags.AvoidCached || mutable || lease.TestingTableLeasesAreDisabled() ||
 		(catalogName == systemschema.SystemDatabaseName && !isAllowedSystemTable)
 	if avoidCache {
@@ -2040,8 +2041,13 @@ func (dt DistSQLTypeResolver) GetTypeDescriptor(
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
+	typeDesc, isType := desc.(catalog.TypeDescriptor)
+	if !isType {
+		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
+			"descriptor %d is a %s not a %s", id, desc.DescriptorType(), catalog.Type)
+	}
 	name := tree.MakeUnqualifiedTypeName(tree.Name(desc.GetName()))
-	return name, desc.(catalog.TypeDescriptor), nil
+	return name, typeDesc, nil
 }
 
 // HydrateTypeSlice installs metadata into a slice of types.T's.
