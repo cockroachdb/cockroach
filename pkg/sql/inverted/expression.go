@@ -650,9 +650,6 @@ func opSpanExpressionAndDefault(
 
 // Intersects two SpanExpressions.
 func intersectSpanExpressions(left, right *SpanExpression) *SpanExpression {
-	// Since we simply union into SpansToRead, we can end up with
-	// FactoredUnionSpans as a subset of SpanToRead *and* both children pruned.
-	// TODO(sumeer): tighten the SpansToRead for this case.
 	expr := &SpanExpression{
 		Tight:              left.Tight && right.Tight,
 		Unique:             left.Unique && right.Unique,
@@ -709,6 +706,19 @@ func tryPruneChildren(expr *SpanExpression, op SetOperator) {
 		expr.Operator = child.Operator
 		expr.Left = child.Left
 		expr.Right = child.Right
+
+		// If child.FactoredUnionSpans is non-empty, we need to recalculate
+		// SpansToRead since it may have contained some spans that were removed by
+		// discarding child.FactoredUnionSpans.
+		if child.FactoredUnionSpans != nil {
+			expr.SpansToRead = expr.FactoredUnionSpans
+			if expr.Left != nil {
+				expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Left.(*SpanExpression).SpansToRead)
+			}
+			if expr.Right != nil {
+				expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Right.(*SpanExpression).SpansToRead)
+			}
+		}
 	}
 	promoteLeft := expr.Left != nil && expr.Right == nil
 	promoteRight := expr.Left == nil && expr.Right != nil
@@ -719,6 +729,7 @@ func tryPruneChildren(expr *SpanExpression, op SetOperator) {
 		promoteChild(expr.Right.(*SpanExpression))
 	}
 	if expr.Left == nil && expr.Right == nil {
+		expr.SpansToRead = expr.FactoredUnionSpans
 		expr.Operator = None
 	}
 }
