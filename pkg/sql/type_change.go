@@ -188,7 +188,7 @@ type TypeSchemaChangerTestingKnobs struct {
 	RunBeforeExec func() error
 	// RunBeforeEnumMemberPromotion runs before enum members are promoted from
 	// readable to all permissions in the typeSchemaChanger.
-	RunBeforeEnumMemberPromotion func()
+	RunBeforeEnumMemberPromotion func() error
 	// RunAfterOnFailOrCancel runs after OnFailOrCancel completes, if
 	// OnFailOrCancel is triggered.
 	RunAfterOnFailOrCancel func() error
@@ -278,7 +278,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
 		len(t.transitioningMembers) != 0 {
 		if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
-			fn()
+			if err := fn(); err != nil {
+				return err
+			}
 		}
 
 		// First, we check if any of the enum values that are being removed are in
@@ -440,13 +442,13 @@ func applyFilterOnEnumMembers(
 // 2. If an enum value was being removed as part of this txn, we promote
 // it back to writable.
 func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
+	var regionChangeFinalizer *databaseRegionChangeFinalizer
 	// Cleanup:
 	cleanup := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
 		if err != nil {
 			return err
 		}
-		b := txn.NewBatch()
 		// No cleanup required.
 		if !enumHasNonPublic(&typeDesc.Immutable) {
 			return nil
@@ -467,12 +469,19 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 			return t.isTransitioningInCurrentJob(member) && enumMemberIsAdding(member)
 		})
 
-		if err := descsCol.WriteDescToBatch(
-			ctx, true /* kvTrace */, typeDesc, b,
-		); err != nil {
+		if err := descsCol.WriteDesc(ctx, true /* kvTrace */, typeDesc, txn); err != nil {
 			return err
 		}
-		return txn.Run(ctx, b)
+
+		if typeDesc.Kind == descpb.TypeDescriptor_MULTIREGION_ENUM {
+			regionChangeFinalizer = newDatabaseRegionChangeFinalizer(typeDesc.GetParentID(), typeDesc.GetID())
+
+			if err := regionChangeFinalizer.finalize(ctx, txn, descsCol, t.execCfg); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 	if err := descs.Txn(ctx, t.execCfg.Settings, t.execCfg.LeaseManager, t.execCfg.InternalExecutor,
 		t.execCfg.DB, cleanup); err != nil {
@@ -486,6 +495,13 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 		}
 		return err
 	}
+
+	if regionChangeFinalizer != nil {
+		if err := regionChangeFinalizer.waitToUpdateLeases(ctx, t.execCfg.LeaseManager); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
