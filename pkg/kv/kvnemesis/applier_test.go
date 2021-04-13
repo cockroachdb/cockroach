@@ -12,16 +12,19 @@ package kvnemesis
 
 import (
 	"context"
+	gosql "database/sql"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestApplier(t *testing.T) {
@@ -32,8 +35,10 @@ func TestApplier(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).DB()
+	sqlDB := tc.ServerConn(0)
+	env := &Env{sqlDBs: []*gosql.DB{sqlDB}}
 
-	a := MakeApplier(db, db)
+	a := MakeApplier(env, db, db)
 	check := func(t *testing.T, s Step, expected string) {
 		t.Helper()
 		require.NoError(t, a.Apply(ctx, &s))
@@ -146,4 +151,45 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		`db1.TransferLeaseOperation(ctx, "foo", 1) // nil`)
 	checkErr(t, step(transferLease(`foo`, 1)),
 		`db0.TransferLeaseOperation(ctx, "foo", 1) // context canceled`)
+
+	// Zone config changes
+	check(t, step(changeZone(ChangeZoneType_ToggleGlobalReads)),
+		`env.UpdateZoneConfig(ctx, ToggleGlobalReads) // nil`)
+	checkErr(t, step(changeZone(ChangeZoneType_ToggleGlobalReads)),
+		`env.UpdateZoneConfig(ctx, ToggleGlobalReads) // context canceled`)
+}
+
+func TestUpdateZoneConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		before   zonepb.ZoneConfig
+		change   ChangeZoneType
+		expAfter zonepb.ZoneConfig
+	}{
+		{
+			before:   zonepb.ZoneConfig{NumReplicas: proto.Int32(3)},
+			change:   ChangeZoneType_ToggleGlobalReads,
+			expAfter: zonepb.ZoneConfig{NumReplicas: proto.Int32(3), GlobalReads: proto.Bool(true)},
+		},
+		{
+			before:   zonepb.ZoneConfig{NumReplicas: proto.Int32(3), GlobalReads: proto.Bool(false)},
+			change:   ChangeZoneType_ToggleGlobalReads,
+			expAfter: zonepb.ZoneConfig{NumReplicas: proto.Int32(3), GlobalReads: proto.Bool(true)},
+		},
+		{
+			before:   zonepb.ZoneConfig{NumReplicas: proto.Int32(3), GlobalReads: proto.Bool(true)},
+			change:   ChangeZoneType_ToggleGlobalReads,
+			expAfter: zonepb.ZoneConfig{NumReplicas: proto.Int32(3), GlobalReads: proto.Bool(false)},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+			zone := test.before
+			updateZoneConfig(&zone, test.change)
+			require.Equal(t, test.expAfter, zone)
+		})
+	}
 }
