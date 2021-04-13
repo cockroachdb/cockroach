@@ -709,6 +709,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tbody>
 <tr><td><a name="experimental_uuid_v4"></a><code>experimental_uuid_v4() &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns a UUID.</p>
 </span></td></tr>
+<tr><td><a name="gen_random_ulid"></a><code>gen_random_ulid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random ULID and returns it as a value of UUID type.</p>
+</span></td></tr>
 <tr><td><a name="gen_random_uuid"></a><code>gen_random_uuid() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Generates a random UUID and returns it as a value of UUID type.</p>
 </span></td></tr>
 <tr><td><a name="unique_rowid"></a><code>unique_rowid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a unique ID used by CockroachDB to generate unique row IDs if a Primary Key isn’t defined for the table. The value is a combination of the insert timestamp and the ID of the node executing the statement, which guarantees this combination is globally unique. However, there can be gaps and the order is not completely guaranteed.</p>
@@ -2638,6 +2640,8 @@ The output can be used to recreate a database.’</p>
 <tr><td><a name="translate"></a><code>translate(input: <a href="string.html">string</a>, find: <a href="string.html">string</a>, replace: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>In <code>input</code>, replaces the first character from <code>find</code> with the first character in <code>replace</code>; repeat for each character in <code>find</code>.</p>
 <p>For example, <code>translate('doggie', 'dog', '123');</code> returns <code>1233ie</code>.</p>
 </span></td></tr>
+<tr><td><a name="ulid_to_uuid"></a><code>ulid_to_uuid(val: <a href="string.html">string</a>) &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Converts a ULID string to its UUID-encoded representation.</p>
+</span></td></tr>
 <tr><td><a name="unaccent"></a><code>unaccent(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes accents (diacritic signs) from the text provided in <code>val</code>.</p>
 </span></td></tr>
 <tr><td><a name="upper"></a><code>upper(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts all characters in <code>val</code> to their to their upper-case equivalents.</p>
@@ -2792,6 +2796,15 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
 <tr><td><a name="row_to_json"></a><code>row_to_json(row: tuple) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the row as a JSON object.</p>
+</span></td></tr></tbody>
+</table>
+
+### UUID functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><a name="uuid_to_ulid"></a><code>uuid_to_ulid(val: <a href="uuid.html">uuid</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts a UUID-encoded ULID to its string representation.</p>
 </span></td></tr></tbody>
 </table>
 

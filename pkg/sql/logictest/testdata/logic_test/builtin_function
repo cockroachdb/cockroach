@@ -1928,6 +1928,37 @@ SELECT length(gen_random_uuid()::BYTES), gen_random_uuid() = gen_random_uuid()
 ----
 16 false
 
+query IB
+SELECT length(gen_random_ulid()::BYTES), gen_random_ulid() = gen_random_ulid()
+----
+16 false
+
+query TTTT
+SELECT uuid_to_ulid('0178951c-b665-30a7-19a2-a18999834858'),
+       ulid_to_uuid('01F2AHSDK562KHK8N1H6CR6J2R'),
+       ulid_to_uuid(uuid_to_ulid('0178951c-b665-30a7-19a2-a18999834858')),
+       uuid_to_ulid(ulid_to_uuid('01F2AHSDK562KHK8N1H6CR6J2R'))
+----
+01F2AHSDK562KHK8N1H6CR6J2R  0178951c-b665-30a7-19a2-a18999834858  0178951c-b665-30a7-19a2-a18999834858  01F2AHSDK562KHK8N1H6CR6J2R
+
+let $ulid1
+SELECT gen_random_ulid()
+
+# Proper sorting of ULIDs inside the same millisecond is not guaranteed, we need this to enforce correct behavior.
+statement ok
+SELECT pg_sleep(0.001)
+
+let $ulid2
+SELECT gen_random_ulid()
+
+query BBBB
+SELECT '$ulid1' < '$ulid2',
+       '$ulid1' > '$ulid2',
+       uuid_to_ulid('$ulid1') < uuid_to_ulid('$ulid2'),
+       uuid_to_ulid('$ulid1') > uuid_to_ulid('$ulid2')
+----
+true  false  true  false
+
 query TTTTTT
 SELECT to_uuid('63616665-6630-3064-6465-616462656566'),
        to_uuid('{63616665-6630-3064-6465-616462656566}'),
