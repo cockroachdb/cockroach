@@ -1116,6 +1116,9 @@ func verifyScansOnNode(
 			}
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return errors.Wrap(err, "unexpected error querying traces")
+	}
 	if len(scansWrongNode) > 0 {
 		err := errors.Newf("expected to scan on %s: %s", node, query)
 		err = errors.WithDetailf(err, "scans:\n%s", strings.Join(scansWrongNode, "\n"))

@@ -654,6 +654,10 @@ CREATE TABLE regional_by_row (
 					require.NoError(t, err)
 					rows = append(rows, r)
 				}
+				if err := res.Err(); err != nil {
+					return errors.Wrap(err, "unexepected error querying schema change GC jobs")
+				}
+
 				actualCount := len(rows)
 				if actualCount != expectedCount {
 					return errors.Newf("expected %d jobs with status %q, found %d. Jobs found: %v",

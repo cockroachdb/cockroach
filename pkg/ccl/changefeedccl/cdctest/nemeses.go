@@ -524,6 +524,9 @@ func openTxn(a fsm.Args) error {
 				return err
 			}
 		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
 		// If there aren't any rows, skip the DELETE this time.
 	}
 
