@@ -45,7 +45,7 @@ func registerPgx(r *testRegistry) {
 		}
 
 		t.Status("setting up go")
-		installLatestGolang(ctx, t, c, node)
+		installGolang(ctx, t, c, node)
 
 		t.Status("getting pgx")
 		if err := repeatGitCloneE(
