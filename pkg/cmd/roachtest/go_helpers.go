@@ -14,22 +14,28 @@ import "context"
 
 const goPath = `/mnt/data1/go`
 
-// installLatestGolang installs the latest version of Go on all nodes in
+// installGolang installs a specific version of Go on all nodes in
 // "node".
-func installLatestGolang(ctx context.Context, t *test, c *cluster, node nodeListOption) {
+func installGolang(ctx context.Context, t *test, c *cluster, node nodeListOption) {
 	if err := repeatRunE(
-		ctx, c, node, "add recent go version repository", "sudo add-apt-repository -y ppa:longsleep/golang-backports",
+		ctx, c, node, "download go", `curl -fsSL https://dl.google.com/go/go1.15.10.linux-amd64.tar.gz > /tmp/go.tgz`,
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := repeatRunE(
-		ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+		ctx, c, node, "verify tarball", `sha256sum -c - <<EOF
+4aa1267517df32f2bf1cc3d55dfc27d0c6b2c2b0989449c96dd19273ccca051d /tmp/go.tgz
+EOF`,
 	); err != nil {
 		t.Fatal(err)
 	}
-
 	if err := repeatRunE(
-		ctx, c, node, "install go", "sudo apt-get install -y golang-go",
+		ctx, c, node, "extract go", `sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := repeatRunE(
+		ctx, c, node, "force symlink go", "sudo ln -sf /usr/local/go/bin/go /usr/bin",
 	); err != nil {
 		t.Fatal(err)
 	}
