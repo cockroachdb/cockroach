@@ -92,49 +92,6 @@ func (sb *ServiceCertificateBundle) loadCACertAndKey(certPath string, keyPath st
 	return
 }
 
-// LoadUserAuthCACertAndKey loads host certificate and key from disk or fails with error.
-func (sb *ServiceCertificateBundle) loadOrCreateUserAuthCACertAndKey(
-	ctx context.Context,
-	caCertPath string,
-	caKeyPath string,
-	initLifespan time.Duration,
-	serviceName string,
-) (err error) {
-	log.Ops.Infof(ctx, "attempting to load CA cert: %s", caCertPath)
-	// Attempt to load cert into ServiceCertificateBundle.
-	sb.CACertificate, err = loadCertificateFile(caCertPath)
-	if err != nil {
-		if oserror.IsNotExist(err) {
-			log.Ops.Infof(ctx, "not found; auto-generating")
-			// Certificate not found, attempt to create both cert and key now.
-			err = sb.createServiceCA(ctx, caCertPath, caKeyPath, initLifespan, serviceName)
-			if err != nil {
-				return err
-			}
-
-			// Both key and cert should now be populated.
-			return nil
-		}
-
-		// Some error unrelated to file existence occurred.
-		return err
-	}
-
-	log.Ops.Infof(ctx, "found; loading CA key: %s", caKeyPath)
-	// Load the key only if it exists.
-	sb.CAKey, err = loadKeyFile(caKeyPath)
-	if err != nil {
-		if !oserror.IsNotExist(err) {
-			// An error returned but it was not that the file didn't exist;
-			// this is an error.
-			return err
-		}
-		log.Ops.Infof(ctx, "CA key not found")
-	}
-
-	return nil
-}
-
 // loadOrCreateServiceCertificates will attempt to load the service cert/key
 // into the service bundle.
 // * If they do not exist:
@@ -373,12 +330,18 @@ func (b *CertificateBundle) InitializeFromConfig(ctx context.Context, c base.Con
 	}
 
 	// Initialize User auth certificates.
-	if err := b.UserAuth.loadOrCreateUserAuthCACertAndKey(
+	if err := b.UserAuth.loadOrCreateServiceCertificates(
 		ctx,
+		cl.ClientNodeCertPath(),
+		cl.ClientNodeKeyPath(),
 		cl.ClientCACertPath(),
 		cl.ClientCAKeyPath(),
+		defaultCertLifetime,
 		defaultCALifetime,
+		security.NodeUser,
 		serviceNameUserAuth,
+		nil,
+		true, /* serviceCertIsAlsoValidAsClient */
 	); err != nil {
 		return errors.Wrap(err,
 			"failed to load or create User auth certificate(s)")
@@ -494,22 +457,22 @@ func (b *CertificateBundle) InitializeNodeFromBundle(ctx context.Context, c base
 	}
 
 	// Attempt to write ClientCA to disk.
-	if err := b.InterNode.writeCAOrFail(cl.ClientCACertPath(), cl.ClientCAKeyPath()); err != nil {
+	if err := b.UserAuth.writeCAOrFail(cl.ClientCACertPath(), cl.ClientCAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write ClientCA to disk")
 	}
 
 	// Attempt to write SQLServiceCA to disk.
-	if err := b.InterNode.writeCAOrFail(cl.SQLServiceCACertPath(), cl.SQLServiceCAKeyPath()); err != nil {
+	if err := b.SQLService.writeCAOrFail(cl.SQLServiceCACertPath(), cl.SQLServiceCAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write SQLServiceCA to disk")
 	}
 
 	// Attempt to write RPCServiceCA to disk.
-	if err := b.InterNode.writeCAOrFail(cl.RPCServiceCACertPath(), cl.RPCServiceCAKeyPath()); err != nil {
+	if err := b.RPCService.writeCAOrFail(cl.RPCServiceCACertPath(), cl.RPCServiceCAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write RPCServiceCA to disk")
 	}
 
 	// Attempt to write AdminUIServiceCA to disk.
-	if err := b.InterNode.writeCAOrFail(cl.UICACertPath(), cl.UICAKeyPath()); err != nil {
+	if err := b.AdminUIService.writeCAOrFail(cl.UICACertPath(), cl.UICAKeyPath()); err != nil {
 		return errors.Wrap(err, "failed to write AdminUIServiceCA to disk")
 	}
 
@@ -644,7 +607,22 @@ func rotateGeneratedCerts(ctx context.Context, c base.Config) error {
 		}
 	}
 
-	// TODO(aaron-crl): Should we rotate UserAuth Certs.
+	// Rotate UserAuth certificate
+	if b.UserAuth.CACertificate != nil {
+		err = b.UserAuth.rotateServiceCert(
+			ctx,
+			cl.ClientNodeCertPath(),
+			cl.ClientNodeKeyPath(),
+			defaultCertLifetime,
+			security.NodeUser,
+			serviceNameUserAuth,
+			nil,
+			true, /* serviceCertIsAlsoValidAsClient */
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to rotate InterNode cert")
+		}
+	}
 
 	// Rotate SQLService Certs.
 	if b.SQLService.CACertificate != nil {
