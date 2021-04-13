@@ -68,9 +68,8 @@ go_repository(
     patches = [
         "@cockroach//build/patches:com_github_gogo_protobuf.patch",
     ],
-    replace = "github.com/cockroachdb/gogoproto",
-    sum = "h1:yrdrJWJpn0+1BmXaRzurDIZz3uHmSs/wnwWbC4arWlQ=",
-    version = "v1.2.1-0.20210111172841-8b6737fea948",
+    sum = "h1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=",
+    version = "v1.3.2",
 )
 
 go_repository(
@@ -81,16 +80,16 @@ go_repository(
     patches = [
         "@cockroach//build/patches:com_github_golang_protobuf.patch",
     ],
-    sum = "h1:+Z5KGCizgyZCbGh1KZqA0fcLLkwbsjIzS4aV2v7wJX0=",
-    version = "v1.4.2",
+    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
+    version = "v1.5.2",
 )
 
 go_repository(
     name = "org_golang_google_genproto",
     build_file_proto_mode = "disable_global",
     importpath = "google.golang.org/genproto",
-    sum = "h1:jB9+PJSvu5tBfmJHy/OVapFdjDF3WvpkqRhxqrmzoEU=",
-    version = "v0.0.0-20200218151345-dad8c97a84f5",
+    sum = "h1:PDIOdWxZ8eRizhKa1AAvY53xsvLB1cWorMjslvY3VA8=",
+    version = "v0.0.0-20200825200019-8632dd797987",
 )
 
 # Load the go dependencies and invoke them.

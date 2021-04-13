@@ -3,15 +3,16 @@
 
 package zonepb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-
-import bytes "bytes"
-
-import io "io"
+import (
+	bytes "bytes"
+	fmt "fmt"
+	github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -22,7 +23,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type Constraint_Type int32
 
@@ -41,6 +42,7 @@ var Constraint_Type_name = map[int32]string{
 	1: "REQUIRED",
 	2: "PROHIBITED",
 }
+
 var Constraint_Type_value = map[string]int32{
 	"DEPRECATED_POSITIVE": 0,
 	"REQUIRED":            1,
@@ -52,9 +54,11 @@ func (x Constraint_Type) Enum() *Constraint_Type {
 	*p = x
 	return p
 }
+
 func (x Constraint_Type) String() string {
 	return proto.EnumName(Constraint_Type_name, int32(x))
 }
+
 func (x *Constraint_Type) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(Constraint_Type_value, data, "Constraint_Type")
 	if err != nil {
@@ -63,8 +67,9 @@ func (x *Constraint_Type) UnmarshalJSON(data []byte) error {
 	*x = Constraint_Type(value)
 	return nil
 }
+
 func (Constraint_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_zone_4d77f81b0bb527ce, []int{1, 0}
+	return fileDescriptor_450fc84cee6c50bb, []int{1, 0}
 }
 
 // GCPolicy defines garbage collection policies which apply to MVCC
@@ -84,21 +89,21 @@ func (m *GCPolicy) Reset()         { *m = GCPolicy{} }
 func (m *GCPolicy) String() string { return proto.CompactTextString(m) }
 func (*GCPolicy) ProtoMessage()    {}
 func (*GCPolicy) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_4d77f81b0bb527ce, []int{0}
+	return fileDescriptor_450fc84cee6c50bb, []int{0}
 }
 func (m *GCPolicy) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *GCPolicy) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *GCPolicy) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GCPolicy.Merge(dst, src)
+func (m *GCPolicy) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GCPolicy.Merge(m, src)
 }
 func (m *GCPolicy) XXX_Size() int {
 	return m.Size()
@@ -121,21 +126,21 @@ type Constraint struct {
 func (m *Constraint) Reset()      { *m = Constraint{} }
 func (*Constraint) ProtoMessage() {}
 func (*Constraint) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_4d77f81b0bb527ce, []int{1}
+	return fileDescriptor_450fc84cee6c50bb, []int{1}
 }
 func (m *Constraint) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *Constraint) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *Constraint) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Constraint.Merge(dst, src)
+func (m *Constraint) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Constraint.Merge(m, src)
 }
 func (m *Constraint) XXX_Size() int {
 	return m.Size()
@@ -163,21 +168,21 @@ type ConstraintsConjunction struct {
 func (m *ConstraintsConjunction) Reset()      { *m = ConstraintsConjunction{} }
 func (*ConstraintsConjunction) ProtoMessage() {}
 func (*ConstraintsConjunction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_4d77f81b0bb527ce, []int{2}
+	return fileDescriptor_450fc84cee6c50bb, []int{2}
 }
 func (m *ConstraintsConjunction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ConstraintsConjunction) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ConstraintsConjunction) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ConstraintsConjunction.Merge(dst, src)
+func (m *ConstraintsConjunction) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ConstraintsConjunction.Merge(m, src)
 }
 func (m *ConstraintsConjunction) XXX_Size() int {
 	return m.Size()
@@ -198,21 +203,21 @@ func (m *LeasePreference) Reset()         { *m = LeasePreference{} }
 func (m *LeasePreference) String() string { return proto.CompactTextString(m) }
 func (*LeasePreference) ProtoMessage()    {}
 func (*LeasePreference) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_4d77f81b0bb527ce, []int{3}
+	return fileDescriptor_450fc84cee6c50bb, []int{3}
 }
 func (m *LeasePreference) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *LeasePreference) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *LeasePreference) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_LeasePreference.Merge(dst, src)
+func (m *LeasePreference) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LeasePreference.Merge(m, src)
 }
 func (m *LeasePreference) XXX_Size() int {
 	return m.Size()
@@ -315,21 +320,21 @@ func (m *ZoneConfig) Reset()         { *m = ZoneConfig{} }
 func (m *ZoneConfig) String() string { return proto.CompactTextString(m) }
 func (*ZoneConfig) ProtoMessage()    {}
 func (*ZoneConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_4d77f81b0bb527ce, []int{4}
+	return fileDescriptor_450fc84cee6c50bb, []int{4}
 }
 func (m *ZoneConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *ZoneConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *ZoneConfig) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ZoneConfig.Merge(dst, src)
+func (m *ZoneConfig) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZoneConfig.Merge(m, src)
 }
 func (m *ZoneConfig) XXX_Size() int {
 	return m.Size()
@@ -356,21 +361,21 @@ func (m *Subzone) Reset()         { *m = Subzone{} }
 func (m *Subzone) String() string { return proto.CompactTextString(m) }
 func (*Subzone) ProtoMessage()    {}
 func (*Subzone) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_4d77f81b0bb527ce, []int{5}
+	return fileDescriptor_450fc84cee6c50bb, []int{5}
 }
 func (m *Subzone) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *Subzone) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *Subzone) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Subzone.Merge(dst, src)
+func (m *Subzone) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Subzone.Merge(m, src)
 }
 func (m *Subzone) XXX_Size() int {
 	return m.Size()
@@ -402,21 +407,21 @@ func (m *SubzoneSpan) Reset()         { *m = SubzoneSpan{} }
 func (m *SubzoneSpan) String() string { return proto.CompactTextString(m) }
 func (*SubzoneSpan) ProtoMessage()    {}
 func (*SubzoneSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_zone_4d77f81b0bb527ce, []int{6}
+	return fileDescriptor_450fc84cee6c50bb, []int{6}
 }
 func (m *SubzoneSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *SubzoneSpan) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *SubzoneSpan) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SubzoneSpan.Merge(dst, src)
+func (m *SubzoneSpan) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SubzoneSpan.Merge(m, src)
 }
 func (m *SubzoneSpan) XXX_Size() int {
 	return m.Size()
@@ -428,6 +433,7 @@ func (m *SubzoneSpan) XXX_DiscardUnknown() {
 var xxx_messageInfo_SubzoneSpan proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterEnum("cockroach.config.zonepb.Constraint_Type", Constraint_Type_name, Constraint_Type_value)
 	proto.RegisterType((*GCPolicy)(nil), "cockroach.config.zonepb.GCPolicy")
 	proto.RegisterType((*Constraint)(nil), "cockroach.config.zonepb.Constraint")
 	proto.RegisterType((*ConstraintsConjunction)(nil), "cockroach.config.zonepb.ConstraintsConjunction")
@@ -435,8 +441,76 @@ func init() {
 	proto.RegisterType((*ZoneConfig)(nil), "cockroach.config.zonepb.ZoneConfig")
 	proto.RegisterType((*Subzone)(nil), "cockroach.config.zonepb.Subzone")
 	proto.RegisterType((*SubzoneSpan)(nil), "cockroach.config.zonepb.SubzoneSpan")
-	proto.RegisterEnum("cockroach.config.zonepb.Constraint_Type", Constraint_Type_name, Constraint_Type_value)
 }
+
+func init() { proto.RegisterFile("config/zonepb/zone.proto", fileDescriptor_450fc84cee6c50bb) }
+
+var fileDescriptor_450fc84cee6c50bb = []byte{
+	// 982 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x55, 0x4f, 0x73, 0xdb, 0x44,
+	0x14, 0xf7, 0x3a, 0xae, 0xad, 0x3c, 0xdb, 0x89, 0xb3, 0x6d, 0x13, 0x91, 0x0e, 0x96, 0x11, 0x30,
+	0x98, 0x7f, 0x36, 0x13, 0x7a, 0x69, 0x66, 0x38, 0x54, 0xb6, 0x29, 0x6a, 0xd2, 0xd6, 0x28, 0x26,
+	0x87, 0x72, 0xd0, 0xc8, 0xf2, 0xc6, 0x11, 0x91, 0x57, 0x1a, 0x49, 0x2e, 0x31, 0xc3, 0xad, 0x5f,
+	0x80, 0x23, 0x07, 0x0e, 0xf9, 0x06, 0x5c, 0xf9, 0x08, 0x39, 0x96, 0x5b, 0xb9, 0x78, 0xc0, 0xb9,
+	0x70, 0xce, 0x91, 0x0b, 0x8c, 0x76, 0x65, 0x4b, 0x76, 0x6a, 0x08, 0x3d, 0x69, 0xb5, 0xef, 0xbd,
+	0xdf, 0xfb, 0xbd, 0x3f, 0xfb, 0x1e, 0x88, 0xa6, 0x43, 0x8f, 0xac, 0x7e, 0xfd, 0x3b, 0x87, 0x12,
+	0xb7, 0xcb, 0x3e, 0x35, 0xd7, 0x73, 0x02, 0x07, 0x6f, 0x99, 0x8e, 0x79, 0xe2, 0x39, 0x86, 0x79,
+	0x5c, 0xe3, 0x3a, 0x35, 0xae, 0xb3, 0x7d, 0xab, 0xef, 0xf4, 0x1d, 0xa6, 0x53, 0x0f, 0x4f, 0x5c,
+	0x5d, 0x56, 0x41, 0x78, 0xd0, 0x68, 0x3b, 0xb6, 0x65, 0x8e, 0xf0, 0xa7, 0x90, 0x0f, 0x02, 0x5b,
+	0xf7, 0x89, 0xe9, 0xd0, 0x9e, 0x2f, 0xa2, 0x0a, 0xaa, 0xde, 0x50, 0xf0, 0xf9, 0x58, 0x4a, 0x4d,
+	0xc6, 0x12, 0x74, 0x3a, 0xfb, 0x07, 0x5c, 0xa2, 0x41, 0x10, 0xd8, 0xd1, 0x79, 0x57, 0xf8, 0xe5,
+	0x4c, 0x42, 0x7f, 0x9e, 0x49, 0x48, 0xfe, 0x15, 0x01, 0x34, 0x1c, 0xea, 0x07, 0x9e, 0x61, 0xd1,
+	0x00, 0x2b, 0x90, 0x09, 0x46, 0x2e, 0x61, 0x30, 0x6b, 0x3b, 0xd5, 0xda, 0x12, 0x5e, 0xb5, 0xd8,
+	0xa4, 0xd6, 0x19, 0xb9, 0x44, 0xc9, 0x84, 0x0e, 0x35, 0x66, 0x8b, 0x37, 0x61, 0xe5, 0x84, 0x8c,
+	0xc4, 0x74, 0x05, 0x55, 0x57, 0x23, 0x41, 0x78, 0x81, 0xb7, 0xe1, 0xc6, 0x33, 0xc3, 0x1e, 0x12,
+	0x71, 0x25, 0x21, 0xe1, 0x57, 0xf2, 0x67, 0x90, 0x09, 0x71, 0xf0, 0x16, 0xdc, 0x6c, 0xb6, 0xda,
+	0x5a, 0xab, 0x71, 0xbf, 0xd3, 0x6a, 0xea, 0xed, 0x27, 0x07, 0x6a, 0x47, 0x3d, 0x6c, 0x95, 0x52,
+	0xb8, 0x00, 0x82, 0xd6, 0xfa, 0xf2, 0x2b, 0x55, 0x6b, 0x35, 0x4b, 0x08, 0xaf, 0x01, 0xb4, 0xb5,
+	0x27, 0x5f, 0xa8, 0x8a, 0xda, 0x69, 0x35, 0x4b, 0xe9, 0xdd, 0xc2, 0x8f, 0x67, 0x52, 0x6a, 0x16,
+	0xd3, 0x4f, 0x08, 0x36, 0x63, 0x82, 0x7e, 0xc3, 0xa1, 0xdf, 0x0c, 0xa9, 0x19, 0x58, 0x0e, 0xc5,
+	0xef, 0x41, 0x81, 0x0e, 0x07, 0xba, 0x47, 0x5c, 0xdb, 0x32, 0x0d, 0x5f, 0xcc, 0xb1, 0x74, 0x71,
+	0x2a, 0x79, 0x3a, 0x1c, 0x68, 0x91, 0x00, 0xef, 0x41, 0xde, 0x8c, 0x21, 0xc4, 0x6c, 0x65, 0xa5,
+	0x9a, 0xdf, 0x79, 0xfb, 0x1a, 0xf9, 0x98, 0x82, 0x25, 0xac, 0x17, 0xe8, 0x3d, 0x47, 0xb0, 0xbe,
+	0x4f, 0x0c, 0x9f, 0xb4, 0x3d, 0x72, 0x44, 0x3c, 0x42, 0x4d, 0x82, 0x8f, 0xe6, 0xdd, 0xa1, 0xeb,
+	0xbb, 0x93, 0x42, 0x77, 0x97, 0x63, 0x69, 0x6b, 0x64, 0x0c, 0xec, 0x5d, 0x39, 0x81, 0xf2, 0xd1,
+	0x91, 0xed, 0x7c, 0x2b, 0xcf, 0x33, 0x89, 0x0b, 0xff, 0xb7, 0x00, 0xf0, 0xd4, 0xa1, 0xa4, 0xc1,
+	0x80, 0xb1, 0x02, 0xeb, 0x9e, 0x41, 0xfb, 0x44, 0x1f, 0x58, 0x54, 0xef, 0x8e, 0x02, 0xe2, 0xb3,
+	0x02, 0xae, 0x28, 0xdb, 0x97, 0x63, 0x69, 0x93, 0x63, 0x2f, 0x28, 0xc8, 0x5a, 0x91, 0xdd, 0x3c,
+	0xb2, 0xa8, 0x12, 0xfe, 0x27, 0x30, 0x8c, 0xd3, 0x08, 0x63, 0x65, 0x09, 0xc6, 0x54, 0x61, 0x86,
+	0x61, 0x9c, 0x72, 0x8c, 0x7b, 0x90, 0xee, 0x9b, 0x62, 0xa6, 0x82, 0xaa, 0xf9, 0x9d, 0xb7, 0x96,
+	0xc6, 0x3f, 0xed, 0x7e, 0x25, 0x3b, 0x19, 0x4b, 0xe9, 0x07, 0x0d, 0x2d, 0xdd, 0x37, 0xf1, 0x2e,
+	0x14, 0xfa, 0xb6, 0xd3, 0x35, 0x6c, 0xdd, 0x23, 0x46, 0xcf, 0x17, 0x0b, 0x15, 0x54, 0x15, 0x94,
+	0xad, 0xcb, 0xb1, 0x74, 0x93, 0xfb, 0x4e, 0x4a, 0x65, 0x2d, 0xcf, 0x7f, 0xb5, 0xf0, 0x2f, 0xb4,
+	0x9d, 0xeb, 0x8b, 0x1b, 0xac, 0x2f, 0x12, 0xb6, 0x49, 0xa9, 0x3c, 0xdf, 0x2a, 0x77, 0x01, 0x42,
+	0xe9, 0x33, 0x27, 0x20, 0x9e, 0x2f, 0x16, 0x99, 0xe5, 0xed, 0xcb, 0xb1, 0xb4, 0x11, 0x5b, 0x72,
+	0x99, 0xac, 0xad, 0xd2, 0xe1, 0xe0, 0x90, 0x9d, 0xb1, 0xf7, 0xaa, 0x06, 0xab, 0x5f, 0xa3, 0xe2,
+	0xc9, 0x7e, 0xfe, 0x7f, 0xd5, 0xc7, 0xcf, 0x11, 0x6c, 0x30, 0x2a, 0x7a, 0xd2, 0xf5, 0xda, 0xeb,
+	0xb9, 0x7e, 0x37, 0x72, 0xfd, 0x26, 0x77, 0x7d, 0x05, 0x37, 0x22, 0x50, 0x62, 0x82, 0x04, 0x06,
+	0xbe, 0x07, 0xb7, 0x2d, 0x7a, 0x4c, 0x3c, 0x2b, 0x20, 0xbd, 0x39, 0x22, 0xc0, 0x0a, 0xc6, 0xdf,
+	0xcf, 0xad, 0x99, 0x4a, 0xd2, 0xf4, 0x21, 0x48, 0x74, 0x68, 0xdb, 0xfa, 0x15, 0x67, 0xba, 0xe5,
+	0xeb, 0x64, 0xe0, 0x06, 0x23, 0x71, 0x3d, 0x01, 0x72, 0x27, 0x54, 0x3e, 0x5c, 0xf0, 0xaf, 0xfa,
+	0xad, 0x50, 0x11, 0x7f, 0x0f, 0x1b, 0x76, 0xf8, 0x0a, 0x75, 0x77, 0xf6, 0x0c, 0x7d, 0x71, 0x95,
+	0xe5, 0x62, 0xf9, 0xdc, 0x5b, 0x78, 0xb7, 0x8b, 0x49, 0xb8, 0x02, 0x38, 0x4d, 0x82, 0x3d, 0x6f,
+	0xe7, 0xe3, 0x26, 0xdc, 0x89, 0x93, 0x70, 0x95, 0x47, 0x3e, 0x11, 0xc5, 0x1b, 0x33, 0xc5, 0xfd,
+	0x45, 0x94, 0xc7, 0x20, 0xf8, 0xc3, 0x6e, 0xc8, 0xcd, 0x17, 0x05, 0x46, 0xbd, 0xb2, 0x94, 0xfa,
+	0x01, 0x57, 0x54, 0x4a, 0x11, 0x65, 0x81, 0x53, 0xfe, 0x58, 0xd6, 0x66, 0x18, 0xf8, 0x6b, 0x28,
+	0x46, 0x67, 0xdd, 0x77, 0x0d, 0x1a, 0xce, 0xc7, 0x10, 0xf4, 0x9d, 0xff, 0x02, 0x3d, 0x70, 0x0d,
+	0xfa, 0x0a, 0xe0, 0x82, 0x1f, 0x8b, 0x13, 0xb3, 0xe7, 0x61, 0x46, 0x40, 0xa5, 0xb4, 0xfc, 0x33,
+	0x82, 0x5c, 0x64, 0x8f, 0x3f, 0x00, 0xc1, 0xa2, 0x3d, 0x72, 0xaa, 0x5b, 0x3d, 0xb6, 0x7b, 0x8a,
+	0xca, 0x7a, 0xb4, 0xc2, 0x72, 0x6a, 0x78, 0xaf, 0x36, 0xb5, 0x1c, 0x53, 0x50, 0x7b, 0xf8, 0x43,
+	0x58, 0x73, 0x0d, 0x2f, 0xb0, 0xc2, 0x2e, 0xd4, 0xa9, 0x31, 0x20, 0x73, 0xab, 0xa6, 0x38, 0x93,
+	0x3d, 0x36, 0x06, 0x04, 0xdf, 0x87, 0x2c, 0x67, 0xcc, 0x46, 0xd1, 0xbf, 0xcd, 0xd4, 0x78, 0x18,
+	0x46, 0x48, 0x91, 0x61, 0x62, 0x66, 0xfe, 0x86, 0x20, 0x9f, 0x88, 0x18, 0x7f, 0xce, 0x37, 0x5d,
+	0x48, 0xb8, 0xa0, 0xdc, 0xfd, 0x6b, 0x2c, 0x7d, 0xd2, 0xb7, 0x82, 0xe3, 0x61, 0xb7, 0x66, 0x3a,
+	0x83, 0xfa, 0xcc, 0x4f, 0xaf, 0x1b, 0x9f, 0xeb, 0xee, 0x49, 0xbf, 0xce, 0x4e, 0x6e, 0xb7, 0xb6,
+	0x47, 0x46, 0x7c, 0x33, 0x3e, 0x82, 0x1c, 0xa1, 0x3d, 0x7d, 0xba, 0x35, 0x5f, 0x17, 0x2b, 0x4b,
+	0x68, 0x6f, 0x8f, 0x8c, 0xf0, 0xfb, 0x71, 0x15, 0x59, 0xce, 0x58, 0xe8, 0xd3, 0x2d, 0x37, 0xad,
+	0x09, 0x4b, 0x6b, 0x1c, 0x9b, 0x52, 0x3d, 0xff, 0xa3, 0x9c, 0x3a, 0x9f, 0x94, 0xd1, 0x8b, 0x49,
+	0x19, 0xbd, 0x9c, 0x94, 0xd1, 0xef, 0x93, 0x32, 0xfa, 0xe1, 0xa2, 0x9c, 0x7a, 0x71, 0x51, 0x4e,
+	0xbd, 0xbc, 0x28, 0xa7, 0x9e, 0x66, 0x79, 0xa2, 0xfe, 0x09, 0x00, 0x00, 0xff, 0xff, 0x69, 0x39,
+	0x67, 0x3e, 0xc7, 0x08, 0x00, 0x00,
+}
+
 func (this *GCPolicy) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -733,7 +807,7 @@ func (this *SubzoneSpan) Equal(that interface{}) bool {
 func (m *GCPolicy) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -741,20 +815,25 @@ func (m *GCPolicy) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *GCPolicy) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GCPolicy) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
 	i = encodeVarintZone(dAtA, i, uint64(m.TTLSeconds))
-	return i, nil
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *Constraint) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -762,28 +841,35 @@ func (m *Constraint) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Constraint) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Constraint) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintZone(dAtA, i, uint64(m.Type))
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintZone(dAtA, i, uint64(len(m.Key)))
-	i += copy(dAtA[i:], m.Key)
-	dAtA[i] = 0x1a
-	i++
+	i -= len(m.Value)
+	copy(dAtA[i:], m.Value)
 	i = encodeVarintZone(dAtA, i, uint64(len(m.Value)))
-	i += copy(dAtA[i:], m.Value)
-	return i, nil
+	i--
+	dAtA[i] = 0x1a
+	i -= len(m.Key)
+	copy(dAtA[i:], m.Key)
+	i = encodeVarintZone(dAtA, i, uint64(len(m.Key)))
+	i--
+	dAtA[i] = 0x12
+	i = encodeVarintZone(dAtA, i, uint64(m.Type))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *ConstraintsConjunction) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -791,32 +877,39 @@ func (m *ConstraintsConjunction) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ConstraintsConjunction) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ConstraintsConjunction) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	i = encodeVarintZone(dAtA, i, uint64(m.NumReplicas))
+	i--
+	dAtA[i] = 0x38
 	if len(m.Constraints) > 0 {
-		for _, msg := range m.Constraints {
-			dAtA[i] = 0x32
-			i++
-			i = encodeVarintZone(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Constraints) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Constraints[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintZone(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x32
 		}
 	}
-	dAtA[i] = 0x38
-	i++
-	i = encodeVarintZone(dAtA, i, uint64(m.NumReplicas))
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *LeasePreference) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -824,29 +917,36 @@ func (m *LeasePreference) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *LeasePreference) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LeasePreference) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
 	if len(m.Constraints) > 0 {
-		for _, msg := range m.Constraints {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintZone(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Constraints) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Constraints[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintZone(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0xa
 		}
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *ZoneConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -854,141 +954,158 @@ func (m *ZoneConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ZoneConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ZoneConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.RangeMinBytes != nil {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintZone(dAtA, i, uint64(*m.RangeMinBytes))
-	}
-	if m.RangeMaxBytes != nil {
-		dAtA[i] = 0x18
-		i++
-		i = encodeVarintZone(dAtA, i, uint64(*m.RangeMaxBytes))
-	}
-	if m.GC != nil {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintZone(dAtA, i, uint64(m.GC.Size()))
-		n1, err := m.GC.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
-	if m.NumReplicas != nil {
-		dAtA[i] = 0x28
-		i++
-		i = encodeVarintZone(dAtA, i, uint64(*m.NumReplicas))
-	}
-	if len(m.Constraints) > 0 {
-		for _, msg := range m.Constraints {
-			dAtA[i] = 0x32
-			i++
-			i = encodeVarintZone(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if len(m.SubzoneSpans) > 0 {
-		for _, msg := range m.SubzoneSpans {
-			dAtA[i] = 0x3a
-			i++
-			i = encodeVarintZone(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if len(m.Subzones) > 0 {
-		for _, msg := range m.Subzones {
-			dAtA[i] = 0x42
-			i++
-			i = encodeVarintZone(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	if len(m.LeasePreferences) > 0 {
-		for _, msg := range m.LeasePreferences {
-			dAtA[i] = 0x4a
-			i++
-			i = encodeVarintZone(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	dAtA[i] = 0x50
-	i++
-	if m.InheritedConstraints {
-		dAtA[i] = 1
-	} else {
-		dAtA[i] = 0
-	}
-	i++
-	dAtA[i] = 0x58
-	i++
-	if m.InheritedLeasePreferences {
-		dAtA[i] = 1
-	} else {
-		dAtA[i] = 0
-	}
-	i++
-	if m.GlobalReads != nil {
-		dAtA[i] = 0x60
-		i++
-		if *m.GlobalReads {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
-	}
-	if m.NumVoters != nil {
-		dAtA[i] = 0x68
-		i++
-		i = encodeVarintZone(dAtA, i, uint64(*m.NumVoters))
-	}
-	if len(m.VoterConstraints) > 0 {
-		for _, msg := range m.VoterConstraints {
-			dAtA[i] = 0x72
-			i++
-			i = encodeVarintZone(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
-	dAtA[i] = 0x78
-	i++
+	i--
 	if m.NullVoterConstraintsIsEmpty {
 		dAtA[i] = 1
 	} else {
 		dAtA[i] = 0
 	}
-	i++
-	return i, nil
+	i--
+	dAtA[i] = 0x78
+	if len(m.VoterConstraints) > 0 {
+		for iNdEx := len(m.VoterConstraints) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.VoterConstraints[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintZone(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x72
+		}
+	}
+	if m.NumVoters != nil {
+		i = encodeVarintZone(dAtA, i, uint64(*m.NumVoters))
+		i--
+		dAtA[i] = 0x68
+	}
+	if m.GlobalReads != nil {
+		i--
+		if *m.GlobalReads {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x60
+	}
+	i--
+	if m.InheritedLeasePreferences {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i--
+	dAtA[i] = 0x58
+	i--
+	if m.InheritedConstraints {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i--
+	dAtA[i] = 0x50
+	if len(m.LeasePreferences) > 0 {
+		for iNdEx := len(m.LeasePreferences) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.LeasePreferences[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintZone(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x4a
+		}
+	}
+	if len(m.Subzones) > 0 {
+		for iNdEx := len(m.Subzones) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Subzones[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintZone(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x42
+		}
+	}
+	if len(m.SubzoneSpans) > 0 {
+		for iNdEx := len(m.SubzoneSpans) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.SubzoneSpans[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintZone(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x3a
+		}
+	}
+	if len(m.Constraints) > 0 {
+		for iNdEx := len(m.Constraints) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Constraints[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintZone(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x32
+		}
+	}
+	if m.NumReplicas != nil {
+		i = encodeVarintZone(dAtA, i, uint64(*m.NumReplicas))
+		i--
+		dAtA[i] = 0x28
+	}
+	if m.GC != nil {
+		{
+			size, err := m.GC.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintZone(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.RangeMaxBytes != nil {
+		i = encodeVarintZone(dAtA, i, uint64(*m.RangeMaxBytes))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.RangeMinBytes != nil {
+		i = encodeVarintZone(dAtA, i, uint64(*m.RangeMinBytes))
+		i--
+		dAtA[i] = 0x10
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *Subzone) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -996,32 +1113,40 @@ func (m *Subzone) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Subzone) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Subzone) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0x8
-	i++
-	i = encodeVarintZone(dAtA, i, uint64(m.IndexID))
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintZone(dAtA, i, uint64(len(m.PartitionName)))
-	i += copy(dAtA[i:], m.PartitionName)
-	dAtA[i] = 0x1a
-	i++
-	i = encodeVarintZone(dAtA, i, uint64(m.Config.Size()))
-	n2, err := m.Config.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
+	{
+		size, err := m.Config.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintZone(dAtA, i, uint64(size))
 	}
-	i += n2
-	return i, nil
+	i--
+	dAtA[i] = 0x1a
+	i -= len(m.PartitionName)
+	copy(dAtA[i:], m.PartitionName)
+	i = encodeVarintZone(dAtA, i, uint64(len(m.PartitionName)))
+	i--
+	dAtA[i] = 0x12
+	i = encodeVarintZone(dAtA, i, uint64(m.IndexID))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 func (m *SubzoneSpan) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -1029,36 +1154,45 @@ func (m *SubzoneSpan) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SubzoneSpan) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SubzoneSpan) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Key != nil {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintZone(dAtA, i, uint64(len(m.Key)))
-		i += copy(dAtA[i:], m.Key)
-	}
-	if m.EndKey != nil {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintZone(dAtA, i, uint64(len(m.EndKey)))
-		i += copy(dAtA[i:], m.EndKey)
-	}
-	dAtA[i] = 0x18
-	i++
 	i = encodeVarintZone(dAtA, i, uint64(m.SubzoneIndex))
-	return i, nil
+	i--
+	dAtA[i] = 0x18
+	if m.EndKey != nil {
+		i -= len(m.EndKey)
+		copy(dAtA[i:], m.EndKey)
+		i = encodeVarintZone(dAtA, i, uint64(len(m.EndKey)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Key != nil {
+		i -= len(m.Key)
+		copy(dAtA[i:], m.Key)
+		i = encodeVarintZone(dAtA, i, uint64(len(m.Key)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintZone(dAtA []byte, offset int, v uint64) int {
+	offset -= sovZone(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func NewPopulatedGCPolicy(r randyZone, easy bool) *GCPolicy {
 	this := &GCPolicy{}
@@ -1083,7 +1217,7 @@ func NewPopulatedConstraint(r randyZone, easy bool) *Constraint {
 
 func NewPopulatedConstraintsConjunction(r randyZone, easy bool) *ConstraintsConjunction {
 	this := &ConstraintsConjunction{}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v1 := r.Intn(5)
 		this.Constraints = make([]Constraint, v1)
 		for i := 0; i < v1; i++ {
@@ -1102,7 +1236,7 @@ func NewPopulatedConstraintsConjunction(r randyZone, easy bool) *ConstraintsConj
 
 func NewPopulatedLeasePreference(r randyZone, easy bool) *LeasePreference {
 	this := &LeasePreference{}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v3 := r.Intn(5)
 		this.Constraints = make([]Constraint, v3)
 		for i := 0; i < v3; i++ {
@@ -1117,31 +1251,31 @@ func NewPopulatedLeasePreference(r randyZone, easy bool) *LeasePreference {
 
 func NewPopulatedZoneConfig(r randyZone, easy bool) *ZoneConfig {
 	this := &ZoneConfig{}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v5 := int64(r.Int63())
 		if r.Intn(2) == 0 {
 			v5 *= -1
 		}
 		this.RangeMinBytes = &v5
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v6 := int64(r.Int63())
 		if r.Intn(2) == 0 {
 			v6 *= -1
 		}
 		this.RangeMaxBytes = &v6
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		this.GC = NewPopulatedGCPolicy(r, easy)
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v7 := int32(r.Int31())
 		if r.Intn(2) == 0 {
 			v7 *= -1
 		}
 		this.NumReplicas = &v7
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v8 := r.Intn(5)
 		this.Constraints = make([]ConstraintsConjunction, v8)
 		for i := 0; i < v8; i++ {
@@ -1149,7 +1283,7 @@ func NewPopulatedZoneConfig(r randyZone, easy bool) *ZoneConfig {
 			this.Constraints[i] = *v9
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v10 := r.Intn(5)
 		this.SubzoneSpans = make([]SubzoneSpan, v10)
 		for i := 0; i < v10; i++ {
@@ -1157,7 +1291,7 @@ func NewPopulatedZoneConfig(r randyZone, easy bool) *ZoneConfig {
 			this.SubzoneSpans[i] = *v11
 		}
 	}
-	if r.Intn(10) == 0 {
+	if r.Intn(5) == 0 {
 		v12 := r.Intn(5)
 		this.Subzones = make([]Subzone, v12)
 		for i := 0; i < v12; i++ {
@@ -1165,7 +1299,7 @@ func NewPopulatedZoneConfig(r randyZone, easy bool) *ZoneConfig {
 			this.Subzones[i] = *v13
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v14 := r.Intn(5)
 		this.LeasePreferences = make([]LeasePreference, v14)
 		for i := 0; i < v14; i++ {
@@ -1175,18 +1309,18 @@ func NewPopulatedZoneConfig(r randyZone, easy bool) *ZoneConfig {
 	}
 	this.InheritedConstraints = bool(bool(r.Intn(2) == 0))
 	this.InheritedLeasePreferences = bool(bool(r.Intn(2) == 0))
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v16 := bool(bool(r.Intn(2) == 0))
 		this.GlobalReads = &v16
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v17 := int32(r.Int31())
 		if r.Intn(2) == 0 {
 			v17 *= -1
 		}
 		this.NumVoters = &v17
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v18 := r.Intn(5)
 		this.VoterConstraints = make([]ConstraintsConjunction, v18)
 		for i := 0; i < v18; i++ {
@@ -1213,14 +1347,14 @@ func NewPopulatedSubzone(r randyZone, easy bool) *Subzone {
 
 func NewPopulatedSubzoneSpan(r randyZone, easy bool) *SubzoneSpan {
 	this := &SubzoneSpan{}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v21 := r.Intn(100)
 		this.Key = make(github_com_cockroachdb_cockroach_pkg_roachpb.Key, v21)
 		for i := 0; i < v21; i++ {
 			this.Key[i] = byte(r.Intn(256))
 		}
 	}
-	if r.Intn(10) != 0 {
+	if r.Intn(5) != 0 {
 		v22 := r.Intn(100)
 		this.EndKey = make(github_com_cockroachdb_cockroach_pkg_roachpb.Key, v22)
 		for i := 0; i < v22; i++ {
@@ -1457,14 +1591,7 @@ func (m *SubzoneSpan) Size() (n int) {
 }
 
 func sovZone(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozZone(x uint64) (n int) {
 	return sovZone(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -1484,7 +1611,7 @@ func (m *GCPolicy) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1512,7 +1639,7 @@ func (m *GCPolicy) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.TTLSeconds |= (int32(b) & 0x7F) << shift
+				m.TTLSeconds |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1553,7 +1680,7 @@ func (m *Constraint) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1581,7 +1708,7 @@ func (m *Constraint) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= (Constraint_Type(b) & 0x7F) << shift
+				m.Type |= Constraint_Type(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1600,7 +1727,7 @@ func (m *Constraint) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1610,6 +1737,9 @@ func (m *Constraint) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1629,7 +1759,7 @@ func (m *Constraint) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1639,6 +1769,9 @@ func (m *Constraint) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1680,7 +1813,7 @@ func (m *ConstraintsConjunction) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1708,7 +1841,7 @@ func (m *ConstraintsConjunction) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1717,6 +1850,9 @@ func (m *ConstraintsConjunction) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1739,7 +1875,7 @@ func (m *ConstraintsConjunction) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.NumReplicas |= (int32(b) & 0x7F) << shift
+				m.NumReplicas |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1780,7 +1916,7 @@ func (m *LeasePreference) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1808,7 +1944,7 @@ func (m *LeasePreference) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1817,6 +1953,9 @@ func (m *LeasePreference) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1861,7 +2000,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1889,7 +2028,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int64(b) & 0x7F) << shift
+				v |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1909,7 +2048,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int64(b) & 0x7F) << shift
+				v |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1929,7 +2068,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1938,6 +2077,9 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1962,7 +2104,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int32(b) & 0x7F) << shift
+				v |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1982,7 +2124,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1991,6 +2133,9 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2013,7 +2158,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2022,6 +2167,9 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2044,7 +2192,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2053,6 +2201,9 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2075,7 +2226,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2084,6 +2235,9 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2106,7 +2260,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2126,7 +2280,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2146,7 +2300,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2167,7 +2321,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int32(b) & 0x7F) << shift
+				v |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2187,7 +2341,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2196,6 +2350,9 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2218,7 +2375,7 @@ func (m *ZoneConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2260,7 +2417,7 @@ func (m *Subzone) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2288,7 +2445,7 @@ func (m *Subzone) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.IndexID |= (uint32(b) & 0x7F) << shift
+				m.IndexID |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2307,7 +2464,7 @@ func (m *Subzone) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2317,6 +2474,9 @@ func (m *Subzone) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2336,7 +2496,7 @@ func (m *Subzone) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2345,6 +2505,9 @@ func (m *Subzone) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2388,7 +2551,7 @@ func (m *SubzoneSpan) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -2416,7 +2579,7 @@ func (m *SubzoneSpan) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2425,6 +2588,9 @@ func (m *SubzoneSpan) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2447,7 +2613,7 @@ func (m *SubzoneSpan) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2456,6 +2622,9 @@ func (m *SubzoneSpan) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthZone
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthZone
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -2478,7 +2647,7 @@ func (m *SubzoneSpan) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.SubzoneIndex |= (int32(b) & 0x7F) << shift
+				m.SubzoneIndex |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -2507,6 +2676,7 @@ func (m *SubzoneSpan) Unmarshal(dAtA []byte) error {
 func skipZone(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -2538,10 +2708,8 @@ func skipZone(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -2558,121 +2726,34 @@ func skipZone(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthZone
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowZone
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipZone(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupZone
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthZone
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthZone = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowZone   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthZone        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowZone          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupZone = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() { proto.RegisterFile("config/zonepb/zone.proto", fileDescriptor_zone_4d77f81b0bb527ce) }
-
-var fileDescriptor_zone_4d77f81b0bb527ce = []byte{
-	// 984 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x55, 0x4d, 0x73, 0xdb, 0x54,
-	0x17, 0xf6, 0xb5, 0x1d, 0x5b, 0x39, 0xb6, 0x13, 0xe7, 0xb6, 0x4d, 0xf4, 0xa6, 0xf3, 0x5a, 0x46,
-	0xc0, 0x60, 0xbe, 0x6c, 0x26, 0x74, 0x83, 0x67, 0x58, 0x54, 0xb6, 0x29, 0x6a, 0xd2, 0xd6, 0x28,
-	0x26, 0x8b, 0xb2, 0xd0, 0xc8, 0xf2, 0x8d, 0x23, 0x22, 0x5f, 0x69, 0x24, 0xb9, 0x44, 0x0c, 0xbb,
-	0xfe, 0x01, 0x96, 0x2c, 0x58, 0xe4, 0x1f, 0xb0, 0xe5, 0x27, 0x64, 0x59, 0x76, 0x65, 0xe3, 0x01,
-	0x67, 0xc3, 0x3a, 0x4b, 0x36, 0x30, 0xba, 0x92, 0x2d, 0xd9, 0xa9, 0x21, 0x74, 0xa5, 0x7b, 0xef,
-	0x39, 0xe7, 0x39, 0x5f, 0x8f, 0xce, 0x01, 0x5e, 0xb7, 0xe8, 0xb1, 0x31, 0x6c, 0x7c, 0x6b, 0x51,
-	0x62, 0xf7, 0xd9, 0xa7, 0x6e, 0x3b, 0x96, 0x67, 0xe1, 0x1d, 0xdd, 0xd2, 0x4f, 0x1d, 0x4b, 0xd3,
-	0x4f, 0xea, 0xa1, 0x4e, 0x3d, 0xd4, 0xd9, 0xbd, 0x3d, 0xb4, 0x86, 0x16, 0xd3, 0x69, 0x04, 0xa7,
-	0x50, 0x5d, 0x94, 0x81, 0x7b, 0xd0, 0xea, 0x5a, 0xa6, 0xa1, 0xfb, 0xf8, 0x63, 0x28, 0x78, 0x9e,
-	0xa9, 0xba, 0x44, 0xb7, 0xe8, 0xc0, 0xe5, 0x51, 0x15, 0xd5, 0xd6, 0x24, 0x7c, 0x31, 0x11, 0x52,
-	0xd3, 0x89, 0x00, 0xbd, 0xde, 0xc1, 0x61, 0x28, 0x51, 0xc0, 0xf3, 0xcc, 0xe8, 0xdc, 0xe4, 0x7e,
-	0x3e, 0x17, 0xd0, 0x1f, 0xe7, 0x02, 0x12, 0x7f, 0x41, 0x00, 0x2d, 0x8b, 0xba, 0x9e, 0xa3, 0x19,
-	0xd4, 0xc3, 0x12, 0x64, 0x3d, 0xdf, 0x26, 0x0c, 0x66, 0x63, 0xaf, 0x56, 0x5f, 0x11, 0x57, 0x3d,
-	0x36, 0xa9, 0xf7, 0x7c, 0x9b, 0x48, 0xd9, 0xc0, 0xa1, 0xc2, 0x6c, 0xf1, 0x36, 0x64, 0x4e, 0x89,
-	0xcf, 0xa7, 0xab, 0xa8, 0xb6, 0x1e, 0x09, 0x82, 0x07, 0xbc, 0x0b, 0x6b, 0xcf, 0x34, 0x73, 0x4c,
-	0xf8, 0x4c, 0x42, 0x12, 0x3e, 0x89, 0x9f, 0x42, 0x36, 0xc0, 0xc1, 0x3b, 0x70, 0xab, 0xdd, 0xe9,
-	0x2a, 0x9d, 0xd6, 0xfd, 0x5e, 0xa7, 0xad, 0x76, 0x9f, 0x1c, 0xca, 0x3d, 0xf9, 0xa8, 0x53, 0x4e,
-	0xe1, 0x22, 0x70, 0x4a, 0xe7, 0x8b, 0x2f, 0x65, 0xa5, 0xd3, 0x2e, 0x23, 0xbc, 0x01, 0xd0, 0x55,
-	0x9e, 0x7c, 0x2e, 0x4b, 0x72, 0xaf, 0xd3, 0x2e, 0xa7, 0x9b, 0xc5, 0x1f, 0xce, 0x85, 0xd4, 0x3c,
-	0xa7, 0x1f, 0x11, 0x6c, 0xc7, 0x01, 0xba, 0x2d, 0x8b, 0x7e, 0x3d, 0xa6, 0xba, 0x67, 0x58, 0x14,
-	0xef, 0x43, 0x41, 0x8f, 0x25, 0x7c, 0xae, 0x9a, 0xa9, 0x15, 0xf6, 0xde, 0xbc, 0x41, 0x9a, 0x51,
-	0xb8, 0x49, 0x6b, 0xfc, 0x0e, 0x14, 0xe9, 0x78, 0xa4, 0x3a, 0xc4, 0x36, 0x0d, 0x5d, 0x73, 0xf9,
-	0x3c, 0xab, 0x7d, 0xa4, 0x48, 0xc7, 0x23, 0x25, 0x12, 0x2c, 0x85, 0xf7, 0x1c, 0xc1, 0xe6, 0x01,
-	0xd1, 0x5c, 0xd2, 0x75, 0xc8, 0x31, 0x71, 0x08, 0xd5, 0x09, 0x3e, 0x5e, 0x8c, 0x0b, 0xdd, 0x3c,
-	0x2e, 0x21, 0x70, 0x77, 0x35, 0x11, 0x76, 0x7c, 0x6d, 0x64, 0x36, 0xc5, 0x04, 0xca, 0x07, 0xc7,
-	0xa6, 0xf5, 0x8d, 0xb8, 0x10, 0x72, 0xa2, 0xf1, 0x7f, 0x71, 0x00, 0x4f, 0x2d, 0x4a, 0x5a, 0x0c,
-	0x18, 0x4b, 0xb0, 0xe9, 0x68, 0x74, 0x48, 0xd4, 0x91, 0x41, 0xd5, 0xbe, 0xef, 0x11, 0x97, 0x35,
-	0x30, 0x23, 0xed, 0x5e, 0x4d, 0x84, 0xed, 0x10, 0x7b, 0x49, 0x41, 0x54, 0x4a, 0xec, 0xe5, 0x91,
-	0x41, 0xa5, 0xe0, 0x9e, 0xc0, 0xd0, 0xce, 0x22, 0x8c, 0xcc, 0x0a, 0x8c, 0x99, 0xc2, 0x1c, 0x43,
-	0x3b, 0x0b, 0x31, 0x3e, 0x81, 0xf4, 0x50, 0xe7, 0xb3, 0x55, 0x54, 0x2b, 0xec, 0xbd, 0xb1, 0x32,
-	0xff, 0x19, 0xfb, 0xa5, 0xdc, 0x74, 0x22, 0xa4, 0x1f, 0xb4, 0x94, 0xf4, 0x50, 0xc7, 0xcd, 0xa5,
-	0x76, 0xac, 0xb1, 0x76, 0xec, 0x5c, 0x4d, 0x84, 0x5b, 0xa1, 0xef, 0xa4, 0x54, 0x5c, 0xe8, 0x10,
-	0x76, 0x5e, 0xc5, 0x8b, 0xc6, 0x0d, 0xea, 0x9f, 0x64, 0xd7, 0x7f, 0xeb, 0x05, 0xfe, 0x0a, 0x4a,
-	0xee, 0xb8, 0x1f, 0x20, 0xaa, 0xae, 0xad, 0xd1, 0x80, 0x3f, 0x81, 0xd7, 0xb7, 0x56, 0x7a, 0x3d,
-	0x0c, 0xb5, 0x0f, 0x6d, 0x8d, 0x4a, 0xe5, 0xc8, 0x15, 0x17, 0xba, 0xfa, 0x50, 0x54, 0x8a, 0x6e,
-	0x2c, 0x76, 0xf1, 0x63, 0xe0, 0xa2, 0xbb, 0xcb, 0x73, 0x0c, 0xb7, 0xfa, 0x6f, 0xb8, 0xaf, 0xc0,
-	0x9c, 0x63, 0xe0, 0xef, 0x60, 0xcb, 0x0c, 0x38, 0xab, 0xda, 0x73, 0xd2, 0xba, 0xfc, 0x3a, 0x03,
-	0x5e, 0x3d, 0x25, 0x96, 0x58, 0x2e, 0xbd, 0x1d, 0x39, 0xf8, 0x7f, 0xe8, 0xe0, 0x1a, 0x60, 0x54,
-	0xa5, 0xb2, 0xb9, 0x68, 0x17, 0xb0, 0xe2, 0x8e, 0x41, 0x4f, 0x88, 0x63, 0x78, 0x64, 0xa0, 0x26,
-	0x1b, 0x05, 0x55, 0x54, 0xe3, 0xa2, 0x5f, 0xee, 0xf6, 0x5c, 0x25, 0xd1, 0x1e, 0xdc, 0x86, 0xbb,
-	0xb1, 0xe9, 0xf5, 0x14, 0x0a, 0x09, 0x80, 0xff, 0xcd, 0x15, 0x0f, 0x96, 0x03, 0x68, 0x42, 0x71,
-	0x68, 0x5a, 0x7d, 0xcd, 0x54, 0x1d, 0xa2, 0x0d, 0x5c, 0xbe, 0xc8, 0xcc, 0x12, 0xdc, 0x4a, 0x4a,
-	0x45, 0xa5, 0x10, 0x5e, 0x95, 0xe0, 0x86, 0xef, 0x01, 0x04, 0xcc, 0x7b, 0x66, 0x79, 0xc4, 0x71,
-	0xf9, 0x12, 0x63, 0xe5, 0x9d, 0xab, 0x89, 0xb0, 0x15, 0xb3, 0x32, 0x94, 0x89, 0xca, 0x3a, 0x1d,
-	0x8f, 0x8e, 0xd8, 0x19, 0x3f, 0x47, 0xb0, 0xc5, 0x9e, 0x17, 0xf2, 0xdd, 0x78, 0x3d, 0x62, 0x2e,
-	0x15, 0xfe, 0x1a, 0xee, 0xac, 0xf0, 0x4c, 0x90, 0xac, 0xde, 0x43, 0x10, 0xe8, 0xd8, 0x34, 0xd5,
-	0x6b, 0x16, 0xaa, 0xe1, 0xaa, 0x64, 0x64, 0x7b, 0x3e, 0xbf, 0x99, 0xa8, 0xe0, 0xdd, 0x40, 0xf9,
-	0x68, 0x09, 0x44, 0x76, 0x3b, 0x81, 0x62, 0x3c, 0x7b, 0x1e, 0x66, 0x39, 0x54, 0x4e, 0x8b, 0x3f,
-	0x21, 0xc8, 0x47, 0xd4, 0xc3, 0xef, 0x01, 0x67, 0xd0, 0x01, 0x39, 0x53, 0x8d, 0x01, 0xdb, 0x3d,
-	0x25, 0x69, 0x33, 0x5a, 0x61, 0x79, 0x39, 0x78, 0x97, 0xdb, 0x4a, 0x9e, 0x29, 0xc8, 0x03, 0xfc,
-	0x3e, 0x6c, 0xd8, 0x9a, 0xe3, 0x19, 0x41, 0x66, 0x2a, 0xd5, 0x46, 0x64, 0x61, 0xd5, 0x94, 0xe6,
-	0xb2, 0xc7, 0xda, 0x88, 0xe0, 0xfb, 0x90, 0x0b, 0x2b, 0xc4, 0x46, 0xd1, 0x3f, 0xcd, 0xd4, 0x78,
-	0x18, 0x46, 0x48, 0x91, 0x61, 0x62, 0x66, 0xfe, 0x8a, 0xa0, 0x90, 0xf8, 0x09, 0xf1, 0x67, 0xe1,
-	0xa6, 0x0b, 0x02, 0x2e, 0x4a, 0xf7, 0xfe, 0x9c, 0x08, 0x1f, 0x0d, 0x0d, 0xef, 0x64, 0xdc, 0xaf,
-	0xeb, 0xd6, 0xa8, 0x31, 0xf7, 0x33, 0xe8, 0xc7, 0xe7, 0x86, 0x7d, 0x3a, 0x6c, 0xb0, 0x93, 0xdd,
-	0xaf, 0xef, 0x13, 0x3f, 0xdc, 0x8c, 0x8f, 0x20, 0x4f, 0xe8, 0x40, 0x9d, 0x6d, 0xcd, 0xd7, 0xc5,
-	0xca, 0x11, 0x3a, 0xd8, 0x27, 0x3e, 0x7e, 0x37, 0x1e, 0x2c, 0xac, 0x66, 0x2c, 0xf5, 0xd9, 0x62,
-	0x9a, 0x8d, 0x09, 0x56, 0xd6, 0x38, 0x37, 0xa9, 0x76, 0xf1, 0x7b, 0x25, 0x75, 0x31, 0xad, 0xa0,
-	0x17, 0xd3, 0x0a, 0x7a, 0x39, 0xad, 0xa0, 0xdf, 0xa6, 0x15, 0xf4, 0xfd, 0x65, 0x25, 0xf5, 0xe2,
-	0xb2, 0x92, 0x7a, 0x79, 0x59, 0x49, 0x3d, 0xcd, 0x85, 0x85, 0xfa, 0x3b, 0x00, 0x00, 0xff, 0xff,
-	0xba, 0x14, 0x20, 0xc9, 0xc7, 0x08, 0x00, 0x00,
-}

@@ -3,13 +3,15 @@
 
 package sessiondatapb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-
-import github_com_cockroachdb_cockroach_pkg_security "github.com/cockroachdb/cockroach/pkg/security"
-
-import io "io"
+import (
+	fmt "fmt"
+	github_com_cockroachdb_cockroach_pkg_security "github.com/cockroachdb/cockroach/pkg/security"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+	io "io"
+	math "math"
+	math_bits "math/bits"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -20,7 +22,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // BytesEncodeFormat is the configuration for bytes to string conversions.
 type BytesEncodeFormat int32
@@ -40,6 +42,7 @@ var BytesEncodeFormat_name = map[int32]string{
 	1: "BytesEncodeEscape",
 	2: "BytesEncodeBase64",
 }
+
 var BytesEncodeFormat_value = map[string]int32{
 	"BytesEncodeHex":    0,
 	"BytesEncodeEscape": 1,
@@ -47,7 +50,7 @@ var BytesEncodeFormat_value = map[string]int32{
 }
 
 func (BytesEncodeFormat) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9172d1bf719d087a, []int{0}
+	return fileDescriptor_9fa1c5a4e61eec38, []int{0}
 }
 
 // VectorizeExecMode controls if an when the Executor executes queries using
@@ -77,6 +80,7 @@ var VectorizeExecMode_name = map[int32]string{
 	2: "VectorizeOn",
 	3: "VectorizeExperimentalAlways",
 }
+
 var VectorizeExecMode_value = map[string]int32{
 	"VectorizeOff":                0,
 	"DeprecatedVectorize201Auto":  1,
@@ -85,7 +89,7 @@ var VectorizeExecMode_value = map[string]int32{
 }
 
 func (VectorizeExecMode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9172d1bf719d087a, []int{1}
+	return fileDescriptor_9fa1c5a4e61eec38, []int{1}
 }
 
 // SessionData contains session parameters that are easily serializable and are
@@ -139,21 +143,21 @@ func (m *SessionData) Reset()         { *m = SessionData{} }
 func (m *SessionData) String() string { return proto.CompactTextString(m) }
 func (*SessionData) ProtoMessage()    {}
 func (*SessionData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9172d1bf719d087a, []int{0}
+	return fileDescriptor_9fa1c5a4e61eec38, []int{0}
 }
 func (m *SessionData) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *SessionData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *SessionData) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SessionData.Merge(dst, src)
+func (m *SessionData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SessionData.Merge(m, src)
 }
 func (m *SessionData) XXX_Size() int {
 	return m.Size()
@@ -180,21 +184,21 @@ func (m *DataConversionConfig) Reset()         { *m = DataConversionConfig{} }
 func (m *DataConversionConfig) String() string { return proto.CompactTextString(m) }
 func (*DataConversionConfig) ProtoMessage()    {}
 func (*DataConversionConfig) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9172d1bf719d087a, []int{1}
+	return fileDescriptor_9fa1c5a4e61eec38, []int{1}
 }
 func (m *DataConversionConfig) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *DataConversionConfig) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *DataConversionConfig) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DataConversionConfig.Merge(dst, src)
+func (m *DataConversionConfig) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DataConversionConfig.Merge(m, src)
 }
 func (m *DataConversionConfig) XXX_Size() int {
 	return m.Size()
@@ -217,21 +221,21 @@ func (m *SequenceState) Reset()         { *m = SequenceState{} }
 func (m *SequenceState) String() string { return proto.CompactTextString(m) }
 func (*SequenceState) ProtoMessage()    {}
 func (*SequenceState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9172d1bf719d087a, []int{2}
+	return fileDescriptor_9fa1c5a4e61eec38, []int{2}
 }
 func (m *SequenceState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *SequenceState) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *SequenceState) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SequenceState.Merge(dst, src)
+func (m *SequenceState) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SequenceState.Merge(m, src)
 }
 func (m *SequenceState) XXX_Size() int {
 	return m.Size()
@@ -252,21 +256,21 @@ func (m *SequenceState_Seq) Reset()         { *m = SequenceState_Seq{} }
 func (m *SequenceState_Seq) String() string { return proto.CompactTextString(m) }
 func (*SequenceState_Seq) ProtoMessage()    {}
 func (*SequenceState_Seq) Descriptor() ([]byte, []int) {
-	return fileDescriptor_session_data_9172d1bf719d087a, []int{2, 0}
+	return fileDescriptor_9fa1c5a4e61eec38, []int{2, 0}
 }
 func (m *SequenceState_Seq) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
 func (m *SequenceState_Seq) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
+	n, err := m.MarshalToSizedBuffer(b)
 	if err != nil {
 		return nil, err
 	}
 	return b[:n], nil
 }
-func (dst *SequenceState_Seq) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SequenceState_Seq.Merge(dst, src)
+func (m *SequenceState_Seq) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SequenceState_Seq.Merge(m, src)
 }
 func (m *SequenceState_Seq) XXX_Size() int {
 	return m.Size()
@@ -278,17 +282,77 @@ func (m *SequenceState_Seq) XXX_DiscardUnknown() {
 var xxx_messageInfo_SequenceState_Seq proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterEnum("cockroach.sql.sessiondatapb.BytesEncodeFormat", BytesEncodeFormat_name, BytesEncodeFormat_value)
+	proto.RegisterEnum("cockroach.sql.sessiondatapb.VectorizeExecMode", VectorizeExecMode_name, VectorizeExecMode_value)
 	proto.RegisterType((*SessionData)(nil), "cockroach.sql.sessiondatapb.SessionData")
 	proto.RegisterType((*DataConversionConfig)(nil), "cockroach.sql.sessiondatapb.DataConversionConfig")
 	proto.RegisterType((*SequenceState)(nil), "cockroach.sql.sessiondatapb.SequenceState")
 	proto.RegisterType((*SequenceState_Seq)(nil), "cockroach.sql.sessiondatapb.SequenceState.Seq")
-	proto.RegisterEnum("cockroach.sql.sessiondatapb.BytesEncodeFormat", BytesEncodeFormat_name, BytesEncodeFormat_value)
-	proto.RegisterEnum("cockroach.sql.sessiondatapb.VectorizeExecMode", VectorizeExecMode_name, VectorizeExecMode_value)
 }
+
+func init() {
+	proto.RegisterFile("sql/sessiondatapb/session_data.proto", fileDescriptor_9fa1c5a4e61eec38)
+}
+
+var fileDescriptor_9fa1c5a4e61eec38 = []byte{
+	// 814 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x54, 0x41, 0x6f, 0x1b, 0x45,
+	0x14, 0xde, 0x89, 0xe3, 0x60, 0x8f, 0x71, 0xba, 0x99, 0xa6, 0x68, 0xe5, 0xc2, 0xda, 0x8a, 0x38,
+	0x98, 0x08, 0xd9, 0x6d, 0x40, 0x1c, 0x91, 0xea, 0x26, 0x11, 0x91, 0x28, 0x84, 0x5d, 0xb5, 0x07,
+	0x0e, 0x8c, 0xc6, 0xb3, 0xcf, 0xf6, 0xd0, 0xdd, 0x9d, 0xdd, 0x9d, 0x71, 0x88, 0x73, 0xe3, 0xc6,
+	0x91, 0xff, 0x40, 0x0f, 0xfc, 0x94, 0x08, 0x09, 0xa9, 0xc7, 0x9e, 0x22, 0x70, 0xfe, 0x05, 0x27,
+	0x34, 0xe3, 0x64, 0x1d, 0xb7, 0x55, 0x72, 0x9b, 0xf7, 0xbd, 0xef, 0x7b, 0xf3, 0xf6, 0x7d, 0x6f,
+	0x16, 0x7f, 0xaa, 0xf2, 0xb8, 0xaf, 0x40, 0x29, 0x21, 0xd3, 0x88, 0x69, 0x96, 0x0d, 0xaf, 0x23,
+	0x6a, 0xc2, 0x5e, 0x56, 0x48, 0x2d, 0xc9, 0x43, 0x2e, 0xf9, 0xcb, 0x42, 0x32, 0x3e, 0xe9, 0xa9,
+	0x3c, 0xee, 0xad, 0xf0, 0x5b, 0xdb, 0x63, 0x39, 0x96, 0x96, 0xd7, 0x37, 0xa7, 0x85, 0x64, 0xe7,
+	0xaf, 0x2a, 0x6e, 0x84, 0x0b, 0xde, 0x3e, 0xd3, 0x8c, 0xb4, 0x70, 0xcd, 0xf0, 0x87, 0x4c, 0x81,
+	0x87, 0x3a, 0xa8, 0x5b, 0x0f, 0xca, 0x98, 0x7c, 0x86, 0x5d, 0x96, 0x65, 0xb1, 0xe0, 0x4c, 0x9b,
+	0x8b, 0x53, 0x96, 0x80, 0xb7, 0x66, 0x39, 0xf7, 0x6e, 0xe0, 0xdf, 0xb1, 0x04, 0x08, 0xc3, 0x78,
+	0xaa, 0xa0, 0xa0, 0xf6, 0x12, 0xaf, 0x62, 0x48, 0x83, 0xc1, 0x7f, 0x17, 0xed, 0xaf, 0xc7, 0x42,
+	0x4f, 0xa6, 0xc3, 0x1e, 0x97, 0x49, 0xbf, 0x6c, 0x36, 0x1a, 0x2e, 0xcf, 0xfd, 0xec, 0xe5, 0xb8,
+	0xaf, 0x80, 0x4f, 0x0b, 0xa1, 0x67, 0xbd, 0xf0, 0x87, 0x6f, 0x9f, 0x2b, 0x28, 0xcc, 0x4d, 0xc7,
+	0xa6, 0x52, 0x50, 0x37, 0x55, 0xed, 0x91, 0x24, 0xf8, 0x23, 0xd3, 0x19, 0xe5, 0x32, 0x3d, 0x81,
+	0xc2, 0x8e, 0x82, 0xcb, 0x74, 0x24, 0xc6, 0xde, 0x7a, 0x07, 0x75, 0x1b, 0x7b, 0x8f, 0x7b, 0xb7,
+	0x4c, 0xa3, 0x67, 0x3e, 0xf6, 0x69, 0xa9, 0x7c, 0x6a, 0x85, 0x83, 0xf5, 0xf3, 0x8b, 0xb6, 0x13,
+	0x6c, 0x47, 0xef, 0xc9, 0x91, 0xe7, 0x78, 0xf3, 0x04, 0xb8, 0x96, 0x85, 0x38, 0x03, 0x9a, 0xc8,
+	0x08, 0xbc, 0x6a, 0x07, 0x75, 0x37, 0xf7, 0x7a, 0xb7, 0x5e, 0xf3, 0xe2, 0x5a, 0x72, 0x70, 0x0a,
+	0xfc, 0x99, 0x8c, 0x20, 0x68, 0x96, 0x55, 0x4c, 0x48, 0x0e, 0x70, 0x5b, 0x83, 0xd2, 0x22, 0x1d,
+	0xd3, 0x65, 0x79, 0x91, 0xfe, 0x0c, 0x5c, 0xd3, 0x8c, 0xa5, 0x82, 0x2b, 0x6f, 0xa3, 0x83, 0xba,
+	0xb5, 0xe0, 0xe3, 0x2b, 0x5a, 0x59, 0xf1, 0xc8, 0x92, 0x8e, 0x2d, 0x87, 0x74, 0xb1, 0x1b, 0xc1,
+	0x88, 0x4d, 0x63, 0x4d, 0x45, 0xaa, 0xa9, 0x12, 0x67, 0xe0, 0x7d, 0xd0, 0x41, 0xdd, 0x6a, 0xb0,
+	0x79, 0x85, 0x1f, 0xa5, 0x3a, 0x14, 0x67, 0x60, 0x0c, 0x8e, 0xe5, 0xc2, 0x29, 0xaf, 0xb6, 0x30,
+	0xf8, 0x3a, 0x26, 0x6d, 0xdc, 0x50, 0xc0, 0x0a, 0x3e, 0xa1, 0x19, 0xd3, 0x13, 0xaf, 0xde, 0xa9,
+	0x74, 0xeb, 0x01, 0x5e, 0x40, 0xc7, 0x4c, 0x4f, 0xc8, 0x1e, 0x7e, 0xa0, 0x21, 0xc9, 0x64, 0xc1,
+	0x8a, 0x19, 0x55, 0x7c, 0x02, 0x09, 0x5b, 0xac, 0x01, 0xb6, 0x95, 0xee, 0x97, 0xc9, 0xd0, 0xe6,
+	0xec, 0x2a, 0x3c, 0xc3, 0x75, 0x05, 0x39, 0x55, 0x9a, 0x69, 0xf0, 0x1a, 0xd6, 0x9a, 0xdd, 0x5b,
+	0x67, 0x16, 0x42, 0x3e, 0x85, 0x94, 0x43, 0x68, 0x14, 0x57, 0x9e, 0xd4, 0x14, 0xe4, 0x36, 0x36,
+	0xfd, 0x8b, 0x54, 0x9b, 0x9d, 0x88, 0x3d, 0xd7, 0x4e, 0xa6, 0x8c, 0x77, 0x5e, 0x21, 0xbc, 0xfd,
+	0x3e, 0x63, 0xc9, 0x4f, 0xf8, 0xfe, 0x70, 0xa6, 0x41, 0x51, 0x48, 0xb9, 0x8c, 0x80, 0x8e, 0x64,
+	0x91, 0x30, 0x6d, 0x17, 0xfc, 0x2e, 0x07, 0x07, 0x46, 0x77, 0x60, 0x65, 0x87, 0x56, 0x15, 0x6c,
+	0x0d, 0xdf, 0x86, 0xc8, 0xe7, 0x98, 0xc0, 0xa9, 0x2e, 0x18, 0x1d, 0xc5, 0x92, 0x69, 0x1a, 0x89,
+	0xb1, 0xd0, 0xca, 0xbe, 0x8d, 0x6a, 0xe0, 0xda, 0xcc, 0xa1, 0x49, 0xec, 0x5b, 0x7c, 0xe7, 0x6f,
+	0x84, 0x9b, 0x2b, 0x1f, 0x49, 0x06, 0x78, 0x5d, 0x41, 0xae, 0x3c, 0xd4, 0xa9, 0x74, 0x1b, 0x77,
+	0x34, 0xb4, 0xa2, 0x34, 0x51, 0x60, 0xb5, 0xe4, 0x11, 0xde, 0x8e, 0x99, 0xd2, 0xd4, 0x0c, 0x5b,
+	0xa4, 0xbc, 0x80, 0x04, 0x52, 0x0d, 0x91, 0xed, 0xa2, 0x19, 0x10, 0x93, 0x0b, 0x21, 0x3f, 0x5a,
+	0x66, 0x5a, 0x87, 0xb8, 0x12, 0x42, 0x4e, 0x3a, 0x78, 0xc3, 0x6a, 0x22, 0x3b, 0x8f, 0xe6, 0xa0,
+	0x3e, 0xbf, 0x68, 0x57, 0x0d, 0x75, 0x3f, 0xa8, 0x2a, 0xc8, 0x8f, 0x22, 0xf2, 0x09, 0xc6, 0x31,
+	0x33, 0xfb, 0x47, 0x4f, 0x58, 0x6c, 0x0b, 0x56, 0x82, 0xfa, 0x02, 0x79, 0xc1, 0xe2, 0x5d, 0x8a,
+	0xb7, 0xde, 0x99, 0x12, 0x21, 0x78, 0xf3, 0x06, 0xf8, 0x0d, 0x9c, 0xba, 0x0e, 0x79, 0xb0, 0x42,
+	0x3c, 0x50, 0x9c, 0x65, 0xe0, 0xa2, 0xb7, 0xe0, 0x01, 0x53, 0xf0, 0xd5, 0x97, 0xee, 0x5a, 0xab,
+	0xf6, 0xdb, 0x1f, 0xbe, 0xf3, 0xe7, 0x2b, 0xdf, 0xd9, 0xfd, 0x15, 0xe1, 0xad, 0x77, 0x5e, 0x12,
+	0x71, 0xf1, 0x87, 0x25, 0xf8, 0xfd, 0x68, 0xe4, 0x3a, 0xc4, 0xc7, 0xad, 0x7d, 0xc8, 0x0a, 0xe0,
+	0x4c, 0x43, 0x54, 0xe6, 0xf6, 0x1e, 0x3d, 0x7e, 0x32, 0xd5, 0xd2, 0x45, 0xe4, 0x1e, 0x6e, 0x2c,
+	0x15, 0xa9, 0xbb, 0x46, 0xda, 0xf8, 0xe1, 0x8d, 0xba, 0x19, 0x14, 0xc2, 0x8c, 0x86, 0xc5, 0x4f,
+	0xe2, 0x5f, 0xd8, 0x4c, 0xb9, 0x95, 0x65, 0x0f, 0x83, 0xfe, 0xf9, 0xbf, 0xbe, 0x73, 0x3e, 0xf7,
+	0xd1, 0xeb, 0xb9, 0x8f, 0xde, 0xcc, 0x7d, 0xf4, 0xcf, 0xdc, 0x47, 0xbf, 0x5f, 0xfa, 0xce, 0xeb,
+	0x4b, 0xdf, 0x79, 0x73, 0xe9, 0x3b, 0x3f, 0x36, 0x57, 0x7c, 0x1a, 0x6e, 0xd8, 0x7f, 0xdf, 0x17,
+	0xff, 0x07, 0x00, 0x00, 0xff, 0xff, 0x6b, 0x0f, 0x8b, 0x28, 0xbb, 0x05, 0x00, 0x00,
+}
+
 func (m *SessionData) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -296,110 +360,118 @@ func (m *SessionData) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SessionData) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SessionData) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Database) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(len(m.Database)))
-		i += copy(dAtA[i:], m.Database)
-	}
-	if len(m.ApplicationName) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(len(m.ApplicationName)))
-		i += copy(dAtA[i:], m.ApplicationName)
-	}
-	if len(m.UserProto) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(len(m.UserProto)))
-		i += copy(dAtA[i:], m.UserProto)
-	}
-	dAtA[i] = 0x22
-	i++
-	i = encodeVarintSessionData(dAtA, i, uint64(m.DataConversionConfig.Size()))
-	n1, err := m.DataConversionConfig.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n1
-	if m.VectorizeMode != 0 {
-		dAtA[i] = 0x28
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(m.VectorizeMode))
-	}
-	if m.TestingVectorizeInjectPanics {
-		dAtA[i] = 0x30
-		i++
-		if m.TestingVectorizeInjectPanics {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
-	}
-	if m.DefaultIntSize != 0 {
-		dAtA[i] = 0x38
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(m.DefaultIntSize))
-	}
-	if len(m.Location) > 0 {
-		dAtA[i] = 0x42
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(len(m.Location)))
-		i += copy(dAtA[i:], m.Location)
-	}
-	if len(m.SearchPath) > 0 {
-		for _, s := range m.SearchPath {
-			dAtA[i] = 0x4a
-			i++
-			l = len(s)
-			for l >= 1<<7 {
-				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
-				l >>= 7
-				i++
-			}
-			dAtA[i] = uint8(l)
-			i++
-			i += copy(dAtA[i:], s)
-		}
-	}
-	if len(m.TemporarySchemaName) > 0 {
-		dAtA[i] = 0x52
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(len(m.TemporarySchemaName)))
-		i += copy(dAtA[i:], m.TemporarySchemaName)
-	}
-	dAtA[i] = 0x5a
-	i++
-	i = encodeVarintSessionData(dAtA, i, uint64(m.SeqState.Size()))
-	n2, err := m.SeqState.MarshalTo(dAtA[i:])
-	if err != nil {
-		return 0, err
-	}
-	i += n2
 	if m.Internal {
-		dAtA[i] = 0x80
-		i++
-		dAtA[i] = 0x1
-		i++
+		i--
 		if m.Internal {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
 		}
-		i++
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x80
 	}
-	return i, nil
+	{
+		size, err := m.SeqState.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSessionData(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x5a
+	if len(m.TemporarySchemaName) > 0 {
+		i -= len(m.TemporarySchemaName)
+		copy(dAtA[i:], m.TemporarySchemaName)
+		i = encodeVarintSessionData(dAtA, i, uint64(len(m.TemporarySchemaName)))
+		i--
+		dAtA[i] = 0x52
+	}
+	if len(m.SearchPath) > 0 {
+		for iNdEx := len(m.SearchPath) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.SearchPath[iNdEx])
+			copy(dAtA[i:], m.SearchPath[iNdEx])
+			i = encodeVarintSessionData(dAtA, i, uint64(len(m.SearchPath[iNdEx])))
+			i--
+			dAtA[i] = 0x4a
+		}
+	}
+	if len(m.Location) > 0 {
+		i -= len(m.Location)
+		copy(dAtA[i:], m.Location)
+		i = encodeVarintSessionData(dAtA, i, uint64(len(m.Location)))
+		i--
+		dAtA[i] = 0x42
+	}
+	if m.DefaultIntSize != 0 {
+		i = encodeVarintSessionData(dAtA, i, uint64(m.DefaultIntSize))
+		i--
+		dAtA[i] = 0x38
+	}
+	if m.TestingVectorizeInjectPanics {
+		i--
+		if m.TestingVectorizeInjectPanics {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.VectorizeMode != 0 {
+		i = encodeVarintSessionData(dAtA, i, uint64(m.VectorizeMode))
+		i--
+		dAtA[i] = 0x28
+	}
+	{
+		size, err := m.DataConversionConfig.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintSessionData(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x22
+	if len(m.UserProto) > 0 {
+		i -= len(m.UserProto)
+		copy(dAtA[i:], m.UserProto)
+		i = encodeVarintSessionData(dAtA, i, uint64(len(m.UserProto)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.ApplicationName) > 0 {
+		i -= len(m.ApplicationName)
+		copy(dAtA[i:], m.ApplicationName)
+		i = encodeVarintSessionData(dAtA, i, uint64(len(m.ApplicationName)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Database) > 0 {
+		i -= len(m.Database)
+		copy(dAtA[i:], m.Database)
+		i = encodeVarintSessionData(dAtA, i, uint64(len(m.Database)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *DataConversionConfig) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -407,27 +479,32 @@ func (m *DataConversionConfig) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *DataConversionConfig) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DataConversionConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.BytesEncodeFormat != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(m.BytesEncodeFormat))
-	}
 	if m.ExtraFloatDigits != 0 {
-		dAtA[i] = 0x10
-		i++
 		i = encodeVarintSessionData(dAtA, i, uint64(m.ExtraFloatDigits))
+		i--
+		dAtA[i] = 0x10
 	}
-	return i, nil
+	if m.BytesEncodeFormat != 0 {
+		i = encodeVarintSessionData(dAtA, i, uint64(m.BytesEncodeFormat))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *SequenceState) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -435,34 +512,41 @@ func (m *SequenceState) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SequenceState) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SequenceState) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.LastSeqIncremented != 0 {
+		i = encodeVarintSessionData(dAtA, i, uint64(m.LastSeqIncremented))
+		i--
+		dAtA[i] = 0x10
+	}
 	if len(m.Seqs) > 0 {
-		for _, msg := range m.Seqs {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintSessionData(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Seqs) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Seqs[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintSessionData(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0xa
 		}
 	}
-	if m.LastSeqIncremented != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(m.LastSeqIncremented))
-	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *SequenceState_Seq) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -470,31 +554,38 @@ func (m *SequenceState_Seq) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *SequenceState_Seq) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SequenceState_Seq) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.SeqID != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintSessionData(dAtA, i, uint64(m.SeqID))
-	}
 	if m.LatestVal != 0 {
-		dAtA[i] = 0x10
-		i++
 		i = encodeVarintSessionData(dAtA, i, uint64(m.LatestVal))
+		i--
+		dAtA[i] = 0x10
 	}
-	return i, nil
+	if m.SeqID != 0 {
+		i = encodeVarintSessionData(dAtA, i, uint64(m.SeqID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintSessionData(dAtA []byte, offset int, v uint64) int {
+	offset -= sovSessionData(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *SessionData) Size() (n int) {
 	if m == nil {
@@ -596,14 +687,7 @@ func (m *SequenceState_Seq) Size() (n int) {
 }
 
 func sovSessionData(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozSessionData(x uint64) (n int) {
 	return sovSessionData(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -623,7 +707,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -651,7 +735,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -661,6 +745,9 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthSessionData
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -680,7 +767,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -690,6 +777,9 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthSessionData
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -709,7 +799,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -719,6 +809,9 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthSessionData
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -738,7 +831,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -747,6 +840,9 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthSessionData
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -768,7 +864,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.VectorizeMode |= (VectorizeExecMode(b) & 0x7F) << shift
+				m.VectorizeMode |= VectorizeExecMode(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -787,7 +883,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -807,7 +903,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.DefaultIntSize |= (int32(b) & 0x7F) << shift
+				m.DefaultIntSize |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -826,7 +922,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -836,6 +932,9 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthSessionData
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -855,7 +954,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -865,6 +964,9 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthSessionData
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -884,7 +986,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -894,6 +996,9 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthSessionData
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -913,7 +1018,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -922,6 +1027,9 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthSessionData
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -943,7 +1051,7 @@ func (m *SessionData) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (int(b) & 0x7F) << shift
+				v |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -985,7 +1093,7 @@ func (m *DataConversionConfig) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1013,7 +1121,7 @@ func (m *DataConversionConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.BytesEncodeFormat |= (BytesEncodeFormat(b) & 0x7F) << shift
+				m.BytesEncodeFormat |= BytesEncodeFormat(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1032,7 +1140,7 @@ func (m *DataConversionConfig) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ExtraFloatDigits |= (int32(b) & 0x7F) << shift
+				m.ExtraFloatDigits |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1073,7 +1181,7 @@ func (m *SequenceState) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1101,7 +1209,7 @@ func (m *SequenceState) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1110,6 +1218,9 @@ func (m *SequenceState) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthSessionData
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthSessionData
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1132,7 +1243,7 @@ func (m *SequenceState) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LastSeqIncremented |= (uint32(b) & 0x7F) << shift
+				m.LastSeqIncremented |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1173,7 +1284,7 @@ func (m *SequenceState_Seq) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1201,7 +1312,7 @@ func (m *SequenceState_Seq) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.SeqID |= (uint32(b) & 0x7F) << shift
+				m.SeqID |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1220,7 +1331,7 @@ func (m *SequenceState_Seq) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.LatestVal |= (int64(b) & 0x7F) << shift
+				m.LatestVal |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1249,6 +1360,7 @@ func (m *SequenceState_Seq) Unmarshal(dAtA []byte) error {
 func skipSessionData(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
+	depth := 0
 	for iNdEx < l {
 		var wire uint64
 		for shift := uint(0); ; shift += 7 {
@@ -1280,10 +1392,8 @@ func skipSessionData(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			return iNdEx, nil
 		case 1:
 			iNdEx += 8
-			return iNdEx, nil
 		case 2:
 			var length int
 			for shift := uint(0); ; shift += 7 {
@@ -1300,112 +1410,34 @@ func skipSessionData(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
 				return 0, ErrInvalidLengthSessionData
 			}
-			return iNdEx, nil
+			iNdEx += length
 		case 3:
-			for {
-				var innerWire uint64
-				var start int = iNdEx
-				for shift := uint(0); ; shift += 7 {
-					if shift >= 64 {
-						return 0, ErrIntOverflowSessionData
-					}
-					if iNdEx >= l {
-						return 0, io.ErrUnexpectedEOF
-					}
-					b := dAtA[iNdEx]
-					iNdEx++
-					innerWire |= (uint64(b) & 0x7F) << shift
-					if b < 0x80 {
-						break
-					}
-				}
-				innerWireType := int(innerWire & 0x7)
-				if innerWireType == 4 {
-					break
-				}
-				next, err := skipSessionData(dAtA[start:])
-				if err != nil {
-					return 0, err
-				}
-				iNdEx = start + next
-			}
-			return iNdEx, nil
+			depth++
 		case 4:
-			return iNdEx, nil
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupSessionData
+			}
+			depth--
 		case 5:
 			iNdEx += 4
-			return iNdEx, nil
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
 		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthSessionData
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
 	}
-	panic("unreachable")
+	return 0, io.ErrUnexpectedEOF
 }
 
 var (
-	ErrInvalidLengthSessionData = fmt.Errorf("proto: negative length found during unmarshaling")
-	ErrIntOverflowSessionData   = fmt.Errorf("proto: integer overflow")
+	ErrInvalidLengthSessionData        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowSessionData          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupSessionData = fmt.Errorf("proto: unexpected end of group")
 )
-
-func init() {
-	proto.RegisterFile("sql/sessiondatapb/session_data.proto", fileDescriptor_session_data_9172d1bf719d087a)
-}
-
-var fileDescriptor_session_data_9172d1bf719d087a = []byte{
-	// 814 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x54, 0x41, 0x6f, 0x1b, 0x45,
-	0x14, 0xde, 0x89, 0xe3, 0x60, 0x8f, 0x71, 0xba, 0x99, 0xa6, 0x68, 0xe5, 0xc2, 0xda, 0x8a, 0x38,
-	0x98, 0x08, 0xd9, 0x6d, 0x40, 0x1c, 0x91, 0xea, 0x26, 0x11, 0x91, 0x28, 0x84, 0x5d, 0xb5, 0x07,
-	0x0e, 0x8c, 0xc6, 0xb3, 0xcf, 0xf6, 0xd0, 0xdd, 0x9d, 0xdd, 0x9d, 0x71, 0x88, 0x73, 0xe3, 0xc6,
-	0x91, 0xff, 0x40, 0x0f, 0xfc, 0x94, 0x08, 0x09, 0xa9, 0xc7, 0x9e, 0x22, 0x70, 0xfe, 0x05, 0x27,
-	0x34, 0xe3, 0x64, 0x1d, 0xb7, 0x55, 0x72, 0x9b, 0xf7, 0xbd, 0xef, 0x7b, 0xf3, 0xf6, 0x7d, 0x6f,
-	0x16, 0x7f, 0xaa, 0xf2, 0xb8, 0xaf, 0x40, 0x29, 0x21, 0xd3, 0x88, 0x69, 0x96, 0x0d, 0xaf, 0x23,
-	0x6a, 0xc2, 0x5e, 0x56, 0x48, 0x2d, 0xc9, 0x43, 0x2e, 0xf9, 0xcb, 0x42, 0x32, 0x3e, 0xe9, 0xa9,
-	0x3c, 0xee, 0xad, 0xf0, 0x5b, 0xdb, 0x63, 0x39, 0x96, 0x96, 0xd7, 0x37, 0xa7, 0x85, 0x64, 0xe7,
-	0xaf, 0x2a, 0x6e, 0x84, 0x0b, 0xde, 0x3e, 0xd3, 0x8c, 0xb4, 0x70, 0xcd, 0xf0, 0x87, 0x4c, 0x81,
-	0x87, 0x3a, 0xa8, 0x5b, 0x0f, 0xca, 0x98, 0x7c, 0x86, 0x5d, 0x96, 0x65, 0xb1, 0xe0, 0x4c, 0x9b,
-	0x8b, 0x53, 0x96, 0x80, 0xb7, 0x66, 0x39, 0xf7, 0x6e, 0xe0, 0xdf, 0xb1, 0x04, 0x08, 0xc3, 0x78,
-	0xaa, 0xa0, 0xa0, 0xf6, 0x12, 0xaf, 0x62, 0x48, 0x83, 0xc1, 0x7f, 0x17, 0xed, 0xaf, 0xc7, 0x42,
-	0x4f, 0xa6, 0xc3, 0x1e, 0x97, 0x49, 0xbf, 0x6c, 0x36, 0x1a, 0x2e, 0xcf, 0xfd, 0xec, 0xe5, 0xb8,
-	0xaf, 0x80, 0x4f, 0x0b, 0xa1, 0x67, 0xbd, 0xf0, 0x87, 0x6f, 0x9f, 0x2b, 0x28, 0xcc, 0x4d, 0xc7,
-	0xa6, 0x52, 0x50, 0x37, 0x55, 0xed, 0x91, 0x24, 0xf8, 0x23, 0xd3, 0x19, 0xe5, 0x32, 0x3d, 0x81,
-	0xc2, 0x8e, 0x82, 0xcb, 0x74, 0x24, 0xc6, 0xde, 0x7a, 0x07, 0x75, 0x1b, 0x7b, 0x8f, 0x7b, 0xb7,
-	0x4c, 0xa3, 0x67, 0x3e, 0xf6, 0x69, 0xa9, 0x7c, 0x6a, 0x85, 0x83, 0xf5, 0xf3, 0x8b, 0xb6, 0x13,
-	0x6c, 0x47, 0xef, 0xc9, 0x91, 0xe7, 0x78, 0xf3, 0x04, 0xb8, 0x96, 0x85, 0x38, 0x03, 0x9a, 0xc8,
-	0x08, 0xbc, 0x6a, 0x07, 0x75, 0x37, 0xf7, 0x7a, 0xb7, 0x5e, 0xf3, 0xe2, 0x5a, 0x72, 0x70, 0x0a,
-	0xfc, 0x99, 0x8c, 0x20, 0x68, 0x96, 0x55, 0x4c, 0x48, 0x0e, 0x70, 0x5b, 0x83, 0xd2, 0x22, 0x1d,
-	0xd3, 0x65, 0x79, 0x91, 0xfe, 0x0c, 0x5c, 0xd3, 0x8c, 0xa5, 0x82, 0x2b, 0x6f, 0xa3, 0x83, 0xba,
-	0xb5, 0xe0, 0xe3, 0x2b, 0x5a, 0x59, 0xf1, 0xc8, 0x92, 0x8e, 0x2d, 0x87, 0x74, 0xb1, 0x1b, 0xc1,
-	0x88, 0x4d, 0x63, 0x4d, 0x45, 0xaa, 0xa9, 0x12, 0x67, 0xe0, 0x7d, 0xd0, 0x41, 0xdd, 0x6a, 0xb0,
-	0x79, 0x85, 0x1f, 0xa5, 0x3a, 0x14, 0x67, 0x60, 0x0c, 0x8e, 0xe5, 0xc2, 0x29, 0xaf, 0xb6, 0x30,
-	0xf8, 0x3a, 0x26, 0x6d, 0xdc, 0x50, 0xc0, 0x0a, 0x3e, 0xa1, 0x19, 0xd3, 0x13, 0xaf, 0xde, 0xa9,
-	0x74, 0xeb, 0x01, 0x5e, 0x40, 0xc7, 0x4c, 0x4f, 0xc8, 0x1e, 0x7e, 0xa0, 0x21, 0xc9, 0x64, 0xc1,
-	0x8a, 0x19, 0x55, 0x7c, 0x02, 0x09, 0x5b, 0xac, 0x01, 0xb6, 0x95, 0xee, 0x97, 0xc9, 0xd0, 0xe6,
-	0xec, 0x2a, 0x3c, 0xc3, 0x75, 0x05, 0x39, 0x55, 0x9a, 0x69, 0xf0, 0x1a, 0xd6, 0x9a, 0xdd, 0x5b,
-	0x67, 0x16, 0x42, 0x3e, 0x85, 0x94, 0x43, 0x68, 0x14, 0x57, 0x9e, 0xd4, 0x14, 0xe4, 0x36, 0x36,
-	0xfd, 0x8b, 0x54, 0x9b, 0x9d, 0x88, 0x3d, 0xd7, 0x4e, 0xa6, 0x8c, 0x77, 0x5e, 0x21, 0xbc, 0xfd,
-	0x3e, 0x63, 0xc9, 0x4f, 0xf8, 0xfe, 0x70, 0xa6, 0x41, 0x51, 0x48, 0xb9, 0x8c, 0x80, 0x8e, 0x64,
-	0x91, 0x30, 0x6d, 0x17, 0xfc, 0x2e, 0x07, 0x07, 0x46, 0x77, 0x60, 0x65, 0x87, 0x56, 0x15, 0x6c,
-	0x0d, 0xdf, 0x86, 0xc8, 0xe7, 0x98, 0xc0, 0xa9, 0x2e, 0x18, 0x1d, 0xc5, 0x92, 0x69, 0x1a, 0x89,
-	0xb1, 0xd0, 0xca, 0xbe, 0x8d, 0x6a, 0xe0, 0xda, 0xcc, 0xa1, 0x49, 0xec, 0x5b, 0x7c, 0xe7, 0x6f,
-	0x84, 0x9b, 0x2b, 0x1f, 0x49, 0x06, 0x78, 0x5d, 0x41, 0xae, 0x3c, 0xd4, 0xa9, 0x74, 0x1b, 0x77,
-	0x34, 0xb4, 0xa2, 0x34, 0x51, 0x60, 0xb5, 0xe4, 0x11, 0xde, 0x8e, 0x99, 0xd2, 0xd4, 0x0c, 0x5b,
-	0xa4, 0xbc, 0x80, 0x04, 0x52, 0x0d, 0x91, 0xed, 0xa2, 0x19, 0x10, 0x93, 0x0b, 0x21, 0x3f, 0x5a,
-	0x66, 0x5a, 0x87, 0xb8, 0x12, 0x42, 0x4e, 0x3a, 0x78, 0xc3, 0x6a, 0x22, 0x3b, 0x8f, 0xe6, 0xa0,
-	0x3e, 0xbf, 0x68, 0x57, 0x0d, 0x75, 0x3f, 0xa8, 0x2a, 0xc8, 0x8f, 0x22, 0xf2, 0x09, 0xc6, 0x31,
-	0x33, 0xfb, 0x47, 0x4f, 0x58, 0x6c, 0x0b, 0x56, 0x82, 0xfa, 0x02, 0x79, 0xc1, 0xe2, 0x5d, 0x8a,
-	0xb7, 0xde, 0x99, 0x12, 0x21, 0x78, 0xf3, 0x06, 0xf8, 0x0d, 0x9c, 0xba, 0x0e, 0x79, 0xb0, 0x42,
-	0x3c, 0x50, 0x9c, 0x65, 0xe0, 0xa2, 0xb7, 0xe0, 0x01, 0x53, 0xf0, 0xd5, 0x97, 0xee, 0x5a, 0xab,
-	0xf6, 0xdb, 0x1f, 0xbe, 0xf3, 0xe7, 0x2b, 0xdf, 0xd9, 0xfd, 0x15, 0xe1, 0xad, 0x77, 0x5e, 0x12,
-	0x71, 0xf1, 0x87, 0x25, 0xf8, 0xfd, 0x68, 0xe4, 0x3a, 0xc4, 0xc7, 0xad, 0x7d, 0xc8, 0x0a, 0xe0,
-	0x4c, 0x43, 0x54, 0xe6, 0xf6, 0x1e, 0x3d, 0x7e, 0x32, 0xd5, 0xd2, 0x45, 0xe4, 0x1e, 0x6e, 0x2c,
-	0x15, 0xa9, 0xbb, 0x46, 0xda, 0xf8, 0xe1, 0x8d, 0xba, 0x19, 0x14, 0xc2, 0x8c, 0x86, 0xc5, 0x4f,
-	0xe2, 0x5f, 0xd8, 0x4c, 0xb9, 0x95, 0x65, 0x0f, 0x83, 0xfe, 0xf9, 0xbf, 0xbe, 0x73, 0x3e, 0xf7,
-	0xd1, 0xeb, 0xb9, 0x8f, 0xde, 0xcc, 0x7d, 0xf4, 0xcf, 0xdc, 0x47, 0xbf, 0x5f, 0xfa, 0xce, 0xeb,
-	0x4b, 0xdf, 0x79, 0x73, 0xe9, 0x3b, 0x3f, 0x36, 0x57, 0x7c, 0x1a, 0x6e, 0xd8, 0x7f, 0xdf, 0x17,
-	0xff, 0x07, 0x00, 0x00, 0xff, 0xff, 0x6b, 0x0f, 0x8b, 0x28, 0xbb, 0x05, 0x00, 0x00,
-}

@@ -3,7 +3,7 @@ module github.com/cockroachdb/cockroach
 go 1.15
 
 require (
-	cloud.google.com/go v0.45.1
+	cloud.google.com/go v0.62.0
 	github.com/Azure/azure-sdk-for-go v33.4.0+incompatible
 	github.com/Azure/azure-storage-blob-go v0.12.0
 	github.com/Azure/go-autorest/autorest v0.10.2
@@ -35,7 +35,7 @@ require (
 	github.com/cockroachdb/cockroach-go v0.0.0-20200504194139-73ffeee90b62
 	github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79
 	github.com/cockroachdb/datadriven v1.0.1-0.20201212195501-e89bf9ee1861
-	github.com/cockroachdb/errors v1.8.3
+	github.com/cockroachdb/errors v1.8.4
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
@@ -70,18 +70,18 @@ require (
 	github.com/golang-commonmark/puny v0.0.0-20180910110745-050be392d8b8 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/mock v1.5.0
-	github.com/golang/protobuf v1.4.2
+	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.3
 	github.com/google/btree v1.0.0
 	github.com/google/flatbuffers v1.11.0
-	github.com/google/go-cmp v0.5.2
+	github.com/google/go-cmp v0.5.5
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/pprof v0.0.0-20190515194954-54271f7e092f
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/gorhill/cronexpr v0.0.0-20140423231348-a557574d6c02
 	github.com/gorilla/mux v1.8.0
 	github.com/goware/modvendor v0.3.0
-	github.com/grpc-ecosystem/grpc-gateway v1.13.0
+	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-opentracing v0.0.0-20180507213350-8e809c8a8645
 	github.com/jackc/fake v0.0.0-20150926172116-812a484cc733 // indirect
 	github.com/jackc/pgconn v1.8.0
@@ -91,7 +91,7 @@ require (
 	github.com/jaegertracing/jaeger v1.17.0
 	github.com/jordanlewis/gcassert v0.0.0-20200706043056-bf61eb72ee48
 	github.com/kevinburke/go-bindata v3.13.0+incompatible
-	github.com/kisielk/errcheck v1.2.0
+	github.com/kisielk/errcheck v1.5.0
 	github.com/kisielk/gotool v1.0.0
 	github.com/klauspost/compress v1.11.9 // indirect
 	github.com/knz/go-libedit v1.10.1
@@ -146,9 +146,9 @@ require (
 	go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/exp v0.0.0-20210212053707-62dc52270d37
-	golang.org/x/lint v0.0.0-20200130185559-910be7a94367
+	golang.org/x/lint v0.0.0-20200302205851-738671d3881b
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
-	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/sys v0.0.0-20210217105451-b926d437f341
@@ -156,19 +156,17 @@ require (
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	golang.org/x/tools v0.1.0
-	google.golang.org/api v0.9.0
-	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5 // indirect
-	google.golang.org/grpc v1.29.1
-	google.golang.org/protobuf v1.23.0
-	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
-	gopkg.in/yaml.v2 v2.3.0
+	google.golang.org/api v0.30.0
+	google.golang.org/genproto v0.0.0-20200825200019-8632dd797987
+	google.golang.org/grpc v1.31.0
+	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
+	google.golang.org/protobuf v1.26.0
+	gopkg.in/yaml.v2 v2.4.0
 	honnef.co/go/tools v0.0.1-2020.1.6
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
 replace cloud.google.com/go => github.com/cockroachdb/google-cloud-go v0.45.2-0.20210623224357-4fefe580b8d5
-
-replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.2.1-0.20210111172841-8b6737fea948
 
 replace github.com/grpc-ecosystem/grpc-gateway => github.com/cockroachdb/grpc-gateway v1.14.6-0.20200519165156-52697fc4a249
 
