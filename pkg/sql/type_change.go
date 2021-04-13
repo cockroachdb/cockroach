@@ -370,7 +370,9 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 					return err
 				}
 				if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeMultiRegionUpdates; fn != nil {
-					return fn()
+					if err := fn(); err != nil {
+						return err
+					}
 				}
 				repartitionedTables, err = performMultiRegionFinalization(
 					ctx,
