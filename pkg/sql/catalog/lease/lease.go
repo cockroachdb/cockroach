@@ -1719,7 +1719,10 @@ func (m *Manager) RefreshLeases(ctx context.Context, s *stop.Stopper, db *kv.DB)
 					}
 				}
 
-				id, version, name, state := descpb.GetDescriptorMetadata(desc)
+				id, version, name, state, _, err := descpb.GetDescriptorMetadata(desc)
+				if err != nil {
+					panic(err)
+				}
 				dropped := state == descpb.DescriptorState_DROP
 				// Try to refresh the lease to one >= this version.
 				log.VEventf(ctx, 2, "purging old version of descriptor %d@%d (dropped %v)",
@@ -1767,7 +1770,10 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- *desc
 			return
 		}
 		descpb.MaybeSetDescriptorModificationTimeFromMVCCTimestamp(&descriptor, ev.Value.Timestamp)
-		id, version, name, _ := descpb.GetDescriptorMetadata(&descriptor)
+		id, version, name, _, _, err := descpb.GetDescriptorMetadata(&descriptor)
+		if err != nil {
+			panic(err)
+		}
 		if log.V(2) {
 			log.Infof(ctx, "%s: refreshing lease on descriptor: %d (%s), version: %d",
 				ev.Key, id, name, version)
