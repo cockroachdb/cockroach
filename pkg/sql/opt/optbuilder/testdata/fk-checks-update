@@ -13,14 +13,14 @@ update child
  ├── columns: <none>
  ├── fetch columns: c:4 child.p:5
  ├── update-mapping:
- │    └── p_new:7 => child.p:2
+ │    └── p:7 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:7!null c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
+ │    ├── columns: p:7!null c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    ├── scan child
  │    │    └── columns: c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    └── projections
- │         └── 4 [as=p_new:7]
+ │         └── 4 [as=p:7]
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
@@ -28,7 +28,7 @@ update child
                 ├── with-scan &1
                 │    ├── columns: p:8!null
                 │    └── mapping:
-                │         └──  p_new:7 => p:8
+                │         └──  p:7 => p:8
                 ├── scan parent
                 │    └── columns: parent.p:10!null
                 └── filters
@@ -41,14 +41,14 @@ update parent
  ├── columns: <none>
  ├── fetch columns: x:5 parent.p:6 other:7
  ├── update-mapping:
- │    └── p_new:9 => parent.p:2
+ │    └── p:9 => parent.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:9!null x:5 parent.p:6!null other:7 parent.crdb_internal_mvcc_timestamp:8
+ │    ├── columns: p:9!null x:5 parent.p:6!null other:7 parent.crdb_internal_mvcc_timestamp:8
  │    ├── scan parent
  │    │    └── columns: x:5 parent.p:6!null other:7 parent.crdb_internal_mvcc_timestamp:8
  │    └── projections
- │         └── parent.p:6 + 1 [as=p_new:9]
+ │         └── parent.p:6 + 1 [as=p:9]
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── semi-join (hash)
@@ -64,7 +64,7 @@ update parent
                 │    └── with-scan &1
                 │         ├── columns: p:11!null
                 │         └── mapping:
-                │              └──  p_new:9 => p:11
+                │              └──  p:9 => p:11
                 ├── scan child
                 │    └── columns: child.p:13!null
                 └── filters
@@ -81,14 +81,14 @@ update child
  ├── columns: <none>
  ├── fetch columns: child.c:4 p:5
  ├── update-mapping:
- │    └── c_new:7 => child.c:1
+ │    └── c:7 => child.c:1
  ├── input binding: &1
  ├── project
- │    ├── columns: c_new:7!null child.c:4!null p:5!null child.crdb_internal_mvcc_timestamp:6
+ │    ├── columns: c:7!null child.c:4!null p:5!null child.crdb_internal_mvcc_timestamp:6
  │    ├── scan child
  │    │    └── columns: child.c:4!null p:5!null child.crdb_internal_mvcc_timestamp:6
  │    └── projections
- │         └── 4 [as=c_new:7]
+ │         └── 4 [as=c:7]
  └── f-k-checks
       └── f-k-checks-item: grandchild(c) -> child(c)
            └── semi-join (hash)
@@ -104,7 +104,7 @@ update child
                 │    └── with-scan &1
                 │         ├── columns: c:9!null
                 │         └── mapping:
-                │              └──  c_new:7 => c:9
+                │              └──  c:7 => c:9
                 ├── scan grandchild
                 │    └── columns: grandchild.c:11!null
                 └── filters
@@ -118,14 +118,14 @@ update child
  ├── columns: <none>
  ├── fetch columns: c:4 child.p:5
  ├── update-mapping:
- │    └── p_new:7 => child.p:2
+ │    └── p:7 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:7!null c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
+ │    ├── columns: p:7!null c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    ├── scan child
  │    │    └── columns: c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    └── projections
- │         └── 4 [as=p_new:7]
+ │         └── 4 [as=p:7]
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
@@ -133,7 +133,7 @@ update child
                 ├── with-scan &1
                 │    ├── columns: p:8!null
                 │    └── mapping:
-                │         └──  p_new:7 => p:8
+                │         └──  p:7 => p:8
                 ├── scan parent
                 │    └── columns: parent.p:10!null
                 └── filters
@@ -170,16 +170,16 @@ update child
  ├── columns: <none>
  ├── fetch columns: child.c:4 child.p:5
  ├── update-mapping:
- │    ├── c_new:8 => child.c:1
- │    └── p_new:7 => child.p:2
+ │    ├── c:8 => child.c:1
+ │    └── p:7 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:7!null c_new:8!null child.c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
+ │    ├── columns: p:7!null c:8!null child.c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    ├── scan child
  │    │    └── columns: child.c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    └── projections
- │         ├── child.p:5 + 1 [as=p_new:7]
- │         └── child.c:4 + 1 [as=c_new:8]
+ │         ├── child.p:5 + 1 [as=p:7]
+ │         └── child.c:4 + 1 [as=c:8]
  └── f-k-checks
       ├── f-k-checks-item: child(p) -> parent(p)
       │    └── anti-join (hash)
@@ -187,7 +187,7 @@ update child
       │         ├── with-scan &1
       │         │    ├── columns: p:9!null
       │         │    └── mapping:
-      │         │         └──  p_new:7 => p:9
+      │         │         └──  p:7 => p:9
       │         ├── scan parent
       │         │    └── columns: parent.p:11!null
       │         └── filters
@@ -206,7 +206,7 @@ update child
                 │    └── with-scan &1
                 │         ├── columns: c:15!null
                 │         └── mapping:
-                │              └──  c_new:8 => c:15
+                │              └──  c:8 => c:15
                 ├── scan grandchild
                 │    └── columns: grandchild.c:17!null
                 └── filters
@@ -223,15 +223,15 @@ UPDATE child_nullable SET p = NULL
 ----
 update child_nullable
  ├── columns: <none>
- ├── fetch columns: c:4 p:5
+ ├── fetch columns: c:4 child_nullable.p:5
  ├── update-mapping:
- │    └── p_new:7 => p:2
+ │    └── p:7 => child_nullable.p:2
  └── project
-      ├── columns: p_new:7 c:4!null p:5 crdb_internal_mvcc_timestamp:6
+      ├── columns: p:7 c:4!null child_nullable.p:5 crdb_internal_mvcc_timestamp:6
       ├── scan child_nullable
-      │    └── columns: c:4!null p:5 crdb_internal_mvcc_timestamp:6
+      │    └── columns: c:4!null child_nullable.p:5 crdb_internal_mvcc_timestamp:6
       └── projections
-           └── NULL::INT8 [as=p_new:7]
+           └── NULL::INT8 [as=p:7]
 
 # Multiple grandchild tables
 exec-ddl
@@ -245,14 +245,14 @@ update child
  ├── columns: <none>
  ├── fetch columns: c:4 child.p:5
  ├── update-mapping:
- │    └── p_new:7 => child.p:2
+ │    └── p:7 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:7!null c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
+ │    ├── columns: p:7!null c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    ├── scan child
  │    │    └── columns: c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    └── projections
- │         └── 4 [as=p_new:7]
+ │         └── 4 [as=p:7]
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
@@ -260,7 +260,7 @@ update child
                 ├── with-scan &1
                 │    ├── columns: p:8!null
                 │    └── mapping:
-                │         └──  p_new:7 => p:8
+                │         └──  p:7 => p:8
                 ├── scan parent
                 │    └── columns: parent.p:10!null
                 └── filters
@@ -277,14 +277,14 @@ update self
  ├── columns: <none>
  ├── fetch columns: x:4 self.y:5
  ├── update-mapping:
- │    └── y_new:7 => self.y:2
+ │    └── y:7 => self.y:2
  ├── input binding: &1
  ├── project
- │    ├── columns: y_new:7!null x:4!null self.y:5!null crdb_internal_mvcc_timestamp:6
+ │    ├── columns: y:7!null x:4!null self.y:5!null crdb_internal_mvcc_timestamp:6
  │    ├── scan self
  │    │    └── columns: x:4!null self.y:5!null crdb_internal_mvcc_timestamp:6
  │    └── projections
- │         └── 3 [as=y_new:7]
+ │         └── 3 [as=y:7]
  └── f-k-checks
       └── f-k-checks-item: self(y) -> self(x)
            └── anti-join (hash)
@@ -292,7 +292,7 @@ update self
                 ├── with-scan &1
                 │    ├── columns: y:8!null
                 │    └── mapping:
-                │         └──  y_new:7 => y:8
+                │         └──  y:7 => y:8
                 ├── scan self
                 │    └── columns: x:9!null
                 └── filters
@@ -305,14 +305,14 @@ update self
  ├── columns: <none>
  ├── fetch columns: self.x:4 y:5
  ├── update-mapping:
- │    └── x_new:7 => self.x:1
+ │    └── x:7 => self.x:1
  ├── input binding: &1
  ├── project
- │    ├── columns: x_new:7!null self.x:4!null y:5!null crdb_internal_mvcc_timestamp:6
+ │    ├── columns: x:7!null self.x:4!null y:5!null crdb_internal_mvcc_timestamp:6
  │    ├── scan self
  │    │    └── columns: self.x:4!null y:5!null crdb_internal_mvcc_timestamp:6
  │    └── projections
- │         └── 3 [as=x_new:7]
+ │         └── 3 [as=x:7]
  └── f-k-checks
       └── f-k-checks-item: self(y) -> self(x)
            └── semi-join (hash)
@@ -328,7 +328,7 @@ update self
                 │    └── with-scan &1
                 │         ├── columns: x:9!null
                 │         └── mapping:
-                │              └──  x_new:7 => x:9
+                │              └──  x:7 => x:9
                 ├── scan self
                 │    └── columns: y:11!null
                 └── filters
@@ -352,22 +352,22 @@ UPDATE child_multicol_simple SET a = 1, b = NULL, c = 1 WHERE k = 1
 ----
 update child_multicol_simple
  ├── columns: <none>
- ├── fetch columns: k:6 a:7 b:8 c:9
+ ├── fetch columns: k:6 child_multicol_simple.a:7 child_multicol_simple.b:8 c:9
  ├── update-mapping:
- │    ├── a_new:11 => a:2
- │    ├── b_new:12 => b:3
- │    └── a_new:11 => c:4
+ │    ├── a:11 => child_multicol_simple.a:2
+ │    ├── b:12 => child_multicol_simple.b:3
+ │    └── a:11 => c:4
  └── project
-      ├── columns: a_new:11!null b_new:12 k:6!null a:7 b:8 c:9 crdb_internal_mvcc_timestamp:10
+      ├── columns: a:11!null b:12 k:6!null child_multicol_simple.a:7 child_multicol_simple.b:8 c:9 crdb_internal_mvcc_timestamp:10
       ├── select
-      │    ├── columns: k:6!null a:7 b:8 c:9 crdb_internal_mvcc_timestamp:10
+      │    ├── columns: k:6!null child_multicol_simple.a:7 child_multicol_simple.b:8 c:9 crdb_internal_mvcc_timestamp:10
       │    ├── scan child_multicol_simple
-      │    │    └── columns: k:6!null a:7 b:8 c:9 crdb_internal_mvcc_timestamp:10
+      │    │    └── columns: k:6!null child_multicol_simple.a:7 child_multicol_simple.b:8 c:9 crdb_internal_mvcc_timestamp:10
       │    └── filters
       │         └── k:6 = 1
       └── projections
-           ├── 1 [as=a_new:11]
-           └── NULL::INT8 [as=b_new:12]
+           ├── 1 [as=a:11]
+           └── NULL::INT8 [as=b:12]
 
 exec-ddl
 CREATE TABLE child_multicol_full (
@@ -385,12 +385,12 @@ update child_multicol_full
  ├── columns: <none>
  ├── fetch columns: k:6 child_multicol_full.a:7 child_multicol_full.b:8 child_multicol_full.c:9
  ├── update-mapping:
- │    ├── a_new:11 => child_multicol_full.a:2
- │    ├── b_new:12 => child_multicol_full.b:3
- │    └── a_new:11 => child_multicol_full.c:4
+ │    ├── a:11 => child_multicol_full.a:2
+ │    ├── b:12 => child_multicol_full.b:3
+ │    └── a:11 => child_multicol_full.c:4
  ├── input binding: &1
  ├── project
- │    ├── columns: a_new:11!null b_new:12 k:6!null child_multicol_full.a:7 child_multicol_full.b:8 child_multicol_full.c:9 child_multicol_full.crdb_internal_mvcc_timestamp:10
+ │    ├── columns: a:11!null b:12 k:6!null child_multicol_full.a:7 child_multicol_full.b:8 child_multicol_full.c:9 child_multicol_full.crdb_internal_mvcc_timestamp:10
  │    ├── select
  │    │    ├── columns: k:6!null child_multicol_full.a:7 child_multicol_full.b:8 child_multicol_full.c:9 child_multicol_full.crdb_internal_mvcc_timestamp:10
  │    │    ├── scan child_multicol_full
@@ -398,8 +398,8 @@ update child_multicol_full
  │    │    └── filters
  │    │         └── k:6 = 1
  │    └── projections
- │         ├── 1 [as=a_new:11]
- │         └── NULL::INT8 [as=b_new:12]
+ │         ├── 1 [as=a:11]
+ │         └── NULL::INT8 [as=b:12]
  └── f-k-checks
       └── f-k-checks-item: child_multicol_full(a,b,c) -> parent_multicol(a,b,c)
            └── anti-join (hash)
@@ -407,9 +407,9 @@ update child_multicol_full
                 ├── with-scan &1
                 │    ├── columns: a:13!null b:14 c:15!null
                 │    └── mapping:
-                │         ├──  a_new:11 => a:13
-                │         ├──  b_new:12 => b:14
-                │         └──  a_new:11 => c:15
+                │         ├──  a:11 => a:13
+                │         ├──  b:12 => b:14
+                │         └──  a:11 => c:15
                 ├── scan parent_multicol
                 │    └── columns: parent_multicol.a:16!null parent_multicol.b:17!null parent_multicol.c:18!null
                 └── filters
@@ -422,21 +422,21 @@ UPDATE child_multicol_full SET a = NULL, b = NULL, c = NULL WHERE k = 1
 ----
 update child_multicol_full
  ├── columns: <none>
- ├── fetch columns: k:6 a:7 b:8 c:9
+ ├── fetch columns: k:6 child_multicol_full.a:7 b:8 c:9
  ├── update-mapping:
- │    ├── a_new:11 => a:2
- │    ├── a_new:11 => b:3
- │    └── a_new:11 => c:4
+ │    ├── a:11 => child_multicol_full.a:2
+ │    ├── a:11 => b:3
+ │    └── a:11 => c:4
  └── project
-      ├── columns: a_new:11 k:6!null a:7 b:8 c:9 crdb_internal_mvcc_timestamp:10
+      ├── columns: a:11 k:6!null child_multicol_full.a:7 b:8 c:9 crdb_internal_mvcc_timestamp:10
       ├── select
-      │    ├── columns: k:6!null a:7 b:8 c:9 crdb_internal_mvcc_timestamp:10
+      │    ├── columns: k:6!null child_multicol_full.a:7 b:8 c:9 crdb_internal_mvcc_timestamp:10
       │    ├── scan child_multicol_full
-      │    │    └── columns: k:6!null a:7 b:8 c:9 crdb_internal_mvcc_timestamp:10
+      │    │    └── columns: k:6!null child_multicol_full.a:7 b:8 c:9 crdb_internal_mvcc_timestamp:10
       │    └── filters
       │         └── k:6 = 1
       └── projections
-           └── NULL::INT8 [as=a_new:11]
+           └── NULL::INT8 [as=a:11]
 
 exec-ddl
 CREATE TABLE two (a int, b int, primary key (a, b))
@@ -466,14 +466,14 @@ update fam
  ├── columns: <none>
  ├── fetch columns: fam.a:8 fam.b:9 fam.c:10 rowid:13
  ├── update-mapping:
- │    └── c_new:15 => fam.c:3
+ │    └── c:15 => fam.c:3
  ├── input binding: &1
  ├── project
- │    ├── columns: c_new:15!null fam.a:8 fam.b:9 fam.c:10 fam.d:11 rowid:13!null
+ │    ├── columns: c:15!null fam.a:8 fam.b:9 fam.c:10 fam.d:11 rowid:13!null
  │    ├── scan fam
  │    │    └── columns: fam.a:8 fam.b:9 fam.c:10 fam.d:11 rowid:13!null
  │    └── projections
- │         └── 3 [as=c_new:15]
+ │         └── 3 [as=c:15]
  └── f-k-checks
       └── f-k-checks-item: fam(c,d) -> two(a,b)
            └── anti-join (hash)
@@ -483,7 +483,7 @@ update fam
                 │    ├── with-scan &1
                 │    │    ├── columns: c:16!null d:17
                 │    │    └── mapping:
-                │    │         ├──  c_new:15 => c:16
+                │    │         ├──  c:15 => c:16
                 │    │         └──  fam.d:11 => d:17
                 │    └── filters
                 │         └── d:17 IS NOT NULL
@@ -500,14 +500,14 @@ update fam
  ├── columns: <none>
  ├── fetch columns: fam.d:11 e:12 rowid:13
  ├── update-mapping:
- │    └── d_new:15 => fam.d:4
+ │    └── d:15 => fam.d:4
  ├── input binding: &1
  ├── project
- │    ├── columns: d_new:15!null fam.c:10 fam.d:11 e:12 rowid:13!null
+ │    ├── columns: d:15!null fam.c:10 fam.d:11 e:12 rowid:13!null
  │    ├── scan fam
  │    │    └── columns: fam.c:10 fam.d:11 e:12 rowid:13!null
  │    └── projections
- │         └── 3 [as=d_new:15]
+ │         └── 3 [as=d:15]
  └── f-k-checks
       └── f-k-checks-item: fam(c,d) -> two(a,b)
            └── anti-join (hash)
@@ -518,7 +518,7 @@ update fam
                 │    │    ├── columns: c:16 d:17!null
                 │    │    └── mapping:
                 │    │         ├──  fam.c:10 => c:16
-                │    │         └──  d_new:15 => d:17
+                │    │         └──  d:15 => d:17
                 │    └── filters
                 │         └── c:16 IS NOT NULL
                 ├── scan two
@@ -535,14 +535,14 @@ update child
  ├── columns: <none>
  ├── fetch columns: c:4 child.p:5
  ├── update-mapping:
- │    └── p_new:7 => child.p:2
+ │    └── p:7 => child.p:2
  ├── input binding: &1
  ├── project
- │    ├── columns: p_new:7!null c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
+ │    ├── columns: p:7!null c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    ├── scan child
  │    │    └── columns: c:4!null child.p:5!null child.crdb_internal_mvcc_timestamp:6
  │    └── projections
- │         └── 4 [as=p_new:7]
+ │         └── 4 [as=p:7]
  └── f-k-checks
       └── f-k-checks-item: child(p) -> parent(p)
            └── anti-join (hash)
@@ -551,7 +551,7 @@ update child
                 ├── with-scan &1
                 │    ├── columns: p:8!null
                 │    └── mapping:
-                │         └──  p_new:7 => p:8
+                │         └──  p:7 => p:8
                 ├── scan parent
                 │    └── columns: parent.p:10!null
                 └── filters

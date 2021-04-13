@@ -794,7 +794,7 @@ func (mb *mutationBuilder) roundDecimalValues(colIDs opt.OptionalColList, roundC
 		// addUpdateColumns would not include columns in the FROM clause. Those
 		// columns are only in-scope in the RETURNING clause via
 		// mb.extraAccessibleCols.
-		scopeCol.name = mb.tab.Column(i).ColName()
+		// scopeCol.name = mb.tab.Column(i).ColName()
 	}
 
 	if projectionsScope != nil {
@@ -969,26 +969,6 @@ func (mb *mutationBuilder) projectPartialIndexColsImpl(putScope, delScope *scope
 
 		mb.b.constructProjectForScope(mb.outScope, projectionScope)
 		mb.outScope = projectionScope
-	}
-}
-
-// disambiguateColumns ranges over the scope and ensures that at most one column
-// has each table column name, and that name refers to the column with the final
-// value that the mutation applies.
-func (mb *mutationBuilder) disambiguateColumns() {
-	// Determine the set of input columns that will have their names preserved.
-	var preserve opt.ColSet
-	for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-		if colID := mb.mapToReturnColID(i); colID != 0 {
-			preserve.Add(colID)
-		}
-	}
-
-	// Clear names of all non-preserved columns.
-	for i := range mb.outScope.cols {
-		if !preserve.Contains(mb.outScope.cols[i].id) {
-			mb.outScope.cols[i].clearName()
-		}
 	}
 }
 

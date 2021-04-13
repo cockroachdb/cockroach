@@ -11,7 +11,6 @@
 package optbuilder
 
 import (
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -648,10 +647,6 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
-	// Disambiguate names so that references in any expressions, such as a
-	// check constraint, refer to the correct columns.
-	mb.disambiguateColumns()
-
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
@@ -860,10 +855,6 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 	// Merge input insert and update columns using CASE expressions.
 	mb.projectUpsertColumns()
 
-	// Disambiguate names so that references in any expressions, such as a
-	// check constraint, refer to the correct columns.
-	mb.disambiguateColumns()
-
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 
@@ -960,9 +951,10 @@ func (mb *mutationBuilder) projectUpsertColumns() {
 			mb.b.factory.ConstructVariable(updateColID),
 		)
 
-		alias := fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName())
+		// alias := fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName())
+		alias := mb.tab.Column(i).ColName()
 		typ := mb.md.ColumnMeta(insertColID).Type
-		scopeCol := mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
+		scopeCol := mb.b.synthesizeColumn(projectionsScope, string(alias), typ, nil /* expr */, caseExpr)
 
 		// Assign name to synthesized column.
 		scopeCol.name = col.ColName()

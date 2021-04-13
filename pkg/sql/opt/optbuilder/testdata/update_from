@@ -14,10 +14,10 @@ update abc
  ├── columns: <none>
  ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
  ├── update-mapping:
- │    ├── b_new:13 => abc.b:2
- │    └── c_new:14 => abc.c:3
+ │    ├── b:13 => abc.b:2
+ │    └── c:14 => abc.c:3
  └── project
-      ├── columns: b_new:13 c_new:14 abc.a:5!null abc.b:6 abc.c:7 other.a:9!null other.b:10 other.c:11 other.crdb_internal_mvcc_timestamp:12
+      ├── columns: b:13 c:14 abc.a:5!null abc.b:6 abc.c:7 other.a:9!null other.b:10 other.c:11 other.crdb_internal_mvcc_timestamp:12
       ├── inner-join (merge)
       │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 other.a:9!null other.b:10 other.c:11 other.crdb_internal_mvcc_timestamp:12
       │    ├── left ordering: +5
@@ -30,8 +30,8 @@ update abc
       │    │    └── ordering: +9
       │    └── filters (true)
       └── projections
-           ├── other.b:10 + 1 [as=b_new:13]
-           └── other.c:11 + 1 [as=c_new:14]
+           ├── other.b:10 + 1 [as=b:13]
+           └── other.c:11 + 1 [as=c:14]
 
 # Test when Update uses multiple tables.
 opt
@@ -86,10 +86,10 @@ update abc
  ├── columns: a:1!null new_b:2 old_b:10 new_c:3 old_c:11
  ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
  ├── update-mapping:
- │    ├── b_new:13 => abc.b:2
- │    └── c_new:14 => abc.c:3
+ │    ├── b:13 => abc.b:2
+ │    └── c:14 => abc.c:3
  └── project
-      ├── columns: b_new:13 c_new:14 abc.a:5!null abc.b:6 abc.c:7 old.b:10 old.c:11
+      ├── columns: b:13 c:14 abc.a:5!null abc.b:6 abc.c:7 old.b:10 old.c:11
       ├── inner-join (merge)
       │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11
       │    ├── left ordering: +5
@@ -102,8 +102,8 @@ update abc
       │    │    └── ordering: +9
       │    └── filters (true)
       └── projections
-           ├── old.b:10 + 1 [as=b_new:13]
-           └── old.c:11 + 2 [as=c_new:14]
+           ├── old.b:10 + 1 [as=b:13]
+           └── old.c:11 + 2 [as=c:14]
 
 # Check if RETURNING * returns everything
 opt
@@ -113,10 +113,10 @@ update abc
  ├── columns: a:1!null b:2 c:3 a:9 b:10 c:11
  ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
  ├── update-mapping:
- │    ├── b_new:13 => abc.b:2
- │    └── c_new:14 => abc.c:3
+ │    ├── b:13 => abc.b:2
+ │    └── c:14 => abc.c:3
  └── project
-      ├── columns: b_new:13 c_new:14 abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11
+      ├── columns: b:13 c:14 abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11
       ├── inner-join (merge)
       │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11
       │    ├── left ordering: +5
@@ -129,8 +129,8 @@ update abc
       │    │    └── ordering: +9
       │    └── filters (true)
       └── projections
-           ├── old.b:10 + 1 [as=b_new:13]
-           └── old.c:11 + 2 [as=c_new:14]
+           ├── old.b:10 + 1 [as=b:13]
+           └── old.c:11 + 2 [as=c:14]
 
 # Check if the joins are optimized (check if the filters are pushed down).
 opt
@@ -140,10 +140,10 @@ update abc
  ├── columns: <none>
  ├── fetch columns: abc.a:5 abc.b:6 abc.c:7
  ├── update-mapping:
- │    ├── b_new:13 => abc.b:2
- │    └── c_new:14 => abc.c:3
+ │    ├── b:13 => abc.b:2
+ │    └── c:14 => abc.c:3
  └── project
-      ├── columns: b_new:13 c_new:14 abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11 old.crdb_internal_mvcc_timestamp:12
+      ├── columns: b:13 c:14 abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11 old.crdb_internal_mvcc_timestamp:12
       ├── inner-join (cross)
       │    ├── columns: abc.a:5!null abc.b:6 abc.c:7 old.a:9!null old.b:10 old.c:11 old.crdb_internal_mvcc_timestamp:12
       │    ├── scan abc
@@ -154,8 +154,8 @@ update abc
       │    │    └── constraint: /9: [/2 - /2]
       │    └── filters (true)
       └── projections
-           ├── old.b:10 + 1 [as=b_new:13]
-           └── old.c:11 + 2 [as=c_new:14]
+           ├── old.b:10 + 1 [as=b:13]
+           └── old.c:11 + 2 [as=c:14]
 
 # Update values of table from values expression
 opt
@@ -373,9 +373,8 @@ project
       ├── fetch columns: a:4 rowid:5
       ├── update-mapping:
       │    └── b:8 => a:1
-      ├── check columns: check1:9
       └── project
-           ├── columns: check1:9 a:4!null rowid:5!null crdb_internal_mvcc_timestamp:6 column1:7!null b:8
+           ├── columns: check1:9!null a:4!null rowid:5!null crdb_internal_mvcc_timestamp:6 column1:7!null b:8
            ├── project
            │    ├── columns: b:8 a:4!null rowid:5!null crdb_internal_mvcc_timestamp:6 column1:7!null
            │    ├── select
@@ -393,4 +392,4 @@ project
            │    └── projections
            │         └── crdb_internal.round_decimal_values(column1:7, 2) [as=b:8]
            └── projections
-                └── b:8 > 0 [as=check1:9]
+                └── column1:7 > 0 [as=check1:9]

@@ -337,13 +337,10 @@ func (pb *projectionBuilder) Add(
 		pb.outScope.appendColumnsFromScope(pb.inScope)
 	}
 	typedExpr := pb.inScope.resolveAndRequireType(expr, desiredType)
-	// Instead of passing the column name here, we let the column get an
-	// auto-generated name in the metadata. We then override it below. This
-	// reduces clashes between column names in the metadata.
-	// TODO(radu): is this really better than using the real column name?
-	scopeCol := pb.outScope.addColumn("" /* alias */, typedExpr)
+	// scopeCol := pb.outScope.addColumn("" /* alias */, typedExpr)
+	scopeCol := pb.outScope.replaceColumn(string(name), typedExpr)
 	scalar := pb.b.buildScalar(typedExpr, pb.inScope, pb.outScope, scopeCol, nil)
-	scopeCol.name = name
+	// scopeCol.name = name
 
 	return scopeCol.id, scalar
 }

@@ -55,17 +55,17 @@ UPSERT INTO kj VALUES (1, '{"a": 2}')
 upsert kj
  ├── columns: <none>
  ├── arbiter indexes: primary
- ├── canary column: k:7
- ├── fetch columns: k:7 j:8
+ ├── canary column: kj.k:7
+ ├── fetch columns: kj.k:7 j:8
  ├── insert-mapping:
- │    ├── column1:5 => k:1
+ │    ├── column1:5 => kj.k:1
  │    └── column2:6 => j:2
  ├── update-mapping:
  │    └── column2:6 => j:2
  └── project
-      ├── columns: upsert_k:11 column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9
+      ├── columns: k:11 column1:5!null column2:6!null kj.k:7 j:8 crdb_internal_mvcc_timestamp:9
       ├── left-join (hash)
-      │    ├── columns: column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9
+      │    ├── columns: column1:5!null column2:6!null kj.k:7 j:8 crdb_internal_mvcc_timestamp:9
       │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: column1:5!null column2:6!null
       │    │    ├── grouping columns: column1:5!null
@@ -76,11 +76,11 @@ upsert kj
       │    │         └── first-agg [as=column2:6]
       │    │              └── column2:6
       │    ├── scan kj
-      │    │    └── columns: k:7!null j:8 crdb_internal_mvcc_timestamp:9
+      │    │    └── columns: kj.k:7!null j:8 crdb_internal_mvcc_timestamp:9
       │    └── filters
-      │         └── column1:5 = k:7
+      │         └── column1:5 = kj.k:7
       └── projections
-           └── CASE WHEN k:7 IS NULL THEN column1:5 ELSE k:7 END [as=upsert_k:11]
+           └── CASE WHEN kj.k:7 IS NULL THEN column1:5 ELSE kj.k:7 END [as=k:11]
 
 build
 INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO NOTHING
@@ -113,19 +113,19 @@ INSERT INTO kj VALUES (1, '{"a": 2}') ON CONFLICT (k) DO UPDATE SET j = '{"a": 3
 upsert kj
  ├── columns: <none>
  ├── arbiter indexes: primary
- ├── canary column: k:7
- ├── fetch columns: k:7 j:8
+ ├── canary column: kj.k:7
+ ├── fetch columns: kj.k:7 kj.j:8
  ├── insert-mapping:
- │    ├── column1:5 => k:1
- │    └── column2:6 => j:2
+ │    ├── column1:5 => kj.k:1
+ │    └── column2:6 => kj.j:2
  ├── update-mapping:
- │    └── upsert_j:13 => j:2
+ │    └── j:13 => kj.j:2
  └── project
-      ├── columns: upsert_k:12 upsert_j:13!null column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9 j_new:11!null
+      ├── columns: k:12 j:13!null column1:5!null column2:6!null kj.k:7 kj.j:8 crdb_internal_mvcc_timestamp:9 j:11!null
       ├── project
-      │    ├── columns: j_new:11!null column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9
+      │    ├── columns: j:11!null column1:5!null column2:6!null kj.k:7 kj.j:8 crdb_internal_mvcc_timestamp:9
       │    ├── left-join (hash)
-      │    │    ├── columns: column1:5!null column2:6!null k:7 j:8 crdb_internal_mvcc_timestamp:9
+      │    │    ├── columns: column1:5!null column2:6!null kj.k:7 kj.j:8 crdb_internal_mvcc_timestamp:9
       │    │    ├── ensure-upsert-distinct-on
       │    │    │    ├── columns: column1:5!null column2:6!null
       │    │    │    ├── grouping columns: column1:5!null
@@ -136,33 +136,33 @@ upsert kj
       │    │    │         └── first-agg [as=column2:6]
       │    │    │              └── column2:6
       │    │    ├── scan kj
-      │    │    │    └── columns: k:7!null j:8 crdb_internal_mvcc_timestamp:9
+      │    │    │    └── columns: kj.k:7!null kj.j:8 crdb_internal_mvcc_timestamp:9
       │    │    └── filters
-      │    │         └── column1:5 = k:7
+      │    │         └── column1:5 = kj.k:7
       │    └── projections
-      │         └── '{"a": 3}' [as=j_new:11]
+      │         └── '{"a": 3}' [as=j:11]
       └── projections
-           ├── CASE WHEN k:7 IS NULL THEN column1:5 ELSE k:7 END [as=upsert_k:12]
-           └── CASE WHEN k:7 IS NULL THEN column2:6 ELSE j_new:11 END [as=upsert_j:13]
+           ├── CASE WHEN kj.k:7 IS NULL THEN column1:5 ELSE kj.k:7 END [as=k:12]
+           └── CASE WHEN kj.k:7 IS NULL THEN column2:6 ELSE j:11 END [as=j:13]
 
 build
 UPDATE kj SET j = '{"a": 3}' WHERE k > 0
 ----
 update kj
  ├── columns: <none>
- ├── fetch columns: k:5 j:6
+ ├── fetch columns: k:5 kj.j:6
  ├── update-mapping:
- │    └── j_new:9 => j:2
+ │    └── j:9 => kj.j:2
  └── project
-      ├── columns: j_new:9!null k:5!null j:6 crdb_internal_mvcc_timestamp:7
+      ├── columns: j:9!null k:5!null kj.j:6 crdb_internal_mvcc_timestamp:7
       ├── select
-      │    ├── columns: k:5!null j:6 crdb_internal_mvcc_timestamp:7
+      │    ├── columns: k:5!null kj.j:6 crdb_internal_mvcc_timestamp:7
       │    ├── scan kj
-      │    │    └── columns: k:5!null j:6 crdb_internal_mvcc_timestamp:7
+      │    │    └── columns: k:5!null kj.j:6 crdb_internal_mvcc_timestamp:7
       │    └── filters
       │         └── k:5 > 0
       └── projections
-           └── '{"a": 3}' [as=j_new:9]
+           └── '{"a": 3}' [as=j:9]
 
 build
 DELETE FROM kj WHERE j @> '{"a": 2}'

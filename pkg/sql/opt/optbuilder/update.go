@@ -189,6 +189,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	// columns in case of tuple assignment).
 	projectionsScope := mb.outScope.replace()
 	projectionsScope.appendColumnsFromScope(mb.outScope)
+	// projectionsScope.appendColumnsFromScope(mb.fetchScope)
 
 	checkCol := func(sourceCol *scopeColumn, targetColID opt.ColumnID) {
 		// Type check the input expression against the corresponding table column.
@@ -197,27 +198,9 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 		// Add source column ID to the list of columns to update.
 		mb.updateColIDs[ord] = sourceCol.id
-
-		// Rename the column to match the target column being updated.
-		sourceCol.name = mb.tab.Column(ord).ColName()
 	}
 
 	addCol := func(expr tree.Expr, targetColID opt.ColumnID) {
-		// If the expression is already a scopeColumn, we can skip creating a
-		// new scopeColumn and proceed with type checking and adding the column
-		// to the list of source columns to update. The expression can be a
-		// scopeColumn when addUpdateCols is called from the
-		// onUpdateCascadeBuilder while building foreign key cascading updates.
-		//
-		// The input scopeColumn is a pointer to a column in mb.outScope. It was
-		// copied by value to projectionsScope. The checkCol function mutates
-		// the name of projected columns, so we must lookup the column in
-		// projectionsScope so that the correct scopeColumn is renamed.
-		if scopeCol, ok := expr.(*scopeColumn); ok {
-			checkCol(projectionsScope.getColumn(scopeCol.id), targetColID)
-			return
-		}
-
 		// Allow right side of SET to be DEFAULT.
 		if _, ok := expr.(tree.DefaultVal); ok {
 			expr = mb.parseDefaultOrComputedExpr(targetColID)
@@ -227,7 +210,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		targetColMeta := mb.md.ColumnMeta(targetColID)
 		desiredType := targetColMeta.Type
 		texpr := inScope.resolveType(expr, desiredType)
-		scopeCol := projectionsScope.addColumn(targetColMeta.Alias+"_new", texpr)
+		scopeCol := projectionsScope.replaceColumn(targetColMeta.Alias, texpr)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 
 		checkCol(scopeCol, targetColID)
@@ -297,7 +280,11 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// is referenced). These do not need to be set back to true again because
 	// mutation columns are not projected by the Update operator.
 	for i := range mb.outScope.cols {
-		mb.outScope.cols[i].mutation = false
+		col := &mb.outScope.cols[i]
+		col.mutation = false
+		if col.table == excludedTableName {
+			col.clearName()
+		}
 	}
 
 	// Add non-computed columns that are being dropped or added (mutated) to the
@@ -311,10 +298,6 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	// the inserted columns.
 	mb.roundDecimalValues(mb.updateColIDs, false /* roundComputedCols */)
 
-	// Disambiguate names so that references in the computed expression refer to
-	// the correct columns.
-	mb.disambiguateColumns()
-
 	// Add all computed columns in case their values have changed.
 	mb.addSynthesizedComputedCols(mb.updateColIDs, true /* restrict */)
 
@@ -325,10 +308,6 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 // buildUpdate constructs an Update operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
 func (mb *mutationBuilder) buildUpdate(returning tree.ReturningExprs) {
-	// Disambiguate names so that references in any expressions, such as a
-	// check constraint, refer to the correct columns.
-	mb.disambiguateColumns()
-
 	// Add any check constraint boolean columns to the input.
 	mb.addCheckConstraintCols()
 

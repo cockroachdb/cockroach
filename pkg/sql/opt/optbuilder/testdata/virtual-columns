@@ -97,14 +97,14 @@ insert t
  ├── insert-mapping:
  │    ├── column1:5 => a:1
  │    ├── column2:6 => b:2
- │    └── column7:7 => v:3
+ │    └── v:7 => t.v:3
  └── project
-      ├── columns: column7:7!null column1:5!null column2:6!null
+      ├── columns: v:7!null column1:5!null column2:6!null
       ├── values
       │    ├── columns: column1:5!null column2:6!null
       │    └── (1, 1)
       └── projections
-           └── column1:5 + column2:6 [as=column7:7]
+           └── column1:5 + column2:6 [as=v:7]
 
 build
 INSERT INTO t(a) VALUES (1)
@@ -113,19 +113,19 @@ insert t
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:5 => a:1
- │    ├── column6:6 => b:2
- │    └── column7:7 => v:3
+ │    ├── b:6 => t.b:2
+ │    └── v:7 => t.v:3
  └── project
-      ├── columns: column7:7 column1:5!null column6:6
+      ├── columns: v:7 column1:5!null b:6
       ├── project
-      │    ├── columns: column6:6 column1:5!null
+      │    ├── columns: b:6 column1:5!null
       │    ├── values
       │    │    ├── columns: column1:5!null
       │    │    └── (1,)
       │    └── projections
-      │         └── NULL::INT8 [as=column6:6]
+      │         └── NULL::INT8 [as=b:6]
       └── projections
-           └── column1:5 + column6:6 [as=column7:7]
+           └── column1:5 + b:6 [as=v:7]
 
 build
 INSERT INTO t(a, b, v) VALUES (1, 1, 1)
@@ -138,18 +138,18 @@ INSERT INTO t VALUES (1, 1) RETURNING v
 project
  ├── columns: v:3!null
  └── insert t
-      ├── columns: a:1!null b:2!null v:3!null
+      ├── columns: a:1!null b:2!null t.v:3!null
       ├── insert-mapping:
       │    ├── column1:5 => a:1
       │    ├── column2:6 => b:2
-      │    └── column7:7 => v:3
+      │    └── v:7 => t.v:3
       └── project
-           ├── columns: column7:7!null column1:5!null column2:6!null
+           ├── columns: v:7!null column1:5!null column2:6!null
            ├── values
            │    ├── columns: column1:5!null column2:6!null
            │    └── (1, 1)
            └── projections
-                └── column1:5 + column2:6 [as=column7:7]
+                └── column1:5 + column2:6 [as=v:7]
 
 build
 INSERT INTO t_idx VALUES (1, 1)
@@ -159,14 +159,14 @@ insert t_idx
  ├── insert-mapping:
  │    ├── column1:5 => a:1
  │    ├── column2:6 => b:2
- │    └── column7:7 => v:3
+ │    └── v:7 => t_idx.v:3
  └── project
-      ├── columns: column7:7!null column1:5!null column2:6!null
+      ├── columns: v:7!null column1:5!null column2:6!null
       ├── values
       │    ├── columns: column1:5!null column2:6!null
       │    └── (1, 1)
       └── projections
-           └── column1:5 + column2:6 [as=column7:7]
+           └── column1:5 + column2:6 [as=v:7]
 
 build
 INSERT INTO t_check VALUES (1, 1)
@@ -176,22 +176,22 @@ insert t_check
  ├── insert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
- │    ├── column8:8 => v:3
- │    └── column9:9 => w:4
+ │    ├── v:8 => t_check.v:3
+ │    └── w:9 => t_check.w:4
  ├── check columns: check1:10 check2:11
  └── project
-      ├── columns: check1:10!null check2:11!null column1:6!null column2:7!null column8:8!null column9:9!null
+      ├── columns: check1:10!null check2:11!null column1:6!null column2:7!null v:8!null w:9!null
       ├── project
-      │    ├── columns: column8:8!null column9:9!null column1:6!null column2:7!null
+      │    ├── columns: v:8!null w:9!null column1:6!null column2:7!null
       │    ├── values
       │    │    ├── columns: column1:6!null column2:7!null
       │    │    └── (1, 1)
       │    └── projections
-      │         ├── column1:6 + column2:7 [as=column8:8]
-      │         └── column1:6 * column2:7 [as=column9:9]
+      │         ├── column1:6 + column2:7 [as=v:8]
+      │         └── column1:6 * column2:7 [as=w:9]
       └── projections
-           ├── column8:8 < column9:9 [as=check1:10]
-           └── column8:8 >= 10 [as=check2:11]
+           ├── v:8 < w:9 [as=check1:10]
+           └── v:8 >= 10 [as=check2:11]
 
 # -- DELETE tests --
 
@@ -417,178 +417,178 @@ UPDATE t SET a=a+1
 ----
 update t
  ├── columns: <none>
- ├── fetch columns: a:5 b:6 v:7
+ ├── fetch columns: t.a:5 b:6 t.v:7
  ├── update-mapping:
- │    ├── a_new:9 => a:1
- │    └── column10:10 => v:3
+ │    ├── a:9 => t.a:1
+ │    └── v:10 => t.v:3
  └── project
-      ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── columns: v:10 t.a:5!null b:6 t.v:7 crdb_internal_mvcc_timestamp:8 a:9!null
       ├── project
-      │    ├── columns: a_new:9!null a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: a:9!null t.a:5!null b:6 t.v:7 crdb_internal_mvcc_timestamp:8
       │    ├── project
-      │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    ├── columns: t.v:7 t.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    ├── scan t
-      │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── columns: t.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    └── computed column expressions
-      │    │    │         └── v:7
-      │    │    │              └── a:5 + b:6
+      │    │    │         └── t.v:7
+      │    │    │              └── t.a:5 + b:6
       │    │    └── projections
-      │    │         └── a:5 + b:6 [as=v:7]
+      │    │         └── t.a:5 + b:6 [as=t.v:7]
       │    └── projections
-      │         └── a:5 + 1 [as=a_new:9]
+      │         └── t.a:5 + 1 [as=a:9]
       └── projections
-           └── a_new:9 + b:6 [as=column10:10]
+           └── a:9 + b:6 [as=v:10]
 
 build
 UPDATE t SET a=a+1 WHERE v=1
 ----
 update t
  ├── columns: <none>
- ├── fetch columns: a:5 b:6 v:7
+ ├── fetch columns: t.a:5 b:6 t.v:7
  ├── update-mapping:
- │    ├── a_new:9 => a:1
- │    └── column10:10 => v:3
+ │    ├── a:9 => t.a:1
+ │    └── v:10 => t.v:3
  └── project
-      ├── columns: column10:10 a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── columns: v:10 t.a:5!null b:6 t.v:7!null crdb_internal_mvcc_timestamp:8 a:9!null
       ├── project
-      │    ├── columns: a_new:9!null a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      │    ├── columns: a:9!null t.a:5!null b:6 t.v:7!null crdb_internal_mvcc_timestamp:8
       │    ├── select
-      │    │    ├── columns: a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      │    │    ├── columns: t.a:5!null b:6 t.v:7!null crdb_internal_mvcc_timestamp:8
       │    │    ├── project
-      │    │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── columns: t.v:7 t.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    ├── scan t
-      │    │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    ├── columns: t.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:7
-      │    │    │    │              └── a:5 + b:6
+      │    │    │    │         └── t.v:7
+      │    │    │    │              └── t.a:5 + b:6
       │    │    │    └── projections
-      │    │    │         └── a:5 + b:6 [as=v:7]
+      │    │    │         └── t.a:5 + b:6 [as=t.v:7]
       │    │    └── filters
-      │    │         └── v:7 = 1
+      │    │         └── t.v:7 = 1
       │    └── projections
-      │         └── a:5 + 1 [as=a_new:9]
+      │         └── t.a:5 + 1 [as=a:9]
       └── projections
-           └── a_new:9 + b:6 [as=column10:10]
+           └── a:9 + b:6 [as=v:10]
 
 build
 UPDATE t SET a=a+1 WHERE a+b=1
 ----
 update t
  ├── columns: <none>
- ├── fetch columns: a:5 b:6 v:7
+ ├── fetch columns: t.a:5 b:6 t.v:7
  ├── update-mapping:
- │    ├── a_new:9 => a:1
- │    └── column10:10 => v:3
+ │    ├── a:9 => t.a:1
+ │    └── v:10 => t.v:3
  └── project
-      ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── columns: v:10 t.a:5!null b:6 t.v:7 crdb_internal_mvcc_timestamp:8 a:9!null
       ├── project
-      │    ├── columns: a_new:9!null a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: a:9!null t.a:5!null b:6 t.v:7 crdb_internal_mvcc_timestamp:8
       │    ├── select
-      │    │    ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    │    ├── columns: t.a:5!null b:6 t.v:7 crdb_internal_mvcc_timestamp:8
       │    │    ├── project
-      │    │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── columns: t.v:7 t.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    ├── scan t
-      │    │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    ├── columns: t.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:7
-      │    │    │    │              └── a:5 + b:6
+      │    │    │    │         └── t.v:7
+      │    │    │    │              └── t.a:5 + b:6
       │    │    │    └── projections
-      │    │    │         └── a:5 + b:6 [as=v:7]
+      │    │    │         └── t.a:5 + b:6 [as=t.v:7]
       │    │    └── filters
-      │    │         └── (a:5 + b:6) = 1
+      │    │         └── (t.a:5 + b:6) = 1
       │    └── projections
-      │         └── a:5 + 1 [as=a_new:9]
+      │         └── t.a:5 + 1 [as=a:9]
       └── projections
-           └── a_new:9 + b:6 [as=column10:10]
+           └── a:9 + b:6 [as=v:10]
 
 build
 UPDATE t_idx SET a=a+1
 ----
 update t_idx
  ├── columns: <none>
- ├── fetch columns: a:5 b:6 v:7
+ ├── fetch columns: t_idx.a:5 b:6 t_idx.v:7
  ├── update-mapping:
- │    ├── a_new:9 => a:1
- │    └── column10:10 => v:3
+ │    ├── a:9 => t_idx.a:1
+ │    └── v:10 => t_idx.v:3
  └── project
-      ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── columns: v:10 t_idx.a:5!null b:6 t_idx.v:7 crdb_internal_mvcc_timestamp:8 a:9!null
       ├── project
-      │    ├── columns: a_new:9!null a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: a:9!null t_idx.a:5!null b:6 t_idx.v:7 crdb_internal_mvcc_timestamp:8
       │    ├── project
-      │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    ├── columns: t_idx.v:7 t_idx.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    ├── scan t_idx
-      │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── columns: t_idx.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    └── computed column expressions
-      │    │    │         └── v:7
-      │    │    │              └── a:5 + b:6
+      │    │    │         └── t_idx.v:7
+      │    │    │              └── t_idx.a:5 + b:6
       │    │    └── projections
-      │    │         └── a:5 + b:6 [as=v:7]
+      │    │         └── t_idx.a:5 + b:6 [as=t_idx.v:7]
       │    └── projections
-      │         └── a:5 + 1 [as=a_new:9]
+      │         └── t_idx.a:5 + 1 [as=a:9]
       └── projections
-           └── a_new:9 + b:6 [as=column10:10]
+           └── a:9 + b:6 [as=v:10]
 
 build
 UPDATE t_idx SET a=a+1 WHERE v=1
 ----
 update t_idx
  ├── columns: <none>
- ├── fetch columns: a:5 b:6 v:7
+ ├── fetch columns: t_idx.a:5 b:6 t_idx.v:7
  ├── update-mapping:
- │    ├── a_new:9 => a:1
- │    └── column10:10 => v:3
+ │    ├── a:9 => t_idx.a:1
+ │    └── v:10 => t_idx.v:3
  └── project
-      ├── columns: column10:10 a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── columns: v:10 t_idx.a:5!null b:6 t_idx.v:7!null crdb_internal_mvcc_timestamp:8 a:9!null
       ├── project
-      │    ├── columns: a_new:9!null a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      │    ├── columns: a:9!null t_idx.a:5!null b:6 t_idx.v:7!null crdb_internal_mvcc_timestamp:8
       │    ├── select
-      │    │    ├── columns: a:5!null b:6 v:7!null crdb_internal_mvcc_timestamp:8
+      │    │    ├── columns: t_idx.a:5!null b:6 t_idx.v:7!null crdb_internal_mvcc_timestamp:8
       │    │    ├── project
-      │    │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── columns: t_idx.v:7 t_idx.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    ├── scan t_idx
-      │    │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    ├── columns: t_idx.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:7
-      │    │    │    │              └── a:5 + b:6
+      │    │    │    │         └── t_idx.v:7
+      │    │    │    │              └── t_idx.a:5 + b:6
       │    │    │    └── projections
-      │    │    │         └── a:5 + b:6 [as=v:7]
+      │    │    │         └── t_idx.a:5 + b:6 [as=t_idx.v:7]
       │    │    └── filters
-      │    │         └── v:7 = 1
+      │    │         └── t_idx.v:7 = 1
       │    └── projections
-      │         └── a:5 + 1 [as=a_new:9]
+      │         └── t_idx.a:5 + 1 [as=a:9]
       └── projections
-           └── a_new:9 + b:6 [as=column10:10]
+           └── a:9 + b:6 [as=v:10]
 
 build
 UPDATE t_idx SET a=a+1 WHERE a+b=1
 ----
 update t_idx
  ├── columns: <none>
- ├── fetch columns: a:5 b:6 v:7
+ ├── fetch columns: t_idx.a:5 b:6 t_idx.v:7
  ├── update-mapping:
- │    ├── a_new:9 => a:1
- │    └── column10:10 => v:3
+ │    ├── a:9 => t_idx.a:1
+ │    └── v:10 => t_idx.v:3
  └── project
-      ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 a_new:9!null
+      ├── columns: v:10 t_idx.a:5!null b:6 t_idx.v:7 crdb_internal_mvcc_timestamp:8 a:9!null
       ├── project
-      │    ├── columns: a_new:9!null a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    ├── columns: a:9!null t_idx.a:5!null b:6 t_idx.v:7 crdb_internal_mvcc_timestamp:8
       │    ├── select
-      │    │    ├── columns: a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+      │    │    ├── columns: t_idx.a:5!null b:6 t_idx.v:7 crdb_internal_mvcc_timestamp:8
       │    │    ├── project
-      │    │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    ├── columns: t_idx.v:7 t_idx.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    ├── scan t_idx
-      │    │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+      │    │    │    │    ├── columns: t_idx.a:5!null b:6 crdb_internal_mvcc_timestamp:8
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:7
-      │    │    │    │              └── a:5 + b:6
+      │    │    │    │         └── t_idx.v:7
+      │    │    │    │              └── t_idx.a:5 + b:6
       │    │    │    └── projections
-      │    │    │         └── a:5 + b:6 [as=v:7]
+      │    │    │         └── t_idx.a:5 + b:6 [as=t_idx.v:7]
       │    │    └── filters
-      │    │         └── (a:5 + b:6) = 1
+      │    │         └── (t_idx.a:5 + b:6) = 1
       │    └── projections
-      │         └── a:5 + 1 [as=a_new:9]
+      │         └── t_idx.a:5 + 1 [as=a:9]
       └── projections
-           └── a_new:9 + b:6 [as=column10:10]
+           └── a:9 + b:6 [as=v:10]
 
 build
 UPDATE t_idx SET b=b+1 RETURNING v
@@ -596,28 +596,28 @@ UPDATE t_idx SET b=b+1 RETURNING v
 project
  ├── columns: v:3
  └── update t_idx
-      ├── columns: a:1!null b:2 v:3
-      ├── fetch columns: a:5 b:6 v:7
+      ├── columns: a:1!null t_idx.b:2 t_idx.v:3
+      ├── fetch columns: a:5 t_idx.b:6 t_idx.v:7
       ├── update-mapping:
-      │    ├── b_new:9 => b:2
-      │    └── column10:10 => v:3
+      │    ├── b:9 => t_idx.b:2
+      │    └── v:10 => t_idx.v:3
       └── project
-           ├── columns: column10:10 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8 b_new:9
+           ├── columns: v:10 a:5!null t_idx.b:6 t_idx.v:7 crdb_internal_mvcc_timestamp:8 b:9
            ├── project
-           │    ├── columns: b_new:9 a:5!null b:6 v:7 crdb_internal_mvcc_timestamp:8
+           │    ├── columns: b:9 a:5!null t_idx.b:6 t_idx.v:7 crdb_internal_mvcc_timestamp:8
            │    ├── project
-           │    │    ├── columns: v:7 a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    │    ├── columns: t_idx.v:7 a:5!null t_idx.b:6 crdb_internal_mvcc_timestamp:8
            │    │    ├── scan t_idx
-           │    │    │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:8
+           │    │    │    ├── columns: a:5!null t_idx.b:6 crdb_internal_mvcc_timestamp:8
            │    │    │    └── computed column expressions
-           │    │    │         └── v:7
-           │    │    │              └── a:5 + b:6
+           │    │    │         └── t_idx.v:7
+           │    │    │              └── a:5 + t_idx.b:6
            │    │    └── projections
-           │    │         └── a:5 + b:6 [as=v:7]
+           │    │         └── a:5 + t_idx.b:6 [as=t_idx.v:7]
            │    └── projections
-           │         └── b:6 + 1 [as=b_new:9]
+           │         └── t_idx.b:6 + 1 [as=b:9]
            └── projections
-                └── a:5 + b_new:9 [as=column10:10]
+                └── a:5 + b:9 [as=v:10]
 
 build
 UPDATE t_idx2 SET b=b+1 RETURNING w
@@ -625,70 +625,70 @@ UPDATE t_idx2 SET b=b+1 RETURNING w
 project
  ├── columns: w:5
  └── update t_idx2
-      ├── columns: a:1!null b:2 c:3 v:4 w:5
-      ├── fetch columns: a:7 b:8 c:9 v:10 w:11
+      ├── columns: a:1!null t_idx2.b:2 c:3 t_idx2.v:4 t_idx2.w:5
+      ├── fetch columns: a:7 t_idx2.b:8 c:9 t_idx2.v:10 t_idx2.w:11
       ├── update-mapping:
-      │    ├── b_new:13 => b:2
-      │    └── column14:14 => v:4
+      │    ├── b:13 => t_idx2.b:2
+      │    └── v:14 => t_idx2.v:4
       └── project
-           ├── columns: column14:14 column15:15 a:7!null b:8 c:9 v:10 w:11 crdb_internal_mvcc_timestamp:12 b_new:13
+           ├── columns: v:14 w:15 a:7!null t_idx2.b:8 c:9 t_idx2.v:10 t_idx2.w:11 crdb_internal_mvcc_timestamp:12 b:13
            ├── project
-           │    ├── columns: b_new:13 a:7!null b:8 c:9 v:10 w:11 crdb_internal_mvcc_timestamp:12
+           │    ├── columns: b:13 a:7!null t_idx2.b:8 c:9 t_idx2.v:10 t_idx2.w:11 crdb_internal_mvcc_timestamp:12
            │    ├── project
-           │    │    ├── columns: v:10 w:11 a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:12
+           │    │    ├── columns: t_idx2.v:10 t_idx2.w:11 a:7!null t_idx2.b:8 c:9 crdb_internal_mvcc_timestamp:12
            │    │    ├── scan t_idx2
-           │    │    │    ├── columns: a:7!null b:8 c:9 crdb_internal_mvcc_timestamp:12
+           │    │    │    ├── columns: a:7!null t_idx2.b:8 c:9 crdb_internal_mvcc_timestamp:12
            │    │    │    └── computed column expressions
-           │    │    │         ├── v:10
-           │    │    │         │    └── a:7 + b:8
-           │    │    │         └── w:11
+           │    │    │         ├── t_idx2.v:10
+           │    │    │         │    └── a:7 + t_idx2.b:8
+           │    │    │         └── t_idx2.w:11
            │    │    │              └── c:9 + 1
            │    │    └── projections
-           │    │         ├── a:7 + b:8 [as=v:10]
-           │    │         └── c:9 + 1 [as=w:11]
+           │    │         ├── a:7 + t_idx2.b:8 [as=t_idx2.v:10]
+           │    │         └── c:9 + 1 [as=t_idx2.w:11]
            │    └── projections
-           │         └── b:8 + 1 [as=b_new:13]
+           │         └── t_idx2.b:8 + 1 [as=b:13]
            └── projections
-                ├── a:7 + b_new:13 [as=column14:14]
-                └── c:9 + 1 [as=column15:15]
+                ├── a:7 + b:13 [as=v:14]
+                └── c:9 + 1 [as=w:15]
 
 build
 UPDATE t_check SET b=b+1
 ----
 update t_check
  ├── columns: <none>
- ├── fetch columns: a:6 b:7 v:8 w:9
+ ├── fetch columns: a:6 t_check.b:7 t_check.v:8 t_check.w:9
  ├── update-mapping:
- │    ├── b_new:11 => b:2
- │    ├── column12:12 => v:3
- │    └── column13:13 => w:4
+ │    ├── b:11 => t_check.b:2
+ │    ├── v:12 => t_check.v:3
+ │    └── w:13 => t_check.w:4
  ├── check columns: check1:14 check2:15
  └── project
-      ├── columns: check1:14 check2:15 a:6!null b:7 v:8 w:9 crdb_internal_mvcc_timestamp:10 b_new:11 column12:12 column13:13
+      ├── columns: check1:14 check2:15 a:6!null t_check.b:7 t_check.v:8 t_check.w:9 crdb_internal_mvcc_timestamp:10 b:11 v:12 w:13
       ├── project
-      │    ├── columns: column12:12 column13:13 a:6!null b:7 v:8 w:9 crdb_internal_mvcc_timestamp:10 b_new:11
+      │    ├── columns: v:12 w:13 a:6!null t_check.b:7 t_check.v:8 t_check.w:9 crdb_internal_mvcc_timestamp:10 b:11
       │    ├── project
-      │    │    ├── columns: b_new:11 a:6!null b:7 v:8 w:9 crdb_internal_mvcc_timestamp:10
+      │    │    ├── columns: b:11 a:6!null t_check.b:7 t_check.v:8 t_check.w:9 crdb_internal_mvcc_timestamp:10
       │    │    ├── project
-      │    │    │    ├── columns: v:8 w:9 a:6!null b:7 crdb_internal_mvcc_timestamp:10
+      │    │    │    ├── columns: t_check.v:8 t_check.w:9 a:6!null t_check.b:7 crdb_internal_mvcc_timestamp:10
       │    │    │    ├── scan t_check
-      │    │    │    │    ├── columns: a:6!null b:7 crdb_internal_mvcc_timestamp:10
+      │    │    │    │    ├── columns: a:6!null t_check.b:7 crdb_internal_mvcc_timestamp:10
       │    │    │    │    └── computed column expressions
-      │    │    │    │         ├── v:8
-      │    │    │    │         │    └── a:6 + b:7
-      │    │    │    │         └── w:9
-      │    │    │    │              └── a:6 * b:7
+      │    │    │    │         ├── t_check.v:8
+      │    │    │    │         │    └── a:6 + t_check.b:7
+      │    │    │    │         └── t_check.w:9
+      │    │    │    │              └── a:6 * t_check.b:7
       │    │    │    └── projections
-      │    │    │         ├── a:6 + b:7 [as=v:8]
-      │    │    │         └── a:6 * b:7 [as=w:9]
+      │    │    │         ├── a:6 + t_check.b:7 [as=t_check.v:8]
+      │    │    │         └── a:6 * t_check.b:7 [as=t_check.w:9]
       │    │    └── projections
-      │    │         └── b:7 + 1 [as=b_new:11]
+      │    │         └── t_check.b:7 + 1 [as=b:11]
       │    └── projections
-      │         ├── a:6 + b_new:11 [as=column12:12]
-      │         └── a:6 * b_new:11 [as=column13:13]
+      │         ├── a:6 + b:11 [as=v:12]
+      │         └── a:6 * b:11 [as=w:13]
       └── projections
-           ├── column12:12 < column13:13 [as=check1:14]
-           └── column12:12 >= 10 [as=check2:15]
+           ├── v:12 < w:13 [as=check1:14]
+           └── v:12 >= 10 [as=check2:15]
 
 # -- UPSERT / INSERT ON CONFLICT tests --
 
@@ -700,14 +700,14 @@ upsert t
  ├── upsert-mapping:
  │    ├── column1:5 => a:1
  │    ├── column2:6 => b:2
- │    └── column7:7 => v:3
+ │    └── v:7 => t.v:3
  └── project
-      ├── columns: column7:7!null column1:5!null column2:6!null
+      ├── columns: v:7!null column1:5!null column2:6!null
       ├── values
       │    ├── columns: column1:5!null column2:6!null
       │    └── (1, 1)
       └── projections
-           └── column1:5 + column2:6 [as=column7:7]
+           └── column1:5 + column2:6 [as=v:7]
 
 build
 UPSERT INTO t(a) VALUES (1)
@@ -715,54 +715,54 @@ UPSERT INTO t(a) VALUES (1)
 upsert t
  ├── columns: <none>
  ├── arbiter indexes: primary
- ├── canary column: a:8
- ├── fetch columns: a:8 b:9 v:10
+ ├── canary column: t.a:8
+ ├── fetch columns: t.a:8 t.b:9 t.v:10
  ├── insert-mapping:
- │    ├── column1:5 => a:1
- │    ├── column6:6 => b:2
- │    └── column7:7 => v:3
+ │    ├── column1:5 => t.a:1
+ │    ├── b:6 => t.b:2
+ │    └── v:7 => t.v:3
  └── project
-      ├── columns: upsert_a:13 upsert_b:14 upsert_v:15 column1:5!null column6:6 column7:7 a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 column12:12
+      ├── columns: a:13 b:14 v:15 column1:5!null b:6 v:7 t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11 v:12
       ├── project
-      │    ├── columns: column12:12 column1:5!null column6:6 column7:7 a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    ├── columns: v:12 column1:5!null b:6 v:7 t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11
       │    ├── left-join (hash)
-      │    │    ├── columns: column1:5!null column6:6 column7:7 a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    ├── columns: column1:5!null b:6 v:7 t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11
       │    │    ├── ensure-upsert-distinct-on
-      │    │    │    ├── columns: column1:5!null column6:6 column7:7
+      │    │    │    ├── columns: column1:5!null b:6 v:7
       │    │    │    ├── grouping columns: column1:5!null
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column7:7 column1:5!null column6:6
+      │    │    │    │    ├── columns: v:7 column1:5!null b:6
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column6:6 column1:5!null
+      │    │    │    │    │    ├── columns: b:6 column1:5!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:5!null
       │    │    │    │    │    │    └── (1,)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── NULL::INT8 [as=column6:6]
+      │    │    │    │    │         └── NULL::INT8 [as=b:6]
       │    │    │    │    └── projections
-      │    │    │    │         └── column1:5 + column6:6 [as=column7:7]
+      │    │    │    │         └── column1:5 + b:6 [as=v:7]
       │    │    │    └── aggregations
-      │    │    │         ├── first-agg [as=column6:6]
-      │    │    │         │    └── column6:6
-      │    │    │         └── first-agg [as=column7:7]
-      │    │    │              └── column7:7
+      │    │    │         ├── first-agg [as=b:6]
+      │    │    │         │    └── b:6
+      │    │    │         └── first-agg [as=v:7]
+      │    │    │              └── v:7
       │    │    ├── project
-      │    │    │    ├── columns: v:10 a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    ├── columns: t.v:10 t.a:8!null t.b:9 crdb_internal_mvcc_timestamp:11
       │    │    │    ├── scan t
-      │    │    │    │    ├── columns: a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    ├── columns: t.a:8!null t.b:9 crdb_internal_mvcc_timestamp:11
       │    │    │    │    └── computed column expressions
-      │    │    │    │         └── v:10
-      │    │    │    │              └── a:8 + b:9
+      │    │    │    │         └── t.v:10
+      │    │    │    │              └── t.a:8 + t.b:9
       │    │    │    └── projections
-      │    │    │         └── a:8 + b:9 [as=v:10]
+      │    │    │         └── t.a:8 + t.b:9 [as=t.v:10]
       │    │    └── filters
-      │    │         └── column1:5 = a:8
+      │    │         └── column1:5 = t.a:8
       │    └── projections
-      │         └── a:8 + b:9 [as=column12:12]
+      │         └── t.a:8 + t.b:9 [as=v:12]
       └── projections
-           ├── CASE WHEN a:8 IS NULL THEN column1:5 ELSE a:8 END [as=upsert_a:13]
-           ├── CASE WHEN a:8 IS NULL THEN column6:6 ELSE b:9 END [as=upsert_b:14]
-           └── CASE WHEN a:8 IS NULL THEN column7:7 ELSE v:10 END [as=upsert_v:15]
+           ├── CASE WHEN t.a:8 IS NULL THEN column1:5 ELSE t.a:8 END [as=a:13]
+           ├── CASE WHEN t.a:8 IS NULL THEN b:6 ELSE t.b:9 END [as=b:14]
+           └── CASE WHEN t.a:8 IS NULL THEN v:7 ELSE t.v:10 END [as=v:15]
 
 build
 UPSERT INTO t(a, b, v) VALUES (1)
@@ -775,18 +775,18 @@ UPSERT INTO t VALUES (1, 1) RETURNING v
 project
  ├── columns: v:3!null
  └── upsert t
-      ├── columns: a:1!null b:2!null v:3!null
+      ├── columns: a:1!null b:2!null t.v:3!null
       ├── upsert-mapping:
       │    ├── column1:5 => a:1
       │    ├── column2:6 => b:2
-      │    └── column7:7 => v:3
+      │    └── v:7 => t.v:3
       └── project
-           ├── columns: column7:7!null column1:5!null column2:6!null
+           ├── columns: v:7!null column1:5!null column2:6!null
            ├── values
            │    ├── columns: column1:5!null column2:6!null
            │    └── (1, 1)
            └── projections
-                └── column1:5 + column2:6 [as=column7:7]
+                └── column1:5 + column2:6 [as=v:7]
 
 build
 UPSERT INTO t_check VALUES (1, 1)
@@ -796,22 +796,22 @@ upsert t_check
  ├── upsert-mapping:
  │    ├── column1:6 => a:1
  │    ├── column2:7 => b:2
- │    ├── column8:8 => v:3
- │    └── column9:9 => w:4
+ │    ├── v:8 => t_check.v:3
+ │    └── w:9 => t_check.w:4
  ├── check columns: check1:10 check2:11
  └── project
-      ├── columns: check1:10!null check2:11!null column1:6!null column2:7!null column8:8!null column9:9!null
+      ├── columns: check1:10!null check2:11!null column1:6!null column2:7!null v:8!null w:9!null
       ├── project
-      │    ├── columns: column8:8!null column9:9!null column1:6!null column2:7!null
+      │    ├── columns: v:8!null w:9!null column1:6!null column2:7!null
       │    ├── values
       │    │    ├── columns: column1:6!null column2:7!null
       │    │    └── (1, 1)
       │    └── projections
-      │         ├── column1:6 + column2:7 [as=column8:8]
-      │         └── column1:6 * column2:7 [as=column9:9]
+      │         ├── column1:6 + column2:7 [as=v:8]
+      │         └── column1:6 * column2:7 [as=w:9]
       └── projections
-           ├── column8:8 < column9:9 [as=check1:10]
-           └── column8:8 >= 10 [as=check2:11]
+           ├── v:8 < w:9 [as=check1:10]
+           └── v:8 >= 10 [as=check2:11]
 
 build
 INSERT INTO t VALUES (1, 1) ON CONFLICT DO NOTHING RETURNING v
@@ -819,40 +819,40 @@ INSERT INTO t VALUES (1, 1) ON CONFLICT DO NOTHING RETURNING v
 project
  ├── columns: v:3!null
  └── insert t
-      ├── columns: a:1!null b:2!null v:3!null
+      ├── columns: a:1!null b:2!null t.v:3!null
       ├── arbiter indexes: primary
       ├── insert-mapping:
       │    ├── column1:5 => a:1
       │    ├── column2:6 => b:2
-      │    └── column7:7 => v:3
+      │    └── v:7 => t.v:3
       └── upsert-distinct-on
-           ├── columns: column1:5!null column2:6!null column7:7!null
+           ├── columns: column1:5!null column2:6!null v:7!null
            ├── grouping columns: column1:5!null
            ├── anti-join (hash)
-           │    ├── columns: column1:5!null column2:6!null column7:7!null
+           │    ├── columns: column1:5!null column2:6!null v:7!null
            │    ├── project
-           │    │    ├── columns: column7:7!null column1:5!null column2:6!null
+           │    │    ├── columns: v:7!null column1:5!null column2:6!null
            │    │    ├── values
            │    │    │    ├── columns: column1:5!null column2:6!null
            │    │    │    └── (1, 1)
            │    │    └── projections
-           │    │         └── column1:5 + column2:6 [as=column7:7]
+           │    │         └── column1:5 + column2:6 [as=v:7]
            │    ├── project
-           │    │    ├── columns: v:10 a:8!null b:9
+           │    │    ├── columns: t.v:10 a:8!null b:9
            │    │    ├── scan t
            │    │    │    ├── columns: a:8!null b:9
            │    │    │    └── computed column expressions
-           │    │    │         └── v:10
+           │    │    │         └── t.v:10
            │    │    │              └── a:8 + b:9
            │    │    └── projections
-           │    │         └── a:8 + b:9 [as=v:10]
+           │    │         └── a:8 + b:9 [as=t.v:10]
            │    └── filters
            │         └── column1:5 = a:8
            └── aggregations
                 ├── first-agg [as=column2:6]
                 │    └── column2:6
-                └── first-agg [as=column7:7]
-                     └── column7:7
+                └── first-agg [as=v:7]
+                     └── v:7
 
 build
 INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO NOTHING
@@ -864,35 +864,35 @@ insert t_idx2
  │    ├── column1:7 => a:1
  │    ├── column2:8 => b:2
  │    ├── column3:9 => c:3
- │    ├── column10:10 => v:4
- │    └── column11:11 => w:5
+ │    ├── v:10 => t_idx2.v:4
+ │    └── w:11 => t_idx2.w:5
  └── upsert-distinct-on
-      ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
-      ├── grouping columns: column11:11!null
+      ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null
+      ├── grouping columns: w:11!null
       ├── anti-join (hash)
-      │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null
       │    ├── project
-      │    │    ├── columns: column10:10!null column11:11!null column1:7!null column2:8!null column3:9!null
+      │    │    ├── columns: v:10!null w:11!null column1:7!null column2:8!null column3:9!null
       │    │    ├── values
       │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
       │    │    │    └── (1, 1, 1)
       │    │    └── projections
-      │    │         ├── column1:7 + column2:8 [as=column10:10]
-      │    │         └── column3:9 + 1 [as=column11:11]
+      │    │         ├── column1:7 + column2:8 [as=v:10]
+      │    │         └── column3:9 + 1 [as=w:11]
       │    ├── project
-      │    │    ├── columns: v:15 w:16 a:12!null b:13 c:14
+      │    │    ├── columns: t_idx2.v:15 t_idx2.w:16 a:12!null b:13 c:14
       │    │    ├── scan t_idx2
       │    │    │    ├── columns: a:12!null b:13 c:14
       │    │    │    └── computed column expressions
-      │    │    │         ├── v:15
+      │    │    │         ├── t_idx2.v:15
       │    │    │         │    └── a:12 + b:13
-      │    │    │         └── w:16
+      │    │    │         └── t_idx2.w:16
       │    │    │              └── c:14 + 1
       │    │    └── projections
-      │    │         ├── a:12 + b:13 [as=v:15]
-      │    │         └── c:14 + 1 [as=w:16]
+      │    │         ├── a:12 + b:13 [as=t_idx2.v:15]
+      │    │         └── c:14 + 1 [as=t_idx2.w:16]
       │    └── filters
-      │         └── column11:11 = w:16
+      │         └── w:11 = t_idx2.w:16
       └── aggregations
            ├── first-agg [as=column1:7]
            │    └── column1:7
@@ -900,8 +900,8 @@ insert t_idx2
            │    └── column2:8
            ├── first-agg [as=column3:9]
            │    └── column3:9
-           └── first-agg [as=column10:10]
-                └── column10:10
+           └── first-agg [as=v:10]
+                └── v:10
 
 build
 INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT DO NOTHING
@@ -913,63 +913,63 @@ insert t_idx2
  │    ├── column1:7 => a:1
  │    ├── column2:8 => b:2
  │    ├── column3:9 => c:3
- │    ├── column10:10 => v:4
- │    └── column11:11 => w:5
+ │    ├── v:10 => t_idx2.v:4
+ │    └── w:11 => t_idx2.w:5
  └── upsert-distinct-on
-      ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
-      ├── grouping columns: column11:11!null
+      ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null
+      ├── grouping columns: w:11!null
       ├── upsert-distinct-on
-      │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null
       │    ├── grouping columns: column1:7!null
       │    ├── anti-join (hash)
-      │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    │    ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null
       │    │    ├── anti-join (hash)
-      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null
       │    │    │    ├── project
-      │    │    │    │    ├── columns: column10:10!null column11:11!null column1:7!null column2:8!null column3:9!null
+      │    │    │    │    ├── columns: v:10!null w:11!null column1:7!null column2:8!null column3:9!null
       │    │    │    │    ├── values
       │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
       │    │    │    │    │    └── (1, 1, 1)
       │    │    │    │    └── projections
-      │    │    │    │         ├── column1:7 + column2:8 [as=column10:10]
-      │    │    │    │         └── column3:9 + 1 [as=column11:11]
+      │    │    │    │         ├── column1:7 + column2:8 [as=v:10]
+      │    │    │    │         └── column3:9 + 1 [as=w:11]
       │    │    │    ├── project
-      │    │    │    │    ├── columns: v:15 w:16 a:12!null b:13 c:14
+      │    │    │    │    ├── columns: t_idx2.v:15 t_idx2.w:16 a:12!null b:13 c:14
       │    │    │    │    ├── scan t_idx2
       │    │    │    │    │    ├── columns: a:12!null b:13 c:14
       │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         ├── v:15
+      │    │    │    │    │         ├── t_idx2.v:15
       │    │    │    │    │         │    └── a:12 + b:13
-      │    │    │    │    │         └── w:16
+      │    │    │    │    │         └── t_idx2.w:16
       │    │    │    │    │              └── c:14 + 1
       │    │    │    │    └── projections
-      │    │    │    │         ├── a:12 + b:13 [as=v:15]
-      │    │    │    │         └── c:14 + 1 [as=w:16]
+      │    │    │    │         ├── a:12 + b:13 [as=t_idx2.v:15]
+      │    │    │    │         └── c:14 + 1 [as=t_idx2.w:16]
       │    │    │    └── filters
       │    │    │         └── column1:7 = a:12
       │    │    ├── project
-      │    │    │    ├── columns: v:21 w:22 a:18!null b:19 c:20
+      │    │    │    ├── columns: t_idx2.v:21 t_idx2.w:22 a:18!null b:19 c:20
       │    │    │    ├── scan t_idx2
       │    │    │    │    ├── columns: a:18!null b:19 c:20
       │    │    │    │    └── computed column expressions
-      │    │    │    │         ├── v:21
+      │    │    │    │         ├── t_idx2.v:21
       │    │    │    │         │    └── a:18 + b:19
-      │    │    │    │         └── w:22
+      │    │    │    │         └── t_idx2.w:22
       │    │    │    │              └── c:20 + 1
       │    │    │    └── projections
-      │    │    │         ├── a:18 + b:19 [as=v:21]
-      │    │    │         └── c:20 + 1 [as=w:22]
+      │    │    │         ├── a:18 + b:19 [as=t_idx2.v:21]
+      │    │    │         └── c:20 + 1 [as=t_idx2.w:22]
       │    │    └── filters
-      │    │         └── column11:11 = w:22
+      │    │         └── w:11 = t_idx2.w:22
       │    └── aggregations
       │         ├── first-agg [as=column2:8]
       │         │    └── column2:8
       │         ├── first-agg [as=column3:9]
       │         │    └── column3:9
-      │         ├── first-agg [as=column10:10]
-      │         │    └── column10:10
-      │         └── first-agg [as=column11:11]
-      │              └── column11:11
+      │         ├── first-agg [as=v:10]
+      │         │    └── v:10
+      │         └── first-agg [as=w:11]
+      │              └── w:11
       └── aggregations
            ├── first-agg [as=column1:7]
            │    └── column1:7
@@ -977,8 +977,8 @@ insert t_idx2
            │    └── column2:8
            ├── first-agg [as=column3:9]
            │    └── column3:9
-           └── first-agg [as=column10:10]
-                └── column10:10
+           └── first-agg [as=v:10]
+                └── v:10
 
 build
 INSERT INTO t VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET a=t.v+1
@@ -986,57 +986,57 @@ INSERT INTO t VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET a=t.v+1
 upsert t
  ├── columns: <none>
  ├── arbiter indexes: primary
- ├── canary column: a:8
- ├── fetch columns: a:8 b:9 v:10
+ ├── canary column: t.a:8
+ ├── fetch columns: t.a:8 t.b:9 t.v:10
  ├── insert-mapping:
- │    ├── column1:5 => a:1
- │    ├── column2:6 => b:2
- │    └── column7:7 => v:3
+ │    ├── column1:5 => t.a:1
+ │    ├── column2:6 => t.b:2
+ │    └── v:7 => t.v:3
  ├── update-mapping:
- │    ├── upsert_a:14 => a:1
- │    └── upsert_v:16 => v:3
+ │    ├── a:14 => t.a:1
+ │    └── v:16 => t.v:3
  └── project
-      ├── columns: upsert_a:14 upsert_b:15 upsert_v:16 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 a_new:12 column13:13
+      ├── columns: a:14 b:15 v:16 column1:5!null column2:6!null v:7!null t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11 a:12 v:13
       ├── project
-      │    ├── columns: column13:13 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 a_new:12
+      │    ├── columns: v:13 column1:5!null column2:6!null v:7!null t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11 a:12
       │    ├── project
-      │    │    ├── columns: a_new:12 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    ├── columns: a:12 column1:5!null column2:6!null v:7!null t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    │    ├── columns: column1:5!null column2:6!null v:7!null t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7!null
+      │    │    │    │    ├── columns: column1:5!null column2:6!null v:7!null
       │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7!null column1:5!null column2:6!null
+      │    │    │    │    │    ├── columns: v:7!null column1:5!null column2:6!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
       │    │    │    │    │    │    └── (1, 1)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column1:5 + column2:6 [as=column7:7]
+      │    │    │    │    │         └── column1:5 + column2:6 [as=v:7]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=column2:6]
       │    │    │    │         │    └── column2:6
-      │    │    │    │         └── first-agg [as=column7:7]
-      │    │    │    │              └── column7:7
+      │    │    │    │         └── first-agg [as=v:7]
+      │    │    │    │              └── v:7
       │    │    │    ├── project
-      │    │    │    │    ├── columns: v:10 a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    ├── columns: t.v:10 t.a:8!null t.b:9 crdb_internal_mvcc_timestamp:11
       │    │    │    │    ├── scan t
-      │    │    │    │    │    ├── columns: a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    │    ├── columns: t.a:8!null t.b:9 crdb_internal_mvcc_timestamp:11
       │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         └── v:10
-      │    │    │    │    │              └── a:8 + b:9
+      │    │    │    │    │         └── t.v:10
+      │    │    │    │    │              └── t.a:8 + t.b:9
       │    │    │    │    └── projections
-      │    │    │    │         └── a:8 + b:9 [as=v:10]
+      │    │    │    │         └── t.a:8 + t.b:9 [as=t.v:10]
       │    │    │    └── filters
-      │    │    │         └── column1:5 = a:8
+      │    │    │         └── column1:5 = t.a:8
       │    │    └── projections
-      │    │         └── v:10 + 1 [as=a_new:12]
+      │    │         └── t.v:10 + 1 [as=a:12]
       │    └── projections
-      │         └── a_new:12 + b:9 [as=column13:13]
+      │         └── a:12 + t.b:9 [as=v:13]
       └── projections
-           ├── CASE WHEN a:8 IS NULL THEN column1:5 ELSE a_new:12 END [as=upsert_a:14]
-           ├── CASE WHEN a:8 IS NULL THEN column2:6 ELSE b:9 END [as=upsert_b:15]
-           └── CASE WHEN a:8 IS NULL THEN column7:7 ELSE column13:13 END [as=upsert_v:16]
+           ├── CASE WHEN t.a:8 IS NULL THEN column1:5 ELSE a:12 END [as=a:14]
+           ├── CASE WHEN t.a:8 IS NULL THEN column2:6 ELSE t.b:9 END [as=b:15]
+           └── CASE WHEN t.a:8 IS NULL THEN v:7 ELSE v:13 END [as=v:16]
 
 build
 INSERT INTO t VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET a=excluded.v+1
@@ -1044,57 +1044,57 @@ INSERT INTO t VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET a=excluded.v+1
 upsert t
  ├── columns: <none>
  ├── arbiter indexes: primary
- ├── canary column: a:8
- ├── fetch columns: a:8 b:9 v:10
+ ├── canary column: t.a:8
+ ├── fetch columns: t.a:8 t.b:9 t.v:10
  ├── insert-mapping:
- │    ├── column1:5 => a:1
- │    ├── column2:6 => b:2
- │    └── column7:7 => v:3
+ │    ├── column1:5 => t.a:1
+ │    ├── column2:6 => t.b:2
+ │    └── v:7 => t.v:3
  ├── update-mapping:
- │    ├── upsert_a:14 => a:1
- │    └── upsert_v:16 => v:3
+ │    ├── a:14 => t.a:1
+ │    └── v:16 => t.v:3
  └── project
-      ├── columns: upsert_a:14!null upsert_b:15 upsert_v:16 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 a_new:12!null column13:13
+      ├── columns: a:14!null b:15 v:16 column1:5!null column2:6!null v:7!null t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11 a:12!null v:13
       ├── project
-      │    ├── columns: column13:13 column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11 a_new:12!null
+      │    ├── columns: v:13 column1:5!null column2:6!null v:7!null t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11 a:12!null
       │    ├── project
-      │    │    ├── columns: a_new:12!null column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    ├── columns: a:12!null column1:5!null column2:6!null v:7!null t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:5!null column2:6!null column7:7!null a:8 b:9 v:10 crdb_internal_mvcc_timestamp:11
+      │    │    │    ├── columns: column1:5!null column2:6!null v:7!null t.a:8 t.b:9 t.v:10 crdb_internal_mvcc_timestamp:11
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:5!null column2:6!null column7:7!null
+      │    │    │    │    ├── columns: column1:5!null column2:6!null v:7!null
       │    │    │    │    ├── grouping columns: column1:5!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column7:7!null column1:5!null column2:6!null
+      │    │    │    │    │    ├── columns: v:7!null column1:5!null column2:6!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:5!null column2:6!null
       │    │    │    │    │    │    └── (1, 1)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── column1:5 + column2:6 [as=column7:7]
+      │    │    │    │    │         └── column1:5 + column2:6 [as=v:7]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=column2:6]
       │    │    │    │         │    └── column2:6
-      │    │    │    │         └── first-agg [as=column7:7]
-      │    │    │    │              └── column7:7
+      │    │    │    │         └── first-agg [as=v:7]
+      │    │    │    │              └── v:7
       │    │    │    ├── project
-      │    │    │    │    ├── columns: v:10 a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    ├── columns: t.v:10 t.a:8!null t.b:9 crdb_internal_mvcc_timestamp:11
       │    │    │    │    ├── scan t
-      │    │    │    │    │    ├── columns: a:8!null b:9 crdb_internal_mvcc_timestamp:11
+      │    │    │    │    │    ├── columns: t.a:8!null t.b:9 crdb_internal_mvcc_timestamp:11
       │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         └── v:10
-      │    │    │    │    │              └── a:8 + b:9
+      │    │    │    │    │         └── t.v:10
+      │    │    │    │    │              └── t.a:8 + t.b:9
       │    │    │    │    └── projections
-      │    │    │    │         └── a:8 + b:9 [as=v:10]
+      │    │    │    │         └── t.a:8 + t.b:9 [as=t.v:10]
       │    │    │    └── filters
-      │    │    │         └── column1:5 = a:8
+      │    │    │         └── column1:5 = t.a:8
       │    │    └── projections
-      │    │         └── column7:7 + 1 [as=a_new:12]
+      │    │         └── v:7 + 1 [as=a:12]
       │    └── projections
-      │         └── a_new:12 + b:9 [as=column13:13]
+      │         └── a:12 + t.b:9 [as=v:13]
       └── projections
-           ├── CASE WHEN a:8 IS NULL THEN column1:5 ELSE a_new:12 END [as=upsert_a:14]
-           ├── CASE WHEN a:8 IS NULL THEN column2:6 ELSE b:9 END [as=upsert_b:15]
-           └── CASE WHEN a:8 IS NULL THEN column7:7 ELSE column13:13 END [as=upsert_v:16]
+           ├── CASE WHEN t.a:8 IS NULL THEN column1:5 ELSE a:12 END [as=a:14]
+           ├── CASE WHEN t.a:8 IS NULL THEN column2:6 ELSE t.b:9 END [as=b:15]
+           └── CASE WHEN t.a:8 IS NULL THEN v:7 ELSE v:13 END [as=v:16]
 
 build
 INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=10
@@ -1102,36 +1102,36 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=10
 upsert t_idx2
  ├── columns: <none>
  ├── arbiter indexes: secondary
- ├── canary column: a:12
- ├── fetch columns: a:12 b:13 c:14 v:15 w:16
+ ├── canary column: t_idx2.a:12
+ ├── fetch columns: t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16
  ├── insert-mapping:
- │    ├── column1:7 => a:1
- │    ├── column2:8 => b:2
- │    ├── column3:9 => c:3
- │    ├── column10:10 => v:4
- │    └── column11:11 => w:5
+ │    ├── column1:7 => t_idx2.a:1
+ │    ├── column2:8 => t_idx2.b:2
+ │    ├── column3:9 => t_idx2.c:3
+ │    ├── v:10 => t_idx2.v:4
+ │    └── w:11 => t_idx2.w:5
  ├── update-mapping:
- │    ├── upsert_c:23 => c:3
- │    └── upsert_w:25 => w:5
+ │    ├── c:23 => t_idx2.c:3
+ │    └── w:25 => t_idx2.w:5
  └── project
-      ├── columns: upsert_a:21 upsert_b:22 upsert_c:23!null upsert_v:24 upsert_w:25!null column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17 c_new:18!null column19:19 column20:20!null
+      ├── columns: a:21 b:22 c:23!null v:24 w:25!null column1:7!null column2:8!null column3:9!null v:10!null w:11!null t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16 crdb_internal_mvcc_timestamp:17 c:18!null v:19 w:20!null
       ├── project
-      │    ├── columns: column19:19 column20:20!null column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17 c_new:18!null
+      │    ├── columns: v:19 w:20!null column1:7!null column2:8!null column3:9!null v:10!null w:11!null t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16 crdb_internal_mvcc_timestamp:17 c:18!null
       │    ├── project
-      │    │    ├── columns: c_new:18!null column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17
+      │    │    ├── columns: c:18!null column1:7!null column2:8!null column3:9!null v:10!null w:11!null t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16 crdb_internal_mvcc_timestamp:17
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16 crdb_internal_mvcc_timestamp:17
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
-      │    │    │    │    ├── grouping columns: column11:11!null
+      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null
+      │    │    │    │    ├── grouping columns: w:11!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column10:10!null column11:11!null column1:7!null column2:8!null column3:9!null
+      │    │    │    │    │    ├── columns: v:10!null w:11!null column1:7!null column2:8!null column3:9!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
       │    │    │    │    │    │    └── (1, 1, 1)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         ├── column1:7 + column2:8 [as=column10:10]
-      │    │    │    │    │         └── column3:9 + 1 [as=column11:11]
+      │    │    │    │    │         ├── column1:7 + column2:8 [as=v:10]
+      │    │    │    │    │         └── column3:9 + 1 [as=w:11]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=column1:7]
       │    │    │    │         │    └── column1:7
@@ -1139,33 +1139,33 @@ upsert t_idx2
       │    │    │    │         │    └── column2:8
       │    │    │    │         ├── first-agg [as=column3:9]
       │    │    │    │         │    └── column3:9
-      │    │    │    │         └── first-agg [as=column10:10]
-      │    │    │    │              └── column10:10
+      │    │    │    │         └── first-agg [as=v:10]
+      │    │    │    │              └── v:10
       │    │    │    ├── project
-      │    │    │    │    ├── columns: v:15 w:16 a:12!null b:13 c:14 crdb_internal_mvcc_timestamp:17
+      │    │    │    │    ├── columns: t_idx2.v:15 t_idx2.w:16 t_idx2.a:12!null t_idx2.b:13 t_idx2.c:14 crdb_internal_mvcc_timestamp:17
       │    │    │    │    ├── scan t_idx2
-      │    │    │    │    │    ├── columns: a:12!null b:13 c:14 crdb_internal_mvcc_timestamp:17
+      │    │    │    │    │    ├── columns: t_idx2.a:12!null t_idx2.b:13 t_idx2.c:14 crdb_internal_mvcc_timestamp:17
       │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         ├── v:15
-      │    │    │    │    │         │    └── a:12 + b:13
-      │    │    │    │    │         └── w:16
-      │    │    │    │    │              └── c:14 + 1
+      │    │    │    │    │         ├── t_idx2.v:15
+      │    │    │    │    │         │    └── t_idx2.a:12 + t_idx2.b:13
+      │    │    │    │    │         └── t_idx2.w:16
+      │    │    │    │    │              └── t_idx2.c:14 + 1
       │    │    │    │    └── projections
-      │    │    │    │         ├── a:12 + b:13 [as=v:15]
-      │    │    │    │         └── c:14 + 1 [as=w:16]
+      │    │    │    │         ├── t_idx2.a:12 + t_idx2.b:13 [as=t_idx2.v:15]
+      │    │    │    │         └── t_idx2.c:14 + 1 [as=t_idx2.w:16]
       │    │    │    └── filters
-      │    │    │         └── column11:11 = w:16
+      │    │    │         └── w:11 = t_idx2.w:16
       │    │    └── projections
-      │    │         └── 10 [as=c_new:18]
+      │    │         └── 10 [as=c:18]
       │    └── projections
-      │         ├── a:12 + b:13 [as=column19:19]
-      │         └── c_new:18 + 1 [as=column20:20]
+      │         ├── t_idx2.a:12 + t_idx2.b:13 [as=v:19]
+      │         └── c:18 + 1 [as=w:20]
       └── projections
-           ├── CASE WHEN a:12 IS NULL THEN column1:7 ELSE a:12 END [as=upsert_a:21]
-           ├── CASE WHEN a:12 IS NULL THEN column2:8 ELSE b:13 END [as=upsert_b:22]
-           ├── CASE WHEN a:12 IS NULL THEN column3:9 ELSE c_new:18 END [as=upsert_c:23]
-           ├── CASE WHEN a:12 IS NULL THEN column10:10 ELSE v:15 END [as=upsert_v:24]
-           └── CASE WHEN a:12 IS NULL THEN column11:11 ELSE column20:20 END [as=upsert_w:25]
+           ├── CASE WHEN t_idx2.a:12 IS NULL THEN column1:7 ELSE t_idx2.a:12 END [as=a:21]
+           ├── CASE WHEN t_idx2.a:12 IS NULL THEN column2:8 ELSE t_idx2.b:13 END [as=b:22]
+           ├── CASE WHEN t_idx2.a:12 IS NULL THEN column3:9 ELSE c:18 END [as=c:23]
+           ├── CASE WHEN t_idx2.a:12 IS NULL THEN v:10 ELSE t_idx2.v:15 END [as=v:24]
+           └── CASE WHEN t_idx2.a:12 IS NULL THEN w:11 ELSE w:20 END [as=w:25]
 
 build
 INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=t_idx2.v+1
@@ -1173,36 +1173,36 @@ INSERT INTO t_idx2 VALUES (1, 1, 1) ON CONFLICT (w) DO UPDATE SET c=t_idx2.v+1
 upsert t_idx2
  ├── columns: <none>
  ├── arbiter indexes: secondary
- ├── canary column: a:12
- ├── fetch columns: a:12 b:13 c:14 v:15 w:16
+ ├── canary column: t_idx2.a:12
+ ├── fetch columns: t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16
  ├── insert-mapping:
- │    ├── column1:7 => a:1
- │    ├── column2:8 => b:2
- │    ├── column3:9 => c:3
- │    ├── column10:10 => v:4
- │    └── column11:11 => w:5
+ │    ├── column1:7 => t_idx2.a:1
+ │    ├── column2:8 => t_idx2.b:2
+ │    ├── column3:9 => t_idx2.c:3
+ │    ├── v:10 => t_idx2.v:4
+ │    └── w:11 => t_idx2.w:5
  ├── update-mapping:
- │    ├── upsert_c:23 => c:3
- │    └── upsert_w:25 => w:5
+ │    ├── c:23 => t_idx2.c:3
+ │    └── w:25 => t_idx2.w:5
  └── project
-      ├── columns: upsert_a:21 upsert_b:22 upsert_c:23 upsert_v:24 upsert_w:25 column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17 c_new:18 column19:19 column20:20
+      ├── columns: a:21 b:22 c:23 v:24 w:25 column1:7!null column2:8!null column3:9!null v:10!null w:11!null t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16 crdb_internal_mvcc_timestamp:17 c:18 v:19 w:20
       ├── project
-      │    ├── columns: column19:19 column20:20 column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17 c_new:18
+      │    ├── columns: v:19 w:20 column1:7!null column2:8!null column3:9!null v:10!null w:11!null t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16 crdb_internal_mvcc_timestamp:17 c:18
       │    ├── project
-      │    │    ├── columns: c_new:18 column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17
+      │    │    ├── columns: c:18 column1:7!null column2:8!null column3:9!null v:10!null w:11!null t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16 crdb_internal_mvcc_timestamp:17
       │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null a:12 b:13 c:14 v:15 w:16 crdb_internal_mvcc_timestamp:17
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null t_idx2.a:12 t_idx2.b:13 t_idx2.c:14 t_idx2.v:15 t_idx2.w:16 crdb_internal_mvcc_timestamp:17
       │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10!null column11:11!null
-      │    │    │    │    ├── grouping columns: column11:11!null
+      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null v:10!null w:11!null
+      │    │    │    │    ├── grouping columns: w:11!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column10:10!null column11:11!null column1:7!null column2:8!null column3:9!null
+      │    │    │    │    │    ├── columns: v:10!null w:11!null column1:7!null column2:8!null column3:9!null
       │    │    │    │    │    ├── values
       │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
       │    │    │    │    │    │    └── (1, 1, 1)
       │    │    │    │    │    └── projections
-      │    │    │    │    │         ├── column1:7 + column2:8 [as=column10:10]
-      │    │    │    │    │         └── column3:9 + 1 [as=column11:11]
+      │    │    │    │    │         ├── column1:7 + column2:8 [as=v:10]
+      │    │    │    │    │         └── column3:9 + 1 [as=w:11]
       │    │    │    │    └── aggregations
       │    │    │    │         ├── first-agg [as=column1:7]
       │    │    │    │         │    └── column1:7
@@ -1210,33 +1210,33 @@ upsert t_idx2
       │    │    │    │         │    └── column2:8
       │    │    │    │         ├── first-agg [as=column3:9]
       │    │    │    │         │    └── column3:9
-      │    │    │    │         └── first-agg [as=column10:10]
-      │    │    │    │              └── column10:10
+      │    │    │    │         └── first-agg [as=v:10]
+      │    │    │    │              └── v:10
       │    │    │    ├── project
-      │    │    │    │    ├── columns: v:15 w:16 a:12!null b:13 c:14 crdb_internal_mvcc_timestamp:17
+      │    │    │    │    ├── columns: t_idx2.v:15 t_idx2.w:16 t_idx2.a:12!null t_idx2.b:13 t_idx2.c:14 crdb_internal_mvcc_timestamp:17
       │    │    │    │    ├── scan t_idx2
-      │    │    │    │    │    ├── columns: a:12!null b:13 c:14 crdb_internal_mvcc_timestamp:17
+      │    │    │    │    │    ├── columns: t_idx2.a:12!null t_idx2.b:13 t_idx2.c:14 crdb_internal_mvcc_timestamp:17
       │    │    │    │    │    └── computed column expressions
-      │    │    │    │    │         ├── v:15
-      │    │    │    │    │         │    └── a:12 + b:13
-      │    │    │    │    │         └── w:16
-      │    │    │    │    │              └── c:14 + 1
+      │    │    │    │    │         ├── t_idx2.v:15
+      │    │    │    │    │         │    └── t_idx2.a:12 + t_idx2.b:13
+      │    │    │    │    │         └── t_idx2.w:16
+      │    │    │    │    │              └── t_idx2.c:14 + 1
       │    │    │    │    └── projections
-      │    │    │    │         ├── a:12 + b:13 [as=v:15]
-      │    │    │    │         └── c:14 + 1 [as=w:16]
+      │    │    │    │         ├── t_idx2.a:12 + t_idx2.b:13 [as=t_idx2.v:15]
+      │    │    │    │         └── t_idx2.c:14 + 1 [as=t_idx2.w:16]
       │    │    │    └── filters
-      │    │    │         └── column11:11 = w:16
+      │    │    │         └── w:11 = t_idx2.w:16
       │    │    └── projections
-      │    │         └── v:15 + 1 [as=c_new:18]
+      │    │         └── t_idx2.v:15 + 1 [as=c:18]
       │    └── projections
-      │         ├── a:12 + b:13 [as=column19:19]
-      │         └── c_new:18 + 1 [as=column20:20]
+      │         ├── t_idx2.a:12 + t_idx2.b:13 [as=v:19]
+      │         └── c:18 + 1 [as=w:20]
       └── projections
-           ├── CASE WHEN a:12 IS NULL THEN column1:7 ELSE a:12 END [as=upsert_a:21]
-           ├── CASE WHEN a:12 IS NULL THEN column2:8 ELSE b:13 END [as=upsert_b:22]
-           ├── CASE WHEN a:12 IS NULL THEN column3:9 ELSE c_new:18 END [as=upsert_c:23]
-           ├── CASE WHEN a:12 IS NULL THEN column10:10 ELSE v:15 END [as=upsert_v:24]
-           └── CASE WHEN a:12 IS NULL THEN column11:11 ELSE column20:20 END [as=upsert_w:25]
+           ├── CASE WHEN t_idx2.a:12 IS NULL THEN column1:7 ELSE t_idx2.a:12 END [as=a:21]
+           ├── CASE WHEN t_idx2.a:12 IS NULL THEN column2:8 ELSE t_idx2.b:13 END [as=b:22]
+           ├── CASE WHEN t_idx2.a:12 IS NULL THEN column3:9 ELSE c:18 END [as=c:23]
+           ├── CASE WHEN t_idx2.a:12 IS NULL THEN v:10 ELSE t_idx2.v:15 END [as=v:24]
+           └── CASE WHEN t_idx2.a:12 IS NULL THEN w:11 ELSE w:20 END [as=w:25]
 
 # Test that virtual column expressions are forced to have the column type.
 exec-ddl

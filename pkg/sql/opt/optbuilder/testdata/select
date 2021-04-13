@@ -1236,15 +1236,15 @@ with &1
  │    ├── columns: abc.a:1!null abc.b:2 abc.c:3
  │    ├── insert-mapping:
  │    │    ├── column1:5 => abc.a:1
- │    │    ├── column6:6 => abc.b:2
- │    │    └── column6:6 => abc.c:3
+ │    │    ├── b:6 => abc.b:2
+ │    │    └── b:6 => abc.c:3
  │    └── project
- │         ├── columns: column6:6 column1:5!null
+ │         ├── columns: b:6 column1:5!null
  │         ├── values
  │         │    ├── columns: column1:5!null
  │         │    └── (1,)
  │         └── projections
- │              └── NULL::INT8 [as=column6:6]
+ │              └── NULL::INT8 [as=b:6]
  └── with &2 (cte)
       ├── columns: abc.a:10!null abc.b:11 abc.c:12
       ├── limit
@@ -1415,14 +1415,14 @@ insert inaccessible
  ├── columns: <none>
  ├── insert-mapping:
  │    ├── column1:4 => k:1
- │    └── column5:5 => v:2
+ │    └── v:5 => inaccessible.v:2
  └── project
-      ├── columns: column5:5 column1:4!null
+      ├── columns: v:5 column1:4!null
       ├── values
       │    ├── columns: column1:4!null
       │    └── (1,)
       └── projections
-           └── NULL::INT8 [as=column5:5]
+           └── NULL::INT8 [as=v:5]
 
 build
 INSERT INTO inaccessible VALUES (1) RETURNING v
@@ -1444,15 +1444,15 @@ UPDATE inaccessible SET k=k+1
 ----
 update inaccessible
  ├── columns: <none>
- ├── fetch columns: k:4 v:5
+ ├── fetch columns: inaccessible.k:4 v:5
  ├── update-mapping:
- │    └── k_new:7 => k:1
+ │    └── k:7 => inaccessible.k:1
  └── project
-      ├── columns: k_new:7!null k:4!null v:5 crdb_internal_mvcc_timestamp:6
+      ├── columns: k:7!null inaccessible.k:4!null v:5 crdb_internal_mvcc_timestamp:6
       ├── scan inaccessible
-      │    └── columns: k:4!null v:5 crdb_internal_mvcc_timestamp:6
+      │    └── columns: inaccessible.k:4!null v:5 crdb_internal_mvcc_timestamp:6
       └── projections
-           └── k:4 + 1 [as=k_new:7]
+           └── inaccessible.k:4 + 1 [as=k:7]
 
 build
 UPDATE inaccessible SET k=k+1 WHERE v=1

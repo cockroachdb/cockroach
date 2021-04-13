@@ -12,42 +12,42 @@ UPDATE parent SET p = p * 10 WHERE p > 1
 root
  ├── update parent
  │    ├── columns: <none>
- │    ├── fetch columns: p:3
+ │    ├── fetch columns: parent.p:3
  │    ├── update-mapping:
- │    │    └── p_new:5 => p:1
+ │    │    └── p:5 => parent.p:1
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk_p_ref_parent
  │    └── project
- │         ├── columns: p_new:5!null p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── columns: p:5!null parent.p:3!null crdb_internal_mvcc_timestamp:4
  │         ├── select
- │         │    ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    ├── columns: parent.p:3!null crdb_internal_mvcc_timestamp:4
  │         │    ├── scan parent
- │         │    │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    │    └── columns: parent.p:3!null crdb_internal_mvcc_timestamp:4
  │         │    └── filters
- │         │         └── p:3 > 1
+ │         │         └── parent.p:3 > 1
  │         └── projections
- │              └── p:3 * 10 [as=p_new:5]
+ │              └── parent.p:3 * 10 [as=p:5]
  └── cascade
       └── update child
            ├── columns: <none>
            ├── fetch columns: c:9 child.p:10
            ├── update-mapping:
-           │    └── p_new:13 => child.p:7
+           │    └── p:13 => child.p:7
            ├── input binding: &2
            ├── inner-join (hash)
-           │    ├── columns: c:9!null child.p:10!null p:12!null p_new:13!null
+           │    ├── columns: c:9!null child.p:10!null p:12!null p:13!null
            │    ├── scan child
            │    │    └── columns: c:9!null child.p:10!null
            │    ├── select
-           │    │    ├── columns: p:12!null p_new:13!null
+           │    │    ├── columns: p:12!null p:13!null
            │    │    ├── with-scan &1
-           │    │    │    ├── columns: p:12!null p_new:13!null
+           │    │    │    ├── columns: p:12!null p:13!null
            │    │    │    └── mapping:
            │    │    │         ├──  parent.p:3 => p:12
-           │    │    │         └──  p_new:5 => p_new:13
+           │    │    │         └──  p:5 => p:13
            │    │    └── filters
-           │    │         └── p:12 IS DISTINCT FROM p_new:13
+           │    │         └── p:12 IS DISTINCT FROM p:13
            │    └── filters
            │         └── child.p:10 = p:12
            └── f-k-checks
@@ -57,7 +57,7 @@ root
                           ├── with-scan &2
                           │    ├── columns: p:14!null
                           │    └── mapping:
-                          │         └──  p_new:13 => p:14
+                          │         └──  p:13 => p:14
                           ├── scan parent
                           │    └── columns: parent.p:15!null
                           └── filters
@@ -89,47 +89,47 @@ UPDATE parent_multi SET p = p * 10, q = q + 1 WHERE pk > 1
 root
  ├── update parent_multi
  │    ├── columns: <none>
- │    ├── fetch columns: pk:5 p:6 q:7
+ │    ├── fetch columns: pk:5 parent_multi.p:6 parent_multi.q:7
  │    ├── update-mapping:
- │    │    ├── p_new:9 => p:2
- │    │    └── q_new:10 => q:3
+ │    │    ├── p:9 => parent_multi.p:2
+ │    │    └── q:10 => parent_multi.q:3
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: p_new:9 q_new:10 pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         ├── columns: p:9 q:10 pk:5!null parent_multi.p:6 parent_multi.q:7 crdb_internal_mvcc_timestamp:8
  │         ├── select
- │         │    ├── columns: pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         │    ├── columns: pk:5!null parent_multi.p:6 parent_multi.q:7 crdb_internal_mvcc_timestamp:8
  │         │    ├── scan parent_multi
- │         │    │    └── columns: pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         │    │    └── columns: pk:5!null parent_multi.p:6 parent_multi.q:7 crdb_internal_mvcc_timestamp:8
  │         │    └── filters
  │         │         └── pk:5 > 1
  │         └── projections
- │              ├── p:6 * 10 [as=p_new:9]
- │              └── q:7 + 1 [as=q_new:10]
+ │              ├── parent_multi.p:6 * 10 [as=p:9]
+ │              └── parent_multi.q:7 + 1 [as=q:10]
  └── cascade
       └── update child_multi
            ├── columns: <none>
            ├── fetch columns: c:15 child_multi.p:16 child_multi.q:17
            ├── update-mapping:
-           │    ├── p_new:21 => child_multi.p:12
-           │    └── q_new:22 => child_multi.q:13
+           │    ├── p:21 => child_multi.p:12
+           │    └── q:22 => child_multi.q:13
            ├── input binding: &2
            ├── inner-join (hash)
-           │    ├── columns: c:15!null child_multi.p:16!null child_multi.q:17!null p:19!null q:20!null p_new:21 q_new:22
+           │    ├── columns: c:15!null child_multi.p:16!null child_multi.q:17!null p:19!null q:20!null p:21 q:22
            │    ├── scan child_multi
            │    │    └── columns: c:15!null child_multi.p:16 child_multi.q:17
            │    ├── select
-           │    │    ├── columns: p:19 q:20 p_new:21 q_new:22
+           │    │    ├── columns: p:19 q:20 p:21 q:22
            │    │    ├── with-scan &1
-           │    │    │    ├── columns: p:19 q:20 p_new:21 q_new:22
+           │    │    │    ├── columns: p:19 q:20 p:21 q:22
            │    │    │    └── mapping:
            │    │    │         ├──  parent_multi.p:6 => p:19
            │    │    │         ├──  parent_multi.q:7 => q:20
-           │    │    │         ├──  p_new:9 => p_new:21
-           │    │    │         └──  q_new:10 => q_new:22
+           │    │    │         ├──  p:9 => p:21
+           │    │    │         └──  q:10 => q:22
            │    │    └── filters
-           │    │         └── (p:19 IS DISTINCT FROM p_new:21) OR (q:20 IS DISTINCT FROM q_new:22)
+           │    │         └── (p:19 IS DISTINCT FROM p:21) OR (q:20 IS DISTINCT FROM q:22)
            │    └── filters
            │         ├── child_multi.p:16 = p:19
            │         └── child_multi.q:17 = q:20
@@ -142,8 +142,8 @@ root
                           │    ├── with-scan &2
                           │    │    ├── columns: p:23 q:24
                           │    │    └── mapping:
-                          │    │         ├──  p_new:21 => p:23
-                          │    │         └──  q_new:22 => q:24
+                          │    │         ├──  p:21 => p:23
+                          │    │         └──  q:22 => q:24
                           │    └── filters
                           │         ├── p:23 IS NOT NULL
                           │         └── q:24 IS NOT NULL
@@ -161,45 +161,45 @@ UPDATE parent_multi SET p = p * 10 WHERE p > 1
 root
  ├── update parent_multi
  │    ├── columns: <none>
- │    ├── fetch columns: pk:5 p:6 q:7
+ │    ├── fetch columns: pk:5 parent_multi.p:6 q:7
  │    ├── update-mapping:
- │    │    └── p_new:9 => p:2
+ │    │    └── p:9 => parent_multi.p:2
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: p_new:9!null pk:5!null p:6!null q:7 crdb_internal_mvcc_timestamp:8
+ │         ├── columns: p:9!null pk:5!null parent_multi.p:6!null q:7 crdb_internal_mvcc_timestamp:8
  │         ├── select
- │         │    ├── columns: pk:5!null p:6!null q:7 crdb_internal_mvcc_timestamp:8
+ │         │    ├── columns: pk:5!null parent_multi.p:6!null q:7 crdb_internal_mvcc_timestamp:8
  │         │    ├── scan parent_multi
- │         │    │    └── columns: pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         │    │    └── columns: pk:5!null parent_multi.p:6 q:7 crdb_internal_mvcc_timestamp:8
  │         │    └── filters
- │         │         └── p:6 > 1
+ │         │         └── parent_multi.p:6 > 1
  │         └── projections
- │              └── p:6 * 10 [as=p_new:9]
+ │              └── parent_multi.p:6 * 10 [as=p:9]
  └── cascade
       └── update child_multi
            ├── columns: <none>
            ├── fetch columns: c:14 child_multi.p:15 child_multi.q:16
            ├── update-mapping:
-           │    ├── p_new:20 => child_multi.p:11
+           │    ├── p:20 => child_multi.p:11
            │    └── q:21 => child_multi.q:12
            ├── input binding: &2
            ├── inner-join (hash)
-           │    ├── columns: c:14!null child_multi.p:15!null child_multi.q:16!null p:18!null q:19!null p_new:20!null q:21
+           │    ├── columns: c:14!null child_multi.p:15!null child_multi.q:16!null p:18!null q:19!null p:20!null q:21
            │    ├── scan child_multi
            │    │    └── columns: c:14!null child_multi.p:15 child_multi.q:16
            │    ├── select
-           │    │    ├── columns: p:18!null q:19 p_new:20!null q:21
+           │    │    ├── columns: p:18!null q:19 p:20!null q:21
            │    │    ├── with-scan &1
-           │    │    │    ├── columns: p:18!null q:19 p_new:20!null q:21
+           │    │    │    ├── columns: p:18!null q:19 p:20!null q:21
            │    │    │    └── mapping:
            │    │    │         ├──  parent_multi.p:6 => p:18
            │    │    │         ├──  parent_multi.q:7 => q:19
-           │    │    │         ├──  p_new:9 => p_new:20
+           │    │    │         ├──  p:9 => p:20
            │    │    │         └──  parent_multi.q:7 => q:21
            │    │    └── filters
-           │    │         └── (p:18 IS DISTINCT FROM p_new:20) OR (q:19 IS DISTINCT FROM q:21)
+           │    │         └── (p:18 IS DISTINCT FROM p:20) OR (q:19 IS DISTINCT FROM q:21)
            │    └── filters
            │         ├── child_multi.p:15 = p:18
            │         └── child_multi.q:16 = q:19
@@ -212,7 +212,7 @@ root
                           │    ├── with-scan &2
                           │    │    ├── columns: p:22!null q:23
                           │    │    └── mapping:
-                          │    │         ├──  p_new:20 => p:22
+                          │    │         ├──  p:20 => p:22
                           │    │         └──  q:21 => q:23
                           │    └── filters
                           │         └── q:23 IS NOT NULL
@@ -229,10 +229,10 @@ root
  ├── upsert parent_multi
  │    ├── columns: <none>
  │    ├── arbiter indexes: primary
- │    ├── canary column: pk:8
- │    ├── fetch columns: pk:8 p:9 q:10
+ │    ├── canary column: parent_multi.pk:8
+ │    ├── fetch columns: parent_multi.pk:8 p:9 q:10
  │    ├── insert-mapping:
- │    │    ├── column1:5 => pk:1
+ │    │    ├── column1:5 => parent_multi.pk:1
  │    │    ├── column2:6 => p:2
  │    │    └── column3:7 => q:3
  │    ├── update-mapping:
@@ -242,9 +242,9 @@ root
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: upsert_pk:12 column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         ├── columns: pk:12 column1:5!null column2:6!null column3:7!null parent_multi.pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
  │         ├── left-join (hash)
- │         │    ├── columns: column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    ├── columns: column1:5!null column2:6!null column3:7!null parent_multi.pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
  │         │    ├── ensure-upsert-distinct-on
  │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
  │         │    │    ├── grouping columns: column1:5!null
@@ -258,11 +258,11 @@ root
  │         │    │         └── first-agg [as=column3:7]
  │         │    │              └── column3:7
  │         │    ├── scan parent_multi
- │         │    │    └── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    │    └── columns: parent_multi.pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
  │         │    └── filters
- │         │         └── column1:5 = pk:8
+ │         │         └── column1:5 = parent_multi.pk:8
  │         └── projections
- │              └── CASE WHEN pk:8 IS NULL THEN column1:5 ELSE pk:8 END [as=upsert_pk:12]
+ │              └── CASE WHEN parent_multi.pk:8 IS NULL THEN column1:5 ELSE parent_multi.pk:8 END [as=pk:12]
  └── cascade
       └── update child_multi
            ├── columns: <none>
@@ -312,44 +312,44 @@ root
  ├── upsert parent_multi
  │    ├── columns: <none>
  │    ├── arbiter indexes: primary
- │    ├── canary column: pk:8
- │    ├── fetch columns: pk:8 p:9 q:10
+ │    ├── canary column: parent_multi.pk:8
+ │    ├── fetch columns: parent_multi.pk:8 p:9 parent_multi.q:10
  │    ├── insert-mapping:
- │    │    ├── column1:5 => pk:1
+ │    │    ├── column1:5 => parent_multi.pk:1
  │    │    ├── column2:6 => p:2
- │    │    └── column7:7 => q:3
+ │    │    └── q:7 => parent_multi.q:3
  │    ├── update-mapping:
  │    │    └── column2:6 => p:2
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: upsert_pk:12 upsert_q:13 column1:5!null column2:6!null column7:7 pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         ├── columns: pk:12 q:13 column1:5!null column2:6!null q:7 parent_multi.pk:8 p:9 parent_multi.q:10 crdb_internal_mvcc_timestamp:11
  │         ├── left-join (hash)
- │         │    ├── columns: column1:5!null column2:6!null column7:7 pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    ├── columns: column1:5!null column2:6!null q:7 parent_multi.pk:8 p:9 parent_multi.q:10 crdb_internal_mvcc_timestamp:11
  │         │    ├── ensure-upsert-distinct-on
- │         │    │    ├── columns: column1:5!null column2:6!null column7:7
+ │         │    │    ├── columns: column1:5!null column2:6!null q:7
  │         │    │    ├── grouping columns: column1:5!null
  │         │    │    ├── project
- │         │    │    │    ├── columns: column7:7 column1:5!null column2:6!null
+ │         │    │    │    ├── columns: q:7 column1:5!null column2:6!null
  │         │    │    │    ├── values
  │         │    │    │    │    ├── columns: column1:5!null column2:6!null
  │         │    │    │    │    ├── (1, 10)
  │         │    │    │    │    └── (2, 20)
  │         │    │    │    └── projections
- │         │    │    │         └── NULL::INT8 [as=column7:7]
+ │         │    │    │         └── NULL::INT8 [as=q:7]
  │         │    │    └── aggregations
  │         │    │         ├── first-agg [as=column2:6]
  │         │    │         │    └── column2:6
- │         │    │         └── first-agg [as=column7:7]
- │         │    │              └── column7:7
+ │         │    │         └── first-agg [as=q:7]
+ │         │    │              └── q:7
  │         │    ├── scan parent_multi
- │         │    │    └── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    │    └── columns: parent_multi.pk:8!null p:9 parent_multi.q:10 crdb_internal_mvcc_timestamp:11
  │         │    └── filters
- │         │         └── column1:5 = pk:8
+ │         │         └── column1:5 = parent_multi.pk:8
  │         └── projections
- │              ├── CASE WHEN pk:8 IS NULL THEN column1:5 ELSE pk:8 END [as=upsert_pk:12]
- │              └── CASE WHEN pk:8 IS NULL THEN column7:7 ELSE q:10 END [as=upsert_q:13]
+ │              ├── CASE WHEN parent_multi.pk:8 IS NULL THEN column1:5 ELSE parent_multi.pk:8 END [as=pk:12]
+ │              └── CASE WHEN parent_multi.pk:8 IS NULL THEN q:7 ELSE parent_multi.q:10 END [as=q:13]
  └── cascade
       └── update child_multi
            ├── columns: <none>
@@ -402,23 +402,23 @@ root
  ├── upsert parent_multi
  │    ├── columns: <none>
  │    ├── arbiter indexes: secondary
- │    ├── canary column: pk:8
- │    ├── fetch columns: pk:8 p:9 q:10
+ │    ├── canary column: parent_multi.pk:8
+ │    ├── fetch columns: parent_multi.pk:8 parent_multi.p:9 parent_multi.q:10
  │    ├── insert-mapping:
- │    │    ├── column1:5 => pk:1
- │    │    ├── column2:6 => p:2
- │    │    └── column3:7 => q:3
+ │    │    ├── column1:5 => parent_multi.pk:1
+ │    │    ├── column2:6 => parent_multi.p:2
+ │    │    └── column3:7 => parent_multi.q:3
  │    ├── update-mapping:
- │    │    └── upsert_p:14 => p:2
+ │    │    └── p:14 => parent_multi.p:2
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: upsert_pk:13 upsert_p:14!null upsert_q:15 column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11 p_new:12!null
+ │         ├── columns: pk:13 p:14!null q:15 column1:5!null column2:6!null column3:7!null parent_multi.pk:8 parent_multi.p:9 parent_multi.q:10 crdb_internal_mvcc_timestamp:11 p:12!null
  │         ├── project
- │         │    ├── columns: p_new:12!null column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    ├── columns: p:12!null column1:5!null column2:6!null column3:7!null parent_multi.pk:8 parent_multi.p:9 parent_multi.q:10 crdb_internal_mvcc_timestamp:11
  │         │    ├── left-join (hash)
- │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null parent_multi.pk:8 parent_multi.p:9 parent_multi.q:10 crdb_internal_mvcc_timestamp:11
  │         │    │    ├── ensure-upsert-distinct-on
  │         │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null
  │         │    │    │    ├── grouping columns: column2:6!null column3:7!null
@@ -430,39 +430,39 @@ root
  │         │    │    │         └── first-agg [as=column1:5]
  │         │    │    │              └── column1:5
  │         │    │    ├── scan parent_multi
- │         │    │    │    └── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    │    │    └── columns: parent_multi.pk:8!null parent_multi.p:9 parent_multi.q:10 crdb_internal_mvcc_timestamp:11
  │         │    │    └── filters
- │         │    │         ├── column2:6 = p:9
- │         │    │         └── column3:7 = q:10
+ │         │    │         ├── column2:6 = parent_multi.p:9
+ │         │    │         └── column3:7 = parent_multi.q:10
  │         │    └── projections
- │         │         └── 100 [as=p_new:12]
+ │         │         └── 100 [as=p:12]
  │         └── projections
- │              ├── CASE WHEN pk:8 IS NULL THEN column1:5 ELSE pk:8 END [as=upsert_pk:13]
- │              ├── CASE WHEN pk:8 IS NULL THEN column2:6 ELSE p_new:12 END [as=upsert_p:14]
- │              └── CASE WHEN pk:8 IS NULL THEN column3:7 ELSE q:10 END [as=upsert_q:15]
+ │              ├── CASE WHEN parent_multi.pk:8 IS NULL THEN column1:5 ELSE parent_multi.pk:8 END [as=pk:13]
+ │              ├── CASE WHEN parent_multi.pk:8 IS NULL THEN column2:6 ELSE p:12 END [as=p:14]
+ │              └── CASE WHEN parent_multi.pk:8 IS NULL THEN column3:7 ELSE parent_multi.q:10 END [as=q:15]
  └── cascade
       └── update child_multi
            ├── columns: <none>
            ├── fetch columns: c:20 child_multi.p:21 child_multi.q:22
            ├── update-mapping:
-           │    ├── upsert_p:26 => child_multi.p:17
+           │    ├── p:26 => child_multi.p:17
            │    └── q:27 => child_multi.q:18
            ├── input binding: &2
            ├── inner-join (hash)
-           │    ├── columns: c:20!null child_multi.p:21!null child_multi.q:22!null p:24!null q:25!null upsert_p:26!null q:27
+           │    ├── columns: c:20!null child_multi.p:21!null child_multi.q:22!null p:24!null q:25!null p:26!null q:27
            │    ├── scan child_multi
            │    │    └── columns: c:20!null child_multi.p:21 child_multi.q:22
            │    ├── select
-           │    │    ├── columns: p:24 q:25 upsert_p:26!null q:27
+           │    │    ├── columns: p:24 q:25 p:26!null q:27
            │    │    ├── with-scan &1
-           │    │    │    ├── columns: p:24 q:25 upsert_p:26!null q:27
+           │    │    │    ├── columns: p:24 q:25 p:26!null q:27
            │    │    │    └── mapping:
            │    │    │         ├──  parent_multi.p:9 => p:24
            │    │    │         ├──  parent_multi.q:10 => q:25
-           │    │    │         ├──  upsert_p:14 => upsert_p:26
+           │    │    │         ├──  p:14 => p:26
            │    │    │         └──  parent_multi.q:10 => q:27
            │    │    └── filters
-           │    │         └── (p:24 IS DISTINCT FROM upsert_p:26) OR (q:25 IS DISTINCT FROM q:27)
+           │    │         └── (p:24 IS DISTINCT FROM p:26) OR (q:25 IS DISTINCT FROM q:27)
            │    └── filters
            │         ├── child_multi.p:21 = p:24
            │         └── child_multi.q:22 = q:25
@@ -475,7 +475,7 @@ root
                           │    ├── with-scan &2
                           │    │    ├── columns: p:28!null q:29
                           │    │    └── mapping:
-                          │    │         ├──  upsert_p:26 => p:28
+                          │    │         ├──  p:26 => p:28
                           │    │         └──  q:27 => q:29
                           │    └── filters
                           │         └── q:29 IS NOT NULL
@@ -500,47 +500,47 @@ UPDATE parent_multi SET q = q * 10 WHERE p > 1
 root
  ├── update parent_multi
  │    ├── columns: <none>
- │    ├── fetch columns: pk:5 p:6 q:7
+ │    ├── fetch columns: pk:5 p:6 parent_multi.q:7
  │    ├── update-mapping:
- │    │    └── q_new:9 => q:3
+ │    │    └── q:9 => parent_multi.q:3
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: q_new:9 pk:5!null p:6!null q:7 crdb_internal_mvcc_timestamp:8
+ │         ├── columns: q:9 pk:5!null p:6!null parent_multi.q:7 crdb_internal_mvcc_timestamp:8
  │         ├── select
- │         │    ├── columns: pk:5!null p:6!null q:7 crdb_internal_mvcc_timestamp:8
+ │         │    ├── columns: pk:5!null p:6!null parent_multi.q:7 crdb_internal_mvcc_timestamp:8
  │         │    ├── scan parent_multi
- │         │    │    └── columns: pk:5!null p:6 q:7 crdb_internal_mvcc_timestamp:8
+ │         │    │    └── columns: pk:5!null p:6 parent_multi.q:7 crdb_internal_mvcc_timestamp:8
  │         │    └── filters
  │         │         └── p:6 > 1
  │         └── projections
- │              └── q:7 * 10 [as=q_new:9]
+ │              └── parent_multi.q:7 * 10 [as=q:9]
  └── cascade
       ├── update child_multi
       │    ├── columns: <none>
       │    ├── fetch columns: c:14 child_multi.p:15 child_multi.q:16
       │    ├── update-mapping:
       │    │    ├── p:20 => child_multi.p:11
-      │    │    └── q_new:21 => child_multi.q:12
+      │    │    └── q:21 => child_multi.q:12
       │    ├── input binding: &2
       │    ├── cascades
       │    │    └── fk2
       │    ├── inner-join (hash)
-      │    │    ├── columns: c:14!null child_multi.p:15!null child_multi.q:16!null p:18!null q:19!null p:20!null q_new:21
+      │    │    ├── columns: c:14!null child_multi.p:15!null child_multi.q:16!null p:18!null q:19!null p:20!null q:21
       │    │    ├── scan child_multi
       │    │    │    └── columns: c:14!null child_multi.p:15 child_multi.q:16
       │    │    ├── select
-      │    │    │    ├── columns: p:18!null q:19 p:20!null q_new:21
+      │    │    │    ├── columns: p:18!null q:19 p:20!null q:21
       │    │    │    ├── with-scan &1
-      │    │    │    │    ├── columns: p:18!null q:19 p:20!null q_new:21
+      │    │    │    │    ├── columns: p:18!null q:19 p:20!null q:21
       │    │    │    │    └── mapping:
       │    │    │    │         ├──  parent_multi.p:6 => p:18
       │    │    │    │         ├──  parent_multi.q:7 => q:19
       │    │    │    │         ├──  parent_multi.p:6 => p:20
-      │    │    │    │         └──  q_new:9 => q_new:21
+      │    │    │    │         └──  q:9 => q:21
       │    │    │    └── filters
-      │    │    │         └── (p:18 IS DISTINCT FROM p:20) OR (q:19 IS DISTINCT FROM q_new:21)
+      │    │    │         └── (p:18 IS DISTINCT FROM p:20) OR (q:19 IS DISTINCT FROM q:21)
       │    │    └── filters
       │    │         ├── child_multi.p:15 = p:18
       │    │         └── child_multi.q:16 = q:19
@@ -554,7 +554,7 @@ root
       │                   │    │    ├── columns: p:22!null q:23
       │                   │    │    └── mapping:
       │                   │    │         ├──  p:20 => p:22
-      │                   │    │         └──  q_new:21 => q:23
+      │                   │    │         └──  q:21 => q:23
       │                   │    └── filters
       │                   │         └── q:23 IS NOT NULL
       │                   ├── scan parent_multi
@@ -568,23 +568,23 @@ root
                 ├── fetch columns: g:32 grandchild.c:33 grandchild.q:34
                 ├── update-mapping:
                 │    ├── c:38 => grandchild.c:29
-                │    └── q_new:39 => grandchild.q:30
+                │    └── q:39 => grandchild.q:30
                 ├── input binding: &3
                 ├── inner-join (hash)
-                │    ├── columns: g:32!null grandchild.c:33!null grandchild.q:34!null c:36!null q:37!null c:38!null q_new:39
+                │    ├── columns: g:32!null grandchild.c:33!null grandchild.q:34!null c:36!null q:37!null c:38!null q:39
                 │    ├── scan grandchild
                 │    │    └── columns: g:32!null grandchild.c:33 grandchild.q:34
                 │    ├── select
-                │    │    ├── columns: c:36!null q:37!null c:38!null q_new:39
+                │    │    ├── columns: c:36!null q:37!null c:38!null q:39
                 │    │    ├── with-scan &2
-                │    │    │    ├── columns: c:36!null q:37!null c:38!null q_new:39
+                │    │    │    ├── columns: c:36!null q:37!null c:38!null q:39
                 │    │    │    └── mapping:
                 │    │    │         ├──  child_multi.c:14 => c:36
                 │    │    │         ├──  child_multi.q:16 => q:37
                 │    │    │         ├──  child_multi.c:14 => c:38
-                │    │    │         └──  q_new:21 => q_new:39
+                │    │    │         └──  q:21 => q:39
                 │    │    └── filters
-                │    │         └── (c:36 IS DISTINCT FROM c:38) OR (q:37 IS DISTINCT FROM q_new:39)
+                │    │         └── (c:36 IS DISTINCT FROM c:38) OR (q:37 IS DISTINCT FROM q:39)
                 │    └── filters
                 │         ├── grandchild.c:33 = c:36
                 │         └── grandchild.q:34 = q:37
@@ -598,7 +598,7 @@ root
                                │    │    ├── columns: c:40!null q:41
                                │    │    └── mapping:
                                │    │         ├──  c:38 => c:40
-                               │    │         └──  q_new:39 => q:41
+                               │    │         └──  q:39 => q:41
                                │    └── filters
                                │         └── q:41 IS NOT NULL
                                ├── scan child_multi
@@ -614,10 +614,10 @@ root
  ├── upsert parent_multi
  │    ├── columns: <none>
  │    ├── arbiter indexes: primary
- │    ├── canary column: pk:8
- │    ├── fetch columns: pk:8 p:9 q:10
+ │    ├── canary column: parent_multi.pk:8
+ │    ├── fetch columns: parent_multi.pk:8 p:9 q:10
  │    ├── insert-mapping:
- │    │    ├── column1:5 => pk:1
+ │    │    ├── column1:5 => parent_multi.pk:1
  │    │    ├── column2:6 => p:2
  │    │    └── column3:7 => q:3
  │    ├── update-mapping:
@@ -627,9 +627,9 @@ root
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: upsert_pk:12 column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         ├── columns: pk:12 column1:5!null column2:6!null column3:7!null parent_multi.pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
  │         ├── left-join (hash)
- │         │    ├── columns: column1:5!null column2:6!null column3:7!null pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    ├── columns: column1:5!null column2:6!null column3:7!null parent_multi.pk:8 p:9 q:10 crdb_internal_mvcc_timestamp:11
  │         │    ├── ensure-upsert-distinct-on
  │         │    │    ├── columns: column1:5!null column2:6!null column3:7!null
  │         │    │    ├── grouping columns: column1:5!null
@@ -643,11 +643,11 @@ root
  │         │    │         └── first-agg [as=column3:7]
  │         │    │              └── column3:7
  │         │    ├── scan parent_multi
- │         │    │    └── columns: pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
+ │         │    │    └── columns: parent_multi.pk:8!null p:9 q:10 crdb_internal_mvcc_timestamp:11
  │         │    └── filters
- │         │         └── column1:5 = pk:8
+ │         │         └── column1:5 = parent_multi.pk:8
  │         └── projections
- │              └── CASE WHEN pk:8 IS NULL THEN column1:5 ELSE pk:8 END [as=upsert_pk:12]
+ │              └── CASE WHEN parent_multi.pk:8 IS NULL THEN column1:5 ELSE parent_multi.pk:8 END [as=pk:12]
  └── cascade
       ├── update child_multi
       │    ├── columns: <none>
@@ -752,35 +752,35 @@ UPDATE parent_partial SET p = p * 10 WHERE p > 1
 root
  ├── update parent_partial
  │    ├── columns: <none>
- │    ├── fetch columns: p:3
+ │    ├── fetch columns: parent_partial.p:3
  │    ├── update-mapping:
- │    │    └── p_new:5 => p:1
+ │    │    └── p:5 => parent_partial.p:1
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk_p_ref_parent_partial
  │    └── project
- │         ├── columns: p_new:5!null p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── columns: p:5!null parent_partial.p:3!null crdb_internal_mvcc_timestamp:4
  │         ├── select
- │         │    ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    ├── columns: parent_partial.p:3!null crdb_internal_mvcc_timestamp:4
  │         │    ├── scan parent_partial
- │         │    │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    │    └── columns: parent_partial.p:3!null crdb_internal_mvcc_timestamp:4
  │         │    └── filters
- │         │         └── p:3 > 1
+ │         │         └── parent_partial.p:3 > 1
  │         └── projections
- │              └── p:3 * 10 [as=p_new:5]
+ │              └── parent_partial.p:3 * 10 [as=p:5]
  └── cascade
       └── update child_partial
            ├── columns: <none>
            ├── fetch columns: c:10 child_partial.p:11 i:12
            ├── update-mapping:
-           │    └── p_new:15 => child_partial.p:7
+           │    └── p:15 => child_partial.p:7
            ├── partial index put columns: partial_index_put1:16 partial_index_put2:17
            ├── partial index del columns: partial_index_put1:16 partial_index_del2:18
            ├── input binding: &2
            ├── project
-           │    ├── columns: partial_index_put1:16 partial_index_put2:17!null partial_index_del2:18!null c:10!null child_partial.p:11!null i:12 p:14!null p_new:15!null
+           │    ├── columns: partial_index_put1:16 partial_index_put2:17!null partial_index_del2:18!null c:10!null child_partial.p:11!null i:12 p:14!null p:15!null
            │    ├── inner-join (hash)
-           │    │    ├── columns: c:10!null child_partial.p:11!null i:12 p:14!null p_new:15!null
+           │    │    ├── columns: c:10!null child_partial.p:11!null i:12 p:14!null p:15!null
            │    │    ├── scan child_partial
            │    │    │    ├── columns: c:10!null child_partial.p:11 i:12
            │    │    │    └── partial index predicates
@@ -789,19 +789,19 @@ root
            │    │    │         └── secondary: filters
            │    │    │              └── child_partial.p:11 > 0
            │    │    ├── select
-           │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    ├── columns: p:14!null p:15!null
            │    │    │    ├── with-scan &1
-           │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    ├── columns: p:14!null p:15!null
            │    │    │    │    └── mapping:
            │    │    │    │         ├──  parent_partial.p:3 => p:14
-           │    │    │    │         └──  p_new:5 => p_new:15
+           │    │    │    │         └──  p:5 => p:15
            │    │    │    └── filters
-           │    │    │         └── p:14 IS DISTINCT FROM p_new:15
+           │    │    │         └── p:14 IS DISTINCT FROM p:15
            │    │    └── filters
            │    │         └── child_partial.p:11 = p:14
            │    └── projections
            │         ├── i:12 > 0 [as=partial_index_put1:16]
-           │         ├── p_new:15 > 0 [as=partial_index_put2:17]
+           │         ├── p:15 > 0 [as=partial_index_put2:17]
            │         └── child_partial.p:11 > 0 [as=partial_index_del2:18]
            └── f-k-checks
                 └── f-k-checks-item: child_partial(p) -> parent_partial(p)
@@ -810,7 +810,7 @@ root
                           ├── with-scan &2
                           │    ├── columns: p:19!null
                           │    └── mapping:
-                          │         └──  p_new:15 => p:19
+                          │         └──  p:15 => p:19
                           ├── scan parent_partial
                           │    └── columns: parent_partial.p:20!null
                           └── filters
@@ -836,53 +836,53 @@ UPDATE parent_partial_ambig SET p = p * 10 WHERE p > 1
 root
  ├── update parent_partial_ambig
  │    ├── columns: <none>
- │    ├── fetch columns: p:3
+ │    ├── fetch columns: parent_partial_ambig.p:3
  │    ├── update-mapping:
- │    │    └── p_new:5 => p:1
+ │    │    └── p:5 => parent_partial_ambig.p:1
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk_p_new_ref_parent_partial_ambig
  │    └── project
- │         ├── columns: p_new:5!null p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── columns: p:5!null parent_partial_ambig.p:3!null crdb_internal_mvcc_timestamp:4
  │         ├── select
- │         │    ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    ├── columns: parent_partial_ambig.p:3!null crdb_internal_mvcc_timestamp:4
  │         │    ├── scan parent_partial_ambig
- │         │    │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    │    └── columns: parent_partial_ambig.p:3!null crdb_internal_mvcc_timestamp:4
  │         │    └── filters
- │         │         └── p:3 > 1
+ │         │         └── parent_partial_ambig.p:3 > 1
  │         └── projections
- │              └── p:3 * 10 [as=p_new:5]
+ │              └── parent_partial_ambig.p:3 * 10 [as=p:5]
  └── cascade
       └── update child_partial_ambig
            ├── columns: <none>
            ├── fetch columns: c:10 child_partial_ambig.p_new:11 i:12
            ├── update-mapping:
-           │    └── p_new:15 => child_partial_ambig.p_new:7
+           │    └── p:15 => child_partial_ambig.p_new:7
            ├── partial index put columns: partial_index_put1:16
            ├── partial index del columns: partial_index_del1:17
            ├── input binding: &2
            ├── project
-           │    ├── columns: partial_index_put1:16!null partial_index_del1:17!null c:10!null child_partial_ambig.p_new:11!null i:12 p:14!null p_new:15!null
+           │    ├── columns: partial_index_put1:16!null partial_index_del1:17!null c:10!null child_partial_ambig.p_new:11!null i:12 p:14!null p:15!null
            │    ├── inner-join (hash)
-           │    │    ├── columns: c:10!null child_partial_ambig.p_new:11!null i:12 p:14!null p_new:15!null
+           │    │    ├── columns: c:10!null child_partial_ambig.p_new:11!null i:12 p:14!null p:15!null
            │    │    ├── scan child_partial_ambig
            │    │    │    ├── columns: c:10!null child_partial_ambig.p_new:11 i:12
            │    │    │    └── partial index predicates
            │    │    │         └── secondary: filters
            │    │    │              └── child_partial_ambig.p_new:11 > 0
            │    │    ├── select
-           │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    ├── columns: p:14!null p:15!null
            │    │    │    ├── with-scan &1
-           │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    ├── columns: p:14!null p:15!null
            │    │    │    │    └── mapping:
            │    │    │    │         ├──  parent_partial_ambig.p:3 => p:14
-           │    │    │    │         └──  p_new:5 => p_new:15
+           │    │    │    │         └──  p:5 => p:15
            │    │    │    └── filters
-           │    │    │         └── p:14 IS DISTINCT FROM p_new:15
+           │    │    │         └── p:14 IS DISTINCT FROM p:15
            │    │    └── filters
            │    │         └── child_partial_ambig.p_new:11 = p:14
            │    └── projections
-           │         ├── p_new:15 > 0 [as=partial_index_put1:16]
+           │         ├── p:15 > 0 [as=partial_index_put1:16]
            │         └── child_partial_ambig.p_new:11 > 0 [as=partial_index_del1:17]
            └── f-k-checks
                 └── f-k-checks-item: child_partial_ambig(p_new) -> parent_partial_ambig(p)
@@ -891,7 +891,7 @@ root
                           ├── with-scan &2
                           │    ├── columns: p_new:18!null
                           │    └── mapping:
-                          │         └──  p_new:15 => p_new:18
+                          │         └──  p:15 => p_new:18
                           ├── scan parent_partial_ambig
                           │    └── columns: parent_partial_ambig.p:19!null
                           └── filters
@@ -928,56 +928,56 @@ root
  ├── upsert parent_multi_partial
  │    ├── columns: <none>
  │    ├── arbiter indexes: primary
- │    ├── canary column: pk:7
- │    ├── fetch columns: pk:7 p:8 q:9
+ │    ├── canary column: parent_multi_partial.pk:7
+ │    ├── fetch columns: parent_multi_partial.pk:7 parent_multi_partial.p:8 q:9
  │    ├── insert-mapping:
- │    │    ├── column1:5 => pk:1
- │    │    ├── column6:6 => p:2
- │    │    └── column6:6 => q:3
+ │    │    ├── column1:5 => parent_multi_partial.pk:1
+ │    │    ├── p:6 => parent_multi_partial.p:2
+ │    │    └── p:6 => q:3
  │    ├── update-mapping:
- │    │    ├── column6:6 => p:2
- │    │    └── column6:6 => q:3
+ │    │    ├── p:6 => parent_multi_partial.p:2
+ │    │    └── p:6 => q:3
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk
  │    └── project
- │         ├── columns: upsert_pk:11 column1:5!null column6:6 pk:7 p:8 q:9 crdb_internal_mvcc_timestamp:10
+ │         ├── columns: pk:11 column1:5!null p:6 parent_multi_partial.pk:7 parent_multi_partial.p:8 q:9 crdb_internal_mvcc_timestamp:10
  │         ├── left-join (hash)
- │         │    ├── columns: column1:5!null column6:6 pk:7 p:8 q:9 crdb_internal_mvcc_timestamp:10
+ │         │    ├── columns: column1:5!null p:6 parent_multi_partial.pk:7 parent_multi_partial.p:8 q:9 crdb_internal_mvcc_timestamp:10
  │         │    ├── ensure-upsert-distinct-on
- │         │    │    ├── columns: column1:5!null column6:6
+ │         │    │    ├── columns: column1:5!null p:6
  │         │    │    ├── grouping columns: column1:5!null
  │         │    │    ├── project
- │         │    │    │    ├── columns: column6:6 column1:5!null
+ │         │    │    │    ├── columns: p:6 column1:5!null
  │         │    │    │    ├── values
  │         │    │    │    │    ├── columns: column1:5!null
  │         │    │    │    │    ├── (1,)
  │         │    │    │    │    └── (2,)
  │         │    │    │    └── projections
- │         │    │    │         └── NULL::INT8 [as=column6:6]
+ │         │    │    │         └── NULL::INT8 [as=p:6]
  │         │    │    └── aggregations
- │         │    │         └── first-agg [as=column6:6]
- │         │    │              └── column6:6
+ │         │    │         └── first-agg [as=p:6]
+ │         │    │              └── p:6
  │         │    ├── scan parent_multi_partial
- │         │    │    └── columns: pk:7!null p:8 q:9 crdb_internal_mvcc_timestamp:10
+ │         │    │    └── columns: parent_multi_partial.pk:7!null parent_multi_partial.p:8 q:9 crdb_internal_mvcc_timestamp:10
  │         │    └── filters
- │         │         └── column1:5 = pk:7
+ │         │         └── column1:5 = parent_multi_partial.pk:7
  │         └── projections
- │              └── CASE WHEN pk:7 IS NULL THEN column1:5 ELSE pk:7 END [as=upsert_pk:11]
+ │              └── CASE WHEN parent_multi_partial.pk:7 IS NULL THEN column1:5 ELSE parent_multi_partial.pk:7 END [as=pk:11]
  └── cascade
       └── update child_multi_partial
            ├── columns: <none>
            ├── fetch columns: c:17 child_multi_partial.p:18 child_multi_partial.q:19 i:20
            ├── update-mapping:
-           │    ├── column6:24 => child_multi_partial.p:13
-           │    └── column6:25 => child_multi_partial.q:14
+           │    ├── p:24 => child_multi_partial.p:13
+           │    └── p:25 => child_multi_partial.q:14
            ├── partial index put columns: partial_index_put1:26 partial_index_put2:27
            ├── partial index del columns: partial_index_put1:26 partial_index_del2:28
            ├── input binding: &2
            ├── project
-           │    ├── columns: partial_index_put1:26 partial_index_put2:27 partial_index_del2:28!null c:17!null child_multi_partial.p:18!null child_multi_partial.q:19!null i:20 p:22!null q:23!null column6:24 column6:25
+           │    ├── columns: partial_index_put1:26 partial_index_put2:27 partial_index_del2:28!null c:17!null child_multi_partial.p:18!null child_multi_partial.q:19!null i:20 p:22!null q:23!null p:24 p:25
            │    ├── inner-join (hash)
-           │    │    ├── columns: c:17!null child_multi_partial.p:18!null child_multi_partial.q:19!null i:20 p:22!null q:23!null column6:24 column6:25
+           │    │    ├── columns: c:17!null child_multi_partial.p:18!null child_multi_partial.q:19!null i:20 p:22!null q:23!null p:24 p:25
            │    │    ├── scan child_multi_partial
            │    │    │    ├── columns: c:17!null child_multi_partial.p:18 child_multi_partial.q:19 i:20
            │    │    │    └── partial index predicates
@@ -986,22 +986,22 @@ root
            │    │    │         └── secondary: filters
            │    │    │              └── (child_multi_partial.p:18 > 0) AND (child_multi_partial.q:19 > 0)
            │    │    ├── select
-           │    │    │    ├── columns: p:22 q:23 column6:24 column6:25
+           │    │    │    ├── columns: p:22 q:23 p:24 p:25
            │    │    │    ├── with-scan &1
-           │    │    │    │    ├── columns: p:22 q:23 column6:24 column6:25
+           │    │    │    │    ├── columns: p:22 q:23 p:24 p:25
            │    │    │    │    └── mapping:
            │    │    │    │         ├──  parent_multi_partial.p:8 => p:22
            │    │    │    │         ├──  parent_multi_partial.q:9 => q:23
-           │    │    │    │         ├──  column6:6 => column6:24
-           │    │    │    │         └──  column6:6 => column6:25
+           │    │    │    │         ├──  p:6 => p:24
+           │    │    │    │         └──  p:6 => p:25
            │    │    │    └── filters
-           │    │    │         └── (p:22 IS DISTINCT FROM column6:24) OR (q:23 IS DISTINCT FROM column6:25)
+           │    │    │         └── (p:22 IS DISTINCT FROM p:24) OR (q:23 IS DISTINCT FROM p:25)
            │    │    └── filters
            │    │         ├── child_multi_partial.p:18 = p:22
            │    │         └── child_multi_partial.q:19 = q:23
            │    └── projections
            │         ├── i:20 > 0 [as=partial_index_put1:26]
-           │         ├── (column6:24 > 0) AND (column6:25 > 0) [as=partial_index_put2:27]
+           │         ├── (p:24 > 0) AND (p:25 > 0) [as=partial_index_put2:27]
            │         └── (child_multi_partial.p:18 > 0) AND (child_multi_partial.q:19 > 0) [as=partial_index_del2:28]
            └── f-k-checks
                 └── f-k-checks-item: child_multi_partial(p,q) -> parent_multi_partial(p,q)
@@ -1012,8 +1012,8 @@ root
                           │    ├── with-scan &2
                           │    │    ├── columns: p:29 q:30
                           │    │    └── mapping:
-                          │    │         ├──  column6:24 => p:29
-                          │    │         └──  column6:25 => q:30
+                          │    │         ├──  p:24 => p:29
+                          │    │         └──  p:25 => q:30
                           │    └── filters
                           │         ├── p:29 IS NOT NULL
                           │         └── q:30 IS NOT NULL
@@ -1047,57 +1047,57 @@ UPDATE parent_check_ambig SET p = p * 10 WHERE p > 1
 root
  ├── update parent_check_ambig
  │    ├── columns: <none>
- │    ├── fetch columns: p:3
+ │    ├── fetch columns: parent_check_ambig.p:3
  │    ├── update-mapping:
- │    │    └── p_new:5 => p:1
+ │    │    └── p:5 => parent_check_ambig.p:1
  │    ├── input binding: &1
  │    ├── cascades
  │    │    └── fk_p_new_ref_parent_check_ambig
  │    └── project
- │         ├── columns: p_new:5!null p:3!null crdb_internal_mvcc_timestamp:4
+ │         ├── columns: p:5!null parent_check_ambig.p:3!null crdb_internal_mvcc_timestamp:4
  │         ├── select
- │         │    ├── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    ├── columns: parent_check_ambig.p:3!null crdb_internal_mvcc_timestamp:4
  │         │    ├── scan parent_check_ambig
- │         │    │    └── columns: p:3!null crdb_internal_mvcc_timestamp:4
+ │         │    │    └── columns: parent_check_ambig.p:3!null crdb_internal_mvcc_timestamp:4
  │         │    └── filters
- │         │         └── p:3 > 1
+ │         │         └── parent_check_ambig.p:3 > 1
  │         └── projections
- │              └── p:3 * 10 [as=p_new:5]
+ │              └── parent_check_ambig.p:3 * 10 [as=p:5]
  └── cascade
       └── update child_check_ambig
            ├── columns: <none>
-           ├── fetch columns: c:10 child_check_ambig.p_new:11 i:12
+           ├── fetch columns: c:10 child_check_ambig.p_new:11 child_check_ambig.i:12
            ├── update-mapping:
-           │    ├── p_new:15 => child_check_ambig.p_new:7
-           │    └── column16:16 => i:8
+           │    ├── p:15 => child_check_ambig.p_new:7
+           │    └── i:16 => child_check_ambig.i:8
            ├── check columns: check1:17
            ├── input binding: &2
            ├── project
-           │    ├── columns: check1:17!null c:10!null child_check_ambig.p_new:11!null i:12 p:14!null p_new:15!null column16:16!null
+           │    ├── columns: check1:17!null c:10!null child_check_ambig.p_new:11!null child_check_ambig.i:12 p:14!null p:15!null i:16!null
            │    ├── project
-           │    │    ├── columns: column16:16!null c:10!null child_check_ambig.p_new:11!null i:12 p:14!null p_new:15!null
+           │    │    ├── columns: i:16!null c:10!null child_check_ambig.p_new:11!null child_check_ambig.i:12 p:14!null p:15!null
            │    │    ├── inner-join (hash)
-           │    │    │    ├── columns: c:10!null child_check_ambig.p_new:11!null i:12 p:14!null p_new:15!null
+           │    │    │    ├── columns: c:10!null child_check_ambig.p_new:11!null child_check_ambig.i:12 p:14!null p:15!null
            │    │    │    ├── scan child_check_ambig
-           │    │    │    │    ├── columns: c:10!null child_check_ambig.p_new:11 i:12
+           │    │    │    │    ├── columns: c:10!null child_check_ambig.p_new:11 child_check_ambig.i:12
            │    │    │    │    └── computed column expressions
-           │    │    │    │         └── i:12
+           │    │    │    │         └── child_check_ambig.i:12
            │    │    │    │              └── child_check_ambig.p_new:11 * 2
            │    │    │    ├── select
-           │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    ├── columns: p:14!null p:15!null
            │    │    │    │    ├── with-scan &1
-           │    │    │    │    │    ├── columns: p:14!null p_new:15!null
+           │    │    │    │    │    ├── columns: p:14!null p:15!null
            │    │    │    │    │    └── mapping:
            │    │    │    │    │         ├──  parent_check_ambig.p:3 => p:14
-           │    │    │    │    │         └──  p_new:5 => p_new:15
+           │    │    │    │    │         └──  p:5 => p:15
            │    │    │    │    └── filters
-           │    │    │    │         └── p:14 IS DISTINCT FROM p_new:15
+           │    │    │    │         └── p:14 IS DISTINCT FROM p:15
            │    │    │    └── filters
            │    │    │         └── child_check_ambig.p_new:11 = p:14
            │    │    └── projections
-           │    │         └── p_new:15 * 2 [as=column16:16]
+           │    │         └── p:15 * 2 [as=i:16]
            │    └── projections
-           │         └── p_new:15 > 0 [as=check1:17]
+           │         └── p:15 > 0 [as=check1:17]
            └── f-k-checks
                 └── f-k-checks-item: child_check_ambig(p_new) -> parent_check_ambig(p)
                      └── anti-join (hash)
@@ -1105,7 +1105,7 @@ root
                           ├── with-scan &2
                           │    ├── columns: p_new:18!null
                           │    └── mapping:
-                          │         └──  p_new:15 => p_new:18
+                          │         └──  p:15 => p_new:18
                           ├── scan parent_check_ambig
                           │    └── columns: parent_check_ambig.p:19!null
                           └── filters

@@ -35,7 +35,7 @@ upsert uniq
  │    └── column5:11 => uniq.y:5
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:18 column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
+ │    ├── columns: k:18 column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    ├── left-join (hash)
  │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    ├── ensure-upsert-distinct-on
@@ -59,7 +59,7 @@ upsert uniq
  │    │    └── filters
  │    │         └── column1:7 = uniq.k:12
  │    └── projections
- │         └── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=upsert_k:18]
+ │         └── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=k:18]
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -69,7 +69,7 @@ upsert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:25 v:26!null w:27!null x:28!null y:29!null
       │              │    └── mapping:
-      │              │         ├──  upsert_k:18 => k:25
+      │              │         ├──  k:18 => k:25
       │              │         ├──  column2:8 => v:26
       │              │         ├──  column3:9 => w:27
       │              │         ├──  column4:10 => x:28
@@ -87,7 +87,7 @@ upsert uniq
                      ├── with-scan &1
                      │    ├── columns: k:36 v:37!null w:38!null x:39!null y:40!null
                      │    └── mapping:
-                     │         ├──  upsert_k:18 => k:36
+                     │         ├──  k:18 => k:36
                      │         ├──  column2:8 => v:37
                      │         ├──  column3:9 => w:38
                      │         ├──  column4:10 => x:39
@@ -113,45 +113,45 @@ upsert uniq
  │    ├── column1:7 => uniq.k:1
  │    ├── column2:8 => uniq.v:2
  │    ├── column3:9 => uniq.w:3
- │    ├── column10:10 => uniq.x:4
- │    └── column11:11 => uniq.y:5
+ │    ├── x:10 => uniq.x:4
+ │    └── y:11 => uniq.y:5
  ├── update-mapping:
  │    ├── column2:8 => uniq.v:2
  │    └── column3:9 => uniq.w:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:18 upsert_x:19 upsert_y:20 column1:7!null column2:8!null column3:9!null column10:10 column11:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
+ │    ├── columns: k:18 x:19 y:20 column1:7!null column2:8!null column3:9!null x:10 y:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    ├── left-join (hash)
- │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
+ │    │    ├── columns: column1:7!null column2:8!null column3:9!null x:10 y:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11!null
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null x:10 y:11!null
  │    │    │    ├── grouping columns: column1:7!null
  │    │    │    ├── project
- │    │    │    │    ├── columns: column10:10 column11:11!null column1:7!null column2:8!null column3:9!null
+ │    │    │    │    ├── columns: x:10 y:11!null column1:7!null column2:8!null column3:9!null
  │    │    │    │    ├── values
  │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
  │    │    │    │    │    ├── (1, 1, 1)
  │    │    │    │    │    └── (2, 2, 2)
  │    │    │    │    └── projections
- │    │    │    │         ├── NULL::INT8 [as=column10:10]
- │    │    │    │         └── 5 [as=column11:11]
+ │    │    │    │         ├── NULL::INT8 [as=x:10]
+ │    │    │    │         └── 5 [as=y:11]
  │    │    │    └── aggregations
  │    │    │         ├── first-agg [as=column2:8]
  │    │    │         │    └── column2:8
  │    │    │         ├── first-agg [as=column3:9]
  │    │    │         │    └── column3:9
- │    │    │         ├── first-agg [as=column10:10]
- │    │    │         │    └── column10:10
- │    │    │         └── first-agg [as=column11:11]
- │    │    │              └── column11:11
+ │    │    │         ├── first-agg [as=x:10]
+ │    │    │         │    └── x:10
+ │    │    │         └── first-agg [as=y:11]
+ │    │    │              └── y:11
  │    │    ├── scan uniq
  │    │    │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    └── filters
  │    │         └── column1:7 = uniq.k:12
  │    └── projections
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=upsert_k:18]
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column10:10 ELSE uniq.x:15 END [as=upsert_x:19]
- │         └── CASE WHEN uniq.k:12 IS NULL THEN column11:11 ELSE uniq.y:16 END [as=upsert_y:20]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=k:18]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN x:10 ELSE uniq.x:15 END [as=x:19]
+ │         └── CASE WHEN uniq.k:12 IS NULL THEN y:11 ELSE uniq.y:16 END [as=y:20]
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -161,11 +161,11 @@ upsert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:27 v:28!null w:29!null x:30 y:31
       │              │    └── mapping:
-      │              │         ├──  upsert_k:18 => k:27
+      │              │         ├──  k:18 => k:27
       │              │         ├──  column2:8 => v:28
       │              │         ├──  column3:9 => w:29
-      │              │         ├──  upsert_x:19 => x:30
-      │              │         └──  upsert_y:20 => y:31
+      │              │         ├──  x:19 => x:30
+      │              │         └──  y:20 => y:31
       │              ├── scan uniq
       │              │    └── columns: uniq.k:21!null uniq.v:22 uniq.w:23 uniq.x:24 uniq.y:25
       │              └── filters
@@ -179,11 +179,11 @@ upsert uniq
                      ├── with-scan &1
                      │    ├── columns: k:38 v:39!null w:40!null x:41 y:42
                      │    └── mapping:
-                     │         ├──  upsert_k:18 => k:38
+                     │         ├──  k:18 => k:38
                      │         ├──  column2:8 => v:39
                      │         ├──  column3:9 => w:40
-                     │         ├──  upsert_x:19 => x:41
-                     │         └──  upsert_y:20 => y:42
+                     │         ├──  x:19 => x:41
+                     │         └──  y:20 => y:42
                      ├── scan uniq
                      │    └── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35 uniq.y:36
                      └── filters
@@ -204,47 +204,47 @@ upsert uniq
  ├── fetch columns: uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16
  ├── insert-mapping:
  │    ├── column1:7 => uniq.k:1
- │    ├── column10:10 => uniq.v:2
+ │    ├── v:10 => uniq.v:2
  │    ├── column2:8 => uniq.w:3
  │    ├── column3:9 => uniq.x:4
- │    └── column11:11 => uniq.y:5
+ │    └── y:11 => uniq.y:5
  ├── update-mapping:
  │    ├── column2:8 => uniq.w:3
  │    └── column3:9 => uniq.x:4
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:18 upsert_v:19 upsert_y:20 column1:7!null column2:8 column3:9 column10:10 column11:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
+ │    ├── columns: k:18 v:19 y:20 column1:7!null column2:8 column3:9 v:10 y:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    ├── left-join (hash)
- │    │    ├── columns: column1:7!null column2:8 column3:9 column10:10 column11:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
+ │    │    ├── columns: column1:7!null column2:8 column3:9 v:10 y:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: column1:7!null column2:8 column3:9 column10:10 column11:11!null
+ │    │    │    ├── columns: column1:7!null column2:8 column3:9 v:10 y:11!null
  │    │    │    ├── grouping columns: column1:7!null
  │    │    │    ├── project
- │    │    │    │    ├── columns: column10:10 column11:11!null column1:7!null column2:8 column3:9
+ │    │    │    │    ├── columns: v:10 y:11!null column1:7!null column2:8 column3:9
  │    │    │    │    ├── values
  │    │    │    │    │    ├── columns: column1:7!null column2:8 column3:9
  │    │    │    │    │    ├── (1, NULL::INT8, 1)
  │    │    │    │    │    └── (2, NULL::INT8, NULL::INT8)
  │    │    │    │    └── projections
- │    │    │    │         ├── NULL::INT8 [as=column10:10]
- │    │    │    │         └── 5 [as=column11:11]
+ │    │    │    │         ├── NULL::INT8 [as=v:10]
+ │    │    │    │         └── 5 [as=y:11]
  │    │    │    └── aggregations
  │    │    │         ├── first-agg [as=column2:8]
  │    │    │         │    └── column2:8
  │    │    │         ├── first-agg [as=column3:9]
  │    │    │         │    └── column3:9
- │    │    │         ├── first-agg [as=column10:10]
- │    │    │         │    └── column10:10
- │    │    │         └── first-agg [as=column11:11]
- │    │    │              └── column11:11
+ │    │    │         ├── first-agg [as=v:10]
+ │    │    │         │    └── v:10
+ │    │    │         └── first-agg [as=y:11]
+ │    │    │              └── y:11
  │    │    ├── scan uniq
  │    │    │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    └── filters
  │    │         └── column1:7 = uniq.k:12
  │    └── projections
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=upsert_k:18]
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column10:10 ELSE uniq.v:13 END [as=upsert_v:19]
- │         └── CASE WHEN uniq.k:12 IS NULL THEN column11:11 ELSE uniq.y:16 END [as=upsert_y:20]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=k:18]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN v:10 ELSE uniq.v:13 END [as=v:19]
+ │         └── CASE WHEN uniq.k:12 IS NULL THEN y:11 ELSE uniq.y:16 END [as=y:20]
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -254,11 +254,11 @@ upsert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:27 v:28 w:29 x:30 y:31
       │              │    └── mapping:
-      │              │         ├──  upsert_k:18 => k:27
-      │              │         ├──  upsert_v:19 => v:28
+      │              │         ├──  k:18 => k:27
+      │              │         ├──  v:19 => v:28
       │              │         ├──  column2:8 => w:29
       │              │         ├──  column3:9 => x:30
-      │              │         └──  upsert_y:20 => y:31
+      │              │         └──  y:20 => y:31
       │              ├── scan uniq
       │              │    └── columns: uniq.k:21!null uniq.v:22 uniq.w:23 uniq.x:24 uniq.y:25
       │              └── filters
@@ -272,11 +272,11 @@ upsert uniq
                      ├── with-scan &1
                      │    ├── columns: k:38 v:39 w:40 x:41 y:42
                      │    └── mapping:
-                     │         ├──  upsert_k:18 => k:38
-                     │         ├──  upsert_v:19 => v:39
+                     │         ├──  k:18 => k:38
+                     │         ├──  v:19 => v:39
                      │         ├──  column2:8 => w:40
                      │         ├──  column3:9 => x:41
-                     │         └──  upsert_y:20 => y:42
+                     │         └──  y:20 => y:42
                      ├── scan uniq
                      │    └── columns: uniq.k:32!null uniq.v:33 uniq.w:34 uniq.x:35 uniq.y:36
                      └── filters
@@ -299,45 +299,45 @@ upsert uniq
  │    ├── other.k:7 => uniq.k:1
  │    ├── other.v:8 => uniq.v:2
  │    ├── other.w:9 => uniq.w:3
- │    ├── column14:14 => uniq.x:4
- │    └── column15:15 => uniq.y:5
+ │    ├── x:14 => uniq.x:4
+ │    └── y:15 => uniq.y:5
  ├── update-mapping:
  │    ├── other.v:8 => uniq.v:2
  │    ├── other.w:9 => uniq.w:3
- │    ├── column14:14 => uniq.x:4
- │    └── column15:15 => uniq.y:5
+ │    ├── x:14 => uniq.x:4
+ │    └── y:15 => uniq.y:5
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:22 other.k:7 other.v:8 other.w:9!null column14:14 column15:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
+ │    ├── columns: k:22 other.k:7 other.v:8 other.w:9!null x:14 y:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
  │    ├── left-join (hash)
- │    │    ├── columns: other.k:7 other.v:8 other.w:9!null column14:14 column15:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
+ │    │    ├── columns: other.k:7 other.v:8 other.w:9!null x:14 y:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
  │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: other.k:7 other.v:8 other.w:9!null column14:14 column15:15!null
+ │    │    │    ├── columns: other.k:7 other.v:8 other.w:9!null x:14 y:15!null
  │    │    │    ├── grouping columns: other.k:7
  │    │    │    ├── project
- │    │    │    │    ├── columns: column14:14 column15:15!null other.k:7 other.v:8 other.w:9!null
+ │    │    │    │    ├── columns: x:14 y:15!null other.k:7 other.v:8 other.w:9!null
  │    │    │    │    ├── project
  │    │    │    │    │    ├── columns: other.k:7 other.v:8 other.w:9!null
  │    │    │    │    │    └── scan other
  │    │    │    │    │         └── columns: other.k:7 other.v:8 other.w:9!null other.x:10 other.y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13
  │    │    │    │    └── projections
- │    │    │    │         ├── NULL::INT8 [as=column14:14]
- │    │    │    │         └── 5 [as=column15:15]
+ │    │    │    │         ├── NULL::INT8 [as=x:14]
+ │    │    │    │         └── 5 [as=y:15]
  │    │    │    └── aggregations
  │    │    │         ├── first-agg [as=other.v:8]
  │    │    │         │    └── other.v:8
  │    │    │         ├── first-agg [as=other.w:9]
  │    │    │         │    └── other.w:9
- │    │    │         ├── first-agg [as=column14:14]
- │    │    │         │    └── column14:14
- │    │    │         └── first-agg [as=column15:15]
- │    │    │              └── column15:15
+ │    │    │         ├── first-agg [as=x:14]
+ │    │    │         │    └── x:14
+ │    │    │         └── first-agg [as=y:15]
+ │    │    │              └── y:15
  │    │    ├── scan uniq
  │    │    │    └── columns: uniq.k:16!null uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
  │    │    └── filters
  │    │         └── other.k:7 = uniq.k:16
  │    └── projections
- │         └── CASE WHEN uniq.k:16 IS NULL THEN other.k:7 ELSE uniq.k:16 END [as=upsert_k:22]
+ │         └── CASE WHEN uniq.k:16 IS NULL THEN other.k:7 ELSE uniq.k:16 END [as=k:22]
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -347,11 +347,11 @@ upsert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:29 v:30 w:31!null x:32 y:33!null
       │              │    └── mapping:
-      │              │         ├──  upsert_k:22 => k:29
+      │              │         ├──  k:22 => k:29
       │              │         ├──  other.v:8 => v:30
       │              │         ├──  other.w:9 => w:31
-      │              │         ├──  column14:14 => x:32
-      │              │         └──  column15:15 => y:33
+      │              │         ├──  x:14 => x:32
+      │              │         └──  y:15 => y:33
       │              ├── scan uniq
       │              │    └── columns: uniq.k:23!null uniq.v:24 uniq.w:25 uniq.x:26 uniq.y:27
       │              └── filters
@@ -365,11 +365,11 @@ upsert uniq
                      ├── with-scan &1
                      │    ├── columns: k:40 v:41 w:42!null x:43 y:44!null
                      │    └── mapping:
-                     │         ├──  upsert_k:22 => k:40
+                     │         ├──  k:22 => k:40
                      │         ├──  other.v:8 => v:41
                      │         ├──  other.w:9 => w:42
-                     │         ├──  column14:14 => x:43
-                     │         └──  column15:15 => y:44
+                     │         ├──  x:14 => x:43
+                     │         └──  y:15 => y:44
                      ├── scan uniq
                      │    └── columns: uniq.k:34!null uniq.v:35 uniq.w:36 uniq.x:37 uniq.y:38
                      └── filters
@@ -392,49 +392,49 @@ upsert uniq
  ├── insert-mapping:
  │    ├── column1:7 => uniq.k:1
  │    ├── column2:8 => uniq.v:2
- │    ├── column9:9 => uniq.w:3
- │    ├── column9:9 => uniq.x:4
- │    └── column10:10 => uniq.y:5
+ │    ├── w:9 => uniq.w:3
+ │    ├── w:9 => uniq.x:4
+ │    └── y:10 => uniq.y:5
  ├── update-mapping:
- │    └── upsert_w:20 => uniq.w:3
+ │    └── w:20 => uniq.w:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:18 upsert_v:19 upsert_w:20 upsert_x:21 upsert_y:22 column1:7!null column2:8!null column9:9 column10:10!null uniq.k:11 uniq.v:12 uniq.w:13 uniq.x:14 uniq.y:15 crdb_internal_mvcc_timestamp:16 w_new:17
+ │    ├── columns: k:18 v:19 w:20 x:21 y:22 column1:7!null column2:8!null w:9 y:10!null uniq.k:11 uniq.v:12 uniq.w:13 uniq.x:14 uniq.y:15 crdb_internal_mvcc_timestamp:16 w:17
  │    ├── project
- │    │    ├── columns: w_new:17 column1:7!null column2:8!null column9:9 column10:10!null uniq.k:11 uniq.v:12 uniq.w:13 uniq.x:14 uniq.y:15 crdb_internal_mvcc_timestamp:16
+ │    │    ├── columns: w:17 column1:7!null column2:8!null w:9 y:10!null uniq.k:11 uniq.v:12 uniq.w:13 uniq.x:14 uniq.y:15 crdb_internal_mvcc_timestamp:16
  │    │    ├── left-join (hash)
- │    │    │    ├── columns: column1:7!null column2:8!null column9:9 column10:10!null uniq.k:11 uniq.v:12 uniq.w:13 uniq.x:14 uniq.y:15 crdb_internal_mvcc_timestamp:16
+ │    │    │    ├── columns: column1:7!null column2:8!null w:9 y:10!null uniq.k:11 uniq.v:12 uniq.w:13 uniq.x:14 uniq.y:15 crdb_internal_mvcc_timestamp:16
  │    │    │    ├── ensure-upsert-distinct-on
- │    │    │    │    ├── columns: column1:7!null column2:8!null column9:9 column10:10!null
+ │    │    │    │    ├── columns: column1:7!null column2:8!null w:9 y:10!null
  │    │    │    │    ├── grouping columns: column1:7!null
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: column9:9 column10:10!null column1:7!null column2:8!null
+ │    │    │    │    │    ├── columns: w:9 y:10!null column1:7!null column2:8!null
  │    │    │    │    │    ├── values
  │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null
  │    │    │    │    │    │    ├── (100, 1)
  │    │    │    │    │    │    └── (200, 1)
  │    │    │    │    │    └── projections
- │    │    │    │    │         ├── NULL::INT8 [as=column9:9]
- │    │    │    │    │         └── 5 [as=column10:10]
+ │    │    │    │    │         ├── NULL::INT8 [as=w:9]
+ │    │    │    │    │         └── 5 [as=y:10]
  │    │    │    │    └── aggregations
  │    │    │    │         ├── first-agg [as=column2:8]
  │    │    │    │         │    └── column2:8
- │    │    │    │         ├── first-agg [as=column9:9]
- │    │    │    │         │    └── column9:9
- │    │    │    │         └── first-agg [as=column10:10]
- │    │    │    │              └── column10:10
+ │    │    │    │         ├── first-agg [as=w:9]
+ │    │    │    │         │    └── w:9
+ │    │    │    │         └── first-agg [as=y:10]
+ │    │    │    │              └── y:10
  │    │    │    ├── scan uniq
  │    │    │    │    └── columns: uniq.k:11!null uniq.v:12 uniq.w:13 uniq.x:14 uniq.y:15 crdb_internal_mvcc_timestamp:16
  │    │    │    └── filters
  │    │    │         └── column1:7 = uniq.k:11
  │    │    └── projections
- │    │         └── column9:9 + 1 [as=w_new:17]
+ │    │         └── w:9 + 1 [as=w:17]
  │    └── projections
- │         ├── CASE WHEN uniq.k:11 IS NULL THEN column1:7 ELSE uniq.k:11 END [as=upsert_k:18]
- │         ├── CASE WHEN uniq.k:11 IS NULL THEN column2:8 ELSE uniq.v:12 END [as=upsert_v:19]
- │         ├── CASE WHEN uniq.k:11 IS NULL THEN column9:9 ELSE w_new:17 END [as=upsert_w:20]
- │         ├── CASE WHEN uniq.k:11 IS NULL THEN column9:9 ELSE uniq.x:14 END [as=upsert_x:21]
- │         └── CASE WHEN uniq.k:11 IS NULL THEN column10:10 ELSE uniq.y:15 END [as=upsert_y:22]
+ │         ├── CASE WHEN uniq.k:11 IS NULL THEN column1:7 ELSE uniq.k:11 END [as=k:18]
+ │         ├── CASE WHEN uniq.k:11 IS NULL THEN column2:8 ELSE uniq.v:12 END [as=v:19]
+ │         ├── CASE WHEN uniq.k:11 IS NULL THEN w:9 ELSE w:17 END [as=w:20]
+ │         ├── CASE WHEN uniq.k:11 IS NULL THEN w:9 ELSE uniq.x:14 END [as=x:21]
+ │         └── CASE WHEN uniq.k:11 IS NULL THEN y:10 ELSE uniq.y:15 END [as=y:22]
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -444,11 +444,11 @@ upsert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:29 v:30 w:31 x:32 y:33
       │              │    └── mapping:
-      │              │         ├──  upsert_k:18 => k:29
-      │              │         ├──  upsert_v:19 => v:30
-      │              │         ├──  upsert_w:20 => w:31
-      │              │         ├──  upsert_x:21 => x:32
-      │              │         └──  upsert_y:22 => y:33
+      │              │         ├──  k:18 => k:29
+      │              │         ├──  v:19 => v:30
+      │              │         ├──  w:20 => w:31
+      │              │         ├──  x:21 => x:32
+      │              │         └──  y:22 => y:33
       │              ├── scan uniq
       │              │    └── columns: uniq.k:23!null uniq.v:24 uniq.w:25 uniq.x:26 uniq.y:27
       │              └── filters
@@ -462,11 +462,11 @@ upsert uniq
                      ├── with-scan &1
                      │    ├── columns: k:40 v:41 w:42 x:43 y:44
                      │    └── mapping:
-                     │         ├──  upsert_k:18 => k:40
-                     │         ├──  upsert_v:19 => v:41
-                     │         ├──  upsert_w:20 => w:42
-                     │         ├──  upsert_x:21 => x:43
-                     │         └──  upsert_y:22 => y:44
+                     │         ├──  k:18 => k:40
+                     │         ├──  v:19 => v:41
+                     │         ├──  w:20 => w:42
+                     │         ├──  x:21 => x:43
+                     │         └──  y:22 => y:44
                      ├── scan uniq
                      │    └── columns: uniq.k:34!null uniq.v:35 uniq.w:36 uniq.x:37 uniq.y:38
                      └── filters
@@ -488,49 +488,49 @@ upsert uniq
  ├── insert-mapping:
  │    ├── other.k:7 => uniq.k:1
  │    ├── other.v:8 => uniq.v:2
- │    ├── column14:14 => uniq.w:3
- │    ├── column14:14 => uniq.x:4
- │    └── column15:15 => uniq.y:5
+ │    ├── w:14 => uniq.w:3
+ │    ├── w:14 => uniq.x:4
+ │    └── y:15 => uniq.y:5
  ├── update-mapping:
- │    └── upsert_w:25 => uniq.w:3
+ │    └── w:25 => uniq.w:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:23 upsert_v:24 upsert_w:25 upsert_x:26 upsert_y:27 other.k:7 other.v:8 column14:14 column15:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21 w_new:22
+ │    ├── columns: k:23 v:24 w:25 x:26 y:27 other.k:7 other.v:8 w:14 y:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21 w:22
  │    ├── project
- │    │    ├── columns: w_new:22 other.k:7 other.v:8 column14:14 column15:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
+ │    │    ├── columns: w:22 other.k:7 other.v:8 w:14 y:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
  │    │    ├── left-join (hash)
- │    │    │    ├── columns: other.k:7 other.v:8 column14:14 column15:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
+ │    │    │    ├── columns: other.k:7 other.v:8 w:14 y:15!null uniq.k:16 uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
  │    │    │    ├── ensure-upsert-distinct-on
- │    │    │    │    ├── columns: other.k:7 other.v:8 column14:14 column15:15!null
+ │    │    │    │    ├── columns: other.k:7 other.v:8 w:14 y:15!null
  │    │    │    │    ├── grouping columns: other.k:7
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: column14:14 column15:15!null other.k:7 other.v:8
+ │    │    │    │    │    ├── columns: w:14 y:15!null other.k:7 other.v:8
  │    │    │    │    │    ├── project
  │    │    │    │    │    │    ├── columns: other.k:7 other.v:8
  │    │    │    │    │    │    └── scan other
  │    │    │    │    │    │         └── columns: other.k:7 other.v:8 other.w:9!null other.x:10 other.y:11 rowid:12!null other.crdb_internal_mvcc_timestamp:13
  │    │    │    │    │    └── projections
- │    │    │    │    │         ├── NULL::INT8 [as=column14:14]
- │    │    │    │    │         └── 5 [as=column15:15]
+ │    │    │    │    │         ├── NULL::INT8 [as=w:14]
+ │    │    │    │    │         └── 5 [as=y:15]
  │    │    │    │    └── aggregations
  │    │    │    │         ├── first-agg [as=other.v:8]
  │    │    │    │         │    └── other.v:8
- │    │    │    │         ├── first-agg [as=column14:14]
- │    │    │    │         │    └── column14:14
- │    │    │    │         └── first-agg [as=column15:15]
- │    │    │    │              └── column15:15
+ │    │    │    │         ├── first-agg [as=w:14]
+ │    │    │    │         │    └── w:14
+ │    │    │    │         └── first-agg [as=y:15]
+ │    │    │    │              └── y:15
  │    │    │    ├── scan uniq
  │    │    │    │    └── columns: uniq.k:16!null uniq.v:17 uniq.w:18 uniq.x:19 uniq.y:20 uniq.crdb_internal_mvcc_timestamp:21
  │    │    │    └── filters
  │    │    │         └── other.k:7 = uniq.k:16
  │    │    └── projections
- │    │         └── uniq.k:16 + 1 [as=w_new:22]
+ │    │         └── uniq.k:16 + 1 [as=w:22]
  │    └── projections
- │         ├── CASE WHEN uniq.k:16 IS NULL THEN other.k:7 ELSE uniq.k:16 END [as=upsert_k:23]
- │         ├── CASE WHEN uniq.k:16 IS NULL THEN other.v:8 ELSE uniq.v:17 END [as=upsert_v:24]
- │         ├── CASE WHEN uniq.k:16 IS NULL THEN column14:14 ELSE w_new:22 END [as=upsert_w:25]
- │         ├── CASE WHEN uniq.k:16 IS NULL THEN column14:14 ELSE uniq.x:19 END [as=upsert_x:26]
- │         └── CASE WHEN uniq.k:16 IS NULL THEN column15:15 ELSE uniq.y:20 END [as=upsert_y:27]
+ │         ├── CASE WHEN uniq.k:16 IS NULL THEN other.k:7 ELSE uniq.k:16 END [as=k:23]
+ │         ├── CASE WHEN uniq.k:16 IS NULL THEN other.v:8 ELSE uniq.v:17 END [as=v:24]
+ │         ├── CASE WHEN uniq.k:16 IS NULL THEN w:14 ELSE w:22 END [as=w:25]
+ │         ├── CASE WHEN uniq.k:16 IS NULL THEN w:14 ELSE uniq.x:19 END [as=x:26]
+ │         └── CASE WHEN uniq.k:16 IS NULL THEN y:15 ELSE uniq.y:20 END [as=y:27]
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -540,11 +540,11 @@ upsert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:34 v:35 w:36 x:37 y:38
       │              │    └── mapping:
-      │              │         ├──  upsert_k:23 => k:34
-      │              │         ├──  upsert_v:24 => v:35
-      │              │         ├──  upsert_w:25 => w:36
-      │              │         ├──  upsert_x:26 => x:37
-      │              │         └──  upsert_y:27 => y:38
+      │              │         ├──  k:23 => k:34
+      │              │         ├──  v:24 => v:35
+      │              │         ├──  w:25 => w:36
+      │              │         ├──  x:26 => x:37
+      │              │         └──  y:27 => y:38
       │              ├── scan uniq
       │              │    └── columns: uniq.k:28!null uniq.v:29 uniq.w:30 uniq.x:31 uniq.y:32
       │              └── filters
@@ -558,11 +558,11 @@ upsert uniq
                      ├── with-scan &1
                      │    ├── columns: k:45 v:46 w:47 x:48 y:49
                      │    └── mapping:
-                     │         ├──  upsert_k:23 => k:45
-                     │         ├──  upsert_v:24 => v:46
-                     │         ├──  upsert_w:25 => w:47
-                     │         ├──  upsert_x:26 => x:48
-                     │         └──  upsert_y:27 => y:49
+                     │         ├──  k:23 => k:45
+                     │         ├──  v:24 => v:46
+                     │         ├──  w:25 => w:47
+                     │         ├──  x:26 => x:48
+                     │         └──  y:27 => y:49
                      ├── scan uniq
                      │    └── columns: uniq.k:39!null uniq.v:40 uniq.w:41 uniq.x:42 uniq.y:43
                      └── filters
@@ -584,50 +584,50 @@ upsert uniq
  │    ├── column1:7 => uniq.k:1
  │    ├── column2:8 => uniq.v:2
  │    ├── column3:9 => uniq.w:3
- │    ├── column10:10 => uniq.x:4
- │    └── column11:11 => uniq.y:5
+ │    ├── x:10 => uniq.x:4
+ │    └── y:11 => uniq.y:5
  ├── update-mapping:
- │    └── upsert_w:21 => uniq.w:3
+ │    └── w:21 => uniq.w:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:19 upsert_v:20 upsert_w:21!null upsert_x:22 upsert_y:23 column1:7!null column2:8!null column3:9!null column10:10 column11:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17 w_new:18!null
+ │    ├── columns: k:19 v:20 w:21!null x:22 y:23 column1:7!null column2:8!null column3:9!null x:10 y:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17 w:18!null
  │    ├── project
- │    │    ├── columns: w_new:18!null column1:7!null column2:8!null column3:9!null column10:10 column11:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
+ │    │    ├── columns: w:18!null column1:7!null column2:8!null column3:9!null x:10 y:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    ├── left-join (hash)
- │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null x:10 y:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    │    ├── ensure-upsert-distinct-on
- │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11!null
+ │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null x:10 y:11!null
  │    │    │    │    ├── grouping columns: column3:9!null
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: column10:10 column11:11!null column1:7!null column2:8!null column3:9!null
+ │    │    │    │    │    ├── columns: x:10 y:11!null column1:7!null column2:8!null column3:9!null
  │    │    │    │    │    ├── values
  │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
  │    │    │    │    │    │    ├── (100, 10, 1)
  │    │    │    │    │    │    └── (200, 20, 2)
  │    │    │    │    │    └── projections
- │    │    │    │    │         ├── NULL::INT8 [as=column10:10]
- │    │    │    │    │         └── 5 [as=column11:11]
+ │    │    │    │    │         ├── NULL::INT8 [as=x:10]
+ │    │    │    │    │         └── 5 [as=y:11]
  │    │    │    │    └── aggregations
  │    │    │    │         ├── first-agg [as=column1:7]
  │    │    │    │         │    └── column1:7
  │    │    │    │         ├── first-agg [as=column2:8]
  │    │    │    │         │    └── column2:8
- │    │    │    │         ├── first-agg [as=column10:10]
- │    │    │    │         │    └── column10:10
- │    │    │    │         └── first-agg [as=column11:11]
- │    │    │    │              └── column11:11
+ │    │    │    │         ├── first-agg [as=x:10]
+ │    │    │    │         │    └── x:10
+ │    │    │    │         └── first-agg [as=y:11]
+ │    │    │    │              └── y:11
  │    │    │    ├── scan uniq
  │    │    │    │    └── columns: uniq.k:12!null uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    │    └── filters
  │    │    │         └── column3:9 = uniq.w:14
  │    │    └── projections
- │    │         └── 10 [as=w_new:18]
+ │    │         └── 10 [as=w:18]
  │    └── projections
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=upsert_k:19]
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column2:8 ELSE uniq.v:13 END [as=upsert_v:20]
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column3:9 ELSE w_new:18 END [as=upsert_w:21]
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column10:10 ELSE uniq.x:15 END [as=upsert_x:22]
- │         └── CASE WHEN uniq.k:12 IS NULL THEN column11:11 ELSE uniq.y:16 END [as=upsert_y:23]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=k:19]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN column2:8 ELSE uniq.v:13 END [as=v:20]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN column3:9 ELSE w:18 END [as=w:21]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN x:10 ELSE uniq.x:15 END [as=x:22]
+ │         └── CASE WHEN uniq.k:12 IS NULL THEN y:11 ELSE uniq.y:16 END [as=y:23]
  └── unique-checks
       ├── unique-checks-item: uniq(w)
       │    └── project
@@ -637,11 +637,11 @@ upsert uniq
       │              ├── with-scan &1
       │              │    ├── columns: k:30 v:31 w:32!null x:33 y:34
       │              │    └── mapping:
-      │              │         ├──  upsert_k:19 => k:30
-      │              │         ├──  upsert_v:20 => v:31
-      │              │         ├──  upsert_w:21 => w:32
-      │              │         ├──  upsert_x:22 => x:33
-      │              │         └──  upsert_y:23 => y:34
+      │              │         ├──  k:19 => k:30
+      │              │         ├──  v:20 => v:31
+      │              │         ├──  w:21 => w:32
+      │              │         ├──  x:22 => x:33
+      │              │         └──  y:23 => y:34
       │              ├── scan uniq
       │              │    └── columns: uniq.k:24!null uniq.v:25 uniq.w:26 uniq.x:27 uniq.y:28
       │              └── filters
@@ -655,11 +655,11 @@ upsert uniq
                      ├── with-scan &1
                      │    ├── columns: k:41 v:42 w:43!null x:44 y:45
                      │    └── mapping:
-                     │         ├──  upsert_k:19 => k:41
-                     │         ├──  upsert_v:20 => v:42
-                     │         ├──  upsert_w:21 => w:43
-                     │         ├──  upsert_x:22 => x:44
-                     │         └──  upsert_y:23 => y:45
+                     │         ├──  k:19 => k:41
+                     │         ├──  v:20 => v:42
+                     │         ├──  w:21 => w:43
+                     │         ├──  x:22 => x:44
+                     │         └──  y:23 => y:45
                      ├── scan uniq
                      │    └── columns: uniq.k:35!null uniq.v:36 uniq.w:37 uniq.x:38 uniq.y:39
                      └── filters
@@ -684,12 +684,12 @@ upsert uniq
  │    ├── column4:10 => uniq.x:4
  │    └── column5:11 => uniq.y:5
  ├── update-mapping:
- │    └── upsert_v:20 => uniq.v:2
+ │    └── v:20 => uniq.v:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:19 upsert_v:20!null upsert_w:21 upsert_x:22 upsert_y:23 column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17 v_new:18!null
+ │    ├── columns: k:19 v:20!null w:21 x:22 y:23 column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17 v:18!null
  │    ├── project
- │    │    ├── columns: v_new:18!null column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
+ │    │    ├── columns: v:18!null column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column5:11!null uniq.k:12 uniq.v:13 uniq.w:14 uniq.x:15 uniq.y:16 crdb_internal_mvcc_timestamp:17
  │    │    │    ├── ensure-upsert-distinct-on
@@ -711,13 +711,13 @@ upsert uniq
  │    │    │         ├── column4:10 = uniq.x:15
  │    │    │         └── column5:11 = uniq.y:16
  │    │    └── projections
- │    │         └── 10 [as=v_new:18]
+ │    │         └── 10 [as=v:18]
  │    └── projections
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=upsert_k:19]
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column2:8 ELSE v_new:18 END [as=upsert_v:20]
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column3:9 ELSE uniq.w:14 END [as=upsert_w:21]
- │         ├── CASE WHEN uniq.k:12 IS NULL THEN column4:10 ELSE uniq.x:15 END [as=upsert_x:22]
- │         └── CASE WHEN uniq.k:12 IS NULL THEN column5:11 ELSE uniq.y:16 END [as=upsert_y:23]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN column1:7 ELSE uniq.k:12 END [as=k:19]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN column2:8 ELSE v:18 END [as=v:20]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN column3:9 ELSE uniq.w:14 END [as=w:21]
+ │         ├── CASE WHEN uniq.k:12 IS NULL THEN column4:10 ELSE uniq.x:15 END [as=x:22]
+ │         └── CASE WHEN uniq.k:12 IS NULL THEN column5:11 ELSE uniq.y:16 END [as=y:23]
  └── unique-checks
       └── unique-checks-item: uniq(w)
            └── project
@@ -727,11 +727,11 @@ upsert uniq
                      ├── with-scan &1
                      │    ├── columns: k:30 v:31!null w:32 x:33 y:34
                      │    └── mapping:
-                     │         ├──  upsert_k:19 => k:30
-                     │         ├──  upsert_v:20 => v:31
-                     │         ├──  upsert_w:21 => w:32
-                     │         ├──  upsert_x:22 => x:33
-                     │         └──  upsert_y:23 => y:34
+                     │         ├──  k:19 => k:30
+                     │         ├──  v:20 => v:31
+                     │         ├──  w:21 => w:32
+                     │         ├──  x:22 => x:33
+                     │         └──  y:23 => y:34
                      ├── scan uniq
                      │    └── columns: uniq.k:24!null uniq.v:25 uniq.w:26 uniq.x:27 uniq.y:28
                      └── filters
@@ -850,16 +850,16 @@ upsert uniq_overlaps_pk
  │    ├── k:6 => uniq_overlaps_pk.a:1
  │    ├── v:7 => uniq_overlaps_pk.b:2
  │    ├── x:9 => uniq_overlaps_pk.c:3
- │    └── column13:13 => uniq_overlaps_pk.d:4
+ │    └── d:13 => uniq_overlaps_pk.d:4
  ├── input binding: &1
  ├── project
- │    ├── columns: column13:13 k:6 v:7 x:9
+ │    ├── columns: d:13 k:6 v:7 x:9
  │    ├── project
  │    │    ├── columns: k:6 v:7 x:9
  │    │    └── scan other
  │    │         └── columns: k:6 v:7 w:8!null x:9 y:10 rowid:11!null other.crdb_internal_mvcc_timestamp:12
  │    └── projections
- │         └── NULL::INT8 [as=column13:13]
+ │         └── NULL::INT8 [as=d:13]
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── project
@@ -872,7 +872,7 @@ upsert uniq_overlaps_pk
       │              │         ├──  k:6 => a:19
       │              │         ├──  v:7 => b:20
       │              │         ├──  x:9 => c:21
-      │              │         └──  column13:13 => d:22
+      │              │         └──  d:13 => d:22
       │              ├── scan uniq_overlaps_pk
       │              │    └── columns: uniq_overlaps_pk.a:14!null uniq_overlaps_pk.b:15!null uniq_overlaps_pk.c:16 uniq_overlaps_pk.d:17
       │              └── filters
@@ -890,7 +890,7 @@ upsert uniq_overlaps_pk
                      │         ├──  k:6 => a:28
                      │         ├──  v:7 => b:29
                      │         ├──  x:9 => c:30
-                     │         └──  column13:13 => d:31
+                     │         └──  d:13 => d:31
                      ├── scan uniq_overlaps_pk
                      │    └── columns: uniq_overlaps_pk.a:23!null uniq_overlaps_pk.b:24!null uniq_overlaps_pk.c:25 uniq_overlaps_pk.d:26
                      └── filters
@@ -913,12 +913,12 @@ upsert uniq_overlaps_pk
  │    ├── column3:8 => uniq_overlaps_pk.c:3
  │    └── column4:9 => uniq_overlaps_pk.d:4
  ├── update-mapping:
- │    └── upsert_a:16 => uniq_overlaps_pk.a:1
+ │    └── a:16 => uniq_overlaps_pk.a:1
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_a:16!null upsert_b:17 upsert_c:18 upsert_d:19 column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14 a_new:15!null
+ │    ├── columns: a:16!null b:17 c:18 d:19 column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14 a:15!null
  │    ├── project
- │    │    ├── columns: a_new:15!null column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14
+ │    │    ├── columns: a:15!null column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14
  │    │    │    ├── ensure-upsert-distinct-on
@@ -940,12 +940,12 @@ upsert uniq_overlaps_pk
  │    │    │    └── filters
  │    │    │         └── column1:6 = uniq_overlaps_pk.a:10
  │    │    └── projections
- │    │         └── 10 [as=a_new:15]
+ │    │         └── 10 [as=a:15]
  │    └── projections
- │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column1:6 ELSE a_new:15 END [as=upsert_a:16]
- │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column2:7 ELSE uniq_overlaps_pk.b:11 END [as=upsert_b:17]
- │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column3:8 ELSE uniq_overlaps_pk.c:12 END [as=upsert_c:18]
- │         └── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column4:9 ELSE uniq_overlaps_pk.d:13 END [as=upsert_d:19]
+ │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column1:6 ELSE a:15 END [as=a:16]
+ │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column2:7 ELSE uniq_overlaps_pk.b:11 END [as=b:17]
+ │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column3:8 ELSE uniq_overlaps_pk.c:12 END [as=c:18]
+ │         └── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column4:9 ELSE uniq_overlaps_pk.d:13 END [as=d:19]
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── project
@@ -955,10 +955,10 @@ upsert uniq_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:25!null b:26 c:27 d:28
       │              │    └── mapping:
-      │              │         ├──  upsert_a:16 => a:25
-      │              │         ├──  upsert_b:17 => b:26
-      │              │         ├──  upsert_c:18 => c:27
-      │              │         └──  upsert_d:19 => d:28
+      │              │         ├──  a:16 => a:25
+      │              │         ├──  b:17 => b:26
+      │              │         ├──  c:18 => c:27
+      │              │         └──  d:19 => d:28
       │              ├── scan uniq_overlaps_pk
       │              │    └── columns: uniq_overlaps_pk.a:20!null uniq_overlaps_pk.b:21!null uniq_overlaps_pk.c:22 uniq_overlaps_pk.d:23
       │              └── filters
@@ -973,10 +973,10 @@ upsert uniq_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:34!null b:35 c:36 d:37
       │              │    └── mapping:
-      │              │         ├──  upsert_a:16 => a:34
-      │              │         ├──  upsert_b:17 => b:35
-      │              │         ├──  upsert_c:18 => c:36
-      │              │         └──  upsert_d:19 => d:37
+      │              │         ├──  a:16 => a:34
+      │              │         ├──  b:17 => b:35
+      │              │         ├──  c:18 => c:36
+      │              │         └──  d:19 => d:37
       │              ├── scan uniq_overlaps_pk
       │              │    └── columns: uniq_overlaps_pk.a:29!null uniq_overlaps_pk.b:30!null uniq_overlaps_pk.c:31 uniq_overlaps_pk.d:32
       │              └── filters
@@ -990,10 +990,10 @@ upsert uniq_overlaps_pk
                      ├── with-scan &1
                      │    ├── columns: a:43!null b:44 c:45 d:46
                      │    └── mapping:
-                     │         ├──  upsert_a:16 => a:43
-                     │         ├──  upsert_b:17 => b:44
-                     │         ├──  upsert_c:18 => c:45
-                     │         └──  upsert_d:19 => d:46
+                     │         ├──  a:16 => a:43
+                     │         ├──  b:17 => b:44
+                     │         ├──  c:18 => c:45
+                     │         └──  d:19 => d:46
                      ├── scan uniq_overlaps_pk
                      │    └── columns: uniq_overlaps_pk.a:38!null uniq_overlaps_pk.b:39!null uniq_overlaps_pk.c:40 uniq_overlaps_pk.d:41
                      └── filters
@@ -1017,12 +1017,12 @@ upsert uniq_overlaps_pk
  │    ├── column3:8 => uniq_overlaps_pk.c:3
  │    └── column4:9 => uniq_overlaps_pk.d:4
  ├── update-mapping:
- │    └── upsert_b:17 => uniq_overlaps_pk.b:2
+ │    └── b:17 => uniq_overlaps_pk.b:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_a:16 upsert_b:17!null upsert_c:18 upsert_d:19 column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14 b_new:15!null
+ │    ├── columns: a:16 b:17!null c:18 d:19 column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14 b:15!null
  │    ├── project
- │    │    ├── columns: b_new:15!null column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14
+ │    │    ├── columns: b:15!null column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:6!null column2:7!null column3:8!null column4:9!null uniq_overlaps_pk.a:10 uniq_overlaps_pk.b:11 uniq_overlaps_pk.c:12 uniq_overlaps_pk.d:13 crdb_internal_mvcc_timestamp:14
  │    │    │    ├── ensure-upsert-distinct-on
@@ -1042,12 +1042,12 @@ upsert uniq_overlaps_pk
  │    │    │         ├── column3:8 = uniq_overlaps_pk.c:12
  │    │    │         └── column4:9 = uniq_overlaps_pk.d:13
  │    │    └── projections
- │    │         └── 10 [as=b_new:15]
+ │    │         └── 10 [as=b:15]
  │    └── projections
- │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column1:6 ELSE uniq_overlaps_pk.a:10 END [as=upsert_a:16]
- │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column2:7 ELSE b_new:15 END [as=upsert_b:17]
- │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column3:8 ELSE uniq_overlaps_pk.c:12 END [as=upsert_c:18]
- │         └── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column4:9 ELSE uniq_overlaps_pk.d:13 END [as=upsert_d:19]
+ │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column1:6 ELSE uniq_overlaps_pk.a:10 END [as=a:16]
+ │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column2:7 ELSE b:15 END [as=b:17]
+ │         ├── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column3:8 ELSE uniq_overlaps_pk.c:12 END [as=c:18]
+ │         └── CASE WHEN uniq_overlaps_pk.a:10 IS NULL THEN column4:9 ELSE uniq_overlaps_pk.d:13 END [as=d:19]
  └── unique-checks
       ├── unique-checks-item: uniq_overlaps_pk(b,c)
       │    └── project
@@ -1057,10 +1057,10 @@ upsert uniq_overlaps_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:25 b:26!null c:27 d:28
       │              │    └── mapping:
-      │              │         ├──  upsert_a:16 => a:25
-      │              │         ├──  upsert_b:17 => b:26
-      │              │         ├──  upsert_c:18 => c:27
-      │              │         └──  upsert_d:19 => d:28
+      │              │         ├──  a:16 => a:25
+      │              │         ├──  b:17 => b:26
+      │              │         ├──  c:18 => c:27
+      │              │         └──  d:19 => d:28
       │              ├── scan uniq_overlaps_pk
       │              │    └── columns: uniq_overlaps_pk.a:20!null uniq_overlaps_pk.b:21!null uniq_overlaps_pk.c:22 uniq_overlaps_pk.d:23
       │              └── filters
@@ -1075,10 +1075,10 @@ upsert uniq_overlaps_pk
                      ├── with-scan &1
                      │    ├── columns: a:34 b:35!null c:36 d:37
                      │    └── mapping:
-                     │         ├──  upsert_a:16 => a:34
-                     │         ├──  upsert_b:17 => b:35
-                     │         ├──  upsert_c:18 => c:36
-                     │         └──  upsert_d:19 => d:37
+                     │         ├──  a:16 => a:34
+                     │         ├──  b:17 => b:35
+                     │         ├──  c:18 => c:36
+                     │         └──  d:19 => d:37
                      ├── scan uniq_overlaps_pk
                      │    └── columns: uniq_overlaps_pk.a:29!null uniq_overlaps_pk.b:30!null uniq_overlaps_pk.c:31 uniq_overlaps_pk.d:32
                      └── filters
@@ -1110,30 +1110,30 @@ upsert uniq_hidden_pk
  ├── insert-mapping:
  │    ├── column1:7 => uniq_hidden_pk.a:1
  │    ├── column2:8 => uniq_hidden_pk.b:2
- │    ├── column10:10 => uniq_hidden_pk.c:3
+ │    ├── c:10 => uniq_hidden_pk.c:3
  │    ├── column3:9 => uniq_hidden_pk.d:4
- │    └── column11:11 => uniq_hidden_pk.rowid:5
+ │    └── rowid:11 => uniq_hidden_pk.rowid:5
  ├── update-mapping:
  │    ├── column1:7 => uniq_hidden_pk.a:1
  │    ├── column2:8 => uniq_hidden_pk.b:2
  │    └── column3:9 => uniq_hidden_pk.d:4
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_c:18 upsert_rowid:19 column1:7!null column2:8!null column3:9!null column10:10 column11:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17
+ │    ├── columns: c:18 rowid:19 column1:7!null column2:8!null column3:9!null c:10 rowid:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17
  │    ├── left-join (hash)
- │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17
+ │    │    ├── columns: column1:7!null column2:8!null column3:9!null c:10 rowid:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17
  │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column10:10 column11:11
- │    │    │    ├── grouping columns: column11:11
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null c:10 rowid:11
+ │    │    │    ├── grouping columns: rowid:11
  │    │    │    ├── project
- │    │    │    │    ├── columns: column10:10 column11:11 column1:7!null column2:8!null column3:9!null
+ │    │    │    │    ├── columns: c:10 rowid:11 column1:7!null column2:8!null column3:9!null
  │    │    │    │    ├── values
  │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
  │    │    │    │    │    ├── (1, 1, 1)
  │    │    │    │    │    └── (2, 2, 2)
  │    │    │    │    └── projections
- │    │    │    │         ├── NULL::INT8 [as=column10:10]
- │    │    │    │         └── unique_rowid() [as=column11:11]
+ │    │    │    │         ├── NULL::INT8 [as=c:10]
+ │    │    │    │         └── unique_rowid() [as=rowid:11]
  │    │    │    └── aggregations
  │    │    │         ├── first-agg [as=column1:7]
  │    │    │         │    └── column1:7
@@ -1141,15 +1141,15 @@ upsert uniq_hidden_pk
  │    │    │         │    └── column2:8
  │    │    │         ├── first-agg [as=column3:9]
  │    │    │         │    └── column3:9
- │    │    │         └── first-agg [as=column10:10]
- │    │    │              └── column10:10
+ │    │    │         └── first-agg [as=c:10]
+ │    │    │              └── c:10
  │    │    ├── scan uniq_hidden_pk
  │    │    │    └── columns: uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16!null crdb_internal_mvcc_timestamp:17
  │    │    └── filters
- │    │         └── column11:11 = uniq_hidden_pk.rowid:16
+ │    │         └── rowid:11 = uniq_hidden_pk.rowid:16
  │    └── projections
- │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column10:10 ELSE uniq_hidden_pk.c:14 END [as=upsert_c:18]
- │         └── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column11:11 ELSE uniq_hidden_pk.rowid:16 END [as=upsert_rowid:19]
+ │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN c:10 ELSE uniq_hidden_pk.c:14 END [as=c:18]
+ │         └── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN rowid:11 ELSE uniq_hidden_pk.rowid:16 END [as=rowid:19]
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
       │    └── project
@@ -1161,9 +1161,9 @@ upsert uniq_hidden_pk
       │              │    └── mapping:
       │              │         ├──  column1:7 => a:26
       │              │         ├──  column2:8 => b:27
-      │              │         ├──  upsert_c:18 => c:28
+      │              │         ├──  c:18 => c:28
       │              │         ├──  column3:9 => d:29
-      │              │         └──  upsert_rowid:19 => rowid:30
+      │              │         └──  rowid:19 => rowid:30
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:20 uniq_hidden_pk.b:21 uniq_hidden_pk.c:22 uniq_hidden_pk.d:23 uniq_hidden_pk.rowid:24!null
       │              └── filters
@@ -1180,9 +1180,9 @@ upsert uniq_hidden_pk
       │              │    └── mapping:
       │              │         ├──  column1:7 => a:37
       │              │         ├──  column2:8 => b:38
-      │              │         ├──  upsert_c:18 => c:39
+      │              │         ├──  c:18 => c:39
       │              │         ├──  column3:9 => d:40
-      │              │         └──  upsert_rowid:19 => rowid:41
+      │              │         └──  rowid:19 => rowid:41
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:31 uniq_hidden_pk.b:32 uniq_hidden_pk.c:33 uniq_hidden_pk.d:34 uniq_hidden_pk.rowid:35!null
       │              └── filters
@@ -1200,9 +1200,9 @@ upsert uniq_hidden_pk
                      │    └── mapping:
                      │         ├──  column1:7 => a:48
                      │         ├──  column2:8 => b:49
-                     │         ├──  upsert_c:18 => c:50
+                     │         ├──  c:18 => c:50
                      │         ├──  column3:9 => d:51
-                     │         └──  upsert_rowid:19 => rowid:52
+                     │         └──  rowid:19 => rowid:52
                      ├── scan uniq_hidden_pk
                      │    └── columns: uniq_hidden_pk.a:42 uniq_hidden_pk.b:43 uniq_hidden_pk.c:44 uniq_hidden_pk.d:45 uniq_hidden_pk.rowid:46!null
                      └── filters
@@ -1221,16 +1221,16 @@ upsert uniq_hidden_pk
  │    ├── v:8 => uniq_hidden_pk.b:2
  │    ├── x:10 => uniq_hidden_pk.c:3
  │    ├── y:11 => uniq_hidden_pk.d:4
- │    └── column14:14 => uniq_hidden_pk.rowid:5
+ │    └── rowid:14 => uniq_hidden_pk.rowid:5
  ├── input binding: &1
  ├── project
- │    ├── columns: column14:14 k:7 v:8 x:10 y:11
+ │    ├── columns: rowid:14 k:7 v:8 x:10 y:11
  │    ├── project
  │    │    ├── columns: k:7 v:8 x:10 y:11
  │    │    └── scan other
  │    │         └── columns: k:7 v:8 w:9!null x:10 y:11 other.rowid:12!null other.crdb_internal_mvcc_timestamp:13
  │    └── projections
- │         └── unique_rowid() [as=column14:14]
+ │         └── unique_rowid() [as=rowid:14]
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
       │    └── project
@@ -1244,7 +1244,7 @@ upsert uniq_hidden_pk
       │              │         ├──  v:8 => b:22
       │              │         ├──  x:10 => c:23
       │              │         ├──  y:11 => d:24
-      │              │         └──  column14:14 => rowid:25
+      │              │         └──  rowid:14 => rowid:25
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:15 uniq_hidden_pk.b:16 uniq_hidden_pk.c:17 uniq_hidden_pk.d:18 uniq_hidden_pk.rowid:19!null
       │              └── filters
@@ -1263,7 +1263,7 @@ upsert uniq_hidden_pk
       │              │         ├──  v:8 => b:33
       │              │         ├──  x:10 => c:34
       │              │         ├──  y:11 => d:35
-      │              │         └──  column14:14 => rowid:36
+      │              │         └──  rowid:14 => rowid:36
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:26 uniq_hidden_pk.b:27 uniq_hidden_pk.c:28 uniq_hidden_pk.d:29 uniq_hidden_pk.rowid:30!null
       │              └── filters
@@ -1283,7 +1283,7 @@ upsert uniq_hidden_pk
                      │         ├──  v:8 => b:44
                      │         ├──  x:10 => c:45
                      │         ├──  y:11 => d:46
-                     │         └──  column14:14 => rowid:47
+                     │         └──  rowid:14 => rowid:47
                      ├── scan uniq_hidden_pk
                      │    └── columns: uniq_hidden_pk.a:37 uniq_hidden_pk.b:38 uniq_hidden_pk.c:39 uniq_hidden_pk.d:40 uniq_hidden_pk.rowid:41!null
                      └── filters
@@ -1305,31 +1305,31 @@ upsert uniq_hidden_pk
  │    ├── column2:8 => uniq_hidden_pk.b:2
  │    ├── column3:9 => uniq_hidden_pk.c:3
  │    ├── column4:10 => uniq_hidden_pk.d:4
- │    └── column11:11 => uniq_hidden_pk.rowid:5
+ │    └── rowid:11 => uniq_hidden_pk.rowid:5
  ├── update-mapping:
- │    └── upsert_a:19 => uniq_hidden_pk.a:1
+ │    └── a:19 => uniq_hidden_pk.a:1
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_a:19!null upsert_b:20 upsert_c:21 upsert_d:22 upsert_rowid:23 column1:7!null column2:8!null column3:9!null column4:10!null column11:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17 a_new:18!null
+ │    ├── columns: a:19!null b:20 c:21 d:22 rowid:23 column1:7!null column2:8!null column3:9!null column4:10!null rowid:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17 a:18!null
  │    ├── project
- │    │    ├── columns: a_new:18!null column1:7!null column2:8!null column3:9!null column4:10!null column11:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17
+ │    │    ├── columns: a:18!null column1:7!null column2:8!null column3:9!null column4:10!null rowid:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17
  │    │    ├── left-join (hash)
- │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column11:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17
+ │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null rowid:11 uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16 crdb_internal_mvcc_timestamp:17
  │    │    │    ├── ensure-upsert-distinct-on
- │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null column11:11
+ │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null rowid:11
  │    │    │    │    ├── grouping columns: column1:7!null column2:8!null column4:10!null
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: column11:11 column1:7!null column2:8!null column3:9!null column4:10!null
+ │    │    │    │    │    ├── columns: rowid:11 column1:7!null column2:8!null column3:9!null column4:10!null
  │    │    │    │    │    ├── values
  │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
  │    │    │    │    │    │    └── (1, 2, 3, 4)
  │    │    │    │    │    └── projections
- │    │    │    │    │         └── unique_rowid() [as=column11:11]
+ │    │    │    │    │         └── unique_rowid() [as=rowid:11]
  │    │    │    │    └── aggregations
  │    │    │    │         ├── first-agg [as=column3:9]
  │    │    │    │         │    └── column3:9
- │    │    │    │         └── first-agg [as=column11:11]
- │    │    │    │              └── column11:11
+ │    │    │    │         └── first-agg [as=rowid:11]
+ │    │    │    │              └── rowid:11
  │    │    │    ├── scan uniq_hidden_pk
  │    │    │    │    └── columns: uniq_hidden_pk.a:12 uniq_hidden_pk.b:13 uniq_hidden_pk.c:14 uniq_hidden_pk.d:15 uniq_hidden_pk.rowid:16!null crdb_internal_mvcc_timestamp:17
  │    │    │    └── filters
@@ -1337,13 +1337,13 @@ upsert uniq_hidden_pk
  │    │    │         ├── column2:8 = uniq_hidden_pk.b:13
  │    │    │         └── column4:10 = uniq_hidden_pk.d:15
  │    │    └── projections
- │    │         └── 10 [as=a_new:18]
+ │    │         └── 10 [as=a:18]
  │    └── projections
- │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column1:7 ELSE a_new:18 END [as=upsert_a:19]
- │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column2:8 ELSE uniq_hidden_pk.b:13 END [as=upsert_b:20]
- │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column3:9 ELSE uniq_hidden_pk.c:14 END [as=upsert_c:21]
- │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column4:10 ELSE uniq_hidden_pk.d:15 END [as=upsert_d:22]
- │         └── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column11:11 ELSE uniq_hidden_pk.rowid:16 END [as=upsert_rowid:23]
+ │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column1:7 ELSE a:18 END [as=a:19]
+ │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column2:8 ELSE uniq_hidden_pk.b:13 END [as=b:20]
+ │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column3:9 ELSE uniq_hidden_pk.c:14 END [as=c:21]
+ │         ├── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN column4:10 ELSE uniq_hidden_pk.d:15 END [as=d:22]
+ │         └── CASE WHEN uniq_hidden_pk.rowid:16 IS NULL THEN rowid:11 ELSE uniq_hidden_pk.rowid:16 END [as=rowid:23]
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(b,c)
       │    └── project
@@ -1353,11 +1353,11 @@ upsert uniq_hidden_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:30!null b:31 c:32 d:33 rowid:34
       │              │    └── mapping:
-      │              │         ├──  upsert_a:19 => a:30
-      │              │         ├──  upsert_b:20 => b:31
-      │              │         ├──  upsert_c:21 => c:32
-      │              │         ├──  upsert_d:22 => d:33
-      │              │         └──  upsert_rowid:23 => rowid:34
+      │              │         ├──  a:19 => a:30
+      │              │         ├──  b:20 => b:31
+      │              │         ├──  c:21 => c:32
+      │              │         ├──  d:22 => d:33
+      │              │         └──  rowid:23 => rowid:34
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:24 uniq_hidden_pk.b:25 uniq_hidden_pk.c:26 uniq_hidden_pk.d:27 uniq_hidden_pk.rowid:28!null
       │              └── filters
@@ -1372,11 +1372,11 @@ upsert uniq_hidden_pk
       │              ├── with-scan &1
       │              │    ├── columns: a:41!null b:42 c:43 d:44 rowid:45
       │              │    └── mapping:
-      │              │         ├──  upsert_a:19 => a:41
-      │              │         ├──  upsert_b:20 => b:42
-      │              │         ├──  upsert_c:21 => c:43
-      │              │         ├──  upsert_d:22 => d:44
-      │              │         └──  upsert_rowid:23 => rowid:45
+      │              │         ├──  a:19 => a:41
+      │              │         ├──  b:20 => b:42
+      │              │         ├──  c:21 => c:43
+      │              │         ├──  d:22 => d:44
+      │              │         └──  rowid:23 => rowid:45
       │              ├── scan uniq_hidden_pk
       │              │    └── columns: uniq_hidden_pk.a:35 uniq_hidden_pk.b:36 uniq_hidden_pk.c:37 uniq_hidden_pk.d:38 uniq_hidden_pk.rowid:39!null
       │              └── filters
@@ -1392,11 +1392,11 @@ upsert uniq_hidden_pk
                      ├── with-scan &1
                      │    ├── columns: a:52!null b:53 c:54 d:55 rowid:56
                      │    └── mapping:
-                     │         ├──  upsert_a:19 => a:52
-                     │         ├──  upsert_b:20 => b:53
-                     │         ├──  upsert_c:21 => c:54
-                     │         ├──  upsert_d:22 => d:55
-                     │         └──  upsert_rowid:23 => rowid:56
+                     │         ├──  a:19 => a:52
+                     │         ├──  b:20 => b:53
+                     │         ├──  c:21 => c:54
+                     │         ├──  d:22 => d:55
+                     │         └──  rowid:23 => rowid:56
                      ├── scan uniq_hidden_pk
                      │    └── columns: uniq_hidden_pk.a:46 uniq_hidden_pk.b:47 uniq_hidden_pk.c:48 uniq_hidden_pk.d:49 uniq_hidden_pk.rowid:50!null
                      └── filters
@@ -1433,33 +1433,33 @@ upsert uniq_fk_parent
  ├── fetch columns: uniq_fk_parent.a:6 uniq_fk_parent.rowid:7
  ├── insert-mapping:
  │    ├── column1:4 => uniq_fk_parent.a:1
- │    └── column5:5 => uniq_fk_parent.rowid:2
+ │    └── rowid:5 => uniq_fk_parent.rowid:2
  ├── update-mapping:
  │    └── column1:4 => uniq_fk_parent.a:1
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_rowid:9 column1:4!null column5:5 uniq_fk_parent.a:6 uniq_fk_parent.rowid:7 uniq_fk_parent.crdb_internal_mvcc_timestamp:8
+ │    ├── columns: rowid:9 column1:4!null rowid:5 uniq_fk_parent.a:6 uniq_fk_parent.rowid:7 uniq_fk_parent.crdb_internal_mvcc_timestamp:8
  │    ├── left-join (hash)
- │    │    ├── columns: column1:4!null column5:5 uniq_fk_parent.a:6 uniq_fk_parent.rowid:7 uniq_fk_parent.crdb_internal_mvcc_timestamp:8
+ │    │    ├── columns: column1:4!null rowid:5 uniq_fk_parent.a:6 uniq_fk_parent.rowid:7 uniq_fk_parent.crdb_internal_mvcc_timestamp:8
  │    │    ├── ensure-upsert-distinct-on
- │    │    │    ├── columns: column1:4!null column5:5
- │    │    │    ├── grouping columns: column5:5
+ │    │    │    ├── columns: column1:4!null rowid:5
+ │    │    │    ├── grouping columns: rowid:5
  │    │    │    ├── project
- │    │    │    │    ├── columns: column5:5 column1:4!null
+ │    │    │    │    ├── columns: rowid:5 column1:4!null
  │    │    │    │    ├── values
  │    │    │    │    │    ├── columns: column1:4!null
  │    │    │    │    │    └── (1,)
  │    │    │    │    └── projections
- │    │    │    │         └── unique_rowid() [as=column5:5]
+ │    │    │    │         └── unique_rowid() [as=rowid:5]
  │    │    │    └── aggregations
  │    │    │         └── first-agg [as=column1:4]
  │    │    │              └── column1:4
  │    │    ├── scan uniq_fk_parent
  │    │    │    └── columns: uniq_fk_parent.a:6 uniq_fk_parent.rowid:7!null uniq_fk_parent.crdb_internal_mvcc_timestamp:8
  │    │    └── filters
- │    │         └── column5:5 = uniq_fk_parent.rowid:7
+ │    │         └── rowid:5 = uniq_fk_parent.rowid:7
  │    └── projections
- │         └── CASE WHEN uniq_fk_parent.rowid:7 IS NULL THEN column5:5 ELSE uniq_fk_parent.rowid:7 END [as=upsert_rowid:9]
+ │         └── CASE WHEN uniq_fk_parent.rowid:7 IS NULL THEN rowid:5 ELSE uniq_fk_parent.rowid:7 END [as=rowid:9]
  ├── unique-checks
  │    └── unique-checks-item: uniq_fk_parent(a)
  │         └── project
@@ -1470,7 +1470,7 @@ upsert uniq_fk_parent
  │                   │    ├── columns: a:13!null rowid:14
  │                   │    └── mapping:
  │                   │         ├──  column1:4 => a:13
- │                   │         └──  upsert_rowid:9 => rowid:14
+ │                   │         └──  rowid:9 => rowid:14
  │                   ├── scan uniq_fk_parent
  │                   │    └── columns: uniq_fk_parent.a:10 uniq_fk_parent.rowid:11!null
  │                   └── filters
@@ -1543,33 +1543,33 @@ upsert t
  ├── fetch columns: t.i:6 t.rowid:7
  ├── insert-mapping:
  │    ├── column1:4 => t.i:1
- │    └── column5:5 => t.rowid:2
+ │    └── rowid:5 => t.rowid:2
  ├── update-mapping:
- │    └── upsert_i:10 => t.i:1
+ │    └── i:10 => t.i:1
  ├── partial index put columns: partial_index_put1:12
  ├── partial index del columns: partial_index_del1:13
  ├── input binding: &1
  ├── project
- │    ├── columns: partial_index_put1:12!null partial_index_del1:13 column1:4!null column5:5 t.i:6 t.rowid:7 crdb_internal_mvcc_timestamp:8 i_new:9!null upsert_i:10!null upsert_rowid:11
+ │    ├── columns: partial_index_put1:12!null partial_index_del1:13 column1:4!null rowid:5 t.i:6 t.rowid:7 crdb_internal_mvcc_timestamp:8 i:9!null i:10!null rowid:11
  │    ├── project
- │    │    ├── columns: upsert_i:10!null upsert_rowid:11 column1:4!null column5:5 t.i:6 t.rowid:7 crdb_internal_mvcc_timestamp:8 i_new:9!null
+ │    │    ├── columns: i:10!null rowid:11 column1:4!null rowid:5 t.i:6 t.rowid:7 crdb_internal_mvcc_timestamp:8 i:9!null
  │    │    ├── project
- │    │    │    ├── columns: i_new:9!null column1:4!null column5:5 t.i:6 t.rowid:7 crdb_internal_mvcc_timestamp:8
+ │    │    │    ├── columns: i:9!null column1:4!null rowid:5 t.i:6 t.rowid:7 crdb_internal_mvcc_timestamp:8
  │    │    │    ├── left-join (hash)
- │    │    │    │    ├── columns: column1:4!null column5:5 t.i:6 t.rowid:7 crdb_internal_mvcc_timestamp:8
+ │    │    │    │    ├── columns: column1:4!null rowid:5 t.i:6 t.rowid:7 crdb_internal_mvcc_timestamp:8
  │    │    │    │    ├── ensure-upsert-distinct-on
- │    │    │    │    │    ├── columns: column1:4!null column5:5
+ │    │    │    │    │    ├── columns: column1:4!null rowid:5
  │    │    │    │    │    ├── grouping columns: column1:4!null
  │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: column5:5 column1:4!null
+ │    │    │    │    │    │    ├── columns: rowid:5 column1:4!null
  │    │    │    │    │    │    ├── values
  │    │    │    │    │    │    │    ├── columns: column1:4!null
  │    │    │    │    │    │    │    └── (1,)
  │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         └── unique_rowid() [as=column5:5]
+ │    │    │    │    │    │         └── unique_rowid() [as=rowid:5]
  │    │    │    │    │    └── aggregations
- │    │    │    │    │         └── first-agg [as=column5:5]
- │    │    │    │    │              └── column5:5
+ │    │    │    │    │         └── first-agg [as=rowid:5]
+ │    │    │    │    │              └── rowid:5
  │    │    │    │    ├── scan t
  │    │    │    │    │    ├── columns: t.i:6 t.rowid:7!null crdb_internal_mvcc_timestamp:8
  │    │    │    │    │    └── partial index predicates
@@ -1578,12 +1578,12 @@ upsert t
  │    │    │    │    └── filters
  │    │    │    │         └── column1:4 = t.i:6
  │    │    │    └── projections
- │    │    │         └── 2 [as=i_new:9]
+ │    │    │         └── 2 [as=i:9]
  │    │    └── projections
- │    │         ├── CASE WHEN t.rowid:7 IS NULL THEN column1:4 ELSE i_new:9 END [as=upsert_i:10]
- │    │         └── CASE WHEN t.rowid:7 IS NULL THEN column5:5 ELSE t.rowid:7 END [as=upsert_rowid:11]
+ │    │         ├── CASE WHEN t.rowid:7 IS NULL THEN column1:4 ELSE i:9 END [as=i:10]
+ │    │         └── CASE WHEN t.rowid:7 IS NULL THEN rowid:5 ELSE t.rowid:7 END [as=rowid:11]
  │    └── projections
- │         ├── upsert_i:10 > 0 [as=partial_index_put1:12]
+ │         ├── i:10 > 0 [as=partial_index_put1:12]
  │         └── t.i:6 > 0 [as=partial_index_del1:13]
  └── unique-checks
       └── unique-checks-item: t(i)
@@ -1594,8 +1594,8 @@ upsert t
                      ├── with-scan &1
                      │    ├── columns: i:17!null rowid:18
                      │    └── mapping:
-                     │         ├──  upsert_i:10 => i:17
-                     │         └──  upsert_rowid:11 => rowid:18
+                     │         ├──  i:10 => i:17
+                     │         └──  rowid:11 => rowid:18
                      ├── scan t
                      │    ├── columns: t.i:14 t.rowid:15!null
                      │    └── partial index predicates
@@ -1714,12 +1714,12 @@ upsert uniq_partial
  │    ├── column2:6 => uniq_partial.a:2
  │    └── column3:7 => uniq_partial.b:3
  ├── update-mapping:
- │    └── upsert_a:15 => uniq_partial.a:2
+ │    └── a:15 => uniq_partial.a:2
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_k:14 upsert_a:15!null upsert_b:16 column1:5!null column2:6!null column3:7!null uniq_partial.k:9 uniq_partial.a:10 uniq_partial.b:11 crdb_internal_mvcc_timestamp:12 a_new:13!null
+ │    ├── columns: k:14 a:15!null b:16 column1:5!null column2:6!null column3:7!null uniq_partial.k:9 uniq_partial.a:10 uniq_partial.b:11 crdb_internal_mvcc_timestamp:12 a:13!null
  │    ├── project
- │    │    ├── columns: a_new:13!null column1:5!null column2:6!null column3:7!null uniq_partial.k:9 uniq_partial.a:10 uniq_partial.b:11 crdb_internal_mvcc_timestamp:12
+ │    │    ├── columns: a:13!null column1:5!null column2:6!null column3:7!null uniq_partial.k:9 uniq_partial.a:10 uniq_partial.b:11 crdb_internal_mvcc_timestamp:12
  │    │    ├── left-join (hash)
  │    │    │    ├── columns: column1:5!null column2:6!null column3:7!null uniq_partial.k:9 uniq_partial.a:10 uniq_partial.b:11 crdb_internal_mvcc_timestamp:12
  │    │    │    ├── project
@@ -1750,11 +1750,11 @@ upsert uniq_partial
  │    │    │         ├── column2:6 = uniq_partial.a:10
  │    │    │         └── column3:7 > 0
  │    │    └── projections
- │    │         └── 10 [as=a_new:13]
+ │    │         └── 10 [as=a:13]
  │    └── projections
- │         ├── CASE WHEN uniq_partial.k:9 IS NULL THEN column1:5 ELSE uniq_partial.k:9 END [as=upsert_k:14]
- │         ├── CASE WHEN uniq_partial.k:9 IS NULL THEN column2:6 ELSE a_new:13 END [as=upsert_a:15]
- │         └── CASE WHEN uniq_partial.k:9 IS NULL THEN column3:7 ELSE uniq_partial.b:11 END [as=upsert_b:16]
+ │         ├── CASE WHEN uniq_partial.k:9 IS NULL THEN column1:5 ELSE uniq_partial.k:9 END [as=k:14]
+ │         ├── CASE WHEN uniq_partial.k:9 IS NULL THEN column2:6 ELSE a:13 END [as=a:15]
+ │         └── CASE WHEN uniq_partial.k:9 IS NULL THEN column3:7 ELSE uniq_partial.b:11 END [as=b:16]
  └── unique-checks
       └── unique-checks-item: uniq_partial(a)
            └── project
@@ -1764,9 +1764,9 @@ upsert uniq_partial
                      ├── with-scan &1
                      │    ├── columns: k:21 a:22!null b:23
                      │    └── mapping:
-                     │         ├──  upsert_k:14 => k:21
-                     │         ├──  upsert_a:15 => a:22
-                     │         └──  upsert_b:16 => b:23
+                     │         ├──  k:14 => k:21
+                     │         ├──  a:15 => a:22
+                     │         └──  b:16 => b:23
                      ├── scan uniq_partial
                      │    └── columns: uniq_partial.k:17!null uniq_partial.a:18 uniq_partial.b:19
                      └── filters
@@ -1809,12 +1809,12 @@ upsert uniq_partial_constraint_and_index
  │    ├── column2:6 => uniq_partial_constraint_and_index.a:2
  │    └── column3:7 => uniq_partial_constraint_and_index.b:3
  ├── update-mapping:
- │    └── upsert_a:15 => uniq_partial_constraint_and_index.a:2
+ │    └── a:15 => uniq_partial_constraint_and_index.a:2
  ├── partial index put columns: partial_index_put1:17
  ├── partial index del columns: partial_index_put1:17
  ├── input binding: &1
  ├── project
- │    ├── columns: partial_index_put1:17!null upsert_k:14 upsert_a:15!null upsert_b:16 column1:5!null column2:6!null column3:7!null uniq_partial_constraint_and_index.k:9 uniq_partial_constraint_and_index.a:10 uniq_partial_constraint_and_index.b:11
+ │    ├── columns: partial_index_put1:17!null k:14 a:15!null b:16 column1:5!null column2:6!null column3:7!null uniq_partial_constraint_and_index.k:9 uniq_partial_constraint_and_index.a:10 uniq_partial_constraint_and_index.b:11
  │    ├── left-join (cross)
  │    │    ├── columns: column1:5!null column2:6!null column3:7!null uniq_partial_constraint_and_index.k:9 uniq_partial_constraint_and_index.a:10 uniq_partial_constraint_and_index.b:11
  │    │    ├── values
@@ -1831,9 +1831,9 @@ upsert uniq_partial_constraint_and_index
  │    │    └── filters (true)
  │    └── projections
  │         ├── true [as=partial_index_put1:17]
- │         ├── CASE WHEN uniq_partial_constraint_and_index.k:9 IS NULL THEN column1:5 ELSE uniq_partial_constraint_and_index.k:9 END [as=upsert_k:14]
- │         ├── CASE WHEN uniq_partial_constraint_and_index.k:9 IS NULL THEN column2:6 ELSE 10 END [as=upsert_a:15]
- │         └── CASE WHEN uniq_partial_constraint_and_index.k:9 IS NULL THEN column3:7 ELSE uniq_partial_constraint_and_index.b:11 END [as=upsert_b:16]
+ │         ├── CASE WHEN uniq_partial_constraint_and_index.k:9 IS NULL THEN column1:5 ELSE uniq_partial_constraint_and_index.k:9 END [as=k:14]
+ │         ├── CASE WHEN uniq_partial_constraint_and_index.k:9 IS NULL THEN column2:6 ELSE 10 END [as=a:15]
+ │         └── CASE WHEN uniq_partial_constraint_and_index.k:9 IS NULL THEN column3:7 ELSE uniq_partial_constraint_and_index.b:11 END [as=b:16]
  └── unique-checks
       └── unique-checks-item: uniq_partial_constraint_and_index(a)
            └── project
@@ -1845,9 +1845,9 @@ upsert uniq_partial_constraint_and_index
                      │    ├── with-scan &1
                      │    │    ├── columns: k:22 a:23!null b:24
                      │    │    └── mapping:
-                     │    │         ├──  upsert_k:14 => k:22
-                     │    │         ├──  upsert_a:15 => a:23
-                     │    │         └──  upsert_b:16 => b:24
+                     │    │         ├──  k:14 => k:22
+                     │    │         ├──  a:15 => a:23
+                     │    │         └──  b:16 => b:24
                      │    └── filters
                      │         └── b:24 > 10
                      ├── select
@@ -1889,12 +1889,12 @@ upsert uniq_constraint_and_partial_index
  │    ├── column2:6 => uniq_constraint_and_partial_index.a:2
  │    └── column3:7 => uniq_constraint_and_partial_index.b:3
  ├── update-mapping:
- │    └── upsert_a:15 => uniq_constraint_and_partial_index.a:2
+ │    └── a:15 => uniq_constraint_and_partial_index.a:2
  ├── partial index put columns: partial_index_put1:17
  ├── partial index del columns: partial_index_del1:18
  ├── input binding: &1
  ├── project
- │    ├── columns: partial_index_put1:17 partial_index_del1:18 upsert_k:14 upsert_a:15!null column1:5!null column2:6!null column3:7!null uniq_constraint_and_partial_index.k:9 uniq_constraint_and_partial_index.a:10 uniq_constraint_and_partial_index.b:11
+ │    ├── columns: partial_index_put1:17 partial_index_del1:18 k:14 a:15!null column1:5!null column2:6!null column3:7!null uniq_constraint_and_partial_index.k:9 uniq_constraint_and_partial_index.a:10 uniq_constraint_and_partial_index.b:11
  │    ├── left-join (cross)
  │    │    ├── columns: column1:5!null column2:6!null column3:7!null uniq_constraint_and_partial_index.k:9 uniq_constraint_and_partial_index.a:10 uniq_constraint_and_partial_index.b:11
  │    │    ├── values
@@ -1913,8 +1913,8 @@ upsert uniq_constraint_and_partial_index
  │    └── projections
  │         ├── CASE WHEN uniq_constraint_and_partial_index.k:9 IS NULL THEN column3:7 ELSE uniq_constraint_and_partial_index.b:11 END > 0 [as=partial_index_put1:17]
  │         ├── uniq_constraint_and_partial_index.b:11 > 0 [as=partial_index_del1:18]
- │         ├── CASE WHEN uniq_constraint_and_partial_index.k:9 IS NULL THEN column1:5 ELSE uniq_constraint_and_partial_index.k:9 END [as=upsert_k:14]
- │         └── CASE WHEN uniq_constraint_and_partial_index.k:9 IS NULL THEN column2:6 ELSE 10 END [as=upsert_a:15]
+ │         ├── CASE WHEN uniq_constraint_and_partial_index.k:9 IS NULL THEN column1:5 ELSE uniq_constraint_and_partial_index.k:9 END [as=k:14]
+ │         └── CASE WHEN uniq_constraint_and_partial_index.k:9 IS NULL THEN column2:6 ELSE 10 END [as=a:15]
  └── unique-checks
       └── unique-checks-item: uniq_constraint_and_partial_index(a)
            └── project
@@ -1924,8 +1924,8 @@ upsert uniq_constraint_and_partial_index
                      ├── with-scan &1
                      │    ├── columns: k:23 a:24!null
                      │    └── mapping:
-                     │         ├──  upsert_k:14 => k:23
-                     │         └──  upsert_a:15 => a:24
+                     │         ├──  k:14 => k:23
+                     │         └──  a:15 => a:24
                      ├── scan uniq_constraint_and_partial_index
                      │    ├── columns: uniq_constraint_and_partial_index.k:19!null uniq_constraint_and_partial_index.a:20
                      │    └── partial index predicates
@@ -1986,42 +1986,39 @@ upsert uniq_computed_pk
  │    ├── column1:9 => uniq_computed_pk.i:1
  │    ├── column2:10 => uniq_computed_pk.s:2
  │    ├── column3:11 => uniq_computed_pk.d:3
- │    ├── column12:12 => uniq_computed_pk.c_i_expr:4
+ │    ├── c_i_expr:12 => uniq_computed_pk.c_i_expr:4
  │    ├── column2:10 => uniq_computed_pk.c_s:5
  │    ├── column3:11 => uniq_computed_pk.c_d:6
- │    └── column13:13 => uniq_computed_pk.c_d_expr:7
+ │    └── c_d_expr:13 => uniq_computed_pk.c_d_expr:7
  ├── update-mapping:
  │    ├── column2:10 => uniq_computed_pk.s:2
- │    ├── column3:11 => uniq_computed_pk.d:3
- │    ├── column2:10 => uniq_computed_pk.c_s:5
- │    ├── column3:11 => uniq_computed_pk.c_d:6
- │    └── column13:13 => uniq_computed_pk.c_d_expr:7
+ │    └── column3:11 => uniq_computed_pk.d:3
  ├── input binding: &1
  ├── project
- │    ├── columns: upsert_i:23 upsert_c_i_expr:24 column1:9!null column2:10!null column3:11!null column12:12!null column13:13!null uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21 column22:22
+ │    ├── columns: i:24 c_i_expr:25 c_s:26 c_d:27 c_d_expr:28 column1:9!null column2:10!null column3:11!null c_i_expr:12!null c_d_expr:13!null uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21 c_i_expr:22 c_d_expr:23
  │    ├── project
- │    │    ├── columns: column22:22 column1:9!null column2:10!null column3:11!null column12:12!null column13:13!null uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21
+ │    │    ├── columns: c_i_expr:22 c_d_expr:23 column1:9!null column2:10!null column3:11!null c_i_expr:12!null c_d_expr:13!null uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21
  │    │    ├── left-join (hash)
- │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12!null column13:13!null uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21
+ │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null c_i_expr:12!null c_d_expr:13!null uniq_computed_pk.i:14 uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17 uniq_computed_pk.c_s:18 uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21
  │    │    │    ├── ensure-upsert-distinct-on
- │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null column12:12!null column13:13!null
- │    │    │    │    ├── grouping columns: column1:9!null column12:12!null
+ │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null c_i_expr:12!null c_d_expr:13!null
+ │    │    │    │    ├── grouping columns: column1:9!null c_i_expr:12!null
  │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: column12:12!null column13:13!null column1:9!null column2:10!null column3:11!null
+ │    │    │    │    │    ├── columns: c_i_expr:12!null c_d_expr:13!null column1:9!null column2:10!null column3:11!null
  │    │    │    │    │    ├── values
  │    │    │    │    │    │    ├── columns: column1:9!null column2:10!null column3:11!null
  │    │    │    │    │    │    ├── (1, 'a', 1.0)
  │    │    │    │    │    │    └── (2, 'b', 2.0)
  │    │    │    │    │    └── projections
- │    │    │    │    │         ├── CASE WHEN column1:9 < 0 THEN 'foo' ELSE 'bar' END [as=column12:12]
- │    │    │    │    │         └── column3:11::STRING [as=column13:13]
+ │    │    │    │    │         ├── CASE WHEN column1:9 < 0 THEN 'foo' ELSE 'bar' END [as=c_i_expr:12]
+ │    │    │    │    │         └── column3:11::STRING [as=c_d_expr:13]
  │    │    │    │    └── aggregations
  │    │    │    │         ├── first-agg [as=column2:10]
  │    │    │    │         │    └── column2:10
  │    │    │    │         ├── first-agg [as=column3:11]
  │    │    │    │         │    └── column3:11
- │    │    │    │         └── first-agg [as=column13:13]
- │    │    │    │              └── column13:13
+ │    │    │    │         └── first-agg [as=c_d_expr:13]
+ │    │    │    │              └── c_d_expr:13
  │    │    │    ├── project
  │    │    │    │    ├── columns: uniq_computed_pk.c_s:18 uniq_computed_pk.i:14!null uniq_computed_pk.s:15 uniq_computed_pk.d:16 uniq_computed_pk.c_i_expr:17!null uniq_computed_pk.c_d:19 uniq_computed_pk.c_d_expr:20 crdb_internal_mvcc_timestamp:21
  │    │    │    │    ├── scan uniq_computed_pk
@@ -2039,43 +2036,47 @@ upsert uniq_computed_pk
  │    │    │    │         └── uniq_computed_pk.s:15 [as=uniq_computed_pk.c_s:18]
  │    │    │    └── filters
  │    │    │         ├── column1:9 = uniq_computed_pk.i:14
- │    │    │         └── column12:12 = uniq_computed_pk.c_i_expr:17
+ │    │    │         └── c_i_expr:12 = uniq_computed_pk.c_i_expr:17
  │    │    └── projections
- │    │         └── CASE WHEN uniq_computed_pk.i:14 < 0 THEN 'foo' ELSE 'bar' END [as=column22:22]
+ │    │         ├── CASE WHEN uniq_computed_pk.i:14 < 0 THEN 'foo' ELSE 'bar' END [as=c_i_expr:22]
+ │    │         └── uniq_computed_pk.d:16::STRING [as=c_d_expr:23]
  │    └── projections
- │         ├── CASE WHEN uniq_computed_pk.c_i_expr:17 IS NULL THEN column1:9 ELSE uniq_computed_pk.i:14 END [as=upsert_i:23]
- │         └── CASE WHEN uniq_computed_pk.c_i_expr:17 IS NULL THEN column12:12 ELSE uniq_computed_pk.c_i_expr:17 END [as=upsert_c_i_expr:24]
+ │         ├── CASE WHEN uniq_computed_pk.c_i_expr:17 IS NULL THEN column1:9 ELSE uniq_computed_pk.i:14 END [as=i:24]
+ │         ├── CASE WHEN uniq_computed_pk.c_i_expr:17 IS NULL THEN c_i_expr:12 ELSE uniq_computed_pk.c_i_expr:17 END [as=c_i_expr:25]
+ │         ├── CASE WHEN uniq_computed_pk.c_i_expr:17 IS NULL THEN column2:10 ELSE uniq_computed_pk.c_s:18 END [as=c_s:26]
+ │         ├── CASE WHEN uniq_computed_pk.c_i_expr:17 IS NULL THEN column3:11 ELSE uniq_computed_pk.c_d:19 END [as=c_d:27]
+ │         └── CASE WHEN uniq_computed_pk.c_i_expr:17 IS NULL THEN c_d_expr:13 ELSE uniq_computed_pk.c_d_expr:20 END [as=c_d_expr:28]
  └── unique-checks
       └── unique-checks-item: uniq_computed_pk(d)
            └── project
-                ├── columns: d:51!null
+                ├── columns: d:55!null
                 └── semi-join (hash)
-                     ├── columns: i:49 s:50!null d:51!null c_i_expr:52 c_s:53!null c_d:54!null c_d_expr:55!null
+                     ├── columns: i:53 s:54!null d:55!null c_i_expr:56 c_s:57 c_d:58 c_d_expr:59
                      ├── with-scan &1
-                     │    ├── columns: i:49 s:50!null d:51!null c_i_expr:52 c_s:53!null c_d:54!null c_d_expr:55!null
+                     │    ├── columns: i:53 s:54!null d:55!null c_i_expr:56 c_s:57 c_d:58 c_d_expr:59
                      │    └── mapping:
-                     │         ├──  upsert_i:23 => i:49
-                     │         ├──  column2:10 => s:50
-                     │         ├──  column3:11 => d:51
-                     │         ├──  upsert_c_i_expr:24 => c_i_expr:52
-                     │         ├──  column2:10 => c_s:53
-                     │         ├──  column3:11 => c_d:54
-                     │         └──  column13:13 => c_d_expr:55
+                     │         ├──  i:24 => i:53
+                     │         ├──  column2:10 => s:54
+                     │         ├──  column3:11 => d:55
+                     │         ├──  c_i_expr:25 => c_i_expr:56
+                     │         ├──  c_s:26 => c_s:57
+                     │         ├──  c_d:27 => c_d:58
+                     │         └──  c_d_expr:28 => c_d_expr:59
                      ├── project
-                     │    ├── columns: uniq_computed_pk.c_s:45 uniq_computed_pk.i:41!null uniq_computed_pk.s:42 uniq_computed_pk.d:43 uniq_computed_pk.c_i_expr:44!null uniq_computed_pk.c_d:46 uniq_computed_pk.c_d_expr:47
+                     │    ├── columns: uniq_computed_pk.c_s:49 uniq_computed_pk.i:45!null uniq_computed_pk.s:46 uniq_computed_pk.d:47 uniq_computed_pk.c_i_expr:48!null uniq_computed_pk.c_d:50 uniq_computed_pk.c_d_expr:51
                      │    ├── scan uniq_computed_pk
-                     │    │    ├── columns: uniq_computed_pk.i:41!null uniq_computed_pk.s:42 uniq_computed_pk.d:43 uniq_computed_pk.c_i_expr:44!null uniq_computed_pk.c_d:46 uniq_computed_pk.c_d_expr:47
+                     │    │    ├── columns: uniq_computed_pk.i:45!null uniq_computed_pk.s:46 uniq_computed_pk.d:47 uniq_computed_pk.c_i_expr:48!null uniq_computed_pk.c_d:50 uniq_computed_pk.c_d_expr:51
                      │    │    └── computed column expressions
-                     │    │         ├── uniq_computed_pk.c_i_expr:44
-                     │    │         │    └── CASE WHEN uniq_computed_pk.i:41 < 0 THEN 'foo' ELSE 'bar' END
-                     │    │         ├── uniq_computed_pk.c_s:45
-                     │    │         │    └── uniq_computed_pk.s:42
-                     │    │         ├── uniq_computed_pk.c_d:46
-                     │    │         │    └── uniq_computed_pk.d:43
-                     │    │         └── uniq_computed_pk.c_d_expr:47
-                     │    │              └── uniq_computed_pk.d:43::STRING
+                     │    │         ├── uniq_computed_pk.c_i_expr:48
+                     │    │         │    └── CASE WHEN uniq_computed_pk.i:45 < 0 THEN 'foo' ELSE 'bar' END
+                     │    │         ├── uniq_computed_pk.c_s:49
+                     │    │         │    └── uniq_computed_pk.s:46
+                     │    │         ├── uniq_computed_pk.c_d:50
+                     │    │         │    └── uniq_computed_pk.d:47
+                     │    │         └── uniq_computed_pk.c_d_expr:51
+                     │    │              └── uniq_computed_pk.d:47::STRING
                      │    └── projections
-                     │         └── uniq_computed_pk.s:42 [as=uniq_computed_pk.c_s:45]
+                     │         └── uniq_computed_pk.s:46 [as=uniq_computed_pk.c_s:49]
                      └── filters
-                          ├── d:51 = uniq_computed_pk.d:43
-                          └── (i:49 != uniq_computed_pk.i:41) OR (c_i_expr:52 != uniq_computed_pk.c_i_expr:44)
+                          ├── d:55 = uniq_computed_pk.d:47
+                          └── (i:53 != uniq_computed_pk.i:45) OR (c_i_expr:56 != uniq_computed_pk.c_i_expr:48)

@@ -199,6 +199,10 @@ func (s *scope) replace() *scope {
 func (s *scope) appendColumnsFromScope(src *scope) {
 	l := len(s.cols)
 	s.cols = append(s.cols, src.cols...)
+
+	// TODO(mgartner): Try clearing names of old columns here if it is
+	// necessary.
+
 	// We want to reset the expressions, as these become pass-through columns in
 	// the new scope.
 	for i := l; i < len(s.cols); i++ {
@@ -271,6 +275,17 @@ func (s *scope) addColumn(alias string, expr tree.TypedExpr) *scopeColumn {
 		expr: expr,
 	})
 	return &s.cols[len(s.cols)-1]
+}
+
+// replaceColumn is similar to addColumn, but any cols already in s with a
+// matching name are anonymized to prevent ambiguity.
+func (s *scope) replaceColumn(alias string, expr tree.TypedExpr) *scopeColumn {
+	for i := range s.cols {
+		if s.cols[i].name == tree.Name(alias) {
+			s.cols[i].clearName()
+		}
+	}
+	return s.addColumn(alias, expr)
 }
 
 // setOrdering sets the ordering in the physical properties and adds any new

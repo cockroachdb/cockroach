@@ -192,6 +192,12 @@ func (b *Builder) synthesizeColumn(
 ) *scopeColumn {
 	name := tree.Name(alias)
 	colID := b.factory.Metadata().AddColumn(alias, typ)
+	// Clear names of columns that already exist with the same name.
+	for i := range scope.cols {
+		if scope.cols[i].name == tree.Name(alias) {
+			scope.cols[i].clearName()
+		}
+	}
 	scope.cols = append(scope.cols, scopeColumn{
 		name:   name,
 		typ:    typ,
