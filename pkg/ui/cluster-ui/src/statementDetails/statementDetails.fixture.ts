@@ -76,6 +76,10 @@ const statementStats: any = {
     mean: 7,
     squared_diffs: 1000000,
   },
+  last_exec_timestamp: {
+    seconds: Long.fromInt(1599670292),
+    nanos: 111613000,
+  },
   sensitive_info: {
     last_err: "",
     most_recent_plan_description: {
