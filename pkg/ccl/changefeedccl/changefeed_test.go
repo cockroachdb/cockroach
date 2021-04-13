@@ -542,21 +542,6 @@ func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 			})
 		})
 
-		t.Run(`rename column`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE rename_column (a INT PRIMARY KEY, b STRING)`)
-			sqlDB.Exec(t, `INSERT INTO rename_column VALUES (1, '1')`)
-			renameColumn := feed(t, f, `CREATE CHANGEFEED FOR rename_column`)
-			defer closeFeed(t, renameColumn)
-			assertPayloads(t, renameColumn, []string{
-				`rename_column: [1]->{"after": {"a": 1, "b": "1"}}`,
-			})
-			sqlDB.Exec(t, `ALTER TABLE rename_column RENAME COLUMN b TO c`)
-			sqlDB.Exec(t, `INSERT INTO rename_column VALUES (2, '2')`)
-			assertPayloads(t, renameColumn, []string{
-				`rename_column: [2]->{"after": {"a": 2, "c": "2"}}`,
-			})
-		})
-
 		t.Run(`add default`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_default (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO add_default (a, b) VALUES (1, '1')`)
@@ -735,6 +720,23 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 					ts.AsOfSystemTime()),
 				fmt.Sprintf(`add_column_def: [2]->{"after": {"a": 2, "b": "d"}, "updated": "%s"}`,
 					ts.AsOfSystemTime()),
+			})
+		})
+
+		t.Run(`rename column`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE rename_column (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO rename_column VALUES (1, '1')`)
+			renameColumn := feed(t, f, `CREATE CHANGEFEED FOR rename_column`)
+			defer closeFeed(t, renameColumn)
+			assertPayloads(t, renameColumn, []string{
+				`rename_column: [1]->{"after": {"a": 1, "b": "1"}}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE rename_column RENAME COLUMN b TO c`)
+			sqlDB.Exec(t, `INSERT INTO rename_column VALUES (2, '2')`)
+
+			assertPayloadsStripTs(t, renameColumn, []string{
+				`rename_column: [1]->{"after": {"a": 1, "c": "1"}}`,
+				`rename_column: [2]->{"after": {"a": 2, "c": "2"}}`,
 			})
 		})
 
