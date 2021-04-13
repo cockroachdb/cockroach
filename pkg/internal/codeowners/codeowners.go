@@ -24,19 +24,15 @@ import (
 )
 
 // DefaultCodeOwnersLocation is the default location for the CODEOWNERS file.
-var DefaultCodeOwnersLocation string
-
-func init() {
-	DefaultCodeOwnersLocation = filepath.Join(
-		gopath.Get(),
-		"src",
-		"github.com",
-		"cockroachdb",
-		"cockroach",
-		".github",
-		"CODEOWNERS",
-	)
-}
+var DefaultCodeOwnersLocation = filepath.Join(
+	gopath.Get(),
+	"src",
+	"github.com",
+	"cockroachdb",
+	"cockroach",
+	".github",
+	"CODEOWNERS",
+)
 
 // Rule is a single rule within a CODEOWNERS file.
 type Rule struct {
@@ -74,7 +70,9 @@ func LoadCodeOwners(r io.Reader, teams map[team.Alias]team.Team) (*CodeOwners, e
 		fields := strings.Fields(t)
 		rule := Rule{Pattern: fields[0]}
 		for _, field := range fields[1:] {
-			owner := team.Alias(strings.TrimPrefix(field, "@"))
+			// @cockroachdb/kv[-noreview] --> cockroachdb/kv.
+			owner := team.Alias(strings.TrimSuffix(strings.TrimPrefix(field, "@"), "-noreview"))
+
 			if _, ok := teams[owner]; !ok {
 				return nil, errors.Newf("owner %s does not exist", owner)
 			}
@@ -99,19 +97,28 @@ func DefaultLoadCodeOwners() (*CodeOwners, error) {
 	return LoadCodeOwners(f, teams)
 }
 
-// Match matches the given file to the rules and returns the owning team(s).
-// Returns empty if there are no owning teams.
-func (co *CodeOwners) Match(inPath string) ([]team.Team, error) {
-	// Hack for now to get the same format as CODEOWNERS
-	fullPath, err := filepath.Abs(inPath)
-	if err != nil {
-		return nil, err
-	}
-	filePath := strings.TrimPrefix(
-		fullPath,
-		filepath.Join(gopath.Get(), "src", "github.com", "cockroachdb", "cockroach"),
-	)
+var repoRoot = filepath.Join(gopath.Get(), "src", "github.com", "cockroachdb", "cockroach")
 
+// Match matches the given file to the rules and returns the owning team(s).
+// If the path is relative, it is interpreted as relative to the repository
+// root (i.e. like in the CODEOWNERS file).
+//
+// Returns empty if there are no owning teams.
+func (co *CodeOwners) Match(filePath string) []team.Team {
+	if filepath.IsAbs(filePath) {
+		var err error
+		// Strip repoRoot prefix.
+		filePath, err = filepath.Rel(repoRoot, filePath)
+		if err != nil {
+			_ = err
+			return nil
+		}
+	}
+	filePath = string(filepath.Separator) + filepath.Clean(filePath)
+	// filePath is now "absolute relative to the repo root", i.e.
+	// `/pkg/acceptance`, and the cleaning helps avoid inputs like
+	// `./pkg/acceptance` not working (when `pkg/acceptance` would).
+	//
 	// Keep matching until we hit the root directory.
 	lastFilePath := ""
 	for filePath != lastFilePath {
@@ -125,11 +132,11 @@ func (co *CodeOwners) Match(inPath string) ([]team.Team, error) {
 				for i, owner := range rule.Owners {
 					teams[i] = co.teams[owner]
 				}
-				return teams, nil
+				return teams
 			}
 		}
 		lastFilePath = filePath
 		filePath = filepath.Dir(filePath)
 	}
-	return nil, nil
+	return nil
 }

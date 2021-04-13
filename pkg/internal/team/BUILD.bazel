@@ -7,6 +7,7 @@ go_library(
     visibility = ["//pkg:__subpackages__"],
     deps = [
         "//pkg/internal/gopath",
+        "@com_github_cockroachdb_errors//:errors",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

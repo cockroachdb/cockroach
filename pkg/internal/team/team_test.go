@@ -32,6 +32,7 @@ func init() {
 func TestLoadTeams(t *testing.T) {
 	yamlFile := []byte(`
 sql:
+  aliases: [sql-alias]
   email: otan@cockroachlabs.com
   slack: otan
   triage_column_id: 1
@@ -46,13 +47,19 @@ test-infra-team:
 		t,
 		map[Alias]Team{
 			"sql": {
-				Alias:          "sql",
+				Aliases:        []Alias{"sql", "sql-alias"},
+				Email:          "otan@cockroachlabs.com",
+				Slack:          "otan",
+				TriageColumnID: 1,
+			},
+			"sql-alias": {
+				Aliases:        []Alias{"sql", "sql-alias"},
 				Email:          "otan@cockroachlabs.com",
 				Slack:          "otan",
 				TriageColumnID: 1,
 			},
 			"test-infra-team": {
-				Alias:          "test-infra-team",
+				Aliases:        []Alias{"test-infra-team"},
 				Email:          "jlinder@cockroachlabs.com",
 				Slack:          "jlinder",
 				TriageColumnID: 2,
