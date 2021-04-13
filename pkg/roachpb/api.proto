@@ -1355,7 +1355,7 @@ enum MVCCFilter {
 }
 
 // FileEncryptionOptions stores information needed by KV level requests (egs:
-// ExportRequest, ImportRequest) to encrypt or decrypt data.
+// ExportRequest) to encrypt or decrypt data.
 message FileEncryptionOptions {
   // Key specifies the key to use for encryption or decryption.
   bytes key = 1;
@@ -1451,51 +1451,6 @@ message ExportResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated File files = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
-}
-
-// ImportRequest is the argument to the Import() method, to bulk load key/value
-// entries.
-message ImportRequest {
-  message File {
-
-    ExternalStorage dir = 1 [(gogoproto.nullable) = false];
-    string path = 2;
-    reserved 3;
-    bytes sha512 = 4;
-  }
-  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Files contains an ordered list of files, each containing kv entries to
-  // import. Entries in later files with the same key override earlier ones.
-  repeated File files = 2 [(gogoproto.nullable) = false];
-  // DataSpan is the pre-rewrite keyrange of the data in `Files`.
-  Span data_span = 3 [(gogoproto.nullable) = false];
-  // EndTime, if not the zero value, will cause only entries before it to be
-  // imported.
-  util.hlc.Timestamp end_time = 6 [(gogoproto.nullable) = false];
-  reserved 4;
-  message TableRekey {
-
-    // OldID is the previous ID of `new_desc`.
-    uint32 old_id = 1 [(gogoproto.customname) = "OldID"];
-    // NewDesc is an encoded Descriptor message.
-    bytes new_desc = 2;
-  }
-  // Rekeys contains the descriptors for the data being Imported and the
-  // previous ID for each (which is the ID used in the source data pointed to by
-  // `files`).
-  // TODO(dan): This field is a superset of the information represented by
-  // `key_rewrites` and will supercede it once rekeying of interleaved tables is
-  // fixed.
-  repeated TableRekey rekeys = 5 [(gogoproto.nullable) = false];
-
-  FileEncryptionOptions encryption = 7;
-}
-
-// ImportResponse is the response to a Import() operation.
-message ImportResponse {
-  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  reserved 2;
-  BulkOpSummary imported = 3 [(gogoproto.nullable) = false];
 }
 
 // AdminScatterRequest is the argument to the AdminScatter() method, which moves
@@ -1820,7 +1775,6 @@ message RequestUnion {
     LeaseInfoRequest lease_info = 30;
     WriteBatchRequest write_batch = 31;
     ExportRequest export = 32;
-    ImportRequest import = 34;
     QueryTxnRequest query_txn = 33;
     QueryIntentRequest query_intent = 42;
     AdminScatterRequest admin_scatter = 36;
@@ -1833,7 +1787,7 @@ message RequestUnion {
     AdminVerifyProtectedTimestampRequest admin_verify_protected_timestamp = 49;
     MigrateRequest migrate = 50;
   }
-  reserved 8, 15, 23, 25, 27;
+  reserved 8, 15, 23, 25, 27, 34;
 }
 
 // A ResponseUnion contains exactly one of the responses.
@@ -1872,7 +1826,6 @@ message ResponseUnion {
     LeaseInfoResponse lease_info = 30;
     WriteBatchResponse write_batch = 31;
     ExportResponse export = 32;
-    ImportResponse import = 34;
     QueryTxnResponse query_txn = 33;
     QueryIntentResponse query_intent = 42;
     AdminScatterResponse admin_scatter = 36;
@@ -1885,7 +1838,7 @@ message ResponseUnion {
     AdminVerifyProtectedTimestampResponse admin_verify_protected_timestamp = 49;
     MigrateResponse migrate = 50;
   }
-  reserved 8, 15, 23, 25, 27, 28;
+  reserved 8, 15, 23, 25, 27, 28, 34;
 }
 
 // A Header is attached to a BatchRequest, encapsulating routing and auxiliary

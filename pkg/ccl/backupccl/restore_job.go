@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -227,7 +226,7 @@ rangeLoop:
 	for _, importRange := range importRanges {
 		needed := false
 		var latestCoveredTime hlc.Timestamp
-		var files []roachpb.ImportRequest_File
+		var files []execinfrapb.RestoreFileSpec
 		payloads := importRange.Payload.([]interface{})
 		for _, p := range payloads {
 			ie := p.(importEntry)
@@ -254,7 +253,7 @@ rangeLoop:
 				}
 			case backupFile:
 				if len(ie.file.Path) > 0 {
-					files = append(files, roachpb.ImportRequest_File{
+					files = append(files, execinfrapb.RestoreFileSpec{
 						Dir:    ie.dir,
 						Path:   ie.file.Path,
 						Sha512: ie.file.Sha512,
@@ -486,7 +485,7 @@ func WriteDescriptors(
 // some no-op splits and route the work to the same range, but the actual
 // imported data is unaffected.
 func rewriteBackupSpanKey(
-	codec keys.SQLCodec, kr *storageccl.KeyRewriter, key roachpb.Key,
+	codec keys.SQLCodec, kr *KeyRewriter, key roachpb.Key,
 ) (roachpb.Key, error) {
 	// TODO(dt): support rewriting tenant keys.
 	if bytes.HasPrefix(key, keys.TenantPrefix) {
@@ -1442,7 +1441,7 @@ func createImportingDescriptors(
 	}
 
 	// Get TableRekeys to use when importing raw data.
-	var rekeys []roachpb.ImportRequest_TableRekey
+	var rekeys []execinfrapb.TableRekey
 	for i := range tables {
 		tableToSerialize := tables[i]
 		newDescBytes, err := protoutil.Marshal(tableToSerialize.DescriptorProto())
@@ -1450,7 +1449,7 @@ func createImportingDescriptors(
 			return nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 				"marshaling descriptor")
 		}
-		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
+		rekeys = append(rekeys, execinfrapb.TableRekey{
 			OldID:   uint32(oldTableIDs[i]),
 			NewDesc: newDescBytes,
 		})
