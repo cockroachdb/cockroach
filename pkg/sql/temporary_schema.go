@@ -218,7 +218,7 @@ func cleanupSchemaObjects(
 	if err != nil {
 		return err
 	}
-	tbNames, err := descsCol.GetObjectNames(
+	tbNames, _, err := descsCol.GetObjectNamesAndIDs(
 		ctx,
 		txn,
 		dbDesc,

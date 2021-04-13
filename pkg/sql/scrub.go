@@ -171,7 +171,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	var tbNames tree.TableNames
 	for _, schema := range schemas {
-		toAppend, err := resolver.GetObjectNames(ctx, p.txn, p, p.ExecCfg().Codec, dbDesc, schema, true /*explicitPrefix*/)
+		toAppend, _, err := resolver.GetObjectNamesAndIDs(ctx, p.txn, p, p.ExecCfg().Codec, dbDesc, schema, true /*explicitPrefix*/)
 		if err != nil {
 			return err
 		}
