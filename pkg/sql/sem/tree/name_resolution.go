@@ -600,7 +600,7 @@ type SchemaLookupFlags = CommonLookupFlags
 // DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
 type DatabaseLookupFlags = CommonLookupFlags
 
-// DatabaseListFlags is the flag struct suitable for GetObjectNames().
+// DatabaseListFlags is the flag struct suitable for GetObjectNamesAndIDs().
 type DatabaseListFlags struct {
 	CommonLookupFlags
 	// ExplicitPrefix, when set, will cause the returned table names to

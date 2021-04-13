@@ -455,21 +455,27 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		if err != nil {
 			return nil, err
 		}
-		objectNames, err := expandTableGlob(ctx, p, tableGlob)
+		objectNames, objectIDs, err := expandTableGlob(ctx, p, tableGlob)
 		if err != nil {
 			return nil, err
 		}
 
-		for i := range objectNames {
-			// We set required to false here, because there could be type names in
-			// the returned set of names, so we don't want to error out if we
-			// couldn't resolve a name into a table.
-			descriptor, err := resolver.ResolveMutableExistingTableObject(ctx, p,
-				&objectNames[i], false /* required */, tree.ResolveAnyTableKind)
+		for i := range objectIDs {
+			descriptor, err := p.Descriptors().GetMutableDescriptorByID(ctx, objectIDs[i], p.txn)
 			if err != nil {
-				return nil, err
+				// If the table is virtual, the above lookup will not find the table.
+				// So, try resolving the table instead.
+				if errors.Is(err, catalog.ErrDescriptorNotFound) {
+					descriptor, err = resolver.ResolveMutableExistingTableObject(ctx, p,
+						&objectNames[i], false /* required */, tree.ResolveAnyTableKind)
+					if err != nil {
+						return nil, err
+					}
+				} else {
+					return nil, err
+				}
 			}
-			if descriptor != nil {
+			if descriptor != nil && descriptor.DescriptorType() == catalog.Table {
 				descs = append(descs, descriptor)
 			}
 		}
@@ -627,7 +633,7 @@ func findTableContainingIndex(
 		return nil, nil, err
 	}
 
-	tns, err := sa.GetObjectNames(ctx, txn, codec, dbDesc, scName,
+	tns, _, err := sa.GetObjectNamesAndIDs(ctx, txn, codec, dbDesc, scName,
 		tree.DatabaseListFlags{CommonLookupFlags: lookupFlags, ExplicitPrefix: true})
 	if err != nil {
 		return nil, nil, err
@@ -775,7 +781,7 @@ func (p *planner) getTableAndIndex(
 // as a tree.TableNames.
 func expandTableGlob(
 	ctx context.Context, p *planner, pattern tree.TablePattern,
-) (tree.TableNames, error) {
+) (tree.TableNames, descpb.IDs, error) {
 	var catalog optCatalog
 	catalog.init(p)
 	catalog.reset()
