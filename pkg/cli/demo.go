@@ -293,11 +293,18 @@ func runDemo(cmd *cobra.Command, gen workload.Generator) (err error) {
 	checkInteractive(cmdIn)
 
 	if cliCtx.isInteractive {
-		fmt.Printf(`#
+		printfUnlessEmbedded(`#
 # Welcome to the CockroachDB demo database!
 #
 # You are connected to a temporary, in-memory CockroachDB cluster of %d node%s.
 `, demoCtx.nodes, util.Pluralize(int64(demoCtx.nodes)))
+
+		if demoCtx.simulateLatency {
+			printfUnlessEmbedded(
+				"#\n# WARNING: the use of --%s is experimental. Some features may not work as expected.\n",
+				cliflags.Global.Name,
+			)
+		}
 
 		// Only print details about the telemetry configuration if the
 		// user has control over it.
