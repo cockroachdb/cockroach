@@ -2188,6 +2188,19 @@ func (t *T) Marshal() (data []byte, err error) {
 	return protoutil.Marshal(&temp.InternalType)
 }
 
+// MarshalToSizedBuffer is like Mashal, except that it deserializes to
+// an existing byte slice with exactly enough remaining space for
+// Size().
+//
+// Marshal is part of the protoutil.Message interface.
+func (t *T) MarshalToSizedBuffer(data []byte) (int, error) {
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		return 0, err
+	}
+	return temp.InternalType.MarshalToSizedBuffer(data)
+}
+
 // MarshalTo behaves like Marshal, except that it deserializes to an existing
 // byte slice and returns the number of bytes written to it. The slice must
 // already have sufficient capacity. Callers can use the Size method to
