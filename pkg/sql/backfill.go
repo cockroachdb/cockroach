@@ -1769,7 +1769,7 @@ func ValidateForwardIndexes(
 			// added earlier in the same mutation. Make the mutations public in an
 			// in-memory copy of the descriptor and add it to the Collection's synthetic
 			// descriptors, so that we can use SQL below to perform the validation.
-			descI, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
+			descI, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraintsAndPKSwaps)
 			if err != nil {
 				return err
 			}
