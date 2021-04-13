@@ -1696,7 +1696,7 @@ func (ef *execFactory) ConstructCreateView(
 		if !d.ColumnOrdinals.Empty() {
 			ref.ColumnIDs = make([]descpb.ColumnID, 0, d.ColumnOrdinals.Len())
 			d.ColumnOrdinals.ForEach(func(ord int) {
-				ref.ColumnIDs = append(ref.ColumnIDs, desc.PublicColumns()[ord].GetID())
+				ref.ColumnIDs = append(ref.ColumnIDs, desc.AllColumns()[ord].GetID())
 			})
 		}
 		entry := planDeps[desc.GetID()]
