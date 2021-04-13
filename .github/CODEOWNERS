@@ -1,10 +1,21 @@
-# https://github.com/blog/2392-introducing-code-owners
-# https://help.github.com/articles/about-codeowners/
+# The CODEOWNERS file is used by Github to automate assigning code reviews, see
+# [1] and [2]. We also use it in our internal tooling (see [3]) to automate test
+# failure issue routing. To do this efficiently, we are enforcing a few rules in
+# this file via linting. They are:
 #
-# Code owners are automatically requested for review when someone
-# opens a pull request that modifies code that they own.
+# - every file under ./pkg has to have at least one owner, and each owner must
+#   be present in TEAMS.yaml (either as a map key or an alias).
+# - you can opt out of Github-requested code review assignments (while
+#   maintaining team ownership) by suffixing the handle with `-noreview`.
+#   (This will essentially make it an unknown team to Github, but our internal
+#   tooling continues to recognize the original team).
 #
-# Remember, *the last rule to match wins.*
+# Remember, *the last rule to match wins*, and you need a trailing slash to get
+# recursive ownership of a directory.
+#
+# [1]: https://github.com/blog/2392-introducing-code-owners
+# [2]: https://help.github.com/articles/about-codeowners/
+# [3]: pkg/internal/codeowners
 
 /docs/RFCS/                  @cockroachdb/rfc-prs
 
@@ -21,7 +32,7 @@
 /pkg/sql/sem/builtins/       @cockroachdb/sql-api-prs
 
 /pkg/cli/                    @cockroachdb/cli-prs
-/pkg/server/                 @cockroachdb/cli-prs
+/pkg/server/                 @cockroachdb/server-prs
 
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 /pkg/ccl/streamingccl/       @cockroachdb/cdc-prs
@@ -32,16 +43,121 @@
 /pkg/sql/distsql_plan_csv.go @cockroachdb/bulk-prs
 /pkg/cli/userfile.go         @cockroachdb/bulk-prs
 # last-rule-wins so *after* CDC takes most of streamingccl we take ingest pkg.
-/pkg/ccl/streamingccl/streamingest       @cockroachdb/bulk-prs
+/pkg/ccl/streamingccl/streamingest @cockroachdb/bulk-prs
 
-/pkg/geo                     @cockroachdb/geospatial
+/pkg/geo/                    @cockroachdb/geospatial
+
+/pkg/kv/                     @cockroachdb/kv
+
+/pkg/storage/                @cockroachdb/storage
 
 /pkg/ui/                     @cockroachdb/cluster-ui-prs
 /pkg/ui/embedded.go          @cockroachdb/cluster-ui-prs
 /pkg/ui/src/js/protos.d.ts   @cockroachdb/cluster-ui-prs
 /pkg/ui/src/js/protos.js     @cockroachdb/cluster-ui-prs
 
-/docs/generated/http         @cockroachdb/http-api-prs
-/pkg/cmd/docgen/http.go      @cockroachdb/http-api-prs
+/docs/generated/http/        @cockroachdb/http-api-prs @cockroachdb/server-prs
+/pkg/cmd/docgen/http.go      @cockroachdb/http-api-prs @cockroachdb/server-prs
 
-/pkg/ccl/sqlproxyccl/        @cockroachdb/sqlproxy-prs
+/pkg/ccl/sqlproxyccl/        @cockroachdb/sqlproxy-prs @cockroachdb/server-prs
+
+/pkg/acceptance/             @cockroachdb/sql-experience
+/pkg/base/                   @cockroachdb/server-prs
+/pkg/bench/                  @cockroachdb/sql-queries
+/pkg/blobs/                  @cockroachdb/bulk-prs
+/pkg/build/                  @cockroachdb/dev-inf
+/pkg/ccl/baseccl/            @cockroachdb/cli-prs
+/pkg/ccl/buildccl/           @cockroachdb/dev-inf
+/pkg/ccl/cliccl/             @cockroachdb/cli-prs
+/pkg/ccl/cmdccl/enc_utils/   @cockroachdb/storage
+/pkg/ccl/gssapiccl/          @cockroachdb/sql-queries
+/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
+/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
+/pkg/ccl/multiregionccl/     @cockroachdb/sql-queries-noreview
+/pkg/ccl/oidcccl/            @cockroachdb/sql-queries
+/pkg/ccl/partitionccl/       @cockroachdb/sql-schema
+/pkg/ccl/serverccl/          @cockroachdb/server-prs
+/pkg/ccl/telemetryccl/       @cockroachdb/obs-infra
+/pkg/ccl/testccl/sqlccl/     @cockroachdb/sql-queries
+/pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-schema
+/pkg/ccl/testutilsccl/       @cockroachdb/test-eng
+/pkg/ccl/utilccl/            @cockroachdb/server-noreview
+/pkg/ccl/workloadccl/        @cockroachdb/sql-experience
+/pkg/clusterversion/         @cockroachdb/kv
+/pkg/cmd/allocsim/           @cockroachdb/kv
+/pkg/cmd/bazci/              @cockroachdb/dev-inf
+/pkg/cmd/cmdutil/            @cockroachdb/dev-inf
+/pkg/cmd/cmp-protocol/       @cockroachdb/sql-experience
+/pkg/cmd/cmp-sql/            @cockroachdb/sql-experience
+/pkg/cmd/cmpconn/            @cockroachdb/sql-experience
+/pkg/cmd/cockroach/          @cockroachdb/cli-prs
+/pkg/cmd/cockroach-oss/      @cockroachdb/cli-prs
+/pkg/cmd/cockroach-short/    @cockroachdb/cli-prs
+/pkg/cmd/compile-build/      @cockroachdb/dev-inf
+/pkg/cmd/cr2pg/              @cockroachdb/sql-experience
+/pkg/cmd/docgen/             @cockroachdb/docs
+/pkg/cmd/fuzz/               @cockroachdb/test-eng
+/pkg/cmd/generate-binary/    @cockroachdb/sql-experience
+/pkg/cmd/generate-postgres-metadata-tables/ @cockroachdb/sql-experience
+/pkg/cmd/generate-spatial-ref-sys/ @cockroachdb/geospatial
+/pkg/cmd/generate-test-suites/ @cockroachdb/dev-inf
+/pkg/cmd/geoviz/             @cockroachdb/geospatial
+/pkg/cmd/github-post/        @cockroachdb/test-eng
+/pkg/cmd/github-pull-request-make/ @cockroachdb/dev-inf
+/pkg/cmd/gossipsim/          @cockroachdb/kv
+/pkg/cmd/import-tools/       @cockroachdb/dev-inf
+/pkg/cmd/internal/issues/    @cockroachdb/test-eng
+/pkg/cmd/prereqs/            @cockroachdb/dev-inf
+/pkg/cmd/protoc-gen-gogoroach/ @cockroachdb/server-prs
+/pkg/cmd/publish-artifacts/  @cockroachdb/dev-inf
+/pkg/cmd/publish-provisional-artifacts/ @cockroachdb/dev-inf
+/pkg/cmd/reduce/             @cockroachdb/sql-queries
+/pkg/cmd/returncheck/        @cockroachdb/dev-inf
+/pkg/cmd/roachprod/          @cockroachdb/dev-inf
+/pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
+/pkg/cmd/roachtest/          @cockroachdb/test-eng
+/pkg/cmd/roachvet/           @cockroachdb/dev-inf
+/pkg/cmd/skip-test/          @cockroachdb/test-eng
+/pkg/cmd/skiperrs/           @cockroachdb/sql-experience
+/pkg/cmd/skipped-tests/      @cockroachdb/test-eng
+/pkg/cmd/smithcmp/           @cockroachdb/sql-queries
+/pkg/cmd/smithtest/          @cockroachdb/sql-queries
+/pkg/cmd/teamcity-trigger/   @cockroachdb/dev-inf
+/pkg/cmd/testfilter/         @cockroachdb/test-eng
+/pkg/cmd/uptodate/           @cockroachdb/dev-inf
+/pkg/cmd/urlcheck/           @cockroachdb/docs
+/pkg/cmd/whoownsit/          @cockroachdb/test-eng
+/pkg/cmd/workload/           @cockroachdb/sql-experience
+/pkg/cmd/wraprules/          @cockroachdb/obs-infra-noreview
+/pkg/cmd/zerosum/            @cockroachdb/kv-noreview
+/pkg/col/                    @cockroachdb/sql-queries
+/pkg/compose/                @cockroachdb/sql-experience
+/pkg/config/                 @cockroachdb/server-prs
+/pkg/docs/                   @cockroachdb/docs
+/pkg/featureflag/            @cockroachdb/cli-prs-noreview
+/pkg/gossip/                 @cockroachdb/kv-noreview
+/pkg/internal/client/requestbatcher/ @cockroachdb/kv
+/pkg/internal/codeowners/    @cockroachdb/test-eng
+/pkg/internal/reporoot       @cockroachdb/dev-inf
+/pkg/internal/rsg/           @cockroachdb/sql-queries
+/pkg/internal/sqlsmith/      @cockroachdb/sql-queries
+/pkg/internal/team/          @cockroachdb/test-eng
+/pkg/jobs/                   @cockroachdb/sql-schema
+/pkg/keys/                   @cockroachdb/kv
+/pkg/migration/              @cockroachdb/kv
+/pkg/release/                @cockroachdb/dev-inf
+/pkg/roachpb/                @cockroachdb/kv
+/pkg/rpc/                    @cockroachdb/server-prs
+/pkg/scheduledjobs/          @cockroachdb/bulk-prs
+/pkg/security/               @cockroachdb/server-prs
+/pkg/settings/               @cockroachdb/server-prs
+/pkg/sql/                    @cockroachdb/sql-queries-noreview
+/pkg/sqlmigrations/          @cockroachdb/sql-queries-noreview
+/pkg/streaming/              @cockroachdb/bulk-prs
+/pkg/testutils/              @cockroachdb/test-eng
+/pkg/ts/                     @cockroachdb/kv
+/pkg/util/                   @cockroachdb/unowned
+/pkg/util/log                @cockroachdb/server-prs
+/pkg/util/metric             @cockroachdb/obs-infra
+/pkg/util/tracing            @cockroachdb/obs-infra
+/pkg/workload/               @cockroachdb/sql-experience
