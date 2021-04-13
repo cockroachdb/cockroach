@@ -1704,7 +1704,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		// added earlier in the same mutation. Make the mutations public in an
 		// in-memory copy of the descriptor and add it to the Collection's synthetic
 		// descriptors, so that we can use SQL below to perform the validation.
-		descI, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraints)
+		descI, err := tableDesc.MakeFirstMutationPublic(tabledesc.IgnoreConstraintsAndPKSwaps)
 		if err != nil {
 			return err
 		}
