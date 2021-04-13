@@ -62,12 +62,13 @@ func registerPgjdbc(r *testRegistry) {
 			t.Fatal(err)
 		}
 
+		// TODO(rafi): use openjdk-11-jdk-headless once we are off of Ubuntu 16.
 		if err := repeatRunE(
 			ctx,
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install default-jre openjdk-11-jdk-headless maven`,
+			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
 		); err != nil {
 			t.Fatal(err)
 		}
