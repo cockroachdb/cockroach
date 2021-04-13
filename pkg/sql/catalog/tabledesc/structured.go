@@ -2011,23 +2011,13 @@ func (desc *Mutable) addMutation(m descpb.DescriptorMutation) {
 	desc.Mutations = append(desc.Mutations, m)
 }
 
-// IgnoreConstraints is used in MakeFirstMutationPublic to indicate that the
-// table descriptor returned should not include newly added constraints, which
-// is useful when passing the returned table descriptor to be used in
-// validating constraints to be added.
-const IgnoreConstraints = false
-
-// IncludeConstraints is used in MakeFirstMutationPublic to indicate that the
-// table descriptor returned should include newly added constraints.
-const IncludeConstraints = true
-
 // MakeFirstMutationPublic creates a Mutable from the
 // immutable by making the first mutation public.
 // This is super valuable when trying to run SQL over data associated
 // with a schema mutation that is still not yet public: Data validation,
 // error reporting.
 func (desc *wrapper) MakeFirstMutationPublic(
-	includeConstraints bool,
+	includeConstraints catalog.MutationPublicationFilter,
 ) (catalog.TableDescriptor, error) {
 	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
 	table := NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
@@ -2039,12 +2029,15 @@ func (desc *wrapper) MakeFirstMutationPublic(
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		if includeConstraints || mutation.GetConstraint() == nil {
-			if err := table.MakeMutationComplete(mutation); err != nil {
-				return nil, err
-			}
-		}
 		i++
+		if mutation.GetPrimaryKeySwap() != nil && includeConstraints == catalog.IgnoreConstraintsAndPKSwaps {
+			continue
+		} else if mutation.GetConstraint() != nil && includeConstraints > catalog.IncludeConstraints {
+			continue
+		}
+		if err := table.MakeMutationComplete(mutation); err != nil {
+			return nil, err
+		}
 	}
 	table.Mutations = table.Mutations[i:]
 	table.Version++
